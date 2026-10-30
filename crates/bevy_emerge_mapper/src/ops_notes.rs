@@ -819,7 +819,7 @@ pub(crate) fn footprint(e: &crate::ops::Entry, map: &bevy_emerge_core::map::Map)
     let cell = |at: (f32, f32)| ((at.0 / bevy_emerge_core::grid::TILE).floor() as i32, (at.1 / bevy_emerge_core::grid::TILE).floor() as i32);
     let mut ids: Vec<String> = Vec::new();
     let mut cells: Vec<(i32, i32)> = Vec::new();
-    if let Some(d) = e.inverse.as_ref().and_then(|i| i.get("delta")).and_then(|d| serde_json::from_value::<crate::ops::RowDelta>(d.clone()).ok()) {
+    if let Some(d) = e.inverse.as_ref().and_then(crate::ops::RowDelta::undoing) {
         ids.extend(d.remove_placements.iter().cloned());
         for a in &d.add_placements {
             ids.push(a.row.id.clone());
@@ -905,8 +905,7 @@ impl NoteUndoWork {
                 let delta = e
                     .inverse
                     .as_ref()
-                    .and_then(|i| i.get("delta"))
-                    .and_then(|d| serde_json::from_value::<crate::ops::RowDelta>(d.clone()).ok())
+                    .and_then(crate::ops::RowDelta::undoing)
                     .ok_or_else(|| Refusal::new(format!("{} ({}) changed more than pieces, so note {id}'s work cannot be undone in one step. Undo it by hand.", e.operation_id, e.op)))?;
                 inverses.push(delta.apply(&mut map)?);
             }

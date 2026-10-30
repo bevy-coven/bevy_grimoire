@@ -22,7 +22,7 @@ Storyboard format (JSON):
     "chunks": [ {"seconds": 6}, {"seconds": 4, "operation": {"name": "...", "parameters": {...}}} ],
     "steps": [
       {"at": 0.5, "cursor": [x, y]},            logical px
-      {"at": 0.8, "click": [x, y]},
+      {"at": 0.8, "click": [x, y]},             "mods": ["ShiftLeft"] holds keys through it
       {"at": 1.0, "key": "KeyZ", "mods": ["SuperLeft"]},
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
@@ -267,11 +267,22 @@ def do_step(step, timeline, inj, agent):
         inj.clear_cursor()
         timeline.add(t=timeline.now(), type="clear_cursor")
     elif kind == "click":
+        # `mods` are held through the click (a Shift-click picks pieces for a note).
         x, y = step["click"]
+        mods = step.get("mods", [])
         inj.cursor(x, y)
         timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
+        for m in mods:
+            inj.press(m)
+        if mods:
+            timeline.add(t=timeline.now(), type="key", keys=list(mods))
+            time.sleep(0.05)
         timeline.add(t=timeline.now(), type="click", x=x, y=y)
         inj.send(kind="Mouse", button="Left", action="Tap")
+        if mods:
+            time.sleep(0.1)
+        for m in reversed(mods):
+            inj.release(m)
     elif kind == "key":
         mods = step.get("mods", [])
         for m in mods:
