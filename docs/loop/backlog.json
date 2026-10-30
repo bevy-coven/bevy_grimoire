@@ -59,12 +59,12 @@
       "title": "A placement appeared in the map during a probe with the cursor and O, not reproduced",
       "must_fix": {
         "blocks": false,
-        "common": false,
-        "no_workaround": false,
+        "common": true,
+        "no_workaround": true,
         "evidence": "On the first probe run a barrel was placed (status 'placed barrel@1 at (-1965.65, -98.65)', undo_depth 1, map dirty). It was not reproduced in two replays of the same cursor and O inputs on a fresh editor, and the scratch session was discarded unsaved. Cause unknown."
       },
-      "status": "open",
-      "evidence": "target/loop/2026-10-22-fcc4e02/live (editor.log); /tmp/emerge_live/it9/probe_pin.py. Pointer investigation 2026-10-22 (CiBuilder): placement at scale 1 and 2 lands under the pointer (crates/bevy_emerge_mapper/tests/a_piece_lands_where_the_pointer_is.rs, 930ced5); the editor's pointer mapping is correct. The probe's coordinates were far off the map, but the cause is not identified and this was not reproduced.",
+      "status": "fixed",
+      "evidence": "target/loop/2026-10-22-fcc4e02/live (editor.log); /tmp/emerge_live/it9/probe_pin.py. Pointer investigation 2026-10-22 (CiBuilder): placement at scale 1 and 2 lands under the pointer (crates/bevy_emerge_mapper/tests/a_piece_lands_where_the_pointer_is.rs, 930ced5). Reproduced 2026-10-30 (bevy_emerge_w4, #182): a click on the door strip's 'the kit door' cue placed lamp_tall@4 at (-17.69, -2.69), off a 10 m map and off screen. Cause: view::cursor_ray handed a pointer outside the map camera's viewport (the frame's hole) to Camera::viewport_to_world, which extrapolates past the edge. Fixed: cursor_ray answers None outside camera.logical_viewport_rect(). Regression: tests/a_click_outside_the_viewport_places_nothing.rs (failed before: a click above the viewport placed wall@1 at (-20.5, -20.5)).",
       "last_failure": "",
       "first_seen": "2026-10-22"
     },

@@ -437,6 +437,9 @@ door_state![
     // The Environment panel's held hour (#98): what this door's preview is showing, released with it.
     #[cfg(feature = "bevy_elements")]
     crate::environment::ClockScrub,
+    // The light map's shown/hidden and its last bake (#103): a view of this door's map, released with it.
+    #[cfg(feature = "bevy_light_grid")]
+    crate::light_overlay::LightOverlay,
 ];
 
 /// **Despawn every root a screen could have spawned.** The one implementation, called by both
@@ -624,6 +627,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // door change lets the next project's own clock run.
     #[cfg(feature = "bevy_elements")]
     ("bevy_emerge_mapper::environment::ClockScrub", Ownership::Door),
+    #[cfg(feature = "bevy_light_grid")]
+    ("bevy_emerge_mapper::light_overlay::LightOverlay", Ownership::Door),
     ("bevy_emerge_mapper::editor::Folded", Ownership::Door),
     ("bevy_emerge_mapper::editor::StampPicture", Ownership::Door),
     ("bevy_emerge_mapper::editor::TargetLock", Ownership::Door),

@@ -131,6 +131,28 @@ enclosure: (wish: 0.25, weight: 200),
 
 **Absent means those two numbers**, which is what the editor shipped before the field existed (E-005), so a map written earlier generates exactly as it did. Set it through `map_set_settings` (`enclosure_wish`, `enclosure_weight`) or by editing the file; both write the same field, and neither needs a rebuild.
 
+## forest/<map>.ron
+
+| | |
+|---|---|
+| Where | `assets/emerge/forest/<map>.ron`, one file per map, beside its terrain. Needs the editor built with `--features bevy_flora`. |
+| What it holds | The map's trees: each one's `id`, `species` (a `bevy_flora` preset name such as `oak`, or a `.tree.ron` path under `assets/emerge/` such as `trees/tall.tree.ron`), its trunk's `at: (x, z)`, the `ground_m` it stands on, `yaw` (radians), `scale` and pool `variant`; a tree placed by hand also has `age_years` and `seed`. |
+| Written by | `forest_scatter`: a `plant` stroke (`bevy_flora`'s own Scatter, kept only within `radius_m` of the stroke, on the terrain) or one `place`d tree; the Terrain field's `forest <x> <z> <radius_m> <spacing_m> <seed> <species>` line sends the same operation. Each is one undo step. |
+| Live reload | Yes. The viewport draws every tree with `bevy_flora`'s plugin and redraws within half a second of a change to this file or to a `.tree.ron` it names: a scattered tree is a `PooledTree` of its species' pool, built in the background, and a placed tree is a `ProceduralTree` grown from its species with its own seed and age, the tree the game grows. With `bevy_elements` too, the trees wear the map's date. |
+| Read by | The editor. A game that lists `bevy_flora` reads it to spawn the same trees through the crate's pools. |
+| Format version | None. |
+
+## trees/<name>.tree.ron
+
+| | |
+|---|---|
+| Where | `assets/emerge/trees/<name>.tree.ron` |
+| What it holds | One tree species: `bevy_flora`'s own `TreeParams`, in the format its asset loader reads. |
+| Written by | `tree_edit` (`preset` starts it from a crate preset, `set` changes fields by dotted path, an unknown field is refused), or the Terrain field's `tree <name> [<preset>] [<field.path>=<value> ...]` line. One undo step per edit. |
+| Live reload | Yes. Every drawn tree of this species regrows within half a second of an edit. |
+| Read by | The editor and the game. |
+| Format version | `bevy_flora`'s. |
+
 ## family/bevy_elements.ron
 
 | | |

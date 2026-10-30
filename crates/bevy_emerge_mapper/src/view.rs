@@ -547,8 +547,9 @@ pub fn over_ui<'a>(
 /// Where the pointer meets the ground plane, in world metres.
 ///
 /// The editor's whole spatial input is this one function, so it is worth being exact about: a ray
-/// through the cursor, intersected with `y = 0`. `None` when the cursor is off-window or the ray runs
-/// parallel to the ground — both are "there is no honest answer", and the callers treat them as such
+/// through the cursor, intersected with `y = 0`. `None` when the cursor is outside the viewport (off
+/// the window, or over the chrome around the frame's hole) or the ray runs parallel to the ground —
+/// all are "there is no honest answer", and the callers treat them as such
 /// rather than falling back to the origin.
 ///
 /// Takes the position rather than the `Window` so that there is exactly one place deciding *which*
@@ -569,6 +570,16 @@ pub fn cursor_ray(
     cam_tf: &GlobalTransform,
 ) -> Option<(Vec3, Vec3)> {
     let cursor = cursor?;
+    // **Only through the viewport, which is a region and not the window** (B-021, #182). The map
+    // camera draws into the frame's hole (`surface::fit_viewport_to_frame`), and
+    // `Camera::viewport_to_world` does not check that its point is inside that hole: past an edge it
+    // extrapolates a ray through a pixel that does not exist. So a click on the door strip above the
+    // hole, or the status band below it, met the ground somewhere real, and placed a piece there:
+    // (-1965.65, -98.65) in B-021, far off the map, where nobody saw it to undo it. A pointer over
+    // the chrome has no ground under it, which is this function's "no honest answer".
+    if !camera.logical_viewport_rect()?.contains(cursor) {
+        return None;
+    }
     let ray = camera.viewport_to_world(cam_tf, cursor).ok()?;
     Some((ray.origin, *ray.direction))
 }

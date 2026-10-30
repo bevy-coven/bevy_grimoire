@@ -93,6 +93,12 @@ pub mod ops_label_vlm;
 pub mod ops_dialogue;
 pub mod balloon;
 pub mod ops_family;
+#[cfg(feature = "bevy_light_grid")]
+pub mod light_overlay;
+#[cfg(feature = "bevy_light_grid")]
+pub mod ops_light;
+#[cfg(feature = "bevy_lights")]
+pub mod ops_pool;
 #[cfg(feature = "bevy_gooey")]
 pub mod ui_skin;
 pub mod ops_terrain;
@@ -102,6 +108,8 @@ pub mod volume_mesh;
 pub mod ops_forest;
 #[cfg(all(feature = "bevy_flora", feature = "bevy_elements"))]
 pub mod forest_season;
+#[cfg(feature = "bevy_flora")]
+pub mod forest_view;
 pub mod ops_tree;
 pub mod ops_water;
 pub mod terrain_view;

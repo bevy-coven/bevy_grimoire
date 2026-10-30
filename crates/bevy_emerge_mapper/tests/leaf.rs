@@ -99,6 +99,10 @@ const ALLOWED: &[(&str, &str)] = &[
          build and a game that lists no family crate pay nothing",
     ),
     (
+        "bevy_light_grid",
+        "the owner's CPU illuminance grid, hosted by the light map (#103) — OPTIONAL, reached only by `--features bevy_light_grid` and pinned by git rev, so an ordinary build and a game that lists no family crate pay nothing",
+    ),
+    (
         "bevy_orca",
         "the owner's reciprocal-avoidance crowd solver, hosted by the family layer (#107) — OPTIONAL, reached only by `--features bevy_orca` and pinned by git rev, so an ordinary build pays nothing",
     ),

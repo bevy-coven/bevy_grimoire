@@ -2558,6 +2558,10 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_data::DataSet),
         Box::new(crate::ops_family::FamilySet),
         Box::new(crate::ops_family::PlacementSetFamily),
+        #[cfg(feature = "bevy_light_grid")]
+        Box::new(crate::ops_light::LightMap),
+        #[cfg(feature = "bevy_lights")]
+        Box::new(crate::ops_pool::LightPoolBudget),
         #[cfg(feature = "bevy_speech_bubbles")]
         Box::new(crate::ops_dialogue::DialoguePreview),
         Box::new(crate::ops_terrain::TerrainStroke),

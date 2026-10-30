@@ -53,6 +53,7 @@ debugger = ["bevy/bevy_remote", "dep:bevy_debugger_bevy"]
 # (`family_host::problems`). The engine-free core crates never depend on these.
 bevy_carnage = ["dep:bevy_carnage"]
 bevy_elements = ["dep:bevy_elements"]
+bevy_light_grid = ["dep:bevy_light_grid", "bevy_lights"]
 bevy_flora = ["dep:bevy_flora"]
 bevy_gooey = ["dep:bevy_gooey"]
 # Not a family crate: the engine-free mesher a carved volume (#101) is sampled through. Off by default.
@@ -71,6 +72,7 @@ bevy_carnage = { git = "https://github.com/Ladvien/bevy_carnage", rev = "615c264
 bevy_elements = { git = "https://github.com/Ladvien/bevy_elements", rev = "2fee42a6c385081783116301469ada6f2d0a4792", features = ["serde"], optional = true }
 isomesh = { git = "https://github.com/Ladvien/isomesh", rev = "d3dc6c0fb6b43b899e534643f51f76a856d2d9ee", optional = true }
 bevy_lights = { git = "https://github.com/Ladvien/bevy_lights", rev = "15af29a7dc05ada701caa4c154a00cee363c84b3", features = ["serde"], optional = true }
+bevy_light_grid = { git = "https://github.com/Ladvien/bevy_light_grid", rev = "8b4a3c760ccc05f39e81bb22e366b330080fcc95", optional = true }
 bevy_orca = { git = "https://github.com/Ladvien/bevy_orca", rev = "e7160df097dc75652633f801f6c0ab1c73356bc4", optional = true }
 bevy_society = { git = "https://github.com/Ladvien/bevy_society", rev = "d2e39703e06ebf40b5e787a2da4b6882a9beee3e", default-features = false, optional = true }
 bevy_speech_bubbles = { git = "https://github.com/Ladvien/bevy_speech_bubbles", rev = "b2d67f0d8a8a984a78f9bc9291cc63be867c6822", optional = true }
