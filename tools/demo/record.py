@@ -22,13 +22,16 @@ Storyboard format (JSON):
     "chunks": [ {"seconds": 6}, {"seconds": 4, "operation": {"name": "...", "parameters": {...}}} ],
     "steps": [
       {"at": 0.5, "cursor": [x, y]},            logical px
-      {"at": 0.8, "click": [x, y]},
+      {"at": 0.8, "click": [x, y]},             "mods": ["ShiftLeft"] holds keys through it
       {"at": 1.0, "key": "KeyZ", "mods": ["SuperLeft"]},
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
       {"at": 3.0, "wheel": {"y": 1, "n": 3, "at": [x, y]}},
       {"at": 4.0, "type": "44"},
       {"at": 5.0, "mcp": "emerge_frame_view", "args": {...}, "caption": "agent: frames the walls"},
+      {"at": 5.5, "mcp": "emerge_apply_operation", "args": {...}, "as": "built"},
+                                                saves the answer's operation_id; "$built" anywhere in a
+                                                later step's args is replaced by it (note_resolve's ops)
       {"at": 6.0, "caption": "person: ..."}
       {"at": 7.0, "write": {"path": "assets/emerge/standards.ron", "text": "..."}}
                                                 a person saving a project file (path under --project),
@@ -260,7 +263,23 @@ def align_events(events, frame_times):
 
 
 
-def do_step(step, timeline, inj, agent):
+def resolve(value, named):
+    """An mcp step's args with every `"$name"` replaced by the operation id a step saved `as` name.
+    A `$name` no earlier step saved is an error: sent as written, the editor would refuse it as an
+    unknown id far from the step that should have saved it."""
+    if isinstance(value, str) and value.startswith("$") and value[1:].isidentifier():
+        if value[1:] not in named:
+            raise RuntimeError(f"{value} names no operation saved by an earlier step (saved: {sorted(named)})")
+        return named[value[1:]]
+    if isinstance(value, list):
+        return [resolve(v, named) for v in value]
+    if isinstance(value, dict):
+        return {k: resolve(v, named) for k, v in value.items()}
+    return value
+
+
+def do_step(step, timeline, inj, agent, named=None):
+    named = {} if named is None else named
     kind = step.get("_kind")
     if kind == "cursor":
         x, y = step["cursor"]
@@ -270,11 +289,22 @@ def do_step(step, timeline, inj, agent):
         inj.clear_cursor()
         timeline.add(t=timeline.now(), type="clear_cursor")
     elif kind == "click":
+        # `mods` are held through the click (a Shift-click picks pieces for a note).
         x, y = step["click"]
+        mods = step.get("mods", [])
         inj.cursor(x, y)
         timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
+        for m in mods:
+            inj.press(m)
+        if mods:
+            timeline.add(t=timeline.now(), type="key", keys=list(mods))
+            time.sleep(0.05)
         timeline.add(t=timeline.now(), type="click", x=x, y=y)
         inj.send(kind="Mouse", button="Left", action="Tap")
+        if mods:
+            time.sleep(0.1)
+        for m in reversed(mods):
+            inj.release(m)
     elif kind == "key":
         mods = step.get("mods", [])
         for m in mods:
@@ -318,8 +348,12 @@ def do_step(step, timeline, inj, agent):
         # Stamped when the call starts: the editor acts on the call as it arrives, and a stamp taken
         # after a slow answer would place the change seconds after the frames that show it.
         t = timeline.now()
-        answer = agent.json_call(step["mcp"], step.get("args", {}))
+        answer = agent.json_call(step["mcp"], resolve(step.get("args", {}), named))
         timeline.add(t=t, type="agent", tool=step["mcp"], result=json.dumps(answer)[:200])
+        if "as" in step:
+            if not answer.get("operation_id"):
+                raise RuntimeError(f"{step['mcp']} at {step['at']} s, saved as {step['as']}, applied nothing: {answer}")
+            named[step["as"]] = answer["operation_id"]
     elif kind == "write":
         # A person saving a file the editor watches. Stamped before the write, like an agent call:
         # the frames after it are the ones that show the editor reading it.
@@ -380,12 +414,13 @@ def main():
     capture.start()
     try:
         seconds = [c["seconds"] for c in sb["chunks"]]
+        named = {}
         for step in steps:
             k, offset = chunk_of(step["at"], seconds)
             if not wait_for_chunk(timeline, k, capture):
                 break
             wait_until(timeline, timeline.chunk_started[k] + offset)
-            do_step(step, timeline, inj, agent)
+            do_step(step, timeline, inj, agent, named)
     finally:
         capture.join()
         agent.close()

@@ -1,0 +1,43 @@
+{
+ "name": "notes_end_to_end",
+ "fps": 10,
+ "scale": 2,
+ "width": 960,
+ "crop": [0, 0, 1280, 703],
+ "setup": [
+  {"mcp": "emerge_frame_view", "args": {"target": {"rect": [-40, -36, -16, -12]}}}
+ ],
+ "chunks": [
+  {"seconds": 17.5}
+ ],
+ "steps": [
+  {"at": 0.1, "caption": "Sanctuary's market (a scratch copy): the person leaves three notes for agents"},
+  {"at": 0.5, "key": "KeyN", "mods": ["ShiftLeft"], "caption": "person: Shift+N arms the note tool; drag a rectangle on empty ground"},
+  {"at": 0.9, "drag": [546, 378, 546, 431], "secs": 0.8},
+  {"at": 1.9, "type": "a bench for the stallkeepers"},
+  {"at": 2.8, "key": "Enter"},
+  {"at": 3.1, "click": [667, 557], "mods": ["ShiftLeft"], "caption": "person: Shift-click the cauldron and the kitchen table"},
+  {"at": 3.5, "click": [664, 512], "mods": ["ShiftLeft"]},
+  {"at": 3.9, "type": "a sack of grain between these"},
+  {"at": 4.7, "key": "Enter"},
+  {"at": 5.0, "click": [813, 425], "mods": ["ShiftLeft"], "caption": "person: Shift-click the empty stall"},
+  {"at": 5.4, "type": "this stall stands empty: clear it?"},
+  {"at": 6.3, "key": "Enter"},
+  {"at": 6.7, "key": "Enter", "caption": "person: Enter sends all three notes"},
+  {"at": 7.3, "mcp": "emerge_apply_operation", "args": {"operation": "note_claim", "parameters": {"id": "n1", "agent": "omp"}}, "caption": "two agents, omp and claude, each claim a note"},
+  {"at": 7.5, "mcp": "emerge_apply_operation", "args": {"operation": "note_claim", "parameters": {"id": "n2", "agent": "claude"}}},
+  {"at": 8.0, "mcp": "emerge_apply_operation", "args": {"operation": "placement_add", "parameters": {"piece": "town/fletcher_bench", "at": [-36.0, -22.0]}, "agent": "omp"}, "as": "bench", "caption": "omp: a bench inside its note; claude: a grain sack inside its own"},
+  {"at": 8.3, "mcp": "emerge_apply_operation", "args": {"operation": "placement_add", "parameters": {"piece": "prop_grain_sack", "at": [-22.3, -17.3]}, "agent": "claude"}, "as": "sack"},
+  {"at": 8.8, "mcp": "emerge_apply_operation", "args": {"operation": "note_resolve", "parameters": {"id": "n1", "agent": "omp", "summary": "a bench along the west edge of the market", "ops": ["$bench"], "captures": ["target/loop/captures/notes_end_to_end", "target/loop/captures/notes_end_to_end"], "assumptions": ["the fletcher's bench suits stallkeepers"]}}},
+  {"at": 9.0, "mcp": "emerge_apply_operation", "args": {"operation": "note_resolve", "parameters": {"id": "n2", "agent": "claude", "summary": "a grain sack between the table and the cauldron", "ops": ["$sack"], "captures": ["target/loop/captures/notes_end_to_end", "target/loop/captures/notes_end_to_end"]}}},
+  {"at": 9.4, "mcp": "emerge_apply_operation", "args": {"operation": "note_claim", "parameters": {"id": "n3", "agent": "claude"}}},
+  {"at": 9.6, "mcp": "emerge_apply_operation", "args": {"operation": "placement_remove", "parameters": {"id": "stall_4"}, "agent": "claude"}, "caption": "claude may not remove the person's stall unasked: refused"},
+  {"at": 10.4, "mcp": "emerge_apply_operation", "args": {"operation": "note_ask", "parameters": {"id": "n3", "agent": "claude", "question": "clear the empty stall?"}}, "caption": "claude asks: clear the empty stall? The person answers yes"},
+  {"at": 11.0, "mcp": "emerge_apply_operation", "args": {"operation": "note_answer", "parameters": {"id": "n3", "answer": "yes"}}},
+  {"at": 11.6, "mcp": "emerge_apply_operation", "args": {"operation": "placement_remove", "parameters": {"id": "stall_4"}, "agent": "claude"}, "as": "cleared", "caption": "claude clears the stall and resolves the note"},
+  {"at": 12.0, "mcp": "emerge_apply_operation", "args": {"operation": "note_resolve", "parameters": {"id": "n3", "agent": "claude", "summary": "cleared the empty stall", "ops": ["$cleared"], "captures": ["target/loop/captures/notes_end_to_end", "target/loop/captures/notes_end_to_end"]}}},
+  {"at": 12.8, "mcp": "emerge_apply_operation", "args": {"operation": "note_keep", "parameters": {"id": "n1"}}, "caption": "the person keeps the bench and the sack (note_keep)"},
+  {"at": 13.1, "mcp": "emerge_apply_operation", "args": {"operation": "note_keep", "parameters": {"id": "n2"}}},
+  {"at": 14.2, "mcp": "emerge_apply_operation", "args": {"operation": "note_undo_work", "parameters": {"id": "n3"}}, "caption": "the person undoes the third note (note_undo_work): the stall is back in one step"}
+ ]
+}
