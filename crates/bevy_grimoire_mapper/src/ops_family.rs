@@ -79,7 +79,7 @@ impl FamilySet {
         if !write {
             return Ok(None);
         }
-        std::fs::write(&path, &new)
+        bevy_grimoire_core::atomic_file::write(&path, &new)
             .map_err(|e| Refusal::new(format!("{} refused the change, so nothing was written: {e}", path.display())))?;
         Ok(Some(Outcome {
             summary: format!("{}: {} = {}", p.krate, p.field, p.value.trim()),

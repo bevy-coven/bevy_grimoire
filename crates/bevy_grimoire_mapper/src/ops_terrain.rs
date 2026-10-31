@@ -138,7 +138,7 @@ impl TerrainStroke {
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir).map_err(|e| Refusal::new(format!("{} cannot be made: {e}", dir.display())))?;
             }
-            std::fs::write(&path, &text)
+            bevy_grimoire_core::atomic_file::write(&path, &text)
                 .map_err(|e| Refusal::new(format!("{} refused the change, so nothing was written: {e}", path.display())))?;
         }
         Ok(Outcome {
@@ -273,7 +273,7 @@ impl TerrainImport {
                     if let Some(dir) = path.parent() {
                         std::fs::create_dir_all(dir).map_err(|e| Refusal::new(format!("{} cannot be made: {e}", dir.display())))?;
                     }
-                    std::fs::write(&path, t)
+                    bevy_grimoire_core::atomic_file::write(&path, t)
                         .map_err(|e| Refusal::new(format!("{} refused the change, so nothing was written: {e}", path.display())))?;
                 }
                 None => {
@@ -419,7 +419,7 @@ impl TerrainPreset {
                     if let Some(dir) = path.parent() {
                         std::fs::create_dir_all(dir).map_err(|e| Refusal::new(format!("{} cannot be made: {e}", dir.display())))?;
                     }
-                    std::fs::write(&path, t)
+                    bevy_grimoire_core::atomic_file::write(&path, t)
                         .map_err(|e| Refusal::new(format!("{} refused the change, so nothing was written: {e}", path.display())))?;
                 }
                 None => {

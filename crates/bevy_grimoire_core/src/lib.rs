@@ -30,6 +30,7 @@
 //! are the game's, and `ir.rs:7` already named `furnish.rs` as the boundary before the split.
 
 pub mod adjacency;
+pub mod atomic_file;
 pub mod census;
 pub mod clips;
 pub mod composition;

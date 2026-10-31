@@ -258,19 +258,15 @@ fn request_capture(commands: &mut Commands, handle: Handle<Image>, path: PathBuf
     Capture { screenshot, done, waited: 0 }
 }
 
-/// PNG-encode `image` and write it beside its final name first, so a crash mid-write leaves no half
-/// a file for the next launch to decode. A failure is a missing optimisation, never an error: it is
-/// said once and the editor carries on baking.
+/// PNG-encode `image` and write it through [`bevy_grimoire_core::atomic_file::write_cache`], so a
+/// crash mid-write leaves no half a file for the next launch to decode and the cache costs no
+/// flush per entry. A failure is a missing optimisation, never an error: it is said once and the
+/// editor carries on baking.
 fn write_cached(image: &Image, path: &Path) {
     static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     let written = (|| -> Result<(), String> {
         let png = crate::labels::encode_png(image)?;
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        }
-        let tmp = path.with_extension("png.tmp");
-        std::fs::write(&tmp, png).map_err(|e| format!("{}: {e}", tmp.display()))?;
-        std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+        bevy_grimoire_core::atomic_file::write_cache(path, png).map_err(|e| format!("{}: {e}", path.display()))
     })();
     if let Err(e) = written
         && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed)

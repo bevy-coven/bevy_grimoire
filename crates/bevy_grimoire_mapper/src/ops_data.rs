@@ -90,7 +90,7 @@ impl DataSet {
         .map_err(Refusal::new)?;
         let old = old.expect("set_leaf succeeded, so the leaf exists");
         if write {
-            std::fs::write(&path, &new)
+            bevy_grimoire_core::atomic_file::write(&path, &new)
                 .map_err(|e| Refusal::new(format!("{} refused the change, so nothing was written: {e}", path.display())))?;
         }
         Ok(Outcome {

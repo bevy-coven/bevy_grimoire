@@ -165,16 +165,10 @@ pub(crate) fn save_bench_cache(
         return;
     };
     let path = project.root.join(CACHE_PATH);
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    // Atomic via a pid-suffixed temp + rename: two concurrently-stepped test apps sharing a root
-    // must not share one temp name. A failed write leaves the old cache, which is merely stale —
-    // the load's checks make stale harmless.
-    let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
-    if std::fs::write(&tmp, &text).is_ok() {
-        let _ = std::fs::rename(&tmp, &path);
-    }
+    // Atomic and uniquely named, so two concurrently-stepped test apps sharing a root never share a
+    // temp file. A failed write leaves the old cache, which is merely stale — the load's checks
+    // make stale harmless. A cache is rebuilt, so it skips the flush.
+    let _ = bevy_grimoire_core::atomic_file::write_cache(&path, &text);
 }
 
 #[cfg(test)]
