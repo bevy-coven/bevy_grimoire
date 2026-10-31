@@ -69,11 +69,21 @@ def parse_ts(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
-def category(tool, text):
+WAITED_ON = [("gate", r"gate|push"), ("tests", r"test"), ("build", r"build|compil|link|target"),
+             ("release", r"release|publish"), ("clip", r"clip|record|render|capture"),
+             ("review", r"review"), ("subagent", r"agent|task")]
+
+
+def category(tool, text, intent=""):
+    if tool == "wait":
+        for name, pattern in WAITED_ON:
+            if re.search(pattern, intent or "", re.I):
+                return f"wait: {name}"
+        return "wait: other"
     if tool != "bash":
         return {"read": "read files", "grep": "search", "find": "search", "glob": "search",
                 "edit": "edit files", "write": "edit files", "ast_edit": "edit files",
-                "task": "subagents", "wait": "wait", "web_search": "web"}.get(tool, tool)
+                "task": "subagents", "web_search": "web"}.get(tool, tool)
     for name, pattern in CATEGORIES:
         if re.search(pattern, text or "", re.S | re.M):
             return name
@@ -168,7 +178,8 @@ def steps(entries):
                 details = m.get("details") or {}
                 job = (details.get("async") or {}).get("jobId") if isinstance(details, dict) else None
                 text = call["args"].get("command", "") if isinstance(call["args"], dict) else ""
-                rows.append(dict(phase=call["phase"], kind="tool", category=category(call["tool"], text),
+                intent = call["args"].get("i", "") if isinstance(call["args"], dict) else ""
+                rows.append(dict(phase=call["phase"], kind="tool", category=category(call["tool"], text, intent),
                                  tool=call["tool"], start=call["start"],
                                  seconds=(t - call["start"]).total_seconds(),
                                  detail=(f"[launched {job}] " if job else "") + detail_of(call["tool"], call["args"])))
