@@ -100,7 +100,7 @@ fn read_while_replacing(target: &Path, times: usize, replace: impl Fn(&Path, &st
 fn a_reader_never_sees_a_torn_map_while_it_is_replaced() {
     let dir = Scratch::new("reader");
     // The editor's own save, flushes included.
-    read_while_replacing(&dir.0.join("town.map.ron"), 300, |p, t| save_atomic(p, t));
+    read_while_replacing(&dir.0.join("town.map.ron"), 300, save_atomic);
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn a_writer_killed_at_random_points_leaves_the_old_file_or_the_new_one() {
 fn two_writers_of_one_path_do_not_corrupt_each_other() {
     let dir = Scratch::new("writers");
     let target = dir.0.join("town.map.ron");
-    let payloads: Vec<String> = [b'w', b'x', b'y', b'z'].into_iter().map(|byte| (byte as char).to_string().repeat(256 * 1024)).collect();
+    let payloads: Vec<String> = b"wxyz".iter().map(|byte| (*byte as char).to_string().repeat(256 * 1024)).collect();
     save_atomic(&target, &payloads[0]).unwrap_or_else(|e| panic!("{e}"));
 
     let done = AtomicBool::new(false);
