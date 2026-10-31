@@ -68,8 +68,21 @@ use std::path::{Path, PathBuf};
 /// The alternative considered was `varisat`, which would have grown the surface by **thirty-two**
 /// crates including two `syn` majors, `regex` and a proc-macro toolchain. That is the comparison that
 /// makes this a paragraph rather than an argument.
-const ALLOWED_DEPS: &[&str] =
-    &["serde", "serde_json", "ron", "rand", "rand_chacha", "bevy_grimoire_rng", "bevy_grimoire_solver"];
+///
+/// **`serde_path_to_error`** (#200) names the field a refused file is wrong at (`placements[3].at[1]`),
+/// which ron does only for a missing field. It depends on `serde` and `itoa` alone, holds no engine
+/// type, and its one user is `reload_check.rs`, which reads a file a second time only after refusing
+/// it. Added as an assumed owner exception (a new row, nothing loosened).
+const ALLOWED_DEPS: &[&str] = &[
+    "serde",
+    "serde_json",
+    "ron",
+    "rand",
+    "rand_chacha",
+    "bevy_grimoire_rng",
+    "bevy_grimoire_solver",
+    "serde_path_to_error",
+];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so
 /// `bevy_math`/`bevy_ecs` are caught as readily as `bevy`.
