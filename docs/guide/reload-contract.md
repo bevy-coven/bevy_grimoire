@@ -7,7 +7,7 @@ The list lives in code, in `bevy_grimoire_core::reload::KINDS`, and the table be
 ## How to read the table
 
 - **kind** is the id an operation names in `Operation::writes`.
-- **path** is relative to `<grimoire>` (the directory holding `kits.ron`, `assets/grimoire` in a default project; for a kit's `library.ron` and `project.ron`, the kit's own directory) or to `<root>` (the game's root, the directory holding `assets/`). `<name>` stands for one word of letters, digits and underscores, and for a per-map kind it is the map's name.
+- **path** is relative to `<grimoire>` (the project's directory, `assets/grimoire`, the one holding `kits.ron`) or to `<root>` (the game's root, the directory holding `assets/`). `<kit>` is a kit's directory under `<grimoire>`: the authoring kit's library, policy, terrain, water, volume, forest, people, scripts and trees live there. `<name>` and `<kit>` each stand for one word of letters, digits and underscores, and for a per-map kind `<name>` is the map's name. `<file>` is one file name of any characters.
 - **parses to** is the Rust type the file is read as.
 - **class** is what a change costs the programs this repository ships (the editor, and the game-side `GrimoireLivePlugin`), the dearest of them when they differ.
 - **lifetime** is what the file belongs to.
@@ -42,24 +42,27 @@ The list lives in code, in `bevy_grimoire_core::reload::KINDS`, and the table be
 | `standards` | `<grimoire>/standards.ron` | Standards | Live | global | by hand | Read fresh each time a kit is checked; the editor revalidates it when it changes. |
 | `repetition` | `<grimoire>/repetition.ron` | RepetitionRules | Live | global | by hand | Read fresh on each `repetition_vary` run; the editor revalidates it when it changes. |
 | `checks` | `<grimoire>/checks.ron` | Checks | Live | global | by hand | `Checks::for_project` reads it fresh on every run, so an edit takes effect at once. |
-| `data_registry` | `<grimoire>/data.ron` | DataFiles | Live | global | by hand | The registry of a game's own tuning files, read at each `data_set`; nothing holds it. |
+| `data_registry` | `<grimoire>/<kit>/data.ron` | DataFiles | Live | global | by hand | The registry of a game's own tuning files, read at each `data_set`; nothing holds it. |
 | `rigs` | `<grimoire>/rigs.ron` | Rigs | Restart | global | the animation tab | Read when the project opens and cached; nothing watches it (the guide says so). |
 | `oplog` | `<grimoire>/oplog.jsonl` | JSON lines | Live | global | the dispatcher appends a line for every operation | Appended and read on request by the log tools; nothing holds it. |
-| `reference_images` | `<grimoire>/references/<name>.png` | image bytes | Live | global | the editor, when a person drops an image on a map | Copied into the project and read when a map's reference is drawn. |
+| `reference_images` | `<root>/references/<file>` | image bytes | Live | global | the editor, when a person drops an image on a map | Copied into the project, where `reference_set` checks that the file exists; nothing watches it and nothing holds it. |
 | `map` | `<grimoire>/maps/<name>.map.ron` | Map | Respawn | per map | `map_create`, `map_set_settings`, `layout_accept`, `fill`, `map_save`, `placement_add`, `placement_set_pin`, `placement_set_yaw`, `placement_set_tip`, `placement_set_pose`, `placement_set_lift`, `placement_remove`, `stamp_remove`, `stamp_add`, `relations_solve`, `repetition_vary`, `map_rename`, `placement_set_family`, `composition_rename`, `run_add`, `run_set`, `run_remove`, `placements_to_run`, `note_undo_work`; also the project chooser (create, settings, rename) | The editor adopts it into the open map, or keeps what it had when it does not parse; the game respawns the placements that changed. |
 | `notes` | `<grimoire>/maps/<name>.notes.ron` | Notes | Live | per map | `note_add`, `note_edit`, `note_remove`, `note_send`, `note_claim`, `note_renew`, `note_release`, `note_ask`, `note_answer`, `note_resolve`, `note_keep`, `note_undo_work` | The editor rereads it when its modification time moves; the game has no reader. |
 | `plan` | `<grimoire>/maps/<name>.plan.ron` | Plan | Live | per map | `plan_set` | Read on demand by `plan_set` and the plan view. |
 | `references` | `<grimoire>/maps/<name>.references.ron` | References | Live | per map | `reference_set` | Read on demand by `reference_set` and the notes. |
 | `relations` | `<grimoire>/maps/<name>.relations.ron` | Relations | Live | per map | by hand | Read on demand by `relations_solve`. |
-| `terrain` | `<grimoire>/terrain/<name>.ron` | Heightfield | Respawn | per map | `terrain_stroke`, `terrain_import`; also `terrain_preset` (only in a build with the elements feature) | The editor redraws the ground when the file's modification time moves; a file that does not parse draws no ground. |
-| `water_plan` | `<grimoire>/water/<name>.ron` | WaterPlan | Live | per map | `water_place` | The plan `water_run` reads; nothing draws it directly. |
-| `water_field` | `<grimoire>/water/<name>.field.ron` | WaterField | Respawn | per map | `water_run` | The editor redraws the water surface when the file's modification time moves. |
-| `volume` | `<grimoire>/volume/<name>.ron` | Volume | Respawn | per map | `volume_edit` | The editor rebuilds the carved ground when the file's modification time moves. |
-| `forest` | `<grimoire>/forest/<name>.ron` | Forest | Respawn | per map | `forest_scatter` | The editor respawns the trees when the file's modification time moves. |
-| `people` | `<grimoire>/people/<name>.ron` | People | Live | per map | `person_set` | Read at each `people_run`; nothing holds it. |
-| `scripts` | `<grimoire>/scripts/<name>.ron` | Scripts | Live | per map | `trigger_set` | The map's triggers, read when they are run; nothing holds it. |
-| `trees` | `<grimoire>/trees/<name>.tree.ron` | TreeParams | Respawn | global | `tree_edit` | A species a forest uses: the editor regrows every tree of it when the file's modification time moves. |
-| `family` | `<root>/family/<name>.ron` | a family crate's settings | Live | global | `family_set` | One file per family crate: the editor and the game apply it in place, polled every 0.1 s. |
+| `terrain` | `<grimoire>/<kit>/terrain/<name>.ron` | Heightfield | Respawn | per map | `terrain_stroke`, `terrain_import`; also `terrain_preset` (only in a build with the elements feature) | The editor redraws the ground when the file's modification time moves; a file that does not parse draws no ground. |
+| `water_plan` | `<grimoire>/<kit>/water/<name>.ron` | WaterPlan | Live | per map | `water_place` | The plan `water_run` reads; nothing draws it directly. |
+| `water_field` | `<grimoire>/<kit>/water/<name>.field.ron` | WaterField | Respawn | per map | `water_run` | The editor redraws the water surface when the file's modification time moves. |
+| `volume` | `<grimoire>/<kit>/volume/<name>.ron` | Volume | Respawn | per map | `volume_edit` | The editor rebuilds the carved ground when the file's modification time moves. |
+| `forest` | `<grimoire>/<kit>/forest/<name>.ron` | Forest | Respawn | per map | `forest_scatter` | The editor respawns the trees when the file's modification time moves. |
+| `people` | `<grimoire>/<kit>/people/<name>.ron` | People | Live | per map | `person_set` | Read at each `people_run`; nothing holds it. |
+| `scripts` | `<grimoire>/<kit>/scripts/<name>.ron` | Scripts | Live | per map | `trigger_set` | The map's triggers, read when they are run; nothing holds it. |
+| `trees` | `<grimoire>/<kit>/trees/<name>.tree.ron` | TreeParams | Respawn | global | `tree_edit` | A species a forest uses: the editor regrows every tree of it when the file's modification time moves. |
+| `family` | `<root>/family/<name>.ron` | a family crate's settings | Live | global | `family_set` | One file per family crate: the editor applies it in place, polled every 0.1 s. The game-side `GrimoireLivePlugin` does not watch `<root>/family/`. |
+| `family_list` | `<root>/family.ron` | Family | Live | global | by hand | Which family crates the project uses, read when the editor needs the list; nothing holds it. |
+| `agent` | `<root>/agent.ron` | AgentSettings | Live | global | by hand | The note agent's model and prompt, read each time a note is sent; nothing holds it. |
+| `play` | `<root>/play.ron` | PlayConfig | Live | global | by hand | How the editor launches the game, read each time `play` runs; nothing holds it. |
 | `destructible_marks` | `<root>/destructible.ron` | Marks | Live | global | `destructible_set` (only in a build with the carnage feature) | Read at each `destructible_hit`; nothing holds it. |
 | `destructible_bake` | `<root>/destructible/<name>.bake.ron` | a baked fracture | Live | global | `destructible_set` and `destructible_hit` (only in a build with the carnage feature) | A cache the next hit rebuilds when it is absent. |
 | `game_data` | (any file registered in `data.ron`) | the game's own RON | Restart | global | `data_set` | Written by `data_set` into files the game owns. This repository ships no reader for them, so a running game is restarted unless it re-reads them itself. |
