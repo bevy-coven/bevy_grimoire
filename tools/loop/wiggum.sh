@@ -583,6 +583,12 @@ one_pass() {
   local -a omp_args
   omp_args=(--model "$MODEL" --thinking "$THINKING")
   [ -f "$OMP_OVERLAY" ] && omp_args+=(--config "$OMP_OVERLAY")
+  # **Every step of the pass, timed, afterwards.** omp records the session as JSONL; `steps.py` turns it
+  # into one row per model turn, tool call, background job and wait in `$STATE/steps.tsv`, so the slow
+  # steps of a loop can be found (`steps.py report --state $STATE`). It reads the session, so it needs
+  # nothing from the pass and works for a pass that was killed. Owner, 2026-10-31.
+  local pass_started_at
+  pass_started_at=$(date +%s)
   ( cd "$REPO" && exec omp "${omp_args[@]}" -p "/$COMMAND" ) \
     >"$passlog" 2>&1 &
   pass_pid=$!
@@ -623,6 +629,12 @@ one_pass() {
     log "pass $n TIMED OUT after ${PASS_TIMEOUT}s — killed, tree left as found"
   fi
   log "pass $n END rc=$rc timed_out=$timed_out log=$passlog"
+  # Never fails the pass: a missing tool or an unreadable session is one log line.
+  local steps_tool
+  steps_tool="$(cd "$(dirname "$0")" && pwd)/steps.py"
+  if [ -f "$steps_tool" ]; then
+    log "pass $n $(python3 "$steps_tool" record --repo "$REPO" --since "$pass_started_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
+  fi
 
   # **A tree left dirty is the next pass's first bug**, and the command says so.
   #

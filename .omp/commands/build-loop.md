@@ -16,6 +16,19 @@ that leaves rubbish behind compounds; a pass that stops early and cleanly costs 
 a fresh-context rule, a hard budget, and a headless mode that must work with no keyboard, no Sanctuary
 and no GPU.
 
+## The owner's override: hot reloading until it is done (2026-10-31)
+
+**While any issue labelled `hot-reload` is open, the pass's item is the first one of them that is ready, and nothing else.** The series is #198 → #204 (H1–H7); `gh issue list --repo bevy-coven/bevy_grimoire --state open --label hot-reload` lists what is left. Ready means every issue on its **Depends on** line is closed; take the lowest-numbered ready one, and #198 and #199 are both ready from the start. This rule outranks Phase 1's bug work, every rule in "Filed issues come before new features" (bugs, `consumer`, `owner` and other issues), "Your own claim first" in "Parallel workers", the focus file and Phase 2. A claim on any other issue is released, with a comment, before you start.
+
+- **One exception: a broken gate.** If the push gate refuses on `main` as it stands, or `main` does not build, fix exactly that first, because no slice can ship without it; then go back to the series in the same pass. Any other bug waits, and is filed if it is not already.
+- **One verified slice per pass**, with its failing-first test, as the issue's acceptance list says. Comment on the issue which acceptance items the slice meets, and close it with `Fixes #N` only in the commit that meets the last of them.
+- **A blocked issue does not end the series.** Comment exactly what it needs, then take the next ready `hot-reload` issue. Only when every open one is blocked does the rest of this command apply, and the log line names each blocker.
+- When the last `hot-reload` issue closes, this section has nothing to select and the rest of this command applies as written.
+
+## Mark your phases, so the loop's steps are timed
+
+The driver times every step of a pass from the omp session afterwards (`tools/loop/steps.py`, rows in `~/.local/state/wiggum/<clone>/steps.tsv`), so the owner can see which steps take longest and optimise them. The phase a step belongs to comes from you: **run `python3 tools/loop/steps.py mark <phase>` as you enter each phase**, with one of `orient`, `bugs`, `choose`, `research`, `build`, `prove`, `gate`, `ship`, `release`, `log`. It prints one line and costs nothing. A pass that skips the marks still has every step timed, but all of it lands in `orient`.
+
 ## Your work is saved even if you are killed
 
 **The driver saves whatever you leave uncommitted, without touching your branch.** Every ten minutes
