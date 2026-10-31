@@ -82,6 +82,25 @@ impl WaterPlan {
         }
         Ok(())
     }
+
+    /// **Read a plan from its file's text**, refusing what [`Self::place`] would refuse: a spring, sink
+    /// or lake with a number that is not finite or a radius or rate that is not above zero. The
+    /// refusal names the entry (`spring 2`), so an edit that cannot be run is refused when it lands
+    /// and not when `water_run` reads it.
+    pub fn parse(text: &str) -> Result<WaterPlan, String> {
+        let read: WaterPlan = ron::from_str(text).map_err(|e| format!("water plan: {e}"))?;
+        let mut checked = WaterPlan::default();
+        for (i, s) in read.springs.iter().enumerate() {
+            checked.place(Placed::Spring(*s)).map_err(|e| format!("water plan: spring {i}: {e}"))?;
+        }
+        for (i, s) in read.sinks.iter().enumerate() {
+            checked.place(Placed::Sink(*s)).map_err(|e| format!("water plan: sink {i}: {e}"))?;
+        }
+        for (i, l) in read.lakes.iter().enumerate() {
+            checked.place(Placed::Lake(*l)).map_err(|e| format!("water plan: lake {i}: {e}"))?;
+        }
+        Ok(read)
+    }
 }
 
 /// **The water the plan settles into** (#100): a depth in metres over every cell of the ground it
@@ -102,6 +121,28 @@ pub struct WaterField {
 }
 
 impl WaterField {
+    /// **Read a field from its file's text**, refusing one whose depths do not fill its shape, whose
+    /// cell is not a positive size, or with a number that is not finite. The shape check is the one
+    /// the drawing relies on: a field of another shape than its ground draws no water, and one whose
+    /// depths are short must not be indexed at all.
+    pub fn parse(text: &str) -> Result<WaterField, String> {
+        let field: WaterField = ron::from_str(text).map_err(|e| format!("water field: {e}"))?;
+        let (w, d) = (field.width, field.depth);
+        if w.checked_mul(d) != Some(field.depth_m.len()) {
+            return Err(format!("water field: {} depths for {w}x{d} (it needs {})", field.depth_m.len(), w.saturating_mul(d)));
+        }
+        if !(field.cell_m.is_finite() && field.cell_m > 0.0) {
+            return Err(format!("water field: cell_m {} is not a positive size", field.cell_m));
+        }
+        if !(field.origin.0.is_finite() && field.origin.1.is_finite()) {
+            return Err(format!("water field: origin {:?} is not a finite point", field.origin));
+        }
+        if let Some(i) = field.depth_m.iter().position(|v| !v.is_finite()) {
+            return Err(format!("water field: depth {i} is {}", field.depth_m[i]));
+        }
+        Ok(field)
+    }
+
     /// Total water, m³.
     pub fn volume_m3(&self) -> f32 {
         self.depth_m.iter().sum::<f32>() * self.cell_m * self.cell_m

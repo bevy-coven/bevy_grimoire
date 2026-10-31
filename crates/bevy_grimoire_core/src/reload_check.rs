@@ -83,11 +83,11 @@ fn field_of<T: DeserializeOwned>(text: &str) -> Option<String> {
 /// **Parse `text` as `kind`.** `file` is only what a refusal names.
 pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
     use crate::{
-        composition::Compositions, family::Family, heightfield::Heightfield, kits::Kits,
-        library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
+        composition::Compositions, data_files::DataFiles, family::Family, heightfield::Heightfield,
+        kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
         play::PlayConfig, policy::Policy, references::References, relations::Relations,
         repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards,
-        vocab::Vocabularies,
+        vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
     };
     let result = match kind.id {
         "kits" => run(text, Kits::parse),
@@ -105,6 +105,10 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "relations" => run(text, Relations::parse),
         "map" => run(text, Map::parse),
         "terrain" => run(text, Heightfield::parse),
+        "water_plan" => run(text, WaterPlan::parse),
+        "water_field" => run(text, WaterField::parse),
+        "volume" => run(text, Volume::parse),
+        "data_registry" => run(text, DataFiles::parse),
         "family_list" => run(text, Family::from_ron),
         "agent" => run(text, AgentSettings::from_ron),
         "play" => run(text, PlayConfig::from_ron),
