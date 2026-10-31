@@ -54,6 +54,26 @@ pub struct DataFiles {
 }
 
 impl DataFiles {
+    /// **Read a registry from its file's text**, refusing one that is malformed, whose version this
+    /// build does not know, or that names an id twice. It does not look at the disk: whether each
+    /// entry's file exists is [`Self::load`]'s question, because it depends on where the registry is.
+    /// Messages carry no path; [`Self::load`] prefixes the registry's.
+    pub fn parse(text: &str) -> Result<DataFiles, String> {
+        let d: DataFiles = ron::Options::default()
+            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+            .from_str(text)
+            .map_err(|e| e.to_string())?;
+        if d.version != REGISTRY_VERSION {
+            return Err(format!("version {} is not {REGISTRY_VERSION}", d.version));
+        }
+        for (i, f) in d.files.iter().enumerate() {
+            if d.files[..i].iter().any(|g| g.id == f.id) {
+                return Err(format!("id `{}` is registered twice", f.id));
+            }
+        }
+        Ok(d)
+    }
+
     /// Read `<grimoire_dir>/data.ron`. An absent registry is `Ok(None)`; a malformed one, a version
     /// this build does not know, a repeated id, or an entry whose file does not exist is an error
     /// naming the entry.
@@ -64,26 +84,9 @@ impl DataFiles {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(format!("{}: {e}", reg.display())),
         };
-        let mut d: DataFiles = ron::Options::default()
-            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
-            .from_str(&text)
-            .map_err(|e| format!("{}: {e}", reg.display()))?;
-        if d.version != REGISTRY_VERSION {
-            return Err(format!(
-                "{}: version {} is not {REGISTRY_VERSION}",
-                reg.display(),
-                d.version
-            ));
-        }
+        let mut d = Self::parse(&text).map_err(|e| format!("{}: {e}", reg.display()))?;
         d.grimoire_dir = grimoire_dir.to_path_buf();
-        for (i, f) in d.files.iter().enumerate() {
-            if d.files[..i].iter().any(|g| g.id == f.id) {
-                return Err(format!(
-                    "{}: id `{}` is registered twice",
-                    reg.display(),
-                    f.id
-                ));
-            }
+        for f in &d.files {
             let p = d.resolve(f);
             if !p.is_file() {
                 return Err(format!(

@@ -59,6 +59,10 @@ fn samples() -> Vec<Sample> {
         s("family_list", "family.ron", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),
         s("agent", "agent.ron", format!("(version: {})", bevy_grimoire_core::note_agent::AGENT_VERSION), "version", true),
         s("play", "play.ron", format!("(version: {}, command: [\"game\"])", bevy_grimoire_core::play::PLAY_VERSION), "version", true),
+        s("water_plan", "site/water/yard.ron", "(springs: [], sinks: [], lakes: [])".to_owned(), "springs", false),
+        s("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "steps", true),
+        s("volume", "site/volume/yard.ron", "(edits: [])".to_owned(), "edits", false),
+        s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION), "version", true),
     ]
 }
 
@@ -194,6 +198,37 @@ fn a_nested_field_is_named_by_its_path() {
     assert_eq!(refused(&sample, text).field.as_deref(), Some("origin[1]"));
 }
 
+/// A refusal the type's own validation raises after the file parsed has no field to name and says why:
+/// water that does not fill its shape, an edit with no size, a registry from another version or one
+/// that names an id twice. The running state is as safe against these as against a typo.
+#[test]
+fn a_file_that_parses_but_is_not_valid_is_refused_and_says_why() {
+    use bevy_grimoire_core::volume::{Edit, Mode, Shape, Volume};
+    let carve = Edit { shape: Shape::Sphere { center: [0.0; 3], radius_m: 0.0 }, mode: Mode::Carve, smooth_m: 0.0 };
+    let cases = [
+        ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "3 depths for 2x2"),
+        ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 0.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "cell_m"),
+        ("volume", "site/volume/yard.ron", ron::to_string(&Volume { edits: vec![carve] }).unwrap(), "above zero"),
+        ("data_registry", "site/data.ron", "(version: 99, files: [])".to_owned(), "version 99"),
+        (
+            "data_registry",
+            "site/data.ron",
+            format!("(version: {}, files: [(id: \"a\", path: \"a.ron\"), (id: \"a\", path: \"b.ron\")])", bevy_grimoire_core::data_files::REGISTRY_VERSION),
+            "`a` is registered twice",
+        ),
+    ];
+    for (id, file, text, why) in cases {
+        let kind = reload::kind_by_id(id).unwrap();
+        match reload_check::check(kind, file, &text) {
+            Check::Refused(r) => {
+                assert_eq!((r.kind, r.file.as_str()), (id, file));
+                assert!(r.reason.contains(why), "`{id}` should say `{why}`: {}", r.reason);
+            }
+            other => panic!("`{id}`: expected a refusal of {text} but got {other:?}"),
+        }
+    }
+}
+
 /// Every kind with a parser here has its three cases above; this keeps the table and `check` in step.
 #[test]
 fn the_samples_are_exactly_the_checked_kinds() {
@@ -209,12 +244,8 @@ fn the_samples_are_exactly_the_checked_kinds() {
 /// here or in the layer that owns it; none joins without a commit that says why it cannot be read.
 const UNCHECKED: &[&str] = &[
     "checks",
-    "data_registry",
     "oplog",
     "reference_images",
-    "water_plan",
-    "water_field",
-    "volume",
     "forest",
     "people",
     "scripts",
@@ -226,7 +257,7 @@ const UNCHECKED: &[&str] = &[
 ];
 
 /// **A literal, not `UNCHECKED.len()`**: a number that is its own measure can never fail.
-const UNCHECKED_MAX: usize = 15;
+const UNCHECKED_MAX: usize = 11;
 
 #[test]
 fn the_unchecked_list_only_shrinks() {

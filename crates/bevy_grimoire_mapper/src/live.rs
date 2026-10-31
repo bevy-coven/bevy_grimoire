@@ -15,7 +15,7 @@
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use bevy::prelude::*;
-use bevy_grimoire_core::live::Verdict;
+use bevy_grimoire_core::live::{KindVerdict, Verdict};
 use serde_json::{Value, json};
 
 use crate::project::{OpenMap, Project};
@@ -30,7 +30,7 @@ pub struct LiveWrite;
 impl Plugin for LivePlugin {
     fn build(&self, app: &mut App) {
         // `PostUpdate`, so every `Update` dispatch and undo of the frame has landed first.
-        app.init_resource::<LiveGame>().add_systems(
+        app.init_resource::<LiveGame>().init_resource::<EditorReloads>().add_systems(
             PostUpdate,
             write_through.run_if(resource_exists::<LiveWrite>),
         );
@@ -71,6 +71,54 @@ impl LiveGame {
             .map(|k| json!({"kind": k.kind, "file": k.file, "outcome": k.outcome.word(), "field": k.field, "reason": k.reason}))
             .collect();
         json!({"ok": v.ok, "message": v.message, "at_unix_ms": v.at_unix_ms, "seq": v.seq, "kinds": kinds})
+    }
+}
+
+/// **The editor's own verdicts on the files it watches** (#200, H3): what became of each file the
+/// editor reads and draws from, as the game's [`Verdict`] says it for the game's.
+///
+/// A watcher that reads a file decides it once per edit (it only looks again when the file's
+/// modification time moves) and hands the decision to [`Self::decide`]. One decision lists every file
+/// that watcher read, because the editor keeps the last good state when any of them is refused. `seq`
+/// counts decisions, so one edit is one number however many frames pass.
+#[derive(Resource, Default)]
+pub struct EditorReloads {
+    seq: u64,
+    kinds: Vec<KindVerdict>,
+}
+
+impl EditorReloads {
+    /// **Record one decision**: each verdict replaces the earlier one for the same kind and file.
+    pub fn decide(&mut self, verdicts: Vec<KindVerdict>) {
+        self.seq += 1;
+        for v in verdicts {
+            match self.kinds.iter_mut().find(|k| k.kind == v.kind && k.file == v.file) {
+                Some(slot) => *slot = v,
+                None => self.kinds.push(v),
+            }
+        }
+    }
+
+    /// Forget the verdicts of these kinds, when the files they named belong to a map no longer open.
+    pub fn forget(&mut self, kinds: &[&str]) {
+        self.kinds.retain(|k| !kinds.contains(&k.kind.as_str()));
+    }
+
+    /// The newest verdict for every file, in the order they were first decided.
+    pub fn kinds(&self) -> &[KindVerdict] {
+        &self.kinds
+    }
+
+    /// **The `reloads` field of `grimoire_state`**: `ok` (no file refused), `seq`, and one entry per
+    /// file with its kind, path, `applied` or `refused`, and for a refusal the field and the reason.
+    pub fn state_json(&self) -> Value {
+        let kinds: Vec<Value> = self
+            .kinds
+            .iter()
+            .map(|k| json!({"kind": k.kind, "file": k.file, "outcome": k.outcome.word(), "field": k.field, "reason": k.reason}))
+            .collect();
+        let ok = self.kinds.iter().all(|k| k.outcome == bevy_grimoire_core::live::Outcome::Applied);
+        json!({"ok": ok, "seq": self.seq, "kinds": kinds})
     }
 }
 
