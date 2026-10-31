@@ -122,7 +122,7 @@ It needs an `GrimoireWorld` resource, which `GrimoirePlugin` spawns from. About 
 - A placement whose height changed is redrawn too. Moving a table moves the lamp on it.
 - Editing a descriptor redraws every placement of that descriptor. `ProjectReloaded::library_changed` says so.
 - A successful reload replaces the `GrimoireWorld` resource and writes a `ProjectReloaded` message. Its `diffs` hold one `MapDiff` per map you listed, so a game can react to the ids that changed.
-- If the project does not load, the plugin logs why, keeps every entity and the last good `GrimoireWorld`, and writes no `ProjectReloaded`. The reason goes to `.live/game.ron`, where the editor shows it.
+- If the project does not load, the plugin logs why, keeps every entity and the last good `GrimoireWorld`, and writes no `ProjectReloaded`. The reason goes to `.live/game.ron`, where the editor shows it: which file, which field of it and why (`maps/town.map.ron (placements[3].at[1]): map: 1:47: Expected float`), with an `applied` or `refused` entry for every file the load reads and a `seq` that counts one edit once. [The reload contract](reload-contract.md) has the detail.
 - The map in the `GrimoireWorld` resource is the one that is redrawn. Other maps in `maps` are diffed but not drawn.
 - The game's own derived data, such as a navmesh built from the map, is yours to rebuild when `ProjectReloaded` arrives.
 

@@ -26,6 +26,8 @@ bevy_grimoire_rng = { path = "../bevy_grimoire_rng", version = "0.1.0" }
 bevy_grimoire_solver = { path = "../bevy_grimoire_solver", version = "0.1.0" }
 serde.workspace = true
 ron.workspace = true
+# On a refused reload, the field the file is wrong at (`reload_check.rs`); never on the happy path.
+serde_path_to_error.workspace = true
 # Reading a `.glb`'s JSON chunk (`glb.rs`). Data only — no engine, no renderer. The reader is
 # hand-rolled rather than pulling a glTF crate, for the reason `tests/common/mod.rs` gives: it would
 # be "a second, differently-behaved reader of an asset the engine already parses its own way".
