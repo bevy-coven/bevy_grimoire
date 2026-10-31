@@ -152,6 +152,9 @@ impl Operation for TreeEdit {
     fn name(&self) -> &'static str {
         "tree_edit"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["trees"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

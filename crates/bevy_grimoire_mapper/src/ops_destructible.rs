@@ -147,6 +147,9 @@ impl Operation for DestructibleSet {
     fn name(&self) -> &'static str {
         "destructible_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["destructible_marks", "destructible_bake"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -242,6 +245,9 @@ impl DestructibleHit {
 impl Operation for DestructibleHit {
     fn name(&self) -> &'static str {
         "destructible_hit"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["destructible_bake"]
     }
     fn undo(&self) -> Undo {
         Undo::None

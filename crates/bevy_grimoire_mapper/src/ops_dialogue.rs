@@ -97,6 +97,9 @@ impl Operation for DialoguePreview {
     fn name(&self) -> &'static str {
         "dialogue_preview"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn undo(&self) -> Undo {
         Undo::None
     }

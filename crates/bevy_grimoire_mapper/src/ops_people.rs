@@ -320,6 +320,9 @@ impl Operation for PersonSet {
     fn name(&self) -> &'static str {
         "person_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["people"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -626,6 +629,9 @@ impl PeopleRun {
 impl Operation for PeopleRun {
     fn name(&self) -> &'static str {
         "people_run"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
     }
     fn undo(&self) -> Undo {
         Undo::None

@@ -191,6 +191,9 @@ impl Operation for NoteAdd {
     fn name(&self) -> &'static str {
         "note_add"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["notes"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -277,6 +280,9 @@ impl Operation for NoteEdit {
     fn name(&self) -> &'static str {
         "note_edit"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["notes"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -348,6 +354,9 @@ impl NoteRemove {
 impl Operation for NoteRemove {
     fn name(&self) -> &'static str {
         "note_remove"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["notes"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse
@@ -438,6 +447,9 @@ impl NoteSend {
 impl Operation for NoteSend {
     fn name(&self) -> &'static str {
         "note_send"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["notes"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse
@@ -575,6 +587,9 @@ macro_rules! lease_operation {
         impl Operation for $ty {
             fn name(&self) -> &'static str {
                 $lease.name()
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &["notes"]
             }
             fn undo(&self) -> Undo {
                 Undo::Inverse
@@ -750,6 +765,9 @@ macro_rules! talk_operation {
         impl Operation for $ty {
             fn name(&self) -> &'static str {
                 $talk.name()
+            }
+            fn writes(&self) -> &'static [&'static str] {
+                &["notes"]
             }
             fn undo(&self) -> Undo {
                 Undo::Inverse
@@ -935,6 +953,9 @@ impl NoteUndoWork {
 impl Operation for NoteUndoWork {
     fn name(&self) -> &'static str {
         "note_undo_work"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map", "notes"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

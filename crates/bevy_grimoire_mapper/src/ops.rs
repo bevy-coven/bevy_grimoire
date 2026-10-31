@@ -544,6 +544,13 @@ pub trait Operation: 'static {
         false
     }
 
+    /// **The kinds of file this operation writes**, by `bevy_grimoire_core::reload::FileKind::id`,
+    /// its undo's writes included. **No default, so a new operation cannot skip it** (#198): an
+    /// operation that writes no file says `&[]`. `every_written_kind_has_a_reload_class` fails when an
+    /// id here is a kind the reload contract does not list, and the contract's guide table is
+    /// rendered from these.
+    fn writes(&self) -> &'static [&'static str];
+
     /// **The RNG seed this operation ran under, for the log.** `None` unless the operation's result
     /// depends on one — a proposal without its seed is a layout nobody can reproduce, which is the
     /// complaint the brief already makes about a WFC run recorded without its RNG.
@@ -655,6 +662,9 @@ pub mod map_create {
     impl Operation for MapCreate {
         fn name(&self) -> &'static str {
             "map_create"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         /// **`Undo::Inverse`, and the inverse is this operation's own undo form.** `take_back`
@@ -1022,6 +1032,9 @@ pub mod layout_propose {
         fn name(&self) -> &'static str {
             "layout_propose"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
 
         /// **Nothing to undo**: a proposal is an offer, and the map is untouched. Taking a standing
         /// proposal away is [`super::layout_discard`], which is its own verb.
@@ -1181,6 +1194,9 @@ pub mod layout_accept {
     impl Operation for LayoutAccept {
         fn name(&self) -> &'static str {
             "layout_accept"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -1417,6 +1433,9 @@ pub mod layout_discard {
         fn name(&self) -> &'static str {
             "layout_discard"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
 
         /// Nothing is written, so there is nothing to take back.
         fn undo(&self) -> Undo {
@@ -1546,6 +1565,9 @@ pub mod fill {
     impl Operation for Fill {
         fn name(&self) -> &'static str {
             "fill"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -1750,6 +1772,9 @@ pub mod map_save {
         fn name(&self) -> &'static str {
             "map_save"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::None
@@ -1858,6 +1883,9 @@ pub mod map_open {
     impl Operation for MapOpen {
         fn name(&self) -> &'static str {
             "map_open"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
         }
 
         /// **`Undo::None`, and the honest reason is that opening a map is not an edit.** It changes
@@ -2058,6 +2086,9 @@ pub mod placement_add {
     impl Operation for PlacementAdd {
         fn name(&self) -> &'static str {
             "placement_add"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -2327,6 +2358,9 @@ pub mod piece_import {
     impl Operation for PieceImport {
         fn name(&self) -> &'static str {
             "piece_import"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["library"]
         }
 
         fn undo(&self) -> Undo {
@@ -2620,6 +2654,9 @@ pub mod piece_remove {
     impl Operation for PieceRemove {
         fn name(&self) -> &'static str {
             "piece_remove"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["library"]
         }
 
         fn undo(&self) -> Undo {
@@ -3900,6 +3937,9 @@ pub mod map_set_settings {
         fn name(&self) -> &'static str {
             "map_set_settings"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -4236,6 +4276,9 @@ pub mod placement_set_pin {
         fn name(&self) -> &'static str {
             "placement_set_pin"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -4394,6 +4437,9 @@ pub mod placement_set_yaw {
     impl Operation for PlacementSetYaw {
         fn name(&self) -> &'static str {
             "placement_set_yaw"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -4602,6 +4648,9 @@ pub mod placement_set_tip {
         fn name(&self) -> &'static str {
             "placement_set_tip"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -4786,6 +4835,9 @@ pub mod placement_set_pose {
     impl Operation for PlacementSetPose {
         fn name(&self) -> &'static str {
             "placement_set_pose"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -4972,6 +5024,9 @@ pub mod placement_set_lift {
     impl Operation for PlacementSetLift {
         fn name(&self) -> &'static str {
             "placement_set_lift"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -5493,6 +5548,9 @@ pub mod label_set {
         fn name(&self) -> &'static str {
             "label_set"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["library"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -5793,6 +5851,9 @@ pub mod piece_set_mount {
         fn name(&self) -> &'static str {
             "piece_set_mount"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["library"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -6029,6 +6090,9 @@ pub mod pack_set_excluded {
         fn name(&self) -> &'static str {
             "pack_set_excluded"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["policy"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -6195,6 +6259,9 @@ pub mod brush_arm {
         fn name(&self) -> &'static str {
             "brush_arm"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
 
         fn undo(&self) -> Undo {
             Undo::None
@@ -6321,6 +6388,9 @@ pub mod composition_arm {
     impl Operation for CompositionArm {
         fn name(&self) -> &'static str {
             "composition_arm"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
         }
 
         fn undo(&self) -> Undo {
@@ -6551,6 +6621,9 @@ pub mod door_open {
         fn name(&self) -> &'static str {
             "door_open"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
+        }
 
         fn undo(&self) -> Undo {
             Undo::None
@@ -6668,6 +6741,9 @@ pub mod piece_select {
     impl Operation for PieceSelect {
         fn name(&self) -> &'static str {
             "piece_select"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &[]
         }
         fn undo(&self) -> Undo {
             Undo::None
@@ -6962,6 +7038,9 @@ pub mod placement_remove {
         fn name(&self) -> &'static str {
             "placement_remove"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
+        }
 
         fn undo(&self) -> Undo {
             Undo::Inverse
@@ -7231,6 +7310,9 @@ pub mod stamp_remove {
     impl Operation for StampRemove {
         fn name(&self) -> &'static str {
             "stamp_remove"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map"]
         }
 
         fn undo(&self) -> Undo {
@@ -7837,6 +7919,9 @@ pub mod rules_set {
         fn name(&self) -> &'static str {
             "rules_set"
         }
+        fn writes(&self) -> &'static [&'static str] {
+            &["rules"]
+        }
 
         /// **An inverse**, because every field here is one value the block already held.
         fn undo(&self) -> Undo {
@@ -8069,6 +8154,9 @@ pub mod map_rename {
     impl Operation for MapRename {
         fn name(&self) -> &'static str {
             "map_rename"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["map", "rules"]
         }
 
         fn undo(&self) -> Undo {

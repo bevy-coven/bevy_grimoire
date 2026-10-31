@@ -9,6 +9,7 @@ Read these in order the first time through.
 - [Your game](your-game.md): use the crates in your own Bevy game.
 - [Keys](keys.md): every key, by context.
 - [Data files](data-files.md): the files a project keeps and a game loads.
+- [The reload contract](reload-contract.md): every kind of file the editor writes, and what a running program does when one changes.
 
 Reference:
 
