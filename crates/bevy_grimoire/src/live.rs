@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy_grimoire_core::live::{FileWatch, MapDiff, Verdict, diff_maps};
 use bevy_grimoire_core::map::Map;
-use bevy_grimoire_core::project_data::ProjectData;
+use bevy_grimoire_core::project_data::{self, ProjectData};
 
 use crate::{GrimoireWorld, Placement, spawn_placements};
 
@@ -43,6 +43,8 @@ struct Live {
     watch: FileWatch,
     /// The last good version of every listed map, the baseline the next diff is against.
     last: BTreeMap<String, Map>,
+    /// How many reload decisions this process has written, so a verdict is one edit's, once.
+    seq: u64,
 }
 
 impl Plugin for GrimoireLivePlugin {
@@ -63,6 +65,7 @@ impl Plugin for GrimoireLivePlugin {
                 maps: self.maps.clone(),
                 watch,
                 last,
+                seq: 0,
             })
             .add_systems(Update, reload);
     }
@@ -126,11 +129,29 @@ pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld) -> Plan {
     out
 }
 
-fn load_world(live: &Live, current: &GrimoireWorld) -> Result<(GrimoireWorld, BTreeMap<String, Map>), String> {
-    let mut names: Vec<&str> = live.maps.iter().map(String::as_str).collect();
-    if !names.contains(&current.map.name.as_str()) {
-        names.push(current.map.name.as_str());
+/// Every map a reload reads: the listed ones, and the world's own map.
+fn map_names(live: &Live, current: &GrimoireWorld) -> Vec<String> {
+    let mut names = live.maps.clone();
+    if !names.contains(&current.map.name) {
+        names.push(current.map.name.clone());
     }
+    names
+}
+
+/// **Write the decision on this edit**, once: the per-file verdicts (every file the load reads, with
+/// the field of each one it refused) and the message, under the next sequence number.
+fn decide(live: &mut Live, names: &[String], error: Option<&str>, message: String) {
+    live.seq += 1;
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let kinds = project_data::verdicts(&live.dir, &names, error);
+    if let Err(e) = Verdict::with_kinds(live.seq, message, kinds).write(&live.dir) {
+        warn!("grimoire live: could not write the verdict: {e}");
+    }
+}
+
+fn load_world(live: &Live, current: &GrimoireWorld) -> Result<(GrimoireWorld, BTreeMap<String, Map>), String> {
+    let names = map_names(live, current);
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
     let mut data = ProjectData::load(&live.dir, &names)?;
     let map = data
         .maps
@@ -166,16 +187,12 @@ fn reload(
         return;
     }
     let Some(mut world) = world else { return };
-    let verdict = |ok: bool, message: String| {
-        if let Err(e) = Verdict::now(ok, message).write(&live.dir) {
-            warn!("grimoire live: could not write the verdict: {e}");
-        }
-    };
+    let names = map_names(&live, &world);
     let (new, maps) = match load_world(&live, &world) {
         Ok(loaded) => loaded,
         Err(e) => {
             warn!("grimoire live: reload refused, keeping the last good project: {e}");
-            verdict(false, e);
+            decide(&mut live, &names, Some(&e), e.clone());
             return;
         }
     };
@@ -210,7 +227,7 @@ fn reload(
         .collect::<Vec<_>>()
         .join("; ");
     info!("grimoire live: reloaded ({summary}); respawned {spawned}");
-    verdict(true, summary);
+    decide(&mut live, &names, None, summary);
     *world = new;
     live.last = maps;
     reloaded.write(ProjectReloaded {

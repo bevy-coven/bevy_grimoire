@@ -34,6 +34,9 @@ use crate::kits::{self, Bound, Kits};
 use crate::map::Map;
 use crate::rules::{self, Rules};
 use crate::vocab::Vocabularies;
+use crate::live::{KindVerdict, Outcome};
+use crate::reload::{self, Base};
+use crate::reload_check::{self, Check};
 
 /// The project's vocabulary file, beside `kits.ron`.
 pub const VOCAB_FILE: &str = "vocab.ron";
@@ -189,6 +192,62 @@ pub fn load(grimoire_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
         compositions,
         maps: loaded,
     })
+}
+
+/// **The verdict on every file [`load`] reads**, for a caller that has just run it (#200).
+///
+/// `load_error` is what `load` answered: `None` when it succeeded, and every file is then
+/// [`Outcome::Applied`]. Given an error, each file is read and checked on its own
+/// ([`reload_check::check`]), so an author sees every file that is wrong, with its field, and not only
+/// the first one `load` stopped at. When no file is wrong by itself, the error is about how files fit
+/// together (an unknown vocabulary token, a descriptor a map names that no library has): it goes to
+/// the file whose path starts it, or to a `project` entry when none does.
+///
+/// The files are the ones `load` would read: `kits.ron`, each bound kit's library and policy,
+/// `vocab.ron`, `rules.ron` and `compositions.ron` when present, and each map asked for. Paths are
+/// relative to `grimoire_dir`.
+pub fn verdicts(grimoire_dir: &Path, maps: &[&str], load_error: Option<&str>) -> Vec<KindVerdict> {
+    let mut files = vec![kits::KITS_FILE.to_owned()];
+    let parsed = std::fs::read_to_string(grimoire_dir.join(kits::KITS_FILE)).ok().and_then(|t| Kits::parse(&t).ok());
+    for bind in parsed.iter().flat_map(|k| &k.bind) {
+        files.push(format!("{}/{}", bind.dir, crate::policy::LIBRARY_FILE));
+        files.push(format!("{}/{}", bind.dir, crate::policy::POLICY_FILE));
+    }
+    files.push(VOCAB_FILE.to_owned());
+    for optional in [rules::FILE, Compositions::FILE] {
+        if grimoire_dir.join(optional).is_file() {
+            files.push(optional.to_owned());
+        }
+    }
+    files.extend(maps.iter().map(|name| format!("{MAPS_DIR}/{}", crate::naming::map_file_name(name))));
+
+    let mut out = Vec::with_capacity(files.len());
+    for rel in files {
+        let Some(kind) = reload::kind_of(Base::Grimoire, &rel) else { continue };
+        out.push(match load_error {
+            None => KindVerdict::applied(kind.id, rel),
+            Some(_) => match std::fs::read_to_string(grimoire_dir.join(&rel)) {
+                Err(e) => KindVerdict::refused(kind.id, rel, None, e.to_string()),
+                Ok(text) => match reload_check::check(kind, &rel, &text) {
+                    Check::Refused(r) => KindVerdict::refused(r.kind, r.file, r.field, r.reason),
+                    Check::Valid | Check::Unchecked => KindVerdict::applied(kind.id, rel),
+                },
+            },
+        });
+    }
+    if let Some(error) = load_error
+        && out.iter().all(|v| v.outcome == Outcome::Applied)
+    {
+        let owner = out.iter_mut().find(|v| error.starts_with(&grimoire_dir.join(&v.file).display().to_string()));
+        match owner {
+            Some(v) => {
+                let prefix = format!("{}: ", grimoire_dir.join(&v.file).display());
+                *v = KindVerdict::refused(v.kind.clone(), v.file.clone(), None, error.strip_prefix(&prefix).unwrap_or(error));
+            }
+            None => out.push(KindVerdict::refused("project", ".", None, error)),
+        }
+    }
+    out
 }
 
 #[cfg(test)]

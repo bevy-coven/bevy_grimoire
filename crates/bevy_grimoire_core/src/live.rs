@@ -21,7 +21,7 @@ use crate::map::Map;
 
 #[path = "live_verdict.rs"]
 mod verdict;
-pub use verdict::{Verdict, VERDICT_VERSION};
+pub use verdict::{KindVerdict, Outcome, Verdict, VERDICT_VERSION};
 
 /// Seconds between looks at the files.
 pub const POLL_SECS: f64 = 0.5;
