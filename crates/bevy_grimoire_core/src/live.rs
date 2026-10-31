@@ -32,8 +32,8 @@ pub const SETTLE_SECS: f64 = 0.5;
 ///
 /// A file or directory whose name starts with `.` is never watched: a game writes its own verdict
 /// into `<grimoire_dir>/.live/`, and that write must not trigger the reload it reports on. A file
-/// with another extension is skipped too, so the editor's `.ron.tmp` write-then-rename is not a
-/// change until the rename lands.
+/// with another extension is skipped too, so the editor's write-then-rename (a hidden
+/// `.<name>.<pid>-<n>.tmp`, see [`crate::atomic_file`]) is not a change until the rename lands.
 pub struct FileWatch {
     dir: PathBuf,
     extensions: Vec<String>,

@@ -781,10 +781,11 @@ pub fn save_atomic(path: &Path, text: &str) -> Result<(), String> {
 ///
 /// # What it leaves behind
 ///
-/// The tmp file is **removed** on every path, including the refusal, so a failed write does not
-/// leave a hidden `.tmp` in the project. The bytes are already in the target by then, so
-/// removing the tmp name is removing a *second name for the same inode*, not the data. The
-/// check and the write are [`crate::atomic_file::write_new`].
+/// The tmp file is removed on every path, including the refusal, so a failed write does not leave a
+/// hidden `.tmp` in the project. After a successful link the removal is best effort (the bytes are in
+/// the target already, and the next write of this target clears a leftover once it is an hour old):
+/// removing the tmp name is removing a *second name for the same inode*, not the data. The check and
+/// the write are [`crate::atomic_file::write_new`].
 pub fn save_atomic_no_replace(path: &Path, text: &str) -> Result<(), String> {
     crate::atomic_file::write_new(path, text).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AlreadyExists {

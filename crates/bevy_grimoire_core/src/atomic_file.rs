@@ -5,13 +5,16 @@
 //! is writing it. `std::fs::write` truncates the target and then fills it, so a reader in between
 //! parses an empty or half-written file (#187, #158). Every write of a project file goes through
 //! [`write`] (or [`write_new`], which refuses to replace), and a ratchet test
-//! (`tests/atomic_writes_only.rs`) fails on a new plain write.
+//! (`tests/atomic_writes_only.rs`) fails on a new plain `fs::write`, `File::create`, `fs::copy`
+//! or `OpenOptions` in the non-test source of `bevy_grimoire_core` and `bevy_grimoire_mapper`
+//! (a write through another API, such as a bare imported `write(`, is not seen by it).
 //!
 //! # What a write does
 //!
 //! 1. A temp file **in the target's own directory** (a rename is atomic only within one file
 //!    system), with a name no other writer shares: `.<name>.<pid>-<serial>.tmp`, created with
-//!    `create_new`, so two writers of one path, in one process or two, never write the same bytes.
+//!    `create_new`. The pid separates processes and the serial separates threads, and a leftover
+//!    of a dead process with the same pid is stepped over. Only the threads are tested.
 //! 2. The bytes, then [`File::sync_all`](std::fs::File::sync_all).
 //! 3. `rename` over the target (or `link`, for [`write_new`]).
 //! 4. A flush of the directory.
@@ -23,9 +26,9 @@
 //! # What is claimed, and what is tested
 //!
 //! **Claimed and tested:** no torn read (a reader thread parses the target while it is replaced ten
-//! thousand times), no half-written target when the writer dies (a child process is killed at
-//! random points), and two writers of one path do not corrupt each other
-//! (`tests/atomic_writes.rs`).
+//! thousand times without the flushes, and three hundred times with them), no half-written target
+//! when the writer dies (a child process is killed at random points), and four writers of one path
+//! do not corrupt each other (`tests/atomic_writes.rs`).
 //!
 //! **Not claimed: durability against power loss.** Steps 2 and 4 are issued, and on macOS
 //! `File::sync_all` is `fcntl(F_FULLFSYNC)` (about 6 ms a call here, against 0.1 ms for plain
@@ -37,8 +40,9 @@
 //! # A crash leaves a temp file, and the next write clears it
 //!
 //! A writer killed between steps 1 and 3 leaves its temp file. It is invisible to the editor and the
-//! game, and the next write of the same target removes any such file older than [`STALE_AFTER`]
-//! (never a fresh one, which may be another writer's, mid-write).
+//! game, and the next [`write`] or [`write_new`] of the same target removes any such file older
+//! than [`STALE_AFTER`] (never a fresh one, which may be another writer's, mid-write).
+//! [`write_cache`] does not look: a cache directory can hold thousands of files.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -143,8 +147,8 @@ fn put(path: &Path, bytes: &[u8], flush: Flush, land: Land) -> io::Result<()> {
     landed?;
     if flush == Flush::Full {
         let _ = File::open(parent).and_then(|dir| dir.sync_all());
+        sweep_stale(parent, path);
     }
-    sweep_stale(parent, path);
     Ok(())
 }
 
@@ -163,16 +167,26 @@ fn create_temp(path: &Path) -> io::Result<(PathBuf, File)> {
     Err(last.unwrap_or_else(|| io::Error::other("no unused temp name")))
 }
 
+/// Whether `file_name` is a temp file of the target called `target_name`, exactly: `.<target_name>.`,
+/// then `<digits>-<digits>`, then `.tmp`. `town.map.ron.bak`'s temp files are not `town.map.ron`'s.
+fn is_temp_of(target_name: &str, file_name: &str) -> bool {
+    let Some(rest) = file_name.strip_prefix('.').and_then(|r| r.strip_prefix(target_name)).and_then(|r| r.strip_prefix('.'))
+    else {
+        return false;
+    };
+    let Some(pid_serial) = rest.strip_suffix(".tmp") else { return false };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    pid_serial.split_once('-').is_some_and(|(pid, serial)| digits(pid) && digits(serial))
+}
+
 /// Remove `target`'s temp files that a dead writer left: older than [`STALE_AFTER`]. Best effort.
 fn sweep_stale(parent: &Path, target: &Path) {
     let Some(name) = target.file_name() else { return };
-    let prefix = format!(".{}.", name.to_string_lossy());
+    let name = name.to_string_lossy();
     let Ok(entries) = fs::read_dir(parent) else { return };
     let now = SystemTime::now();
     for entry in entries.flatten() {
-        let file_name = entry.file_name();
-        let file_name = file_name.to_string_lossy();
-        if !file_name.starts_with(&prefix) || !is_temp(Path::new(&*file_name)) {
+        if !is_temp_of(&name, &entry.file_name().to_string_lossy()) {
             continue;
         }
         let old = entry

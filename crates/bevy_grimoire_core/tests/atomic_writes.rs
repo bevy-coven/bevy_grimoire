@@ -12,7 +12,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use bevy_grimoire_core::live::{FileWatch, POLL_SECS};
@@ -61,15 +61,17 @@ impl Drop for Stop<'_> {
     }
 }
 
-/// **Replace `target` `times` times while a reader thread parses it in a loop.** Every read must
-/// parse, and must be one of the two whole maps.
+/// **Replace `target` at least `times` times while a reader thread parses it in a loop.** Every read
+/// must parse, and must be one of the two whole maps. The writer goes on past `times` until the
+/// reader has read at least 20 times (or ten seconds pass), so a reader the scheduler starts late
+/// still overlaps the writes.
 fn read_while_replacing(target: &Path, times: usize, replace: impl Fn(&Path, &str) -> Result<(), String>) -> usize {
     let (a, b) = (map_text(60, 0.0), map_text(60, 90.0));
     replace(target, &a).unwrap_or_else(|e| panic!("{e}"));
     let done = AtomicBool::new(false);
-    let reads = std::thread::scope(|scope| {
+    let reads = AtomicUsize::new(0);
+    std::thread::scope(|scope| {
         let reader = scope.spawn(|| {
-            let mut reads = 0usize;
             while !done.load(Ordering::Acquire) {
                 let text = std::fs::read_to_string(target)
                     .unwrap_or_else(|e| panic!("the target vanished mid-replace: {e}"));
@@ -81,18 +83,21 @@ fn read_while_replacing(target: &Path, times: usize, replace: impl Fn(&Path, &st
                     b.len()
                 );
                 Map::parse(&text).unwrap_or_else(|e| panic!("a reader saw a map that does not parse: {e}"));
-                reads += 1;
+                reads.fetch_add(1, Ordering::Release);
             }
-            reads
         });
         let _stop = Stop(&done);
-        for i in 0..times {
+        let started = Instant::now();
+        let mut i = 0;
+        while i < times || (reads.load(Ordering::Acquire) < 20 && started.elapsed() < Duration::from_secs(10)) {
             replace(target, if i % 2 == 0 { &b } else { &a }).unwrap_or_else(|e| panic!("{e}"));
+            i += 1;
         }
         done.store(true, Ordering::Release);
-        reader.join().unwrap_or_else(|_| panic!("the reader thread panicked"))
+        reader.join().unwrap_or_else(|_| panic!("the reader thread panicked"));
     });
-    assert!(reads > 20, "the reader only read {reads} times, so the test did not overlap the writer");
+    let reads = reads.into_inner();
+    assert!(reads >= 20, "the reader only read {reads} times, so the test did not overlap the writer");
     reads
 }
 
@@ -100,7 +105,7 @@ fn read_while_replacing(target: &Path, times: usize, replace: impl Fn(&Path, &st
 fn a_reader_never_sees_a_torn_map_while_it_is_replaced() {
     let dir = Scratch::new("reader");
     // The editor's own save, flushes included.
-    read_while_replacing(&dir.0.join("town.map.ron"), 300, |p, t| save_atomic(p, t));
+    read_while_replacing(&dir.0.join("town.map.ron"), 300, save_atomic);
 }
 
 #[test]
@@ -122,6 +127,17 @@ const PAYLOAD: usize = 2 * 1024 * 1024;
 
 fn payload(byte: u8) -> String {
     (byte as char).to_string().repeat(PAYLOAD)
+}
+
+/// A child that is killed and reaped when it drops, so a failed assertion cannot leave a writer
+/// running forever (it would also recreate the scratch directory the test removes).
+struct KillOnDrop(std::process::Child);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 /// **Not a test by itself**: the child process the kill test starts. Run bare it does nothing.
@@ -159,22 +175,24 @@ fn a_writer_killed_at_random_points_leaves_the_old_file_or_the_new_one() {
     let (mut saw_old, mut saw_a, mut saw_b) = (0, 0, 0);
     for trial in 0..40 {
         let _ = std::fs::remove_file(&started);
-        let mut child = Command::new(&exe)
-            .args(["--exact", "a_writer_to_kill", "--test-threads=1"])
-            .env(KILL_TARGET_ENV, &target)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap_or_else(|e| panic!("cannot start the writer: {e}"));
+        let mut child = KillOnDrop(
+            Command::new(&exe)
+                .args(["--exact", "a_writer_to_kill", "--test-threads=1"])
+                .env(KILL_TARGET_ENV, &target)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap_or_else(|e| panic!("cannot start the writer: {e}")),
+        );
         let waited = Instant::now();
         while !started.exists() {
             assert!(waited.elapsed() < Duration::from_secs(30), "the writer never started (trial {trial})");
             std::thread::sleep(Duration::from_millis(1));
         }
-        // Somewhere inside the writer's loop, anywhere from its first write to the thirtieth.
-        std::thread::sleep(Duration::from_micros(next() % 60_000));
-        child.kill().unwrap_or_else(|e| panic!("cannot kill the writer: {e}"));
-        let _ = child.wait();
+        // Somewhere inside the writer's loop: from before its first write lands to many writes in.
+        std::thread::sleep(Duration::from_micros(next() % 150_000));
+        child.0.kill().unwrap_or_else(|e| panic!("cannot kill the writer: {e}"));
+        let _ = child.0.wait();
 
         let got = std::fs::read_to_string(&target).unwrap_or_else(|e| panic!("trial {trial}: the target is gone: {e}"));
         if got == old {
@@ -203,7 +221,7 @@ fn a_writer_killed_at_random_points_leaves_the_old_file_or_the_new_one() {
 fn two_writers_of_one_path_do_not_corrupt_each_other() {
     let dir = Scratch::new("writers");
     let target = dir.0.join("town.map.ron");
-    let payloads: Vec<String> = [b'w', b'x', b'y', b'z'].into_iter().map(|byte| (byte as char).to_string().repeat(256 * 1024)).collect();
+    let payloads: Vec<String> = b"wxyz".iter().map(|byte| (*byte as char).to_string().repeat(256 * 1024)).collect();
     save_atomic(&target, &payloads[0]).unwrap_or_else(|e| panic!("{e}"));
 
     let done = AtomicBool::new(false);
@@ -255,20 +273,30 @@ fn no_file_a_write_makes_but_the_target_is_a_ron_file() {
     let dir = Scratch::new("names");
     let target = dir.0.join("town.map.ron");
     let done = AtomicBool::new(false);
+    let caught = AtomicBool::new(false);
     let seen: BTreeSet<String> = std::thread::scope(|scope| {
         let looker = scope.spawn(|| {
             let mut seen = BTreeSet::new();
             while !done.load(Ordering::Acquire) {
                 for entry in std::fs::read_dir(&dir.0).into_iter().flatten().flatten() {
-                    seen.insert(entry.file_name().to_string_lossy().into_owned());
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if name != "town.map.ron" {
+                        caught.store(true, Ordering::Release);
+                    }
+                    seen.insert(name);
                 }
             }
             seen
         });
         let _stop = Stop(&done);
         let text = map_text(200, 0.0);
-        for _ in 0..200 {
+        // At least 200 writes, and on until the looker has seen a temp file (or ten seconds pass): the
+        // temp file exists for a few microseconds on a fast disk.
+        let started = Instant::now();
+        let mut writes = 0;
+        while writes < 200 || (!caught.load(Ordering::Acquire) && started.elapsed() < Duration::from_secs(10)) {
             save_atomic(&target, &text).unwrap_or_else(|e| panic!("{e}"));
+            writes += 1;
         }
         done.store(true, Ordering::Release);
         looker.join().unwrap_or_else(|_| panic!("the looker panicked"))

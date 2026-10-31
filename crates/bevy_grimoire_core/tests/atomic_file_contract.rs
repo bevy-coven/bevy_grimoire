@@ -105,17 +105,21 @@ fn the_next_write_clears_a_dead_writers_temp_file_and_spares_a_fresh_one() {
     let stale = atomic_file::temp_path(&target, 900_001);
     let fresh = atomic_file::temp_path(&target, 900_002);
     let other_targets = atomic_file::temp_path(&dir.0.join("kits.ron"), 900_003);
-    for p in [&stale, &fresh, &other_targets] {
+    // A target whose name only *starts* with this one's: `town.map.ron.bak` is not `town.map.ron`.
+    let longer_name = atomic_file::temp_path(&dir.0.join("town.map.ron.bak"), 900_004);
+    for p in [&stale, &fresh, &other_targets, &longer_name] {
         std::fs::write(p, "half a file").unwrap_or_else(|e| panic!("{e}"));
     }
     age(&stale, STALE_AFTER + Duration::from_secs(60));
     age(&other_targets, STALE_AFTER + Duration::from_secs(60));
+    age(&longer_name, STALE_AFTER + Duration::from_secs(60));
 
     atomic_file::write(&target, "whole").unwrap_or_else(|e| panic!("{e}"));
 
     assert!(!stale.exists(), "a dead writer's temp file was not cleared");
     assert!(fresh.exists(), "a writer that may still be running had its temp file removed");
     assert!(other_targets.exists(), "a write of one file cleared another file's temp file");
+    assert!(longer_name.exists(), "a write of town.map.ron cleared a temp file of town.map.ron.bak");
     assert_eq!(std::fs::read_to_string(&target).unwrap_or_default(), "whole");
 }
 

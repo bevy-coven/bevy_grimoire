@@ -50,12 +50,12 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         file: "bevy_grimoire_core/src/project_data.rs",
-        needle: "fs::rename(",
+        needle: "std::fs::rename(&old, &new)",
         why: "moves the directory `assets/emerge` to `assets/grimoire` when a project is opened; it writes no bytes",
     },
     Allowed {
         file: "bevy_grimoire_mapper/src/ops.rs",
-        needle: "OpenOptions",
+        needle: "let mut f = std::fs::OpenOptions::new()",
         why: "the operation log is an append (`append(true)`), so it cannot lose an earlier line by being rewritten, and nobody edits it",
     },
 ];
@@ -75,17 +75,37 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The lines of `text` that are not in the file's `#[cfg(test)] mod`, with their numbers. Every file
-/// in the workspace puts its test module last, so everything from it on is test code.
+/// The lines of `text` outside its `#[cfg(test)] mod` bodies, with their numbers. A test module ends at
+/// the first later line that is a lone `}` at the module's own indentation (rustfmt's shape, which the
+/// workspace is written in), so production code written after a test module is still scanned.
 fn code_lines(text: &str) -> Vec<(usize, &str)> {
     let lines: Vec<&str> = text.lines().collect();
-    let end = (0..lines.len())
-        .find(|&i| {
-            lines[i].trim() == "#[cfg(test)]"
-                && lines[i + 1..].iter().find(|l| !l.trim().starts_with("#[")).is_some_and(|l| l.trim_start().starts_with("mod "))
-        })
-        .unwrap_or(lines.len());
-    lines[..end].iter().enumerate().map(|(i, l)| (i + 1, *l)).collect()
+    let mut keep = vec![true; lines.len()];
+    let mut i = 0;
+    while i < lines.len() {
+        if lines[i].trim() != "#[cfg(test)]" {
+            i += 1;
+            continue;
+        }
+        let Some(offset) = lines[i + 1..].iter().position(|l| !l.trim().starts_with("#[")) else { break };
+        let module = i + 1 + offset;
+        let header = lines[module];
+        // A one-line item (`use ...;`, `fn f() { ... }`, `mod tests;`) is cut alone; anything longer
+        // runs to the closing brace at its own indentation.
+        let one_line = header.trim_end().ends_with(';') || (header.contains('{') && header.trim_end().ends_with('}'));
+        let end = if one_line {
+            module
+        } else {
+            let indent = header.len() - header.trim_start().len();
+            let closer = format!("{}}}", " ".repeat(indent));
+            (module + 1..lines.len())
+                .find(|&k| lines[k].trim_end() == closer)
+                .unwrap_or_else(|| panic!("line {}: the closing `}}` of this test item was not found at column {indent}", module + 1))
+        };
+        keep[i..=end].iter_mut().for_each(|k| *k = false);
+        i = end + 1;
+    }
+    lines.iter().enumerate().filter(|(i, _)| keep[*i]).map(|(i, l)| (i + 1, *l)).collect()
 }
 
 #[test]
@@ -136,10 +156,40 @@ fn no_project_file_is_written_the_plain_way() {
 
 #[test]
 fn the_scan_sees_a_plain_write_when_there_is_one() {
-    // The scan is only worth anything if it can fail: feed it the shape it exists to catch.
+    // The scan is only worth anything if it can fail: feed it the shapes it exists to catch.
     let text = "fn save(p: &Path) {\n    std::fs::write(p, \"x\").unwrap();\n}\n\n#[cfg(test)]\nmod tests {\n    fn fixture() { std::fs::write(\"a\", \"b\").unwrap(); }\n}\n";
     let lines = code_lines(text);
     assert_eq!(lines.len(), 4, "the test module must be cut off: {lines:?}");
     assert!(lines.iter().any(|(n, l)| *n == 2 && PLAIN.iter().any(|p| l.contains(p))));
     assert!(!lines.iter().any(|(_, l)| l.contains("fixture")), "test code was scanned");
+}
+
+/// **Production code after a test module is scanned**: the first version cut each file at its first
+/// test module and skipped thousands of lines after it. A nested module, an external `mod tests;` and a
+/// `#[cfg(test)]` on one function are each cut by exactly their own extent.
+#[test]
+fn production_code_after_a_test_module_is_still_scanned() {
+    let text = "\
+fn one() {}
+#[cfg(test)]
+mod tests {
+    fn fixture() { std::fs::write(\"a\", \"b\").unwrap(); }
+}
+fn after() { std::fs::write(\"p\", \"q\").unwrap(); }
+pub mod picker {
+    fn inner() {}
+    #[cfg(test)]
+    mod tests {
+        fn nested() { std::fs::File::create(\"n\").unwrap(); }
+    }
+    fn inner_after() { std::fs::copy(\"a\", \"b\").unwrap(); }
+}
+#[cfg(test)]
+mod external;
+#[cfg(test)]
+fn only_for_tests() { std::fs::write(\"t\", \"t\").unwrap(); }
+fn last() { std::fs::rename(\"x\", \"y\").unwrap(); }
+";
+    let hits: Vec<usize> = code_lines(text).into_iter().filter(|(_, l)| PLAIN.iter().any(|p| l.contains(p))).map(|(n, _)| n).collect();
+    assert_eq!(hits, [6, 13, 19], "the lines a scan reports: after the first test module, inside a nested module's tail, and the last");
 }
