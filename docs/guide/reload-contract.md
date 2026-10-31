@@ -85,7 +85,7 @@ The game writes one `Verdict` to `.live/game.ron` for each edit it decides on. V
 
 `grimoire_state.game` carries `seq` and `kinds`, and the editor's journal says `game refused the reload: maps/town.map.ron (placements[3].at[1]): map: 1:47: Expected float`. The tests are `crates/bevy_grimoire_core/tests/reload_verdicts.rs` (three bad files per kind), `crates/bevy_grimoire/tests/live_verdicts.rs` (the game keeps its entities and world, writes one verdict per edit) and `crates/bevy_grimoire_mapper/tests/the_games_per_file_verdicts_reach_grimoire_state.rs`.
 
-This is the first slice of #200. A refusal for the kinds the editor reads itself (notes, terrain, water, volume, forest, trees, family settings), the `needs_restart` outcome, and the rule that refuses a settings struct which adds a field with no default are still to do.
+This is the first slice of #200. Still to do: a check for the 15 kinds `check` cannot read, the same per-file verdict from the editor's own watchers (notes, terrain, water, volume, forest and tree views), the `needs_restart` outcome, and the rule that refuses a settings struct which adds a field with no default.
 
 ## What the audit found
 
