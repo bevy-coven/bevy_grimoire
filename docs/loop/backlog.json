@@ -233,6 +233,69 @@
           "evidence": "2026-10-28: moved to #95 (end to end)."
         }
       ]
+    },
+    {
+      "id": "S-005",
+      "kind": "series",
+      "area": "live",
+      "title": "Hot reload: every file the editor writes reaches a running program by a declared path",
+      "goal": "A new kind of file cannot ship without a declared reload class, every editor write is atomic, a bad file never replaces a good state, runtime state keeps its identity across a reload, and the editor shows each file's reload state",
+      "approved_by": "owner 2026-10-31",
+      "acceptance": [
+        "docs/guide/reload-contract.md lists every kind the editor writes, with class and lifetime",
+        "every_written_kind_has_a_reload_class and the_restart_list_only_shrinks fail when a kind is added without a class or to Restart without the list",
+        "every editor write is atomic",
+        "a reload that does not parse keeps the last good state and reports a verdict per kind",
+        "the editor shows each file's reload state"
+      ],
+      "status": "open",
+      "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 slice 1 (pass 164, 2026-10-31): core reload::KINDS (30 kinds, class and lifetime), Operation::writes on all 70 impls, docs/guide/reload-contract.md, core tests/reload_contract.rs and mapper tests/reload_contract.rs.",
+      "last_failure": "",
+      "first_seen": "2026-10-31",
+      "steps": [
+        {
+          "id": "H1",
+          "title": "One reload contract for every file the editor writes, and a ratchet test",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/198"
+        },
+        {
+          "id": "H2",
+          "title": "Every editor write is atomic",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/199"
+        },
+        {
+          "id": "H3",
+          "title": "Last good wins on every kind, and every reload reports a verdict",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/200"
+        },
+        {
+          "id": "H4",
+          "title": "Runtime state keeps its identity across a reload",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/201"
+        },
+        {
+          "id": "H5",
+          "title": "Move gameplay behaviour into data and scripts, so the restart list shrinks",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/202"
+        },
+        {
+          "id": "H6",
+          "title": "The editor shows each file's reload state",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/203"
+        },
+        {
+          "id": "H7",
+          "title": "A spike: Bevy's asset system against the custom watcher, for one file kind",
+          "status": "open",
+          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/204"
+        }
+      ]
     }
   ]
 }
