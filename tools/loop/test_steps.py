@@ -97,6 +97,39 @@ class Steps(unittest.TestCase):
         first = [l for l in text.splitlines() if l and not l.startswith(("category", "1 pass"))][0]
         self.assertTrue(first.startswith("wait"), text)
 
+    def test_publish_pushes_the_log_to_its_own_branch_and_leaves_the_clone_alone(self):
+        import subprocess
+
+        def run(*a, cwd=None):
+            return subprocess.run(a, cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+        with tempfile.TemporaryDirectory() as d:
+            origin, clone, state = Path(d) / "origin.git", Path(d) / "loop_clone", Path(d) / "state"
+            run("git", "init", "-q", "--bare", "-b", "main", str(origin))
+            run("git", "clone", "-q", str(origin), str(clone))
+            for k, v in (("user.name", "t"), ("user.email", "t@t")):
+                run("git", "config", k, v, cwd=clone)
+            (clone / "a.txt").write_text("a\n")
+            run("git", "add", "a.txt", cwd=clone)
+            run("git", "commit", "-qm", "a", cwd=clone)
+            run("git", "push", "-q", "origin", "HEAD:main", cwd=clone)
+            (clone / "dirty.txt").write_text("the pass's own work\n")
+            head = run("git", "rev-parse", "HEAD", cwd=clone)
+            state.mkdir()
+            steps.write_rows(state / "steps.tsv", 7, self.rows)
+
+            self.assertIn("pushed", steps.publish(str(clone), str(state), "loop-stats"))
+            # A second publish builds on the branch it fetched, so it fast-forwards or has nothing to do.
+            steps.write_rows(state / "steps.tsv", 8, self.rows)
+            self.assertIn("pushed", steps.publish(str(clone), str(state), "loop-stats"))
+            self.assertEqual(run("git", "rev-list", "--count", "loop-stats", cwd=origin), "2")
+
+            files = run("git", "ls-tree", "-r", "--name-only", "loop-stats", cwd=origin).split()
+            self.assertEqual(files, ["steps/loop_clone.md", "steps/loop_clone.tsv"])
+            self.assertEqual(run("git", "rev-parse", "HEAD", cwd=clone), head)
+            self.assertEqual(run("git", "status", "--short", cwd=clone), "?? dirty.txt")
+            self.assertEqual(run("git", "rev-parse", "main", cwd=origin), head)
+
     def test_a_session_is_matched_to_the_driver_pass_that_started_it(self):
         with tempfile.TemporaryDirectory() as d:
             log = Path(d) / "driver.log"

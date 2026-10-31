@@ -634,6 +634,11 @@ one_pass() {
   steps_tool="$(cd "$(dirname "$0")" && pwd)/steps.py"
   if [ -f "$steps_tool" ]; then
     log "pass $n $(python3 "$steps_tool" record --repo "$REPO" --since "$pass_started_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
+    # And onto GitHub, on the repo's own `loop-stats` branch (`steps/<clone>.tsv` and `.md`), built with
+    # plumbing so the clone's tree, index and `main` are untouched. WIGGUM_STEPS_BRANCH= turns it off.
+    if [ -n "${WIGGUM_STEPS_BRANCH-loop-stats}" ]; then
+      log "pass $n $(python3 "$steps_tool" publish --repo "$REPO" --state "$STATE" --branch "${WIGGUM_STEPS_BRANCH-loop-stats}" 2>&1 | tail -1)"
+    fi
   fi
 
   # **A tree left dirty is the next pass's first bug**, and the command says so.

@@ -27,6 +27,9 @@ and a `phase`. Phases are marked by the pass itself with `python3 tools/loop/ste
     steps.py backfill --repo DIR --state STATEDIR [--last K]
                                                 # every past session of that clone, numbered by start time
     steps.py report --state STATEDIR [--last K] # where the time goes, across the last K passes
+    steps.py publish --repo DIR --state STATEDIR [--branch loop-stats]
+                                                # the driver, after record: push steps/<clone>.tsv and
+                                                # steps/<clone>.md to the repo's loop-stats branch
 
 Stdlib only.
 """
@@ -290,6 +293,56 @@ def report(state, last, out=sys.stdout):
         print(f"  pass {r['pass']:>4} {r['seconds']:7.0f}s  {r['kind']:<5} {r['category']:<20} {r['detail'][:90]}", file=out)
 
 
+def git(repo, *args, env=None, input=None):
+    import subprocess
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, env=env, input=input)
+
+
+def publish(repo, state, branch):
+    """Commit this clone's step log and its report to `branch` and push it, without touching the clone.
+
+    The loop's working tree, index and `main` are the pass's; the driver writes nothing there (a loop's
+    bookkeeping must never appear in a pass's `git status`). So this builds the commit with plumbing in a
+    throwaway index and pushes it to a branch of its own, which only this writes. The pre-push gate guards
+    `main` only, so it does not run here.
+    """
+    import io
+    import tempfile
+    name = os.path.basename(os.path.realpath(repo))
+    tsv = Path(state) / "steps.tsv"
+    if not tsv.exists():
+        return f"steps: nothing to publish ({tsv} missing)"
+    buf = io.StringIO()
+    buf.write(f"# Where {name}'s time goes\n\nWritten by `tools/loop/steps.py publish` after every pass; ")
+    buf.write(f"the rows are in [`{name}.tsv`]({name}.tsv). Updated {dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%MZ}.\n\n")
+    for title, last in (("The last 12 passes", 12), ("Every pass recorded", 0)):
+        buf.write(f"## {title}\n\n```text\n")
+        report(state, last, out=buf)
+        buf.write("```\n\n")
+    ref = f"refs/remotes/origin/{branch}"
+    for attempt in (1, 2):
+        git(repo, "fetch", "-q", "origin", f"+refs/heads/{branch}:{ref}")
+        base = git(repo, "rev-parse", "-q", "--verify", f"{ref}^{{commit}}").stdout.strip()
+        with tempfile.TemporaryDirectory() as d:
+            env = dict(os.environ, GIT_INDEX_FILE=os.path.join(d, "index"))
+            if base:
+                git(repo, "read-tree", base, env=env)
+            for path, text in ((f"steps/{name}.tsv", tsv.read_text(encoding="utf-8")),
+                               (f"steps/{name}.md", buf.getvalue())):
+                blob = git(repo, "hash-object", "-w", "--stdin", input=text).stdout.strip()
+                git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=env)
+            tree = git(repo, "write-tree", env=env).stdout.strip()
+        if base and git(repo, "rev-parse", f"{base}^{{tree}}").stdout.strip() == tree:
+            return f"steps: {branch} already up to date"
+        args = ["commit-tree", tree, "-m", f"steps: {name}"] + (["-p", base] if base else [])
+        commit = git(repo, *args, env=dict(os.environ, GIT_AUTHOR_NAME="wiggum", GIT_AUTHOR_EMAIL="wiggum@localhost",
+                                           GIT_COMMITTER_NAME="wiggum", GIT_COMMITTER_EMAIL="wiggum@localhost")).stdout.strip()
+        pushed = git(repo, "push", "-q", "origin", f"{commit}:refs/heads/{branch}")
+        if pushed.returncode == 0:
+            return f"steps: pushed steps/{name}.tsv and .md to {branch} ({commit[:9]})"
+    return f"steps: push to {branch} failed: {(pushed.stderr or '').strip()[:160]}"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -307,6 +360,10 @@ def main(argv=None):
     p = sub.add_parser("report", help="where the time goes")
     p.add_argument("--state", required=True)
     p.add_argument("--last", type=int, default=0)
+    u = sub.add_parser("publish", help="push this clone's step log to the repo's loop-stats branch")
+    u.add_argument("--repo", required=True)
+    u.add_argument("--state", required=True)
+    u.add_argument("--branch", default="loop-stats")
     a = ap.parse_args(argv)
 
     if a.cmd == "mark":
@@ -336,6 +393,9 @@ def main(argv=None):
         return 0
     if a.cmd == "report":
         report(a.state, a.last)
+        return 0
+    if a.cmd == "publish":
+        print(publish(a.repo, a.state, a.branch))
         return 0
     return 2
 
