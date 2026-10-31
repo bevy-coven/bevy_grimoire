@@ -361,6 +361,7 @@ struct Loaded<'w> {
     project: Option<Res<'w, crate::project::Project>>,
     open: Option<Res<'w, crate::project::OpenMap>>,
     game: Option<Res<'w, crate::live::LiveGame>>,
+    reloads: Option<Res<'w, crate::live::EditorReloads>>,
     diagnostics: Option<Res<'w, bevy::diagnostic::DiagnosticsStore>>,
     busy: Option<Res<'w, FrameBusy>>,
 }
@@ -414,7 +415,7 @@ fn editor_state(
     // apart, and its predicate passed on the pre-fix build.
     screen: Option<Res<State<crate::screen::Screen>>>,
 ) -> Result<Value, String> {
-    let Loaded { project, open, game, diagnostics, busy } = loaded;
+    let Loaded { project, open, game, reloads, diagnostics, busy } = loaded;
     // **The agent's presentation, and the person's answer to it** (S1.7). `None` until an agent
     // presents something; then an object whose `answer` is `null` while the question is up. This is
     // the only channel an agent has for what a person did after its call returned.
@@ -592,6 +593,9 @@ fn editor_state(
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),
         // **The game's verdict on the last reload** (S3.5): null, "pending", or {ok, message, at_unix_ms}.
         "game": game.map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
+        // **The editor's own verdicts** on the files it watches and draws (#200, H3): `{ok, seq, kinds}`,
+        // one entry per file with its kind, path, `applied` or `refused`, and the field and reason.
+        "reloads": reloads.map_or(Value::Null, |r| r.state_json()),
         "armed_composition": armed.and_then(|a| a.id().map(|s| s.to_owned())),
         "selected": tiles.as_ref().map(|t| t.selected_library_id.clone()),
         "door": door.map(|d| d.label()),

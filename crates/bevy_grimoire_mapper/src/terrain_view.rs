@@ -14,6 +14,9 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy_grimoire_core::heightfield::Heightfield;
+use bevy_grimoire_core::live::{KindVerdict, Outcome};
+use bevy_grimoire_core::reload_check::{self, Check};
+use bevy_grimoire_core::volume::Volume;
 use bevy_grimoire_core::water::WaterField;
 
 use crate::project::{OpenMap, Project};
@@ -123,15 +126,22 @@ pub fn ground_base() -> StandardMaterial {
     StandardMaterial { perceptual_roughness: 1.0, ..default() }
 }
 
-/// **Draw the open map's terrain and water**, and redraw when either file changes. A terrain file
-/// that does not read ([`Heightfield::parse`]: heights that do not fill its shape, say) draws no
-/// ground and is named on the status line, once per change to the file (#187).
+/// **Draw the open map's terrain and water**, and redraw when any of its files changes.
+///
+/// **A file that does not read is refused, and the last good drawing stays** (#187, #200). The ground,
+/// the water and the carved volume are read as one unit, the way the game reloads a project: when one
+/// of the three is refused ([`Heightfield::parse`]: heights that do not fill their shape, say), what is
+/// drawn stays as it was, and the others' edits wait until the bad one is fixed, so the view never
+/// shows a half of an edit. Nothing drawn yet draws nothing. Each edit is one decision, recorded in
+/// [`crate::live::EditorReloads`] with the file and the field it is wrong at and said once on the
+/// status line, because the files are only read again when one's modification time moves.
 #[allow(clippy::too_many_arguments)]
 pub fn sync_terrain_view(
     time: Res<Time>,
     project: Res<Project>,
     open: Res<OpenMap>,
     mut state: ResMut<crate::editor::EditorState>,
+    mut reloads: Option<ResMut<crate::live::EditorReloads>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -159,18 +169,46 @@ pub fn sync_terrain_view(
     if built.as_ref() == Some(&now) {
         return;
     }
+    // Read each file that exists, and decide it: its value, or the refusal that names file and field.
+    let ground = read_kind("terrain", &project, &ground_path, Heightfield::parse);
+    let water = read_kind("water_field", &project, &water_path, WaterField::parse);
+    let volume = read_kind("volume", &project, &volume_path, Volume::parse);
+    let verdicts: Vec<KindVerdict> = ground
+        .iter()
+        .map(|(_, v)| v)
+        .chain(water.iter().map(|(_, v)| v))
+        .chain(volume.iter().map(|(_, v)| v))
+        .cloned()
+        .collect();
+    let same_view = built.as_ref().is_some_and(|b| (&b.map_path, b.origin, b.drop) == (&now.map_path, now.origin, now.drop));
+    if let Some(reloads) = reloads.as_deref_mut() {
+        if !same_view {
+            reloads.forget(&["terrain", "water_field", "volume"]);
+        }
+        reloads.decide(verdicts.clone());
+    }
+    let refused: Vec<&KindVerdict> = verdicts.iter().filter(|v| v.outcome == Outcome::Refused).collect();
+    if !refused.is_empty() {
+        let kept = same_view && !drawn.is_empty();
+        let sentence = refused.iter().map(|v| v.sentence()).collect::<Vec<_>>().join("; ");
+        state.status.problem(if kept {
+            format!("{sentence}: refused, so the terrain drawn before stays")
+        } else {
+            format!("{sentence}: refused, so the terrain is not drawn from it")
+        });
+        if same_view {
+            // Last good wins: leave what is drawn, and remember the stamp so this is said once.
+            *built = Some(now);
+            return;
+        }
+    }
     for e in drawn.drain(..) {
         commands.entity(e).despawn();
     }
-    let ground = match std::fs::read_to_string(&ground_path) {
-        Ok(text) => Heightfield::parse(&text)
-            .inspect_err(|e| state.status.problem(format!("terrain/{name}.ron does not read, so no terrain is drawn: {e}")))
-            .ok(),
-        Err(_) => None,
-    };
+    let ground = ground.and_then(|(g, _)| g);
     if let Some(ground) = &ground {
         let at = Transform::from_xyz(open.map.origin.0, open.map.origin.1 - drop, open.map.origin.2);
-        let carved = volume_chunks(&project, &open, ground);
+        let carved = volume_chunks(volume.and_then(|(v, _)| v).as_ref(), ground);
         let material = materials.add(ground_base());
         if carved.is_empty() {
             drawn.push(commands.spawn((TerrainView::Ground, Mesh3d(meshes.add(ground_mesh(ground))), MeshMaterial3d(material), at)).id());
@@ -179,8 +217,7 @@ pub fn sync_terrain_view(
                 drawn.push(commands.spawn((TerrainView::Volume, Mesh3d(meshes.add(mesh)), MeshMaterial3d(material.clone()), at)).id());
             }
         }
-        let water: Option<WaterField> = std::fs::read_to_string(&water_path).ok().and_then(|t| ron::from_str(&t).ok());
-        if let Some(mesh) = water.and_then(|w| water_mesh(ground, &w)) {
+        if let Some(mesh) = water.and_then(|(w, _)| w).and_then(|w| water_mesh(ground, &w)) {
             drawn.push(commands.spawn((
                 TerrainView::Water,
                 Mesh3d(meshes.add(mesh)),
@@ -193,12 +230,35 @@ pub fn sync_terrain_view(
     *built = Some(now);
 }
 
+/// **One file the view reads**, decided: `None` when it does not exist; otherwise its value when it
+/// reads, and the verdict either way. A refusal names the file as the project's directory sees it
+/// (`site/terrain/yard.ron`) and the field the file is wrong at.
+fn read_kind<T>(
+    kind: &'static str,
+    project: &Project,
+    path: &std::path::Path,
+    parse: fn(&str) -> Result<T, String>,
+) -> Option<(Option<T>, KindVerdict)> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let file = path.strip_prefix(&project.project_dir).unwrap_or(path).to_string_lossy().replace('\\', "/");
+    Some(match parse(&text) {
+        Ok(value) => (Some(value), KindVerdict::applied(kind, file)),
+        Err(reason) => {
+            let field = bevy_grimoire_core::reload::kind_by_id(kind).and_then(|k| match reload_check::check(k, &file, &text) {
+                Check::Refused(r) => r.field,
+                _ => None,
+            });
+            (None, KindVerdict::refused(kind, file, field, reason))
+        }
+    })
+}
+
 /// **The carved ground's chunk meshes** (#101): empty when the map has no volume edits, or when the
 /// `isomesh` feature is off, and the heightfield mesh is drawn instead.
 #[cfg(feature = "isomesh")]
-fn volume_chunks(project: &Project, open: &OpenMap, ground: &Heightfield) -> Vec<Mesh> {
-    let Some(volume) = crate::ops_volume::volume_of(project, open) else { return Vec::new() };
-    let buffers = crate::volume_mesh::mesh_volume(&volume, ground).unwrap_or_default();
+fn volume_chunks(volume: Option<&Volume>, ground: &Heightfield) -> Vec<Mesh> {
+    let Some(volume) = volume else { return Vec::new() };
+    let buffers = crate::volume_mesh::mesh_volume(volume, ground).unwrap_or_default();
     buffers
         .into_iter()
         .map(|b| {
@@ -212,6 +272,6 @@ fn volume_chunks(project: &Project, open: &OpenMap, ground: &Heightfield) -> Vec
 }
 
 #[cfg(not(feature = "isomesh"))]
-fn volume_chunks(_: &Project, _: &OpenMap, _: &Heightfield) -> Vec<Mesh> {
+fn volume_chunks(_: Option<&Volume>, _: &Heightfield) -> Vec<Mesh> {
     Vec::new()
 }
