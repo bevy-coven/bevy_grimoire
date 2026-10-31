@@ -186,6 +186,9 @@ impl Operation for StampAdd {
     fn name(&self) -> &'static str {
         "stamp_add"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

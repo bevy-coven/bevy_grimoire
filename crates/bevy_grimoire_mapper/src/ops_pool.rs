@@ -88,6 +88,9 @@ impl Operation for LightPoolBudget {
     fn name(&self) -> &'static str {
         "light_pool"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn undo(&self) -> Undo {
         Undo::None
     }

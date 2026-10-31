@@ -366,6 +366,9 @@ impl Operation for TriggerSet {
     fn name(&self) -> &'static str {
         "trigger_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["scripts"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

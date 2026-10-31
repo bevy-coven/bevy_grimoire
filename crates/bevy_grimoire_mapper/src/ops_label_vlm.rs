@@ -91,6 +91,9 @@ impl Operation for LabelSuggest {
     fn name(&self) -> &'static str {
         "label_suggest"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
 
     fn undo(&self) -> Undo {
         Undo::None
@@ -251,6 +254,9 @@ pub struct LabelApply;
 impl Operation for LabelApply {
     fn name(&self) -> &'static str {
         "label_apply"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["library"]
     }
 
     fn undo(&self) -> Undo {

@@ -112,6 +112,9 @@ impl Operation for DataSet {
     fn name(&self) -> &'static str {
         "data_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["game_data"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

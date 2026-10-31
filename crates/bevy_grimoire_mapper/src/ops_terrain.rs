@@ -155,6 +155,9 @@ impl Operation for TerrainStroke {
     fn name(&self) -> &'static str {
         "terrain_stroke"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["terrain"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -291,6 +294,9 @@ impl TerrainImport {
 impl Operation for TerrainImport {
     fn name(&self) -> &'static str {
         "terrain_import"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["terrain"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse
@@ -435,6 +441,9 @@ impl TerrainPreset {
 impl Operation for TerrainPreset {
     fn name(&self) -> &'static str {
         "terrain_preset"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["terrain"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

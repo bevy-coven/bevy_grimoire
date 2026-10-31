@@ -125,6 +125,9 @@ impl Operation for PlanSet {
     fn name(&self) -> &'static str {
         "plan_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["plan"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
