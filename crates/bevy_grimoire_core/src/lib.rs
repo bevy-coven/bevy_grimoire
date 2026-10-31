@@ -63,6 +63,7 @@ pub mod project_data;
 pub mod range;
 pub mod references;
 pub mod reload;
+pub mod reload_check;
 pub mod relations;
 pub mod repetition;
 pub mod rig_check;

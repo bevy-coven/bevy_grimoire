@@ -225,6 +225,7 @@ mod the_arm_survives_the_door_change;
 mod the_door_switch_crosses;
 mod the_editor_and_the_game_agree;
 mod the_enclosure_wish_is_the_maps_to_set;
+mod the_games_per_file_verdicts_reach_grimoire_state;
 mod the_games_verdict_reaches_grimoire_state;
 mod the_ghost_is_the_contract;
 mod the_interface_does_not_write_the_ground_back_over_the_world;

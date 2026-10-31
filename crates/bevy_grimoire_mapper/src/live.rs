@@ -51,7 +51,8 @@ pub struct LiveGame {
 impl LiveGame {
     /// **The `game` field of `grimoire_state`.** `null` with no verdict; `"pending"` when the newest
     /// verdict is not newer than the map file's last write (it answers an earlier write, never the
-    /// new one); otherwise the verdict.
+    /// new one); otherwise the verdict, with one entry in `kinds` for every file the game read: its
+    /// kind, path, `applied` or `refused`, and for a refusal the field and the reason (#200).
     pub fn state_json(&self, map_path: Option<&std::path::Path>) -> Value {
         let Some(v) = &self.verdict else {
             return Value::Null;
@@ -64,7 +65,12 @@ impl LiveGame {
         if v.at_unix_ms < wrote_ms {
             return json!("pending");
         }
-        json!({"ok": v.ok, "message": v.message, "at_unix_ms": v.at_unix_ms})
+        let kinds: Vec<Value> = v
+            .kinds
+            .iter()
+            .map(|k| json!({"kind": k.kind, "file": k.file, "outcome": k.outcome.word(), "field": k.field, "reason": k.reason}))
+            .collect();
+        json!({"ok": v.ok, "message": v.message, "at_unix_ms": v.at_unix_ms, "seq": v.seq, "kinds": kinds})
     }
 }
 
@@ -99,7 +105,14 @@ fn poll_verdict(
             if v.ok {
                 state.status.note(format!("game: {}", v.message));
             } else {
-                state.status.problem(format!("game refused the reload: {}", v.message));
+                let refused: Vec<String> = v
+                    .kinds
+                    .iter()
+                    .filter(|k| k.outcome == bevy_grimoire_core::live::Outcome::Refused)
+                    .map(|k| k.sentence())
+                    .collect();
+                let why = if refused.is_empty() { v.message.clone() } else { refused.join("; ") };
+                state.status.problem(format!("game refused the reload: {why}"));
             }
         }
     }
