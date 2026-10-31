@@ -138,6 +138,9 @@ impl Operation for CompositionDefine {
     fn name(&self) -> &'static str {
         "composition_define"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["compositions"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -238,6 +241,9 @@ impl Operation for CompositionSetEnvelope {
     fn name(&self) -> &'static str {
         "composition_set_envelope"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["compositions"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -330,6 +336,9 @@ impl CompositionRename {
 impl Operation for CompositionRename {
     fn name(&self) -> &'static str {
         "composition_rename"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["compositions", "map"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

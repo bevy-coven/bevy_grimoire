@@ -152,6 +152,9 @@ impl Operation for ReferenceSet {
     fn name(&self) -> &'static str {
         "reference_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["references"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

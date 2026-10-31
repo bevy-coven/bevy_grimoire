@@ -110,6 +110,9 @@ impl Operation for RepetitionVary {
     fn name(&self) -> &'static str {
         "repetition_vary"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
+    }
 
     fn undo(&self) -> Undo {
         Undo::Inverse

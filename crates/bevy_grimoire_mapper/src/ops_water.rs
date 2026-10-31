@@ -128,6 +128,9 @@ impl Operation for WaterPlace {
     fn name(&self) -> &'static str {
         "water_place"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["water_plan"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -251,6 +254,9 @@ impl WaterRun {
 impl Operation for WaterRun {
     fn name(&self) -> &'static str {
         "water_run"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["water_field"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

@@ -128,6 +128,9 @@ impl Operation for LightMap {
     fn name(&self) -> &'static str {
         "light_map"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn undo(&self) -> Undo {
         Undo::None
     }

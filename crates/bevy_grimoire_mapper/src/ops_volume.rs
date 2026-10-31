@@ -129,6 +129,9 @@ impl Operation for VolumeEdit {
     fn name(&self) -> &'static str {
         "volume_edit"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["volume"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

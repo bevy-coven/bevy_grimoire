@@ -326,6 +326,9 @@ impl Operation for ForestScatter {
     fn name(&self) -> &'static str {
         "forest_scatter"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["forest"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }

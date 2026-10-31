@@ -95,6 +95,9 @@ impl Operation for FamilySet {
     fn name(&self) -> &'static str {
         "family_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["family"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -222,6 +225,9 @@ fn check_conversation(_script: &std::path::Path, _p: &PieceParams) -> Result<(),
 impl Operation for PlacementSetFamily {
     fn name(&self) -> &'static str {
         "placement_set_family"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

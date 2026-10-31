@@ -70,6 +70,9 @@ impl Operation for CrowdPreview {
     fn name(&self) -> &'static str {
         "crowd_preview"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn undo(&self) -> Undo {
         Undo::None
     }

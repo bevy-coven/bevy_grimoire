@@ -102,6 +102,9 @@ impl Operation for Play {
     fn name(&self) -> &'static str {
         "play"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn undo(&self) -> Undo {
         Undo::None
     }
@@ -162,6 +165,9 @@ pub struct PlayStop;
 impl Operation for PlayStop {
     fn name(&self) -> &'static str {
         "play_stop"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &[]
     }
     fn undo(&self) -> Undo {
         Undo::None

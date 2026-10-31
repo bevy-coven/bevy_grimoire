@@ -147,6 +147,9 @@ impl Operation for RelationsSolve {
     fn name(&self) -> &'static str {
         "relations_solve"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
+    }
 
     fn undo(&self) -> Undo {
         Undo::Inverse

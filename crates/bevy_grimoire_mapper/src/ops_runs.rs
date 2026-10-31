@@ -222,6 +222,9 @@ impl Operation for RunAdd {
     fn name(&self) -> &'static str {
         "run_add"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -352,6 +355,9 @@ impl Operation for RunSet {
     fn name(&self) -> &'static str {
         "run_set"
     }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
+    }
     fn undo(&self) -> Undo {
         Undo::Inverse
     }
@@ -419,6 +425,9 @@ impl RunRemove {
 impl Operation for RunRemove {
     fn name(&self) -> &'static str {
         "run_remove"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse
@@ -548,6 +557,9 @@ impl PlacementsToRun {
 impl Operation for PlacementsToRun {
     fn name(&self) -> &'static str {
         "placements_to_run"
+    }
+    fn writes(&self) -> &'static [&'static str] {
+        &["map"]
     }
     fn undo(&self) -> Undo {
         Undo::Inverse

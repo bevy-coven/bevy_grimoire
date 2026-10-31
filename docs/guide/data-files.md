@@ -2,7 +2,7 @@
 
 This page lists every file in a bevy_grimoire project. Each table says where the file lives, what it holds, who writes it, whether the editor reloads it when it changes, and which code reads it.
 
-"Live reload" means the editor watches the file and reloads it when its content changes. The game never reloads a file. It reads the project once, when it starts.
+"Live reload" means the editor watches the file and reloads it when its content changes. A game reads the project when it starts, and reloads it when it changes only if it adds `GrimoireLivePlugin` ([your game](your-game.md)). [The reload contract](reload-contract.md) lists every kind of file, with what a change to it costs a running program.
 
 ## kits.ron
 
