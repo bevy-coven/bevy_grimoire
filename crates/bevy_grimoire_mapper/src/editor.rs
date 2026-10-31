@@ -4995,7 +4995,7 @@ fn reference_path_for_drop(root: &std::path::Path, dropped: &std::path::Path) ->
         Ok(_) => return Err(format!("{} already holds a different picture, so {shown} was not copied over it", into.display())),
         Err(_) => {
             std::fs::create_dir_all(canon_root.join("references")).map_err(|e| format!("references/ cannot be made ({e}), so {shown} is not a reference"))?;
-            std::fs::write(&dest, &bytes).map_err(|e| format!("{shown} cannot be copied into {} ({e}), so it is not a reference", into.display()))?;
+            bevy_grimoire_core::atomic_file::write(&dest, &bytes).map_err(|e| format!("{shown} cannot be copied into {} ({e}), so it is not a reference", into.display()))?;
         }
     }
     Ok(relative(&into))

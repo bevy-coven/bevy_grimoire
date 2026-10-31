@@ -718,8 +718,9 @@ pub fn fmt_f32(v: f32) -> String {
     format!("{v}")
 }
 
-/// Write `text` to `path` atomically — tmp file then rename, so a crash mid-write cannot leave a
-/// half-written document on disk.
+/// Write `text` to `path` atomically: a reader sees the old file or the new one, never half of
+/// either (#199). All of it is [`crate::atomic_file::write`]: a uniquely named hidden temp file
+/// beside the target, flushed, renamed over it, then the directory flushed.
 ///
 /// The caller is expected to re-load and re-validate afterwards; this only guarantees the bytes
 /// landed.
@@ -731,16 +732,7 @@ pub fn fmt_f32(v: f32) -> String {
 /// path — and the wrong default for anything where the path is *derived* from a name the author
 /// typed. **Use [`save_atomic_no_replace`] there.**
 pub fn save_atomic(path: &Path, text: &str) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("ron: {} has no parent directory", path.display()))?;
-    std::fs::create_dir_all(parent).map_err(|e| format!("ron: {}: {e}", parent.display()))?;
-    let mut tmp = path.as_os_str().to_owned();
-    tmp.push(".tmp");
-    let tmp = std::path::PathBuf::from(tmp);
-    std::fs::write(&tmp, text).map_err(|e| format!("ron: {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("ron: {}: {e}", path.display()))?;
-    Ok(())
+    crate::atomic_file::write(path, text).map_err(|e| format!("ron: {}: {e}", path.display()))
 }
 
 /// **Write `text` to `path`, and refuse if something is already there.**
@@ -790,36 +782,17 @@ pub fn save_atomic(path: &Path, text: &str) -> Result<(), String> {
 /// # What it leaves behind
 ///
 /// The tmp file is **removed** on every path, including the refusal, so a failed write does not
-/// leave `<name>.map.ron.tmp` in the project. The bytes are already in the target by then, so
-/// removing the tmp name is removing a *second name for the same inode*, not the data.
+/// leave a hidden `.tmp` in the project. The bytes are already in the target by then, so
+/// removing the tmp name is removing a *second name for the same inode*, not the data. The
+/// check and the write are [`crate::atomic_file::write_new`].
 pub fn save_atomic_no_replace(path: &Path, text: &str) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("ron: {} has no parent directory", path.display()))?;
-    std::fs::create_dir_all(parent).map_err(|e| format!("ron: {}: {e}", parent.display()))?;
-    let mut tmp = path.as_os_str().to_owned();
-    tmp.push(".tmp");
-    let tmp = std::path::PathBuf::from(tmp);
-    std::fs::write(&tmp, text).map_err(|e| format!("ron: {}: {e}", tmp.display()))?;
-    // **The link is the check.** `link(2)` fails with `EEXIST` when the target is taken, and it
-    // never touches the target. There is no `exists()` before it, because a check and the write
-    // are two calls and only one of them can be atomic.
-    if let Err(e) = std::fs::hard_link(&tmp, path) {
-        // **The tmp name goes first, and the target is untouched either way.** A refusal leaves
-        // the author's file exactly as it was, which is the whole contract.
-        let _ = std::fs::remove_file(&tmp);
+    crate::atomic_file::write_new(path, text).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AlreadyExists {
-            return Err(format!(
-                "ron: {} already exists, and this write refuses to replace it",
-                path.display()
-            ));
+            format!("ron: {} already exists, and this write refuses to replace it", path.display())
+        } else {
+            format!("ron: {}: {e}", path.display())
         }
-        return Err(format!("ron: {}: {e}", path.display()));
-    }
-    // **And now the tmp name goes.** The bytes are in the target — the link made a second name
-    // for the same inode — so this removes a name, not the data.
-    std::fs::remove_file(&tmp).map_err(|e| format!("ron: {}: {e}", tmp.display()))?;
-    Ok(())
+    })
 }
 
 #[cfg(test)]

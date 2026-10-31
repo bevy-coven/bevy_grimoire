@@ -63,7 +63,7 @@ fn load_marks(root: &Path) -> Result<Marks, Refusal> {
 
 fn write_marks(root: &Path, marks: &Marks) -> Result<(), Refusal> {
     let text = ron::ser::to_string_pretty(marks, ron::ser::PrettyConfig::default()).map_err(|e| Refusal::new(e.to_string()))?;
-    std::fs::write(marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.ron refused the write, so nothing changed: {e}")))
+    bevy_grimoire_core::atomic_file::write(&marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.ron refused the write, so nothing changed: {e}")))
 }
 
 fn cut_for(piece: &str) -> CutSettings {
@@ -123,7 +123,7 @@ fn baked(ctx: &Ctx, piece: &str) -> Result<(Bake, bool), Refusal> {
     let path = bake_path(&root, piece);
     std::fs::create_dir_all(path.parent().expect("a bake path has a directory")).map_err(|e| Refusal::new(e.to_string()))?;
     let text = ron::ser::to_string(&bake).map_err(|e| Refusal::new(e.to_string()))?;
-    std::fs::write(&path, text).map_err(|e| Refusal::new(format!("{} refused the bake, so nothing changed: {e}", path.display())))?;
+    bevy_grimoire_core::atomic_file::write(&path, text).map_err(|e| Refusal::new(format!("{} refused the bake, so nothing changed: {e}", path.display())))?;
     Ok((bake, true))
 }
 

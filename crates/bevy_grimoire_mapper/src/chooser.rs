@@ -633,13 +633,14 @@ pub fn create_project(parent: &Path, raw_name: &str, vocab_source: &Path) -> Res
         "(version: {}, bind: [], authoring: None, bash: [])",
         bevy_grimoire_core::kits::KITS_VERSION
     );
-    std::fs::write(grimoire.join(bevy_grimoire_core::kits::KITS_FILE), kits)
-        .map_err(|e| format!("{}: {e}", grimoire.join(bevy_grimoire_core::kits::KITS_FILE).display()))?;
+    let kits_path = grimoire.join(bevy_grimoire_core::kits::KITS_FILE);
+    bevy_grimoire_core::atomic_file::write(&kits_path, kits).map_err(|e| format!("{}: {e}", kits_path.display()))?;
 
     // **Copy the vocabulary byte-for-byte.** A copy preserves the rationale comments; serializing
     // `Vocabularies` would delete them. The source is the current project's `vocab.ron`, which is
     // the only vocabulary on hand.
-    std::fs::copy(vocab_source, grimoire.join("vocab.ron"))
+    let vocab = std::fs::read(vocab_source).map_err(|e| format!("cannot copy {} to vocab.ron: {e}", vocab_source.display()))?;
+    bevy_grimoire_core::atomic_file::write(&grimoire.join("vocab.ron"), vocab)
         .map_err(|e| format!("cannot copy {} to vocab.ron: {e}", vocab_source.display()))?;
 
     // **Write nothing else.** No `compositions.ron` (absence and empty are the same state, per
