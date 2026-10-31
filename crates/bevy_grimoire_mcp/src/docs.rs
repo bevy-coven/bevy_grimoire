@@ -128,7 +128,10 @@ pub const TOOLS: &[ToolDoc] = &[
                        game's verdict on the last reload: null (none), \"pending\" (it has not \
                        answered the latest write) or {ok, message, at_unix_ms, seq, kinds}; kinds has \
                        one entry for every file the game read, {kind, file, outcome (applied or \
-                       refused), field, reason}, so a refusal names its file and field. frame is the editor's own \
+                       refused), field, reason}, so a refusal names its file and field. reloads is the \
+                       editor's own verdict on the files it draws from (terrain, water_field, volume): \
+                       {ok, seq, kinds} with the same entries; a refused file keeps what was drawn, and \
+                       seq counts decisions, one per edit. frame is the editor's own \
                        clock: frame_ms (wall time between frames), busy_ms (work done inside one \
                        frame) and fps; a high frame_ms with a low busy_ms is the machine, not the \
                        editor. The notes section lists the sent and claimed notes (id, \

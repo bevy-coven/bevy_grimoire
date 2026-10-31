@@ -102,6 +102,17 @@ impl Volume {
         self.edits.is_empty()
     }
 
+    /// **Read a volume from its file's text**, refusing an edit [`Edit::check`] would refuse (a number
+    /// that is not finite, a size that is not above zero, a negative blend) and naming it (`edit 2`).
+    /// A hand edit that reads as a list of edits but would feed the mesher a NaN is refused here.
+    pub fn parse(text: &str) -> Result<Volume, String> {
+        let volume: Volume = ron::from_str(text).map_err(|e| format!("volume: {e}"))?;
+        for (i, e) in volume.edits.iter().enumerate() {
+            e.check().map_err(|why| format!("volume: edit {i}: {why}"))?;
+        }
+        Ok(volume)
+    }
+
     /// Append one edit; a bad one is refused and nothing changes.
     pub fn push(&mut self, edit: Edit) -> Result<(), String> {
         edit.check()?;
