@@ -138,7 +138,7 @@ Steering a running loop (focus, settings, provider, keys) is in `docs/loop/RUNNI
 | systemd's view | `~/target/emerge-loop/wiggum/systemd.log` |
 | what a pass did | `~/bevy_emerge_loop/docs/loop/iterations/`, `docs/loop/log.md` |
 | what is still open | `~/bevy_emerge_loop/docs/loop/backlog.json` |
-| how long every step took | `~/.local/state/wiggum/<clone>/steps.tsv`, one row per model turn, tool call, background job and wait, written after each pass by `tools/loop/steps.py record` |
+| how long every step took | `~/.local/state/wiggum/<clone>/steps.tsv`, one row per model turn, tool call, background job and wait, written after each pass by `tools/loop/steps.py record`; pushed after each pass to the repo's `loop-stats` branch as `steps/<clone>.tsv` with a report in `steps/<clone>.md` |
 
 **Where a loop's time goes.** `python3 tools/loop/steps.py report --state ~/.local/state/wiggum/<clone> --last 12` ranks the time by category (`wait: gate`, `wait: tests`, `model`, `cargo test`, ...) and by phase, and lists the slowest single steps. The phase comes from the pass marking it (`steps.py mark <phase>`, asked for in `build-loop.md`). The rows come from omp's own session record, so a killed pass is timed too, and `steps.py backfill --repo <clone> --state <state dir>` rebuilds the history of any loop, including one whose driver predates the tool.
 
