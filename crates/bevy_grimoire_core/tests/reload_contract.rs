@@ -25,8 +25,10 @@ const RESTART_KINDS_MAX: usize = 2;
 #[test]
 fn the_restart_list_only_shrinks() {
     assert!(
-        RESTART_KINDS.len() <= RESTART_KINDS_MAX,
-        "the checked-in restart list has {} kinds and the ratchet says {RESTART_KINDS_MAX}: it may only shrink",
+        RESTART_KINDS.len() == RESTART_KINDS_MAX,
+        "the checked-in restart list has {} kinds and the ratchet says {RESTART_KINDS_MAX}: the two move \
+         together. Lower both when a kind gains a reload path; raising either is a decision a reviewer \
+         must see, and the commit says why the kind cannot be hot.",
         RESTART_KINDS.len()
     );
     for k in reload::kinds_of_class(ReloadClass::Restart) {
@@ -52,28 +54,45 @@ fn the_restart_list_only_shrinks() {
     }
 }
 
-/// **Each pattern answers to exactly its own kind**, so a changed path is classified one way.
+/// **Each pattern answers to exactly its own kind**, so a changed path is classified one way. Every
+/// placeholder is filled with every word that is a fixed segment of some pattern (`water`, `library`,
+/// `maps`...), not only a sample name, because a collision needs one pattern's placeholder to meet
+/// another's literal: a kit named `water` must not make `water/library.ron` two kinds.
 #[test]
 fn every_kind_is_found_by_its_own_pattern_and_by_no_other() {
     let mut ids = std::collections::BTreeSet::new();
+    let mut words = std::collections::BTreeSet::from(["sample".to_owned()]);
     for k in KINDS {
         assert!(ids.insert(k.id), "the kind id `{}` appears twice", k.id);
-        if k.pattern.is_empty() {
-            continue;
+        for segment in k.pattern.split('/').filter(|s| !s.contains('<')) {
+            words.insert(segment.split('.').next().unwrap_or(segment).to_owned());
         }
-        // Fill every `<word>` with a sample name and see who answers to it.
-        let mut sample = String::new();
-        let mut rest = k.pattern;
-        while let Some(open) = rest.find('<') {
-            let close = rest[open..].find('>').expect("a `<` closes with `>`") + open;
-            sample.push_str(&rest[..open]);
-            sample.push_str("sample");
-            rest = &rest[close + 1..];
+    }
+    let words: Vec<String> = words.into_iter().collect();
+    for k in KINDS.iter().filter(|k| !k.pattern.is_empty()) {
+        // Every way to fill the pattern's placeholders from `words`.
+        let mut paths = vec![String::new()];
+        for segment in k.pattern.split('/') {
+            let mut next = Vec::new();
+            for path in &paths {
+                let prefix = if path.is_empty() { String::new() } else { format!("{path}/") };
+                match segment.find('<') {
+                    None => next.push(format!("{prefix}{segment}")),
+                    Some(open) => {
+                        let close = segment.find('>').expect("a `<` closes with `>`");
+                        for w in &words {
+                            next.push(format!("{prefix}{}{w}{}", &segment[..open], &segment[close + 1..]));
+                        }
+                    }
+                }
+            }
+            paths = next;
         }
-        sample.push_str(rest);
-        let claimants: Vec<&str> = KINDS.iter().filter(|o| o.base == k.base && o.matches(&sample)).map(|o| o.id).collect();
-        assert_eq!(claimants, vec![k.id], "`{sample}` should be only `{}`", k.id);
-        assert_eq!(reload::kind_of(k.base, &sample).map(|f| f.id), Some(k.id));
+        for path in paths {
+            let claimants: Vec<&str> = KINDS.iter().filter(|o| o.base == k.base && o.matches(&path)).map(|o| o.id).collect();
+            assert_eq!(claimants, vec![k.id], "`{path}` should be only `{}`", k.id);
+            assert_eq!(reload::kind_of(k.base, &path).map(|f| f.id), Some(k.id));
+        }
     }
 }
 

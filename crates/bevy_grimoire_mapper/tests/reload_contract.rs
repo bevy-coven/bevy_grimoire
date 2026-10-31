@@ -11,10 +11,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use bevy::prelude::*;
 use bevy_grimoire_core::reload::{self, Base, KINDS};
 use bevy_grimoire_mapper::harness;
-use bevy_grimoire_mapper::ops;
+use bevy_grimoire_mapper::ops::{self, Applied, Ctx};
+use bevy_grimoire_mapper::project::{OpenMap, Project};
 
 use crate::fixtures;
 
@@ -54,50 +54,50 @@ fn every_kind_is_written_by_an_operation_or_says_who_writes_it() {
     }
 }
 
-/// **An operation's declaration is true**: run one and every file it changed is a kind it declares.
-/// `oplog` is the dispatcher's own, written for every operation.
+/// **An operation's declaration is true**: run some and every file each one changed is a kind it
+/// declares. `oplog` is the dispatcher's own, written for every operation. `terrain_stroke` writes into
+/// the authoring kit's directory and `map_rename` into the project's, so both bases are exercised.
 #[test]
 fn a_dispatched_operation_changes_only_the_kinds_it_declares() {
-    let root = fixtures::Fixture::new("reload_contract_writes")
-        .descriptor("site/wall", "alpha")
-        .place("site/wall", (0.0, 0.0))
-        .build("m");
+    let root = fixtures::Fixture::new("reload_contract_writes").descriptor("site/wall", "alpha").build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
-    app.add_plugins(bevy_grimoire_mapper::ops_brp::OpsBridgePlugin);
-    for _ in 0..8 {
+    for _ in 0..4 {
         app.update();
     }
-    let grimoire = root.join("assets/grimoire");
-    let before = stat(&grimoire);
-    let answer = call(
-        &mut app,
-        "grimoire/operation_apply",
-        serde_json::json!({"operation": "map_rename", "parameters": {"name": "Town Two"}, "dry_run": false}),
-    );
-    assert!(answer.get("saved").is_some(), "map_rename answered {answer}");
-    let after = stat(&grimoire);
+    let project = app.world().resource::<Project>().clone();
+    let open = app.world().resource::<OpenMap>().clone();
+    let mut ctx = Ctx { project: Some(project), open: Some(open), session: "test".to_owned(), ..Ctx::default() };
 
-    let declared = ops::find("map_rename").expect("map_rename is registered").writes();
-    let mut changed = Vec::new();
-    for (path, now) in &after {
-        if before.get(path) != Some(now) {
-            changed.push(path.clone());
+    let stroke = serde_json::json!({
+        "map": "m",
+        "create": {"origin": [0.0, 0.0], "cell_m": 1.0, "width": 11, "depth": 11, "height_m": 0.0},
+        "stroke": {"brush": "Raise", "radius_m": 2.0, "strength": 1.5, "points": [[5.0, 5.0]]}
+    });
+    let rename = serde_json::json!({"name": "Town Two"});
+    for (op, params) in [("terrain_stroke", stroke), ("map_rename", rename)] {
+        let before = stat(&root);
+        match ops::dispatch(&mut ctx, op, &params) {
+            Ok(Applied::Done { .. }) => {}
+            other => panic!("{op} was not applied: {other:?}"),
         }
-    }
-    for path in before.keys().filter(|p| !after.contains_key(*p)) {
-        changed.push(path.clone());
-    }
-    assert!(!changed.is_empty(), "map_rename changed no file, so the check proves nothing");
-    for path in changed {
-        let rel = path.strip_prefix(&grimoire).expect("under the grimoire directory").to_string_lossy().replace('\\', "/");
-        let kind = reload::kind_of(Base::Grimoire, &rel)
-            .unwrap_or_else(|| panic!("`{rel}` changed and is no kind in bevy_grimoire_core::reload::KINDS"));
-        assert!(
-            kind.id == "oplog" || declared.contains(&kind.id),
-            "map_rename changed `{rel}` (kind `{}`) and declares only {declared:?}",
-            kind.id
-        );
+        let after = stat(&root);
+        let declared = ops::find(op).expect("a registered operation").writes();
+        let mut changed: Vec<&PathBuf> = after.iter().filter(|(p, now)| before.get(*p) != Some(*now)).map(|(p, _)| p).collect();
+        changed.extend(before.keys().filter(|p| !after.contains_key(*p)));
+        assert!(!changed.is_empty(), "{op} changed no file, so the check proves nothing");
+        for path in changed {
+            let rel = path.strip_prefix(&root).expect("under the project root").to_string_lossy().replace('\\', "/");
+            let kind = match rel.strip_prefix("assets/grimoire/") {
+                Some(under) => reload::kind_of(Base::Grimoire, under),
+                None => reload::kind_of(Base::Root, &rel),
+            }
+            .unwrap_or_else(|| panic!("{op} changed `{rel}`, which is no kind in bevy_grimoire_core::reload::KINDS"));
+            assert!(
+                kind.id == "oplog" || declared.contains(&kind.id),
+                "{op} changed `{rel}` (kind `{}`) and declares only {declared:?}",
+                kind.id
+            );
+        }
     }
 }
 
@@ -149,16 +149,4 @@ fn stat(dir: &Path) -> BTreeMap<PathBuf, (u64, std::time::SystemTime)> {
         }
     }
     out
-}
-
-/// **Through the registered method**, as an agent's request goes.
-fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::Value {
-    use bevy::remote::{RemoteMethodSystemId, RemoteMethods};
-    let Some(RemoteMethodSystemId::Instant(id)) = app.world().resource::<RemoteMethods>().get(method).cloned() else {
-        panic!("no method `{method}` is registered, so an agent cannot reach it");
-    };
-    app.world_mut()
-        .run_system_with(id, Some(params))
-        .unwrap_or_else(|e| panic!("{method}: {e:?}"))
-        .unwrap_or_else(|e| panic!("{method}: {e:?}"))
 }

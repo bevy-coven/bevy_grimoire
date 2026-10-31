@@ -1,5 +1,5 @@
-//! **The reload contract: every kind of file the editor writes, and what a running program does when
-//! one changes on disk.**
+//! **The reload contract: every kind of file the editor writes (and the hand-authored files it reads),
+//! and what a running program does when one changes on disk.**
 //!
 //! Whether a running game or editor picks a file up, and how, used to be decided case by case: a
 //! kind could ship with no reload path at all and nobody noticed (#198, series H1 to H7). This is the
@@ -74,8 +74,9 @@ impl Lifetime {
 /// **Where a kind's path pattern starts.**
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Base {
-    /// The project's grimoire directory (`assets/grimoire`, the one holding `kits.ron`); for `library.ron`
-    /// and `project.ron`, a kit's own directory under it.
+    /// The project's directory (`assets/grimoire`, the one holding `kits.ron`). A kit's own files
+    /// (its library, policy, terrain, water, forest, trees and `data.ron`) are under `<kit>/`, the
+    /// authoring kit's directory.
     Grimoire,
     /// The game's root, the directory holding `assets/`.
     Root,
@@ -87,8 +88,10 @@ pub struct FileKind {
     /// The stable name an operation declares in `Operation::writes` and a test reads.
     pub id: &'static str,
     pub base: Base,
-    /// Path under [`Self::base`]. `<name>` stands for one snake_case word (no `.` and no `/`). Empty
-    /// for a kind with no fixed path: the files a game registers in `data.ron`.
+    /// Path under [`Self::base`]. `<name>` and `<kit>` each stand for one word of letters, digits and
+    /// underscores (no `.` and no `/`); `<file>` for one file name of any characters. Empty for a kind
+    /// with no fixed path: the files a game registers in `data.ron`. A kit's own files
+    /// (`<kit>/library.ron`, `<kit>/terrain/...`) live in the authoring kit's directory.
     pub pattern: &'static str,
     /// The type it parses to.
     pub parses_to: &'static str,
@@ -121,7 +124,7 @@ use Base::{Grimoire, Root};
 use Lifetime::{Global, PerMap};
 use ReloadClass::{Live, Respawn, Restart};
 
-/// **Every kind of file the editor writes, hand-authored kinds it reads included.** One row each.
+/// **Every kind of file the editor writes, and the hand-authored files it reads.** One row each.
 pub const KINDS: &[FileKind] = &[
     // ---- the project's own files ----
     kind("kits", Grimoire, "kits.ron", "Kits", Respawn, Global,
@@ -149,7 +152,7 @@ pub const KINDS: &[FileKind] = &[
     kind("checks", Grimoire, "checks.ron", "Checks", Live, Global,
         "by hand",
         "`Checks::for_project` reads it fresh on every run, so an edit takes effect at once."),
-    kind("data_registry", Grimoire, "data.ron", "DataFiles", Live, Global,
+    kind("data_registry", Grimoire, "<kit>/data.ron", "DataFiles", Live, Global,
         "by hand",
         "The registry of a game's own tuning files, read at each `data_set`; nothing holds it."),
     kind("rigs", Grimoire, "rigs.ron", "Rigs", Restart, Global,
@@ -158,9 +161,9 @@ pub const KINDS: &[FileKind] = &[
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
         "the dispatcher appends a line for every operation",
         "Appended and read on request by the log tools; nothing holds it."),
-    kind("reference_images", Grimoire, "references/<name>.png", "image bytes", Live, Global,
+    kind("reference_images", Root, "references/<file>", "image bytes", Live, Global,
         "the editor, when a person drops an image on a map",
-        "Copied into the project and read when a map's reference is drawn."),
+        "Copied into the project, where `reference_set` checks that the file exists; nothing watches it and nothing holds it."),
     // ---- a map's own files ----
     kind("map", Grimoire, "maps/<name>.map.ron", "Map", Respawn, PerMap,
         "the project chooser (create, settings, rename)",
@@ -174,27 +177,33 @@ pub const KINDS: &[FileKind] = &[
     kind("relations", Grimoire, "maps/<name>.relations.ron", "Relations", Live, PerMap,
         "by hand",
         "Read on demand by `relations_solve`."),
-    kind("terrain", Grimoire, "terrain/<name>.ron", "Heightfield", Respawn, PerMap,
+    kind("terrain", Grimoire, "<kit>/terrain/<name>.ron", "Heightfield", Respawn, PerMap,
         "`terrain_preset` (only in a build with the elements feature)",
         "The editor redraws the ground when the file's modification time moves; a file that does not parse draws no ground."),
-    kind("water_plan", Grimoire, "water/<name>.ron", "WaterPlan", Live, PerMap, "",
+    kind("water_plan", Grimoire, "<kit>/water/<name>.ron", "WaterPlan", Live, PerMap, "",
         "The plan `water_run` reads; nothing draws it directly."),
-    kind("water_field", Grimoire, "water/<name>.field.ron", "WaterField", Respawn, PerMap, "",
+    kind("water_field", Grimoire, "<kit>/water/<name>.field.ron", "WaterField", Respawn, PerMap, "",
         "The editor redraws the water surface when the file's modification time moves."),
-    kind("volume", Grimoire, "volume/<name>.ron", "Volume", Respawn, PerMap, "",
+    kind("volume", Grimoire, "<kit>/volume/<name>.ron", "Volume", Respawn, PerMap, "",
         "The editor rebuilds the carved ground when the file's modification time moves."),
-    kind("forest", Grimoire, "forest/<name>.ron", "Forest", Respawn, PerMap, "",
+    kind("forest", Grimoire, "<kit>/forest/<name>.ron", "Forest", Respawn, PerMap, "",
         "The editor respawns the trees when the file's modification time moves."),
-    kind("people", Grimoire, "people/<name>.ron", "People", Live, PerMap, "",
+    kind("people", Grimoire, "<kit>/people/<name>.ron", "People", Live, PerMap, "",
         "Read at each `people_run`; nothing holds it."),
-    kind("scripts", Grimoire, "scripts/<name>.ron", "Scripts", Live, PerMap, "",
+    kind("scripts", Grimoire, "<kit>/scripts/<name>.ron", "Scripts", Live, PerMap, "",
         "The map's triggers, read when they are run; nothing holds it."),
     // ---- shared by maps ----
-    kind("trees", Grimoire, "trees/<name>.tree.ron", "TreeParams", Respawn, Global, "",
+    kind("trees", Grimoire, "<kit>/trees/<name>.tree.ron", "TreeParams", Respawn, Global, "",
         "A species a forest uses: the editor regrows every tree of it when the file's modification time moves."),
     // ---- the game root's files ----
     kind("family", Root, "family/<name>.ron", "a family crate's settings", Live, Global, "",
-        "One file per family crate: the editor and the game apply it in place, polled every 0.1 s."),
+        "One file per family crate: the editor applies it in place, polled every 0.1 s. The game-side `GrimoireLivePlugin` does not watch `<root>/family/`."),
+    kind("family_list", Root, "family.ron", "Family", Live, Global, "by hand",
+        "Which family crates the project uses, read when the editor needs the list; nothing holds it."),
+    kind("agent", Root, "agent.ron", "AgentSettings", Live, Global, "by hand",
+        "The note agent's model and prompt, read each time a note is sent; nothing holds it."),
+    kind("play", Root, "play.ron", "PlayConfig", Live, Global, "by hand",
+        "How the editor launches the game, read each time `play` runs; nothing holds it."),
     kind("destructible_marks", Root, "destructible.ron", "Marks", Live, Global,
         "`destructible_set` (only in a build with the carnage feature)",
         "Read at each `destructible_hit`; nothing holds it."),
@@ -211,7 +220,8 @@ pub fn kind_by_id(id: &str) -> Option<&'static FileKind> {
 }
 
 /// **Whether a path segment pattern matches one segment.** `<word>` stands for one run of letters,
-/// digits and underscores: no `.` and no `/`, so `<name>.ron` never matches `town.field.ron`.
+/// digits and underscores: no `.` and no `/`, so `<name>.ron` never matches `town.field.ron`. `<file>`
+/// is the one exception: any non-empty file name.
 fn segment_matches(pattern: &str, segment: &str) -> bool {
     let Some(open) = pattern.find('<') else {
         return pattern == segment;
@@ -223,7 +233,8 @@ fn segment_matches(pattern: &str, segment: &str) -> bool {
     let Some(rest) = segment.strip_prefix(head).and_then(|s| s.strip_suffix(tail)) else {
         return false;
     };
-    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    let any = &pattern[open..=close] == "<file>";
+    !rest.is_empty() && (any || rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
 }
 
 impl FileKind {
@@ -341,8 +352,10 @@ mod tests {
     fn a_changed_path_is_classified_by_its_pattern() {
         let map = kind_of(Base::Grimoire, "maps/town.map.ron").expect("a map is a kind");
         assert_eq!((map.id, map.class, map.lifetime), ("map", Respawn, PerMap));
-        assert_eq!(kind_of(Base::Grimoire, "water/lake.field.ron").map(|k| k.id), Some("water_field"));
-        assert_eq!(kind_of(Base::Grimoire, "water/lake.ron").map(|k| k.id), Some("water_plan"));
+        assert_eq!(kind_of(Base::Grimoire, "site/water/lake.field.ron").map(|k| k.id), Some("water_field"));
+        assert_eq!(kind_of(Base::Grimoire, "site/water/lake.ron").map(|k| k.id), Some("water_plan"));
+        assert_eq!(kind_of(Base::Grimoire, "site/library.ron").map(|k| k.id), Some("library"));
+        assert_eq!(kind_of(Base::Root, "references/Sketch v2.JPG").map(|k| k.id), Some("reference_images"));
         assert_eq!(kind_of(Base::Root, "family/weather.ron").map(|k| k.id), Some("family"));
         assert_eq!(kind_of(Base::Grimoire, "maps/town.map.ron.tmp"), None);
         assert_eq!(kind_of(Base::Grimoire, ".live/game.ron"), None);

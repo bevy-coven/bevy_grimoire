@@ -249,7 +249,7 @@
         "the editor shows each file's reload state"
       ],
       "status": "open",
-      "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 slice 1 (pass 164, 2026-10-31): core reload::KINDS (30 kinds, class and lifetime), Operation::writes on all 70 impls, docs/guide/reload-contract.md, core tests/reload_contract.rs and mapper tests/reload_contract.rs.",
+      "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 slice 1 (pass 164, 2026-10-31): core reload::KINDS (33 kinds, class and lifetime), Operation::writes on all 70 impls, docs/guide/reload-contract.md, core tests/reload_contract.rs and mapper tests/reload_contract.rs.",
       "last_failure": "",
       "first_seen": "2026-10-31",
       "steps": [

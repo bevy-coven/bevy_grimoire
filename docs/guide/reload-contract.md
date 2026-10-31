@@ -7,7 +7,7 @@ The list lives in code, in `bevy_grimoire_core::reload::KINDS`, and the table be
 ## How to read the table
 
 - **kind** is the id an operation names in `Operation::writes`.
-- **path** is relative to `<grimoire>` (the directory holding `kits.ron`, `assets/grimoire` in a default project; for a kit's `library.ron` and `project.ron`, the kit's own directory) or to `<root>` (the game's root, the directory holding `assets/`). `<name>` stands for one word of letters, digits and underscores, and for a per-map kind it is the map's name.
+- **path** is relative to `<grimoire>` (the project's directory, `assets/grimoire`, the one holding `kits.ron`) or to `<root>` (the game's root, the directory holding `assets/`). `<kit>` is a kit's directory under `<grimoire>`: the authoring kit's library, policy, terrain, water, volume, forest, people, scripts and trees live there. `<name>` and `<kit>` each stand for one word of letters, digits and underscores, and for a per-map kind `<name>` is the map's name. `<file>` is one file name of any characters.
 - **parses to** is the Rust type the file is read as.
 - **class** is what a change costs the programs this repository ships (the editor, and the game-side `GrimoireLivePlugin`), the dearest of them when they differ.
 - **lifetime** is what the file belongs to.
