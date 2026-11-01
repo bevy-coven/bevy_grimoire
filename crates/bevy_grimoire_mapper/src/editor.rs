@@ -4363,6 +4363,53 @@ pub fn remove_piece(
     }
 }
 
+/// **Turn one library piece's mesh through the operation** (E-002, #129 slice 9). `N`, `O` and `P` on
+/// the Meshes tab, the three rotate chips and the labeler's righting call this, so a person's turn is
+/// the change an agent's `piece_turn` makes, with the person's source, and its log line is one Cmd+Z on
+/// the Meshes tab. Returns `true` when the turn landed, so the labeler chains its re-photograph only
+/// then; a refusal goes to the status row.
+pub fn turn_piece(
+    import: &mut crate::tiles::ImportState,
+    project: &mut crate::project::Project,
+    id: &str,
+    axis: crate::tiles::RotateAxis,
+    quarters: u8,
+    force: bool,
+) -> bool {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let axis_name = match axis {
+        crate::tiles::RotateAxis::X => "x",
+        crate::tiles::RotateAxis::Y => "y",
+        crate::tiles::RotateAxis::Z => "z",
+    };
+    let params = serde_json::json!({"id": id, "axis": axis_name, "quarters": quarters, "force": force});
+    match crate::ops::dispatch(&mut ctx, "piece_turn", &params) {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            if let Some(fresh) = ctx.project {
+                adopt_library(project, &fresh);
+            }
+            import.record_logged(operation_id, outcome.summary.clone());
+            import.status.note(outcome.summary);
+            true
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            import.status.problem(e.0);
+            false
+        }
+    }
+}
+
 /// **Carry the library a label operation changed onto the live project.** Only the fields a
 /// library write touches move: the measured library and the layers the Map draws from it, and the
 /// kit's policy (a pack's exclusion). A clone is not the live state, so without this the write would
