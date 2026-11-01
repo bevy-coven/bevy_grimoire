@@ -180,7 +180,7 @@ fn line_text(line: Line, draft: &Draft) -> String {
 /// - **The z-order is [`crate::chrome::MODAL_Z`]**, in front of every panel.
 ///
 /// The keys are not gooey's: this editor owns the arrows, `Enter` and `Esc` ([`token_keys`]), and
-/// gooey's navigation plugin is not added.
+/// gooey's `Cancel` on `Esc` is not observed.
 fn sync_token_prompt(
     mut commands: Commands,
     prompt: Res<TokenPrompt>,

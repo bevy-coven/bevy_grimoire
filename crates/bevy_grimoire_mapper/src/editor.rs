@@ -2213,6 +2213,7 @@ impl Plugin for EditorPlugin {
                 ),
             );
         app.add_plugins(crate::ui::EditorUiPlugin);
+        app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_observer(on_play_click);
         app.init_resource::<EditorState>()
             .init_resource::<MapFraming>()
@@ -12649,6 +12650,23 @@ fn turn_under_cursor(
         state.status.note("nothing here to turn".to_owned());
         return;
     };
+    turn_at(commands, assets, project, open, state, placed, index, step);
+}
+
+/// **Turn the placement at `index` by `step` degrees**, through the registry. The half of a turn that
+/// does not care how the piece was found, so the `R`/`T` keys (the piece under the cursor) and the
+/// piece context menu (the piece it was opened on, UI-36, #230) are one code path.
+#[allow(clippy::too_many_arguments)]
+fn turn_at(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    placed: &Query<(Entity, &Placement)>,
+    index: usize,
+    step: f32,
+) {
     let Some(p) = open.map.placements.get(index) else {
         return;
     };
@@ -13749,11 +13767,28 @@ fn lift_under_cursor(
         state.status.note("nothing here to lift".to_owned());
         return;
     };
-    let step = lift_step(project, level);
+    let delta = sign * lift_step(project, level);
+    lift_at(commands, assets, project, open, state, placed, index, delta);
+}
+
+/// **Raise the placement at `index` by `delta` metres** (negative lowers), through `placement_set_lift`.
+/// The half of a lift that does not care how the piece was found: the bracket keys and the piece
+/// context menu (UI-36, #230) both end here.
+#[allow(clippy::too_many_arguments)]
+fn lift_at(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    placed: &Query<(Entity, &Placement)>,
+    index: usize,
+    delta: f32,
+) {
     let Some(p) = open.map.placements.get(index) else {
         return;
     };
-    let (id, want) = (p.id.clone(), p.lift + sign * step);
+    let (id, want) = (p.id.clone(), p.lift + delta);
     let Some((line, summary)) = set_lift(project, open, state, &id, want) else {
         return;
     };
@@ -13793,6 +13828,22 @@ fn tip_under_cursor(
         state.status.note("nothing here to tip".to_owned());
         return;
     };
+    tip_at(commands, assets, project, open, state, placed, index, about_x);
+}
+
+/// **Tip the placement at `index` a quarter turn**, about X or about Z, through `placement_set_tip`.
+/// Shared by the `Y`/`U` keys and the piece context menu (UI-36, #230).
+#[allow(clippy::too_many_arguments)]
+fn tip_at(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    placed: &Query<(Entity, &Placement)>,
+    index: usize,
+    about_x: bool,
+) {
     let Some(p) = open.map.placements.get(index) else {
         return;
     };
@@ -13814,6 +13865,53 @@ fn tip_under_cursor(
                 .problem(format!("tipped {id} but cannot draw it: {e}"));
             error!("{e}");
         }
+    }
+}
+
+/// **What the piece context menu does to the piece it was opened on** (UI-36, #230). Each is the verb
+/// the keys already have, by the piece's id rather than by where the cursor is, because the cursor is
+/// on the menu by the time an item is chosen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PieceVerb {
+    TurnLeft,
+    TurnRight,
+    TipX,
+    TipZ,
+    Lift,
+    Lower,
+    Remove,
+}
+
+/// Do `verb` to the placement `id`, through the registry, so it is one log line and one `Cmd+Z`, the
+/// same as the key that does it. A piece that is gone since the menu opened says so and changes nothing.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn piece_verb(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    placed: &Query<(Entity, &Placement)>,
+    id: &str,
+    verb: PieceVerb,
+    level: SnapLevel,
+) {
+    let Some(index) = open.map.placements.iter().position(|p| p.id == id) else {
+        state.status.note(format!("{id} is no longer on the map"));
+        return;
+    };
+    match verb {
+        PieceVerb::TurnLeft => turn_at(commands, assets, project, open, state, placed, index, -YAW_STEP),
+        PieceVerb::TurnRight => turn_at(commands, assets, project, open, state, placed, index, YAW_STEP),
+        PieceVerb::TipX => tip_at(commands, assets, project, open, state, placed, index, true),
+        PieceVerb::TipZ => tip_at(commands, assets, project, open, state, placed, index, false),
+        PieceVerb::Lift => {
+            lift_at(commands, assets, project, open, state, placed, index, lift_step(project, level))
+        }
+        PieceVerb::Lower => {
+            lift_at(commands, assets, project, open, state, placed, index, -lift_step(project, level))
+        }
+        PieceVerb::Remove => delete_index(commands, project, index, open, state, placed),
     }
 }
 
@@ -14776,7 +14874,7 @@ fn layer_of(
 /// The lock holds while the cursor stays on the cell it was taken on and the piece still exists;
 /// otherwise it lapses silently and the nearest pick resumes — a lock that followed the cursor
 /// around the map would turn every later nudge into a surprise.
-fn under_cursor_target(
+pub(crate) fn under_cursor_target(
     lock: &mut TargetLock,
     pointer: crate::view::Pointer,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
