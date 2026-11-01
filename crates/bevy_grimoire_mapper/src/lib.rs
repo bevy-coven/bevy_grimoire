@@ -129,6 +129,7 @@ pub mod ops_people;
 pub mod ops_scripts;
 pub mod ops_runs;
 pub mod project;
+pub mod recent;
 pub mod screen;
 pub mod sequencer;
 pub mod snip;

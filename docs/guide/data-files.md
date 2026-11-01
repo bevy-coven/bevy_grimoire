@@ -184,3 +184,16 @@ enclosure: (wish: 0.25, weight: 200),
 | Live reload | No. |
 | Read by | Nothing in the project. The game does not read it. |
 | Format version | None. |
+
+## recent.ron
+
+Not a project file: one per user, so a project folder never carries where an author opened it from.
+
+| | |
+|---|---|
+| Where | `<data_dir>/Grimoire/recent.ron`: `~/.local/share` on Linux, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows. |
+| What it holds | The projects the editor has opened, most recent first: each one's `path`, whether it is `pinned`, and `last_opened` (seconds since the Unix epoch). A folder that has gone stays listed and is marked missing; `Recent::locate` points the entry at where it went. |
+| Written by | The editor, each time a project is opened by the menu, the command line or an agent's `map_open`. Each write goes through a temporary file, then a rename. |
+| Live reload | No. |
+| Read by | The editor only. |
+| Format version | 1. A file of another version is refused by name and left as it is, and the project still opens. |

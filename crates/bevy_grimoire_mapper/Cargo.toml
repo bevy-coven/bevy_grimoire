@@ -121,6 +121,9 @@ accesskit = "0.24"
 bevy_devshot = { path = "../bevy_devshot" }
 ron.workspace = true
 serde.workspace = true
+# The platform's own data directory, where `recent.ron` lives (`recent.rs`, UI-11): no family crate finds
+# platform directories, so this is the one small crate that does.
+dirs = "6"
 # The VLM labeler's transport (`vlm.rs`): one blocking OpenAI-style POST, made from a task-pool
 # thread, never the UI thread. The editor is dev-only tooling, so a network client here does not
 # leak toward the game — the game keeps zero HTTP deps (`docs/llm_rule_authoring.md`: the LLM

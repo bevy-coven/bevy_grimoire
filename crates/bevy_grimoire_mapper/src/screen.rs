@@ -101,6 +101,14 @@ fn open_the_door(world: &mut World) {
         }
         return;
     };
+    // **One place records an opening**, because this is the one way into the editor: the menu, the
+    // command line and an agent's `map_open` all arrive as a `Chosen`. Only where a file is named
+    // (`main` names it), and a list that cannot be written never stops the project opening.
+    if let Some(file) = world.get_resource::<crate::recent::RecentProjects>().map(|r| r.0.clone())
+        && let Err(e) = crate::recent::record(&file, &chosen.0.project.root)
+    {
+        warn!("recent projects not updated: {e}");
+    }
     chosen.0.insert_into(world);
 }
 

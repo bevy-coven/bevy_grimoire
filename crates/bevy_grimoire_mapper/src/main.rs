@@ -83,6 +83,11 @@ fn main() -> AppExit {
 
     // The state both halves are gated by, and the two transitions that load and unload a door.
     app.add_plugins(screen::ScreenPlugin);
+    // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the
+    // binary names the file: a test's editor has none, so no test writes to the real data directory.
+    if let Some(file) = bevy_grimoire_mapper::recent::user_file() {
+        app.insert_resource(bevy_grimoire_mapper::recent::RecentProjects(file));
+    }
 
     // **Both screens' plugins, always added.** Which one *runs* is the state's business, not the
     // plugin list's — a list that changed with the screen would be two plugin graphs, and only one

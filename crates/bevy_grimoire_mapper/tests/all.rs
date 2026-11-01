@@ -228,6 +228,7 @@ mod placement_set_yaw;
 mod placement_undo_without_id;
 mod project_clone_shares;
 mod references;
+mod recent_projects;
 mod relations_read_a_turned_piece_in_degrees;
 mod relations_solve_mends_the_open_map;
 mod reload_contract;

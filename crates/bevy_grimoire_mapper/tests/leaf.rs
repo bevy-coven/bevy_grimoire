@@ -46,6 +46,7 @@ const ALLOWED: &[(&str, &str)] = &[
     ),
     ("ron", "map and library serialization"),
     ("serde", "derives on every schema type this crate reads and writes"),
+    ("dirs", "the platform's own data directory, where the user's recent-projects list lives (UI-11, #217); no family crate finds platform directories"),
     ("serde_json", "the VLM chat request and reply bodies"),
     ("ureq", "the VLM transport — one blocking POST from a task-pool thread"),
     ("base64", "data-URI image parts for the booth renders"),
