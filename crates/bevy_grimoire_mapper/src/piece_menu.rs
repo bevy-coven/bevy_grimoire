@@ -54,7 +54,9 @@ pub struct PieceMenuPlugin;
 
 impl Plugin for PieceMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_menu)
+        // **On entering the editor, not at startup**: leaving a door despawns everything it made
+        // (`screen::close_the_door`), the menu with it, and the next door needs its own.
+        app.add_systems(OnEnter(crate::screen::Screen::Editor), spawn_menu)
             .add_systems(Update, open_on_right_click.run_if(crate::editor::in_map_mode));
     }
 }
@@ -156,7 +158,12 @@ fn open_on_right_click(
         return;
     };
     let (window_entity, window) = *window;
-    let Some(at) = window.cursor_position() else {
+    // The window's own cursor, or the pointer the editor sensed when that is injected (an agent driving
+    // the editor over BRP never moves the window's cursor).
+    let Some(at) = window
+        .cursor_position()
+        .or_else(|| pointer.0.map(|p| p / window.scale_factor().max(1.0)))
+    else {
         return;
     };
     let Some(target) = WindowRef::Primary.normalize(Some(window_entity)) else {
