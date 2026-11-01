@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-01
 
+- **99-preset-field** `8d59af9` The Terrain field takes 'preset <name> <seed> <cell_m> <cells_x> <cells_z>', so a person bakes a bevy_elements terrain preset through the same operation an agent calls (#99) *No clip: visible, not yet recorded: a typed line in a build with bevy_elements, which big's capture cannot draw; proved by tests/a_person_types_a_terrain_preset.rs*
 - **129-rig-adopt** `35dfc63` An agent can adopt a rig's measured gait values into rigs.ron (rig_adopt_measured), and Enter on the Anim tab is the same operation, one log line and one undo (#129 slice 13) *No clip: an operation; proved by tests/rig_adopt_measured_is_an_operation.rs*
 - **129-accept-edges** `960f6a8` Enter on a mesh scan's derived edges keeps them through piece_set_cells, with a new per-cell edges verb an agent can call *No clip: a key's routing and an operation verb, nothing new on screen; proved by keeping_derived_edges_is_a_cell_operation*
 - **262-bedroom-demos** `39f762a` A bedroom map ships in the repository's own project, and the eight standing demos and editor.png are re-recorded on it *No clip: the change is the standing demos themselves, in docs/media/; proved by tools/demo/stale.py (every row fresh) and the_shipped_bedroom_map_loads_against_the_shipped_kits*
