@@ -34,7 +34,7 @@ The list lives in code, in `bevy_grimoire_core::reload::KINDS`, and the table be
 | kind | path | parses to | class | lifetime | written by | how a change lands |
 |---|---|---|---|---|---|---|
 | `kits` | `<grimoire>/kits.ron` | Kits | Respawn | global | the project chooser (create, bind, unbind) | The editor reopens the whole project; the game's `GrimoireLivePlugin` reloads it whole. |
-| `vocab` | `<grimoire>/vocab.ron` | Vocabularies | Respawn | global | the project chooser (create), the vocabulary editor | The editor re-resolves its libraries in place; the game reloads the project whole. |
+| `vocab` | `<grimoire>/vocab.ron` | Vocabularies | Respawn | global | `vocab_add_token`; also the project chooser (create), the vocabulary editor | The editor re-resolves its libraries in place; the game reloads the project whole. |
 | `library` | `<grimoire>/<kit>/library.ron` | Library | Respawn | global | `piece_import`, `piece_remove`, `piece_turn`, `piece_set_cells`, `label_set`, `piece_set_mount`, `label_apply`; also the project chooser (create a kit) | One per kit. The editor rereads the kit; the game rebuilds the maps that place a changed piece. |
 | `policy` | `<grimoire>/<kit>/project.ron` | Policy | Respawn | global | `pack_set_excluded`; also the project chooser (create a kit, remove a policy), `policy::remove_patch` | One per kit: its exclusions, patches and mounts. Reloads with the kit's library. |
 | `rules` | `<grimoire>/rules.ron` | Rules | Respawn | global | `rules_set`, `map_rename` | The editor reopens the project; the game revalidates it against the library. |

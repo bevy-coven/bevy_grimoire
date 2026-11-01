@@ -295,6 +295,7 @@ mod the_whole_map_is_inside_the_cameras_depth;
 mod tree_editor;
 mod triggers;
 mod two_writers_never_share_a_sequence_number;
+mod vocab_add_token_is_an_operation;
 mod volume_edit_is_an_operation;
 mod volume_meshes_without_cracks;
 mod volume_snow;

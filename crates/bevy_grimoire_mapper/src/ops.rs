@@ -3469,6 +3469,148 @@ pub mod piece_set_cells {
     }
 }
 
+/// **Add one token to an axis of the project's vocabulary (E-002, #129 slice 11).**
+///
+/// `Shift+T`, and the `+` chip on an axis row, opened a prompt whose Enter spliced `vocab.ron` with a
+/// write of its own, so an agent could use the vocabulary and never grow it, no log line named the
+/// addition, and the registry's two-front-end rule listed `Shift+T` as unmigrated. This is the same
+/// addition, named: `axis` (`kind`, `effects`, `look` or `surfaces`), `name` (lowercase letters,
+/// digits and hyphens) and `note` (a sentence saying what it means).
+///
+/// # It is `bevy_grimoire_core::vocab::append_token`, and its refusals are that function's
+///
+/// The splice keeps every comment in the file, and every refusal it makes is this operation's: an axis
+/// the editor does not draw, a malformed name, an empty or unescapable note, a token the axis already
+/// holds and an axis already at the mask's limit. The plan runs the splice on a copy of the file, so a
+/// preview refuses what the commit would. A vocabulary the project cannot resolve afterwards puts the
+/// file back as it was.
+///
+/// # There is no undo, and that is the vocabulary's rule
+///
+/// A token's bit is its position, so a token is only ever appended: taking one out, or putting it back
+/// somewhere else, would re-point every mask already computed. Nothing has to be put back for an
+/// added token that nothing uses, and for one something uses, putting it back is the harm.
+pub mod vocab_add_token {
+    use super::*;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// `kind`, `effects`, `look` or `surfaces`.
+        pub axis: String,
+        /// Lowercase letters, digits and hyphens, starting with a letter.
+        pub name: String,
+        /// A sentence saying what the token means.
+        pub note: String,
+    }
+
+    fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
+        serde_json::from_value(raw.clone()).map_err(|e| {
+            Refusal::new(format!(
+                "this is not a token to add: {e}. The fields are `axis` (`kind`, `effects`, `look` or \
+                 `surfaces`), `name` and `note`."
+            ))
+        })
+    }
+
+    fn vocab_path(project: &Project) -> std::path::PathBuf {
+        project.root.join("assets/grimoire/vocab.ron")
+    }
+
+    /// **The splice, run on a copy**, so a plan writes nothing.
+    fn dry_run(project: &Project, p: &Params) -> Result<(), Refusal> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COPIES: AtomicU64 = AtomicU64::new(0);
+        let path = vocab_path(project);
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was added.", path.display())))?;
+        let copy = std::env::temp_dir().join(format!(
+            "grimoire-vocab-plan-{}-{}.ron",
+            std::process::id(),
+            COPIES.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::write(&copy, text).map_err(|e| Refusal::new(format!("{}: {e}", copy.display())))?;
+        let tried = bevy_grimoire_core::vocab::append_token(&copy, &p.axis, &p.name, &p.note);
+        let _ = std::fs::remove_file(&copy);
+        tried.map_err(|e| Refusal::new(format!("{e}. Nothing was added.")))
+    }
+
+    /// **Add a token to an axis of the vocabulary.**
+    pub struct VocabAddToken;
+
+    impl Operation for VocabAddToken {
+        fn name(&self) -> &'static str {
+            "vocab_add_token"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["vocab"]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["axis", "name", "note"],
+                "properties": {
+                    "axis": {
+                        "type": "string",
+                        "enum": ["kind", "effects", "look", "surfaces"],
+                        "description": "The axis of the vocabulary to add to: what a piece is (kind), what it does (effects), how it looks (look) or what it offers (surfaces)."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "The token, lowercase letters, digits and hyphens, starting with a letter, e.g. uses-electricity."
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "A sentence saying what the token means, without quotes, backslashes or control characters. A token is only ever appended, so it cannot be taken back."
+                    }
+                }
+            })
+        }
+
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let p = parse(params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no vocabulary to add a token to."));
+            };
+            dry_run(project, &p)?;
+            Ok(json!({"axis": p.axis, "name": p.name}))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let p = parse(params)?;
+            let Some(project) = ctx.project.as_mut() else {
+                return Err(Refusal::new("no project is open, so there is no vocabulary to add a token to."));
+            };
+            dry_run(project, &p)?;
+            let path = vocab_path(project);
+            let was = std::fs::read_to_string(&path)
+                .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was added.", path.display())))?;
+            bevy_grimoire_core::vocab::append_token(&path, &p.axis, &p.name, &p.note)
+                .map_err(|e| Refusal::new(format!("{e}. Nothing was added.")))?;
+            if let Err(why) = project.reload_vocab() {
+                // **The file goes back as it was**: a vocabulary the project cannot resolve is not
+                // one to leave on disk.
+                let _ = bevy_grimoire_core::ron_surgery::save_atomic(&path, &was);
+                return Err(Refusal::new(format!("the project would not take it, so nothing was added: {why}")));
+            }
+            Ok(Outcome {
+                summary: format!("added `{}` to {}", p.name, p.axis),
+                affected: 1,
+                saved: true,
+                inverse: None,
+                after: Some(json!({"axis": p.axis, "name": p.name})),
+            })
+        }
+    }
+}
+
 /// **Every operation the editor knows, in one list.**
 ///
 /// **The one list.** The MCP tool surface, the parity test and the log's vocabulary are all read
@@ -3488,6 +3630,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(piece_remove::PieceRemove),
         Box::new(piece_turn::PieceTurn),
         Box::new(piece_set_cells::PieceSetCells),
+        Box::new(vocab_add_token::VocabAddToken),
         Box::new(placement_set_pin::PlacementSetPin),
         Box::new(placement_set_yaw::PlacementSetYaw),
         Box::new(placement_set_tip::PlacementSetTip),
@@ -3760,6 +3903,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The lattice's cell verbs (E-002, #129 slice 10)** — `Z`, `X`, `V`, the grid's chips and its headers
     // call `set_cells` for a library piece and dispatch `piece_set_cells`, the same write an agent's `apply` makes.
     ("piece_set_cells", "set_cells("),
+    // **The vocabulary prompt (E-002, #129 slice 11)** — `Shift+T` and the `+` chip open it and its
+    // Enter calls `add_vocab_token`, which dispatches `vocab_add_token`.
+    ("vocab_add_token", "add_vocab_token("),
     // **The door and tab keys and the door switch**, which open a door through `open_door`, and that
     // runs the `door_open` operation (item 1 of cycle 8).
     ("door_open", "open_door("),

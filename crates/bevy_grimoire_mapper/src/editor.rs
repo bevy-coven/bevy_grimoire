@@ -4454,6 +4454,37 @@ pub fn set_cells(
     }
 }
 
+/// **Add a token to the vocabulary through the operation** (E-002, #129 slice 11). The vocabulary
+/// prompt's Enter calls this, so a person's addition is the change an agent's `vocab_add_token`
+/// makes, with the person's source, and its log line names it. On success the project's vocabulary and
+/// masks are the fresh ones and the receipt is returned; a refusal is returned as the prompt's problem.
+pub fn add_vocab_token(
+    project: &mut crate::project::Project,
+    axis: &str,
+    name: &str,
+    note: &str,
+) -> Result<String, String> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let params = serde_json::json!({"axis": axis, "name": name, "note": note});
+    match crate::ops::dispatch(&mut ctx, "vocab_add_token", &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if let Some(fresh) = ctx.project {
+                project.vocab = fresh.vocab.clone();
+                project.masks = fresh.masks.clone();
+            }
+            Ok(outcome.summary)
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
+}
+
 /// **Carry the library a label operation changed onto the live project.** Only the fields a
 /// library write touches move: the measured library and the layers the Map draws from it, and the
 /// kit's policy (a pack's exclusion). A clone is not the live state, so without this the write would

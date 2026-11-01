@@ -255,27 +255,18 @@ fn token_keys(
                     }
                     return;
                 }
-                let path = project.root.join("assets/grimoire/vocab.ron");
                 let name = draft.name.trim().to_owned();
                 let note = draft.note.trim().to_owned();
-                match bevy_grimoire_core::vocab::append_token(&path, draft.axis.name(), &name, &note) {
-                    Ok(()) => match project.reload_vocab() {
-                        Ok(()) => {
-                            // **The status write is the repaint.** `rebuild_detail` is gated on
-                            // `resource_changed::<ImportState>`, and `state.status` is a field of
-                            // it — so this one line is what makes the new chip appear.
-                            state.status.note(format!(
-                                "added `{name}` to {}",
-                                draft.axis.label()
-                            ));
-                            prompt.open = None;
-                        }
-                        Err(e) => {
-                            if let Some(d) = prompt.open.as_mut() {
-                                d.problem = Some(e);
-                            }
-                        }
-                    },
+                // **The addition is the `vocab_add_token` operation** (E-002, #129 slice 11), the one an
+                // agent calls: its refusals are the draft's problem, the text stays as typed.
+                match crate::editor::add_vocab_token(&mut project, draft.axis.name(), &name, &note) {
+                    Ok(_) => {
+                        // **The status write is the repaint.** `rebuild_detail` is gated on
+                        // `resource_changed::<ImportState>`, and `state.status` is a field of
+                        // it — so this one line is what makes the new chip appear.
+                        state.status.note(format!("added `{name}` to {}", draft.axis.label()));
+                        prompt.open = None;
+                    }
                     Err(e) => {
                         if let Some(d) = prompt.open.as_mut() {
                             d.problem = Some(e);

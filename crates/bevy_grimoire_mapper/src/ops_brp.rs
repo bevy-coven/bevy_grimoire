@@ -262,6 +262,16 @@ pub(crate) fn put_back(
     {
         crate::editor::adopt_library(handle, fresh);
     }
+    // **The vocabulary too** (E-002, #129 slice 11): `vocab_add_token` appends to `vocab.ron` and
+    // re-resolves the masks in the clone, and the editor's own copy must say so or the chips would
+    // not show the token and a piece could not wear it. Compared first, like the library.
+    if let Some(fresh) = ctx.project.as_ref()
+        && project.as_deref().is_some_and(|p| p.vocab != fresh.vocab)
+        && let Some(handle) = project.as_deref_mut()
+    {
+        handle.vocab = fresh.vocab.clone();
+        handle.masks = fresh.masks.clone();
+    }
     // **The compositions too** (E-072): `composition_define` writes `compositions.ron` through the
     // clone's project, and the editor's own copy must say so or the next define would not see it.
     // Compared first, like the rules and the library.
