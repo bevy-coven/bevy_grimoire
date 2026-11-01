@@ -134,7 +134,7 @@ fn a_volume_edit_that_cannot_be_meshed_is_refused_and_the_ground_stays() {
     let ground = entities(&mut app, TerrainView::Ground);
     use bevy_grimoire_core::volume::{Edit, Mode, Shape, Volume};
     let flat = Edit { shape: Shape::Sphere { center: [1.0, 0.0, 1.0], radius_m: 0.0 }, mode: Mode::Carve, smooth_m: 0.0 };
-    write(&app, "volume", "m.ron", &ron::to_string(&Volume { edits: vec![flat] }).unwrap());
+    write(&app, "volume", "m.ron", &ron::to_string(&Volume { edits: vec![flat], ..Volume::default() }).unwrap());
     until(&mut app, "the refusal", |a| verdict(a, "volume")["outcome"] == json!("refused"));
     let v = verdict(&mut app, "volume");
     assert!(v["reason"].as_str().unwrap().contains("edit 0") && v["reason"].as_str().unwrap().contains("above zero"), "{v}");

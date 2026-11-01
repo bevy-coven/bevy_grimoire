@@ -33,6 +33,8 @@
 // The split is Kapadia et al.'s: attributes "identify immutable properties of a smart object such as
 // its role (e.g., a button or a person) which never changes", as against `IsPressed`/`IsStanding`.
 (
+    // The format version (`bevy_grimoire_core::vocab::VOCAB_VERSION`). A file without it is read as the first.
+    version: 1,
     // WHAT A THING IS.
     //
     // Seeded from the 14 `category` values already authored across `assets/config/*.ron`. Those were

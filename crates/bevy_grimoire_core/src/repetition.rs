@@ -37,10 +37,17 @@ pub const YAW_TOLERANCE_DEG: f32 = 1.0;
 /// The project's rules, beside `kits.ron` (#139). Absent means [`RepetitionRules::default`].
 pub const FILE: &str = "repetition.ron";
 
+/// The format version of a `repetition.ron` (#202). A file with no `version` is the first.
+pub const REPETITION_VERSION: u32 = 1;
+
 /// What a repeat is, and what it costs, as data an author can tune.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct RepetitionRules {
+    /// The format version: [`REPETITION_VERSION`]. A file from before it existed has none and reads as
+    /// the first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "crate::format_version::first", deserialize_with = "crate::format_version::read::<_, REPETITION_VERSION>")]
+    pub version: u32,
     /// Two look-alikes closer than this, in metres, are seen together.
     pub radius_m: f32,
     /// `kind` tokens that make a piece structure: meant to repeat.
@@ -56,6 +63,7 @@ pub struct RepetitionRules {
 impl Default for RepetitionRules {
     fn default() -> Self {
         Self {
+            version: REPETITION_VERSION,
             radius_m: 6.0,
             structure: ["building-module", "fence", "tile", "landmark", "grave", "door"]
                 .map(str::to_owned)

@@ -90,11 +90,24 @@ fn smin(a: f32, b: f32, k: f32) -> f32 {
     b + (a - b) * h - k * h * (1.0 - h)
 }
 
+/// The format version of a volume file (#202). A file with no `version` is the first.
+pub const VOLUME_VERSION: u32 = 1;
+
 /// Every edit of a map, in the order they were made.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Volume {
+    /// The format version: [`VOLUME_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "crate::format_version::first", deserialize_with = "crate::format_version::read::<_, VOLUME_VERSION>")]
+    pub version: u32,
     #[serde(default)]
     pub edits: Vec<Edit>,
+}
+
+impl Default for Volume {
+    fn default() -> Self {
+        Volume { version: VOLUME_VERSION, edits: Vec::new() }
+    }
 }
 
 impl Volume {

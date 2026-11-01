@@ -19,26 +19,25 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use bevy_grimoire_core::destructible::{Bake, Chunk, DESTRUCTIBLE_VERSION, Marks};
+use bevy_grimoire_core::heightfield::Heightfield;
 use bevy_grimoire_core::map::{MAP_VERSION, Map};
 use bevy_grimoire_core::notes::Notes;
 use bevy_grimoire_core::plan::Plan;
+use bevy_grimoire_core::repetition::RepetitionRules;
 use bevy_grimoire_core::references::References;
 use bevy_grimoire_core::relations::Relations;
 use bevy_grimoire_core::reload::{self, KINDS};
 use bevy_grimoire_core::reload_check::{self, Check};
 use bevy_grimoire_core::standards::Standards;
+use bevy_grimoire_core::vocab::Vocabularies;
+use bevy_grimoire_core::volume::Volume;
+use bevy_grimoire_core::water::{WATER_FIELD_VERSION, WaterField, WaterPlan};
 
 /// **The kinds whose format has no version today**, each with what is left to do. Checked in: a kind
 /// leaves this list in the commit that versions it.
 const UNVERSIONED: &[(&str, &str)] = &[
-    ("vocab", "the project's vocabularies: `deny_unknown_fields`, so a newer file is refused as an unknown field, but no number says which shape it is"),
-    ("repetition", "the repetition rules: the whole struct has a default, so a version can default to the first"),
     ("checks", "`checks.ron`, a list of checks read by the decision layer"),
     ("oplog", "the operation log: one JSON object per line, with no version of the line's shape"),
-    ("terrain", "a height field: the ground a map stands on, one height per cell"),
-    ("water_plan", "a map's springs, sinks and lakes"),
-    ("water_field", "the water a plan settles into"),
-    ("volume", "a map's carved volume: its edits, in the order they were made"),
     ("forest", "a map's planted forest, its trees in the order they were planted"),
     ("people", "a map's people, each with their needs and ties"),
     ("scripts", "a map's triggers and the scripts they run"),
@@ -46,7 +45,7 @@ const UNVERSIONED: &[(&str, &str)] = &[
 
 /// **A literal, not `UNVERSIONED.len()`**: a number that is its own measure can never fail. Lower it with
 /// the list; raising it is a decision a reviewer must see.
-const UNVERSIONED_MAX: usize = 11;
+const UNVERSIONED_MAX: usize = 5;
 
 /// **Kinds whose format is not the editor's to version**, and whose it is.
 const OWNED_ELSEWHERE: &[(&str, &str)] = &[
@@ -91,6 +90,18 @@ fn versioned() -> Vec<(&'static str, &'static str, String)> {
             "destructible/site__cart.bake.ron",
             ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(),
         ),
+        // The six kinds core parses that carried no version until #202 slice 2: each is written by the
+        // type itself, so the sample is what this build writes, and `version:` is the root's first field.
+        s("vocab", "vocab.ron", ron::to_string(&Vocabularies::default()).unwrap()),
+        s("repetition", "repetition.ron", ron::to_string(&RepetitionRules::default()).unwrap()),
+        s("terrain", "site/terrain/yard.ron", ron::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 2, 2, 0.0)).unwrap()),
+        s("water_plan", "site/water/yard.ron", ron::to_string(&WaterPlan::default()).unwrap()),
+        s(
+            "water_field",
+            "site/water/yard.field.ron",
+            ron::to_string(&WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: vec![0.0; 4], settled: true, steps: 1 }).unwrap(),
+        ),
+        s("volume", "site/volume/yard.ron", ron::to_string(&Volume::default()).unwrap()),
     ]
 }
 
