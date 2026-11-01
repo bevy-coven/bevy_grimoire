@@ -40,11 +40,24 @@ pub struct Tree {
     pub seed: Option<i32>,
 }
 
+/// The format version of a forest file (#202). A file with no `version` is the first.
+pub const FOREST_VERSION: u32 = 1;
+
 /// A map's planted forest: `<grimoire_dir>/forest/<map>.ron`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Forest {
+    /// The format version: [`FOREST_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "bevy_grimoire_core::format_version::first", deserialize_with = "bevy_grimoire_core::format_version::read::<_, FOREST_VERSION>")]
+    pub version: u32,
     pub trees: Vec<Tree>,
+}
+
+impl Default for Forest {
+    fn default() -> Self {
+        Forest { version: FOREST_VERSION, trees: Vec::new() }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

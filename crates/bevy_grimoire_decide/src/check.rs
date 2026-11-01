@@ -30,10 +30,42 @@ pub struct Check {
     pub calibration: Option<Calibration>,
 }
 
+/// The format version of `checks.ron` (#202). A file with no `version` is the first.
+///
+/// This crate has no `bevy_grimoire_core` dependency (it is engine-free and no game links it), so the two
+/// small functions below say what `bevy_grimoire_core::format_version` says for the formats core owns.
+pub const CHECKS_VERSION: u32 = 1;
+
+/// The version of a file from before the version existed: the first.
+fn first_version() -> u32 {
+    1
+}
+
+/// A `version` that must be [`CHECKS_VERSION`]: any other number is refused, saying which version this
+/// build reads, so an author knows a file from a newer release is not damaged.
+fn read_version<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    let found = u32::deserialize(deserializer)?;
+    if found == CHECKS_VERSION {
+        Ok(found)
+    } else {
+        Err(serde::de::Error::custom(format!("version {found} is not the {CHECKS_VERSION} this build reads")))
+    }
+}
+
 /// The `checks.ron` file: checks by name.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Checks {
+    /// The format version: [`CHECKS_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "first_version", deserialize_with = "read_version")]
+    pub version: u32,
     pub checks: Vec<Check>,
+}
+
+impl Default for Checks {
+    fn default() -> Self {
+        Checks { version: CHECKS_VERSION, checks: Vec::new() }
+    }
 }
 
 impl Checks {

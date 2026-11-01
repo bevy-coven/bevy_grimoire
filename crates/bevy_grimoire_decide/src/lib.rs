@@ -19,7 +19,7 @@ mod transport;
 mod types;
 
 pub use calibrate::{Calibration, Sample, calibrate};
-pub use check::{BUILTIN_CHECKS_RON, Check, PROJECT_CHECKS_FILE, Checks, Evidence, Finding};
+pub use check::{BUILTIN_CHECKS_RON, CHECKS_VERSION, Check, PROJECT_CHECKS_FILE, Checks, Evidence, Finding};
 pub use config::Config;
 pub use transport::{Http, Recorder, Replay, Transport};
 pub use types::{Answer, MAX_IMAGES, MAX_QUESTIONS, Question, Request, Response, Usage};
