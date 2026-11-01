@@ -40,6 +40,17 @@ pub struct Refusal {
     pub reason: String,
 }
 
+impl Refusal {
+    /// `site/forest/yard.ron (trees[2].yaw): 1:47: Expected float`: the file, the field when the file
+    /// got that far, and why. The same sentence `KindVerdict::sentence` says.
+    pub fn sentence(&self) -> String {
+        match &self.field {
+            Some(field) => format!("{} ({field}): {}", self.file, self.reason),
+            None => format!("{}: {}", self.file, self.reason),
+        }
+    }
+}
+
 /// **What [`check`] makes of a file.**
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Check {
@@ -78,6 +89,19 @@ fn field_of<T: DeserializeOwned>(text: &str) -> Option<String> {
         (_, None) => Some(path),
         (_, Some(field)) => Some(format!("{path}.{field}")),
     }
+}
+
+/// **Read `text` as the `T` that kind `kind` is**, for a type whose reader is plain `ron::from_str` and
+/// which lives in a layer above this crate (the editor's forests, people and triggers). A file that
+/// does not read is refused with the file and the field, exactly as [`check`] does for the kinds this
+/// crate owns, so the one reader decides both whether to apply a file and what to tell its author.
+pub fn read<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> Result<T, Refusal> {
+    ron::from_str(text).map_err(|e: ron::error::SpannedError| Refusal {
+        kind,
+        file: file.to_owned(),
+        field: field_of::<T>(text),
+        reason: e.to_string(),
+    })
 }
 
 /// **Parse `text` as `kind`.** `file` is only what a refusal names.

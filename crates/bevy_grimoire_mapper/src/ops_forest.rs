@@ -174,6 +174,12 @@ pub fn forest_of(project: &crate::project::Project, map: &str) -> Forest {
         .unwrap_or_default()
 }
 
+/// **The saved forest of a map for an operation that rewrites the file**: empty when there is no file,
+/// and a refusal naming the file and the field when there is one that does not read (#200).
+pub fn try_forest_of(project: &crate::project::Project, map: &str) -> Result<Forest, Refusal> {
+    crate::map_files::read_or_empty("forest", project, &project.grimoire_dir.join("forest").join(format!("{map}.ron")))
+}
+
 /// Squared distance from `p` to the segment `a`-`b`.
 fn dist2_to_segment(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
     let (abx, abz) = (b.0 - a.0, b.1 - a.1);
@@ -276,7 +282,7 @@ impl ForestScatter {
             (back.text.clone(), 0)
         } else {
             let project = ctx.project.as_ref().expect("forest_path needs a project");
-            let mut forest = forest_of(project, &p.map);
+            let mut forest = try_forest_of(project, &p.map)?;
             // A terrain file that does not read is flat ground here, as the terrain view draws it (#187).
             let ground = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{}.ron", p.map)))
                 .ok()
