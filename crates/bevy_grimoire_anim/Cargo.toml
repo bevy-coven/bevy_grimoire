@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire_anim"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 description = "Clip-weight blending on a skinned rig's AnimationPlayer — no transitions, one shared gait phase."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
@@ -25,4 +25,4 @@ repository = "https://github.com/bevy-coven/bevy_grimoire"
 # is inherited — so writing `{ workspace = true, default-features = false }` would silently keep the
 # defaults on. The version is the workspace's; keep them in step by hand when bumping.
 bevy = { version = "0.20.0", default-features = false, features = ["bevy_animation", "bevy_scene", "bevy_gltf", "bevy_log"] }
-bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.3.0" }
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.4.0" }
