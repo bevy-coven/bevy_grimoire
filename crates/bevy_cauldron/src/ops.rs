@@ -3167,14 +3167,27 @@ pub mod piece_set_cells {
         /// Forget everything about the cells.
         #[serde(default)]
         pub clear: bool,
+        /// Per-cell edge tokens, each `{at: [x, y, z], token}`, written as one act. This is the verb that
+        /// keeps the edges a mesh scan derived: one token per boundary cell, not one token for every cell.
+        #[serde(default)]
+        pub edges: Option<Vec<EdgeAt>>,
         /// **Undo only.** The lattice to put back.
         #[serde(default)]
         pub restore: Option<Restore>,
     }
 
+    /// One cell and the edge token it takes.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct EdgeAt {
+        pub at: (u32, u32, u32),
+        pub token: String,
+    }
+
     enum Change {
         Solid(bool),
         Edge(String),
+        Edges(Vec<((u32, u32, u32), String)>),
         Clear,
     }
 
@@ -3198,7 +3211,7 @@ pub mod piece_set_cells {
             ))
         })?;
         if let Some(restore) = p.restore {
-            if p.cells.is_empty() && p.solid.is_none() && p.edge.is_none() && !p.clear {
+            if p.cells.is_empty() && p.solid.is_none() && p.edge.is_none() && p.edges.is_none() && !p.clear {
                 return Ok(Request::Restore { id: p.id, restore });
             }
             return Err(Refusal::new(
@@ -3206,12 +3219,44 @@ pub mod piece_set_cells {
                  only an undo sends it. Nothing was changed.",
             ));
         }
-        let verbs = usize::from(p.solid.is_some()) + usize::from(p.edge.is_some()) + usize::from(p.clear);
+        let verbs = usize::from(p.solid.is_some())
+            + usize::from(p.edge.is_some())
+            + usize::from(p.edges.is_some())
+            + usize::from(p.clear);
         if verbs != 1 {
             return Err(Refusal::new(
                 "an edit does one thing to its cells: give exactly one of `solid` (true or false), \
-                 `edge` (a token, empty to clear it) or `clear`. Nothing was changed.",
+                 `edge` (a token, empty to clear it), `edges` (a token for each cell) or `clear`. \
+                 Nothing was changed.",
             ));
+        }
+        if let Some(edges) = p.edges {
+            if !p.cells.is_empty() {
+                return Err(Refusal::new(
+                    "`edges` names its own cells, so give it without `cells`. Nothing was changed.",
+                ));
+            }
+            if edges.is_empty() {
+                return Err(Refusal::new("no edges to write \u{2014} give `edges`, each `{at: [x, y, z], token}`. Nothing was changed."));
+            }
+            let mut seen: Vec<(u32, u32, u32)> = edges.iter().map(|e| e.at).collect();
+            seen.sort_unstable();
+            if let Some(pair) = seen.windows(2).find(|w| w[0] == w[1]) {
+                return Err(Refusal::new(format!(
+                    "cell {} is named twice in `edges`, so which token it takes is not said. Nothing was changed.",
+                    at_text(pair[0])
+                )));
+            }
+            return Ok(Request::Set {
+                id: p.id,
+                cells: edges.iter().map(|e| e.at).collect(),
+                change: Change::Edges(
+                    edges
+                        .into_iter()
+                        .map(|e| (e.at, bevy_grimoire_core::naming::to_snake_case(&e.token)))
+                        .collect(),
+                ),
+            });
         }
         if p.cells.is_empty() {
             return Err(Refusal::new("no cells to edit \u{2014} give `cells`, each `[x, y, z]`. Nothing was changed."));
@@ -3322,6 +3367,11 @@ pub mod piece_set_cells {
                             d.lattice_mut().set_edge(at, div, token);
                         }
                     }
+                    Change::Edges(edges) => {
+                        for (at, token) in edges {
+                            d.lattice_mut().set_edge(*at, div, token);
+                        }
+                    }
                     Change::Clear => {
                         if let Some(grid) = d.subgrid.as_mut() {
                             for &at in &cells {
@@ -3351,6 +3401,8 @@ pub mod piece_set_cells {
                     Change::Edge(t) if t.is_empty() => format!("{which} token cleared"),
                     Change::Edge(t) if many => format!("{which} = `{t}`"),
                     Change::Edge(t) => format!("{which} = `{t}`"),
+                    Change::Edges(_) if many => format!("{which}' edge tokens written"),
+                    Change::Edges(_) => format!("{which} edge token written"),
                     Change::Clear => format!("{which} cleared"),
                 }
             }
@@ -3399,7 +3451,7 @@ pub mod piece_set_cells {
             json!({
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "cells"],
+                "required": ["id"],
                 "properties": {
                     "id": {
                         "type": "string",
@@ -3409,11 +3461,11 @@ pub mod piece_set_cells {
                         "type": "array",
                         "minItems": 1,
                         "items": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 3, "maxItems": 3},
-                        "description": "The lattice cells to edit, each [x, y, z]. A cell outside the piece's lattice refuses the whole edit."
+                        "description": "The lattice cells to edit, each [x, y, z]; required with solid, edge or clear, and not given with edges. A cell outside the piece's lattice refuses the whole edit."
                     },
                     "solid": {
                         "type": "boolean",
-                        "description": "true marks the cells solid, false opens them. Give exactly one of solid, edge or clear."
+                        "description": "true marks the cells solid, false opens them. Give exactly one of solid, edge, edges or clear."
                     },
                     "edge": {
                         "type": "string",
@@ -3422,6 +3474,20 @@ pub mod piece_set_cells {
                     "clear": {
                         "type": "boolean",
                         "description": "true forgets everything about the cells (solid and token)."
+                    },
+                    "edges": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["at", "token"],
+                            "properties": {
+                                "at": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 3, "maxItems": 3},
+                                "token": {"type": "string", "description": "The edge token this cell takes, snake-cased; the project's vocabulary must hold it."}
+                            }
+                        },
+                        "description": "A token for each of several cells, written as one act (what keeping a mesh scan's derived edges writes): each {at: [x, y, z], token}. Replaces cells, and a cell named twice refuses the edit."
                     }
                 }
             })

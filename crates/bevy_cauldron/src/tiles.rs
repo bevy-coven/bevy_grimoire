@@ -2092,6 +2092,20 @@ fn accept_derived_edges(
         return;
     }
 
+    // **A library piece's keep is `piece_set_cells` with `edges` (E-002, #129 slice 12)**, the operation
+    // an agent calls, so the key, the chord and an agent are one change with one log line, one Cmd+Z, and
+    // the same refusal the vocabulary check above gives when it lacks a token. A candidate is not in the library yet,
+    // so it has no operation to name: its tokens stay in memory, below, and are written by Accept.
+    if let Some(id) = state.selected_library_id.clone() {
+        let edges: Vec<serde_json::Value> = proposal
+            .cells
+            .iter()
+            .map(|(at, token)| serde_json::json!({"at": [at.0, at.1, at.2], "token": token}))
+            .collect();
+        crate::editor::set_cells(&mut state, &mut project, &id, &[], serde_json::json!({"edges": edges}));
+        return;
+    }
+
     let history_before = state.snapshot(&project);
     let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
         return;

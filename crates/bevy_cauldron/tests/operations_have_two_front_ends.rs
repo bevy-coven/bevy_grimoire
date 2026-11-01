@@ -247,7 +247,6 @@ const UNMIGRATED: &[Action] = &[
     Action::FrameView,
     Action::Cancel,
     Action::CycleGrid,
-    Action::AcceptEdges,
     Action::GroupFromSet,
     Action::PageEnter,
     Action::PageLeave,
@@ -349,7 +348,8 @@ const UNMIGRATED: &[Action] = &[
 // 102 -> 99: `RotateMeshX`, `RotateMeshY` and `RotateMeshZ` -> `piece_turn` (E-002, #129 slice 9): `N`, `O`, `P`, the rotate chips and the labeler's righting turn a library piece through the operation an agent calls.
 // 99 -> 96: `CellSolid`, `CellEdge` and `CellClear` -> `piece_set_cells` (E-002, #129 slice 10): `Z`, `X`, `V`, the lattice grid's chips and headers edit a library piece's cells through the operation an agent calls.
 // 96 -> 95: `NewToken` -> `vocab_add_token` (E-002, #129 slice 11): `Shift+T` and the `+` chip add a token to the vocabulary through the operation an agent calls.
-const UNMIGRATED_MAX: usize = 95;
+// 95 -> 94: `AcceptEdges` -> `piece_set_cells` (E-002, #129 slice 12): `Enter` on a mesh scan's derived edges keeps them on a library piece through the operation an agent calls (its `edges` verb).
+const UNMIGRATED_MAX: usize = 94;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
