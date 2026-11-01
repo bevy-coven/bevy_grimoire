@@ -621,6 +621,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_grimoire_mapper::balloon::BalloonPreview", Ownership::Door),
     // The game's newest verdict on a reload, read from `.live/game.ron`: true for as long as the app runs.
     ("bevy_grimoire_mapper::live::LiveGame", Ownership::Session),
+    // **The editor's own verdicts on the files it draws from** (#200): true for as long as the app runs, like the
+    // game's; `sync_terrain_view` forgets and re-decides them whenever one of its files or its map changes.
+    ("bevy_grimoire_mapper::live::EditorReloads", Ownership::Session),
     ("bevy_grimoire_mapper::family_host::FamilySettings", Ownership::Session),
     // **`Door`, like the camera it sits beside**: the hour the Environment panel's clock buttons
     // hold the preview at (#98). It is a view of the open project, never written to its file, so a
