@@ -2,15 +2,15 @@
 
 The Map door is one of the editor's three workspaces. It is where you lay pieces on the ground. A **piece** is one kit item you place. A **placement** is one piece on the map. A **stamp** is a composition laid down as one unit. A **composition** is a named group of pieces that you keep for reuse. This page covers the tasks you do on the Map. For the file formats, see [data files](data-files.md). For every key, see [keys](keys.md).
 
-![The whole editor window on the Map door: the PLACE list is walked to the gate house, R turns it before it is placed, two clicks place two gate houses, X and a click remove one, and Cmd+Z puts it back; the inspector names each step](../media/build-a-map.gif)
+![The Map door's 3D view and PLACE list on the bedroom map: the list is filtered to the sofa and the sofa armed, R turns it a quarter turn, a click places it, X and a click remove it, and Ctrl+Z puts it back](../media/build-a-map.gif)
 
-The clip shows the jobs below in one pass: arm a piece from the PLACE list, set its facing with `R` while it is armed, click to place, `X` and a click to remove, and Cmd+Z to undo. The INSPECTOR on the left names each step: BRUSH and YAW for the armed piece, MAP for the count, LAST for the newest change, and the history list with who made each one.
+The clip shows the jobs below in one pass: arm a piece from the PLACE list, set its facing with `R` while it is armed, click to place, `X` and a click to remove, and Cmd+Z to undo (the clip was recorded on Linux, where the key is Ctrl+Z). The INSPECTOR on the left, outside the clip's frame, names each step: BRUSH and YAW for the armed piece, MAP for the count, LAST for the newest change, and the history list with who made each one.
 
 ## Place a piece and undo it
 
 **Goal:** Put one piece on the ground and take it back.
 
-![A gate house is armed from the palette, a click places it on the ground, and Cmd+Z takes it back.](../media/place-and-undo.gif)
+![The PLACE list is filtered to the sofa and the sofa armed, a click places it on the floor, and Ctrl+Z takes it back.](../media/place-and-undo.gif)
 
 1. Pick a piece in the palette.
 2. Click the ground where the piece goes.
@@ -136,7 +136,7 @@ An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z
 
 **Goal:** Look at a different part of the map.
 
-![The camera pans left and right over the abbey as A and D are tapped.](../media/move-the-camera.gif)
+![The camera pans left and right over the bedroom as A and D are tapped.](../media/move-the-camera.gif)
 
 1. Press `W`, `A`, `S` or `D` to pan.
 2. Press `Q` or `E` to turn the view.
@@ -147,7 +147,7 @@ An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z
 
 **Goal:** Bring the piece you are working on, or the whole map, into view.
 
-![The view starts zoomed in on one corner of a small block map. Home brings the whole block into view.](../media/frame-the-map.gif)
+![The view starts zoomed in on one corner of the bedroom map. Home brings the whole room into view.](../media/frame-the-map.gif)
 
 1. Press `Home`.
 

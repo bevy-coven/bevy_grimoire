@@ -1,23 +1,91 @@
 {
   "name": "review_labels",
-  "fps": 15,
-  "scale": 2,
-  "width": 960,
-  "crop": [14, 84, 952, 662],
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1280,
+    703
+  ],
   "setup": [],
-  "chunks": [{"seconds": 5}],
+  "chunks": [
+    {
+      "seconds": 4.4
+    }
+  ],
   "steps": [
-    {"at": 0.0, "caption": "Map door. An agent asks which pieces a model labelled."},
-    {"at": 0.1, "mcp": "grimoire_list_pieces", "args": {"by_model": true}},
-    {"at": 1.2, "mcp": "grimoire_apply_operation", "args": {"operation": "door_open", "parameters": {"door": "kit", "tab": "meshes"}},
-     "caption": "agent: door_open kit. The editor crosses to the kit door's Meshes tab."},
-    {"at": 2.0, "key": "ArrowRight"},
-    {"at": 2.4, "hold": "ArrowDown", "secs": 0.4},
-    {"at": 3.0, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 3.2, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 3.4, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 3.6, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 3.8, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 4.0, "caption": "The labels row leads with the confidence, then names the model file and the date."}
+    {
+      "at": 0.0,
+      "caption": "Map door. An agent asks which pieces a model labelled."
+    },
+    {
+      "at": 0.1,
+      "mcp": "grimoire_list_pieces",
+      "args": {
+        "by_model": true
+      }
+    },
+    {
+      "at": 1.2,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "door_open",
+        "parameters": {
+          "door": "kit",
+          "tab": "meshes"
+        }
+      },
+      "caption": "agent: door_open kit. The editor crosses to the kit door's Meshes tab."
+    },
+    {
+      "at": 2.0,
+      "key": "ArrowRight"
+    },
+    {
+      "at": 2.4,
+      "hold": "ArrowDown",
+      "secs": 0.4
+    },
+    {
+      "at": 3.0,
+      "key": "ArrowDown",
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 3.2,
+      "key": "ArrowDown",
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 3.4,
+      "key": "ArrowDown",
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 3.6,
+      "key": "ArrowDown",
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 3.8,
+      "key": "ArrowDown",
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 4.0,
+      "caption": "The labels row leads with the confidence, then names the model and the date."
+    }
   ]
 }

@@ -6,9 +6,9 @@ The Cauldron is a world editor for Bevy games, for developers who build levels w
 
 [![crates.io](https://img.shields.io/crates/v/bevy_grimoire.svg)](https://crates.io/crates/bevy_grimoire) [![docs.rs](https://img.shields.io/docsrs/bevy_grimoire_core)](https://docs.rs/bevy_grimoire_core) [![CI](https://github.com/bevy-coven/bevy_grimoire/actions/workflows/ci.yml/badge.svg)](https://github.com/bevy-coven/bevy_grimoire/actions/workflows/ci.yml) [![Bevy 0.20](https://img.shields.io/badge/bevy-0.20-purple.svg)](https://bevyengine.org) [![licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue.svg)](#who-and-licence)
 
-![The whole editor window: an AI agent turns the abbey 90 degrees and removes its table through MCP calls, each change named on the inspector's LAST line and in the history list as the agent's; then the person presses Cmd+Z twice and takes both back](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/agent-drives.gif)
+![The editor's 3D view of the bedroom map that ships in this repository: an AI agent removes the bed and then turns the sofa 90 degrees through MCP calls; then the person presses Ctrl+Z twice and takes both back](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/agent-drives.gif)
 
-*An agent calls `grimoire_apply_operation` twice, a turn and then a removal; the inspector names each change and who made it, and two presses of Cmd+Z take them back. A 64-second recording with snips is [on the book page](https://bevy-coven.github.io/crates/bevy_grimoire.html#the-demo).*
+*An agent calls `grimoire_apply_operation` twice, a removal and then a turn, and two presses of Cmd+Z (Ctrl+Z on Linux and Windows, as recorded here) take them back; the still below shows the inspector naming each change and who made it. A 64-second recording with snips is [on the book page](https://bevy-coven.github.io/crates/bevy_grimoire.html#the-demo).*
 
 **Status:** usable · Bevy 0.20 · toolchain 1.98.1 (pinned in `rust-toolchain.toml`)
 
@@ -38,9 +38,9 @@ To let the Familiar drive the open editor, add the MCP server to your MCP client
 cargo run -p bevy_cauldron -- . --kit furniture
 ```
 
-Opens the repository's own project on its `furniture` kit (`site` and `scp` are the others); choose `+ new map` in the MAPS column for a map to place them on. [The MCP tools](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/mcp-tools.md) list what an agent can call.
+Opens the repository's own project on its `furniture` kit (`site` and `scp` are the others); choose `bedroom` in the MAPS column to open the one-room map that ships with the repository, or `+ new map` for an empty one. [The MCP tools](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/mcp-tools.md) list what an agent can call.
 
-![The editor on the Map door after the agent's turn and removal: the inspector lists both changes as the agent's, the abbey stands turned on the town map, and the PLACE palette lists the container kit](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/editor.png)
+![The whole editor window on the Map door with the bedroom map, after an agent removed the bed and turned the sofa 90 degrees: the inspector's LAST line and its history list name both changes as the agent's, and the PLACE palette lists the furniture kit](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/editor.png)
 
 *The same window mid-clip: every change in the history list says who made it.*
 
@@ -48,7 +48,7 @@ Opens the repository's own project on its `furniture` kit (`site` and `scp` are 
 
 - **Build a map**: place pieces, fill areas, turn and remove them, and undo any of it: [building maps](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/building-maps.md).
 
-  ![The whole editor window on the Map door: the PLACE list is walked to the gate house, R turns it before it is placed, two clicks place two gate houses, X and a click remove one, and Cmd+Z puts it back; the inspector names each step](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/build-a-map.gif)
+  ![The Map door's 3D view and PLACE list on the bedroom map: the list is filtered to the sofa and the sofa armed, R turns it a quarter turn, a click places it, X and a click remove it, and Ctrl+Z puts it back](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/build-a-map.gif)
 
 - **Work with the Familiar**: an agent turns, removes, labels, frames and captures through the same operations you use, and one Cmd+Z takes back its turn: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
 - **Show the agent what you mean**: Cmd+\ snips a rectangle of the editor with a note the agent can read and see: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
