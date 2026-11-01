@@ -7,15 +7,19 @@
 //! new one stands for it. What a game hung on the old entity moves across through one hook per kind of
 //! state, registered on the app with [`GrimoireLiveApp::carry_across_respawn`] (a component copied as it
 //! is) or [`GrimoireLiveApp::migrate_on_respawn`] (anything else), never at the call site that edits.
+//! What *points at* a piece (a person's home, a list of places) is rewritten the same way, once per kind
+//! of reference, with [`GrimoireLiveApp::follow_respawn`].
 //!
 //! The reload is `bevy_grimoire_core::project_data::load` plus `GrimoireWorld::with_compositions`, the
 //! same two doors a game's first load goes through. A reload either of them refuses leaves every
 //! entity and the [`GrimoireWorld`] as they were and writes no [`ProjectReloaded`].
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use bevy::ecs::component::Mutable;
 use bevy::prelude::*;
 use bevy_grimoire_core::live::{FileWatch, MapDiff, Verdict, diff_maps_renaming, same_but_id};
 use bevy_grimoire_core::map::Map;
@@ -57,9 +61,39 @@ struct Live {
 /// that stands for it now.
 type Migration = Arc<dyn Fn(&mut World, Entity, Entity) + Send + Sync>;
 
-/// The hooks a game registered, in the order it registered them.
+/// A hook run once for a reload that drew pieces again: the world, and where each of them stands now.
+type Reference = Arc<dyn Fn(&mut World, &Respawned) + Send + Sync>;
+
+/// The hooks a game registered, each kind in the order it registered them.
 #[derive(Resource, Default)]
-struct ReloadMigrations(Vec<Migration>);
+struct ReloadMigrations {
+    pieces: Vec<Migration>,
+    references: Vec<Reference>,
+}
+
+/// **Where each piece a reload drew again stands now** (#201): the entity that stood for it is gone and
+/// a new one stands for it. A hook registered with [`GrimoireLiveApp::follow_respawn`] asks it.
+pub struct Respawned {
+    now: HashMap<Entity, Entity>,
+    /// Set when [`Respawned::follow`] answered with another entity, so a rewrite that changed nothing
+    /// is not flagged as a change.
+    answered: Cell<bool>,
+}
+
+impl Respawned {
+    /// The entity that stands for `entity` now: the new one when a reload drew `entity` again, and
+    /// `entity` itself for everything else (a piece the reload kept, a piece it removed, an entity
+    /// that is not a placement at all).
+    pub fn follow(&self, entity: Entity) -> Entity {
+        match self.now.get(&entity) {
+            Some(&now) => {
+                self.answered.set(true);
+                now
+            }
+            None => entity,
+        }
+    }
+}
 
 /// **How a game's state follows a piece a reload draws again** (#201). A reload keeps the entity of every
 /// placement whose definition did not change, and draws the rest again: a moved, turned or retyped piece
@@ -86,12 +120,49 @@ pub trait GrimoireLiveApp {
             }
         })
     }
+
+    /// **Rewrite the entities a component names** when a reload draws them again (#201). A person is
+    /// not a placement, so a reload leaves them alone; but a person's `Home(entity)` names a placement,
+    /// and a placement an edit draws again has a new entity. After each reload that drew a piece again,
+    /// `follow` is called for every `C` in the world with the component and a [`Respawned`] to ask where
+    /// an entity stands now:
+    ///
+    /// ```ignore
+    /// app.follow_respawn::<Home>(|home, respawned| home.0 = respawned.follow(home.0));
+    /// ```
+    ///
+    /// It is a closure, not `MapEntities`, because a game cannot implement that for another crate's
+    /// component. A `C` is marked changed only when `follow` was answered with another entity. A
+    /// reference to a piece the reload removed is left as it was: nothing stands for it.
+    fn follow_respawn<C: Component<Mutability = Mutable>>(
+        &mut self,
+        follow: impl Fn(&mut C, &Respawned) + Send + Sync + 'static,
+    ) -> &mut Self;
 }
 
 impl GrimoireLiveApp for App {
     fn migrate_on_respawn(&mut self, migrate: impl Fn(&mut World, Entity, Entity) + Send + Sync + 'static) -> &mut Self {
         self.init_resource::<ReloadMigrations>();
-        self.world_mut().resource_mut::<ReloadMigrations>().0.push(Arc::new(migrate));
+        self.world_mut().resource_mut::<ReloadMigrations>().pieces.push(Arc::new(migrate));
+        self
+    }
+
+    fn follow_respawn<C: Component<Mutability = Mutable>>(
+        &mut self,
+        follow: impl Fn(&mut C, &Respawned) + Send + Sync + 'static,
+    ) -> &mut Self {
+        let hook = move |world: &mut World, respawned: &Respawned| {
+            let mut query = world.query::<&mut C>();
+            for mut component in query.iter_mut(world) {
+                respawned.answered.set(false);
+                follow(component.bypass_change_detection(), respawned);
+                if respawned.answered.get() {
+                    component.set_changed();
+                }
+            }
+        };
+        self.init_resource::<ReloadMigrations>();
+        self.world_mut().resource_mut::<ReloadMigrations>().references.push(Arc::new(hook));
         self
     }
 }
@@ -292,7 +363,8 @@ fn reload(
     // paired here, once, so state a game registered follows it. The hooks run after the new entity is
     // spawned and before the old one is despawned, both in this command queue's order. A piece that was
     // removed, or renamed and edited together, has no new entity under its name and is not paired.
-    if !migrations.0.is_empty() {
+    // What points at a piece is rewritten after the per-piece hooks, once for the whole reload.
+    if !migrations.pieces.is_empty() || !migrations.references.is_empty() {
         let pairs: Vec<(Entity, Entity)> = replaced
             .iter()
             .filter_map(|&(id, old)| {
@@ -301,11 +373,18 @@ fn reload(
             })
             .collect();
         if !pairs.is_empty() {
-            let hooks = migrations.0.clone();
+            let pieces = migrations.pieces.clone();
+            let references = migrations.references.clone();
             commands.queue(move |world: &mut World| {
-                for (old, new) in pairs {
-                    for hook in &hooks {
+                for &(old, new) in &pairs {
+                    for hook in &pieces {
                         hook(world, old, new);
+                    }
+                }
+                if !references.is_empty() {
+                    let respawned = Respawned { now: pairs.into_iter().collect(), answered: Cell::new(false) };
+                    for hook in &references {
+                        hook(world, &respawned);
                     }
                 }
             });
