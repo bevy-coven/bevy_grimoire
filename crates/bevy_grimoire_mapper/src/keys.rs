@@ -3247,8 +3247,13 @@ impl Plugin for KeysPlugin {
             .configure_sets(Update, (Phase::Sense, Phase::Text, Phase::Act).chain())
             .add_systems(
                 Update,
-                (crate::editor::sense_context.in_set(Phase::Sense))
-                    .run_if(in_state(crate::screen::Screen::Editor)),
+                // **Before gooey's `Navigate`**, where the command palette closes itself on Esc and
+                // Enter: sensed after it, the palette is already gone and the same keypress would
+                // reach the tab behind it (Esc is the global Cancel).
+                (crate::editor::sense_context
+                    .in_set(Phase::Sense)
+                    .before(bevy_gooey::GooeySystems::Navigate))
+                .run_if(in_state(crate::screen::Screen::Editor)),
             );
     }
 }

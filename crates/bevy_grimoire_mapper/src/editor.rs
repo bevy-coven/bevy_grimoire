@@ -7716,8 +7716,13 @@ impl Fields<'_> {
 /// this same plugin — but every condition in a `.run_if(..)` chain IS evaluated in Bevy 0.19, so a
 /// condition reading a resource some *other* plugin owns must take the option. Worth stating next to
 /// the one place that legitimately does not.
-pub fn not_typing(fields: Fields, filters: Res<crate::filter::Filters>) -> bool {
-    !fields.typing() && !filters.typing()
+pub fn not_typing(
+    fields: Fields,
+    filters: Res<crate::filter::Filters>,
+    // The command palette's field is gooey's own, so it is asked of its marker (see `sense_context`).
+    palette: Query<(), With<bevy_gooey::CommandPalette>>,
+) -> bool {
+    !fields.typing() && !filters.typing() && palette.is_empty()
 }
 
 /// **The Note tool's mouse guard** (#173): [`not_typing`], except that the note box does not count.

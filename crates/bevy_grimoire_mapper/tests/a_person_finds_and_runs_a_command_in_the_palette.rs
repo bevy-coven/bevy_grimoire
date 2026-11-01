@@ -192,3 +192,29 @@ fn the_palette_lists_every_command_with_its_chord_and_the_reason_it_cannot_run()
         "a Tiles command is listed on the Map tab with the registry's reason"
     );
 }
+
+/// **Esc closes the palette and does nothing else**: it is also the editor's global Cancel, which
+/// peels the armed tool, so it must not reach the tab on the frame the palette goes.
+#[test]
+fn escape_closes_the_palette_without_cancelling_what_is_armed() {
+    let mut app = editor("palette_escape");
+    app.world_mut().resource_mut::<EditorState>().brush = Some(0);
+    settle(&mut app);
+    let armed = app.world().resource::<EditorState>().brush;
+    assert!(armed.is_some(), "a fence is armed");
+
+    ctrl_shift_p(&mut app);
+    assert!(open(&mut app));
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        send(&mut app, KeyCode::Escape, Key::Escape, None, state);
+        app.update();
+    }
+    settle(&mut app);
+
+    assert!(!open(&mut app), "Esc closes the palette");
+    assert_eq!(
+        app.world().resource::<EditorState>().brush,
+        armed,
+        "the Esc that closed the palette must not also put the brush down"
+    );
+}

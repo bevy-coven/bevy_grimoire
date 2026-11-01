@@ -70,6 +70,7 @@ fn capitalised(word: &str) -> String {
 fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     live: Res<Live>,
+    confirm: Res<crate::confirm::Confirm>,
     open: Query<Entity, With<CommandPalette>>,
     mut commands_list: ResMut<CommandList>,
     mut commands: Commands,
@@ -81,7 +82,10 @@ fn toggle(
         commands.entity(palette).despawn();
         return;
     }
-    if live.0 == Context::Typing {
+    // Not over a text field, a filter box or the journal (each takes the keys on its own terms), and
+    // not over a question on screen: `confirm` reads raw Y, N and Esc, so the first `y` typed into
+    // the palette's field would answer it.
+    if live.0 == Context::Typing || live.2 != crate::keys::Holder::Tab || confirm.is_open() {
         return;
     }
     commands_list.0 = list(*live);
@@ -100,7 +104,9 @@ fn run(
     };
     chords.queue(&command);
     if let Some(mut state) = state {
-        state.status.note(format!("ran {} from the palette", command.title));
+        // "Asked for", not "ran": the chord goes down a frame or two from now and the dispatcher
+        // judges it then.
+        state.status.note(format!("asked for {} from the palette", command.title));
     }
 }
 
