@@ -56,7 +56,7 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **What you see:** The piece comes off the map. `Cmd+Z` puts it back.
 
-Or right-click the piece: its menu opens at the pointer with Turn left, Turn right, Tip about x, Tip about z, Lift, Lower and Remove. Each is the same act as its key, on that one piece, and each is one line in the history, so `Cmd+Z` takes it back.
+Or right-click the piece: its menu opens at the pointer with Turn left, Turn right, Tip about x, Tip about z, Lift, Lower and Remove. Each is the same act as its key, on that one piece, and each is one line in the history, so `Cmd+Z` takes it back. Move picks that piece up with the move tool, so the next click on the map puts it down (one move in the history); Note arms the Note tool with its box already open on that piece, so you type it and Enter leaves the note.
 
 ## Clone and run
 
