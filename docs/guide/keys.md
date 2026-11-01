@@ -25,6 +25,10 @@ The "Works when" column names the state the editor must be in:
 
 A key marked "in filter boxes" still walks its list while a filter box has focus. Every other key pauses while you type in a name, an id, or a filter box. Typing the letter `S` in a name does not save the map, because saving is `Cmd+S`.
 
+## Every key is a command
+
+Each key on this page is also a command with an id that does not change, such as `file.save`, `edit.undo` or `tiles.align_forward`. The part before the dot is the category a menu groups it under. A menu, the command palette and an agent name a command by its id, so renaming a key never breaks them. `crates/bevy_grimoire_mapper/src/commands.rs` lists every id and its title, and a test fails when two commands share an id, a title, or a shortcut on a tab where both work.
+
 ## Everywhere
 
 These keys work on every tab.

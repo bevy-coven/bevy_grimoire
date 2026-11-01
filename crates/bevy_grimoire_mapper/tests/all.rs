@@ -165,6 +165,7 @@ mod grimoire_state_reports_broken_relations;
 mod grimoire_state_reports_standards_breaches;
 mod grimoire_state_says_whether_the_kit_loops_and_opens_into_a_room;
 mod environment_applies;
+mod every_action_is_a_command;
 mod every_key_has_a_home;
 mod editor_skin;
 mod editor_ui_plugin;
