@@ -14,7 +14,7 @@ This is the **only** crate in the grimoire set that knows what a renderer is, on
 
 ## The non-negotiable: one spawner
 
-`spawn_descriptor` is deliberately the **single** shared spawner. `bevy_grimoire_mapper` shows you a map and the game plays it, and they must agree about what a placement looks like down to the last degree of yaw. The way to guarantee that is not care — it is having one function.
+`spawn_descriptor` is deliberately the **single** shared spawner. `bevy_cauldron` shows you a map and the game plays it, and they must agree about what a placement looks like down to the last degree of yaw. The way to guarantee that is not care — it is having one function.
 
 **Do not add a second spawner**, not for the editor, not for a test, not behind a flag. The alternative was tried elsewhere in this tree and is on the record: `bake.rs` and `site_editor::source_map` independently grew the same RON writer, and one of them had a bug the other did not.
 
@@ -32,4 +32,4 @@ Masks, stacked Y, role masks and seat positions all resolve **once at load**, be
 
 ## In the monorepo
 
-The game loads what `bevy_grimoire_mapper` writes through `src/grimoire_map.rs`, which uses `GrimoirePlugin` / `GrimoireWorld` — that is the step that makes the editor's output real. Root `CLAUDE.md` and `TESTING.md` carry the project-wide rules; neither is part of this mirror.
+The game loads what `bevy_cauldron` writes through `src/grimoire_map.rs`, which uses `GrimoirePlugin` / `GrimoireWorld` — that is the step that makes the editor's output real. Root `CLAUDE.md` and `TESTING.md` carry the project-wide rules; neither is part of this mirror.

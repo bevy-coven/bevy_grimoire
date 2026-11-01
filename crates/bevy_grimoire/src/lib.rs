@@ -7,7 +7,7 @@
 //!
 //! # One spawner, two callers
 //!
-//! `bevy_grimoire_mapper` shows you a map and the game plays it, and they must agree about what a placement
+//! `bevy_cauldron` shows you a map and the game plays it, and they must agree about what a placement
 //! looks like down to the last degree of yaw. The way to guarantee that is not care — it is having
 //! one function. `sim_harness.rs` is the precedent this project already trusts: the same plugin graph
 //! from two entry points, *"not a second code path"*.

@@ -479,7 +479,7 @@ pub fn apply_pose_blenders(
                 // pins it. A free clip is the opposite by design — Bevy's `advance_animations` ticks
                 // it at `speed` and this module only ever touches its weight — so [`hold_phase`] did
                 // not reach it at all, and the bench's `Space` froze the walk while the idle kept
-                // going. Measured in `bevy_grimoire_mapper`: two captures 2 s apart differed by ~150,000
+                // going. Measured in `bevy_cauldron`: two captures 2 s apart differed by ~150,000
                 // pixels with the phase held.
                 //
                 // Speed, not a seek: a free clip has no φ to hold it at, and rewinding one is the
@@ -712,7 +712,7 @@ mod tests {
     /// The half `hold_phase` did not cover. A gait is a paused clip whose seek time this module
     /// owns, so pinning φ pins it; a free clip is ticked by Bevy at its authored speed and never
     /// looked at φ at all. The bench's `Space` therefore froze the walk and left the idle running —
-    /// measured in `bevy_grimoire_mapper` as ~150,000 pixels of change per two seconds with the phase held.
+    /// measured in `bevy_cauldron` as ~150,000 pixels of change per two seconds with the phase held.
     ///
     /// Asserted on `speed` rather than on the pose, because speed is the thing this module writes
     /// and a rewind is what it must never do: the clip stops where it stands.

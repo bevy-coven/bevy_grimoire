@@ -93,7 +93,7 @@ pub struct Token {
     /// render can show either, so no labeller can be asked for them and no author should have to
     /// remember them.
     ///
-    /// It lived as a hardcoded five-row table in `bevy_grimoire_mapper`'s labeller until 2026-08-19, which
+    /// It lived as a hardcoded five-row table in `bevy_cauldron`'s labeller until 2026-08-19, which
     /// put game-design semantics inside the editor and left every other consumer — the game
     /// included — unaware of it. A descriptor written by hand, or by any tool that is not this
     /// editor, simply did not get the effect. Moving it here makes it one fact, read by
@@ -493,7 +493,7 @@ impl Vocabularies {
         // **The effects a kind implies are resolved here, with the authored ones.**
         //
         // One place, so every consumer agrees without remembering to. This was a table in
-        // `bevy_grimoire_mapper`'s labeller that only its apply path consulted — so a bed labelled by the
+        // `bevy_cauldron`'s labeller that only its apply path consulted — so a bed labelled by the
         // editor gained `stamina-recharge` and the identical bed written by hand did not, and the
         // game, which reads these masks, could not tell the two apart. Deriving it at resolve time
         // means the stored list is an author's *statement* and the mask is the *truth*.

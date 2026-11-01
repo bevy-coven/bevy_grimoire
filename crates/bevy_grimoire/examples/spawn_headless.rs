@@ -34,7 +34,7 @@ fn placed(id: &str, descriptor: &str, at: (f32, f32), yaw: f32) -> Placed {
     Placed { id: id.to_owned(), descriptor: descriptor.to_owned(), at, yaw, ..Placed::default() }
 }
 
-/// The headless `App`, built the way `bevy_grimoire_mapper`'s harness builds one.
+/// The headless `App`, built the way `bevy_cauldron`'s harness builds one.
 fn headless_app() -> App {
     let mut app = App::new();
     app.add_plugins(
@@ -55,7 +55,7 @@ fn headless_app() -> App {
             .disable::<bevy::winit::WinitPlugin>()
             .disable::<bevy::audio::AudioPlugin>()
             // With no render device there is no render app, so a few plugins log an error about
-            // its absence. That is expected here and only obscures the output. `bevy_grimoire_mapper`'s
+            // its absence. That is expected here and only obscures the output. `bevy_cauldron`'s
             // harness drops the log plugin for the same reason.
             .disable::<bevy::log::LogPlugin>(),
     )

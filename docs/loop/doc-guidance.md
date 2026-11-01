@@ -30,7 +30,7 @@ Research found with Home Still (`distill_search`, 2026-10-23), and the rules it 
 **Voice.** Second person, present tense, active voice, short sentences. Concrete names: the exact key, the exact label on screen, the exact file. No marketing words. No history ("now", "since cycle 6", "was fixed"): the page describes the editor as it is. No internal ids (B-044, E-042), no commit hashes, no source line numbers in user docs; data file paths are fine.
 
 **Truth.**
-- Every key, label, operation name, tool name, file name and behaviour on a page is checked against the code before it is written: keys against the `BINDINGS` table in `crates/bevy_grimoire_mapper/src/keys.rs`; operations against the registry in `crates/bevy_grimoire_mapper/src/ops.rs`; tools against `docs/mcp-tools.md`.
+- Every key, label, operation name, tool name, file name and behaviour on a page is checked against the code before it is written: keys against the `BINDINGS` table in `crates/bevy_cauldron/src/keys.rs`; operations against the registry in `crates/bevy_cauldron/src/ops.rs`; tools against `docs/mcp-tools.md`.
 - A limitation is stated plainly where a reader would hit it, not hidden.
 - If something can't be checked, leave it out.
 

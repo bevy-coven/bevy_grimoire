@@ -14,13 +14,13 @@
 //! is already paid.
 //!
 //! Test code is not scanned (a fixture writes a plain file on purpose), and neither is
-//! `bevy_grimoire_mcp`, `bevy_grimoire_snip` or `bevy_grimoire_decide`: they write screenshots,
+//! `bevy_cauldron_mcp`, `bevy_grimoire_snip` or `bevy_grimoire_decide`: they write screenshots,
 //! snips and recorded fixtures, which are not project files.
 
 use std::path::{Path, PathBuf};
 
 /// The source directories scanned, relative to the workspace root.
-const ROOTS: &[&str] = &["crates/bevy_grimoire_core/src", "crates/bevy_grimoire_mapper/src"];
+const ROOTS: &[&str] = &["crates/bevy_grimoire_core/src", "crates/bevy_cauldron/src"];
 
 /// The calls that put bytes in a file, or move one, without going through `atomic_file`.
 const PLAIN: &[&str] = &[
@@ -54,7 +54,7 @@ const ALLOWED: &[Allowed] = &[
         why: "moves the directory `assets/emerge` to `assets/grimoire` when a project is opened; it writes no bytes",
     },
     Allowed {
-        file: "bevy_grimoire_mapper/src/ops.rs",
+        file: "bevy_cauldron/src/ops.rs",
         needle: "let mut f = std::fs::OpenOptions::new()",
         why: "the operation log is an append (`append(true)`), so it cannot lose an earlier line by being rewritten, and nobody edits it",
     },

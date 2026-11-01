@@ -1399,7 +1399,7 @@ mod tests {
     /// **A four-tile kit, built here rather than read off disk.**
     ///
     /// This used to load `assets/grimoire/site`, which was a rule violation hiding in plain sight:
-    /// `bevy_grimoire_mapper/CLAUDE.md` states *"Tests do not read the shipped assets… The shipped `assets/`
+    /// `bevy_cauldron/CLAUDE.md` states *"Tests do not read the shipped assets… The shipped `assets/`
     /// is corpus, and a suite bound to it fails the day somebody imports a kit, which is the thing
     /// this editor exists to do."* Seven solver tests were bound to four authored tiles, so clearing
     /// the project to author new ones took the constraint solver's whole real-data coverage with it.

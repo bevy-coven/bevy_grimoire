@@ -484,7 +484,7 @@ impl Interface {
 /// against it rather than re-derived: Bevy's yaw turns +X toward −Z, so getting the sign wrong here
 /// mirrors every composition without failing anything.
 ///
-/// **Public because a turned *loose set* has to agree with a turned stamp.** `bevy_grimoire_mapper`'s clone
+/// **Public because a turned *loose set* has to agree with a turned stamp.** `bevy_cauldron`'s clone
 /// tool rotates a captured group about its anchor, and a second copy of this sign convention is how
 /// a set stamped at 90° would come out mirrored against a composition stamped at 90° — the failure
 /// this comment already warns about, one caller further out.

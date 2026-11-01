@@ -4,7 +4,7 @@ Status: owner-directed series, 2026-11-01. The work is tracked by the issue labe
 
 ## 1. What the UI is for
 
-Grimoire is a **mixed-initiative authoring tool**: a person and the Familiar (the agent) edit one project through the same commands. Horvitz (1999, "Principles of mixed-initiative user interfaces", [10.1145/302979.303030](https://doi.org/10.1145/302979.303030)) asks that an agent add genuine value over direct manipulation, reason about the uncertainty of the user's goal, and time its interruptions to the user's attention. *Procedural Content Generation in Games*, chapter 11, makes the same case for content creation: the human steers, the generator proposes, and both see the same artefact.
+The Cauldron is a **mixed-initiative authoring tool**: a person and the Familiar (the agent) edit one project through the same commands. Horvitz (1999, "Principles of mixed-initiative user interfaces", [10.1145/302979.303030](https://doi.org/10.1145/302979.303030)) asks that an agent add genuine value over direct manipulation, reason about the uncertainty of the user's goal, and time its interruptions to the user's attention. *Procedural Content Generation in Games*, chapter 11, makes the same case for content creation: the human steers, the generator proposes, and both see the same artefact.
 
 So the UI has three jobs:
 
@@ -12,7 +12,7 @@ So the UI has three jobs:
 2. Show what the Familiar is doing, let the person stop, correct or undo it, and say why it did it.
 3. Make the project's files the truth: nothing is only in memory, and every setting is a file that can be read, diffed and committed.
 
-Today the UI is hand-built on `bevy_ui` in `crates/bevy_grimoire_mapper/src/` (`chrome.rs`, 3,531 lines, and 168 raw `Node {` constructions across the crate). `bevy_gooey` is an optional feature used only to preview a game's skin. The series ends with every widget of the editor on gooey, one skin, one command registry and one settings system.
+Today the UI is hand-built on `bevy_ui` in `crates/bevy_cauldron/src/` (`chrome.rs`, 3,531 lines, and 168 raw `Node {` constructions across the crate). `bevy_gooey` is an optional feature used only to preview a game's skin. The series ends with every widget of the editor on gooey, one skin, one command registry and one settings system.
 
 ## 2. Principles
 

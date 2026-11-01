@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/bevy-coven/bevy_grimoire"
 
 # **Its own crate so the editor can drive the REAL blender.** It lived in the game crate, which made it
-# unreachable from `bevy_grimoire_mapper` — and an animation tab previewing a *copy* of the blend would be the
+# unreachable from `bevy_cauldron` — and an animation tab previewing a *copy* of the blend would be the
 # same fork `bevy_grimoire`'s header warns about for `spawn_descriptor`: "a map cannot look one way here
 # and another in the game". The game re-exports this at `crate::anim`, so no call site moved.
 #

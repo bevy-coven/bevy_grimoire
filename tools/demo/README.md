@@ -14,13 +14,13 @@ Start the editor on the project first, from its own shell. `record.py` never lau
 
 ```sh
 cd /path/to/project
-BEVY_BRP_PORT=15710 /path/to/bevy_grimoire_mapper . town > editor.log 2>&1
+BEVY_BRP_PORT=15710 /path/to/bevy_cauldron . town > editor.log 2>&1
 ```
 
 Record a storyboard against it:
 
 ```sh
-BEVY_GRIMOIRE_MCP=/path/to/bevy_grimoire_mcp \
+BEVY_GRIMOIRE_MCP=/path/to/bevy_cauldron_mcp \
   python3 tools/demo/record.py tools/demo/storyboards/hero.json --port 15710 --project /path/to/project
 ```
 
