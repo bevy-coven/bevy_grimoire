@@ -1163,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",
