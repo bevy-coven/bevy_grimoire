@@ -130,6 +130,53 @@ class Steps(unittest.TestCase):
             self.assertEqual(run("git", "status", "--short", cwd=clone), "?? dirty.txt")
             self.assertEqual(run("git", "rev-parse", "main", cwd=origin), head)
 
+    def test_the_audit_names_what_a_pass_did_not_ship(self):
+        import subprocess
+
+        def run(*a, cwd=None):
+            return subprocess.run(a, cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+        def commit(clone, files, msg):
+            for f, text in files.items():
+                (clone / f).parent.mkdir(parents=True, exist_ok=True)
+                (clone / f).write_text(text)
+            run("git", "add", "-A", cwd=clone)
+            run("git", "commit", "-qm", msg, cwd=clone)
+
+        with tempfile.TemporaryDirectory() as d:
+            origin, clone, state = Path(d) / "origin.git", Path(d) / "c", Path(d) / "s"
+            state.mkdir()
+            run("git", "init", "-q", "--bare", "-b", "main", str(origin))
+            run("git", "clone", "-q", str(origin), str(clone))
+            for k, v in (("user.name", "t"), ("user.email", "t@t")):
+                run("git", "config", k, v, cwd=clone)
+            commit(clone, {"src/lib.rs": "a", "Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\n'}, "base")
+            run("git", "push", "-q", "origin", "HEAD:main", cwd=clone)
+            start = run("git", "rev-parse", "HEAD", cwd=clone)
+
+            # A pass that shipped everything: code, docs, a GIF, and a release tag, all pushed.
+            commit(clone, {"src/lib.rs": "b", "README.md": "b", "docs/media/b.gif": "GIF"}, "feature")
+            run("git", "tag", "-a", "v0.1.1", "-m", "v0.1.1", cwd=clone)
+            run("git", "push", "-q", "origin", "HEAD:main", "v0.1.1", cwd=clone)
+            line = steps.audit(str(clone), start, 1, str(state))
+            self.assertIn("missing: -", line)
+            self.assertIn("released v0.1.1", line)
+
+            # A pass that changed the code, pushed it, and stopped there.
+            start = run("git", "rev-parse", "HEAD", cwd=clone)
+            commit(clone, {"src/lib.rs": "c"}, "code only")
+            run("git", "push", "-q", "origin", "HEAD:main", cwd=clone)
+            line = steps.audit(str(clone), start, 2, str(state))
+            self.assertIn("missing: release,docs,demo?", line)
+
+            # A pass that committed and never pushed.
+            start = run("git", "rev-parse", "origin/main", cwd=clone)
+            commit(clone, {"notes.txt": "d"}, "local only")
+            line = steps.audit(str(clone), start, 3, str(state))
+            self.assertIn("1 unpushed", line)
+            self.assertIn("push", line.split("missing: ")[1])
+            self.assertEqual(len((state / "audit.tsv").read_text().splitlines()), 4)
+
     def test_a_session_is_matched_to_the_driver_pass_that_started_it(self):
         with tempfile.TemporaryDirectory() as d:
             log = Path(d) / "driver.log"
