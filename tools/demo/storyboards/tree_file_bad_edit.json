@@ -1,0 +1,58 @@
+{
+ "name": "tree_file_bad_edit",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -20,
+      -17,
+      20,
+      -3
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 10
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "five birches, all grown from trees/tall.tree.ron"
+  },
+  {
+   "at": 1.3,
+   "caption": "person: a typo in the tree file (radius: \"thick\")"
+  },
+  {
+   "at": 2.0,
+   "write": {
+    "path": "assets/grimoire/furniture/trees/tall.tree.ron",
+    "text": "(\n    seed: 42,\n    trunk: (\n        height: 7.0,\n        radius: \"thick\",\n        radial_segments: 6,\n        height_segments: 5,\n        taper: 0.2,\n        taper_curve: 0.5,\n        flare: 1.0,\n        randomness: 0.15,\n        root_flare_count: 0,\n        root_flare_spread: 0.0,\n        root_flare_height: 0.15,\n        termination: LeaderBranch,\n        leader_length: 0.15,\n        leader_taper: 0.1,\n        leader_has_branches: false,\n        twist: 5.0,\n    ),\n    branches: (\n        start: 0.4,\n        end: 0.95,\n        density: 3.0,\n        length: 0.35,\n        angle: 40.0,\n        radius_ratio: 0.2,\n        taper: 0.75,\n        phyllotaxis_angle: 137.5,\n        randomness: 0.2,\n        up_attraction: 0.3,\n        recursion: 1,\n        sub_branch_count: 3,\n        sub_branch_scale: 0.5,\n        length_variation: 0.15,\n        sub_branch_position_bias: 0.1,\n        apical_dominance: 0.55,\n        flatness: 0.1,\n        angle_curve: 0.2,\n        crown_angle_variation: 0.1,\n        twist: 8.0,\n        gravity_strength: 0.1,\n        stiffness: 0.7,\n        break_chance: 0.1,\n        crown_shape: TaperedCylindrical,\n        crown_influence: 0.7,\n        floor_avoidance: true,\n        floor_level: 0.0,\n        min_twig_radius: 0.005,\n    ),\n    split: (\n        enabled: true,\n        probability: 0.2,\n        angle: 25.0,\n        position: 0.5,\n        radius_threshold: 0.05,\n    ),\n    mesh: (\n        smooth_iterations: 0,\n        smooth_factor: 0.5,\n        adaptive_resolution: false,\n        resolution_scale: 16.0,\n        min_radial_segments: 4,\n        max_radial_segments: 16,\n        pipe_radius_enabled: false,\n        pipe_radius_exponent: 2.0,\n        pipe_radius_min: 0.02,\n        collar_enabled: true,\n        collar_length: 1.5,\n    ),\n    foliage: (\n        enabled: true,\n        style: CrossedPlanes,\n        placement: TerminalBranches,\n        orientation: RandomUpward,\n        density: 3.5,\n        cluster_size: 4,\n        leaf_size: 0.26,\n        leaf_size_variation: 0.15,\n        radius_threshold: 0.12,\n        height_falloff: 0.35,\n        droop: 0.1,\n        rotation_variation: 0.5,\n        use_crown_density: true,\n        normal_bend: 0.8,\n        color_variation: 0.3,\n        hue_variation: 0.3,\n        occlusion: 0.6,\n        color: Srgba((\n            red: 0.486,\n            green: 0.804,\n            blue: 0.486,\n            alpha: 1.0,\n        )),\n        shading: (\n            translucency: 1.0,\n            transmission_tint: Srgba((\n                red: 1.0,\n                green: 0.95,\n                blue: 0.55,\n                alpha: 1.0,\n            )),\n            roughness: 0.55,\n            veins: 0.5,\n            underside: 0.25,\n        ),\n        scan: Some(Birch),\n        autumn: Some(Srgba((\n            red: 0.95,\n            green: 0.7,\n            blue: 0.08,\n            alpha: 1.0,\n        ))),\n        blossom: None,\n        fruit: None,\n    ),\n    growth: (\n        maturity_age: 10.0,\n        trunk_fraction: 0.4,\n        branch_fraction: 0.35,\n        child_duration_scale: 0.8,\n        thickening_lag: 2.0,\n        leaf_threshold: 0.5,\n    ),\n    wind: (\n        sway: 1.2,\n        flutter: 1.3,\n        sway_frequency: 1.1,\n        flutter_frequency: 1.3,\n    ),\n    trunk_color: Srgba((\n        red: 0.961,\n        green: 0.961,\n        blue: 0.863,\n        alpha: 1.0,\n    )),\n    bark: (\n        scan: Some(Birch),\n        smooth_below: 0.03,\n        fissured_above: 0.15,\n    ),\n    style: Natural,\n    crown: Leaves,\n    trunk_style: Round,\n    undergrowth: false,\n)"
+   }
+  },
+  {
+   "at": 4.3,
+   "caption": "the five trees stay standing: the last good file is held"
+  },
+  {
+   "at": 6.3,
+   "caption": "person: fixes the file, taller this time; the trees regrow"
+  },
+  {
+   "at": 6.8,
+   "write": {
+    "path": "assets/grimoire/furniture/trees/tall.tree.ron",
+    "text": "(\n    seed: 42,\n    trunk: (\n        height: 12.0,\n        radius: 0.25,\n        radial_segments: 6,\n        height_segments: 5,\n        taper: 0.2,\n        taper_curve: 0.5,\n        flare: 1.0,\n        randomness: 0.15,\n        root_flare_count: 0,\n        root_flare_spread: 0.0,\n        root_flare_height: 0.15,\n        termination: LeaderBranch,\n        leader_length: 0.15,\n        leader_taper: 0.1,\n        leader_has_branches: false,\n        twist: 5.0,\n    ),\n    branches: (\n        start: 0.4,\n        end: 0.95,\n        density: 3.0,\n        length: 0.35,\n        angle: 40.0,\n        radius_ratio: 0.2,\n        taper: 0.75,\n        phyllotaxis_angle: 137.5,\n        randomness: 0.2,\n        up_attraction: 0.3,\n        recursion: 1,\n        sub_branch_count: 3,\n        sub_branch_scale: 0.5,\n        length_variation: 0.15,\n        sub_branch_position_bias: 0.1,\n        apical_dominance: 0.55,\n        flatness: 0.1,\n        angle_curve: 0.2,\n        crown_angle_variation: 0.1,\n        twist: 8.0,\n        gravity_strength: 0.1,\n        stiffness: 0.7,\n        break_chance: 0.1,\n        crown_shape: TaperedCylindrical,\n        crown_influence: 0.7,\n        floor_avoidance: true,\n        floor_level: 0.0,\n        min_twig_radius: 0.005,\n    ),\n    split: (\n        enabled: true,\n        probability: 0.2,\n        angle: 25.0,\n        position: 0.5,\n        radius_threshold: 0.05,\n    ),\n    mesh: (\n        smooth_iterations: 0,\n        smooth_factor: 0.5,\n        adaptive_resolution: false,\n        resolution_scale: 16.0,\n        min_radial_segments: 4,\n        max_radial_segments: 16,\n        pipe_radius_enabled: false,\n        pipe_radius_exponent: 2.0,\n        pipe_radius_min: 0.02,\n        collar_enabled: true,\n        collar_length: 1.5,\n    ),\n    foliage: (\n        enabled: true,\n        style: CrossedPlanes,\n        placement: TerminalBranches,\n        orientation: RandomUpward,\n        density: 3.5,\n        cluster_size: 4,\n        leaf_size: 0.26,\n        leaf_size_variation: 0.15,\n        radius_threshold: 0.12,\n        height_falloff: 0.35,\n        droop: 0.1,\n        rotation_variation: 0.5,\n        use_crown_density: true,\n        normal_bend: 0.8,\n        color_variation: 0.3,\n        hue_variation: 0.3,\n        occlusion: 0.6,\n        color: Srgba((\n            red: 0.486,\n            green: 0.804,\n            blue: 0.486,\n            alpha: 1.0,\n        )),\n        shading: (\n            translucency: 1.0,\n            transmission_tint: Srgba((\n                red: 1.0,\n                green: 0.95,\n                blue: 0.55,\n                alpha: 1.0,\n            )),\n            roughness: 0.55,\n            veins: 0.5,\n            underside: 0.25,\n        ),\n        scan: Some(Birch),\n        autumn: Some(Srgba((\n            red: 0.95,\n            green: 0.7,\n            blue: 0.08,\n            alpha: 1.0,\n        ))),\n        blossom: None,\n        fruit: None,\n    ),\n    growth: (\n        maturity_age: 10.0,\n        trunk_fraction: 0.4,\n        branch_fraction: 0.35,\n        child_duration_scale: 0.8,\n        thickening_lag: 2.0,\n        leaf_threshold: 0.5,\n    ),\n    wind: (\n        sway: 1.2,\n        flutter: 1.3,\n        sway_frequency: 1.1,\n        flutter_frequency: 1.3,\n    ),\n    trunk_color: Srgba((\n        red: 0.961,\n        green: 0.961,\n        blue: 0.863,\n        alpha: 1.0,\n    )),\n    bark: (\n        scan: Some(Birch),\n        smooth_below: 0.03,\n        fissured_above: 0.15,\n    ),\n    style: Natural,\n    crown: Leaves,\n    trunk_style: Round,\n    undergrowth: false,\n)"
+   }
+  }
+ ]
+}
