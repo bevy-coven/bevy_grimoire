@@ -15301,3 +15301,128 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 202	232	release	model	model		2026-11-01T14:32:20Z	6.7	
 202	233	log	tool	phase mark	bash	2026-11-01T14:32:27Z	3.5	Close out issue and tracking list :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark log; gh issue view 213 --repo bevy-coven/bevy_grimoire --json state --jq .state; gh issue 
 202	234	log	model	model		2026-11-01T14:32:30Z	11.0	
+203	1	orient	model	model		2026-11-01T14:33:04Z	3.3	
+203	2	orient	tool	phase mark	bash	2026-11-01T14:33:07Z	0.8	Orienting: git state, audit, log :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark orient; git status --short | head; git log --oneline -10; uptime; df -h / | tail -1; free 
+203	3	orient	tool	github	bash	2026-11-01T14:33:07Z	0.8	Listing open issues :: cd /home/ladvien/bevy_emerge_loop && gh issue list --repo bevy-coven/bevy_grimoire --state open --limit 100 --json number,title,labels,createdAt --jq '.[] | "#\
+203	4	orient	model	model		2026-11-01T14:33:08Z	5.6	
+203	5	orient	tool	github	bash	2026-11-01T14:33:13Z	1.3	Reading UI-00 and gooey issues :: cd /home/ladvien/bevy_emerge_loop && gh issue view 208 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body, (.comments[-3:][]|.body)' | cut -c1-600
+203	6	orient	model	model		2026-11-01T14:33:15Z	2.9	
+203	7	orient	tool	github	bash	2026-11-01T14:33:18Z	8.2	Reading Depends and Needs lines :: cd /home/ladvien/bevy_emerge_loop && for n in 210 211 212 214 215 216 217 218 219 220 221 222 223 224 225; do echo "== #$n"; gh issue view $n --repo bevy-coven/
+203	8	orient	model	model		2026-11-01T14:33:26Z	4.6	
+203	9	bugs	tool	phase mark	bash	2026-11-01T14:33:30Z	1.4	Reading UI-11 issue and changelog head :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark bugs; head -12 CHANGELOG.md | cut -c1-400; gh issue view 217 --repo bevy-coven/bevy_grimoi
+203	10	bugs	model	model		2026-11-01T14:33:32Z	3.3	
+203	11	choose	tool	phase mark	bash	2026-11-01T14:33:35Z	0.3	Finding existing recent/chooser code :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark choose; grep -rniE "recent|chooser" crates --include=*.rs -l | head -20; grep -n "^dirs\|d
+203	12	choose	model	model		2026-11-01T14:33:35Z	2.4	
+203	13	choose	tool	shell	bash	2026-11-01T14:33:38Z	0.0	Reading chooser and Cargo :: cd /home/ladvien/bevy_emerge_loop && wc -l crates/bevy_grimoire_mapper/src/chooser.rs; grep -niE "recent|fn |pub " crates/bevy_grimoire_mapper/src/chooser.rs | 
+203	14	choose	model	model		2026-11-01T14:33:38Z	4.7	
+203	15	choose	tool	shell	bash	2026-11-01T14:33:43Z	0.0	Reading main.rs and deps :: cd /home/ladvien/bevy_emerge_loop && grep -n 'name = "dirs' -A2 Cargo.lock | head; sed -n 60,200p crates/bevy_grimoire_mapper/src/main.rs; grep -rn "deny_unknow
+203	16	choose	model	model		2026-11-01T14:33:43Z	4.8	
+203	17	choose	tool	shell	bash	2026-11-01T14:33:47Z	0.0	Looking at versioned-file patterns and lib layout :: cd /home/ladvien/bevy_emerge_loop && grep -rn "_VERSION: u32" crates/*/src | head; sed -n 1,60p crates/bevy_grimoire_mapper/src/environment.rs; grep -n "A proje
+203	18	choose	model	model		2026-11-01T14:33:47Z	2.5	
+203	19	choose	tool	shell	bash	2026-11-01T14:33:50Z	0.0	Reading versioned-file pattern, args::open :: cd /home/ladvien/bevy_emerge_loop && sed -n 1,90p crates/bevy_grimoire_core/src/family.rs; sed -n 90,140p crates/bevy_grimoire_mapper/src/args.rs; grep -n "Open
+203	20	choose	model	model		2026-11-01T14:33:50Z	26.4	
+203	21	choose	tool	shell	bash	2026-11-01T14:34:16Z	0.0	Reading the open path in chooser and brp :: cd /home/ladvien/bevy_emerge_loop && sed -n 6495,6575p crates/bevy_grimoire_mapper/src/chooser.rs; sed -n 10,40p crates/bevy_grimoire_mapper/src/args.rs; sed -n
+203	22	choose	model	model		2026-11-01T14:34:16Z	3.5	
+203	23	choose	tool	shell	bash	2026-11-01T14:34:20Z	0.1	Reading open_the_door :: cd /home/ladvien/bevy_emerge_loop && grep -n "open_the_door" -B3 -A30 crates/bevy_grimoire_mapper/src/screen.rs | sed -n 1,120p; grep -n "root" crates/bevy_grim
+203	24	choose	model	model		2026-11-01T14:34:20Z	10.9	
+203	25	choose	tool	shell	bash	2026-11-01T14:34:31Z	0.2	Looking for atomic write helper, test layout :: cd /home/ladvien/bevy_emerge_loop && grep -rn "fn write_atomic\|fn atomic_write\|fn write_file_atomically" crates | head; sed -n 100,135p crates/bevy_grimoire_m
+203	26	choose	model	model		2026-11-01T14:34:31Z	4.5	
+203	27	choose	tool	shell	bash	2026-11-01T14:34:35Z	0.1	Reading ALLOWED and test conventions :: cd /home/ladvien/bevy_emerge_loop && grep -n "ALLOWED" -A12 crates/bevy_grimoire_mapper/tests/leaf.rs | sed -n 1,60p; sed -n 1,30p crates/bevy_grimoire_mapper/t
+203	28	choose	model	model		2026-11-01T14:34:36Z	5.1	
+203	29	choose	tool	shell	bash	2026-11-01T14:34:41Z	0.1	cd /home/ladvien/bevy_emerge_loop && grep -rln "Chosen\|ScreenPlugin" crates/bevy_grimoire_mapper/tests | head;
+203	30	choose	model	model		2026-11-01T14:34:41Z	1.7	
+203	31	choose	tool	shell	bash	2026-11-01T14:34:42Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "Chosen\|ScreenPlugin" -B8 -A12 crates/bevy_grimoire_mapper/tests/an_agent_can_enter_the_map_it_made.rs | sed -n 1,
+203	32	choose	model	model		2026-11-01T14:34:42Z	1.5	
+203	33	choose	tool	shell	bash	2026-11-01T14:34:44Z	0.0	cd /home/ladvien/bevy_emerge_loop && sed -n 28,90p crates/bevy_grimoire_mapper/tests/an_agent_can_enter_the_map_it_made.rs
+203	34	choose	model	model		2026-11-01T14:34:44Z	21.2	
+203	35	choose	tool	edit files	write	2026-11-01T14:35:05Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper/src/recent.rs
+203	36	choose	model	model		2026-11-01T14:35:05Z	4.4	
+203	37	choose	tool	shell	bash	2026-11-01T14:35:10Z	0.0	cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' p='crates/bevy_grimoire_mapper/src/recent.rs' s=open(p).read() i=s.index("/// Records that `root`") s=s[:
+203	38	choose	tool	edit files	edit	2026-11-01T14:35:10Z	0.0	Wire module, dep, hook, ALLOWED row :: [crates/bevy_grimoire_mapper/src/lib.rs#0000]
+203	39	choose	model	model		2026-11-01T14:35:10Z	2.2	
+203	40	choose	tool	read files	read	2026-11-01T14:35:12Z	0.0	crates/bevy_grimoire_mapper/src/lib.rs:128-133
+203	41	choose	tool	read files	read	2026-11-01T14:35:12Z	0.0	crates/bevy_grimoire_mapper/Cargo.toml:119-124
+203	42	choose	tool	read files	read	2026-11-01T14:35:12Z	0.0	crates/bevy_grimoire_mapper/tests/leaf.rs:44-52
+203	43	choose	tool	read files	read	2026-11-01T14:35:12Z	0.0	crates/bevy_grimoire_mapper/src/screen.rs:94-105
+203	44	choose	model	model		2026-11-01T14:35:12Z	4.4	
+203	45	choose	tool	edit files	edit	2026-11-01T14:35:16Z	0.0	Wiring recent module, dirs dep, hook :: [crates/bevy_grimoire_mapper/src/lib.rs#E085] PUT >131: +pub mod recent; [crates/bevy_grimoire_mapper/Cargo.toml#00A0] PUT >123: +# The platform's own data dire
+203	46	choose	model	model		2026-11-01T14:35:16Z	2.7	
+203	47	build	tool	phase mark	bash	2026-11-01T14:35:19Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark build && grep -n "ScreenPlugin" crates/bevy_grimoire_mapper/src/main.rs
+203	48	build	model	model		2026-11-01T14:35:19Z	1.4	
+203	49	build	tool	edit files	edit	2026-11-01T14:35:20Z	0.0	Insert RecentProjects in main :: [crates/bevy_grimoire_mapper/src/main.rs#0000]
+203	50	build	tool	read files	read	2026-11-01T14:35:20Z	0.0	crates/bevy_grimoire_mapper/src/main.rs:83-87
+203	51	build	model	model		2026-11-01T14:35:20Z	21.0	
+203	52	build	tool	edit files	edit	2026-11-01T14:35:41Z	0.0	Insert RecentProjects in main :: [crates/bevy_grimoire_mapper/src/main.rs#09BC] PUT >85: + // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the + /
+203	53	build	tool	edit files	write	2026-11-01T14:35:41Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper/tests/recent_projects.rs
+203	54	build	model	model		2026-11-01T14:35:41Z	3.3	
+203	55	build	tool	shell	bash	2026-11-01T14:35:45Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "^mod " crates/bevy_grimoire_mapper/tests/all.rs | awk -F: '$3 ~ /mod (r|s)/' | head -8
+203	56	build	model	model		2026-11-01T14:35:45Z	1.1	
+203	57	build	tool	shell	bash	2026-11-01T14:35:46Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "^mod [p-s]" crates/bevy_grimoire_mapper/tests/all.rs | head -12
+203	58	build	model	model		2026-11-01T14:35:46Z	1.4	
+203	59	build	tool	shell	bash	2026-11-01T14:35:47Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "^mod " crates/bevy_grimoire_mapper/tests/all.rs | tail -2; grep -n "^mod " crates/bevy_grimoire_mapper/tests/all.r
+203	60	build	model	model		2026-11-01T14:35:47Z	2.2	
+203	61	build	tool	shell	bash	2026-11-01T14:35:50Z	0.1	cd /home/ladvien/bevy_emerge_loop && grep -n "^mod [p-r]" crates/bevy_grimoire_mapper/tests/all.rs | tail -4 && cd crates/bevy_grimoire_mapper/tests && python3 
+203	62	build	model	model		2026-11-01T14:35:50Z	1.4	
+203	63	build	tool	edit files	edit	2026-11-01T14:35:51Z	0.0	Add test module line :: [crates/bevy_grimoire_mapper/tests/all.rs#0000]
+203	64	build	tool	read files	read	2026-11-01T14:35:51Z	0.0	crates/bevy_grimoire_mapper/tests/all.rs:232-235
+203	65	build	model	model		2026-11-01T14:35:51Z	1.3	
+203	66	build	tool	edit files	edit	2026-11-01T14:35:52Z	0.0	Add test module line :: [crates/bevy_grimoire_mapper/tests/all.rs#683E] PUT >230: +mod recent_projects;
+203	67	build	model	model		2026-11-01T14:35:52Z	1.0	
+203	68	build	tool	edit files	edit	2026-11-01T14:35:53Z	0.0	Add test module line :: [crates/bevy_grimoire_mapper/tests/all.rs#683E] PUT >230: +mod recent_projects;
+203	69	build	model	model		2026-11-01T14:35:54Z	1.3	
+203	70	build	tool	cargo test	bash	2026-11-01T14:35:55Z	60.1	[launched bg_2] Running new tests :: cd /home/ladvien/bevy_emerge_loop && timeout 3000 cargo test -p bevy_grimoire_mapper --test editor recent_projects:: 2>&1 | tail -40
+203	71	build	model	model		2026-11-01T14:36:55Z	3.3	
+203	72	build	tool	shell	bash	2026-11-01T14:36:58Z	0.1	cd /home/ladvien/bevy_emerge_loop && ls docs/guide | head -30; grep -n "recent\|Recent" docs/ui/vision.md | head
+203	73	build	model	model		2026-11-01T14:36:58Z	1.3	
+203	74	build	tool	shell	bash	2026-11-01T14:37:00Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "^#" docs/guide/getting-started.md | head -20; grep -n "start\|open" docs/guide/getting-started.md | head -15
+203	75	build	model	model		2026-11-01T14:37:00Z	2.5	
+203	76	build	tool	shell	bash	2026-11-01T14:37:02Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "^#" docs/guide/data-files.md; tail -15 docs/guide/data-files.md | cut -c1-300
+203	77	build	model	model		2026-11-01T14:37:02Z	1.1	
+203	78	build	tool	shell	bash	2026-11-01T14:37:03Z	0.0	cd /home/ladvien/bevy_emerge_loop && sed -n 160,176p docs/guide/data-files.md | cut -c1-400; sed -n 1,6p docs/guide/data-files.md | cut -c1-400
+203	79	build	model	model		2026-11-01T14:37:03Z	4.1	
+203	80	build	tool	shell	bash	2026-11-01T14:37:07Z	0.0	cd /home/ladvien/bevy_emerge_loop && cat >> docs/guide/data-files.md <<'EOF' ## recent.ron Not a project file: one per user, so a project folder never carries w
+203	81	build	model	model		2026-11-01T14:37:07Z	0.6	
+203	82	build	tool	wait: other	wait	2026-11-01T14:37:08Z	35.9	{}
+203	83	build	model	model		2026-11-01T14:37:44Z	3.5	
+203	84	prove	tool	phase mark	bash	2026-11-01T14:37:47Z	28.4	Clippy and leaf test :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark prove && timeout 2500 cargo clippy -p bevy_grimoire_mapper --all-targets -- -D warnings 2>
+203	85	prove	model	model		2026-11-01T14:38:16Z	1.9	
+203	86	prove	tool	cargo test	bash	2026-11-01T14:38:18Z	0.6	cd /home/ladvien/bevy_emerge_loop && timeout 1500 cargo test -p bevy_grimoire_mapper --test editor leaf:: 2>&1 | tail -10; python3 tools/loop/accept.py --help 2
+203	87	prove	model	model		2026-11-01T14:38:18Z	3.2	
+203	88	prove	tool	remote wait	bash	2026-11-01T14:38:21Z	0.0	[launched bg_3] cd /home/ladvien/bevy_emerge_loop && mkdir -p /tmp/accept_p189 && (timeout 1500 python3 tools/loop/accept.py --source assets --out /tmp/accept_p189 > /tmp/accep
+203	89	prove	model	model		2026-11-01T14:38:21Z	1.2	
+203	90	prove	tool	shell	bash	2026-11-01T14:38:23Z	0.0	cd /home/ladvien/bevy_emerge_loop && ls docs/loop/iterations | tail -2; cat docs/loop/iterations/$(ls docs/loop/iterations | tail -1) | head -40; git log -1 --f
+203	91	prove	model	model		2026-11-01T14:38:23Z	1.2	
+203	92	prove	tool	shell	bash	2026-11-01T14:38:24Z	0.0	cd /home/ladvien/bevy_emerge_loop && cat docs/loop/iterations/2026-11-01-ui-84857c2.md
+203	93	prove	bg	loop tools	bash	2026-11-01T14:38:23Z	1.3	bg_3 completed: mkdir -p /tmp/accept_p189 && (timeout 1500 python3 tools/loop/accept.py --source assets --out /tmp/accept_p189 > /tmp...
+203	94	prove	model	model		2026-11-01T14:38:24Z	2.5	
+203	95	prove	tool	remote wait	bash	2026-11-01T14:38:26Z	60.0	[launched bg_4] sleep 60; tail -15 /tmp/accept_p189.log
+203	96	prove	bg	remote wait	bash	2026-11-01T14:38:26Z	60.0	bg_4 completed: sleep 60; tail -15 /tmp/accept_p189.log
+203	97	prove	model	model		2026-11-01T14:39:26Z	1.7	
+203	98	prove	tool	loop tools	bash	2026-11-01T14:39:28Z	1.4	cd /home/ladvien/bevy_emerge_loop && rmdir /tmp/accept_p189 && timeout 1500 python3 tools/loop/accept.py --source assets --out /tmp/accept_p189.json 2>&1 | tail
+203	99	prove	model	model		2026-11-01T14:39:30Z	5.4	
+203	100	ship	tool	phase mark	bash	2026-11-01T14:39:35Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark ship && git add -A crates docs/guide Cargo.lock && git status --short && git commit -q -F 
+203	101	ship	model	model		2026-11-01T14:39:35Z	9.8	
+203	102	ship	tool	loop tools	bash	2026-11-01T14:39:45Z	1.6	cd /home/ladvien/bevy_emerge_loop && python3 tools/changelog/changelog.py add --id ui-11-recent-projects --sha b335efc --title "The editor remembers the project
+203	103	ship	model	model		2026-11-01T14:39:47Z	5.2	
+203	104	ship	tool	push gate	bash	2026-11-01T14:39:52Z	60.0	[launched bg_5] cd /home/ladvien/bevy_emerge_loop && cat >> docs/loop/log.md <<'EOF' - 2026-11-01 08:45 loop (bevy_emerge_loop, big, pass 189): shipped UI-11 (#217), the user's
+203	105	ship	model	model		2026-11-01T14:40:52Z	5.0	
+203	106	ship	tool	github	bash	2026-11-01T14:40:57Z	4.5	cd /home/ladvien/bevy_emerge_loop && gh label create assumed-decision --color FBCA04 2>/dev/null; gh issue comment 217 --repo bevy-coven/bevy_grimoire --body "A
+203	107	ship	model	model		2026-11-01T14:41:01Z	0.7	
+203	108	ship	tool	wait: other	wait	2026-11-01T14:41:02Z	102.5	{}
+203	109	ship	model	model		2026-11-01T14:42:45Z	1.6	
+203	110	ship	tool	cargo test	bash	2026-11-01T14:42:46Z	27.2	cd /home/ladvien/bevy_emerge_loop && timeout 900 cargo test -p bevy_grimoire_core --test atomic_writes_only 2>&1 | tail -30
+203	111	ship	model	model		2026-11-01T14:43:14Z	1.7	
+203	112	ship	tool	shell	bash	2026-11-01T14:43:15Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "pub fn" crates/bevy_grimoire_core/src/atomic_file.rs; sed -n 1,30p crates/bevy_grimoire_core/src/atomic_file.rs
+203	113	ship	model	model		2026-11-01T14:43:15Z	3.4	
+203	114	ship	tool	cargo test	bash	2026-11-01T14:43:19Z	31.0	cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' p='crates/bevy_grimoire_mapper/src/recent.rs' s=open(p).read() a=s.index(" /// Writes the list to `file` 
+203	115	ship	model	model		2026-11-01T14:43:50Z	3.4	
+203	116	ship	tool	push gate	bash	2026-11-01T14:43:53Z	60.0	[launched bg_6] cd /home/ladvien/bevy_emerge_loop && git add -A crates docs && git commit -q -m "fix(ui): recent.ron is written through atomic_file::write, as the ratchet requi
+203	117	ship	model	model		2026-11-01T14:44:53Z	0.7	
+203	118	ship	tool	wait: other	wait	2026-11-01T14:44:54Z	49.6	{}
+203	119	ship	model	model		2026-11-01T14:45:43Z	2.7	
+203	120	log	tool	phase mark	bash	2026-11-01T14:45:46Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark log; git status --short | head -3; git log origin/main --oneline -1
+203	121	log	model	model		2026-11-01T14:45:46Z	2.1	
+203	122	log	tool	git	bash	2026-11-01T14:45:48Z	0.0	cd /home/ladvien/bevy_emerge_loop && git diff --stat; git diff | head -20 | cut -c1-200
+203	123	log	model	model		2026-11-01T14:45:48Z	3.2	
+203	124	log	tool	push gate	bash	2026-11-01T14:45:52Z	5.5	cd /home/ladvien/bevy_emerge_loop && python3 tools/changelog/changelog.py check | tail -1 && git add CHANGELOG.md && git commit -q -m "docs(changelog): the UI-1
+203	125	log	model	model		2026-11-01T14:45:57Z	6.0	
