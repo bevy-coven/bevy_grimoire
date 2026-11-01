@@ -1,0 +1,26 @@
+{
+  "name": "palette_menu",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-6, -4, 6, 4]}}}
+  ],
+  "chunks": [
+    {"seconds": 7},
+    {"seconds": 6}
+  ],
+  "steps": [
+    {"at": 0.0, "cursor": [900, 400]},
+    {"at": 0.8, "cursor": [1100, 449]},
+    {"at": 1.4, "click": [1100, 449], "button": "Right", "caption": "person: right-click a piece's row in the palette, and its menu opens"},
+    {"at": 3.4, "cursor": [987, 520]},
+    {"at": 4.2, "cursor": [987, 536], "caption": "person: Mount on wall"},
+    {"at": 5.2, "click": [987, 536]},
+    {"at": 7.0, "caption": "the row stood through the click: LAST reads mount: on wall at 1.8 m"},
+    {"at": 8.6, "click": [1100, 449], "button": "Right", "caption": "person: right-click it again"},
+    {"at": 10.4, "cursor": [987, 505]},
+    {"at": 11.2, "click": [987, 505], "caption": "person: Mount on floor puts it back (LAST: mount: on floor)"},
+    {"at": 12.4, "clear_cursor": true}
+  ]
+}
