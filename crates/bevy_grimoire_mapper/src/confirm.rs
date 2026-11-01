@@ -24,9 +24,10 @@
 //!
 //! The old prompts were a line of text in the status bar at the bottom-left, which is where this
 //! editor puts *commentary*. A question that blocks progress rendered in the same place, in the
-//! same colour, as "baked 82 palette thumbnails" is a question an author walks past. This draws a
-//! panel in the middle of the window over a dimmed backdrop, so the question is the only thing to
-//! answer.
+//! same colour, as "baked 82 palette thumbnails" is a question an author walks past. This is a
+//! gooey `dialog` over the whole window (UI-40, #234): a veil, a card in the middle, and the
+//! question as the only thing to answer. It was drawn by hand on `chrome::modal_card`, the shell
+//! the three modals shared; the card and the scrim are the library's now.
 //!
 //! # The mouse answers it too
 //!
@@ -50,10 +51,11 @@
 //! `keys::Action` takes, and for the same reason: a question that is not in the list cannot be
 //! asked, so the audit is a `match` rather than a search.
 
-use bevy::input_focus::tab_navigation::TabGroup;
+use bevy::input_focus::AutoFocus;
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-
-use crate::chrome::{DIM, Severity, TEXT};
+use bevy::ui_widgets::Activate;
+use bevy_gooey::{button, dialog, heading, label, menu, panel};
 
 /// **Every question this application can raise.**
 ///
@@ -116,6 +118,8 @@ impl Asked {
 /// The question on screen, if there is one.
 struct Question {
     of: Asked,
+    /// Which asking this is, so a dialog knows whether it shows this question or the last one.
+    serial: u64,
     title: String,
     body: String,
     yes: String,
@@ -131,6 +135,8 @@ struct Question {
 pub struct Confirm {
     question: Option<Question>,
     answer: Option<(Asked, bool)>,
+    /// Questions asked so far; the next one's `Question::serial`.
+    serial: u64,
 }
 
 impl Confirm {
@@ -148,8 +154,10 @@ impl Confirm {
         if self.question.is_some() {
             return;
         }
+        self.serial += 1;
         self.question = Some(Question {
             of,
+            serial: self.serial,
             title: title.into(),
             body: body.into(),
             yes: yes.into(),
@@ -187,60 +195,41 @@ impl Confirm {
     }
 }
 
-/// **Marks the modal's scrim layer** — the thing `paint` shows and hides, and the thing that eats a
-/// click aimed at the list behind the question. [`crate::chrome::modal_card`] puts this bundle on
-/// the layer it spawns and hands back the card.
-#[derive(Component)]
-struct ConfirmRoot;
-
-/// The two answers, as clickable buttons.
-///
-/// **The word inside is not marked**, because [`crate::chrome::button`] spawns it: a bundle cannot
-/// mark somebody else's child, so `paint` reaches the label through this entity's `Children`. That
-/// is the price of the shared builder and it is worth paying — the button's box, its five states
-/// and its severity ink all come from one place now, where this module used to state them itself.
+/// The two answers, as gooey buttons in the dialog. `true` is the affirmative.
 #[derive(Component, Clone, Copy)]
 struct ConfirmButton(bool);
 
+/// **The dialog on screen, and the question it was built for.** The serial is `Question::serial`:
+/// a question asked in the frame after another was answered can carry the same [`Asked`] and other
+/// words, and a dialog keyed by `Asked` would go on showing the old ones.
 #[derive(Component)]
-struct ConfirmTitle;
-#[derive(Component)]
-struct ConfirmBody;
+struct ConfirmDialog(u64);
 
 pub struct ConfirmPlugin;
 
 impl Plugin for ConfirmPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Confirm>()
-            // **Spawned on entering either screen**, not once at startup: `screen::scene_roots`
-            // sweeps every parentless UI root on a screen change, and a modal that survived the
-            // sweep once would be despawned by it the next time. The guide card learned this the
-            // expensive way (`screen.rs`); rather than add a second exclusion, this simply belongs
-            // to whichever screen is up.
-            .add_systems(
-                OnEnter(crate::screen::Screen::Menu),
-                spawn.after(crate::chrome::FrameSystems),
-            )
-            .add_systems(
-                OnEnter(crate::screen::Screen::Editor),
-                spawn.after(crate::chrome::FrameSystems),
-            )
             // **Before `Phase::Act`**, so the frame a question is answered is not also a frame in
             // which the answer key does its ordinary job. `Y` is not bound in the editor's census
             // today, but `N` is `RotateMeshX` on the Meshes tab — so without this ordering,
             // refusing a prompt would also turn the focused mesh a quarter turn.
             .add_systems(
                 Update,
-                (answer_by_key, paint).before(crate::keys::Phase::Act),
+                (answer_by_key, sync_dialog)
+                    .chain()
+                    .before(crate::keys::Phase::Act),
             )
-            .add_observer(answer_by_click);
+            .add_observer(answer_by_activate);
     }
 }
 
 /// **`Y` proceeds, `N` stops, `Esc` is a synonym for `N`.**
 ///
 /// Read raw rather than through `keys::just_pressed`: this is not a tab's verb and it must answer
-/// identically on the menu, where the editor's key census does not exist at all.
+/// identically on the menu, where the editor's key census does not exist at all. gooey's own
+/// navigation plugin is not added (the editor owns the arrow keys), so its `Cancel` never fires and
+/// `Esc` is read here too.
 fn answer_by_key(keyboard: Res<ButtonInput<KeyCode>>, mut confirm: ResMut<Confirm>) {
     if confirm.question.is_none() {
         return;
@@ -252,149 +241,85 @@ fn answer_by_key(keyboard: Res<ButtonInput<KeyCode>>, mut confirm: ResMut<Confir
     }
 }
 
-/// The same two answers, by pointer.
-fn answer_by_click(
-    click: On<PointerClick>,
+/// The same two answers, by pointer, by Enter or Space on the focused button, or by the pad: a
+/// gooey button says so with an `Activate`.
+fn answer_by_activate(
+    activate: On<Activate>,
     buttons: Query<&ConfirmButton>,
     mut confirm: ResMut<Confirm>,
 ) {
-    let Ok(button) = buttons.get(click.entity) else {
+    let Ok(button) = buttons.get(activate.entity) else {
         return;
     };
     confirm.settle(button.0);
 }
 
-/// Build the card once per screen, hidden. `paint` fills it in and shows it.
+/// **One dialog while a question is up, and none otherwise.** It is built when the question is
+/// asked, from the question's own words, and taken down when the question is gone (answered, or the
+/// screen's sweep took it, in which case a question still waiting gets a new one).
 ///
-/// **The scrim, the z-order, the card and its padding are [`crate::chrome::modal_card`]'s now.**
-/// This module used to state all four itself, and the audit (F14) found the three modals
-/// disagreeing about every one of them: this one at `GlobalZIndex(900)` with a border and
-/// `padding: 20`, the token prompt at 400 with neither, and the name box with a fourth scrim
-/// written inline. `modal_card` supplies the `SCRIM`, the `GlobalZIndex(MODAL_Z)`, the centring,
-/// the `OVERLAY_BG` card with its border and radius, and `MODAL_PAD` — and it starts the layer
-/// `Display::None`, because all three modals are built on entering a screen and shown on demand.
+/// # What the dialog is
 ///
-/// **What stays here is behaviour.** [`ConfirmRoot`] and the `TabGroup` go on the layer, so
-/// `paint`'s show/hide is unchanged and `Tab` still walks the two answers. The layer keeps the
-/// default `Pickable` rather than `Pickable::IGNORE`, and that is the whole reason this is modal
-/// rather than merely centred: a click that misses the card must not land on the list underneath
-/// and move the selection the question is about.
-fn spawn(mut commands: Commands) {
-    crate::chrome::modal_card(&mut commands, (ConfirmRoot, TabGroup::new(0)))
-        .with_children(|panel| {
-            panel.spawn((
-                Text::new(String::new()),
-                // **`TEXT`, not `ACCENT`** — the 2026-09-03 decision D6. Amber is a value being
-                // changed right now, and a question's title is not one; `chrome::title` moved for
-                // the same reason on the same day.
-                TextColor(TEXT),
-                crate::chrome::font(crate::chrome::text::TITLE),
-                ConfirmTitle,
-            ));
-            panel.spawn((
-                Text::new(String::new()),
-                TextColor(TEXT),
-                crate::chrome::font(crate::chrome::text::BODY),
-                ConfirmBody,
-            ));
-            panel
-                .spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(crate::chrome::GAP_ROW),
-                    ..default()
-                })
-                .with_children(|row| {
-                    // **Refuse on the left, agree on the right**, and severity is what tells them
-                    // apart. The pair used to be a grey box and a `DANGER`-filled box — a filled
-                    // red button for every question, including the one whose body says nothing is
-                    // lost. Now the affirmative is [`Severity::Primary`] (*the* thing to do here)
-                    // or [`Severity::Destructive`] when the question throws work away, the
-                    // refusal is always [`Severity::Plain`], and `paint` repaints the affirmative's
-                    // ink when the question changes — see [`Asked::destructive`].
-                    //
-                    // The card's own `MODAL_PAD` and `row_gap: GAP_GROUP` separate this row from
-                    // the body above it, which is what the hand-rolled `margin.top: 4` was for.
-                    for (yes, severity) in
-                        [(false, Severity::Plain), (true, Severity::Primary)]
-                    {
-                        crate::chrome::button(row, ConfirmButton(yes), "", severity);
-                    }
-                });
-            panel.spawn((
-                Text::new("Y proceeds  ·  N stops".to_owned()),
-                TextColor(DIM),
-                crate::chrome::font(crate::chrome::text::HINT),
-            ));
-        });
-}
-
-/// Show, hide and fill the card. Guarded, because it runs every frame.
+/// gooey's [`dialog`]: the scrim, the centring, the opaque framed card and the modal tab group are
+/// the library's, in the skin's colours. The card used to be `chrome::modal_card`, which the modals
+/// shared so that none of them could dim, pad or stack differently; gooey's `dialog` is that one
+/// contract now, and the editor's skin (`src/editor_skin.ron`) is what colours it. Only the z-order
+/// is the editor's own: [`crate::chrome::MODAL_Z`], in front of every panel, which gooey's default
+/// of 100 is not.
 ///
-/// **Nothing here paints a fill any more.** It used to write each button's `BackgroundColor` from
-/// its own `Hovered` — one of the six places this editor answered a pointer by hand — and
-/// `chrome::style_list_rows` now gives every `chrome::button` the same five states (rest, hover,
-/// pressed, selected, disabled) off the `RowRest` the builder carries. Two systems writing one
-/// `BackgroundColor` would fight, and the shared one is the one that knows about a press.
-#[allow(clippy::type_complexity)]
-fn paint(
+/// **The card carries `Hovered`**, as `modal_card`'s did, so the question "is the pointer over UI"
+/// still answers yes over an open dialog: without it, scrolling over a visible question zoomed the
+/// world behind it.
+///
+/// **The least destructive answer is focused.** A question whose yes throws work away
+/// ([`Asked::destructive`]) focuses `no`; any other focuses `yes`. A destructive button names what
+/// goes (`Delete map `x``, never `Yes`), because the label is all of the warning a reflex key leaves
+/// time to read.
+fn sync_dialog(
+    mut commands: Commands,
     confirm: Res<Confirm>,
-    mut roots: Query<&mut Node, With<ConfirmRoot>>,
-    mut titles: Query<&mut Text, (With<ConfirmTitle>, Without<ConfirmBody>)>,
-    mut bodies: Query<&mut Text, (With<ConfirmBody>, Without<ConfirmTitle>)>,
-    buttons: Query<(&ConfirmButton, &Children)>,
-    // The words inside the buttons. Filtered off the title and the body so the three `Text`
-    // queries are disjoint — the hint line matches too and is simply never reached, because this
-    // only ever looks at a button's own children.
-    mut words: Query<(&mut Text, &mut TextColor), (Without<ConfirmTitle>, Without<ConfirmBody>)>,
+    standing: Query<(Entity, &ConfirmDialog)>,
 ) {
-    let open = confirm.question.is_some();
-    for mut node in &mut roots {
-        let want = if open { Display::Flex } else { Display::None };
-        if node.display != want {
-            node.display = want;
+    let want = confirm.question.as_ref();
+    let mut built = false;
+    for (entity, dialog) in &standing {
+        if want.is_some_and(|q| q.serial == dialog.0) {
+            built = true;
+        } else {
+            commands.entity(entity).try_despawn();
         }
     }
-    let Some(q) = confirm.question.as_ref() else {
+    let Some(q) = want else {
         return;
     };
-    for mut t in &mut titles {
-        if t.0 != q.title {
-            t.0 = q.title.clone();
-        }
+    if built {
+        return;
     }
-    for mut t in &mut bodies {
-        if t.0 != q.body {
-            t.0 = q.body.clone();
-        }
-    }
-    // **The severity travels with the question, not with the button.** One card serves all four
-    // questions, and `Asked::DeleteEntry` is destructive where `Asked::QuitApp` is not — so the
-    // affirmative's ink is repainted here rather than chosen once at spawn. `Severity::ink` is
-    // asked for it, because the Primary→amber / Destructive→red mapping belongs to `chrome` and
-    // restating it here is the drift that module exists to stop.
-    let affirmative = if q.of.destructive() {
-        Severity::Destructive
-    } else {
-        Severity::Primary
-    };
-    for (button, children) in &buttons {
-        let (label, ink) = if button.0 {
-            (&q.yes, affirmative.ink())
-        } else {
-            (&q.no, Severity::Plain.ink())
-        };
-        for child in children.iter() {
-            let Ok((mut text, mut colour)) = words.get_mut(child) else {
-                continue;
-            };
-            if &text.0 != label {
-                text.0 = label.clone();
-            }
-            if colour.0 != ink {
-                colour.0 = ink;
-            }
-        }
-    }
+    let destructive = q.of.destructive();
+    commands
+        .spawn((dialog(), ConfirmDialog(q.serial)))
+        .insert(GlobalZIndex(crate::chrome::MODAL_Z))
+        .with_children(|scrim| {
+            scrim
+                .spawn((panel(), Hovered::default()))
+                .with_children(|card| {
+                    card.spawn(heading(q.title.clone()));
+                    if !q.body.is_empty() {
+                        card.spawn(label(q.body.clone()));
+                    }
+                    card.spawn(menu()).with_children(|answers| {
+                        let mut yes = answers.spawn((button(q.yes.clone()), ConfirmButton(true)));
+                        if !destructive {
+                            yes.insert(AutoFocus);
+                        }
+                        let mut no = answers.spawn((button(q.no.clone()), ConfirmButton(false)));
+                        if destructive {
+                            no.insert(AutoFocus);
+                        }
+                    });
+                    card.spawn(label("Y proceeds  ·  N stops"));
+                });
+        });
 }
 
 #[cfg(test)]

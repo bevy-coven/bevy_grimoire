@@ -30,9 +30,10 @@
 //! refusal keeps you in the field. `Esc` closes without writing.
 
 use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
+use bevy_gooey::{dialog, heading, label, panel};
 
-use crate::chrome::{self, ACCENT, DANGER, DIM, LABEL, text};
 use crate::keys;
 use crate::project::Project;
 
@@ -130,74 +131,12 @@ pub fn open(prompt: &mut TokenPrompt, axis: Axis) {
 // The modal
 // ---------------------------------------------------------------------------------------------
 
+/// The dialog on screen while the prompt is open: gooey's `dialog`, built when the prompt opens and
+/// taken down when it closes (UI-40, #234).
 #[derive(Component)]
 struct TokenPromptRoot;
 
-
-fn spawn_token_prompt(mut commands: Commands) {
-    // **The shared modal shell**, where this hand-rolled its own.
-    //
-    // It carried its own scrim, its own z (400 against the confirm dialog's 900), its own padding
-    // (`PAD * 1.5` = 18 against 20) and its own row gap (`GAP_ROW * 2` = 10 against 12) — the
-    // 2026-09-03 audit's F14: two modals, two contracts. `chrome::modal_card` is that one
-    // contract, stated once: one [`crate::chrome::SCRIM`], one `MODAL_Z`, one `MODAL_PAD`, and a
-    // card on `OVERLAY_BG` with an edge and a corner, spawned hidden.
-    //
-    // `TokenPromptRoot` lands on the **scrim layer**, which is the node [`paint_token_prompt`]
-    // flips `Node::display` on — so the show/hide half is untouched and only the box goes.
-    //
-    // **`Pickable::IGNORE` is gone from the root, on purpose.** It was there so a full-screen
-    // container could not eat world clicks, which is right for `chrome::spawn_name_box`: that is a
-    // prompt you are meant to be able to click past. This is a *question* — `Enter` on the note
-    // keeps it, `Esc` cancels, and while it is open `editor::not_typing` has stood every tab verb
-    // down. A click reaching the map underneath and placing a piece nobody asked for, in the one
-    // moment the keyboard is captured, is precisely the bug the typing guard exists to prevent. So
-    // the scrim eats it, the way `confirm`'s always has. One shell, one contract.
-    //
-    // The card keeps its own `Hovered` (`modal_card` puts one there) so the "is the pointer over
-    // UI" question still answers yes over an open dialog — without it, scrolling on a visible
-    // prompt zoomed the world behind it.
-    crate::chrome::modal_card(&mut commands, TokenPromptRoot).with_children(|b| {
-        b.spawn((
-            Text::new(String::new()),
-            chrome::font(text::BODY),
-            TextColor(LABEL),
-            Line::Title,
-        ));
-        b.spawn((
-            Text::new(String::new()),
-            chrome::font(text::BODY),
-            TextColor(ACCENT),
-            Line::Axis,
-        ));
-        b.spawn((
-            Text::new(String::new()),
-            chrome::font(text::BODY),
-            TextColor(DIM),
-            Line::Name,
-        ));
-        b.spawn((
-            Text::new(String::new()),
-            chrome::font(text::BODY),
-            TextColor(DIM),
-            Line::Note,
-        ));
-        b.spawn((
-            Text::new(String::new()),
-            chrome::font(text::BODY),
-            TextColor(DANGER),
-            Line::Problem,
-        ));
-        b.spawn((
-            Text::new(String::new()),
-            chrome::font(text::HINT),
-            TextColor(DIM),
-            Line::Hint,
-        ));
-    });
-}
-
-/// Which line of the dialog a `Text` is, so one query can paint all of them.
+/// Which line of the dialog a `Text` is, so one query can fill all of them.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Line {
     Title,
@@ -208,40 +147,71 @@ enum Line {
     Hint,
 }
 
-/// Show, hide and fill the prompt. Guarded, because it runs every frame.
-fn paint_token_prompt(
+/// The words of one line of the dialog, for the draft as it stands.
+fn line_text(line: Line, draft: &Draft) -> String {
+    match line {
+        Line::Title => "ADD A VOCABULARY TOKEN".to_owned(),
+        Line::Axis => format!("axis  {}   ← → cycles", draft.axis.label()),
+        Line::Name => {
+            let caret = if draft.field == Field::Name { "_" } else { "" };
+            format!("name  {}{caret}", draft.name)
+        }
+        Line::Note => {
+            let caret = if draft.field == Field::Note { "_" } else { "" };
+            format!("note  {}{caret}", draft.note)
+        }
+        Line::Problem => draft.problem.clone().unwrap_or_default(),
+        Line::Hint => "Enter on note keeps it    Esc cancels".to_owned(),
+    }
+}
+
+/// **One dialog while the prompt is open, none otherwise, and its lines are the draft.** Guarded,
+/// because it runs every frame.
+///
+/// The card is gooey's `dialog` and its `panel`, in the skin's colours, where this prompt carried
+/// its own scrim, padding and fills on `chrome::modal_card`. What stays the editor's own is what
+/// made it a question rather than a floating box:
+///
+/// - **The scrim eats the click.** A click reaching the map underneath and placing a piece nobody
+///   asked for, in the one moment the keyboard is captured, is precisely the bug the typing guard
+///   (`editor::not_typing`) exists to prevent, and gooey's scrim is pickable.
+/// - **The card carries `Hovered`**, so "is the pointer over UI" still answers yes over an open
+///   dialog; without it, scrolling on a visible prompt zoomed the world behind it.
+/// - **The z-order is [`crate::chrome::MODAL_Z`]**, in front of every panel.
+///
+/// The keys are not gooey's: this editor owns the arrows, `Enter` and `Esc` ([`token_keys`]), and
+/// gooey's navigation plugin is not added.
+fn sync_token_prompt(
+    mut commands: Commands,
     prompt: Res<TokenPrompt>,
-    mut roots: Query<&mut Node, With<TokenPromptRoot>>,
+    standing: Query<Entity, With<TokenPromptRoot>>,
     mut lines: Query<(&Line, &mut Text)>,
 ) {
-    let display = if prompt.open.is_some() {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    for mut node in &mut roots {
-        if node.display != display {
-            node.display = display;
-        }
-    }
     let Some(draft) = &prompt.open else {
+        for entity in &standing {
+            commands.entity(entity).try_despawn();
+        }
         return;
     };
-    for (line, mut t) in &mut lines {
-        t.0 = match line {
-            Line::Title => "ADD A VOCABULARY TOKEN".to_owned(),
-            Line::Axis => format!("axis  {}   ← → cycles", draft.axis.label()),
-            Line::Name => {
-                let caret = if draft.field == Field::Name { "_" } else { "" };
-                format!("name  {}{caret}", draft.name)
-            }
-            Line::Note => {
-                let caret = if draft.field == Field::Note { "_" } else { "" };
-                format!("note  {}{caret}", draft.note)
-            }
-            Line::Problem => draft.problem.clone().unwrap_or_default(),
-            Line::Hint => "Enter on note keeps it    Esc cancels".to_owned(),
-        };
+    if standing.is_empty() {
+        commands
+            .spawn((dialog(), TokenPromptRoot))
+            .insert(GlobalZIndex(crate::chrome::MODAL_Z))
+            .with_children(|scrim| {
+                scrim.spawn((panel(), Hovered::default())).with_children(|card| {
+                    card.spawn((heading(line_text(Line::Title, draft)), Line::Title));
+                    for line in [Line::Axis, Line::Name, Line::Note, Line::Problem, Line::Hint] {
+                        card.spawn((label(line_text(line, draft)), line));
+                    }
+                });
+            });
+        return;
+    }
+    for (line, mut text) in &mut lines {
+        let want = line_text(*line, draft);
+        if text.0 != want {
+            text.0 = want;
+        }
     }
 }
 
@@ -381,10 +351,6 @@ impl Plugin for TokenPromptPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TokenPrompt>()
             .add_systems(
-                OnEnter(crate::screen::Screen::Editor),
-                spawn_token_prompt.after(crate::chrome::FrameSystems),
-            )
-            .add_systems(
                 Update,
                 (open_token_prompt.in_set(keys::Phase::Act))
                     .run_if(in_state(crate::screen::Screen::Editor)),
@@ -394,11 +360,11 @@ impl Plugin for TokenPromptPlugin {
                 (token_keys.in_set(keys::Phase::Text))
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
-            // After `Phase::Text`, so the field's keystroke is already in the draft when the paint
-            // reads it — the same ordering `chrome::paint_name_box` states.
+            // After `Phase::Text`, so the field's keystroke is already in the draft when the dialog
+            // is filled in — the same ordering `chrome::paint_name_box` states.
             .add_systems(
                 Update,
-                (paint_token_prompt.after(keys::Phase::Text))
+                (sync_token_prompt.after(keys::Phase::Text))
                     .run_if(in_state(crate::screen::Screen::Editor)),
             );
     }

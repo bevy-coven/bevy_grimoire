@@ -6335,7 +6335,7 @@ fn drive_chooser(input: ChooserInput<'_, '_>) {
                 } else {
                     "The map file is removed. This cannot be undone."
                 },
-                "Delete it",
+                format!("Delete {what} `{}`", pending.name),
                 "Keep it",
             );
         }
@@ -6347,7 +6347,7 @@ fn drive_chooser(input: ChooserInput<'_, '_>) {
                 crate::confirm::Asked::DeleteEntry,
                 "Remove this policy entry?",
                 format!("`{shown}` is spliced out of the kit's project.ron. The file's comments are kept."),
-                "Remove it",
+                format!("Remove `{shown}`"),
                 "Keep it",
             );
         }
