@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use bevy_grimoire_decide::{Answer, Error, Request, Response, Transport};
+use bevy_oracle::{Answer, Error, Request, Response, Transport};
 use bevy_cauldron_mcp::decide::{DecideParams, NamedImage, decide, load_checks, needs_view};
 use serde_json::json;
 
@@ -13,7 +13,7 @@ impl Transport for Scene {
         "scene".into()
     }
     fn send(&self, r: &Request) -> Result<Response, Error> {
-        use bevy_grimoire_decide::Question;
+        use bevy_oracle::Question;
         use base64::Engine as _;
         let floating = r.images.iter().any(|i| {
             let b64 = i.split_once("base64,").map_or("", |x| x.1);
@@ -140,7 +140,7 @@ fn a_projects_checks_are_read_on_every_call_and_replace_the_editors_of_the_same_
 
 #[test]
 fn the_view_is_taken_only_when_asked_for_or_a_check_needs_it_and_was_not_given_it() {
-    let checks = bevy_grimoire_decide::Checks::builtin();
+    let checks = bevy_oracle::Checks::builtin();
     let view_check = checks.checks.iter().find(|c| c.images.iter().any(|i| i == "view")).expect("a built-in needs view").name.clone();
     let p = DecideParams { check: Some(view_check.clone()), ..Default::default() };
     assert!(needs_view(&p, &checks));

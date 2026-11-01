@@ -50,5 +50,5 @@ fn the_crop_is_the_named_pixels() {
 
 #[test]
 fn the_built_in_checks_want_a_picture() {
-    assert!(wants_picture(&bevy_grimoire_decide::Checks::builtin()));
+    assert!(wants_picture(&bevy_oracle::Checks::builtin()));
 }

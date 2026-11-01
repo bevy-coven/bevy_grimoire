@@ -1,4 +1,4 @@
-use bevy_grimoire_decide::*;
+use bevy_oracle::*;
 use std::path::PathBuf;
 
 fn fixtures() -> PathBuf {

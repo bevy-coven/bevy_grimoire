@@ -14,7 +14,7 @@
 //! is already paid.
 //!
 //! Test code is not scanned (a fixture writes a plain file on purpose), and neither is
-//! `bevy_cauldron_mcp`, `bevy_grimoire_snip` or `bevy_grimoire_decide`: they write screenshots,
+//! `bevy_cauldron_mcp`, `bevy_grimoire_snip` or `bevy_oracle`: they write screenshots,
 //! snips and recorded fixtures, which are not project files.
 
 use std::path::{Path, PathBuf};

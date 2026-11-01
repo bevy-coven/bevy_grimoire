@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use bevy_grimoire_decide::{Answer, Checks, Error, Request, Response, Transport};
+use bevy_oracle::{Answer, Checks, Error, Request, Response, Transport};
 use bevy_cauldron::after_edit::{AgentEdit, run_due};
 
 #[derive(Default)]

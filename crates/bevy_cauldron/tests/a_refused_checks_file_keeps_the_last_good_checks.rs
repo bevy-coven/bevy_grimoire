@@ -11,7 +11,7 @@
 use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
-use bevy_grimoire_decide::Checks;
+use bevy_oracle::Checks;
 use bevy_cauldron::checks_view::{ChecksView, checks_for};
 use bevy_cauldron::editor::EditorState;
 use bevy_cauldron::project::Project;

@@ -14,7 +14,7 @@ use crate::vlm::{LabelFailure, PromptCtx, Provenance, Suggestion};
 use crate::vlm::{face_token, mount_meaning};
 use bevy_grimoire_core::descriptor::{Confidence, Face, Mount, mount_label, mount_options};
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
-use bevy_grimoire_decide::{Error, MAX_QUESTIONS, Question, Request, Response, Transport, ask};
+use bevy_oracle::{Error, MAX_QUESTIONS, Question, Request, Response, Transport, ask};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Which path labels a mesh. One per run: no fallback from one to the other.
@@ -311,7 +311,7 @@ pub fn agreement(person: &Suggestion, s: &Suggestion) -> Agreement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_grimoire_decide::{Answer, Replay};
+    use bevy_oracle::{Answer, Replay};
 
     fn vocab() -> Vocabularies {
         Vocabularies {

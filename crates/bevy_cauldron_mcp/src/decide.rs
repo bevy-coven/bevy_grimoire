@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use bevy_grimoire_decide::{Check, Checks, Evidence, Question, Request, Transport};
+use bevy_oracle::{Check, Checks, Evidence, Question, Request, Transport};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -258,7 +258,7 @@ pub fn decide_with(
                 req.questions.insert(id.clone(), q);
             }
             req.images = ordered;
-            let response = bevy_grimoire_decide::ask(transport, &req).map_err(|e| e.to_string())?;
+            let response = bevy_oracle::ask(transport, &req).map_err(|e| e.to_string())?;
             let mut answer = json!({"answers": response.answers, "endpoint": transport.endpoint()});
             if let Some(g) = game {
                 answer["game"] = json!({"port": g.port, "state": g.state.is_some()});

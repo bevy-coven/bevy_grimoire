@@ -6,7 +6,7 @@
 //! refused as damaged without saying what was wrong. The refusal is in the type's own deserialiser, so
 //! `Checks::from_ron`, `Checks::for_project` and the editor's `reload_check::read` all refuse the same way.
 
-use bevy_grimoire_decide::Checks;
+use bevy_oracle::Checks;
 
 #[test]
 fn a_file_of_another_version_is_refused_naming_the_version_this_build_reads() {

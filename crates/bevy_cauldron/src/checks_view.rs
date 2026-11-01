@@ -24,7 +24,7 @@ use std::time::SystemTime;
 use bevy::prelude::*;
 use bevy_grimoire_core::live::KindVerdict;
 use bevy_grimoire_core::reload_check;
-use bevy_grimoire_decide::{Checks, Error as DecideError, PROJECT_CHECKS_FILE};
+use bevy_oracle::{Checks, Error as DecideError, PROJECT_CHECKS_FILE};
 
 use crate::editor::EditorState;
 use crate::live::EditorReloads;

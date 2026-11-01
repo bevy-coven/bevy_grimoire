@@ -1,5 +1,5 @@
 [package]
-name = "bevy_grimoire_decide"
+name = "bevy_oracle"
 version = "0.1.0"
 edition = "2024"
 description = "Typed questions to a decision model (Clef): yes/no, choice and score questions about a state and up to four images, answered with a probability for every option. Authoring time only; no Bevy."

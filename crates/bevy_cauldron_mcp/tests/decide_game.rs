@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
-use bevy_grimoire_decide::{Answer, Checks, Error, Question, Request, Response, Transport};
+use bevy_oracle::{Answer, Checks, Error, Question, Request, Response, Transport};
 use bevy_cauldron_mcp::decide::{DecideParams, GameParams, StateCall, decide_with, fetch_game, load_checks, needs_game};
 use serde_json::{Value, json};
 

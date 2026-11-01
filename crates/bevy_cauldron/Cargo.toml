@@ -137,7 +137,7 @@ image.workspace = true
 # The snip's crop and its two files, shared with the MCP reader so both read one format.
 bevy_grimoire_snip = { path = "../bevy_grimoire_snip" }
 # The after-edit checks (#111): typed yes/no questions to a decision model, authoring time only.
-bevy_grimoire_decide = { path = "../bevy_grimoire_decide" }
+bevy_oracle = { path = "../bevy_oracle" }
 # Cmd+C on the detail pane — the pane's text into the system clipboard, so an author can hand a
 # piece's facts to an agent. Text only; the image-data feature would drag image deps in twice.
 arboard = { version = "3", default-features = false }

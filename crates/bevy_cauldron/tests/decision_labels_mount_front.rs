@@ -3,7 +3,7 @@
 
 use bevy_grimoire_core::descriptor::{mount_label, Face, Mount};
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
-use bevy_grimoire_decide::{Answer, Response};
+use bevy_oracle::{Answer, Response};
 use bevy_cauldron::decide_labels::{build_requests, suggest, DEFAULT_THRESHOLD};
 use bevy_cauldron::vlm::PromptCtx;
 use std::collections::BTreeMap;
@@ -40,9 +40,9 @@ fn choice(winner: &str, others: &[String]) -> Answer {
     Answer::Choice { choice: winner.to_owned(), probabilities, confidence: 0.9 }
 }
 
-fn options(request: &bevy_grimoire_decide::Request, id: &str) -> Vec<String> {
+fn options(request: &bevy_oracle::Request, id: &str) -> Vec<String> {
     match &request.questions[id] {
-        bevy_grimoire_decide::Question::Choice { criteria, .. } => criteria.keys().cloned().collect(),
+        bevy_oracle::Question::Choice { criteria, .. } => criteria.keys().cloned().collect(),
         other => panic!("`{id}` is {other:?}"),
     }
 }

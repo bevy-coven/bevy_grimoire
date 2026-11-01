@@ -562,7 +562,7 @@ pub(crate) fn spawn_request(
                     vlm::label_with_retry(&cfg, &pngs, &vocab, &ctx, date)?
                 }
                 crate::decide_labels::LabelPath::Decide => {
-                    let http = bevy_grimoire_decide::Http::new(bevy_grimoire_decide::Config::from_env());
+                    let http = bevy_oracle::Http::new(bevy_oracle::Config::from_env());
                     crate::decide_labels::label_with_decisions(
                         &http,
                         &pngs,

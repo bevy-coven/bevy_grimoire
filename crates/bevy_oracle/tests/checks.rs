@@ -1,4 +1,4 @@
-use bevy_grimoire_decide::*;
+use bevy_oracle::*;
 use std::collections::BTreeMap;
 
 /// A model stand-in for the recorded exchanges of a labelled capture set: it answers by what the image

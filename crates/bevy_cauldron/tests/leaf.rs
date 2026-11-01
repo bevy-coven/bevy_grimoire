@@ -56,7 +56,7 @@ const ALLOWED: &[(&str, &str)] = &[
         "the one crop, shared by the editor's snip and the MCP's grimoire_snip, so a picture from either door is cut the same way",
     ),
     (
-        "bevy_grimoire_decide",
+        "bevy_oracle",
         "the after-edit checks (#111): typed yes/no questions to a decision model about what an agent's operation changed — authoring time only, never in a game",
     ),
     ("arboard", "Cmd+C copies the live tab's text, problems first, for handing to an agent"),

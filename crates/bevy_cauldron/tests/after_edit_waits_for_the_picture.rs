@@ -1,7 +1,7 @@
 //! **An operation waiting for the editor's picture is asked about once: with the picture when it lands,
 //! without it when it never does (#111).** A late picture for an operation already released is dropped.
 
-use bevy_grimoire_decide::Checks;
+use bevy_oracle::Checks;
 use bevy_cauldron::after_edit::{AgentEdit, SHOT_FRAMES, ShotWait, wants_view};
 
 fn edit(seq: u64) -> AgentEdit {

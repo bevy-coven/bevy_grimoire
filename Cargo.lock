@@ -707,10 +707,10 @@ dependencies = [
  "bevy_grimoire",
  "bevy_grimoire_anim",
  "bevy_grimoire_core",
- "bevy_grimoire_decide",
  "bevy_grimoire_snip",
  "bevy_light_grid",
  "bevy_lights",
+ "bevy_oracle",
  "bevy_orca",
  "bevy_society",
  "bevy_speech_bubbles",
@@ -730,8 +730,8 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "bevy_grimoire_core",
- "bevy_grimoire_decide",
  "bevy_grimoire_snip",
+ "bevy_oracle",
  "rmcp",
  "schemars",
  "serde",
@@ -1227,16 +1227,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_grimoire_decide"
-version = "0.1.0"
-dependencies = [
- "ron",
- "serde",
- "serde_json",
- "ureq",
-]
-
-[[package]]
 name = "bevy_grimoire_rng"
 version = "0.1.0"
 dependencies = [
@@ -1566,6 +1556,16 @@ name = "bevy_mikktspace"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bff34eb29ff4b8a8688bc7299f14fb6b597461ca80fec03ed7d22939ab33e48f"
+
+[[package]]
+name = "bevy_oracle"
+version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+ "serde_json",
+ "ureq",
+]
 
 [[package]]
 name = "bevy_orca"
