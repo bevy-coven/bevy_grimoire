@@ -105,6 +105,7 @@ pub mod ops_light;
 pub mod ops_pool;
 #[cfg(feature = "bevy_lights")]
 pub mod light_view;
+pub mod palette_menu;
 pub mod piece_menu;
 pub mod ui;
 pub mod ui_skin;

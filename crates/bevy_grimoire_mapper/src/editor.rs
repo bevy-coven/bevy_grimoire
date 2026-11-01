@@ -1474,7 +1474,7 @@ struct CategoryHeader(String);
 
 /// A palette row, carrying its library index so one observer can serve all of them.
 #[derive(Component, Clone, Copy)]
-struct PaletteRow(usize);
+pub struct PaletteRow(pub usize);
 
 /// The Map palette's scrollable list, read for its geometry and written for its scroll position.
 type PaletteListQuery<'w, 's> = Query<
@@ -2214,6 +2214,7 @@ impl Plugin for EditorPlugin {
             );
         app.add_plugins(crate::ui::EditorUiPlugin);
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
+        app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_observer(on_play_click);
         app.init_resource::<EditorState>()
             .init_resource::<MapFraming>()

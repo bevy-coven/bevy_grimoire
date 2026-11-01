@@ -21,6 +21,8 @@ The clip shows the jobs below in one pass: arm a piece from the PLACE list, set 
 
 **If it goes wrong:** Hold `Alt` (Option on a Mac) while you click to place the piece exactly where the pointer is. Alt turns off grid snapping for that click.
 
+Or right-click the piece's row in the palette: its menu opens with Place, Mount on floor, Mount on wall, Mount on ceiling and Remove from the kit. Place is the row's own click. A mount is one line in the history, and a wall mount keeps the height the piece already has. Remove from the kit sends the piece back to the NOT IMPORTED shelf, and says which map places it when one does, and then leaves it in the library.
+
 ## Turn, tip and lift a piece
 
 **Goal:** Rotate, tip or raise a piece you have already placed, or set the facing of the piece you are about to place.

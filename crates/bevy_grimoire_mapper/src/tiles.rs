@@ -6225,27 +6225,45 @@ fn remove_tile(
         ));
         return;
     }
+    send_back_out_of_library(&mut project, &mut state, &mut suggestions, &mut generation, &id);
+}
+
+/// **Take `id` out of the library and put the shelf where the removal leaves it** — the whole of what
+/// `Delete` does once it has a row, and what the palette's context menu does for a row (UI-36, #230),
+/// so the key and the menu are one path with one log line, one Cmd+Z and one set of refusals. Returns
+/// `true` when the piece is gone; a refusal (a map places it, a composition names it) is on
+/// `state.status`.
+pub(crate) fn send_back_out_of_library(
+    project: &mut Project,
+    state: &mut ImportState,
+    suggestions: &mut crate::labels::Suggestions,
+    generation: &mut crate::labels::LabelGeneration,
+    id: &str,
+) -> bool {
     // The mesh path is the reborn candidate's name — captured before the entry is gone, through the
     // same question the Map asks before it deletes anything on this piece's behalf.
-    let mesh = match remove_blockers(&id, &project) {
+    let mesh = match remove_blockers(id, project) {
         Ok(mesh) => mesh,
-        Err(e) => return state.status.problem(e),
+        Err(e) => {
+            state.status.problem(e);
+            return false;
+        }
     };
     // **Through the registry (E-002, #129 slice 8).** The removal is the operation an agent calls, and
     // its log line is the step Cmd+Z takes back (`replay_logged`); what stays here is the shelf: the
     // rescan, the cursor, and the labels the piece's judgements made stale.
-    let Some(after) = crate::editor::remove_piece(&mut state, &mut project, &id) else {
-        return;
+    let Some(after) = crate::editor::remove_piece(state, project, id) else {
+        return false;
     };
     // The rescan IS the strip: `import::scan` measures the GLB fresh, so the candidate re-enters with
     // the importer's facts and none of the author's judgements. It also puts `NOT IMPORTED` on screen
     // with the piece under the highlight, through `focus_on`, the one place allowed to move the cursor
     // (see `follow_piece_removal`).
-    follow_piece_removal(&project, &mut state, Some(&after));
+    follow_piece_removal(project, state, Some(&after));
     // Proposed labels under either identity judged the piece as it was configured — stale by
     // definition now.
     let dropped = suggestions
-        .remove(&EditTarget::Library(id.clone()))
+        .remove(&EditTarget::Library(id.to_owned()))
         .is_some()
         | mesh.as_ref().is_some_and(|m| {
             suggestions
@@ -6272,6 +6290,7 @@ fn remove_tile(
         )),
     }
     info!("sent `{id}` back out of the library");
+    true
 }
 
 /// **Move the Meshes shelf to where a library removal, or the undo or redo of one, leaves it.**
