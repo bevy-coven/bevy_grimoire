@@ -29,6 +29,16 @@ and no GPU.
 
 The driver times every step of a pass from the omp session afterwards (`tools/loop/steps.py`, rows in `~/.local/state/wiggum/<clone>/steps.tsv`), so the owner can see which steps take longest and optimise them. The phase a step belongs to comes from you: **run `python3 tools/loop/steps.py mark <phase>` as you enter each phase**, with one of `orient`, `bugs`, `choose`, `research`, `build`, `prove`, `gate`, `ship`, `release`, `log`. It prints one line and costs nothing. A pass that skips the marks still has every step timed, but all of it lands in `orient`.
 
+## Every pass ships: commit, push, publish, docs, demos (owner, 2026-10-31)
+
+The owner's rule for every pass of this loop. It is checked: after each pass the driver audits it from git (`tools/loop/steps.py audit` in bevy_grimoire) and records commits on `main`, commits left unpushed, package files changed, release tags, doc and demo files, and what was **missing**, on this repo's `loop-stats` branch.
+
+1. **Commit and push.** Everything the pass made is committed and pushed to `main` (through the gate) before the pass ends. Nothing stays only in the clone.
+2. **Publish.** A pass that changed what the package ships releases it in the same pass (Phase 5's "Release": every publishable crate whose files changed). There is no time limit between releases. A publish crates.io refuses with `429` is logged once and not retried in this pass; the next pass releases, and its audit says so.
+3. **Docs.** A change to behaviour or API updates its documentation in the same pass: the README line, the `docs/guide/` section, rustdoc and the CHANGELOG, following https://github.com/bevy-coven/.github/blob/main/DOCUMENTATION.md. Images and links in a README are absolute URLs.
+4. **Demos.** A change anyone can see ships its demo in the same pass: a changelog line with its clip from `tools/demo/record.py` and `render.py`, and the GIF in the README or `docs/guide/` when the change is a headline one; `--no-clip "visible, not yet recorded: <why>"` only when no display can be had, and then the next pass on a Mac records it first. A media file a published README names is never moved.
+5. **Read the last audit first.** In Orient, run `git fetch -q origin loop-stats && git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv | tail -3`. Anything the previous pass left in `missing` (`push`, `release`, `docs`, `demo?`) is this pass's first job, ahead of its item, because it finishes work already done; only a broken gate comes before it. `demo?` is met by a demo, or by one line in the log saying why the change is not visible.
+
 ## Your work is saved even if you are killed
 
 **The driver saves whatever you leave uncommitted, without touching your branch.** Every ten minutes

@@ -587,8 +587,10 @@ one_pass() {
   # into one row per model turn, tool call, background job and wait in `$STATE/steps.tsv`, so the slow
   # steps of a loop can be found (`steps.py report --state $STATE`). It reads the session, so it needs
   # nothing from the pass and works for a pass that was killed. Owner, 2026-10-31.
-  local pass_started_at
+  local pass_started_at pass_main_at
   pass_started_at=$(date +%s)
+  # origin/main as the pass found it, for the audit of what the pass shipped (`steps.py audit`).
+  pass_main_at=$(git -C "$REPO" rev-parse -q --verify origin/main 2>/dev/null || true)
   ( cd "$REPO" && exec omp "${omp_args[@]}" -p "/$COMMAND" ) \
     >"$passlog" 2>&1 &
   pass_pid=$!
@@ -634,6 +636,13 @@ one_pass() {
   steps_tool="$(cd "$(dirname "$0")" && pwd)/steps.py"
   if [ -f "$steps_tool" ]; then
     log "pass $n $(python3 "$steps_tool" record --repo "$REPO" --since "$pass_started_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
+    # **Did the pass ship?** Commits on origin/main, anything left unpushed, a release tag when the package
+    # changed, docs and demo files. What the commands require and the pass skipped is named as `missing`,
+    # and the next pass reads it from loop-stats (owner, 2026-10-31: every pass commits, pushes,
+    # publishes, documents and demos).
+    if [ -n "$pass_main_at" ]; then
+      log "pass $n $(python3 "$steps_tool" audit --repo "$REPO" --from "$pass_main_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
+    fi
     # And onto GitHub, on the repo's own `loop-stats` branch (`steps/<clone>.tsv` and `.md`), built with
     # plumbing so the clone's tree, index and `main` are untouched. WIGGUM_STEPS_BRANCH= turns it off.
     if [ -n "${WIGGUM_STEPS_BRANCH-loop-stats}" ]; then

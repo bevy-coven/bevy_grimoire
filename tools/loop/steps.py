@@ -27,6 +27,9 @@ and a `phase`. Phases are marked by the pass itself with `python3 tools/loop/ste
     steps.py backfill --repo DIR --state STATEDIR [--last K]
                                                 # every past session of that clone, numbered by start time
     steps.py report --state STATEDIR [--last K] # where the time goes, across the last K passes
+    steps.py audit --repo DIR --from SHA --pass N --state STATEDIR
+                                                # the driver, after a pass: did it commit, push, release,
+                                                # document and demo? one row in STATEDIR/audit.tsv
     steps.py publish --repo DIR --state STATEDIR [--branch loop-stats]
                                                 # the driver, after record: push steps/<clone>.tsv and
                                                 # steps/<clone>.md to the repo's loop-stats branch
@@ -298,6 +301,51 @@ def git(repo, *args, env=None, input=None):
     return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, env=env, input=input)
 
 
+AUDIT_COLUMNS = ["pass", "at", "commits", "unpushed", "package_files", "released", "docs_files", "demo_files", "missing"]
+PACKAGE = re.compile(r"^(src/|crates/[^/]+/src/|crates/[^/]+/Cargo\.toml$|Cargo\.toml$|build\.rs$|crates/[^/]+/build\.rs$|assets/[^/]*shader|.*\.wgsl$|.*\.wesl$)")
+DOCS = re.compile(r"(^|/)(README[^/]*\.md|CHANGELOG\.md)$|^docs/(?!loop/|loop-log)|^crates/[^/]+/(README|CHANGELOG)\.md$")
+DEMO = re.compile(r"\.(gif|mp4|webm|png|jpg|webp)$", re.I)
+
+
+def audit(repo, start, pass_no, state):
+    """What a pass shipped, read from git: commits it put on origin/main, whether any are still only
+    local, whether it changed the package and tagged a release, and whether it touched docs and demos.
+    `missing` names what the commands require and the pass did not do."""
+    git(repo, "fetch", "-q", "--tags", "origin")
+    head = git(repo, "rev-parse", "origin/main").stdout.strip()
+    rng = f"{start}..{head}"
+    commits = int(git(repo, "rev-list", "--count", rng).stdout.strip() or 0)
+    unpushed = int(git(repo, "rev-list", "--count", "origin/main..HEAD").stdout.strip() or 0) \
+        if git(repo, "symbolic-ref", "-q", "--short", "HEAD").stdout.strip() == "main" else 0
+    files = [f for f in git(repo, "diff", "--name-only", rng).stdout.split() if f]
+    added = [f for f in git(repo, "diff", "--name-only", "--diff-filter=AM", rng).stdout.split() if f]
+    package = [f for f in files if PACKAGE.search(f)]
+    docs = [f for f in files if DOCS.search(f)]
+    demo = [f for f in added if DEMO.search(f) and not f.startswith(("docs/loop/", "target/"))]
+    tags = [x for x in git(repo, "tag", "--merged", head, "--no-merged", start).stdout.split() if x]
+    missing = []
+    if unpushed:
+        missing.append("push")
+    if package and not tags:
+        missing.append("release")
+    if package and not docs:
+        missing.append("docs")
+    if package and not demo:
+        missing.append("demo?")  # a change nobody can see needs none; a visible one does
+    if commits == 0 and not unpushed:
+        missing.append("nothing shipped")
+    row = [str(pass_no), dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"), str(commits), str(unpushed),
+           str(len(package)), ",".join(tags) or "-", str(len(docs)), str(len(demo)), ",".join(missing) or "-"]
+    path = Path(state) / "audit.tsv"
+    new = not path.exists()
+    with open(path, "a", encoding="utf-8") as f:
+        if new:
+            f.write("\t".join(AUDIT_COLUMNS) + "\n")
+        f.write("\t".join(row) + "\n")
+    return (f"audit: {commits} commit(s) on main, {unpushed} unpushed, {len(package)} package file(s), "
+            f"released {row[5]}, {len(docs)} doc file(s), {len(demo)} demo file(s); missing: {row[8]}")
+
+
 def publish(repo, state, branch):
     """Commit this clone's step log and its report to `branch` and push it, without touching the clone.
 
@@ -315,6 +363,16 @@ def publish(repo, state, branch):
     buf = io.StringIO()
     buf.write(f"# Where {name}'s time goes\n\nWritten by `tools/loop/steps.py publish` after every pass; ")
     buf.write(f"the rows are in [`{name}.tsv`]({name}.tsv). Updated {dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%MZ}.\n\n")
+    audit_tsv = Path(state) / "audit.tsv"
+    if audit_tsv.exists():
+        lines = audit_tsv.read_text(encoding="utf-8").splitlines()
+        buf.write(f"## What the last passes shipped\n\nFrom [`{name}-audit.tsv`]({name}-audit.tsv): commits on main, ")
+        buf.write("unpushed commits, package files changed, release tags, doc and demo files, and what was missing.\n\n")
+        head, rows = lines[0].split("\t"), [l.split("\t") for l in lines[1:]][-12:]
+        buf.write("| " + " | ".join(head) + " |\n|" + "---|" * len(head) + "\n")
+        for r in rows:
+            buf.write("| " + " | ".join(r) + " |\n")
+        buf.write("\n")
     for title, last in (("The last 12 passes", 12), ("Every pass recorded", 0)):
         buf.write(f"## {title}\n\n```text\n")
         report(state, last, out=buf)
@@ -327,8 +385,11 @@ def publish(repo, state, branch):
             env = dict(os.environ, GIT_INDEX_FILE=os.path.join(d, "index"))
             if base:
                 git(repo, "read-tree", base, env=env)
-            for path, text in ((f"steps/{name}.tsv", tsv.read_text(encoding="utf-8")),
-                               (f"steps/{name}.md", buf.getvalue())):
+            files = [(f"steps/{name}.tsv", tsv.read_text(encoding="utf-8")), (f"steps/{name}.md", buf.getvalue())]
+            audit_tsv = Path(state) / "audit.tsv"
+            if audit_tsv.exists():
+                files.append((f"steps/{name}-audit.tsv", audit_tsv.read_text(encoding="utf-8")))
+            for path, text in files:
                 blob = git(repo, "hash-object", "-w", "--stdin", input=text).stdout.strip()
                 git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=env)
             tree = git(repo, "write-tree", env=env).stdout.strip()
@@ -360,6 +421,11 @@ def main(argv=None):
     p = sub.add_parser("report", help="where the time goes")
     p.add_argument("--state", required=True)
     p.add_argument("--last", type=int, default=0)
+    au = sub.add_parser("audit", help="what a pass shipped: commits, push, release, docs, demos")
+    au.add_argument("--repo", required=True)
+    au.add_argument("--from", dest="start", required=True, help="origin/main when the pass started")
+    au.add_argument("--pass", dest="pass_no", type=int, required=True)
+    au.add_argument("--state", required=True)
     u = sub.add_parser("publish", help="push this clone's step log to the repo's loop-stats branch")
     u.add_argument("--repo", required=True)
     u.add_argument("--state", required=True)
@@ -393,6 +459,9 @@ def main(argv=None):
         return 0
     if a.cmd == "report":
         report(a.state, a.last)
+        return 0
+    if a.cmd == "audit":
+        print(audit(a.repo, a.start, a.pass_no, a.state))
         return 0
     if a.cmd == "publish":
         print(publish(a.repo, a.state, a.branch))
