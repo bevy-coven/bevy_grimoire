@@ -587,6 +587,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // tab's working state, capped and cleared by `Esc`; this one answers *"what has gone wrong since
     // the application started"*, which a value thrown away with the door cannot.
     ("bevy_grimoire_mapper::chrome::Journal", Ownership::Session),
+    // Chords an agent or the command palette has asked to press: a key one frame from going down belongs to
+    // whoever is at the keyboard, not to the map the door is leaving.
+    ("bevy_grimoire_mapper::command_run::Chords", Ownership::Session),
     // The agent operations whose checks are owed: a fact about this project's log.
     (
         "bevy_grimoire_mapper::after_edit::AfterEditQueue",

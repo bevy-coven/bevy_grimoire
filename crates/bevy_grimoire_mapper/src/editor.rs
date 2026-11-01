@@ -2239,6 +2239,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::ui::EditorUiPlugin);
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
+        app.add_plugins(crate::command_palette::CommandPalettePlugin);
         app.add_observer(on_play_click);
         app.init_resource::<EditorState>()
             .init_resource::<MapFraming>()
@@ -7747,6 +7748,10 @@ pub fn sense_context(
     // because `Display::None` on the node *is* the open/closed state — `notice::toggle_journal`
     // writes exactly that, and a second flag beside it would be a second answer.
     journal: Query<&Node, With<crate::chrome::JournalPanel>>,
+    // **The command palette's field takes the keys** (UI-32). It is gooey's own text field, which none
+    // of [`Fields`] knows about, so "a palette is open" is asked of the palette's marker: without
+    // it, typing `undo` in the palette would also press U, N, D and O on the tab behind it.
+    palette: Query<(), With<bevy_gooey::CommandPalette>>,
 ) {
     let InHand {
         move_drag,
@@ -7761,7 +7766,7 @@ pub fn sense_context(
     // below. It used to be a `Context`, which threw the tab away and fired every tab's walk on one
     // arrow — see [`keys::Holder`].
     let filter_typing = filters.typing();
-    let typing = fields.typing();
+    let typing = fields.typing() || !palette.is_empty();
     // **What is in hand, asked of the tab that can be holding something.** Two tabs can, and they hold
     // different things: the assembler has a piece taken with `Space`, the map has one picked up in
     // Move or a set captured in Clone. Both answer the same question — *do the arrows move a thing, or
