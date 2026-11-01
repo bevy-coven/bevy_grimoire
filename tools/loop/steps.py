@@ -216,7 +216,9 @@ def pass_starts(driver_log):
     """`pass N START` lines of a driver log: [(utc start, N)]. The log writes local time."""
     out = []
     try:
-        for line in open(driver_log, encoding="utf-8", errors="replace"):
+        with open(driver_log, encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        for line in lines:
             m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d) pass (\d+) START\b", line)
             if m:
                 local = dt.datetime.fromisoformat(m.group(1)).astimezone()
@@ -307,6 +309,28 @@ DOCS = re.compile(r"(^|/)(README[^/]*\.md|CHANGELOG\.md)$|^docs/(?!loop/|loop-lo
 DEMO = re.compile(r"\.(gif|mp4|webm|png|jpg|webp)$", re.I)
 
 
+def unreleased_crates(repo, head, package, tags):
+    """The published crates whose shipped files changed with no release tag for them in the range.
+
+    A workspace tags each crate `<crate>-v<version>`; a single-crate repo tags `v<version>` and is named
+    `.` here. A crate whose manifest says `publish = false` ships nothing, so it needs no release."""
+    crates = {}
+    for f in package:
+        m = re.match(r"crates/([^/]+)/", f)
+        crates.setdefault(m.group(1) if m else ".", True)
+    out = []
+    for crate in sorted(crates):
+        manifest = "Cargo.toml" if crate == "." else f"crates/{crate}/Cargo.toml"
+        text = git(repo, "show", f"{head}:{manifest}").stdout
+        if re.search(r"(?m)^\s*publish\s*=\s*false", text) or not re.search(r"(?m)^\[package\]", text):
+            continue  # unpublished, or a workspace root that is no crate
+        name = re.search(r'(?m)^\s*name\s*=\s*"([^"]+)"', text)
+        want = "v" if crate == "." else f"{name.group(1) if name else crate}-v"
+        if not any(t_.startswith(want) or (crate == "." and re.match(r"v\d", t_)) for t_ in tags):
+            out.append(crate if crate == "." else (name.group(1) if name else crate))
+    return out
+
+
 def audit(repo, start, pass_no, state):
     """What a pass shipped, read from git: commits it put on origin/main, whether any are still only
     local, whether it changed the package and tagged a release, and whether it touched docs and demos.
@@ -326,8 +350,9 @@ def audit(repo, start, pass_no, state):
     missing = []
     if unpushed:
         missing.append("push")
-    if package and not tags:
-        missing.append("release")
+    unreleased = unreleased_crates(repo, head, package, tags)
+    if unreleased:
+        missing.append("release(" + " ".join(unreleased) + ")" if unreleased != ["."] else "release")
     if package and not docs:
         missing.append("docs")
     if package and not demo:

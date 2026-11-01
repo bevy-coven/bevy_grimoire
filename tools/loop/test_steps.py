@@ -150,7 +150,7 @@ class Steps(unittest.TestCase):
             run("git", "clone", "-q", str(origin), str(clone))
             for k, v in (("user.name", "t"), ("user.email", "t@t")):
                 run("git", "config", k, v, cwd=clone)
-            commit(clone, {"src/lib.rs": "a"}, "base")
+            commit(clone, {"src/lib.rs": "a", "Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\n'}, "base")
             run("git", "push", "-q", "origin", "HEAD:main", cwd=clone)
             start = run("git", "rev-parse", "HEAD", cwd=clone)
 
