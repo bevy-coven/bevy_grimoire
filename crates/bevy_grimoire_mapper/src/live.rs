@@ -104,6 +104,12 @@ impl EditorReloads {
         self.kinds.retain(|k| !kinds.contains(&k.kind.as_str()));
     }
 
+    /// Forget the verdict of one file, when it is gone: a file a watcher no longer finds is no longer
+    /// refused, and its kind may still hold other files.
+    pub fn forget_file(&mut self, kind: &str, file: &str) {
+        self.kinds.retain(|k| !(k.kind == kind && k.file == file));
+    }
+
     /// The newest verdict for every file, in the order they were first decided.
     pub fn kinds(&self) -> &[KindVerdict] {
         &self.kinds

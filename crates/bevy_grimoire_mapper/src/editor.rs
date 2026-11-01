@@ -1882,15 +1882,9 @@ fn draw_notes(
     note_box: Res<NoteBox>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
-    mut cache: Local<Option<(std::path::PathBuf, Option<std::time::SystemTime>, bevy_grimoire_core::notes::Notes)>>,
+    view: Res<crate::notes_view::NotesView>,
     mut gizmos: Gizmos,
 ) {
-    let path = bevy_grimoire_core::notes::path_for_map(&open.map_path);
-    let stamp = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
-    if cache.as_ref().is_none_or(|(p, t, _)| *p != path || *t != stamp) {
-        let notes = bevy_grimoire_core::notes::Notes::load(&path).unwrap_or_default();
-        *cache = Some((path, stamp, notes));
-    }
     let (ox, oy, oz) = open.map.origin;
     let mut rect = |x0: f32, z0: f32, x1: f32, z1: f32, color: Color| {
         gizmos.rect(
@@ -1902,13 +1896,11 @@ fn draw_notes(
             color,
         );
     };
-    if let Some((_, _, notes)) = cache.as_ref() {
-        for n in notes.notes.iter().filter(|n| n.stands()) {
-            if let Some(site) = &n.site {
-                let color = if n.is_draft() { Color::WHITE } else { ACCENT };
-                let (x0, z0, x1, z1) = site.world;
-                rect(x0, z0, x1, z1, color);
-            }
+    for n in view.notes().notes.iter().filter(|n| n.stands()) {
+        if let Some(site) = &n.site {
+            let color = if n.is_draft() { Color::WHITE } else { ACCENT };
+            let (x0, z0, x1, z1) = site.world;
+            rect(x0, z0, x1, z1, color);
         }
     }
     if state.tool != Tool::Note {
@@ -2216,6 +2208,7 @@ impl Plugin for EditorPlugin {
             .init_resource::<RemovalDrag>()
             .init_resource::<NoteBox>()
             .init_resource::<NotesFilter>()
+            .init_resource::<crate::notes_view::NotesView>()
             .init_resource::<crate::family_host::FamilySettings>()
             .add_systems(Update, (crate::family_host::report_problems, crate::family_host::reload_settings.in_set(crate::family_host::Reloaded)))
             // Registered in the same commit as `drive_move` and `keys` read it — a missing `ResMut`
@@ -2532,6 +2525,7 @@ impl Plugin for EditorPlugin {
                         draw_bounds,
                         draw_map_grid,
                         crate::terrain_view::sync_terrain_view,
+                        crate::notes_view::sync_notes_view,
                         fit_bounds_floor
                             .run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
                     ),
@@ -6015,7 +6009,7 @@ fn refresh_plan_list(
 fn refresh_notes_list(
     mut commands: Commands,
     time: Res<Time>,
-    open: Option<Res<OpenMap>>,
+    view: Res<crate::notes_view::NotesView>,
     filter: Res<NotesFilter>,
     lists: Query<Entity, With<NotesList>>,
     mut local: Local<(Option<NotesShown>, f32)>,
@@ -6027,9 +6021,7 @@ fn refresh_notes_list(
         return;
     }
     *since = 0.0;
-    let all = open
-        .and_then(|o| bevy_grimoire_core::notes::Notes::load(&bevy_grimoire_core::notes::path_for_map(&o.map_path)).ok())
-        .unwrap_or_default();
+    let all = view.notes();
     let rows: Vec<(String, &'static str, String, bool, NoteReview, bool)> = all
         .listing(filter.0)
         .iter()
