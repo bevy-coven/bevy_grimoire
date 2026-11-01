@@ -2194,7 +2194,7 @@ impl Plugin for EditorPlugin {
         #[cfg(feature = "bevy_flora")]
         app.add_plugins(crate::forest_view::ForestViewPlugin);
         #[cfg(feature = "bevy_lights")]
-        app.add_plugins(crate::light_view::LightViewPlugin);
+        app.add_plugins(crate::light_view::LightViewPlugin).add_observer(crate::ops_pool::on_pool_click);
         #[cfg(feature = "bevy_elements")]
         app.add_observer(on_environment_click);
         // **The light map (#103):** shown by its button, re-baked when the map changes, drawn over the floor.
@@ -3374,6 +3374,15 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(crate::environment::spawn_section);
+
+            // **Lights (#103):** the pool's budget from where the camera looks.
+            #[cfg(feature = "bevy_lights")]
+            p.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            })
+            .with_children(crate::ops_pool::spawn_section);
 
             // **Light map (#103):** show or hide `bevy_light_grid`'s field over the open map.
             #[cfg(feature = "bevy_light_grid")]

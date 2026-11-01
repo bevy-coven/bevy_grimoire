@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 
 use crate::editor::EditorState;
+use crate::ops::{Applied, Ctx, Source, dispatch, session_id};
 use crate::ops_light::{Params, bake};
 use crate::project::{OpenMap, Project};
 
@@ -62,13 +63,17 @@ pub fn spawn_section(s: &mut ChildSpawnerCommands) {
     button(s, LightMapToggle, "Show / hide", Severity::Plain);
 }
 
-/// **The button** shows or hides the overlay. `Option`, because this is a GLOBAL observer: see
+/// **The button** shows or hides the overlay. Showing it dispatches `light_map`, so a person's click and an
+/// agent's `apply` are one operation with one log line, and the status says the operation's receipt.
+/// Hiding reads nothing, so it dispatches nothing. `Option`, because this is a GLOBAL observer: see
 /// `editor::on_size_field_click`.
 pub fn on_light_map_click(
     activate: On<Activate>,
     buttons: Query<(), With<LightMapToggle>>,
     overlay: Option<ResMut<LightOverlay>>,
     state: Option<ResMut<EditorState>>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
 ) {
     let (Some(mut overlay), Some(mut state)) = (overlay, state) else {
         return;
@@ -77,11 +82,21 @@ pub fn on_light_map_click(
         return;
     }
     overlay.on = !overlay.on;
-    state.status.note(if overlay.on {
-        "light map shown: blue is dark, amber is lit by a placed fixture's Flicker".to_owned()
-    } else {
-        "light map hidden".to_owned()
-    });
+    if !overlay.on {
+        state.status.note("light map hidden".to_owned());
+        return;
+    }
+    let mut ctx = Ctx {
+        project: project.as_deref().cloned(),
+        open: open.as_deref().cloned(),
+        source: Source::Human,
+        session: session_id(),
+        ..Ctx::default()
+    };
+    match dispatch(&mut ctx, "light_map", &serde_json::json!({})) {
+        Ok(Applied::Done { outcome, .. }) => state.status.note(format!("{}; blue is dark, amber is lit by a placed fixture's Flicker", outcome.summary)),
+        Ok(Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    }
 }
 
 /// **Re-bake while shown**, when the button or the map changed. Writes `drawn` only when it differs,

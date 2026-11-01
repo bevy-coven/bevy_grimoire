@@ -200,6 +200,7 @@ mod inspector_names_broken_relations;
 mod inspector_names_the_worst_repeat;
 mod label_set_is_an_operation;
 mod leaf;
+mod light_buttons;
 mod light_map;
 mod light_overlay;
 mod light_pool;

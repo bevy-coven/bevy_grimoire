@@ -3129,6 +3129,13 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The family settings field (#96)** — Enter on `<crate> <field> <value>` dispatches
     // `family_set` through `set_family_field`, the same write an agent's `apply` makes.
     ("family_set", "set_family_field("),
+    // **The LIGHT MAP button** shows or hides the overlay and, on showing it, dispatches `light_map` and says
+    // its receipt (#103). The observer is registered in `editor.rs`.
+    #[cfg(feature = "bevy_light_grid")]
+    ("light_map", "light_overlay::on_light_map_click"),
+    // **The POOL HERE button** dispatches `light_pool` at the point the camera looks at (#103).
+    #[cfg(feature = "bevy_lights")]
+    ("light_pool", "ops_pool::on_pool_click"),
     // **A piece's family settings (#103)** — the same field with `@<id> <crate> <value>` dispatches
     // `placement_set_family` through `set_piece_family`.
     ("placement_set_family", "set_piece_family("),
