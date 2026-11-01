@@ -69,6 +69,10 @@ bevy_orca = ["dep:bevy_orca"]
 bevy_society = ["dep:bevy_society"]
 bevy_speech_bubbles = ["dep:bevy_speech_bubbles"]
 bevy_stigmergy = ["dep:bevy_stigmergy"]
+# **A spike, not a migration (#204, hot-reload H7)**: `standards.ron` through Bevy's `AssetLoader` and its
+# file watcher, beside the editor's own `FileWatch`. Off by default and in no build the gate makes; it turns
+# on Bevy's `file_watcher` (the `notify` crates) and nothing else. `src/asset_spike.rs` says what it is for.
+asset_spike = ["bevy/file_watcher"]
 
 [dependencies]
 bevy_carnage = { git = "https://github.com/bevy-coven/bevy_carnage", rev = "615c264e28680448b934d3f28b73487dd8b98750", default-features = false, features = ["serde"], optional = true }
@@ -146,3 +150,7 @@ bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-co
 [[test]]
 name = "editor"
 path = "tests/all.rs"
+
+[[example]]
+name = "asset_spike_measure"
+required-features = ["asset_spike"]
