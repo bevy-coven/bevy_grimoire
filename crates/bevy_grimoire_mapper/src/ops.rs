@@ -3391,21 +3391,11 @@ pub fn undo_target(ctx: &Ctx, target: Option<&str>) -> Result<UndoPlan, Refusal>
             "no project is open, so there is no log to undo from.",
         ));
     };
-    let path = oplog_path(project);
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
     // **A change that records no undo, by id and op name.** It stays out of the undo lines, so an
     // undo of its id can say what it is rather than that it is not in the log.
     let mut silent: HashMap<String, String> = HashMap::new();
     let mut lines = Vec::new();
-    // **The one reader of the log's lines that names what is wrong** (`oplog_view` decides the same
-    // refusal into `grimoire_state.reloads`): a damaged line is not guessed around, because the newest
-    // change in effect may be the line that does not read.
-    let entries: Vec<Entry> = bevy_grimoire_core::reload_check::read_lines("oplog", &crate::map_files::file_name(project, &path), &text).map_err(|r| {
-        Refusal::new(format!(
-            "the log does not read, so it cannot say what the newest change is: {}. Nothing was changed.",
-            r.sentence()
-        ))
-    })?;
+    let entries = read_entries_strict(project, "what the newest change is")?;
     for entry in entries {
         let records_no_undo = find(&entry.op).is_some_and(|op| op.undo() == Undo::None);
         if entry.outcome == "applied" {
@@ -3689,6 +3679,21 @@ pub fn read_entries(path: &std::path::Path) -> Vec<Entry> {
         .filter(|l| !l.trim().is_empty())
         .filter_map(|l| serde_json::from_str::<Entry>(l).ok())
         .collect()
+}
+
+/// **Every line of the operation log, or a refusal naming the first line that does not read** (#207).
+///
+/// The reader for a decision that must not guess around a damaged line (the undo walk, a note's undo,
+/// the fence on an agent): [`read_entries`] skips such a line, which hides a newer change from an
+/// overlap check or credits an agent's pieces to a person. `cannot_say` finishes the sentence "the
+/// log does not read, so it cannot say ...". It names the line and field the way the reload verdict
+/// does (`oplog_view`), so one repaired line moves both.
+pub fn read_entries_strict(project: &Project, cannot_say: &str) -> Result<Vec<Entry>, Refusal> {
+    let path = oplog_path(project);
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    bevy_grimoire_core::reload_check::read_lines("oplog", &crate::map_files::file_name(project, &path), &text).map_err(|r| {
+        Refusal::new(format!("the log does not read, so it cannot say {cannot_say}: {}. Nothing was changed.", r.sentence()))
+    })
 }
 
 /// **An operation id** — unique within a project, and short enough to read aloud.

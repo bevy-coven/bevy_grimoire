@@ -206,6 +206,7 @@ mod note_claims;
 mod note_cites_reference;
 mod note_fence;
 mod note_undo_work;
+mod note_work_reads_the_whole_log;
 mod notes_are_operations;
 mod notes_end_to_end;
 mod notes_history_and_send;

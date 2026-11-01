@@ -897,7 +897,7 @@ impl NoteUndoWork {
                 Some(_) => return Err(Refusal::new(format!("note {id} is not done, so there is no work to undo. Nothing was changed."))),
                 None => return Err(Refusal::new(format!("no note {id} on this map. Nothing was changed."))),
             };
-            let entries = crate::ops::read_entries(&crate::ops::oplog_path(project));
+            let entries = crate::ops::read_entries_strict(project, "what was done after the note's work, or what is already undone")?;
             let undone: Vec<&str> = entries.iter().filter(|e| e.outcome == "applied").filter_map(|e| e.undoes.as_deref()).collect();
             let mut mine: Vec<&crate::ops::Entry> = Vec::new();
             for op in &ops {
@@ -1146,10 +1146,13 @@ fn measure(before: &bevy_grimoire_core::map::Map, after: &bevy_grimoire_core::ma
 
 /// **The ids the operation log credits to an agent**: what its applied, not-undone changes added,
 /// read from each line's inverse (`delta.remove_placements`, `delta.remove_stamps`, `take_back`).
-fn agent_made_ids(ctx: &Ctx) -> std::collections::HashSet<String> {
+///
+/// **A log that does not read refuses** (#207): an agent line that cannot be read would make its
+/// pieces a person's, and the fence exists to guard a person's work.
+fn agent_made_ids(ctx: &Ctx) -> Result<std::collections::HashSet<String>, crate::ops::Refusal> {
     let mut ids = std::collections::HashSet::new();
-    let Some(project) = ctx.project.as_ref() else { return ids };
-    for e in crate::ops::read_entries(&crate::ops::oplog_path(project)) {
+    let Some(project) = ctx.project.as_ref() else { return Ok(ids) };
+    for e in crate::ops::read_entries_strict(project, "which pieces an agent made")? {
         if e.source != crate::ops::Source::Agent || e.outcome != "applied" || e.undoes.is_some() {
             continue;
         }
@@ -1163,7 +1166,7 @@ fn agent_made_ids(ctx: &Ctx) -> std::collections::HashSet<String> {
             ids.insert(id.to_owned());
         }
     }
-    ids
+    Ok(ids)
 }
 
 /// **The fence on an agent's operation** (#92): `Some(why)` when `agent` holds a note and the
@@ -1208,7 +1211,11 @@ pub fn fence_refusal(ctx: &Ctx, agent: &str, op: &str, params: &serde_json::Valu
     let ran = operation.commit(&mut trial, params);
     let _ = std::fs::remove_dir_all(&scratch_dir);
     ran.ok()?;
-    let change = measure(&open.map, &trial.open.as_ref()?.map, &agent_made_ids(ctx));
+    let agent_made = match agent_made_ids(ctx) {
+        Ok(ids) => ids,
+        Err(refusal) => return Some(refusal.0),
+    };
+    let change = measure(&open.map, &trial.open.as_ref()?.map, &agent_made);
     if change == notes::Change::default() {
         return None;
     }
