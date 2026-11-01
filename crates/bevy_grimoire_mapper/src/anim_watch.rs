@@ -475,7 +475,7 @@ pub(crate) fn sync_rigs_reload(
     if let Some(state) = state.as_deref_mut() {
         if verdict.outcome == Outcome::Refused {
             let kept = if held { "the rigs already loaded stay" } else { "no rigs are loaded from it" };
-            state.status.problem(format!("{}: refused, so {kept}", verdict.sentence()));
+            state.status.raise("", verdict.problem(kept));
         } else {
             state.status.note(format!("{}: {}", verdict.file, verdict.reason));
         }

@@ -437,7 +437,13 @@ impl EditorState {
     /// not a note: it reaches the toast and the journal, and it does not overwrite the person's
     /// receipt.
     pub(crate) fn problem_agent_refusal(&mut self, operation: &str, refusal: &str) {
-        self.status.problem(format!("agent: {operation}: {refusal}"));
+        self.problem_agent_problem(operation, bevy_grimoire_core::problem::Problem::new(refusal));
+    }
+
+    /// [`Self::problem_agent_refusal`] for a refusal that has its parts (UI-05): the row keeps the
+    /// problem, so the journal reads the same `where` and `fix` the agent's answer carries.
+    pub(crate) fn problem_agent_problem(&mut self, operation: &str, problem: bevy_grimoire_core::problem::Problem) {
+        self.status.raise(&format!("agent: {operation}: "), problem);
     }
 
     /// **Take an agent's undo onto the person's stacks (E-076).**
@@ -2111,7 +2117,7 @@ fn dispatch_note(
             true
         }
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
-            state.status.problem(format!("cannot {phrase}: {}", e.0));
+            state.status.raise(&format!("cannot {phrase}: "), e.problem());
             false
         }
     }
