@@ -127,6 +127,13 @@ pub fn people_of(project: &crate::project::Project, map: &str) -> People {
         .unwrap_or_default()
 }
 
+/// **The saved people of a map for an operation that rewrites the file**: nobody when there is no file,
+/// and a refusal naming the file and the field when there is one that does not read, so the rewrite
+/// never replaces it (#200).
+pub fn try_people_of(project: &crate::project::Project, map: &str) -> Result<People, Refusal> {
+    crate::map_files::read_or_empty("people", project, &path_of(project, map)?)
+}
+
 /// **Who lives or works in one of `ids`**: `(person, "home" | "work", placement)`, the first found.
 pub fn tenant_of(project: &crate::project::Project, map: &str, ids: &[String]) -> Option<(String, &'static str, String)> {
     people_of(project, map).people.into_iter().find_map(|p| {
@@ -208,7 +215,7 @@ impl PersonSet {
             let Some(name) = p.name.as_deref().filter(|n| !n.trim().is_empty()) else {
                 return Err(Refusal::new("a person needs a `name`. Nothing was changed."));
             };
-            let mut people = people_of(project, &p.map);
+            let mut people = try_people_of(project, &p.map)?;
             let at_row = people.people.iter().position(|q| q.name == name);
             let summary = if p.remove {
                 let Some(i) = at_row else {
@@ -611,7 +618,7 @@ impl PeopleRun {
         let Some(open) = ctx.open.as_ref().filter(|o| o.map.name == p.map) else {
             return Err(Refusal::new(format!("`{}` is not the open map, so its placements cannot be read.", p.map)));
         };
-        let people = people_of(project, &p.map);
+        let people = try_people_of(project, &p.map)?;
         if people.people.is_empty() {
             return Err(Refusal::new(format!("nobody lives on `{}`; author someone with person_set first.", p.map)));
         }
