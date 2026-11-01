@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire_core"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2024"
 description = "Engine-free world-building core: constraint IR, solvers, WFC, deterministic RNG."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
