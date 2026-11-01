@@ -25,6 +25,7 @@ mod a_click_outside_the_viewport_places_nothing;
 mod a_composed_proposal_draws_its_members;
 mod a_composition_can_be_renamed;
 mod a_damaged_oplog_line_is_named_and_the_rest_still_reads;
+mod an_oplog_line_of_another_version_is_refused;
 mod a_dead_end_names_its_closest_piece;
 mod a_destructible_file_of_another_version_is_refused;
 mod a_destructible_file_that_does_not_read_is_named;
