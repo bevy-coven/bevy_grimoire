@@ -199,6 +199,31 @@ class Steps(unittest.TestCase):
         self.assertEqual(passes.count("11"), len(self.rows))
         self.assertEqual(passes.count("12"), 1)
 
+    def test_each_pass_records_its_configuration_once(self):
+        import io
+        import time
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            env = {"WIGGUM_THINK": "high", "CARGO_BUILD_JOBS": "10"}
+            with mock.patch.dict(os.environ, env):
+                os.environ.pop("WIGGUM_MODEL", None)
+                os.environ.pop("RUST_TEST_THREADS", None)
+                since = time.time() - 600
+                steps.write_config(d, 7, since)
+                steps.write_config(d, 7, since)
+                steps.write_config(d, 8, since)
+            rows = list(steps.load_tsv(Path(d) / "config.tsv"))
+            self.assertEqual([r["pass"] for r in rows], ["7", "8"])
+            self.assertEqual({r["think"] for r in rows}, {"high"})
+            self.assertEqual(rows[0]["model"], "-")
+            self.assertTrue(599 <= float(rows[0]["seconds"]) <= 602)
+            out = io.StringIO()
+            steps.config_report(d, out)
+            lines = out.getvalue().splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("high", lines[1])
+            self.assertRegex(lines[1], r"\s2\s+10\.0\s")
+
 
 if __name__ == "__main__":
     unittest.main()
