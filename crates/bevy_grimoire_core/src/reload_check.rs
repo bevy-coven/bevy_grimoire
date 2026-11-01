@@ -77,16 +77,18 @@ fn field_of<T: DeserializeOwned>(text: &str) -> Option<String> {
     let err = serde_path_to_error::deserialize::<_, T>(&mut de).err()?;
     // A path serde_path_to_error cannot name (text that ended mid-value) prints `?` for the segment.
     let path = err.path().to_string().replace(".?", "");
-    // ron raises a missing or an unknown field at the struct, so the path ends at the struct.
-    let named = match err.inner() {
-        ron::Error::MissingStructField { field, .. } => Some(field.to_string()),
-        ron::Error::NoSuchStructField { found, .. } => Some(found.to_string()),
-        _ => None,
+    // ron raises a missing or an unknown field at the struct, so the path ends at the struct. An unknown
+    // one was refused while its key was being read, so the path already ends with it.
+    let (named, key_in_path) = match err.inner() {
+        ron::Error::MissingStructField { field, .. } => (Some(field.to_string()), false),
+        ron::Error::NoSuchStructField { found, .. } => (Some(found.to_string()), true),
+        _ => (None, false),
     };
     match (path.as_str(), named) {
         (".", None) => None,
         (".", Some(field)) => Some(field),
         (_, None) => Some(path),
+        (_, Some(field)) if key_in_path && (path == field || path.ends_with(&format!(".{field}"))) => Some(path),
         (_, Some(field)) => Some(format!("{path}.{field}")),
     }
 }

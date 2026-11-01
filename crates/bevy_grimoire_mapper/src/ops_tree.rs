@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::project::Project;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,11 +62,12 @@ impl Params {
     }
 }
 
-fn tree_path(ctx: &Ctx, name: &str) -> Result<std::path::PathBuf, Refusal> {
+/// The project and the tree file `name` is in it.
+fn tree_path<'a>(ctx: &'a Ctx, name: &str) -> Result<(&'a Project, std::path::PathBuf), Refusal> {
     let Some(project) = ctx.project.as_ref() else {
         return Err(Refusal::new("no project is open, so there is no tree file to write."));
     };
-    Ok(project.grimoire_dir.join("trees").join(format!("{name}.tree.ron")))
+    Ok((project, project.grimoire_dir.join("trees").join(format!("{name}.tree.ron"))))
 }
 
 #[cfg(feature = "bevy_flora")]
@@ -81,9 +83,11 @@ fn set_path(root: &mut serde_json::Value, path: &str, value: serde_json::Value) 
     Ok(())
 }
 
-/// **The tree file's text after this edit**, for the file as it is now.
+/// **The tree file's text after this edit**, for the file as it is now. A file that exists and does not
+/// read is refused naming the file and the field and is left as it is (#200): only `preset`, which asks
+/// for the file to start again, writes over one.
 #[cfg(feature = "bevy_flora")]
-fn edited(existing: Option<&str>, p: &Params) -> Result<String, Refusal> {
+fn edited(project: &Project, path: &std::path::Path, existing: Option<&str>, p: &Params) -> Result<String, Refusal> {
     use bevy_flora::{TreeParams, TreePreset};
     let base: TreeParams = match (&p.preset, existing) {
         (Some(name), _) => TreePreset::ALL
@@ -94,7 +98,7 @@ fn edited(existing: Option<&str>, p: &Params) -> Result<String, Refusal> {
                 Refusal::new(format!("`{name}` is not a preset. They are {}. Nothing was written.", all.join(", ")))
             })?
             .params(),
-        (None, Some(text)) => TreeParams::from_ron(text).map_err(|e| Refusal::new(format!("{e}. Nothing was written.")))?,
+        (None, Some(text)) => crate::map_files::read_text::<TreeParams>("trees", project, path, text)?,
         (None, None) => return Err(Refusal::new(format!("trees/{}.tree.ron does not exist: name a `preset` to start it.", p.name))),
     };
     let mut value = serde_json::to_value(&base).map_err(|e| Refusal::new(format!("the tree could not be read: {e}")))?;
@@ -112,11 +116,11 @@ impl TreeEdit {
     #[cfg(feature = "bevy_flora")]
     fn apply(ctx: &Ctx, params: &serde_json::Value, write: bool) -> Result<Outcome, Refusal> {
         let p = Params::parse(params)?;
-        let path = tree_path(ctx, &p.name)?;
+        let (project, path) = tree_path(ctx, &p.name)?;
         let before = std::fs::read_to_string(&path).ok();
         let text = match &p.put_back {
             Some(back) => back.text.clone(),
-            None => Some(edited(before.as_deref(), &p)?),
+            None => Some(edited(project, &path, before.as_deref(), &p)?),
         };
         if write {
             match &text {
@@ -166,7 +170,7 @@ impl Operation for TreeEdit {
     }
     fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
         let name = after.get("name")?.as_str()?;
-        Some(json!({"name": name, "text": std::fs::read_to_string(tree_path(ctx, name).ok()?).ok()}))
+        Some(json!({"name": name, "text": std::fs::read_to_string(tree_path(ctx, name).ok()?.1).ok()}))
     }
     fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
         let o = Self::apply(ctx, params, false)?;

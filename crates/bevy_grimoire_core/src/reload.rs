@@ -194,7 +194,7 @@ pub const KINDS: &[FileKind] = &[
         "The map's triggers, read when they are run; nothing holds it."),
     // ---- shared by maps ----
     kind("trees", Grimoire, "<kit>/trees/<name>.tree.ron", "TreeParams", Respawn, Global, "",
-        "A species a forest uses: the editor regrows every tree of it when the file's modification time moves."),
+        "A species a forest uses: the editor regrows every tree of it when the file's modification time moves, and a file that does not read leaves them as the last good one drew them."),
     // ---- the game root's files ----
     kind("family", Root, "family/<name>.ron", "a family crate's settings", Live, Global, "",
         "One file per family crate: the editor applies it in place, polled every 0.1 s. The game-side `GrimoireLivePlugin` does not watch `<root>/family/`."),

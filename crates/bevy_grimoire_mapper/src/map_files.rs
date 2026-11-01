@@ -1,4 +1,4 @@
-//! **A per-map file that an operation rewrites is read strictly** (#200, H3).
+//! **A file that an operation rewrites is read strictly** (#200, H3).
 //!
 //! `forest_scatter`, `person_set` and `trigger_set` read the map's file, change one row and write the
 //! whole file back. Read leniently (a file that did not parse counted as no file), one typo in a hand
@@ -17,9 +17,23 @@ use serde::de::DeserializeOwned;
 use crate::ops::Refusal;
 use crate::project::Project;
 
-/// **The registry kinds this layer reads with a named refusal**: their types live here, so
-/// `reload_check::check` in core cannot. They are on core's unchecked list and on no other.
-pub const READ_HERE: &[&str] = &["forest", "people", "scripts"];
+/// **The registry kinds this layer reads with a named refusal**: their types live here, or (`trees`) in
+/// a family crate the editor is built with, so `reload_check::check` in core cannot. They are on core's
+/// unchecked list and on no other.
+pub const READ_HERE: &[&str] = &["forest", "people", "scripts", "trees"];
+
+/// **The path of `path` as the project's directory sees it**: what a verdict and a refusal name.
+pub fn file_name(project: &Project, path: &Path) -> String {
+    path.strip_prefix(&project.project_dir).unwrap_or(path).to_string_lossy().replace('\\', "/")
+}
+
+/// **`text`, the contents of the file at `path`, as a `T`**, and a refusal that names the file and the
+/// field when it does not read.
+pub fn read_text<T: DeserializeOwned>(kind: &'static str, project: &Project, path: &Path, text: &str) -> Result<T, Refusal> {
+    reload_check::read(kind, &file_name(project, path), text).map_err(|r| {
+        Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))
+    })
+}
 
 /// **The file at `path` as a `T`**, `T::default()` when there is no file, and a refusal that names the
 /// file (as the project's directory sees it) and the field when there is one that does not read.
@@ -29,8 +43,5 @@ pub fn read_or_empty<T: DeserializeOwned + Default>(kind: &'static str, project:
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
         Err(e) => return Err(Refusal::new(format!("{} cannot be read: {e}. Nothing was changed.", path.display()))),
     };
-    let file = path.strip_prefix(&project.project_dir).unwrap_or(path).to_string_lossy().replace('\\', "/");
-    reload_check::read(kind, &file, &text).map_err(|r| {
-        Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))
-    })
+    read_text(kind, project, path, &text)
 }

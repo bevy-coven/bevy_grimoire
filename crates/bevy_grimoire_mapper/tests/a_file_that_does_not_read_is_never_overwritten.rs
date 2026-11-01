@@ -22,6 +22,8 @@ use crate::fixtures;
 struct Case {
     kind: &'static str,
     dir: &'static str,
+    /// The file's name in `dir`: a per-map file is `m.ron`, a species is `m.tree.ron`.
+    file: &'static str,
     op: &'static str,
     call: Value,
     /// A file that reads and holds a row of its own; `marker` is a string of that row.
@@ -37,6 +39,7 @@ fn cases() -> Vec<Case> {
         Case {
             kind: "people",
             dir: "people",
+            file: "m.ron",
             op: "person_set",
             call: json!({"map": "m", "name": "Ola", "at": [2.0, 2.0]}),
             good: "(people: [(name: \"Mara\", at: (1.0, 2.0))])",
@@ -50,6 +53,7 @@ fn cases() -> Vec<Case> {
         Case {
             kind: "scripts",
             dir: "scripts",
+            file: "m.ron",
             op: "trigger_set",
             call: json!({"map": "m", "id": "t", "on": "Activity(\"work\")", "then": "let x = 1;"}),
             good: "(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\", then: \"let x = 1;\")])",
@@ -65,6 +69,7 @@ fn cases() -> Vec<Case> {
     cases.push(Case {
         kind: "forest",
         dir: "forest",
+        file: "m.ron",
         op: "forest_scatter",
         call: json!({"map": "m", "plant": {"points": [[0.0, 0.0], [12.0, 0.0]], "radius_m": 4.0, "spacing_m": 3.0, "seed": 3, "species": [{"name": "oak", "weight": 1.0}]}}),
         good: "(trees: [])",
@@ -73,6 +78,23 @@ fn cases() -> Vec<Case> {
             ("corrupt", "(trees: [(id: 1, species: \"oak\"", None),
             ("wrong type", "(trees: \"none\")", Some("trees")),
             ("missing field", "(trees: [(id: 1)])", Some("trees[0].")),
+        ],
+    });
+    // Every field of a tree file has a default, so none can be missing: the third way to break it is
+    // a field the crate does not know, which ron names.
+    #[cfg(feature = "bevy_flora")]
+    cases.push(Case {
+        kind: "trees",
+        dir: "trees",
+        file: "m.tree.ron",
+        op: "tree_edit",
+        call: json!({"name": "m", "set": {"seed": 9}}),
+        good: "(seed: 5)",
+        marker: None,
+        bad: [
+            ("corrupt", "(seed: 5", None),
+            ("wrong type", "(seed: \"five\")", Some("seed")),
+            ("unknown field", "(sed: 5)", Some("sed")),
         ],
     });
     cases
@@ -92,7 +114,7 @@ fn open(tag: &str) -> (Ctx, Project) {
 fn put(project: &Project, case: &Case, text: &str) -> std::path::PathBuf {
     let dir = project.grimoire_dir.join(case.dir);
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{dir:?}: {e}"));
-    let path = dir.join("m.ron");
+    let path = dir.join(case.file);
     std::fs::write(&path, text).unwrap_or_else(|e| panic!("{path:?}: {e}"));
     path
 }
@@ -104,7 +126,7 @@ fn a_file_that_does_not_read_refuses_the_operation_and_stays_as_it_was() {
         for (what, text, field) in case.bad {
             let path = put(&project, &case, text);
             let refusal = ops::dispatch(&mut ctx, case.op, &case.call).expect_err(&format!("{} file, {what}: the call must be refused", case.kind)).0;
-            assert!(refusal.contains(&format!("{}/m.ron", case.dir)), "{} {what}: the refusal names the file: {refusal}", case.kind);
+            assert!(refusal.contains(&format!("{}/{}", case.dir, case.file)), "{} {what}: the refusal names the file: {refusal}", case.kind);
             if let Some(field) = field {
                 assert!(refusal.contains(field), "{} {what}: the refusal names the field `{field}`: {refusal}", case.kind);
             }
@@ -139,7 +161,7 @@ fn once_the_file_is_fixed_the_same_call_applies_and_keeps_the_rows_that_were_the
 fn the_cases_are_exactly_the_kinds_read_here() {
     let mut tested: Vec<&str> = cases().iter().map(|c| c.kind).collect();
     tested.sort_unstable();
-    let mut read: Vec<&str> = READ_HERE.iter().copied().filter(|k| cfg!(feature = "bevy_flora") || *k != "forest").collect();
+    let mut read: Vec<&str> = READ_HERE.iter().copied().filter(|k| cfg!(feature = "bevy_flora") || !matches!(*k, "forest" | "trees")).collect();
     read.sort_unstable();
     assert_eq!(tested, read, "a kind in `map_files::READ_HERE` needs its three cases here, and a case needs the kind there");
 }
@@ -148,10 +170,10 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 /// `tests/reload_verdicts.rs`'s `UNCHECKED`; the three kinds this layer reads are off it here. A kind
 /// comes off when its type gains a reader that names the file and the field; none joins unseen.
 const STILL_UNCHECKED: &[&str] =
-    &["checks", "oplog", "reference_images", "trees", "family", "destructible_marks", "destructible_bake", "game_data"];
+    &["checks", "oplog", "reference_images", "family", "destructible_marks", "destructible_bake", "game_data"];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 8;
+const STILL_UNCHECKED_MAX: usize = 7;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {
