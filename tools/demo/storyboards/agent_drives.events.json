@@ -1,321 +1,481 @@
 {
  "name": "agent_drives",
- "fps": 10,
- "scale": 2,
+ "fps": 15,
+ "scale": 1,
  "crop": [
-  0,
-  0,
-  1280,
-  703
+  440,
+  64,
+  980,
+  690
  ],
- "width": 1200,
+ "width": 600,
  "title": null,
  "frames": [
   {
-   "t": 0.049,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f000_t0.00s.png"
+   "t": 0.042,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_0/f000_t0.00s.png"
   },
   {
-   "t": 0.124,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f001_t0.10s.png"
+   "t": 0.097,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_0/f001_t0.07s.png"
   },
   {
-   "t": 0.237,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f002_t0.20s.png"
+   "t": 0.153,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_0/f002_t0.13s.png"
   },
   {
-   "t": 0.326,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f003_t0.30s.png"
+   "t": 0.238,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_0/f003_t0.20s.png"
   },
   {
-   "t": 0.596,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f000_t0.00s.png"
+   "t": 0.297,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_0/f004_t0.27s.png"
   },
   {
-   "t": 0.709,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f001_t0.10s.png"
+   "t": 0.354,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_0/f005_t0.33s.png"
   },
   {
-   "t": 0.817,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f002_t0.20s.png"
+   "t": 0.585,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_1/f000_t0.00s.png"
   },
   {
-   "t": 0.879,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f003_t0.30s.png"
+   "t": 0.639,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_1/f001_t0.07s.png"
   },
   {
-   "t": 1.286,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f000_t0.00s.png"
+   "t": 0.694,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_1/f002_t0.13s.png"
   },
   {
-   "t": 1.394,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f001_t0.10s.png"
+   "t": 0.776,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_1/f003_t0.20s.png"
   },
   {
-   "t": 1.494,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f002_t0.20s.png"
+   "t": 0.83,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_1/f004_t0.27s.png"
   },
   {
-   "t": 1.6,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f003_t0.30s.png"
+   "t": 0.911,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_1/f005_t0.33s.png"
   },
   {
-   "t": 1.904,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f000_t0.00s.png"
+   "t": 1.118,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_2/f000_t0.00s.png"
   },
   {
-   "t": 1.988,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f001_t0.10s.png"
+   "t": 1.175,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_2/f001_t0.07s.png"
   },
   {
-   "t": 2.1,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f002_t0.20s.png"
+   "t": 1.233,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_2/f002_t0.13s.png"
   },
   {
-   "t": 2.191,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f003_t0.30s.png"
+   "t": 1.292,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_2/f003_t0.20s.png"
   },
   {
-   "t": 2.357,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f004_t0.40s.png"
+   "t": 1.38,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_2/f004_t0.27s.png"
   },
   {
-   "t": 2.393,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f005_t0.50s.png"
+   "t": 1.436,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_2/f005_t0.33s.png"
   },
   {
-   "t": 2.508,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f006_t0.60s.png"
+   "t": 1.684,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f000_t0.00s.png"
   },
   {
-   "t": 2.597,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f007_t0.70s.png"
+   "t": 1.739,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f001_t0.07s.png"
   },
   {
-   "t": 2.694,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f008_t0.80s.png"
+   "t": 1.793,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f002_t0.13s.png"
   },
   {
-   "t": 2.782,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f009_t0.90s.png"
+   "t": 1.875,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f003_t0.20s.png"
   },
   {
-   "t": 2.925,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f010_t1.00s.png"
+   "t": 1.931,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f004_t0.27s.png"
   },
   {
-   "t": 3.024,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f011_t1.10s.png"
+   "t": 2.014,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f005_t0.33s.png"
   },
   {
-   "t": 3.084,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f012_t1.20s.png"
+   "t": 2.071,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f006_t0.40s.png"
   },
   {
-   "t": 3.24,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f013_t1.30s.png"
+   "t": 2.126,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f007_t0.47s.png"
   },
   {
-   "t": 3.292,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f014_t1.40s.png"
+   "t": 2.208,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f008_t0.53s.png"
   },
   {
-   "t": 3.416,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f015_t1.50s.png"
+   "t": 2.262,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f009_t0.60s.png"
   },
   {
-   "t": 3.513,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f016_t1.60s.png"
+   "t": 2.343,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f010_t0.67s.png"
   },
   {
-   "t": 3.585,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f017_t1.70s.png"
+   "t": 2.398,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f011_t0.73s.png"
   },
   {
-   "t": 3.688,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f018_t1.80s.png"
+   "t": 2.479,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f012_t0.80s.png"
   },
   {
-   "t": 3.806,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f019_t1.90s.png"
+   "t": 2.533,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f013_t0.87s.png"
   },
   {
-   "t": 3.916,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f020_t2.00s.png"
+   "t": 2.615,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f014_t0.93s.png"
   },
   {
-   "t": 4.003,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f021_t2.10s.png"
+   "t": 2.669,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f015_t1.00s.png"
   },
   {
-   "t": 4.118,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f022_t2.20s.png"
+   "t": 2.749,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f016_t1.07s.png"
   },
   {
-   "t": 4.22,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f023_t2.30s.png"
+   "t": 2.806,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f017_t1.13s.png"
   },
   {
-   "t": 4.336,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f024_t2.40s.png"
+   "t": 2.862,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f018_t1.20s.png"
   },
   {
-   "t": 4.431,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f025_t2.50s.png"
+   "t": 2.943,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f019_t1.27s.png"
   },
   {
-   "t": 4.491,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f026_t2.60s.png"
+   "t": 2.998,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f020_t1.33s.png"
   },
   {
-   "t": 4.615,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f027_t2.70s.png"
+   "t": 3.081,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f021_t1.40s.png"
   },
   {
-   "t": 4.703,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f028_t2.80s.png"
+   "t": 3.137,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f022_t1.47s.png"
   },
   {
-   "t": 4.805,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f029_t2.90s.png"
+   "t": 3.19,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f023_t1.53s.png"
   },
   {
-   "t": 4.912,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f030_t3.00s.png"
+   "t": 3.271,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f024_t1.60s.png"
   },
   {
-   "t": 4.983,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f031_t3.10s.png"
+   "t": 3.325,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f025_t1.67s.png"
   },
   {
-   "t": 5.117,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f032_t3.20s.png"
+   "t": 3.406,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f026_t1.73s.png"
   },
   {
-   "t": 5.239,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f033_t3.30s.png"
+   "t": 3.46,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f027_t1.80s.png"
   },
   {
-   "t": 5.315,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f034_t3.40s.png"
+   "t": 3.542,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f028_t1.87s.png"
   },
   {
-   "t": 5.455,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f035_t3.50s.png"
+   "t": 3.596,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f029_t1.93s.png"
   },
   {
-   "t": 5.496,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f036_t3.60s.png"
+   "t": 3.677,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f030_t2.00s.png"
   },
   {
-   "t": 5.64,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f037_t3.70s.png"
+   "t": 3.731,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f031_t2.07s.png"
   },
   {
-   "t": 5.753,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f038_t3.80s.png"
+   "t": 3.811,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f032_t2.13s.png"
   },
   {
-   "t": 5.82,
-   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f039_t3.90s.png"
+   "t": 3.864,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f033_t2.20s.png"
+  },
+  {
+   "t": 3.946,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f034_t2.27s.png"
+  },
+  {
+   "t": 3.999,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f035_t2.33s.png"
+  },
+  {
+   "t": 4.081,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f036_t2.40s.png"
+  },
+  {
+   "t": 4.135,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f037_t2.47s.png"
+  },
+  {
+   "t": 4.217,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f038_t2.53s.png"
+  },
+  {
+   "t": 4.27,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f039_t2.60s.png"
+  },
+  {
+   "t": 4.327,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f040_t2.67s.png"
+  },
+  {
+   "t": 4.41,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f041_t2.73s.png"
+  },
+  {
+   "t": 4.463,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f042_t2.80s.png"
+  },
+  {
+   "t": 4.544,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f043_t2.87s.png"
+  },
+  {
+   "t": 4.598,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f044_t2.93s.png"
+  },
+  {
+   "t": 4.678,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f045_t3.00s.png"
+  },
+  {
+   "t": 4.732,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f046_t3.07s.png"
+  },
+  {
+   "t": 4.813,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f047_t3.13s.png"
+  },
+  {
+   "t": 4.867,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f048_t3.20s.png"
+  },
+  {
+   "t": 4.95,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f049_t3.27s.png"
+  },
+  {
+   "t": 5.009,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f050_t3.33s.png"
+  },
+  {
+   "t": 5.067,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f051_t3.40s.png"
+  },
+  {
+   "t": 5.127,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f052_t3.47s.png"
+  },
+  {
+   "t": 5.217,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f053_t3.53s.png"
+  },
+  {
+   "t": 5.277,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f054_t3.60s.png"
+  },
+  {
+   "t": 5.337,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f055_t3.67s.png"
+  },
+  {
+   "t": 5.395,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f056_t3.73s.png"
+  },
+  {
+   "t": 5.457,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f057_t3.80s.png"
+  },
+  {
+   "t": 5.546,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f058_t3.87s.png"
+  },
+  {
+   "t": 5.606,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_drives_3/f059_t3.93s.png"
   }
  ],
  "chunks": [
   {
    "index": 0,
    "label": "demo_agent_drives_0",
-   "start": 0.022,
+   "start": 0.015,
    "operation_applied_t_s": null,
    "operation_result": null,
    "planned_s": 0.4,
-   "captured_s": 0.304
+   "captured_s": 0.339
   },
   {
    "index": 1,
    "label": "demo_agent_drives_1",
-   "start": 0.565,
-   "operation_applied_t_s": 0.0545654296875,
+   "start": 0.557,
+   "operation_applied_t_s": 0.05451202392578125,
    "operation_result": {
+    "checks": {
+     "clearances_in_the_way": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "doorways_in_the_way": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "edge_faults": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "overlaps": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     }
+    },
     "outcome": "applied",
     "saved": true,
-    "summary": "turned abbey to 90 deg",
+    "summary": "removed bed",
     "waiting_on": null
    },
    "planned_s": 0.4,
-   "captured_s": 0.314
+   "captured_s": 0.354
   },
   {
    "index": 2,
    "label": "demo_agent_drives_2",
-   "start": 1.257,
-   "operation_applied_t_s": 0.05457496643066406,
+   "start": 1.09,
+   "operation_applied_t_s": 0.05563926696777344,
    "operation_result": {
+    "checks": {
+     "clearances_in_the_way": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "doorways_in_the_way": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "edge_faults": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "overlaps": {
+      "new": [
+       {
+        "a": "coffee_table",
+        "b": "sofa"
+       }
+      ],
+      "new_total": 1,
+      "total": 1
+     }
+    },
     "outcome": "applied",
     "saved": true,
-    "summary": "removed abbey_table and 3 on it",
+    "summary": "turned sofa to 90 deg",
     "waiting_on": null
    },
    "planned_s": 0.4,
-   "captured_s": 0.343
+   "captured_s": 0.346
   },
   {
    "index": 3,
    "label": "demo_agent_drives_3",
-   "start": 1.88,
+   "start": 1.656,
    "operation_applied_t_s": null,
    "operation_result": null,
    "planned_s": 4.0,
-   "captured_s": 3.941
+   "captured_s": 3.95
   }
  ],
  "events": [
   {
-   "t": 0.049,
-   "type": "caption",
-   "text": "agent: grimoire_frame_view placements abbey, well (71 x 52 m), before recording",
-   "t_stamp": 0.022142041940242052
+   "t": 0.042,
+   "type": "cursor",
+   "x": 200,
+   "y": 400,
+   "t_stamp": 0.04190311802085489
   },
   {
-   "t": 0.709,
+   "t": 0.042,
    "type": "caption",
-   "text": "agent: grimoire_apply_operation placement_set_yaw abbey, yaw 90",
-   "t_stamp": 0.6156515829497948
+   "text": "agent: grimoire_frame_view frames the middle of the bedroom, before recording",
+   "t_stamp": 0.04192185803549364
   },
   {
-   "t": 1.394,
+   "t": 0.639,
    "type": "caption",
-   "text": "agent: grimoire_apply_operation placement_remove abbey_table (and the items on it)",
-   "t_stamp": 1.308771749958396
+   "text": "agent: grimoire_apply_operation placement_remove bed",
+   "t_stamp": 0.6070265200105496
   },
   {
-   "t": 2.191,
+   "t": 1.175,
+   "type": "caption",
+   "text": "agent: grimoire_apply_operation placement_set_yaw sofa, yaw 90",
+   "t_stamp": 1.1403696730267256
+  },
+  {
+   "t": 1.931,
    "type": "key",
    "keys": [
-    "SuperLeft",
+    "ControlLeft",
     "KeyZ"
    ],
-   "t_stamp": 2.1766173749929294
+   "t_stamp": 1.9111172810080461
   },
   {
-   "t": 2.357,
+   "t": 2.014,
    "type": "caption",
-   "text": "person: \u2318Z takes back the newest change, the agent's removal",
-   "t_stamp": 2.2521403749706224
+   "text": "person: Ctrl+Z takes back the newest change, the turn of the sofa",
+   "t_stamp": 1.9591156130190939
   },
   {
-   "t": 3.24,
+   "t": 2.943,
    "type": "key",
    "keys": [
-    "SuperLeft",
+    "ControlLeft",
     "KeyZ"
    ],
-   "t_stamp": 3.1578224999830127
+   "t_stamp": 2.925198396027554
   },
   {
-   "t": 3.292,
+   "t": 2.998,
    "type": "caption",
-   "text": "person: \u2318Z takes back the yaw turn",
-   "t_stamp": 3.2735438329400495
+   "text": "person: Ctrl+Z takes back the removal, and the bed is back",
+   "t_stamp": 2.979974146990571
   }
  ]
 }

@@ -171,7 +171,7 @@ Goal: have an agent find unchecked labels and set them.
 
 The agent uses three operations and one read. It calls them through `grimoire_apply_operation`, which takes `operation`, `parameters` and `dry_run`. On this tool `dry_run` defaults to `false`; set it to `true` to preview a change without making it.
 
-![An agent lists the pieces a model labelled, the editor crosses to the kit door's Meshes panel, the arrow keys walk the piece list, and the labels row reads confidence high · model file · date.](../media/review-labels.gif)
+![An agent lists the pieces a model labelled, the editor crosses to the kit door's Meshes panel, the arrow keys walk the piece list, and the labels row reads confidence high · the model · date.](../media/review-labels.gif)
 
 Steps:
 

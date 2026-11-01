@@ -1,194 +1,201 @@
 {
  "name": "move_the_camera",
  "fps": 8,
- "scale": 2,
+ "scale": 1,
  "crop": [
-  470,
+  440,
   64,
-  950,
+  980,
   690
  ],
  "width": 600,
  "title": null,
  "frames": [
   {
-   "t": 0.061,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f000_t0.00s.png"
+   "t": 0.044,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f000_t0.00s.png"
   },
   {
-   "t": 0.184,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f001_t0.12s.png"
+   "t": 0.145,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f001_t0.12s.png"
   },
   {
-   "t": 0.281,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f002_t0.25s.png"
+   "t": 0.28,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f002_t0.25s.png"
   },
   {
-   "t": 0.411,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f003_t0.38s.png"
+   "t": 0.416,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f003_t0.38s.png"
   },
   {
-   "t": 0.539,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f004_t0.50s.png"
+   "t": 0.517,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f004_t0.50s.png"
   },
   {
-   "t": 0.671,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f005_t0.62s.png"
+   "t": 0.654,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f005_t0.62s.png"
   },
   {
-   "t": 0.795,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f006_t0.75s.png"
+   "t": 0.789,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f006_t0.75s.png"
   },
   {
-   "t": 0.922,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f007_t0.88s.png"
+   "t": 0.891,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f007_t0.88s.png"
   },
   {
-   "t": 1.048,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f008_t1.00s.png"
+   "t": 1.027,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f008_t1.00s.png"
   },
   {
-   "t": 1.179,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f009_t1.12s.png"
+   "t": 1.161,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f009_t1.12s.png"
   },
   {
-   "t": 1.286,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f010_t1.25s.png"
+   "t": 1.264,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f010_t1.25s.png"
   },
   {
-   "t": 1.419,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f011_t1.38s.png"
+   "t": 1.399,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f011_t1.38s.png"
   },
   {
-   "t": 1.546,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f012_t1.50s.png"
+   "t": 1.535,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f012_t1.50s.png"
   },
   {
-   "t": 1.673,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f013_t1.62s.png"
+   "t": 1.636,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f013_t1.62s.png"
   },
   {
-   "t": 1.798,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f014_t1.75s.png"
+   "t": 1.771,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f014_t1.75s.png"
   },
   {
-   "t": 1.913,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f015_t1.88s.png"
+   "t": 1.908,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f015_t1.88s.png"
   },
   {
-   "t": 2.04,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f016_t2.00s.png"
+   "t": 2.012,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f016_t2.00s.png"
   },
   {
-   "t": 2.166,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f017_t2.12s.png"
+   "t": 2.15,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f017_t2.12s.png"
   },
   {
-   "t": 2.29,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f018_t2.25s.png"
+   "t": 2.286,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f018_t2.25s.png"
   },
   {
-   "t": 2.416,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f019_t2.38s.png"
+   "t": 2.388,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f019_t2.38s.png"
   },
   {
-   "t": 2.542,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f020_t2.50s.png"
+   "t": 2.524,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f020_t2.50s.png"
   },
   {
-   "t": 2.668,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f021_t2.62s.png"
+   "t": 2.66,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f021_t2.62s.png"
   },
   {
-   "t": 2.794,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f022_t2.75s.png"
+   "t": 2.762,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f022_t2.75s.png"
   },
   {
-   "t": 2.921,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f023_t2.88s.png"
+   "t": 2.897,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f023_t2.88s.png"
   },
   {
-   "t": 3.044,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f024_t3.00s.png"
+   "t": 3.033,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f024_t3.00s.png"
   },
   {
-   "t": 3.17,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f025_t3.12s.png"
+   "t": 3.168,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f025_t3.12s.png"
   },
   {
-   "t": 3.284,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f026_t3.25s.png"
+   "t": 3.27,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f026_t3.25s.png"
   },
   {
-   "t": 3.427,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f027_t3.38s.png"
+   "t": 3.405,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f027_t3.38s.png"
   },
   {
-   "t": 3.532,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f028_t3.50s.png"
+   "t": 3.54,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f028_t3.50s.png"
   },
   {
-   "t": 3.675,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f029_t3.62s.png"
+   "t": 3.642,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f029_t3.62s.png"
   },
   {
-   "t": 3.805,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f030_t3.75s.png"
+   "t": 3.778,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f030_t3.75s.png"
   },
   {
-   "t": 3.922,
-   "path": "/tmp/cycle7/c7pan_proj/target/loop/captures/demo_move_the_camera_0/f031_t3.88s.png"
+   "t": 3.914,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_move_the_camera_0/f031_t3.88s.png"
   }
  ],
  "chunks": [
   {
    "index": 0,
    "label": "demo_move_the_camera_0",
-   "start": 0.031,
+   "start": 0.01,
    "operation_applied_t_s": null,
    "operation_result": null,
    "planned_s": 4.0,
-   "captured_s": 3.891
+   "captured_s": 3.904
   }
  ],
  "events": [
   {
-   "t": 0.539,
+   "t": 0.044,
+   "type": "cursor",
+   "x": 200,
+   "y": 400,
+   "t_stamp": 0.04299786896444857
+  },
+  {
+   "t": 0.416,
    "type": "caption",
    "text": "person: taps A and D to pan left and right",
-   "t_stamp": 0.4359952500090003
+   "t_stamp": 0.41014211997389793
   },
   {
-   "t": 0.922,
+   "t": 0.891,
    "type": "key",
    "keys": [
     "KeyD"
    ],
-   "t_stamp": 0.8660926250158809
+   "t_stamp": 0.8220813549705781
   },
   {
-   "t": 1.546,
+   "t": 1.636,
    "type": "key",
    "keys": [
     "KeyA"
    ],
-   "t_stamp": 1.5427530420129187
+   "t_stamp": 1.5422016509692185
   },
   {
-   "t": 2.29,
+   "t": 2.286,
    "type": "key",
    "keys": [
     "KeyD"
    ],
-   "t_stamp": 2.2542299579945393
+   "t_stamp": 2.2161811999976635
   },
   {
-   "t": 3.044,
+   "t": 3.033,
    "type": "key",
    "keys": [
     "KeyA"
    ],
-   "t_stamp": 2.988525708031375
+   "t_stamp": 2.930429974978324
   }
  ]
 }

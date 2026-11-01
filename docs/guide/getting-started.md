@@ -4,7 +4,7 @@ In about ten minutes you will make a map in this repo's own project, place a pie
 
 You need a Rust toolchain and a clone of this repo. Run every command from the repo root.
 
-![Placing a piece on the map, then undoing it with Cmd+Z](../media/place-and-undo.gif)
+![Placing a sofa on the bedroom map, then undoing it with Ctrl+Z (Cmd+Z on a Mac)](../media/place-and-undo.gif)
 
 ## Start the editor
 
@@ -20,13 +20,13 @@ The menu has three columns: PROJECTS, KITS and MAPS. Three panels sit under them
 
 The KITS column is selected first, on the first kit in the list. In this repo that is `furniture`, the kit that new work lands in. KIT INFO shows `pieces 90` and `new work lands here yes`. Other kits can be empty: `scp` shows 0 pieces.
 
-A **kit** is a folder of pieces. A **piece** is one thing you can place on a map, such as a wall, a table, or a gate house.
+A **kit** is a folder of pieces. A **piece** is one thing you can place on a map, such as a wall, a table, or a sofa.
 
 ## Make a map
 
 A **map** is a file that holds your placements. It is saved as `<name>.map.ron` in the project's maps folder.
 
-1. Press Right. The MAPS column is selected. Its only row is `+ new map`. The hint bar reads `up/down map · left/right column · Enter new map · Esc quit`.
+1. Press Right. The MAPS column is selected. Its first row is `+ new map`, and below it is `bedroom`, a one-room map that ships with this repo (Enter on it opens it). The hint bar reads `up/down map · left/right column · Enter new map · Esc quit`.
 2. Press `N`. A form titled `NEW MAP IN furniture` opens in the panel under MAPS. It has four fields: NAME, BOUNDS, ORIGIN and NOTE. NAME is blank, BOUNDS is `10 x 4 x 10` and ORIGIN is `0 x 0 x 0`. The hint reads `type · Enter makes the map · Esc cancel`. Enter on `+ new map` also starts the name prompt.
 3. Type `first_map`. Use lowercase letters, digits and underscores. Start with a letter.
 4. Press Enter. The map `first_map` is made **and opens in the editor**, in that one press.

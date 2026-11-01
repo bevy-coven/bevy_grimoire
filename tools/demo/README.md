@@ -6,7 +6,8 @@ Dev-only. These scripts make the GIFs in `docs/media/`. They are not part of any
 
 - `record.py` runs a storyboard against a running editor. It sends the person's keys, clicks and drags over `bevy_fairy/input`, sends agent operations through the MCP server, and captures frames with the editor's own `grimoire_capture_sequence`. It writes `<project>/target/loop/demo/<name>/events.json`.
 - `render.py` turns that timeline into a GIF, with captions, keycaps and a cursor. It can also write a contact sheet and full-size stills.
-- `storyboards/*.json` are the five demos: `hero`, `place_and_undo`, `agent_removes_then_undo`, `frame_the_map` and `move_the_camera`.
+- `storyboards/*.json` are the demos. Eight are the standing ones in `docs/media/`: `hero`, `agent_drives`, `agent_removes_then_undo`, `place_and_undo`, `build_a_map`, `frame_the_map`, `move_the_camera` and `review_labels`. Each aims at the `bedroom` map in this repository's own `assets/grimoire/maps/`, so none needs a game's project; the others record one changelog clip each.
+- `check.py` measures a rendered GIF (every change moment changes at least 5% of the scene, no static run over 1.5 s) and `stale.py` says which standing demos a later visible change has left behind. A storyboard presses Ctrl+Z, which is the editor's undo on Linux and Windows (Cmd+Z on a Mac).
 
 ## Run
 
@@ -14,7 +15,7 @@ Start the editor on the project first, from its own shell. `record.py` never lau
 
 ```sh
 cd /path/to/project
-BEVY_BRP_PORT=15710 /path/to/bevy_cauldron . town > editor.log 2>&1
+BEVY_BRP_PORT=15710 /path/to/bevy_cauldron . bedroom > editor.log 2>&1
 ```
 
 Record a storyboard against it:

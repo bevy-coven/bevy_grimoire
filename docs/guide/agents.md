@@ -32,26 +32,26 @@ If it goes wrong: a refusal that says no editor answered means the editor is not
 
 ## A worked session
 
-Goal: remove a piece that blocks a gate, and undo the removal if you change your mind.
+Goal: remove a piece that is in the way, and undo the removal if you change your mind.
 
-Say to the agent what you see. For example: "The abbey blocks the gate. Take it out." The agent then does the following.
+Say to the agent what you see. For example: "The bed is in the way. Take it out." The agent then does the following.
 
-1. It calls `grimoire_state` to read the open map and the placements. The answer gives the abbey's id.
-2. It calls `grimoire_capture_still` to see the gate before the change.
-3. It calls `grimoire_preview_operation` with `operation: "placement_remove"` and `parameters: {"id": "<the abbey's id>"}`. The answer says what would change. Nothing changes yet.
+1. It calls `grimoire_state` to read the open map and the placements. The answer gives the bed's id.
+2. It calls `grimoire_capture_still` to see the room before the change.
+3. It calls `grimoire_preview_operation` with `operation: "placement_remove"` and `parameters: {"id": "<the bed's id>"}`. The answer says what would change. Nothing changes yet.
 4. It calls `grimoire_apply_operation` with the same operation and parameters. The answer carries an `operation_id`.
-5. It calls `grimoire_capture_still` again. The gate is clear.
-6. You press Cmd+Z in the editor. The abbey comes back. `grimoire_read_oplog` shows the undo as a new line.
+5. It calls `grimoire_capture_still` again. The bed is gone.
+6. You press Cmd+Z in the editor. The bed comes back. `grimoire_read_oplog` shows the undo as a new line.
 
 To turn a placement instead of removing it, use `placement_set_yaw` with `id` and `yaw`. Yaw wraps to 0 to 360, so `-15` is `345`. To lay it on its side, use `placement_set_tip` with `id` and `tip`, two quarter-turn counts (about X, then Z) from 0 to 3; `[0, 0]` is upright. To raise a lamp off its table, use `placement_set_lift` with `id` and `lift` in metres; `0` puts it back. To set the turn and the tip in one change, use `placement_set_pose` with `id`, `yaw` and `tip`; `0` and `[0, 0]` stand it straight, as `V` does.
 
-![The whole editor window: the agent turns the abbey with placement_set_yaw and removes its table with placement_remove; the inspector's LAST line and history list name each change as the agent's; two Cmd+Z presses take both back](../media/agent-drives.gif)
+![The 3D view of the bedroom map: the agent removes the bed with placement_remove and turns the sofa with placement_set_yaw; two Ctrl+Z presses take both back, the newest first](../media/agent-drives.gif)
 
-The inspector on the left shows the same thing you would read in the tool answers: LAST names the newest change, UNDO names what Cmd+Z takes back next, and the history list marks the agent's changes with `agent`.
+The inspector on the left (outside the clips' frame) shows the same thing you would read in the tool answers: LAST names the newest change, UNDO names what Cmd+Z takes back next, and the history list marks the agent's changes with `agent`.
 
-![An agent removes the abbey with placement_remove, and the person's Cmd+Z puts it back.](../media/agent-removes-then-undo.gif)
+![An agent removes the bed with placement_remove, and the person's Ctrl+Z puts it back.](../media/agent-removes-then-undo.gif)
 
-What you see: after step 4 the abbey is gone from the map and the gate is open. After your Cmd+Z the abbey stands on the gate again, and the operation log has one new undo line.
+What you see: after step 4 the bed is gone from the map. After your Cmd+Z the bed stands where it was, and the operation log has one new undo line.
 
 If it goes wrong: `placement_remove` takes away any piece standing on the placement too, so check the still in step 2 before you apply.
 
@@ -117,7 +117,7 @@ A snip that is confirmed but not yet written is pending. The editor clears pendi
 
 `grimoire_decide` can look at the running game as well as the editor. `play` starts the game, which carries `bevy_fairy`. Give `grimoire_decide` `game: {}` and it takes one frame through the game's own `bevy_fairy`, named `game`, on the port in the project's `play.ron` (or `game: {port: 15990}`), and sends it with the question. `game: {state: {method: "world.query", params: {...}}}` also makes one BRP call to the game and puts its answer in the facts under `game`. A named check that asks for the image `game` takes the frame by itself, so `{check: "hud_readable"}` is enough. A game's checks are the game's own: write them in the project's `assets/grimoire/checks.ron` with `images: ["game"]`, and the editor's built-in checks do not change. A game that is not running is refused naming the port, and a check is never answered from less.
 
-![The person snips a box over a wall and writes a note; the agent reads the snip and turns the wall; the person's Cmd+Z takes the turn back.](../media/hero.gif)
+![The person presses Ctrl+\ and drags a snip box round the bed, writing the note "remove the bed"; the agent reads the snip and removes the bed with placement_remove; the person's Ctrl+Z takes the removal back.](../media/hero.gif)
 
 The state read has its own paging. `grimoire_state` takes `pinned_from` to page the list of pins, and returns `pinned_next` when more follow. It also reports `undo_next`, `undo_depth`, `redo_next`, `redo_depth`, `leaving`, and `door_waiting`.
 

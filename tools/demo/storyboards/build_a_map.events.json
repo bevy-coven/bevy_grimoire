@@ -1,599 +1,419 @@
 {
  "name": "build_a_map",
  "fps": 10,
- "scale": 2,
+ "scale": 1,
  "crop": [
-  0,
-  0,
-  1280,
-  703
+  440,
+  64,
+  1270,
+  690
  ],
- "width": 1200,
+ "width": 760,
  "title": null,
  "frames": [
   {
-   "t": 0.104,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f000_t0.00s.png"
+   "t": 0.09,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f000_t0.00s.png"
   },
   {
-   "t": 0.177,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f001_t0.10s.png"
+   "t": 0.168,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f001_t0.10s.png"
   },
   {
-   "t": 0.341,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f002_t0.20s.png"
+   "t": 0.276,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f002_t0.20s.png"
   },
   {
-   "t": 0.379,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f003_t0.30s.png"
+   "t": 0.383,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f003_t0.30s.png"
   },
   {
-   "t": 0.476,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f004_t0.40s.png"
+   "t": 0.486,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f004_t0.40s.png"
   },
   {
-   "t": 0.645,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f005_t0.50s.png"
+   "t": 0.557,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f005_t0.50s.png"
   },
   {
-   "t": 0.732,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f006_t0.60s.png"
+   "t": 0.663,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f006_t0.60s.png"
   },
   {
-   "t": 0.982,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f007_t0.70s.png"
+   "t": 0.77,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f007_t0.70s.png"
   },
   {
-   "t": 1.232,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f008_t0.80s.png"
+   "t": 0.878,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f008_t0.80s.png"
   },
   {
-   "t": 1.262,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f009_t0.90s.png"
+   "t": 0.98,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f009_t0.90s.png"
   },
   {
-   "t": 1.714,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f010_t1.00s.png"
+   "t": 1.083,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f010_t1.00s.png"
   },
   {
-   "t": 1.785,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f011_t1.10s.png"
+   "t": 1.185,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f011_t1.10s.png"
   },
   {
-   "t": 2.035,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f012_t1.20s.png"
+   "t": 1.254,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f012_t1.20s.png"
   },
   {
-   "t": 2.285,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f013_t1.30s.png"
+   "t": 1.357,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f013_t1.30s.png"
   },
   {
-   "t": 2.327,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f014_t1.40s.png"
+   "t": 1.461,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f014_t1.40s.png"
   },
   {
-   "t": 2.827,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f015_t1.50s.png"
+   "t": 1.566,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f015_t1.50s.png"
   },
   {
-   "t": 2.895,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f016_t1.60s.png"
+   "t": 1.668,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f016_t1.60s.png"
   },
   {
-   "t": 3.145,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f017_t1.70s.png"
+   "t": 1.773,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f017_t1.70s.png"
   },
   {
-   "t": 3.395,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f018_t1.80s.png"
+   "t": 1.878,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f018_t1.80s.png"
   },
   {
-   "t": 3.429,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f019_t1.90s.png"
+   "t": 1.984,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f019_t1.90s.png"
   },
   {
-   "t": 3.926,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f020_t2.00s.png"
+   "t": 2.055,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f020_t2.00s.png"
   },
   {
-   "t": 3.994,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f021_t2.10s.png"
+   "t": 2.164,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f021_t2.10s.png"
   },
   {
-   "t": 4.098,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f022_t2.20s.png"
+   "t": 2.27,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f022_t2.20s.png"
   },
   {
-   "t": 4.179,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f023_t2.30s.png"
+   "t": 2.376,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f023_t2.30s.png"
   },
   {
-   "t": 4.238,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f024_t2.40s.png"
+   "t": 2.485,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f024_t2.40s.png"
   },
   {
-   "t": 4.324,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f025_t2.50s.png"
+   "t": 2.557,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f025_t2.50s.png"
   },
   {
-   "t": 4.408,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f026_t2.60s.png"
+   "t": 2.663,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f026_t2.60s.png"
   },
   {
-   "t": 4.505,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f027_t2.70s.png"
+   "t": 2.768,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f027_t2.70s.png"
   },
   {
-   "t": 4.585,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f028_t2.80s.png"
+   "t": 2.877,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f028_t2.80s.png"
   },
   {
-   "t": 4.663,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f029_t2.90s.png"
+   "t": 2.985,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f029_t2.90s.png"
   },
   {
-   "t": 4.735,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f030_t3.00s.png"
+   "t": 3.057,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f030_t3.00s.png"
   },
   {
-   "t": 4.82,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f031_t3.10s.png"
+   "t": 3.164,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f031_t3.10s.png"
   },
   {
-   "t": 4.88,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f032_t3.20s.png"
+   "t": 3.272,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f032_t3.20s.png"
   },
   {
-   "t": 4.953,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f033_t3.30s.png"
+   "t": 3.357,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f033_t3.30s.png"
   },
   {
-   "t": 5.025,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f034_t3.40s.png"
+   "t": 3.466,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f034_t3.40s.png"
   },
   {
-   "t": 5.097,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f035_t3.50s.png"
+   "t": 3.571,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f035_t3.50s.png"
   },
   {
-   "t": 5.169,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f036_t3.60s.png"
+   "t": 3.69,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f036_t3.60s.png"
   },
   {
-   "t": 5.241,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f037_t3.70s.png"
+   "t": 3.767,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f037_t3.70s.png"
   },
   {
-   "t": 5.306,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f038_t3.80s.png"
+   "t": 3.896,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f038_t3.80s.png"
   },
   {
-   "t": 5.374,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f039_t3.90s.png"
+   "t": 3.979,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f039_t3.90s.png"
   },
   {
-   "t": 5.442,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f040_t4.00s.png"
+   "t": 4.09,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f040_t4.00s.png"
   },
   {
-   "t": 5.507,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f041_t4.10s.png"
+   "t": 4.163,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f041_t4.10s.png"
   },
   {
-   "t": 5.578,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f042_t4.20s.png"
+   "t": 4.265,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f042_t4.20s.png"
   },
   {
-   "t": 5.646,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f043_t4.30s.png"
+   "t": 4.377,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f043_t4.30s.png"
   },
   {
-   "t": 5.715,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f044_t4.40s.png"
+   "t": 4.459,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f044_t4.40s.png"
   },
   {
-   "t": 5.781,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f045_t4.50s.png"
+   "t": 4.57,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f045_t4.50s.png"
   },
   {
-   "t": 5.85,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f046_t4.60s.png"
+   "t": 4.681,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f046_t4.60s.png"
   },
   {
-   "t": 5.93,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f047_t4.70s.png"
+   "t": 4.763,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f047_t4.70s.png"
   },
   {
-   "t": 6.0,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f048_t4.80s.png"
+   "t": 4.872,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f048_t4.80s.png"
   },
   {
-   "t": 6.075,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f049_t4.90s.png"
+   "t": 4.958,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f049_t4.90s.png"
   },
   {
-   "t": 6.155,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f050_t5.00s.png"
+   "t": 5.067,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f050_t5.00s.png"
   },
   {
-   "t": 6.219,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f051_t5.10s.png"
+   "t": 5.175,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f051_t5.10s.png"
   },
   {
-   "t": 6.282,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f052_t5.20s.png"
+   "t": 5.259,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f052_t5.20s.png"
   },
   {
-   "t": 6.348,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f053_t5.30s.png"
+   "t": 5.373,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f053_t5.30s.png"
   },
   {
-   "t": 6.411,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f054_t5.40s.png"
+   "t": 5.462,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f054_t5.40s.png"
   },
   {
-   "t": 6.476,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f055_t5.50s.png"
+   "t": 5.574,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f055_t5.50s.png"
   },
   {
-   "t": 6.538,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f056_t5.60s.png"
+   "t": 5.66,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f056_t5.60s.png"
   },
   {
-   "t": 6.598,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f057_t5.70s.png"
+   "t": 5.774,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f057_t5.70s.png"
   },
   {
-   "t": 6.667,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f058_t5.80s.png"
+   "t": 5.859,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f058_t5.80s.png"
   },
   {
-   "t": 6.733,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f059_t5.90s.png"
+   "t": 5.973,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f059_t5.90s.png"
   },
   {
-   "t": 6.796,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f060_t6.00s.png"
+   "t": 6.058,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f060_t6.00s.png"
   },
   {
-   "t": 6.858,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f061_t6.10s.png"
-  },
-  {
-   "t": 6.921,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f062_t6.20s.png"
-  },
-  {
-   "t": 6.982,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f063_t6.30s.png"
-  },
-  {
-   "t": 7.07,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f064_t6.40s.png"
-  },
-  {
-   "t": 7.154,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f065_t6.50s.png"
-  },
-  {
-   "t": 7.236,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f066_t6.60s.png"
-  },
-  {
-   "t": 7.294,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f067_t6.70s.png"
-  },
-  {
-   "t": 7.356,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f068_t6.80s.png"
-  },
-  {
-   "t": 7.418,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f069_t6.90s.png"
-  },
-  {
-   "t": 7.49,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f070_t7.00s.png"
-  },
-  {
-   "t": 7.547,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f071_t7.10s.png"
-  },
-  {
-   "t": 7.611,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f072_t7.20s.png"
-  },
-  {
-   "t": 7.665,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f073_t7.30s.png"
-  },
-  {
-   "t": 7.725,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f074_t7.40s.png"
-  },
-  {
-   "t": 7.781,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f075_t7.50s.png"
-  },
-  {
-   "t": 7.842,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f076_t7.60s.png"
-  },
-  {
-   "t": 7.896,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f077_t7.70s.png"
-  },
-  {
-   "t": 7.972,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f078_t7.80s.png"
-  },
-  {
-   "t": 8.032,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f079_t7.90s.png"
-  },
-  {
-   "t": 8.099,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f080_t8.00s.png"
-  },
-  {
-   "t": 8.162,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f081_t8.10s.png"
-  },
-  {
-   "t": 8.291,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f082_t8.20s.png"
-  },
-  {
-   "t": 8.409,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f083_t8.30s.png"
-  },
-  {
-   "t": 8.473,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f084_t8.40s.png"
-  },
-  {
-   "t": 8.572,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f085_t8.50s.png"
-  },
-  {
-   "t": 8.666,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f086_t8.60s.png"
-  },
-  {
-   "t": 8.761,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f087_t8.70s.png"
-  },
-  {
-   "t": 8.856,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f088_t8.80s.png"
-  },
-  {
-   "t": 8.997,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f089_t8.90s.png"
-  },
-  {
-   "t": 9.09,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f090_t9.00s.png"
-  },
-  {
-   "t": 9.153,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f091_t9.10s.png"
-  },
-  {
-   "t": 9.309,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f092_t9.20s.png"
-  },
-  {
-   "t": 9.399,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f093_t9.30s.png"
-  },
-  {
-   "t": 9.521,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f094_t9.40s.png"
-  },
-  {
-   "t": 9.553,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f095_t9.50s.png"
-  },
-  {
-   "t": 9.664,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f096_t9.60s.png"
-  },
-  {
-   "t": 9.787,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f097_t9.70s.png"
-  },
-  {
-   "t": 9.901,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f098_t9.80s.png"
-  },
-  {
-   "t": 9.982,
-   "path": "/tmp/gifs/build-a-map/proj/target/loop/captures/demo_build_a_map_0/f099_t9.90s.png"
+   "t": 6.173,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_build_a_map_0/f061_t6.10s.png"
   }
  ],
  "chunks": [
   {
    "index": 0,
    "label": "demo_build_a_map_0",
-   "start": 0.053,
+   "start": 0.054,
    "operation_applied_t_s": null,
    "operation_result": null,
-   "planned_s": 10,
-   "captured_s": 9.929
+   "planned_s": 6.2,
+   "captured_s": 6.119
   }
  ],
  "events": [
   {
-   "t": 0.341,
-   "type": "caption",
-   "text": "Map door, town. The view is framed on clear ground, 25 by 18 m.",
-   "t_stamp": 0.2543408330529928
-  },
-  {
-   "t": 0.732,
-   "type": "key",
-   "keys": [
-    "ShiftLeft",
-    "ArrowDown"
-   ],
-   "t_stamp": 0.6930519170127809
-  },
-  {
-   "t": 1.714,
-   "type": "key",
-   "keys": [
-    "ShiftLeft",
-    "ArrowDown"
-   ],
-   "t_stamp": 1.3967647920362651
-  },
-  {
-   "t": 2.285,
-   "type": "key",
-   "keys": [
-    "ShiftLeft",
-    "ArrowDown"
-   ],
-   "t_stamp": 2.0640504580223933
-  },
-  {
-   "t": 2.827,
-   "type": "key",
-   "keys": [
-    "ShiftLeft",
-    "ArrowDown"
-   ],
-   "t_stamp": 2.794559583067894
-  },
-  {
-   "t": 3.926,
-   "type": "key",
-   "keys": [
-    "ShiftLeft",
-    "ArrowDown"
-   ],
-   "t_stamp": 3.7130268330220133
-  },
-  {
-   "t": 4.585,
-   "type": "key",
-   "keys": [
-    "ShiftLeft",
-    "ArrowDown"
-   ],
-   "t_stamp": 4.509329917025752
-  },
-  {
-   "t": 5.097,
-   "type": "key",
-   "keys": [
-    "ArrowDown"
-   ],
-   "t_stamp": 5.0340908750658855
-  },
-  {
-   "t": 5.241,
-   "type": "key",
-   "keys": [
-    "ArrowDown"
-   ],
-   "t_stamp": 5.238409208017401
-  },
-  {
-   "t": 5.374,
-   "type": "caption",
-   "text": "person: Shift+Down walks the PLACE list five at a time; Down arms landmark_gate_house",
-   "t_stamp": 5.341677332995459
-  },
-  {
-   "t": 5.442,
+   "t": 0.383,
    "type": "cursor",
-   "x": 653,
-   "y": 367,
-   "t_stamp": 5.427904292009771
+   "x": 600,
+   "y": 300,
+   "t_stamp": 0.3061124460073188
   },
   {
-   "t": 5.442,
-   "type": "click",
-   "x": 653,
-   "y": 367,
-   "t_stamp": 5.427908250014298
-  },
-  {
-   "t": 5.507,
+   "t": 0.383,
    "type": "caption",
-   "text": "person: click the ground to place a gate house",
-   "t_stamp": 5.46623541705776
+   "text": "person: furnish the bedroom: filter the PLACE list and arm the sofa",
+   "t_stamp": 0.3540877780178562
   },
   {
-   "t": 5.578,
+   "t": 0.663,
    "type": "cursor",
-   "x": 588,
-   "y": 408,
-   "t_stamp": 5.5652966250199825
+   "x": 1118,
+   "y": 133,
+   "t_stamp": 0.5756177289877087
   },
   {
-   "t": 5.578,
+   "t": 0.663,
    "type": "click",
-   "x": 588,
-   "y": 408,
-   "t_stamp": 5.565300874994136
+   "x": 1118,
+   "y": 133,
+   "t_stamp": 0.5756278589833528
   },
   {
-   "t": 5.715,
+   "t": 0.878,
+   "type": "text",
+   "text": "sofa",
+   "t_stamp": 0.7986656429711729
+  },
+  {
+   "t": 1.357,
+   "type": "cursor",
+   "x": 1100,
+   "y": 203,
+   "t_stamp": 1.2729661510093138
+  },
+  {
+   "t": 1.357,
+   "type": "click",
+   "x": 1100,
+   "y": 203,
+   "t_stamp": 1.2729697109898552
+  },
+  {
+   "t": 1.668,
+   "type": "cursor",
+   "x": 690,
+   "y": 360,
+   "t_stamp": 1.59398876799969
+  },
+  {
+   "t": 1.878,
    "type": "caption",
-   "text": "person: click again, a second gate house",
-   "t_stamp": 5.654673457960598
+   "text": "R turns the armed sofa a quarter turn",
+   "t_stamp": 1.8540891580050811
   },
   {
-   "t": 5.93,
+   "t": 1.984,
+   "type": "key",
+   "keys": [
+    "KeyR"
+   ],
+   "t_stamp": 1.9540512589737773
+  },
+  {
+   "t": 2.485,
+   "type": "cursor",
+   "x": 800,
+   "y": 464,
+   "t_stamp": 2.4679909350234084
+  },
+  {
+   "t": 2.557,
+   "type": "caption",
+   "text": "person: click to place it",
+   "t_stamp": 2.554086713003926
+  },
+  {
+   "t": 2.877,
+   "type": "cursor",
+   "x": 800,
+   "y": 464,
+   "t_stamp": 2.796224625024479
+  },
+  {
+   "t": 2.877,
+   "type": "click",
+   "x": 800,
+   "y": 464,
+   "t_stamp": 2.79622899601236
+  },
+  {
+   "t": 3.466,
+   "type": "caption",
+   "text": "person: press X, then click the sofa to remove it",
+   "t_stamp": 3.4540889189811423
+  },
+  {
+   "t": 3.571,
    "type": "key",
    "keys": [
     "KeyX"
    ],
-   "t_stamp": 5.85816770803649
+   "t_stamp": 3.554083110007923
   },
   {
-   "t": 6.0,
-   "type": "caption",
-   "text": "person: X enters removal mode",
-   "t_stamp": 5.9556897500297055
-  },
-  {
-   "t": 6.982,
+   "t": 3.979,
    "type": "cursor",
-   "x": 653,
-   "y": 367,
-   "t_stamp": 6.965474667027593
+   "x": 800,
+   "y": 464,
+   "t_stamp": 3.9589768259902485
   },
   {
-   "t": 6.982,
+   "t": 3.979,
    "type": "click",
-   "x": 653,
-   "y": 367,
-   "t_stamp": 6.965480500017293
+   "x": 800,
+   "y": 464,
+   "t_stamp": 3.9589816560037434
   },
   {
-   "t": 7.07,
+   "t": 4.872,
    "type": "caption",
-   "text": "person: click the gate house to remove it",
-   "t_stamp": 7.0535743329674006
+   "text": "person: Ctrl+Z brings it back",
+   "t_stamp": 4.85408441000618
   },
   {
-   "t": 8.291,
+   "t": 5.067,
    "type": "key",
    "keys": [
-    "SuperLeft",
+    "ControlLeft",
     "KeyZ"
    ],
-   "t_stamp": 8.174550667055883
+   "t_stamp": 5.066772693011444
   },
   {
-   "t": 8.409,
-   "type": "caption",
-   "text": "person: Cmd+Z brings it back; UNDO names each step",
-   "t_stamp": 8.328423833008856
+   "t": 6.058,
+   "type": "clear_cursor",
+   "t_stamp": 5.9731393459951505
   }
  ]
 }

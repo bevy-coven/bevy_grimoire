@@ -1,218 +1,248 @@
 {
  "name": "agent_removes_then_undo",
  "fps": 15,
- "scale": 2,
+ "scale": 1,
  "crop": [
-  470,
+  440,
   64,
-  950,
+  980,
   690
  ],
  "width": 600,
  "title": null,
  "frames": [
   {
-   "t": 0.07,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f000_t0.00s.png"
+   "t": 0.083,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f000_t0.00s.png"
   },
   {
-   "t": 0.125,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f001_t0.07s.png"
+   "t": 0.119,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f001_t0.07s.png"
   },
   {
-   "t": 0.186,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f002_t0.13s.png"
+   "t": 0.194,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f002_t0.13s.png"
   },
   {
-   "t": 0.296,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f003_t0.20s.png"
+   "t": 0.267,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f003_t0.20s.png"
   },
   {
-   "t": 0.324,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f004_t0.27s.png"
+   "t": 0.345,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f004_t0.27s.png"
   },
   {
-   "t": 0.399,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f005_t0.33s.png"
+   "t": 0.381,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f005_t0.33s.png"
   },
   {
-   "t": 0.474,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f006_t0.40s.png"
+   "t": 0.458,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f006_t0.40s.png"
   },
   {
-   "t": 0.565,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f007_t0.47s.png"
+   "t": 0.531,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f007_t0.47s.png"
   },
   {
-   "t": 0.622,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_0/f008_t0.53s.png"
+   "t": 0.605,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_0/f008_t0.53s.png"
   },
   {
-   "t": 1.111,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f000_t0.00s.png"
+   "t": 0.958,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f000_t0.00s.png"
   },
   {
-   "t": 1.16,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f001_t0.07s.png"
+   "t": 0.994,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f001_t0.07s.png"
   },
   {
-   "t": 1.262,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f002_t0.13s.png"
+   "t": 1.069,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f002_t0.13s.png"
   },
   {
-   "t": 1.349,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f003_t0.20s.png"
+   "t": 1.143,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f003_t0.20s.png"
   },
   {
-   "t": 1.374,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f004_t0.27s.png"
+   "t": 1.22,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f004_t0.27s.png"
   },
   {
-   "t": 1.464,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f005_t0.33s.png"
+   "t": 1.256,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f005_t0.33s.png"
   },
   {
-   "t": 1.489,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f006_t0.40s.png"
+   "t": 1.331,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f006_t0.40s.png"
   },
   {
-   "t": 1.583,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f007_t0.47s.png"
+   "t": 1.406,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f007_t0.47s.png"
   },
   {
-   "t": 1.67,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f008_t0.53s.png"
+   "t": 1.482,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f008_t0.53s.png"
   },
   {
-   "t": 1.696,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f009_t0.60s.png"
+   "t": 1.556,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f009_t0.60s.png"
   },
   {
-   "t": 1.756,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f010_t0.67s.png"
+   "t": 1.592,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f010_t0.67s.png"
   },
   {
-   "t": 1.886,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f011_t0.73s.png"
+   "t": 1.669,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f011_t0.73s.png"
   },
   {
-   "t": 1.947,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f012_t0.80s.png"
+   "t": 1.744,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f012_t0.80s.png"
   },
   {
-   "t": 2.003,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f013_t0.87s.png"
+   "t": 1.821,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f013_t0.87s.png"
   },
   {
-   "t": 2.061,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f014_t0.93s.png"
+   "t": 1.858,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f014_t0.93s.png"
   },
   {
-   "t": 2.148,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f015_t1.00s.png"
+   "t": 1.933,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f015_t1.00s.png"
   },
   {
-   "t": 2.203,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f016_t1.07s.png"
+   "t": 2.008,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f016_t1.07s.png"
   },
   {
-   "t": 2.26,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f017_t1.13s.png"
+   "t": 2.083,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f017_t1.13s.png"
   },
   {
-   "t": 2.317,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f018_t1.20s.png"
+   "t": 2.121,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f018_t1.20s.png"
   },
   {
-   "t": 2.401,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f019_t1.27s.png"
+   "t": 2.197,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f019_t1.27s.png"
   },
   {
-   "t": 2.453,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f020_t1.33s.png"
+   "t": 2.273,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f020_t1.33s.png"
   },
   {
-   "t": 2.507,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f021_t1.40s.png"
+   "t": 2.347,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f021_t1.40s.png"
   },
   {
-   "t": 2.562,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f022_t1.47s.png"
+   "t": 2.42,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f022_t1.47s.png"
   },
   {
-   "t": 2.649,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f023_t1.53s.png"
+   "t": 2.456,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f023_t1.53s.png"
   },
   {
-   "t": 2.71,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f024_t1.60s.png"
+   "t": 2.53,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f024_t1.60s.png"
   },
   {
-   "t": 2.765,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f025_t1.67s.png"
+   "t": 2.601,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f025_t1.67s.png"
   },
   {
-   "t": 2.843,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f026_t1.73s.png"
+   "t": 2.677,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f026_t1.73s.png"
   },
   {
-   "t": 2.901,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f027_t1.80s.png"
+   "t": 2.752,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f027_t1.80s.png"
   },
   {
-   "t": 2.96,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f028_t1.87s.png"
+   "t": 2.788,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f028_t1.87s.png"
   },
   {
-   "t": 3.039,
-   "path": "/tmp/c6_video_proj/target/loop/captures/demo_agent_removes_then_undo_1/f029_t1.93s.png"
+   "t": 2.864,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_agent_removes_then_undo_1/f029_t1.93s.png"
   }
  ],
  "chunks": [
   {
    "index": 0,
    "label": "demo_agent_removes_then_undo_0",
-   "start": 0.042,
-   "operation_applied_t_s": 0.0557403564453125,
+   "start": 0.047,
+   "operation_applied_t_s": 0.07174873352050781,
    "operation_result": {
+    "checks": {
+     "clearances_in_the_way": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "doorways_in_the_way": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "edge_faults": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     },
+     "overlaps": {
+      "new": [],
+      "new_total": 0,
+      "total": 0
+     }
+    },
     "outcome": "applied",
     "saved": true,
-    "summary": "removed abbey"
+    "summary": "removed bed",
+    "waiting_on": null
    },
    "planned_s": 0.6,
-   "captured_s": 0.58
+   "captured_s": 0.557
   },
   {
    "index": 1,
    "label": "demo_agent_removes_then_undo_1",
-   "start": 1.086,
+   "start": 0.92,
    "operation_applied_t_s": null,
    "operation_result": null,
    "planned_s": 2.0,
-   "captured_s": 1.952
+   "captured_s": 1.943
   }
  ],
  "events": [
   {
-   "t": 0.07,
-   "type": "caption",
-   "text": "agent: placement_remove abbey",
-   "t_stamp": 0.04328979196725413
+   "t": 0.083,
+   "type": "cursor",
+   "x": 200,
+   "y": 400,
+   "t_stamp": 0.07737397000892088
   },
   {
-   "t": 1.464,
+   "t": 0.083,
+   "type": "caption",
+   "text": "agent: placement_remove bed",
+   "t_stamp": 0.0773950099828653
+  },
+  {
+   "t": 1.256,
    "type": "key",
    "keys": [
-    "SuperLeft",
+    "ControlLeft",
     "KeyZ"
    ],
-   "t_stamp": 1.4394912919960916
+   "t_stamp": 1.2277849579695612
   },
   {
-   "t": 1.583,
+   "t": 1.331,
    "type": "caption",
-   "text": "person: \u2318Z takes the agent's change back",
-   "t_stamp": 1.5589919579797424
+   "text": "person: Ctrl+Z takes the agent's change back",
+   "t_stamp": 1.3034521939698607
   }
  ]
 }

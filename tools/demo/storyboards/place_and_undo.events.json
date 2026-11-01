@@ -1,316 +1,294 @@
 {
  "name": "place_and_undo",
- "fps": 15,
- "scale": 2,
+ "fps": 10,
+ "scale": 1,
  "crop": [
-  470,
+  440,
   64,
-  950,
+  1270,
   690
  ],
- "width": 600,
+ "width": 760,
  "title": null,
  "frames": [
   {
-   "t": 0.063,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f000_t0.00s.png"
+   "t": 0.073,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f000_t0.00s.png"
   },
   {
-   "t": 0.18,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f001_t0.07s.png"
+   "t": 0.145,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f001_t0.10s.png"
   },
   {
-   "t": 0.37,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f002_t0.13s.png"
+   "t": 0.253,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f002_t0.20s.png"
   },
   {
-   "t": 0.545,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f003_t0.20s.png"
+   "t": 0.359,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f003_t0.30s.png"
   },
   {
-   "t": 0.69,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f004_t0.27s.png"
+   "t": 0.465,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f004_t0.40s.png"
   },
   {
-   "t": 0.833,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f005_t0.33s.png"
+   "t": 0.57,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f005_t0.50s.png"
   },
   {
-   "t": 0.976,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f006_t0.40s.png"
+   "t": 0.642,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f006_t0.60s.png"
   },
   {
-   "t": 1.129,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f007_t0.47s.png"
+   "t": 0.746,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f007_t0.70s.png"
   },
   {
-   "t": 1.278,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f008_t0.53s.png"
+   "t": 0.85,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f008_t0.80s.png"
   },
   {
-   "t": 1.416,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f009_t0.60s.png"
+   "t": 0.954,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f009_t0.90s.png"
   },
   {
-   "t": 1.557,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f010_t0.67s.png"
+   "t": 1.057,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f010_t1.00s.png"
   },
   {
-   "t": 1.699,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f011_t0.73s.png"
+   "t": 1.164,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f011_t1.10s.png"
   },
   {
-   "t": 1.838,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f012_t0.80s.png"
+   "t": 1.271,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f012_t1.20s.png"
   },
   {
-   "t": 1.984,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f013_t0.87s.png"
+   "t": 1.341,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f013_t1.30s.png"
   },
   {
-   "t": 2.127,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f014_t0.93s.png"
+   "t": 1.447,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f014_t1.40s.png"
   },
   {
-   "t": 2.265,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f015_t1.00s.png"
+   "t": 1.551,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f015_t1.50s.png"
   },
   {
-   "t": 2.412,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f016_t1.07s.png"
+   "t": 1.655,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f016_t1.60s.png"
   },
   {
-   "t": 2.548,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f017_t1.13s.png"
+   "t": 1.757,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f017_t1.70s.png"
   },
   {
-   "t": 2.687,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f018_t1.20s.png"
+   "t": 1.863,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f018_t1.80s.png"
   },
   {
-   "t": 2.825,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f019_t1.27s.png"
+   "t": 1.97,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f019_t1.90s.png"
   },
   {
-   "t": 2.971,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f020_t1.33s.png"
+   "t": 2.039,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f020_t2.00s.png"
   },
   {
-   "t": 3.113,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f021_t1.40s.png"
+   "t": 2.145,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f021_t2.10s.png"
   },
   {
-   "t": 3.248,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f022_t1.47s.png"
+   "t": 2.252,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f022_t2.20s.png"
   },
   {
-   "t": 3.383,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f023_t1.53s.png"
+   "t": 2.358,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f023_t2.30s.png"
   },
   {
-   "t": 3.525,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f024_t1.60s.png"
+   "t": 2.463,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f024_t2.40s.png"
   },
   {
-   "t": 3.667,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f025_t1.67s.png"
+   "t": 2.57,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f025_t2.50s.png"
   },
   {
-   "t": 3.807,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f026_t1.73s.png"
+   "t": 2.641,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f026_t2.60s.png"
   },
   {
-   "t": 3.946,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f027_t1.80s.png"
+   "t": 2.746,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f027_t2.70s.png"
   },
   {
-   "t": 4.083,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f028_t1.87s.png"
+   "t": 2.852,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f028_t2.80s.png"
   },
   {
-   "t": 4.228,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f029_t1.93s.png"
+   "t": 2.96,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f029_t2.90s.png"
   },
   {
-   "t": 4.373,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f030_t2.00s.png"
+   "t": 3.07,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f030_t3.00s.png"
   },
   {
-   "t": 4.521,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f031_t2.07s.png"
+   "t": 3.139,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f031_t3.10s.png"
   },
   {
-   "t": 4.666,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f032_t2.13s.png"
+   "t": 3.246,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f032_t3.20s.png"
   },
   {
-   "t": 4.807,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f033_t2.20s.png"
+   "t": 3.352,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f033_t3.30s.png"
   },
   {
-   "t": 4.953,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f034_t2.27s.png"
+   "t": 3.456,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f034_t3.40s.png"
   },
   {
-   "t": 5.098,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f035_t2.33s.png"
+   "t": 3.559,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f035_t3.50s.png"
   },
   {
-   "t": 5.238,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f036_t2.40s.png"
+   "t": 3.665,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f036_t3.60s.png"
   },
   {
-   "t": 5.388,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f037_t2.47s.png"
+   "t": 3.77,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f037_t3.70s.png"
   },
   {
-   "t": 5.534,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f038_t2.53s.png"
+   "t": 3.841,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f038_t3.80s.png"
   },
   {
-   "t": 5.682,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f039_t2.60s.png"
+   "t": 3.945,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f039_t3.90s.png"
   },
   {
-   "t": 5.828,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f040_t2.67s.png"
+   "t": 4.051,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f040_t4.00s.png"
   },
   {
-   "t": 5.967,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f041_t2.73s.png"
+   "t": 4.158,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f041_t4.10s.png"
   },
   {
-   "t": 6.114,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f042_t2.80s.png"
+   "t": 4.262,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f042_t4.20s.png"
   },
   {
-   "t": 6.26,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f043_t2.87s.png"
+   "t": 4.369,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f043_t4.30s.png"
   },
   {
-   "t": 6.406,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f044_t2.93s.png"
-  },
-  {
-   "t": 6.55,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f045_t3.00s.png"
-  },
-  {
-   "t": 6.699,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f046_t3.07s.png"
-  },
-  {
-   "t": 6.84,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f047_t3.13s.png"
-  },
-  {
-   "t": 6.983,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f048_t3.20s.png"
-  },
-  {
-   "t": 7.123,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f049_t3.27s.png"
-  },
-  {
-   "t": 7.26,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f050_t3.33s.png"
-  },
-  {
-   "t": 7.403,
-   "path": "/tmp/c5_video_scratch/proj/target/loop/captures/demo_place_and_undo_0/f051_t3.40s.png"
+   "t": 4.439,
+   "path": "/tmp/demo/proj/target/loop/captures/demo_place_and_undo_0/f044_t4.40s.png"
   }
  ],
  "chunks": [
   {
    "index": 0,
    "label": "demo_place_and_undo_0",
-   "start": 0.035,
+   "start": 0.036,
    "operation_applied_t_s": null,
    "operation_result": null,
-   "planned_s": 3.5,
-   "captured_s": 7.368
+   "planned_s": 4.5,
+   "captured_s": 4.403
   }
  ],
  "events": [
   {
-   "t": 0.37,
+   "t": 0.253,
    "type": "cursor",
-   "x": 1106,
+   "x": 1118,
    "y": 133,
-   "t_stamp": 0.3029404159751721
+   "t_stamp": 0.25296605500625446
   },
   {
-   "t": 0.37,
+   "t": 0.253,
    "type": "click",
-   "x": 1106,
+   "x": 1118,
    "y": 133,
-   "t_stamp": 0.3029463329585269
+   "t_stamp": 0.2529697049758397
   },
   {
-   "t": 0.545,
+   "t": 0.57,
    "type": "text",
-   "text": "house",
-   "t_stamp": 0.48112954100361094
+   "text": "sofa",
+   "t_stamp": 0.46510450897039846
   },
   {
-   "t": 0.69,
+   "t": 0.57,
    "type": "caption",
-   "text": "person: arms the gate house from the list",
-   "t_stamp": 0.644836374965962
+   "text": "person: filters the PLACE list to the sofa",
+   "t_stamp": 0.5360147259780206
   },
   {
-   "t": 0.976,
+   "t": 1.164,
    "type": "cursor",
-   "x": 1090,
+   "x": 1100,
    "y": 203,
-   "t_stamp": 0.8671373329707421
+   "t_stamp": 1.0576535839936696
   },
   {
-   "t": 0.976,
+   "t": 1.164,
    "type": "click",
-   "x": 1090,
+   "x": 1100,
    "y": 203,
-   "t_stamp": 0.8671421660110354
+   "t_stamp": 1.0576586039969698
   },
   {
-   "t": 0.976,
+   "t": 1.164,
    "type": "caption",
-   "text": "person: click the ground to place it",
-   "t_stamp": 0.9405684579978697
+   "text": "person: arms the sofa from the list",
+   "t_stamp": 1.1360170969855972
   },
   {
-   "t": 1.129,
+   "t": 1.757,
    "type": "cursor",
-   "x": 710,
-   "y": 377,
-   "t_stamp": 1.065087582974229
+   "x": 800,
+   "y": 464,
+   "t_stamp": 1.7566924399579875
   },
   {
-   "t": 1.129,
+   "t": 1.757,
    "type": "click",
-   "x": 710,
-   "y": 377,
-   "t_stamp": 1.0650945410015993
+   "x": 800,
+   "y": 464,
+   "t_stamp": 1.7566957600065507
   },
   {
-   "t": 1.699,
+   "t": 1.863,
+   "type": "caption",
+   "text": "person: click the floor to place the sofa",
+   "t_stamp": 1.8360120209981687
+  },
+  {
+   "t": 2.463,
    "type": "clear_cursor",
-   "t_stamp": 1.5922268749563955
+   "t_stamp": 2.462403984973207
   },
   {
-   "t": 2.127,
-   "type": "caption",
-   "text": "person: \u2318Z takes the gate house back",
-   "t_stamp": 2.0370779579970986
-  },
-  {
-   "t": 2.412,
+   "t": 2.96,
    "type": "key",
    "keys": [
-    "SuperLeft",
+    "ControlLeft",
     "KeyZ"
    ],
-   "t_stamp": 2.2994233749923296
+   "t_stamp": 2.8520316279609688
+  },
+  {
+   "t": 2.96,
+   "type": "caption",
+   "text": "person: Ctrl+Z takes the sofa back",
+   "t_stamp": 2.926635166979395
   }
  ]
 }
