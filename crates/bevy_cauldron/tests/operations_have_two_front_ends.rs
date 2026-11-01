@@ -311,7 +311,6 @@ const UNMIGRATED: &[Action] = &[
     Action::DiscardAllSuggestions,
     Action::PrevRig,
     Action::NextRig,
-    Action::AdoptMeasured,
     Action::UndoBench,
     Action::RedoBench,
     Action::ScrubBack,
@@ -349,7 +348,8 @@ const UNMIGRATED: &[Action] = &[
 // 99 -> 96: `CellSolid`, `CellEdge` and `CellClear` -> `piece_set_cells` (E-002, #129 slice 10): `Z`, `X`, `V`, the lattice grid's chips and headers edit a library piece's cells through the operation an agent calls.
 // 96 -> 95: `NewToken` -> `vocab_add_token` (E-002, #129 slice 11): `Shift+T` and the `+` chip add a token to the vocabulary through the operation an agent calls.
 // 95 -> 94: `AcceptEdges` -> `piece_set_cells` (E-002, #129 slice 12): `Enter` on a mesh scan's derived edges keeps them on a library piece through the operation an agent calls (its `edges` verb).
-const UNMIGRATED_MAX: usize = 94;
+// 94 -> 93: `AdoptMeasured` -> `rig_adopt_measured` (E-002, #129 slice 13): `Enter` on the Anim tab adopts the selected rig's measured gait values into `rigs.ron` through the operation an agent calls.
+const UNMIGRATED_MAX: usize = 93;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///

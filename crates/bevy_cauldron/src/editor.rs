@@ -4485,6 +4485,30 @@ pub fn add_vocab_token(
     }
 }
 
+/// **Adopt a rig's measured gait values through the operation** (E-002, #129 slice 13). The Anim tab's
+/// Enter calls this, so a person's adoption is the change an agent's `rig_adopt_measured` makes, with
+/// the person's source, and its log line names it. `skip_slots` is the tab's transient exclude. The
+/// receipt is returned, or the refusal as the tab's problem; the tab reads the manifest back itself.
+pub fn adopt_rig_measured(
+    project: &crate::project::Project,
+    rig: &str,
+    skip_slots: &[usize],
+) -> Result<String, String> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let params = serde_json::json!({"rig": rig, "skip_slots": skip_slots});
+    match crate::ops::dispatch(&mut ctx, "rig_adopt_measured", &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
+}
+
 /// **Carry the library a label operation changed onto the live project.** Only the fields a
 /// library write touches move: the measured library and the layers the Map draws from it, and the
 /// kit's policy (a pack's exclusion). A clone is not the live state, so without this the write would

@@ -912,6 +912,7 @@ impl Action {
                 Some("piece_set_cells")
             }
             Action::NewToken => Some("vocab_add_token"),
+            Action::AdoptMeasured => Some("rig_adopt_measured"),
             Action::RenameMap => Some("map_rename"),
             Action::NoteTool => Some("note_add"),
             Action::SetRule => Some("rules_set"),

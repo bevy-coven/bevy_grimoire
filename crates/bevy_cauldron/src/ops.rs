@@ -3678,6 +3678,181 @@ pub mod vocab_add_token {
     }
 }
 
+/// **Adopt a rig's measured gait values into `rigs.ron`** (E-002, #129 slice 13). Enter on the Anim tab
+/// and an agent's `apply` are this one operation: it measures the rig's mesh now, rewrites each gait
+/// slot that is not kept, stamps provenance and refuses the whole write unless the edited manifest
+/// parses back to what was built ([`crate::anim_tab::adopt_text`]). Undo puts the manifest back whole.
+pub mod rig_adopt_measured {
+    use super::*;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// The rig's name in `rigs.ron`.
+        pub rig: String,
+        /// Gait slots to hold back for this write only, by index in the rig's slot list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub skip_slots: Vec<usize>,
+        /// **Undo only.** The manifest as it was, put back whole.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub restore: Option<String>,
+    }
+
+    fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
+        serde_json::from_value(raw.clone()).map_err(|e| {
+            Refusal::new(format!(
+                "this is not a rig to adopt measured values for: {e}. The fields are `rig` (a name in \
+                 rigs.ron) and, optionally, `skip_slots` (slot indexes to leave as they are)."
+            ))
+        })
+    }
+
+    fn manifest(project: &Project) -> PathBuf {
+        project.root.join("assets/grimoire/rigs.ron")
+    }
+
+    /// **FNV-1a of the manifest text**: stable across runs, because an undo compares it with what the log
+    /// recorded in an earlier session.
+    fn fnv(text: &str) -> String {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for b in text.bytes() {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        format!("{h:016x}")
+    }
+
+    fn state_json(rig: &str, text: &str) -> serde_json::Value {
+        json!({"id": format!("rig:{rig}"), "manifest": fnv(text)})
+    }
+
+    struct Edit {
+        path: PathBuf,
+        was: String,
+        text: String,
+        summary: String,
+    }
+
+    /// **The write, computed and checked and not made**, so a preview refuses what the commit would.
+    fn edit(project: &Project, p: &Params) -> Result<Edit, Refusal> {
+        let path = manifest(project);
+        let was = std::fs::read_to_string(&path)
+            .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was changed.", path.display())))?;
+        if let Some(restore) = &p.restore {
+            bevy_grimoire_core::rigs::Rigs::parse(restore).map_err(|e| {
+                Refusal::new(format!("the manifest to put back does not read: {e}. Nothing was changed."))
+            })?;
+            return Ok(Edit {
+                path,
+                was,
+                text: restore.clone(),
+                summary: format!("put rigs.ron back as it was before '{}' adopted its measured values", p.rig),
+            });
+        }
+        let rigs = bevy_grimoire_core::rigs::Rigs::parse(&was)
+            .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was changed.", path.display())))?;
+        let Some(rig) = rigs.get(&p.rig) else {
+            return Err(Refusal::new(format!(
+                "no rig named `{}` in rigs.ron (it has {}). Nothing was changed.",
+                p.rig,
+                rigs.rigs.keys().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
+            )));
+        };
+        if let Some(bad) = p.skip_slots.iter().find(|i| **i >= rig.slots.len()) {
+            return Err(Refusal::new(format!(
+                "`{}` has {} slot(s), so slot {bad} cannot be skipped. Nothing was changed.",
+                p.rig,
+                rig.slots.len()
+            )));
+        }
+        let skip = p.skip_slots.iter().copied().collect();
+        let adopted = crate::anim_tab::adopt_text(&project.root, &was, &p.rig, &skip)
+            .map_err(|why| Refusal::new(format!("{why}. Nothing was changed.")))?;
+        if adopted.text == was {
+            return Err(Refusal::new(format!(
+                "`{}` already holds its measured values, so nothing was changed.",
+                p.rig
+            )));
+        }
+        Ok(Edit { path, was, summary: adopted.said(&p.rig), text: adopted.text })
+    }
+
+    /// **Adopt a rig's measured gait values, or put the manifest back.**
+    pub struct RigAdoptMeasured;
+
+    impl Operation for RigAdoptMeasured {
+        fn name(&self) -> &'static str {
+            "rig_adopt_measured"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["rigs"]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::Inverse
+        }
+
+        /// **A put-back is never a request an agent may send.**
+        fn only_as_undo(&self, params: &serde_json::Value) -> bool {
+            parse(params).is_ok_and(|p| p.restore.is_some())
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rig"],
+                "properties": {
+                    "rig": {
+                        "type": "string",
+                        "description": "The rig's name in rigs.ron, as the Anim tab lists it."
+                    },
+                    "skip_slots": {
+                        "type": "array",
+                        "items": {"type": "integer", "minimum": 0},
+                        "description": "Gait slots, by index in the rig's slot list, to leave as they are for this write only. A slot marked keep is always left alone."
+                    }
+                }
+            })
+        }
+
+        /// **Whether `rigs.ron` is still what the change left**, against what it recorded.
+        fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
+            let rig = after.get("id")?.as_str()?.strip_prefix("rig:")?;
+            let text = std::fs::read_to_string(manifest(ctx.project.as_ref()?)).ok()?;
+            Some(state_json(rig, &text))
+        }
+
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let p = parse(params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
+            };
+            let e = edit(project, &p)?;
+            Ok(state_json(&p.rig, &e.text))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let p = parse(params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
+            };
+            let e = edit(project, &p)?;
+            bevy_grimoire_core::ron_surgery::save_atomic(&e.path, &e.text).map_err(|why| {
+                Refusal::new(format!("rigs.ron refused the change, so nothing was written: {why}"))
+            })?;
+            Ok(Outcome {
+                summary: e.summary,
+                affected: 1,
+                saved: true,
+                inverse: Some(json!({"rig": p.rig, "restore": e.was})),
+                after: Some(state_json(&p.rig, &e.text)),
+            })
+        }
+    }
+}
+
 /// **Every operation the editor knows, in one list.**
 ///
 /// **The one list.** The MCP tool surface, the parity test and the log's vocabulary are all read
@@ -3698,6 +3873,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(piece_turn::PieceTurn),
         Box::new(piece_set_cells::PieceSetCells),
         Box::new(vocab_add_token::VocabAddToken),
+        Box::new(rig_adopt_measured::RigAdoptMeasured),
         Box::new(placement_set_pin::PlacementSetPin),
         Box::new(placement_set_yaw::PlacementSetYaw),
         Box::new(placement_set_tip::PlacementSetTip),
@@ -3973,6 +4149,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The vocabulary prompt (E-002, #129 slice 11)** — `Shift+T` and the `+` chip open it and its
     // Enter calls `add_vocab_token`, which dispatches `vocab_add_token`.
     ("vocab_add_token", "add_vocab_token("),
+    // **The Anim tab's Enter (E-002, #129 slice 13)** adopts the selected rig's measured gait values through
+    // `adopt_rig_measured`, which dispatches `rig_adopt_measured`, the same write an agent's `apply` makes.
+    ("rig_adopt_measured", "adopt_rig_measured("),
     // **The door and tab keys and the door switch**, which open a door through `open_door`, and that
     // runs the `door_open` operation (item 1 of cycle 8).
     ("door_open", "open_door("),

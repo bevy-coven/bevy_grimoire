@@ -444,13 +444,13 @@ fn commit_text(
     Ok(())
 }
 
-/// **Adopt measured values for the selected rig** — the explicit write-back, and the only one.
-///
-/// Measures the asset NOW (hash, clips, checks in one motion, so the provenance stamps exactly the
-/// bytes the numbers came from), rewrites each unkept gait slot's measured fields through
-/// [`bevy_grimoire_core::rigs_edit::RigDoc`], stamps provenance, and refuses the whole write unless the
+/// **Adopt measured values for the selected rig straight into the bench**, without the operation: the
+/// door the unit tests below drive. The key and an agent go through `rig_adopt_measured`, which shares
+/// [`adopt_text`], the body that measures, rewrites each unkept gait slot through
+/// [`bevy_grimoire_core::rigs_edit::RigDoc`], stamps provenance and refuses the whole write unless the
 /// edited text parses back to precisely the value it built in memory — `replace_field`'s key search
 /// is textual, and corruption must be refused, never written.
+#[cfg(test)]
 fn adopt(
     root: &std::path::Path,
     bench: &mut BenchState,
@@ -462,8 +462,51 @@ fn adopt(
         .get(bench.selected)
         .map(|s| (*s).to_owned())
         .ok_or("no rig selected")?;
-    let excluded = exclude.for_rig(&name);
-    let rigs = bench.rigs.as_ref().ok_or("no manifest loaded")?;
+    let adopted = adopt_text(root, &text, &name, &exclude.for_rig(&name))?;
+    commit_text(root, bench, adopted.text.clone())?;
+    bench.record(text);
+    Ok(adopted.said(&name))
+}
+
+/// What [`adopt_text`] worked out: the manifest as it would be written, and how many values it wrote
+/// and how many gait slots it held back.
+pub(crate) struct Adopted {
+    pub text: String,
+    pub wrote: usize,
+    pub kept: usize,
+    pub skipped: usize,
+}
+
+impl Adopted {
+    /// The receipt a person and an agent are both told.
+    pub fn said(&self, name: &str) -> String {
+        let mut held = Vec::new();
+        if self.kept > 0 {
+            held.push(format!("{} kept", self.kept));
+        }
+        if self.skipped > 0 {
+            held.push(format!("{} skipped", self.skipped));
+        }
+        format!(
+            "wrote {} value(s) + provenance for '{name}'{}",
+            self.wrote,
+            if held.is_empty() { String::new() } else { format!(" ({})", held.join(", ")) }
+        )
+    }
+}
+
+/// **The adoption, computed and checked and not written**: the one body the Anim tab's Enter and the
+/// `rig_adopt_measured` operation share, so the refusals, the provenance stamp and the parse-back guard
+/// have one answer. `text` is the manifest as it stands, `excluded` the gait slots held back for this
+/// write only.
+pub(crate) fn adopt_text(
+    root: &std::path::Path,
+    text: &str,
+    name: &str,
+    excluded: &std::collections::BTreeSet<usize>,
+) -> Result<Adopted, String> {
+    let name = name.to_owned();
+    let rigs = Rigs::parse(text)?;
     let rig = rigs
         .get(&name)
         .cloned()
@@ -479,7 +522,7 @@ fn adopt(
         == bevy_grimoire_core::rig_check::Staleness::Current;
     let report = bevy_grimoire_core::rig_check::check_rig(&glb, &rig, current);
 
-    let mut doc = bevy_grimoire_core::rigs_edit::RigDoc::open(&text, &name)?;
+    let mut doc = bevy_grimoire_core::rigs_edit::RigDoc::open(text, &name)?;
     // The in-memory expectation the written text must parse back to.
     let mut trial = rigs.clone();
     let trial_rig = trial
@@ -572,19 +615,7 @@ fn adopt(
     if parsed != trial {
         return Err("the edit did not land where intended — refusing to write".to_owned());
     }
-    commit_text(root, bench, new_text)?;
-    bench.record(text);
-    let mut held = Vec::new();
-    if kept > 0 {
-        held.push(format!("{kept} kept"));
-    }
-    if skipped > 0 {
-        held.push(format!("{skipped} skipped"));
-    }
-    Ok(format!(
-        "wrote {wrote} value(s) + provenance for '{name}'{}",
-        if held.is_empty() { String::new() } else { format!(" ({})", held.join(", ")) }
-    ))
+    Ok(Adopted { text: new_text, wrote, kept, skipped })
 }
 
 /// Enter, in the Anim context.
@@ -603,8 +634,31 @@ fn adopt_measured(
     // A failed write REPLACES the message — an author told "adopted" by a program that could not
     // write the file has been told something untrue (the `tiles::persist` rule). It now goes to a
     // different slot as well, so it survives whatever the author does next.
-    match adopt(&project.root, &mut bench, &exclude) {
-        Ok(said) => {
+    //
+    // **The write is the `rig_adopt_measured` operation** (#129 slice 13): the same change an agent's
+    // `apply` makes, with the person's source in the log. The tab then reads the manifest back so what
+    // it holds is what the file holds, and keeps the text it replaced as the one undo step.
+    let result = bench
+        .names()
+        .get(bench.selected)
+        .map(|s| (*s).to_owned())
+        .ok_or_else(|| "no rig selected".to_owned())
+        .and_then(|name| {
+            let skip: Vec<usize> = exclude.for_rig(&name).into_iter().collect();
+            crate::editor::adopt_rig_measured(&project, &name, &skip)
+        })
+        .and_then(|said| {
+            let path = project.root.join("assets/grimoire/rigs.ron");
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            let rigs = Rigs::parse(&text)?;
+            Ok((said, rigs, text))
+        });
+    match result {
+        Ok((said, rigs, text)) => {
+            if let Some(before) = bench.text.replace(text) {
+                bench.record(before);
+            }
+            bench.rigs = Some(rigs);
             crate::anim_watch::invalidate(&mut reports, &mut generation);
             // The excludes were about the text that just changed; a stale set silently shaping
             // the NEXT adopt would be the two-paths bug in miniature.
