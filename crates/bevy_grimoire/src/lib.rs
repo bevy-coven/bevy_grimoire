@@ -630,7 +630,7 @@ pub fn mesh_rotation(d: &Descriptor) -> Quat {
 /// and the table may be authored after it. `GrimoireWorld::new` has already resolved them once and
 /// refused the map if it could not, so this cannot fail here.
 fn spawn_world(mut commands: Commands, assets: Res<AssetServer>, world: Res<GrimoireWorld>) {
-    let spawned = spawn_placements(&mut commands, &assets, &world, None, &HashMap::new());
+    let spawned = spawn_placements(&mut commands, &assets, &world, None, &HashMap::new()).len();
     info!(
         "grimoire: spawned {spawned} of {} placement(s) from map `{}`",
         world.map.placements.len(),
@@ -638,21 +638,20 @@ fn spawn_world(mut commands: Commands, assets: Res<AssetServer>, world: Res<Grim
     );
 }
 
-/// Spawn the map's placements — all of them, or only the ids in `only` — and return how many became
-/// an entity.
+/// Spawn the map's placements, all of them or only the ids in `only`, and return the entity each one
+/// became, by id. A placement whose descriptor has neither a mesh nor a footprint becomes none.
 ///
 /// `kept` is the entities that already stand for placements this call does not spawn, by id, so a
 /// rider spawned now can be mounted on a host spawned earlier. [`live`] respawns a subset; the first
 /// spawn passes `None` and an empty `kept`.
-fn spawn_placements(
+fn spawn_placements<'w>(
     commands: &mut Commands,
     assets: &AssetServer,
-    world: &GrimoireWorld,
+    world: &'w GrimoireWorld,
     only: Option<&std::collections::BTreeSet<String>>,
     kept: &HashMap<String, Entity>,
-) -> usize {
+) -> HashMap<&'w str, Entity> {
     let origin = world.map.origin;
-    let mut spawned = 0usize;
     // Index by placement id so the `MountedOn` relationship can be attached once every entity exists.
     let mut by_id: HashMap<&str, Entity> = HashMap::with_capacity(world.map.placements.len());
     for (i, p) in world.map.placements.iter().enumerate() {
@@ -673,7 +672,6 @@ fn spawn_placements(
                 commands.entity(e).insert(Paint(p.paint));
             }
             by_id.insert(p.id.as_str(), e);
-            spawned += 1;
         }
     }
 
@@ -698,7 +696,7 @@ fn spawn_placements(
             ),
         }
     }
-    spawned
+    by_id
 }
 
 // ── smart objects ────────────────────────────────────────────────────────────────────────────────
