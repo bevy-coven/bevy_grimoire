@@ -36,10 +36,21 @@ pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
 }
 
 /// **The marks, strictly**: no file is no marks, and a file that does not read refuses with its field
-/// (`pieces[1]`) and is left as it is, so a typo in a hand edit never costs the marks it held.
+/// (`pieces[1]`) and is left as it is, so a typo in a hand edit never costs the marks it held. A file of
+/// another version is refused the same way: `destructible_set` writes the whole file back, so reading a
+/// newer build's marks and writing them at this version would lose what that build put there.
 fn load_marks(root: &Path) -> Result<Marks, Refusal> {
     match std::fs::read_to_string(marks_path(root)) {
-        Ok(t) => read_named("destructible_marks", MARKS_FILE, &t),
+        Ok(t) => {
+            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t)?;
+            if marks.version != VERSION {
+                return Err(Refusal::new(format!(
+                    "{MARKS_FILE} (version): version {} is not the {VERSION} this program reads. The file is left as it is: it comes from another build, so use that build or remove the file, then try again. Nothing was changed.",
+                    marks.version
+                )));
+            }
+            Ok(marks)
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Marks { version: VERSION, pieces: Vec::new() }),
         Err(e) => Err(Refusal::new(format!("destructible.ron cannot be read: {e}"))),
     }
@@ -167,7 +178,6 @@ impl Operation for DestructibleSet {
         let p = Self::parse(params)?;
         let root = ctx.root_or_project().ok_or_else(|| Refusal::new("no project is open."))?;
         let mut marks = load_marks(&root)?;
-        marks.version = VERSION;
         let was = marks.pieces.contains(&p.piece);
         let mut fresh = false;
         let mut chunks = 0;
