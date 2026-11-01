@@ -1,0 +1,80 @@
+{
+ "name": "light_map_button",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -12,
+      -8,
+      12,
+      8
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 3
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_set_family",
+    "parameters": {
+     "id": "lamp_tall@1",
+     "crate": "bevy_lights",
+     "value": "(base: 1000.0)"
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_set_family",
+    "parameters": {
+     "id": "lamp_tall@2",
+     "crate": "bevy_lights",
+     "value": "(base: 1000.0)"
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    300,
+    500
+   ]
+  },
+  {
+   "at": 0.4,
+   "cursor": [
+    222,
+    614
+   ]
+  },
+  {
+   "at": 0.9,
+   "click": [
+    222,
+    614
+   ],
+   "caption": "person: LIGHT MAP, shown (no lamp is lit yet)"
+  },
+  {
+   "at": 3.1,
+   "caption": "agent: lights the first lamp"
+  },
+  {
+   "at": 6.1,
+   "caption": "agent: lights the second lamp"
+  }
+ ]
+}
