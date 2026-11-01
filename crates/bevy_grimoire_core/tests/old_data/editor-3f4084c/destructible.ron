@@ -1,0 +1,6 @@
+(
+    version: 1,
+    pieces: [
+        "site/cart",
+    ],
+)

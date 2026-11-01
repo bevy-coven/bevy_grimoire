@@ -11,41 +11,23 @@
 
 use bevy::prelude::*;
 use bevy_carnage::{CutSettings, ProxyCell, audit_cell, fracture_mesh};
-use serde::{Deserialize, Serialize};
+use bevy_grimoire_core::destructible::{Bake, Chunk, DESTRUCTIBLE_VERSION as VERSION, Marks};
+use serde::Deserialize;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
+use crate::map_files::read_named;
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
 
-const VERSION: u32 = 1;
 /// Chunks a fresh bake aims for, and the smallest share of the piece one may be.
 const TARGET_CHUNKS: usize = 6;
 const MIN_FRACTION: f32 = 0.05;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Marks {
-    version: u32,
-    pieces: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Chunk {
-    points: Vec<[f32; 3]>,
-    faces: Vec<Vec<u32>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Bake {
-    version: u32,
-    key: u64,
-    chunks: Vec<Chunk>,
-}
+/// What a refusal calls the marks file: the path the author edits it by.
+const MARKS_FILE: &str = "destructible.ron";
 
 fn marks_path(root: &Path) -> PathBuf {
-    root.join("destructible.ron")
+    root.join(MARKS_FILE)
 }
 
 /// `<project>/destructible/<piece>.bake.ron`, the piece id's `/` written `__`.
@@ -53,9 +35,11 @@ pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
     root.join("destructible").join(format!("{}.bake.ron", piece.replace('/', "__")))
 }
 
+/// **The marks, strictly**: no file is no marks, and a file that does not read refuses with its field
+/// (`pieces[1]`) and is left as it is, so a typo in a hand edit never costs the marks it held.
 fn load_marks(root: &Path) -> Result<Marks, Refusal> {
     match std::fs::read_to_string(marks_path(root)) {
-        Ok(t) => ron::from_str(&t).map_err(|e| Refusal::new(format!("destructible.ron does not parse: {e}"))),
+        Ok(t) => read_named("destructible_marks", MARKS_FILE, &t),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Marks { version: VERSION, pieces: Vec::new() }),
         Err(e) => Err(Refusal::new(format!("destructible.ron cannot be read: {e}"))),
     }
@@ -99,8 +83,18 @@ fn subject(ctx: &Ctx, piece: &str) -> Result<(Mesh, ProxyCell, u64), Refusal> {
     Ok((m, proxy, key))
 }
 
-fn read_bake(root: &Path, piece: &str) -> Option<Bake> {
-    ron::from_str(&std::fs::read_to_string(bake_path(root, piece)).ok()?).ok()
+/// **The cached bake, strictly**: none is `None`, and a file that does not read at all refuses with its
+/// field (`chunks[0].points`) and is left as it is. A bake that reads but was made from another mesh
+/// or other cut settings is stale, and the caller bakes again.
+fn read_bake(root: &Path, piece: &str) -> Result<Option<Bake>, Refusal> {
+    let path = bake_path(root, piece);
+    let name = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(Refusal::new(format!("{name} cannot be read: {e}. The file is left as it is: fix it or remove it, then try again. Nothing was changed."))),
+    };
+    read_named("destructible_bake", &name, &text).map(Some)
 }
 
 /// The cached bake for `piece` when it matches `key`; otherwise bake, write and return it. The flag is
@@ -108,7 +102,7 @@ fn read_bake(root: &Path, piece: &str) -> Option<Bake> {
 fn baked(ctx: &Ctx, piece: &str) -> Result<(Bake, bool), Refusal> {
     let root = ctx.project.as_ref().map(|p| p.root.clone()).ok_or_else(|| Refusal::new("no project is open."))?;
     let (mesh, proxy, key) = subject(ctx, piece)?;
-    if let Some(b) = read_bake(&root, piece).filter(|b| b.version == VERSION && b.key == key) {
+    if let Some(b) = read_bake(&root, piece)?.filter(|b| b.version == VERSION && b.key == key) {
         return Ok((b, false));
     }
     let leaves = fracture_mesh(&[(&mesh, Mat4::IDENTITY)], &[proxy], &cut_for(piece)).into_leaves();
