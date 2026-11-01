@@ -11,7 +11,7 @@
 //! still there.
 
 use bevy_grimoire_core::reload_check;
-use bevy_grimoire_mapper::map_files::READ_HERE;
+use bevy_grimoire_mapper::map_files::{READ_HERE, WATCHED_HERE};
 use bevy_grimoire_mapper::ops::{self, Ctx};
 use bevy_grimoire_mapper::project::{OpenMap, Project};
 use serde_json::{Value, json};
@@ -168,25 +168,31 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 }
 
 /// **The kinds nothing reads with a named refusal**, checked in. Core's own list is
-/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads are off it here. A kind
-/// comes off when its type gains a reader that names the file and the field; none joins unseen.
+/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads (`READ_HERE`) and the one it
+/// watches (`WATCHED_HERE`) are off it here. A kind comes off when its type gains a reader that names the
+/// file and the field; none joins unseen.
 const STILL_UNCHECKED: &[&str] =
-    &["checks", "oplog", "reference_images", "family", "destructible_marks", "destructible_bake", "game_data"];
+    &["oplog", "reference_images", "family", "destructible_marks", "destructible_bake", "game_data"];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 7;
+const STILL_UNCHECKED_MAX: usize = 6;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {
     assert!(STILL_UNCHECKED.len() == STILL_UNCHECKED_MAX, "the list has {} kinds and the ratchet says {STILL_UNCHECKED_MAX}: lower both together", STILL_UNCHECKED.len());
     for k in reload_check::unchecked() {
-        assert!(READ_HERE.contains(&k.id) || STILL_UNCHECKED.contains(&k.id), "`{}` is read by neither core nor `map_files::READ_HERE` and is not on this list", k.id);
+        assert!(READ_HERE.contains(&k.id) || WATCHED_HERE.contains(&k.id) || STILL_UNCHECKED.contains(&k.id), "`{}` is read by neither core nor `map_files::READ_HERE` or `WATCHED_HERE` and is not on this list", k.id);
     }
     for id in READ_HERE {
         assert!(reload_check::unchecked().any(|k| k.id == *id), "`{id}` is read here and core reads it too: take it off `READ_HERE`");
     }
     for id in STILL_UNCHECKED {
         assert!(!READ_HERE.contains(id), "`{id}` is read here now: take it off the list and lower STILL_UNCHECKED_MAX");
+    }
+    for id in WATCHED_HERE {
+        assert!(reload_check::unchecked().any(|k| k.id == *id), "`{id}` is watched here and core reads it too: take it off `WATCHED_HERE`");
+        assert!(!READ_HERE.contains(id), "`{id}` is on both `READ_HERE` and `WATCHED_HERE`: a kind is read one way");
+        assert!(!STILL_UNCHECKED.contains(id), "`{id}` is watched here now: take it off the list and lower STILL_UNCHECKED_MAX");
     }
 }
 

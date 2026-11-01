@@ -427,6 +427,7 @@ fn start_checks(
     shots: Res<Shots>,
     mut wait: ResMut<ShotWait>,
     mut journal: ResMut<crate::chrome::Journal>,
+    view: Option<Res<crate::checks_view::ChecksView>>,
 ) {
     // A headless app has no window and so no picture of the editor to ask about: the owed checks stay
     // queued for whoever drains them, rather than every image check being reported as skipped.
@@ -437,7 +438,7 @@ fn start_checks(
         return;
     };
     let edits = std::mem::take(&mut queue.pending);
-    let checks = match Checks::for_project(&project.root) {
+    let checks = match crate::checks_view::checks_for(view.as_deref(), &project.root) {
         Ok(c) => c,
         Err(e) => {
             journal.record(&format!("after-edit checks not run: {e}"), 1);
@@ -482,6 +483,7 @@ fn launch_shot_checks(
     shots: Res<Shots>,
     mut wait: ResMut<ShotWait>,
     mut memory: ResMut<PictureMemory>,
+    view: Option<Res<crate::checks_view::ChecksView>>,
 ) {
     let mut ready: Vec<(Vec<AgentEdit>, Pictures)> = wait.tick().into_iter().map(|e| (e, Pictures::default())).collect();
     if let Ok(rx) = shots.rx.lock() {
@@ -497,7 +499,7 @@ fn launch_shot_checks(
         return;
     };
     for (edits, pictures) in ready {
-        let (Ok(checks), Ok(tx)) = (Checks::for_project(&project.root), reports.tx.lock().map(|t| t.clone())) else {
+        let (Ok(checks), Ok(tx)) = (crate::checks_view::checks_for(view.as_deref(), &project.root), reports.tx.lock().map(|t| t.clone())) else {
             continue;
         };
         spawn_checks(edits, checks, pictures, tx);
@@ -528,9 +530,12 @@ impl Plugin for AfterEditPlugin {
             .init_resource::<Shots>()
             .init_resource::<ShotWait>()
             .init_resource::<PictureMemory>()
+            // The checks it asks are the held ones, so the view is looked at first, in every door: the
+            // checks belong to the project, not to the open map.
+            .init_resource::<crate::checks_view::ChecksView>()
             .add_systems(
                 Update,
-                (queue_after_edit, start_checks, launch_shot_checks, collect_reports).chain(),
+                (crate::checks_view::sync_checks_view, queue_after_edit, start_checks, launch_shot_checks, collect_reports).chain(),
             );
     }
 }

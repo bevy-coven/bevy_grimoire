@@ -115,6 +115,7 @@ pub mod ops_tree;
 pub mod ops_water;
 pub mod terrain_view;
 pub mod notes_view;
+pub mod checks_view;
 pub mod ops_play;
 pub mod ops_notes;
 pub mod ops_references;
