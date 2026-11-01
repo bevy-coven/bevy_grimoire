@@ -1,6 +1,6 @@
 # Where bevy_emerge_loop's time goes
 
-Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-01 17:33Z.
+Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-01 17:50Z.
 
 ## What the last passes shipped
 
@@ -8,7 +8,6 @@ From [`bevy_emerge_loop-audit.tsv`](bevy_emerge_loop-audit.tsv): commits on main
 
 | pass | at | commits | unpushed | package_files | released | docs_files | demo_files | missing |
 |---|---|---|---|---|---|---|---|---|
-| 203 | 2026-11-01T14:46Z | 4 | 0 | 5 | - | 2 | 0 | demo? |
 | 204 | 2026-11-01T15:02Z | 4 | 0 | 4 | - | 1 | 0 | demo? |
 | 205 | 2026-11-01T15:09Z | 3 | 0 | 2 | - | 1 | 0 | demo? |
 | 206 | 2026-11-01T15:30Z | 5 | 0 | 7 | - | 3 | 0 | release(bevy_grimoire_core),demo? |
@@ -20,6 +19,7 @@ From [`bevy_emerge_loop-audit.tsv`](bevy_emerge_loop-audit.tsv): commits on main
 | 212 | 2026-11-01T16:47Z | 3 | 0 | 5 | - | 4 | 0 | demo? |
 | 213 | 2026-11-01T17:08Z | 2 | 0 | 4 | - | 3 | 2 | - |
 | 214 | 2026-11-01T17:33Z | 3 | 0 | 7 | - | 4 | 2 | - |
+| 215 | 2026-11-01T17:50Z | 2 | 0 | 4 | - | 2 | 0 | demo? |
 
 ## How each configuration did
 
@@ -28,41 +28,41 @@ From [`bevy_emerge_loop-config.tsv`](bevy_emerge_loop-config.tsv): one row per p
 ```text
 host       model                        think    jobs  threads  passes  mean min  median min
 Cs-MacBook-Pro anthropic/claude-sonnet-5-5  xhigh    4     -             1      75.8        75.8
-big        anthropic/claude-sonnet-5-5  high     10    8            14      15.2        16.4
+big        anthropic/claude-sonnet-5-5  high     10    8            15      15.3        16.4
 ```
 
 ## The last 12 passes
 
 ```text
-12 pass(es), 1611 steps, 2.9 h of pass time
+12 pass(es), 1670 steps, 3.0 h of pass time
 
 category                       hours  share  steps  mean s
-model                           1.17  39.7%    772     5.5
-cargo test                      0.40  13.7%     41    35.5
-wait: gate                      0.30  10.0%      9   118.3
-wait: other                     0.28   9.6%     20    51.2
-phase mark                      0.21   7.1%     84     9.0
-push gate                       0.13   4.4%     23    20.5
-shell                           0.13   4.4%    334     1.4
-remote wait                     0.08   2.9%     13    23.4
-github                          0.06   2.0%     72     3.0
-clip record/render              0.05   1.7%     32     5.6
+model                           1.23  41.0%    801     5.5
+cargo test                      0.40  13.5%     42    34.7
+wait: gate                      0.31  10.3%     10   111.8
+phase mark                      0.25   8.4%     86    10.5
+wait: other                     0.23   7.7%     17    49.1
+shell                           0.14   4.8%    348     1.5
+push gate                       0.10   3.2%     20    17.2
+remote wait                     0.07   2.3%     11    22.2
+clip record/render              0.06   2.0%     42     5.3
+github                          0.06   1.9%     74     2.8
+cargo build                     0.05   1.7%     10    18.8
 wait: tests                     0.05   1.6%      6    28.1
-cargo build                     0.04   1.3%      9    15.1
 cargo clippy                    0.01   0.4%      2    23.4
 sleep                           0.01   0.3%      5     6.7
-eval                            0.01   0.3%      1    30.3
+eval                            0.01   0.3%      3    10.6
 
 phase                          hours  share  steps  mean s
-prove                           0.68  23.2%    349     7.1
-build                           0.64  21.7%    382     6.0
-ship                            0.51  17.3%    140    13.1
-log                             0.34  11.5%     61    20.1
-research                        0.23   7.8%    209     4.0
-choose                          0.22   7.3%    200     3.9
-gate                            0.21   7.1%    117     6.5
-orient                          0.08   2.7%    102     2.8
-bugs                            0.03   0.9%     35     2.6
+prove                           0.76  25.4%    415     6.6
+build                           0.65  21.8%    357     6.6
+ship                            0.41  13.8%    126    11.8
+log                             0.34  11.2%     57    21.3
+research                        0.29   9.5%    269     3.8
+gate                            0.24   8.1%    123     7.1
+choose                          0.19   6.5%    172     4.1
+orient                          0.08   2.6%    103     2.7
+bugs                            0.02   0.8%     33     2.6
 release                         0.01   0.4%      8     5.4
 
 slowest single steps
@@ -72,7 +72,6 @@ slowest single steps
   pass  209     131s  tool  wait: other          {}
   pass  212     118s  tool  wait: other          {}
   pass  206     103s  tool  wait: gate           Waiting for push
-  pass  203     102s  tool  wait: other          {}
   pass  206     101s  tool  wait: gate           Waiting for push
   pass  214      95s  tool  wait: gate           Waiting for the push gate
   pass  212      94s  tool  wait: other          {}
@@ -81,39 +80,40 @@ slowest single steps
   pass  212      86s  bg    cargo test           bg_3 completed: cd /home/ladvien/bevy_emerge_loop; cargo test -p bevy_grimoire_mapper --te
   pass  206      79s  bg    shell                bg_3 completed: cd crates/bevy_grimoire_mapper; sed -i '48i mod a_key_set_in_both_settings
   pass  207      75s  tool  wait: tests          Waiting for clippy and mapper tests
+  pass  207      68s  bg    cargo test           bg_2 completed: cargo test -p bevy_grimoire_mapper --test editor a_question_is_asked_in_a_
 ```
 
 ## Every pass recorded
 
 ```text
-194 pass(es), 16913 steps, 95.8 h of pass time
+195 pass(es), 17097 steps, 96.1 h of pass time
 
 category                       hours  share  steps  mean s
-wait: other                    32.96  34.4%    223   532.1
+wait: other                    32.96  34.3%    223   532.1
 wait: tests                    19.27  20.1%    111   625.1
-wait: gate                     15.09  15.8%    121   449.1
-model                          13.59  14.2%   7913     6.2
-cargo test                      3.17   3.3%    380    30.0
+wait: gate                     15.11  15.7%    122   445.8
+model                          13.72  14.3%   8000     6.2
+cargo test                      3.20   3.3%    385    30.0
 wait: build                     2.43   2.5%     21   416.2
-remote command                  1.78   1.9%    547    11.7
+remote command                  1.78   1.8%    547    11.7
 push gate                       1.20   1.2%    343    12.6
 wait: review                    1.17   1.2%     33   127.2
 wait: clip                      0.71   0.7%     19   135.3
-shell                           0.68   0.7%   3176     0.8
+shell                           0.70   0.7%   3214     0.8
+phase mark                      0.59   0.6%    253     8.4
 wait: release                   0.56   0.6%      6   336.8
-phase mark                      0.54   0.6%    244     7.9
+cargo build                     0.51   0.5%     68    27.2
 remote wait                     0.51   0.5%     68    27.1
-cargo build                     0.50   0.5%     67    26.8
 
 phase                          hours  share  steps  mean s
-orient                         79.03  82.5%  10214    27.9
-gate                            3.87   4.0%    610    22.8
-build                           3.61   3.8%   1674     7.8
-prove                           3.05   3.2%   1201     9.2
-choose                          2.08   2.2%   1420     5.3
-ship                            2.05   2.1%    604    12.2
-research                        1.13   1.2%    782     5.2
-log                             0.59   0.6%    160    13.4
+orient                         79.03  82.3%  10223    27.8
+gate                            3.91   4.1%    616    22.8
+build                           3.66   3.8%   1686     7.8
+prove                           3.16   3.3%   1281     8.9
+choose                          2.09   2.2%   1428     5.3
+ship                            2.06   2.1%    610    12.2
+research                        1.19   1.2%    842     5.1
+log                             0.60   0.6%    162    13.3
 release                         0.34   0.4%    133     9.3
 bugs                            0.04   0.0%     48     3.0
 
