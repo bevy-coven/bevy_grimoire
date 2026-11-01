@@ -3666,6 +3666,13 @@ fn rebuild_palette(
     lists: Query<Entity, With<PaletteList>>,
     order: Option<ResMut<crate::thumbs::ThumbOrder>>,
 ) {
+    warn!(
+        "DBG rebuild_palette: project {} folded {} filters {} brush {:?}",
+        palette.project.is_changed(),
+        palette.fold.is_changed(),
+        palette.filters.is_changed(),
+        state.brush
+    );
     let PaletteSource {
         project,
         open,

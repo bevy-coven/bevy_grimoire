@@ -69,7 +69,26 @@ impl Plugin for PaletteMenuPlugin {
         // On entering the editor, for the reason `PieceMenuPlugin` gives: the door change despawns what
         // a Startup system spawned.
         app.add_systems(OnEnter(crate::screen::Screen::Editor), spawn_menu)
-            .add_systems(Update, name_on_rows);
+            .add_systems(Update, (name_on_rows, dbg_changes));
+    }
+}
+
+fn dbg_changes(
+    project: Option<Res<Project>>,
+    folded: Option<Res<crate::editor::Folded>>,
+    filters: Option<Res<crate::filter::Filters>>,
+    thumbs: Option<Res<crate::thumbs::ThumbGeneration>>,
+    rows: Query<Entity, Added<PaletteRow>>,
+) {
+    let n = rows.iter().count();
+    if n > 0 {
+        warn!(
+            "DBG rows added {n}: project {} folded {} filters {} thumbs {}",
+            project.is_some_and(|p| p.is_changed()),
+            folded.is_some_and(|p| p.is_changed()),
+            filters.is_some_and(|p| p.is_changed()),
+            thumbs.is_some_and(|p| p.is_changed()),
+        );
     }
 }
 
@@ -119,13 +138,17 @@ fn on_item(
     Option<Res<OpenMap>>,
 ) {
     move |activate, parents, targets, rows, project, import, state, suggestions, generation, open| {
+        warn!("DBG palette item activated: entity {:?}", activate.entity);
         let (Some(mut project), Some(mut import), Some(mut state)) = (project, import, state) else {
+            warn!("DBG missing resources");
             return;
         };
         let Some(row) = ContextTarget::of(activate.entity, &parents, &targets) else {
+            warn!("DBG no ContextTarget above the item");
             return;
         };
         let Ok(PaletteRow(ix)) = rows.get(row) else {
+            warn!("DBG the target {row:?} is no palette row (rebuilt?)");
             return;
         };
         let Some(id) = project.library.descriptors.get(*ix).map(|d| d.id.clone()) else {
