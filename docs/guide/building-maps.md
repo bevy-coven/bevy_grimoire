@@ -95,6 +95,8 @@ Or right-click the piece: its menu opens at the pointer with Turn left, Turn rig
 
 **What you see:** The layout waits for your answer. Press `Enter` to keep it, or `Esc` to throw it away.
 
+An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z0, x1, z1]` in map metres (the same space as a placement's `at`), and lays only the cells whose centre is in it. The cells around the area stay as they are and the new layout joins them, and `layout_accept` replaces only the unpinned pieces in the area, so everything outside it stays where it was. An area that holds no cell of the map is refused, and so is one on a map the project's block rules lay.
+
 ## Pin a piece
 
 **Goal:** Mark a piece you want to keep.
