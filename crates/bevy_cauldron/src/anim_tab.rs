@@ -637,33 +637,41 @@ fn adopt_measured(
     //
     // **The write is the `rig_adopt_measured` operation** (#129 slice 13): the same change an agent's
     // `apply` makes, with the person's source in the log. The tab then reads the manifest back so what
-    // it holds is what the file holds, and keeps the text it replaced as the one undo step.
-    let result = bench
-        .names()
-        .get(bench.selected)
-        .map(|s| (*s).to_owned())
-        .ok_or_else(|| "no rig selected".to_owned())
-        .and_then(|name| {
-            let skip: Vec<usize> = exclude.for_rig(&name).into_iter().collect();
-            crate::editor::adopt_rig_measured(&project, &name, &skip)
-        })
-        .and_then(|said| {
-            let path = project.root.join("assets/grimoire/rigs.ron");
-            let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-            let rigs = Rigs::parse(&text)?;
-            Ok((said, rigs, text))
-        });
-    match result {
-        Ok((said, rigs, text)) => {
-            if let Some(before) = bench.text.replace(text) {
-                bench.record(before);
-            }
-            bench.rigs = Some(rigs);
+    // it holds is what the file holds.
+    let Some(name) = bench.names().get(bench.selected).map(|s| (*s).to_owned()) else {
+        bench.status.problem("NOT WRITTEN: no rig selected".to_owned());
+        return;
+    };
+    let path = project.root.join("assets/grimoire/rigs.ron");
+    // **The text on disk now is what the operation replaces**, so it is what the tab's undo puts back:
+    // the tab may hold older text than the file when the file was edited under it (by hand, or by an
+    // agent's adoption), and undoing to the held text would discard that edit too.
+    let before = std::fs::read_to_string(&path).ok();
+    let skip: Vec<usize> = exclude.for_rig(&name).into_iter().collect();
+    match crate::editor::adopt_rig_measured(&project, &name, &skip) {
+        Ok(said) => {
             crate::anim_watch::invalidate(&mut reports, &mut generation);
             // The excludes were about the text that just changed; a stale set silently shaping
             // the NEXT adopt would be the two-paths bug in miniature.
             exclude.clear();
-            bench.status.note(said);
+            let read_back = std::fs::read_to_string(&path)
+                .map_err(|e| format!("cannot read {}: {e}", path.display()))
+                .and_then(|text| Rigs::parse(&text).map(|rigs| (rigs, text)));
+            match read_back {
+                Ok((rigs, text)) => {
+                    if let Some(before) = before {
+                        bench.record(before);
+                    }
+                    bench.rigs = Some(rigs);
+                    bench.text = Some(text);
+                    // The manifest may have gained or lost rigs since it was read: keep the same rig selected.
+                    if let Some(at) = bench.names().iter().position(|n| *n == name) {
+                        bench.selected = at;
+                    }
+                    bench.status.note(said);
+                }
+                Err(e) => bench.status.problem(format!("written, but the tab could not read rigs.ron back: {e}")),
+            }
         }
         Err(e) => bench.status.problem(format!("NOT WRITTEN: {e}")),
     }

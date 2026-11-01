@@ -207,3 +207,24 @@ fn a_persons_enter_on_the_anim_tab_adopts_through_the_operation() {
     assert_eq!(last.op, "rig_adopt_measured");
     assert_eq!(format!("{:?}", last.source), "Human", "a person's adoption must be stamped as a person's");
 }
+
+/// **A bare `operation_undo` takes back the open map's newest change, never a rig adoption.** The adoption
+/// is a kit-level write scoped to its own rig, so with no change to the map in effect the bare undo has
+/// nothing to take back, and `rigs.ron` stays as the adoption left it until its own id is named.
+#[test]
+fn a_bare_undo_does_not_revert_a_rig_adoption() {
+    let mut app = editor("rig-adopt-bare-undo");
+    let before = manifest(&app);
+    let a = apply(&mut app, serde_json::json!({"rig": "valkyrie"}), false);
+    assert_eq!(a["outcome"], "applied", "{a}");
+    let adopted = manifest(&app);
+
+    let bare = call(&mut app, "grimoire/operation_undo", serde_json::json!({"dry_run": false}));
+    assert_ne!(bare["outcome"], "applied", "a bare undo reverted the adoption: {bare}");
+    assert_eq!(manifest(&app), adopted, "the bare undo wrote rigs.ron");
+
+    let id = a["operation_id"].as_str().expect("an apply returns its id").to_owned();
+    let named = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
+    assert_eq!(named["outcome"], "applied", "{named}");
+    assert_eq!(manifest(&app), before, "the named undo puts the manifest back");
+}

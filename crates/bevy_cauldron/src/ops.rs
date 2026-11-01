@@ -3793,6 +3793,14 @@ pub mod rig_adopt_measured {
             Undo::Inverse
         }
 
+        /// **A manifest write is a kit-level change, scoped to its own rig** by the `id` its recorded state
+        /// carries, like a pack's exclusion: a bare `operation_undo` scopes past it to the open map's newest
+        /// change instead of reverting `rigs.ron`, and it joins the Meshes history beside the other
+        /// library writes when an agent makes it.
+        fn writes_library(&self) -> bool {
+            true
+        }
+
         /// **A put-back is never a request an agent may send.**
         fn only_as_undo(&self, params: &serde_json::Value) -> bool {
             parse(params).is_ok_and(|p| p.restore.is_some())
@@ -3830,7 +3838,9 @@ pub mod rig_adopt_measured {
                 return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
             };
             let e = edit(project, &p)?;
-            Ok(state_json(&p.rig, &e.text))
+            let mut planned = state_json(&p.rig, &e.text);
+            planned["would"] = json!(e.summary);
+            Ok(planned)
         }
 
         fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
