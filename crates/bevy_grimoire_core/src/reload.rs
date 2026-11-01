@@ -157,7 +157,7 @@ pub const KINDS: &[FileKind] = &[
         "The registry of a game's own tuning files, read at each `data_set`; nothing holds it."),
     kind("rigs", Grimoire, "rigs.ron", "Rigs", Restart, Global,
         "the animation tab",
-        "Read when the project opens and cached; nothing watches it (the guide says so)."),
+        "Read when the animation tab loads (its first entry, and again after a door change) and held in between; an edit while it is held is reported as `needs_restart` (a file that does not read, as `refused`) in `grimoire_state.reloads`."),
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
         "the dispatcher appends a line for every operation",
         "Appended and read on request by the log tools; nothing holds it."),

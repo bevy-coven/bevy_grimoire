@@ -24,6 +24,10 @@ pub enum Outcome {
     Applied,
     /// The file was refused and the previous state stays; [`KindVerdict::reason`] says why.
     Refused,
+    /// The file reads and is valid, but the program holds this kind from when it started and cannot take
+    /// a change without a restart (a [`crate::reload::ReloadClass::Restart`] kind). What it holds stays,
+    /// and [`KindVerdict::reason`] says so.
+    NeedsRestart,
 }
 
 impl Outcome {
@@ -32,6 +36,7 @@ impl Outcome {
         match self {
             Outcome::Applied => "applied",
             Outcome::Refused => "refused",
+            Outcome::NeedsRestart => "needs_restart",
         }
     }
 }
@@ -65,6 +70,12 @@ impl KindVerdict {
         reason: impl Into<String>,
     ) -> KindVerdict {
         KindVerdict { kind: kind.into(), file: file.into(), outcome: Outcome::Refused, field, reason: reason.into() }
+    }
+
+    /// **A change the program cannot take without a restart**: the file is valid, what the program
+    /// holds stays, and `reason` says what to do.
+    pub fn needs_restart(kind: impl Into<String>, file: impl Into<String>, reason: impl Into<String>) -> KindVerdict {
+        KindVerdict { kind: kind.into(), file: file.into(), outcome: Outcome::NeedsRestart, field: None, reason: reason.into() }
     }
 
     /// `maps/yard.map.ron (placements[3].yaw): 1:47: Expected float`, for the journal.
@@ -104,7 +115,8 @@ impl Verdict {
         Verdict { version: VERDICT_VERSION, at_unix_ms, ok, message: message.into(), seq: 0, kinds: Vec::new() }
     }
 
-    /// A verdict stamped now whose `ok` is that no file was refused.
+    /// A verdict stamped now whose `ok` is that every file was applied: a refused file and one that
+    /// needs a restart are both an edit that did not land.
     pub fn with_kinds(seq: u64, message: impl Into<String>, kinds: Vec<KindVerdict>) -> Verdict {
         let ok = kinds.iter().all(|k| k.outcome == Outcome::Applied);
         Verdict { seq, kinds, ..Verdict::now(ok, message) }

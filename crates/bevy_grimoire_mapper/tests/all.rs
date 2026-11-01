@@ -78,6 +78,7 @@ mod a_refused_undo_keeps_its_entry;
 mod a_rename_carries_the_rules_example_with_it;
 mod a_rename_is_all_or_nothing;
 mod a_rename_whose_old_file_cannot_go_changes_nothing;
+mod a_rigs_edit_says_what_became_of_it;
 mod a_rule_can_be_changed;
 mod a_run_lays_a_line_of_pieces;
 mod a_sequence_started_behind_schedule_still_applies_its_operation;

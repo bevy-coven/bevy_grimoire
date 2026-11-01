@@ -260,6 +260,8 @@ impl Plugin for AnimTabPlugin {
                     crate::anim_watch::poll_mtimes,
                     crate::anim_watch::queue_selected,
                     crate::anim_watch::step_measure_queue,
+                    // Ungated by the tab: a fact about `rigs.ron` stays true while another tab is open.
+                    crate::anim_watch::sync_rigs_reload,
                     crate::anim_watch::paint_stale_badge
                         .run_if(resource_changed::<crate::anim_watch::BenchGeneration>),
                     crate::anim_cache::save_bench_cache
