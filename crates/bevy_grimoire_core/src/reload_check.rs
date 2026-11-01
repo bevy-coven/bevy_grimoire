@@ -106,6 +106,69 @@ pub fn read<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> 
     })
 }
 
+/// **Read every line of a JSON-lines file as a `T`**, for a log the editor appends to and a reader walks
+/// (`oplog.jsonl`): a line that does not read as a `T` refuses the file, naming the line and the field.
+///
+/// The line is its number in the file, counted from 1 as an editor shows it (a blank line counts and is
+/// skipped), and the field follows it: `line 3.seq` for a `seq` of the wrong type, `line 3.op` for one
+/// that is missing, `line 3` for text that is not JSON at all or stopped before it named a field. Only
+/// the first damaged line is named; the reason says how many more there are, so a repaired line moves
+/// the verdict. A line is read the way `serde_json::from_str` reads it, trailing text included (two
+/// entries glued together by a write cut short is a line that does not read).
+pub fn read_lines<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> Result<Vec<T>, Refusal> {
+    let mut read = Vec::new();
+    let mut first: Option<(usize, Option<String>, String)> = None;
+    let mut damaged = 0usize;
+    for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
+        match line_as::<T>(line) {
+            Ok(value) => read.push(value),
+            Err((field, reason)) => {
+                damaged += 1;
+                first.get_or_insert((n + 1, field, reason));
+            }
+        }
+    }
+    let Some((line, field, reason)) = first else { return Ok(read) };
+    let more = match damaged - 1 {
+        0 => String::new(),
+        1 => "; 1 more line does not read".to_owned(),
+        k => format!("; {k} more lines do not read"),
+    };
+    let field = match field {
+        Some(field) => format!("line {line}.{field}"),
+        None => format!("line {line}"),
+    };
+    Err(Refusal { kind, file: file.to_owned(), field: Some(field), reason: format!("{reason}{more}") })
+}
+
+/// One line as a `T`, or the field it is wrong at (`None` for text that is not JSON or stopped before it
+/// named one) and why. serde_json names a missing field only in its message, so that is read from it.
+fn line_as<T: DeserializeOwned>(line: &str) -> Result<T, (Option<String>, String)> {
+    fn said(e: &serde_json::Error) -> String {
+        // `... at line 1 column 40` says line 1 of the line; the column is all that helps.
+        match e.to_string().rsplit_once(" at line ") {
+            Some((what, _)) => format!("{what} (column {})", e.column()),
+            None => e.to_string(),
+        }
+    }
+    let mut de = serde_json::Deserializer::from_str(line);
+    match serde_path_to_error::deserialize::<_, T>(&mut de) {
+        Ok(value) => de.end().map(|()| value).map_err(|e| (None, said(&e))),
+        Err(err) => {
+            let path = err.path().to_string();
+            let message = err.inner().to_string();
+            let missing = message.strip_prefix("missing field `").and_then(|rest| rest.split_once('`')).map(|(f, _)| f.to_owned());
+            let field = match (path.as_str(), missing) {
+                (".", None) => None,
+                (".", Some(field)) => Some(field),
+                (_, None) => Some(path),
+                (_, Some(field)) => Some(format!("{path}.{field}")),
+            };
+            Err((field, said(err.inner())))
+        }
+    }
+}
+
 /// **Parse `text` as `kind`.** `file` is only what a refusal names.
 pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
     use crate::{

@@ -24,6 +24,7 @@ mod a_chip_click_writes_the_library_once;
 mod a_click_outside_the_viewport_places_nothing;
 mod a_composed_proposal_draws_its_members;
 mod a_composition_can_be_renamed;
+mod a_damaged_oplog_line_is_named_and_the_rest_still_reads;
 mod a_dead_end_names_its_closest_piece;
 mod a_door_answer_says_whether_it_waits;
 mod a_dropped_image_becomes_a_reference;

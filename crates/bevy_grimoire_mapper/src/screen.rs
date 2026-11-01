@@ -628,6 +628,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_grimoire_mapper::notes_view::NotesView", Ownership::Project),
     // **Derived from the open project's `checks.ron`**: the last good checks the after-edit run asks (#200). Another project's file starts it afresh.
     ("bevy_grimoire_mapper::checks_view::ChecksView", Ownership::Project),
+    // **Derived from the open project's `oplog.jsonl`**: what the editor last found when it read the log (#200). Another project's log starts it afresh.
+    ("bevy_grimoire_mapper::oplog_view::OplogView", Ownership::Project),
     ("bevy_grimoire_mapper::family_host::FamilySettings", Ownership::Session),
     // **`Door`, like the camera it sits beside**: the hour the Environment panel's clock buttons
     // hold the preview at (#98). It is a view of the open project, never written to its file, so a

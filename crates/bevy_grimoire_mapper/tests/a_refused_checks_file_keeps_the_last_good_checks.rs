@@ -220,8 +220,9 @@ fn an_edit_is_decided_in_every_door() {
     }
 }
 
-/// `WATCHED_HERE` is the kinds this file has tests for: a kind joins it with its three bad files here.
+/// `WATCHED_HERE` is the kinds with tests for their three bad files: `checks` here, `oplog` in
+/// `a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs`. A kind joins it with its tests.
 #[test]
 fn the_kinds_watched_here_are_the_ones_tested_here() {
-    assert_eq!(bevy_grimoire_mapper::map_files::WATCHED_HERE, ["checks"]);
+    assert_eq!(bevy_grimoire_mapper::map_files::WATCHED_HERE, ["checks", "oplog"]);
 }
