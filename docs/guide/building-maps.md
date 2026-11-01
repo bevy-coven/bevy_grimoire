@@ -54,6 +54,8 @@ The clip shows the jobs below in one pass: arm a piece from the PLACE list, set 
 
 **What you see:** The piece comes off the map. `Cmd+Z` puts it back.
 
+Or right-click the piece: its menu opens at the pointer with Turn left, Turn right, Tip about x, Tip about z, Lift, Lower and Remove. Each is the same act as its key, on that one piece, and each is one line in the history, so `Cmd+Z` takes it back.
+
 ## Clone and run
 
 **Goal:** Copy a piece, or lay a line of the same piece.
