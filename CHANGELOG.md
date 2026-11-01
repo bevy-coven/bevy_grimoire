@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-01
 
+- **ui-90-run-command** `b70184a` An agent runs any registered command by its id (grimoire_run_command), exactly as its shortcut would, and grimoire_state.ui says the screen, workspace, panels and focus (UI-90, #256) *No clip: an MCP tool; proved by a_command_runs_by_id_through_the_agents_door (4 tests)*
 - **ui-07-writing-style** `335e231` Every command title follows the writing style: a test refuses abbreviations (verts, loc, rot, fac, obj, cfg, info), contractions and implementation terms, and the refused list is in docs/ui/vision.md §9 (UI-07, #215) *No clip: a test over the command titles; proved by every_label_follows_the_writing_style*
 - **ui-04-command-registry** `4a4d6de` Every key is a command with a stable id, a title and a default shortcut (bevy_gooey Shortcut), and no two commands take one chord on a tab where both are live (UI-04, first slice; the menus and the palette dispatch by these ids) *No clip: an API the menus and the palette will read; proved by every_action_is_a_command (5 tests)*
 - **103-flicker-preview** `8e958f2` A placed torch flickers in the viewport: a placement carrying a bevy_lights Flicker is drawn with a real light that the crate's own FlickerPlugin drives, retuned when the value changes and taken down when it is removed (#103) *No clip: visible, not yet recorded: on big the Xvfb capture of the editor is unreliable (UI-40 pass); proved by light_view::the_light_flickers_between_the_crates_own_bounds_as_frames_pass*
