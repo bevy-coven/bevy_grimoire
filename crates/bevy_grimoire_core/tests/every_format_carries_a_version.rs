@@ -122,6 +122,12 @@ fn with_version(text: &str, version: u32) -> String {
     format!("{}{version}{}", &text[..a], &text[b..])
 }
 
+/// Whether `reason` says the number `n` as a number of its own, and not as a digit of another or of a
+/// byte offset: a refusal at version 2 of a build that reads 1 must name the 1 as a word.
+fn names_number(reason: &str, n: u32) -> bool {
+    reason.split(|c: char| !c.is_ascii_digit()).any(|word| word == n.to_string())
+}
+
 /// **Each kind is in exactly one place**, so a new kind has to say how its format is versioned.
 #[test]
 fn every_kind_is_versioned_unversioned_or_owned_elsewhere() {
@@ -190,7 +196,7 @@ fn a_newer_version_is_refused_and_the_version_this_build_reads_is_named() {
             continue;
         }
         match checked {
-            Check::Refused(r) if r.reason.contains("version") && r.reason.contains(&current.to_string()) => {}
+            Check::Refused(r) if r.reason.contains("version") && names_number(&r.reason, current) => {}
             Check::Refused(r) => broken.push(format!(
                 "`{id}` refused version {ahead} without naming the version {current} it reads: {}",
                 r.reason
