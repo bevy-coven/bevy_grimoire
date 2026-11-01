@@ -87,7 +87,7 @@ bevy_stigmergy = { git = "https://github.com/bevy-coven/bevy_stigmergy", rev = "
 bevy_grimoire_core = { path = "../bevy_grimoire_core" }
 bevy_flora = { git = "https://github.com/bevy-coven/bevy_flora", rev = "25e956b3f88ba32a1b6d75957360c6840da6afd9", features = ["ron"], optional = true }
 # The editor's UI library (UI-01, #209): required, not a family-crate feature. `EditorUiPlugin` owns it.
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "23e851a8d4921cb0375a59400f5ec60f68fe8ea5", features = ["serde"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "9a7dcbd36c58e4714d6f1ca73ebdf883692c80ac", features = ["serde"] }
 # The runtime half. The editor spawns pieces through `bevy_grimoire::spawn_descriptor` rather than its
 # own copy, so a map cannot look one way here and another in the game — the failure `bake.rs` and
 # `site_editor::source_map` demonstrated by independently growing the same RON writer.

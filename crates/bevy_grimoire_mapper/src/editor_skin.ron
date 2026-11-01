@@ -1,0 +1,39 @@
+// The editor's own skin (UI-02, #210): the colours and measures `chrome.rs` draws with, as the data
+// `bevy_gooey` reads. `surfaces` is the elevation ladder, lowest first; every adjacent step differs by
+// at least dL* 2 (`GooeySkin::problems()` checks it). `OVERLAY_BG` is not a step: it sits 1.1 under
+// `SLOT_BG` and 1.9 under `ROW_HOVER`, a card above the scrim rather than a rung. Edit this file and the editor's look follows.
+(
+    background: Srgba((red: 0.075, green: 0.07, blue: 0.061, alpha: 1.0)),
+    surface: Srgba((red: 0.115, green: 0.107, blue: 0.093, alpha: 1.0)),
+    surface_raised: Srgba((red: 0.165, green: 0.153, blue: 0.134, alpha: 1.0)),
+    text: Srgba((red: 0.88, green: 0.865, blue: 0.835, alpha: 1.0)),
+    text_muted: Srgba((red: 0.7, green: 0.685, blue: 0.655, alpha: 1.0)),
+    accent: Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0)),
+    accent_text: Srgba((red: 0.075, green: 0.07, blue: 0.061, alpha: 1.0)),
+    danger: Srgba((red: 0.98, green: 0.52, blue: 0.46, alpha: 1.0)),
+    focus_ring: Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0)),
+    outline: Srgba((red: 0.440, green: 0.409, blue: 0.356, alpha: 1.0)),
+    scrim: Srgba((red: 0.0, green: 0.0, blue: 0.0, alpha: 0.55)),
+    surfaces: [
+        Srgba((red: 0.075, green: 0.07, blue: 0.061, alpha: 1.0)),  // VOID
+        Srgba((red: 0.115, green: 0.107, blue: 0.093, alpha: 1.0)),  // PANEL_BG
+        Srgba((red: 0.14, green: 0.13, blue: 0.113, alpha: 1.0)),  // HEADER_BG
+        Srgba((red: 0.165, green: 0.153, blue: 0.134, alpha: 1.0)),  // ROW_BG
+        Srgba((red: 0.185, green: 0.172, blue: 0.15, alpha: 1.0)),  // SLOT_BG
+        Srgba((red: 0.212, green: 0.197, blue: 0.172, alpha: 1.0)),  // ROW_HOVER
+        Srgba((red: 0.248, green: 0.231, blue: 0.201, alpha: 1.0)),  // ROW_SELECTED
+        Srgba((red: 0.325, green: 0.302, blue: 0.263, alpha: 1.0)),  // PANEL_EDGE
+    ],
+    text_size: 11.0,
+    heading_size: 15.0,
+    gap: 5.0,
+    padding: 12.0,
+    radius: 4.0,
+    border: 1.0,
+    meter_height: 10.0,
+    min_target: 24.0,
+    density: Compact,
+    spacing: (3.0, 5.0, 12.0, 16.0, 20.0, 24.0),
+    radii: (3.0, 4.0, 8.0),
+    type_scale: (9.0, 10.0, 11.0, 13.0, 15.0),
+)
