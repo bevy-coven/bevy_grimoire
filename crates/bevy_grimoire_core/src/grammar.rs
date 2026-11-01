@@ -229,6 +229,108 @@ fn window(map: &Map, cell: f32, area: Option<&Area>) -> Result<Window, String> {
     })
 }
 
+/// **What a solve over a [`Window`] actually solves: the area alone** (#261).
+///
+/// The ring around an area is pinned to what stands in it ([`pinned_domains`]), but it is not part of
+/// the problem: collapsing it beside the area made two ring neighbours that the grammar does not allow
+/// together refuse an area that could be filled, and made an enclosure wish count the ring's cells as
+/// part of the region. So the ring leaves the grid and speaks only through the area's edge cells, each
+/// narrowed to what the grammar lets stand beside the ring cell it touches.
+struct Part {
+    /// The area as a window of its own: the grid is the area, so [`harvest`] lays every cell of it.
+    win: Window,
+    /// The author's pins in the area, as [`pinned_domains`] reads them; what [`harvest`] skips.
+    pins: Vec<u32>,
+    /// `pins`, with each edge cell narrowed by the ring cell beside it; what the solver collapses.
+    domains: Vec<u32>,
+}
+
+impl Part {
+    fn of(win: &Window, initial: &[u32], grammar: &Grammar) -> Self {
+        let (x0, z0, x1, z1) = win.area;
+        let part = Window {
+            grid: win.area,
+            area: win.area,
+        };
+        let (w, h) = (part.width(), part.height());
+        let mut pins = Vec::with_capacity(w * h);
+        for z in z0..z1 {
+            for x in x0..x1 {
+                let at = win.local((x as i64, z as i64));
+                pins.push(at.and_then(|i| initial.get(i)).copied().unwrap_or(0));
+            }
+        }
+        let mut domains = pins.clone();
+        // The neighbour of each edge cell in the four directions N, E, S, W, as `learn` orders them.
+        let steps: [(i64, i64); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
+        for z in z0..z1 {
+            for x in x0..x1 {
+                let here = (z - z0) * w + (x - x0);
+                for (dir, (dx, dz)) in steps.iter().enumerate() {
+                    let c = (x as i64 + dx, z as i64 + dz);
+                    let (cx, cz) = (c.0, c.1);
+                    let inside = cx >= x0 as i64 && cx < x1 as i64 && cz >= z0 as i64 && cz < z1 as i64;
+                    if inside {
+                        continue;
+                    }
+                    let Some(ring) = win.local(c).and_then(|i| initial.get(i)).copied() else {
+                        continue; // the map's own edge: nothing stands beyond it
+                    };
+                    // What may stand on `dir`'s side of this cell is what the ring prototype allows on
+                    // its opposite side, read for each prototype the ring cell could be.
+                    let opposite = (dir + 2) % 4;
+                    let mut allowed = 0u32;
+                    for (q, row) in grammar.support[opposite].iter().enumerate() {
+                        if ring & (1 << q) != 0 {
+                            allowed |= row;
+                        }
+                    }
+                    domains[here] &= allowed;
+                }
+            }
+        }
+        Part { win: part, pins, domains }
+    }
+
+    /// Which sides of the area have more map past them, N, E, S, W: the sides the ring stands on.
+    fn beyond(&self, win: &Window) -> [bool; 4] {
+        let (x0, z0, x1, z1) = win.area;
+        [z0 > win.grid.1, x1 < win.grid.2, z1 < win.grid.3, x0 > win.grid.0]
+    }
+
+    fn width(&self) -> usize {
+        self.win.width()
+    }
+
+    fn height(&self) -> usize {
+        self.win.height()
+    }
+
+    /// The solved area written back into the window's grid, the ring read as what it was pinned to
+    /// (empty where it was left open), so [`Solved::grid`] stays the area and the ring around it.
+    fn with_ring(&self, win: &Window, initial: &[u32], solved: &[usize]) -> Vec<usize> {
+        let (w, h) = (win.width(), win.height());
+        let (x0, z0, ..) = win.area;
+        let aw = self.width();
+        let mut grid = vec![0usize; w * h];
+        for z in 0..h {
+            for x in 0..w {
+                let i = z * w + x;
+                grid[i] = if win.lays(x, z) {
+                    let (ax, az) = (x + win.grid.0 - x0, z + win.grid.1 - z0);
+                    solved.get(az * aw + ax).copied().unwrap_or(0)
+                } else {
+                    match initial.get(i) {
+                        Some(&mask) if mask.count_ones() == 1 => mask.trailing_zeros() as usize,
+                        _ => 0,
+                    }
+                };
+            }
+        }
+        grid
+    }
+}
+
 /// **Read the author's arrangement as a grammar.**
 ///
 /// Every placement lands in a cell; every orthogonally adjacent pair of cells teaches one rule in each
@@ -426,24 +528,32 @@ fn solve_window(
         (1u32 << grammar.len()) - 1
     };
     let (initial, owned_cells) = pinned_domains(map, grammar, cell, &win, full)?;
+    let part = Part::of(&win, &initial, grammar);
 
-    let chosen = wfc::collapse_grid(w, h, &grammar.weights, &grammar.support, &initial, seed)
-        .ok_or_else(|| {
-            "grammar: no arrangement satisfies what you have pinned. The learned rules cannot tile \
-             this region around those cells — free some of them, or extend the example so the solver \
-             has more ways to join things up."
-                .to_owned()
-        })?;
+    let solved = wfc::collapse_grid(
+        part.width(),
+        part.height(),
+        &grammar.weights,
+        &grammar.support,
+        &part.domains,
+        seed,
+    )
+    .ok_or_else(|| {
+        "grammar: no arrangement satisfies what you have pinned. The learned rules cannot tile \
+         this region around those cells — free some of them, or extend the example so the solver \
+         has more ways to join things up."
+            .to_owned()
+    })?;
 
     let (placements, stamps, free_cells) =
-        harvest(map, grammar, cell, &chosen, &initial, &win, &mut next_id);
+        harvest(map, grammar, cell, &solved, &part.pins, &part.win, &mut next_id);
 
     Ok(Solved {
         placements,
         stamps,
         free_cells,
         owned_cells,
-        grid: chosen,
+        grid: part.with_ring(&win, &initial, &solved),
         width: w,
         height: h,
         unmet: 0,
@@ -547,26 +657,30 @@ fn solve_constrained_window(
         (1u32 << grammar.len()) - 1
     };
     let (initial, owned_cells) = pinned_domains(map, grammar, cell, &win, full)?;
+    let part = Part::of(&win, &initial, grammar);
+    let (aw, ah) = (part.width(), part.height());
 
     let mut gp = crate::constraints::GridProblem::encode(
         &grammar.support,
-        &initial,
-        w,
-        h,
+        &part.domains,
+        aw,
+        ah,
         grammar.len(),
     )?;
-    // The author's pinned cells, as unary constraints — the same masks WFC takes as `initial`.
-    crate::constraints::domain_rules(&mut gp.problem, &gp.place, &initial);
+    // The author's pinned cells, and what the ring leaves each edge cell, as unary constraints — the
+    // same masks WFC takes as `initial`.
+    crate::constraints::domain_rules(&mut gp.problem, &gp.place, &part.domains);
     // One wish per cell, drawn from the weights the author's own arrangement taught.
     crate::constraints::preference_rules(&mut gp.problem, &gp.place, &grammar.weights, seed)?;
     if wishes.enclosure > 0.0 {
         let read = crate::range::Faces::new(faces, WALL_TOKEN, WALKABLE_GAP);
-        crate::constraints::enclosure_rules(
+        crate::constraints::enclosure_rules_beyond(
             &mut gp.problem,
             &gp.place,
             &read,
-            w,
-            h,
+            aw,
+            ah,
+            part.beyond(&win),
             wishes.enclosure,
             wishes.enclosure_weight,
         )?;
@@ -575,14 +689,14 @@ fn solve_constrained_window(
     let solution = gp.problem.solve(SOLVE_BUDGET)?;
     let chosen = gp.read(&solution)?;
     let (placements, stamps, free_cells) =
-        harvest(map, grammar, cell, &chosen, &initial, &win, &mut next_id);
+        harvest(map, grammar, cell, &chosen, &part.pins, &part.win, &mut next_id);
 
     Ok(Solved {
         placements,
         stamps,
         free_cells,
         owned_cells,
-        grid: chosen,
+        grid: part.with_ring(&win, &initial, &chosen),
         width: w,
         height: h,
         unmet: solution.unmet(),
@@ -635,7 +749,13 @@ fn pinned_domains(
     let mut initial = vec![full; w * win.height()];
     let mut owned_cells = 0usize;
     let quarter = |yaw: f32| (yaw / 15.0).round() * 15.0;
-    let known = |p: &Prototype| grammar.prototypes.iter().position(|q| q == p);
+    let known = |p: &Prototype| {
+        grammar
+            .prototypes
+            .iter()
+            .position(|q| q == p)
+            .or_else(|| same_tile_turned(grammar, p))
+    };
 
     let mut ring: HashMap<usize, Option<usize>> = HashMap::new();
     let mut stands = |i: usize, proto: Prototype| {
@@ -710,6 +830,36 @@ fn pinned_domains(
         owned_cells += 1;
     }
     Ok((initial, owned_cells))
+}
+
+/// **The prototype a stamp at a turn the grammar deduplicated stands for** (#261).
+///
+/// [`from_compositions`] keeps a tile's turns until one presents the faces of an earlier turn, so a
+/// tile that looks the same turned half a circle keeps two of its four turns, and one that looks the
+/// same turned a quarter keeps one. A stamp standing at a turn that was dropped is therefore the kept
+/// turn whose yaw is the same modulo the tile's period, `90 * kept` degrees: the identical-faced copy.
+/// `None` for anything but a stamp of a composition the grammar knows, and for a count of kept turns
+/// that is not a divisor of the circle in quarters, which no deduplication produces.
+fn same_tile_turned(grammar: &Grammar, proto: &Prototype) -> Option<usize> {
+    let Prototype::Composed { composition, yaw } = proto else {
+        return None;
+    };
+    let turns = |p: &Prototype| match p {
+        Prototype::Composed { composition: c, yaw } if c == composition => Some(*yaw),
+        _ => None,
+    };
+    let kept = grammar.prototypes.iter().filter_map(turns).count();
+    if !matches!(kept, 1 | 2 | 4) {
+        return None;
+    }
+    let period = 90.0 * kept as f32;
+    let want = yaw.rem_euclid(period);
+    grammar.prototypes.iter().position(|p| {
+        turns(p).is_some_and(|y| {
+            let y = y.rem_euclid(360.0);
+            (y - want).abs() < 1.0 && y < period
+        })
+    })
 }
 
 /// A solved grid as the rows a caller can write back: the cells `win` lays, skipping the ones the

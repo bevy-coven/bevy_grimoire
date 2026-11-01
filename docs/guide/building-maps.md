@@ -95,7 +95,7 @@ Or right-click the piece: its menu opens at the pointer with Turn left, Turn rig
 
 **What you see:** The layout waits for your answer. Press `Enter` to keep it, or `Esc` to throw it away.
 
-An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z0, x1, z1]` in map metres (the same space as a placement's `at`), and lays only the cells whose centre is in it. The cells around the area stay as they are and the new layout joins them, and `layout_accept` replaces only the unpinned pieces in the area, so everything outside it stays where it was. An area that holds no cell of the map is refused, and so is one on a map the project's block rules lay.
+An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z0, x1, z1]` in map metres (the same space as a placement's `at`), and lays only the cells whose centre is in it. The cells around the area stay as they are and the new layout joins them, and `layout_accept` replaces only the unpinned pieces in the area, so everything outside it stays where it was. An area that holds no cell of the map is refused, and so is one on a map the project's block rules lay. Only the area is solved. The pieces around it narrow what its edge cells may be, each edge cell taking what the rules let stand beside the piece it touches, so two old pieces that the rules would not set side by side do not refuse an area between them. An enclosure wish counts the area's own cells, and a wall on an edge cell's outward face closes it; a stamp of a symmetric tile at a turn the kit does not keep counts as the turn it equals.
 
 ## Pin a piece
 
