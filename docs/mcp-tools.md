@@ -177,6 +177,16 @@ Frame the editor's Map camera on a box. target: "map" (the whole map), "selectio
 | `destructiveHint` | false |
 | `idempotentHint` | true |
 
+### `grimoire_run_command`
+
+Run one of the editor's registered commands by id, exactly as its keyboard shortcut would: `edit.undo` takes back what Cmd+Z takes back, `edit.redo` puts it back. An id is `<category>.<verb>`. Refuses, and changes nothing, when the command is not enabled now (the answer says why: the tab, what is in hand, or a text field holding the keys), when the launcher is open, or when the id is unknown (the answer names the nearest ids as did_you_mean). `ran` means the shortcut was queued; the change lands within a frame or two, so read grimoire_state for the result. grimoire_state.ui says which screen, workspace and panels are open and which region has the keys. A command that is also an operation (a placement, a resize) is better done with grimoire_apply_operation, which names its effect and logs it.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | false |
+| `destructiveHint` | true |
+| `idempotentHint` | false |
+
 ## How the two paths converge
 
 Every operation writes the data file, and the editor watches that file. So:

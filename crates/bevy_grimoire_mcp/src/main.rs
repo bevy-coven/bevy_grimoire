@@ -29,8 +29,9 @@
 //! | `grimoire_list_pieces` | the library's pieces, a page at a time, with their label provenance |
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
 //! | `grimoire_list_rules` | the block rules a layout is generated from, as the project states them |
+//! | `grimoire_run_command` | run a registered editor command by its id, as its shortcut would |
 //!
-//! **Fifteen tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Sixteen tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -124,6 +125,14 @@ pub struct UndoParams {
     /// Refused when nothing has been presented, because a turn is a thing the agent declared.
     #[serde(default)]
     pub turn: bool,
+}
+
+/// **The parameters of `grimoire_run_command`.**
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RunCommandParams {
+    /// **The command's id**, `<category>.<verb>`, such as `edit.undo` or `edit.redo`.
+    pub id: String,
 }
 
 /// **The parameters of `grimoire_frame_view`.**
@@ -1455,6 +1464,54 @@ impl Grimoire {
             .call("grimoire/frame_view", json!({"target": p.target}))
             .await
         {
+            Ok(v) => {
+                let refused = v.get("outcome").and_then(|o| o.as_str()) == Some("refused");
+                if refused {
+                    Ok(CallToolResult::structured_error(v))
+                } else {
+                    Ok(CallToolResult::structured(v))
+                }
+            }
+            Err(e) => Ok(refusal(&e)),
+        }
+    }
+
+    /// **`grimoire_run_command` — run one of the editor's registered commands by id** (UI-90, #256).
+    ///
+    /// **The same command a key, a menu or the palette runs.** The editor presses the command's
+    /// chord and its one dispatcher answers, so `edit.undo` undoes as Cmd+Z does, and a command the
+    /// key would refuse in this state is refused here with the editor's own reason.
+    #[tool(
+        name = "grimoire_run_command",
+        description = "Run one of the editor's registered commands by id, exactly as its keyboard \
+                       shortcut would: `edit.undo` takes back what Cmd+Z takes back, `edit.redo` \
+                       puts it back. An id is `<category>.<verb>`. Refuses, and changes nothing, \
+                       when the command is not enabled now (the answer says why: the tab, what is \
+                       in hand, or a text field holding the keys), when the launcher is open, or \
+                       when the id is unknown (the answer names the nearest ids as did_you_mean). \
+                       `ran` means the shortcut was queued; the change lands within a frame or two, \
+                       so read grimoire_state for the result. grimoire_state.ui says which screen, \
+                       workspace and panels are open and which region has the keys. A command \
+                       that is also an operation (a placement, a resize) is better done with \
+                       grimoire_apply_operation, which names its effect and logs it.",
+        annotations(
+            title = "Run an editor command",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn run_command(
+        &self,
+        Parameters(p): Parameters<RunCommandParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        // **The project is checked first**: a shortcut pressed in the wrong project's editor would
+        // change the wrong map.
+        if let Err(why) = self.check_project().await {
+            return Ok(refusal(&why));
+        }
+        match self.editor.call("grimoire/run_command", json!({"id": p.id})).await {
             Ok(v) => {
                 let refused = v.get("outcome").and_then(|o| o.as_str()) == Some("refused");
                 if refused {

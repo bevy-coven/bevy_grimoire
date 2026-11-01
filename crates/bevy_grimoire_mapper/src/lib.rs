@@ -54,6 +54,7 @@ pub mod build;
 pub mod chooser;
 pub mod checks;
 pub mod chrome;
+pub mod command_run;
 pub mod commands;
 pub mod compass;
 pub mod compose;

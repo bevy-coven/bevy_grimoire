@@ -415,6 +415,8 @@ fn editor_state(
     // 2026-10-25: that is exactly the pair `tools/loop/accept.py`'s `open_map` step has to tell
     // apart, and its predicate passed on the pre-fix build.
     screen: Option<Res<State<crate::screen::Screen>>>,
+    // **Which keys the editor is reading and who holds them** (UI-90), for `ui.focus`.
+    keys_live: Option<Res<crate::keys::Live>>,
 ) -> Result<Value, String> {
     let Loaded { project, open, game, reloads, live, diagnostics, busy } = loaded;
     // **The agent's presentation, and the person's answer to it** (S1.7). `None` until an agent
@@ -553,8 +555,11 @@ fn editor_state(
             })),
         })
     });
+    // **Where the person is looking** (UI-90, #256): the screen, the workspace, the panels and the region with the keys.
+    let ui = ui_json(screen.as_deref(), door.as_deref(), keys_live.as_deref());
     Ok(json!({
         "map": map,
+        "ui": ui,
         // **The notes an agent can claim, and with `note` the bundle to work one** (#91).
         "notes": open.as_ref().map(|o| crate::ops_notes::state_json(
             o,
@@ -619,6 +624,37 @@ fn editor_state(
             crate::screen::Screen::Editor => "editor",
         }),
     }))
+}
+
+/// **`grimoire/state.ui` — where the person is looking** (UI-90, #256; `docs/ui/vision.md` §4).
+///
+/// `screen` is `launcher` on the chooser and `workbench` in the editor. `workspace` is the open door
+/// (the workbench's saved layouts replace the doors, UI-33) and `panels` are the tabs that door shows,
+/// until the docks hold panels of their own (UI-30). `focus` is the region with the keyboard: the
+/// `viewport` unless a text field, a filter box or the journal is holding it. Read it before
+/// `grimoire/run_command`: a command is refused when the region that holds the keys is not its own.
+fn ui_json(
+    screen: Option<&State<crate::screen::Screen>>,
+    door: Option<&crate::tiles::Door>,
+    live: Option<&crate::keys::Live>,
+) -> Value {
+    use crate::keys::{Context, Holder};
+    let workbench = screen.is_some_and(|s| *s.get() == crate::screen::Screen::Editor);
+    if !workbench {
+        return json!({"screen": "launcher", "workspace": null, "panels": [], "focus": "launcher"});
+    }
+    let focus = match live.map(|l| (l.0, l.2)) {
+        Some((Context::Typing, _)) => "text_field",
+        Some((_, Holder::Filter)) => "filter",
+        Some((_, Holder::Journal)) => "journal",
+        _ => "viewport",
+    };
+    json!({
+        "screen": "workbench",
+        "workspace": door.map(|d| d.label()),
+        "panels": door.map_or_else(Vec::new, |d| d.tabs().iter().map(|m| m.label()).collect()),
+        "focus": focus,
+    })
 }
 
 /// The most repeats `grimoire_state` names; `total` always counts them all.
@@ -1913,6 +1949,74 @@ pub struct FrameParams {
     pub target: FrameTargetParam,
 }
 
+/// **The parameters of `grimoire/run_command`.** `deny_unknown_fields`, so a typo is a refusal.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunCommandParams {
+    /// The command's id, `<category>.<verb>` (`edit.undo`), as the command registry names it.
+    pub id: String,
+}
+
+/// **`grimoire/run_command` — run a registered command by id** (UI-90, #256).
+///
+/// **The agent's door onto [`crate::commands`].** The command's chord is pressed for one frame and the
+/// editor's own dispatcher answers, so `edit.undo` undoes exactly as Cmd+Z does, through the same
+/// system, with the same receipt and the same undo stack ([`crate::command_run`] says why a key and
+/// not a call). **It runs nothing the key would refuse**: a command that is not enabled now is refused
+/// with the registry's own reason ([`crate::commands::Command::enabled`]) and nothing is pressed.
+///
+/// **`ran` means the chord is queued, not that the verb finished**; the change lands in the next frame
+/// or two and the caller reads it from `grimoire/state`. An unknown id is refused and names the ids
+/// nearest to it.
+fn run_command(
+    In(p): In<RunCommandParams>,
+    screen: Option<Res<State<crate::screen::Screen>>>,
+    live: Option<Res<crate::keys::Live>>,
+    chords: Option<ResMut<crate::command_run::Chords>>,
+    state: Option<ResMut<crate::editor::EditorState>>,
+) -> Result<Value, String> {
+    fn refused(id: &str, why: impl Into<String>) -> Value {
+        json!({"outcome": "refused", "id": id, "why": why.into()})
+    }
+    let Some(command) = crate::commands::by_id(&p.id) else {
+        let ids: Vec<&str> = crate::commands::all().into_iter().map(|c| c.id).collect();
+        let mut near: Vec<(usize, &str)> = ids
+            .iter()
+            .map(|id| (bevy_grimoire_core::vocab::edit_distance(id, &p.id), *id))
+            .collect();
+        near.sort();
+        let mut did_you_mean: Vec<&str> = near.into_iter().take(3).map(|(_, id)| id).collect();
+        // **An id that is a part of another names it too**: `undo` finds `edit.undo` and `tiles.undo`.
+        let parts: Vec<&str> = ids
+            .iter()
+            .copied()
+            .filter(|id| !p.id.is_empty() && id.contains(p.id.as_str()) && !did_you_mean.contains(id))
+            .take(5)
+            .collect();
+        did_you_mean.extend(parts);
+        return Ok(json!({
+            "outcome": "refused",
+            "id": p.id,
+            "why": format!("`{}` is not a command id; ids are `<category>.<verb>`, such as `edit.undo`", p.id),
+            "did_you_mean": did_you_mean,
+        }));
+    };
+    if screen.as_deref().is_some_and(|s| *s.get() != crate::screen::Screen::Editor) {
+        return Ok(refused(command.id, "The launcher is open; commands run in the workbench"));
+    }
+    let (Some(live), Some(mut chords)) = (live, chords) else {
+        return Ok(refused(command.id, "The editor is not ready for keys yet"));
+    };
+    if let Err(why) = command.enabled(*live) {
+        return Ok(refused(command.id, why));
+    }
+    chords.queue(&command);
+    if let Some(mut state) = state {
+        state.status.note(format!("an agent ran {}", command.title));
+    }
+    Ok(json!({"outcome": "ran", "id": command.id, "title": command.title, "shortcut": command.shortcut_label()}))
+}
+
 /// **`grimoire/frame_view` — frame the Map camera on a box.**
 ///
 /// **Camera state only.** It moves the view, not the map: it is not an operation, it is not in the
@@ -1996,6 +2100,7 @@ impl Plugin for OpsBridgePlugin {
         app.init_resource::<FrameBusy>()
             .add_systems(First, frame_busy_start)
             .add_systems(Last, frame_busy_end);
+        app.add_plugins(crate::command_run::CommandRunPlugin);
 
         app.add_debug_command(
             DebugCommandInfo::new(
@@ -2149,6 +2254,18 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({"target": {"rect": [200.0, 100.0, 400.0, 300.0]}})),
             frame_view,
+        );
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/run_command",
+                "Run a registered editor command by id, as its key would: `edit.undo` undoes exactly \
+                 as Cmd+Z does. Refused, with the registry's reason, when the command is not enabled \
+                 now (the stance, the tab or a text field refuses it); an unknown id names the nearest \
+                 ids. `ran` means the key is queued: read grimoire/state for the result.",
+            )
+            .params("id: the command's id, `<category>.<verb>`, such as `edit.undo` or `edit.redo`.")
+            .example(json!({"id": "edit.undo"})),
+            run_command,
         );
         app.add_debug_command(
             DebugCommandInfo::new(

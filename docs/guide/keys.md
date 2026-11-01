@@ -29,6 +29,8 @@ A key marked "in filter boxes" still walks its list while a filter box has focus
 
 Each key on this page is also a command with an id that does not change, such as `file.save`, `edit.undo` or `tiles.align_forward`. The part before the dot is the category a menu groups it under. A menu, the command palette and an agent name a command by its id, so renaming a key never breaks them. `crates/bevy_grimoire_mapper/src/commands.rs` lists every id and its title, and a test fails when two commands share an id, a title, or a shortcut on a tab where both work.
 
+An agent runs a command by its id with `grimoire_run_command`, and it presses the same shortcut, so a command that is not available now (a key that needs a piece in hand, or a text field holding the keys) is refused with the reason a menu would show.
+
 ## Everywhere
 
 These keys work on every tab.
