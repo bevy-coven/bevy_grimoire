@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::ron_surgery::{fmt_f32, scan_ron_leaves};
+use crate::reload_check::Refusal;
 
 /// File name of the registry inside the grimoire directory.
 pub const REGISTRY_FILE: &str = "data.ron";
@@ -118,6 +119,57 @@ pub fn leaves(text: &str) -> Result<Vec<(String, String)>, String> {
         .into_iter()
         .map(|l| (l.path, l.text))
         .collect())
+}
+
+/// The kind id a refusal of a registered data file carries.
+const KIND: &str = "game_data";
+
+/// **The field a scan stopped at**: its errors end "... at `mob.speed`" when they got that far.
+fn stopped_at(why: &str) -> Option<String> {
+    let (_, path) = why.strip_suffix('`')?.rsplit_once(" at `")?;
+    (!path.is_empty()).then(|| path.to_owned())
+}
+
+/// **Every scalar leaf of `text`, or a refusal that names the file and the field** (#200, H3): the one
+/// reader a data edit and the editor's look at a game's file both use, so the two cannot disagree about
+/// what reads. `file` is only what the refusal names. A file cut off or not RON is refused at the leaf
+/// where reading stopped (`mob.name`), when it got that far; a file the scan read and RON does not is
+/// refused with RON's position and no field.
+pub fn read(file: &str, text: &str) -> Result<Vec<(String, String)>, Refusal> {
+    let refuse = |field, reason: String| Refusal { kind: KIND, file: file.to_owned(), field, reason };
+    let all = leaves(text).map_err(|why| refuse(stopped_at(&why), why))?;
+    ron::from_str::<ron::Value>(text).map_err(|e| refuse(None, e.to_string()))?;
+    Ok(all)
+}
+
+/// `[0, 9]`, `[1, inf]`: a range as a refusal says it.
+fn range(b: &Bounds) -> String {
+    format!("[{}, {}]", b.min.map_or("-inf".into(), |m| m.to_string()), b.max.map_or("inf".into(), |m| m.to_string()))
+}
+
+/// **Check one registered file against its registry entry** (#200, H3): [`read`], then every leaf the
+/// registry bounds must be there, a number, and inside its bounds. The bounded leaves are the fields
+/// this crate knows a game's file must have, since the file's own type is the game's. A refusal names
+/// the file and the leaf; a file that does not read is [`read`]'s refusal.
+pub fn check(file: &str, entry: &DataFile, text: &str) -> Result<(), Refusal> {
+    let all = read(file, text)?;
+    for (path, b) in &entry.bounds {
+        let refuse = |reason: String| Refusal { kind: KIND, file: file.to_owned(), field: Some(path.clone()), reason };
+        let Some((_, token)) = all.iter().find(|(p, _)| p == path) else {
+            let known: Vec<String> = all.iter().map(|(p, _)| p.clone()).collect();
+            let near = nearest(path, &known).iter().map(|p| format!("`{p}`")).collect::<Vec<_>>().join(", ");
+            return Err(refuse(format!("the registry bounds `{path}` and this file has no such leaf; nearest: {near}")));
+        };
+        let kind = Kind::of(token);
+        let x = match (kind, leaf_json(token).and_then(|v| v.as_f64())) {
+            (Kind::Int | Kind::Float, Some(x)) => x,
+            _ => return Err(refuse(format!("`{path}` holds {} (`{token}`) and the registry bounds it as a number", kind.name()))),
+        };
+        if b.min.is_some_and(|m| x < m) || b.max.is_some_and(|m| x > m) {
+            return Err(refuse(format!("`{path}` is {token}, outside its bounds {}", range(b))));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,11 +291,7 @@ pub fn set_leaf(
             if let Some(b) = bounds
                 && (b.min.is_some_and(|m| x < m) || b.max.is_some_and(|m| x > m))
             {
-                return Err(format!(
-                    "`{path}`: {n} is outside its bounds [{}, {}]",
-                    b.min.map_or("-inf".into(), |m| m.to_string()),
-                    b.max.map_or("inf".into(), |m| m.to_string())
-                ));
+                return Err(format!("`{path}`: {n} is outside its bounds {}", range(b)));
             }
             if kind == Kind::Int {
                 if let Some(i) = n.as_i64() {

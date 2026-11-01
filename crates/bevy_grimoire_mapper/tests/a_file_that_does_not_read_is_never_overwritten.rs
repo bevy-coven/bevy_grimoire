@@ -171,11 +171,10 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 /// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads (`READ_HERE`) and the two it
 /// watches (`WATCHED_HERE`) are off it here. A kind comes off when its type gains a reader that names the
 /// file and the field; none joins unseen.
-const STILL_UNCHECKED: &[&str] =
-    &["reference_images", "family", "destructible_marks", "destructible_bake", "game_data"];
+const STILL_UNCHECKED: &[&str] = &["reference_images", "family", "destructible_marks", "destructible_bake"];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 5;
+const STILL_UNCHECKED_MAX: usize = 4;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {

@@ -24,12 +24,15 @@ pub const READ_HERE: &[&str] = &["forest", "people", "scripts", "trees"];
 
 /// **The registry kinds a watcher in this layer reads with a named refusal** (`checks`: the decision
 /// crate's type, held by [`crate::checks_view::ChecksView`]; `oplog`: this layer's own entry type,
-/// looked at by [`crate::oplog_view::OplogView`]). No operation rewrites these files, so they have no
-/// row in the table of operations that refuse to overwrite a file that does not read;
-/// `tests/a_refused_checks_file_keeps_the_last_good_checks.rs` and
-/// `tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs` have their bad files instead. Like
+/// looked at by [`crate::oplog_view::OplogView`]; `game_data`: a game's own files, checked against the
+/// registry's bounds by [`crate::data_view::DataView`]). No operation needs these files to read in order
+/// to rewrite them (`data_set` refuses a file that does not scan, but a wrong type or a missing leaf
+/// does not stop it setting another leaf), so they have no row in the table of operations that refuse to
+/// overwrite a file that does not read; `tests/a_refused_checks_file_keeps_the_last_good_checks.rs`,
+/// `tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs` and
+/// `tests/a_game_data_file_that_does_not_read_is_named.rs` have their bad files instead. Like
 /// [`READ_HERE`] they are on core's unchecked list and on no other.
-pub const WATCHED_HERE: &[&str] = &["checks", "oplog"];
+pub const WATCHED_HERE: &[&str] = &["checks", "oplog", "game_data"];
 
 /// **The path of `path` as the project's directory sees it**: what a verdict and a refusal name.
 pub fn file_name(project: &Project, path: &Path) -> String {
