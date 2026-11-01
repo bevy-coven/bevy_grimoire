@@ -9,7 +9,6 @@
 //! (or to anything else the type reads) is `applied`. The three bad files of the issue's acceptance are,
 //! for each crate: a file cut off (not RON), a field of the wrong type, and (for a crate with a required
 //! field) a field missing.
-#![cfg(any(feature = "bevy_elements", feature = "bevy_gooey"))]
 
 use std::time::{Duration, Instant};
 
@@ -52,7 +51,6 @@ fn elements() -> Case {
     }
 }
 
-#[cfg(feature = "bevy_gooey")]
 fn gooey() -> Case {
     Case {
         krate: "bevy_gooey",
@@ -71,7 +69,6 @@ fn cases() -> Vec<Case> {
     vec![
         #[cfg(feature = "bevy_elements")]
         elements(),
-        #[cfg(feature = "bevy_gooey")]
         gooey(),
     ]
 }

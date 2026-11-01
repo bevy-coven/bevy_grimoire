@@ -1,5 +1,4 @@
 //! **A project's `family/bevy_gooey.ron` is the running UI skin, and edits reach it live** (#147).
-#![cfg(feature = "bevy_gooey")]
 
 use bevy::prelude::*;
 use bevy_grimoire_mapper::editor::EditorState;

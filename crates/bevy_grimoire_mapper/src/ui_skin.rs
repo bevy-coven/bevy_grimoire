@@ -11,7 +11,7 @@
 //! each broken rule is a problem. Removing the file puts the crate's default skin back.
 
 use bevy::prelude::*;
-use bevy_gooey::{GooeySkin, GooeyStylePlugin};
+use bevy_gooey::GooeySkin;
 
 use crate::editor::EditorState;
 use crate::family_host::FamilySettings;
@@ -22,20 +22,6 @@ pub const CRATE: &str = "bevy_gooey";
 /// Reads a skin file's text as the crate's own type.
 pub fn from_ron(text: &str) -> Result<GooeySkin, String> {
     ron::from_str(text).map_err(|e| format!("bevy_gooey skin: {e}"))
-}
-
-/// Adds the crate's style plugin (not its navigation plugin: the editor owns the arrow keys) and the
-/// system that applies the project's skin file.
-pub fn build(app: &mut App) {
-    if !app.is_plugin_added::<GooeyStylePlugin>() {
-        app.add_plugins(GooeyStylePlugin);
-    }
-    app.add_systems(
-        Update,
-        apply_ui_skin
-            .after(crate::family_host::Reloaded)
-            .before(bevy_gooey::GooeySystems::Style),
-    );
 }
 
 /// Copies a changed `family/bevy_gooey.ron` into the running [`GooeySkin`].

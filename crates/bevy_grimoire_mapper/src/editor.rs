@@ -2204,8 +2204,7 @@ impl Plugin for EditorPlugin {
                         .run_if(resource_exists::<Project>),
                 ),
             );
-        #[cfg(feature = "bevy_gooey")]
-        crate::ui_skin::build(app);
+        app.add_plugins(crate::ui::EditorUiPlugin);
         app.add_observer(on_play_click);
         app.init_resource::<EditorState>()
             .init_resource::<MapFraming>()

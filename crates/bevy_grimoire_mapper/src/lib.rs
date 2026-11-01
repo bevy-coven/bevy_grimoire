@@ -101,7 +101,7 @@ pub mod light_overlay;
 pub mod ops_light;
 #[cfg(feature = "bevy_lights")]
 pub mod ops_pool;
-#[cfg(feature = "bevy_gooey")]
+pub mod ui;
 pub mod ui_skin;
 pub mod ops_terrain;
 pub mod ops_volume;

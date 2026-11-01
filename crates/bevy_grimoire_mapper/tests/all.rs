@@ -162,6 +162,7 @@ mod grimoire_state_reports_standards_breaches;
 mod grimoire_state_says_whether_the_kit_loops_and_opens_into_a_room;
 mod environment_applies;
 mod every_key_has_a_home;
+mod editor_ui_plugin;
 mod every_list_follows_its_selection;
 mod every_refusal_is_in_a_problem;
 mod every_resource_says_what_a_door_does_to_it;

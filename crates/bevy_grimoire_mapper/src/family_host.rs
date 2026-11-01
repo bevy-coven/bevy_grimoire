@@ -7,7 +7,6 @@
 use bevy::prelude::*;
 use bevy_grimoire_core::family::{Family, FamilyWatch, SettingsChange};
 use bevy_grimoire_core::live::KindVerdict;
-#[cfg(any(feature = "bevy_elements", feature = "bevy_gooey"))]
 use bevy_grimoire_core::reload_check;
 use bevy_grimoire_core::reload_check::Refusal;
 use std::path::PathBuf;
@@ -19,7 +18,7 @@ use crate::project::Project;
 /// commit that adds the cargo feature.
 pub const KNOWN: &[&str] = &["bevy_carnage", "bevy_elements", "bevy_flora", "bevy_gooey", "bevy_lights", "bevy_orca", "bevy_society", "bevy_speech_bubbles", "bevy_stigmergy"];
 
-/// The family crates this build was compiled with: one entry per enabled cargo feature.
+/// The family crates this build was compiled with: `bevy_gooey` always (the editor's UI is gooey), and one entry per enabled cargo feature for the rest.
 pub fn built() -> Vec<&'static str> {
     let mut on = Vec::new();
     if cfg!(feature = "bevy_carnage") {
@@ -31,9 +30,7 @@ pub fn built() -> Vec<&'static str> {
     if cfg!(feature = "bevy_flora") {
         on.push("bevy_flora");
     }
-    if cfg!(feature = "bevy_gooey") {
-        on.push("bevy_gooey");
-    }
+    on.push("bevy_gooey");
     if cfg!(feature = "bevy_lights") {
         on.push("bevy_lights");
     }
@@ -111,7 +108,6 @@ fn read_as(krate: &str, text: &str) -> Result<(), (Refusal, &'static str)> {
         let file = settings_file(krate);
         return reload_check::read::<crate::environment::ElementsSettings>("family", &file, text).map(drop).map_err(|r| (r, "the previous environment stays"));
     }
-    #[cfg(feature = "bevy_gooey")]
     if krate == crate::ui_skin::CRATE {
         let file = settings_file(krate);
         return reload_check::read::<bevy_gooey::GooeySkin>("family", &file, text).map(drop).map_err(|r| (r, "the previous skin stays"));

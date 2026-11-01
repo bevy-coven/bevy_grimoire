@@ -80,8 +80,8 @@ const ALLOWED: &[(&str, &str)] = &[
     (
         "bevy_gooey",
         "the owner's game-UI skin and widgets crate, hosted by the family layer (#147) — \
-         OPTIONAL, reached only by `--features bevy_gooey` and pinned by git rev, so an ordinary \
-         build and a game that lists no family crate pay nothing",
+         REQUIRED since UI-01 (#209), pinned by git rev: the editor's whole UI is gooey, owned by `EditorUiPlugin`, \
+         and never reached by a game, which links none of the editor crates",
     ),
     (
         "isomesh",
