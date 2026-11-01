@@ -24,6 +24,8 @@ use std::time::SystemTime;
 
 use bevy::prelude::*;
 use bevy_flora::{BackgroundPools, LodSettings, PooledTree, ProceduralTree, TreeAge, TreeParams, TreePool, TreePreset};
+use bevy_grimoire_core::live::KindVerdict;
+use bevy_grimoire_core::reload_check;
 
 use crate::ops_forest::Forest;
 use crate::project::{OpenMap, Project};
@@ -104,6 +106,7 @@ pub fn sync_forest_view(
     open: Res<OpenMap>,
     mut commands: Commands,
     mut background: BackgroundPools,
+    mut reloads: Option<ResMut<crate::live::EditorReloads>>,
     mut state: Local<ForestState>,
 ) {
     let state = &mut *state;
@@ -127,14 +130,33 @@ pub fn sync_forest_view(
     if state.seen.as_ref() == Some(&now) {
         return;
     }
-    // No file is an empty forest. A file that does not parse (broken by hand, or read between a
-    // write's truncate and its bytes) keeps what is drawn; the write's next modification time redraws.
+    // No file is an empty forest. A file that does not parse (broken by hand) keeps what is drawn, and
+    // is not read again until its modification time moves. Each edit of the file is one verdict, in
+    // `grimoire_state.reloads`, with the file and the field; a redraw because a species or the origin
+    // changed re-reads the file but does not decide it again.
+    let edited = state.seen.as_ref().is_none_or(|s| s.forest != now.forest);
+    let file = forest_path.strip_prefix(&project.project_dir).unwrap_or(&forest_path).to_string_lossy().replace('\\', "/");
     let forest: Forest = match std::fs::read_to_string(&forest_path) {
-        Err(_) => Forest::default(),
-        Ok(text) => match ron::from_str(&text) {
-            Ok(forest) => forest,
-            Err(e) => {
-                warn!("forest view: {}: {e}; the trees drawn are kept", forest_path.display());
+        Err(_) => {
+            if let Some(reloads) = reloads.as_mut().filter(|_| edited) {
+                reloads.forget(&["forest"]);
+            }
+            Forest::default()
+        }
+        Ok(text) => match reload_check::read::<Forest>("forest", &file, &text) {
+            Ok(forest) => {
+                if let Some(reloads) = reloads.as_mut().filter(|_| edited) {
+                    reloads.forget(&["forest"]);
+                    reloads.decide(vec![KindVerdict::applied("forest", file)]);
+                }
+                forest
+            }
+            Err(refusal) => {
+                warn!("forest view: {}; the trees drawn are kept", refusal.sentence());
+                if let Some(reloads) = reloads.as_mut().filter(|_| edited) {
+                    reloads.forget(&["forest"]);
+                    reloads.decide(vec![KindVerdict::refused("forest", refusal.file, refusal.field, refusal.reason)]);
+                }
                 state.seen = Some(now);
                 return;
             }

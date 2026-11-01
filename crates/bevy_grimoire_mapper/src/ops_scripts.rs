@@ -124,6 +124,12 @@ pub fn scripts_of(project: &crate::project::Project, map: &str) -> Scripts {
         .unwrap_or_default()
 }
 
+/// **The saved triggers of a map for an operation that rewrites the file**: none when there is no file,
+/// and a refusal naming the file and the field when there is one that does not read (#200).
+pub fn try_scripts_of(project: &crate::project::Project, map: &str) -> Result<Scripts, Refusal> {
+    crate::map_files::read_or_empty("scripts", project, &path_of(project, map)?)
+}
+
 /// **A trigger as the terrain line writes it**: `trigger <id> | <on> | <if> | <then> [| people=..] [| faction=..] [| area=..]`,
 /// the form `set_trigger` parses, so a Scripts row can open the line to edit the trigger it shows.
 pub fn trigger_line(t: &Trigger) -> String {
@@ -209,7 +215,7 @@ pub fn defs_with_triggers(ctx: &Ctx, map: &str, people: &People) -> Result<bevy_
         return Err(Refusal::new("no project is open."));
     };
     let mut file = base_file(ctx)?;
-    for t in scripts_of(project, map).triggers {
+    for t in try_scripts_of(project, map)?.triggers {
         file.triggers.push(def_of(&t, people, true)?);
     }
     bevy_society::SocietyDefs::compile(file).map_err(|e| Refusal::new(format!("the society definitions do not compile: {e}")))
@@ -248,7 +254,7 @@ impl TriggerSet {
             let Some(id) = p.id.as_deref().filter(|n| !n.trim().is_empty()) else {
                 return Err(Refusal::new("a trigger needs an `id`. Nothing was changed."));
             };
-            let mut scripts = scripts_of(project, &p.map);
+            let mut scripts = try_scripts_of(project, &p.map)?;
             let at_row = scripts.triggers.iter().position(|t| t.id == id);
             let summary = if p.remove {
                 let Some(i) = at_row else {
