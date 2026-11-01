@@ -227,9 +227,9 @@ impl Plugin for ConfirmPlugin {
 /// **`Y` proceeds, `N` stops, `Esc` is a synonym for `N`.**
 ///
 /// Read raw rather than through `keys::just_pressed`: this is not a tab's verb and it must answer
-/// identically on the menu, where the editor's key census does not exist at all. gooey's own
-/// navigation plugin is not added (the editor owns the arrow keys), so its `Cancel` never fires and
-/// `Esc` is read here too.
+/// identically on the menu, where the editor's key census does not exist at all. gooey's navigation
+/// plugin is added (menus need it, UI-36) and sends the dialog a `Cancel` on `Esc`, which nothing here
+/// observes; `Esc` is read here too, and is the answer.
 fn answer_by_key(keyboard: Res<ButtonInput<KeyCode>>, mut confirm: ResMut<Confirm>) {
     if confirm.question.is_none() {
         return;
