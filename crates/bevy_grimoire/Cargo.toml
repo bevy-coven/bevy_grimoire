@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "The runtime half of grimoire: load a library and a map, and put it in a Bevy world."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
@@ -12,5 +12,5 @@ repository = "https://github.com/bevy-coven/bevy_grimoire"
 # stops being true); this turns its data into entities. The game and `bevy_grimoire_mapper` both depend on
 # THIS rather than each growing a spawner, so a map looks the same in the editor and in play.
 [dependencies]
-bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.1.0" }
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.2.0" }
 bevy = { workspace = true, features = ["jpeg"] }
