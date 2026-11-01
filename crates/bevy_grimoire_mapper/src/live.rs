@@ -115,8 +115,9 @@ impl EditorReloads {
         &self.kinds
     }
 
-    /// **The `reloads` field of `grimoire_state`**: `ok` (no file refused), `seq`, and one entry per
-    /// file with its kind, path, `applied` or `refused`, and for a refusal the field and the reason.
+    /// **The `reloads` field of `grimoire_state`**: `ok` (every file applied), `seq`, and one entry per
+    /// file with its kind, path, `applied`, `refused` or `needs_restart`, and for the last two the
+    /// reason, and for a refusal the field.
     pub fn state_json(&self) -> Value {
         let kinds: Vec<Value> = self
             .kinds
