@@ -118,6 +118,7 @@ fn a_refused_notes_file_keeps_the_notes_and_says_which_file_and_field_once_per_e
 
     for (what, text, field) in BAD {
         let before = seq(&mut app);
+        let raised_before = app.world().resource::<EditorState>().status.raised();
         write(&app, text);
         // Past the panel's half-second look and the view's once-a-second re-read.
         pump(&mut app, 1.6);
@@ -130,8 +131,11 @@ fn a_refused_notes_file_keeps_the_notes_and_says_which_file_and_field_once_per_e
         }
         assert!(!v["reason"].as_str().unwrap().is_empty(), "{what}: the verdict says why: {v}");
         assert_eq!(reloads(&mut app)["ok"], json!(false), "{what}");
-        let said: Vec<String> = app.world().resource::<EditorState>().status.problems().iter().map(|p| p.text.clone()).collect();
-        assert!(said.iter().any(|p| p.contains(FILE) && p.contains("refused")), "{what}: the status line names the file: {said:?}");
+        // What this edit raised, not an earlier edit's problem still in the log.
+        let raised = (app.world().resource::<EditorState>().status.raised() - raised_before) as usize;
+        let said: Vec<String> = app.world().resource::<EditorState>().status.problems().iter().rev().take(raised).map(|p| p.text.clone()).collect();
+        assert_eq!(raised, 1, "{what}: the refusal is said once: {said:?}");
+        assert!(said[0].contains(FILE) && said[0].contains("refused"), "{what}: the status line names the file: {said:?}");
 
         let refused_at = seq(&mut app);
         assert_eq!(refused_at, before + 1, "{what}: one edit, one decision");

@@ -80,12 +80,59 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
     pump(&mut app, 1.5);
     assert_eq!(seq(&app), refused_at, "nothing was edited, so nothing is decided again");
 
-    // A fix applies, and a removed file is no longer listed.
+    // Undoing the typo, back to exactly the settings in force, is no change to the settings, and the
+    // refusal still goes.
+    std::thread::sleep(Duration::from_millis(50));
+    std::fs::write(&file, "(sun: (hour: 18.5))").unwrap();
+    until(&mut app, "the undo applied", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "applied"));
+    assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
+
+    // A fix to other settings applies, and a removed file is no longer listed.
+    std::thread::sleep(Duration::from_millis(50));
+    std::fs::write(&file, "(sun: (hour: ").unwrap();
+    until(&mut app, "the second refusal", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "refused"));
     std::thread::sleep(Duration::from_millis(50));
     std::fs::write(&file, "(sun: (hour: 7.0))").unwrap();
     until(&mut app, "the fix applied", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "applied"));
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
+    assert_eq!(app.world().resource::<FamilySettings>().text["bevy_elements"], "(sun: (hour: 7.0))");
     std::thread::sleep(Duration::from_millis(50));
     std::fs::remove_file(&file).unwrap();
     until(&mut app, "the verdict gone", |a| kinds(a).is_empty());
+}
+
+fn verdict(app: &App, file: &str) -> Value {
+    kinds(app).into_iter().find(|k| k["file"] == file).unwrap_or(Value::Null)
+}
+
+#[test]
+fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_deleted() {
+    let root = fixtures::Fixture::new("family_verdicts_launch").descriptor("site/wall", "alpha").build("m");
+    let dir = root.join("family");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("bevy_elements.ron"), "(sun: (hour: 6.0))").unwrap();
+    std::fs::write(dir.join("bevy_lights.ron"), "(budget: (").unwrap();
+    let mut app = bevy_grimoire_mapper::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.update();
+    assert_eq!(kinds(&app).len(), 2, "{:?}", kinds(&app));
+    assert_eq!(verdict(&app, "family/bevy_elements.ron")["outcome"], "applied");
+    let broken = verdict(&app, "family/bevy_lights.ron");
+    assert_eq!(broken["outcome"], "refused", "a file that never read is named from the start: {broken}");
+    assert!(!broken["reason"].as_str().unwrap().is_empty(), "{broken}");
+    assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], false);
+
+    // Another file's edit makes the watch say the broken one is invalid again; it is not decided twice.
+    let before = seq(&app);
+    std::thread::sleep(Duration::from_millis(50));
+    std::fs::write(dir.join("bevy_elements.ron"), "(sun: (hour: 9.0))").unwrap();
+    until(&mut app, "the other file applied", |a| a.world().resource::<FamilySettings>().text["bevy_elements"] == "(sun: (hour: 9.0))");
+    pump(&mut app, 0.6);
+    assert_eq!(seq(&app), before + 1, "one edit, one decision: the broken file was not re-decided");
+    assert_eq!(kinds(&app).len(), 2);
+    assert_eq!(verdict(&app, "family/bevy_lights.ron")["outcome"], "refused");
+
+    // Deleting a file that never read: nothing was in force to be removed, and the refusal still goes.
+    std::fs::remove_file(dir.join("bevy_lights.ron")).unwrap();
+    until(&mut app, "the refusal gone", |a| verdict(a, "family/bevy_lights.ron") == Value::Null);
+    assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
 }
