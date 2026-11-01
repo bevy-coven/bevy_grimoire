@@ -23,7 +23,7 @@ and no GPU.
 - **One exception: a broken gate.** If the push gate refuses on `main` as it stands, or `main` does not build, fix exactly that first, because no slice can ship without it; then go back to the series in the same pass. Any other bug waits, and is filed if it is not already.
 - **One verified slice per pass**, with its failing-first test, as the issue's acceptance list says. Comment on the issue which acceptance items the slice meets, and close it with `Fixes #N` only in the commit that meets the last of them.
 - **A blocked issue does not end the series.** Comment exactly what it needs, then take the next ready `hot-reload` issue. Only when every open one is blocked does the rest of this command apply, and the log line names each blocker.
-- When the last `hot-reload` issue closes, this section has nothing to select and the rest of this command applies as written.
+- **When the last `hot-reload` issue closes, grind through the open issues (owner, 2026-11-01).** Every pass takes the next open issue in the order "Filed issues come before new features" gives (bug issues oldest first, then `consumer`, then `owner` in the focus's order, then every other open issue oldest first), one verified slice per pass, until none is left that can be worked; only then do the backlog, the series and your own candidates get a pass. Skip an issue labelled `wontfix`, and say so in the log line. Only `bevy_emerge_loop` runs since 2026-10-31, so a `worker:bevy_emerge_w*` label is a retired worker's claim: remove it with a comment and take the issue. An issue that needs the owner's decision (`decide`) is decided by "Owner input: recommend, record, proceed", not skipped.
 
 ## Mark your phases, so the loop's steps are timed
 
