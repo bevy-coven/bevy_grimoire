@@ -13582,3 +13582,262 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 195	285	log	tool	phase mark	bash	2026-11-01T10:21:08Z	1.5	Final tree check :: cd /Users/ladvien/bevy_emerge_loop && git status -sb | head -3; git log --oneline -4; python3 tools/loop/steps.py mark log
 195	286	log	tool	learn	learn	2026-11-01T10:21:08Z	1.5	Capturing durable lessons
 195	287	log	model	model		2026-11-01T10:21:10Z	11.1	
+196	1	orient	model	model		2026-11-01T10:22:26Z	8.3	
+196	2	orient	tool	phase mark	bash	2026-11-01T10:22:34Z	3.6	Orienting: status, log, last audit :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark orient; git status --short | head -20; git log --oneline -10; basename "$(git rev-parse -
+196	3	orient	tool	shell	bash	2026-11-01T10:22:34Z	3.6	Reading last log entries and focus :: cd /Users/ladvien/bevy_emerge_loop && tail -n 3 docs/loop/log.md | cut -c1-2500; echo ----; sed -n '1,80p' docs/loop/focus.md | cut -c1-400
+196	4	orient	tool	github	bash	2026-11-01T10:22:34Z	3.6	Listing open issues :: cd /Users/ladvien/bevy_emerge_loop && gh issue list --repo bevy-coven/bevy_grimoire --state open --label hot-reload --json number,title,labels,body --jq '.[] | 
+196	5	orient	model	model		2026-11-01T10:22:38Z	6.1	
+196	6	orient	tool	github	bash	2026-11-01T10:22:44Z	5.3	Reading hot-reload issue bodies and comments :: cd /Users/ladvien/bevy_emerge_loop && git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv | head -1; for n in 201 202 203 204; do echo "=== #$n"; gh iss
+196	7	orient	model	model		2026-11-01T10:22:49Z	1.5	
+196	8	orient	tool	read files	read	2026-11-01T10:22:51Z	0.0	Reading issue text :: /tmp/p182_issues.txt
+196	9	orient	model	model		2026-11-01T10:22:51Z	15.5	
+196	10	orient	tool	github	bash	2026-11-01T10:23:06Z	4.2	Checking parked branches, CI, pulling main :: cd /Users/ladvien/bevy_emerge_loop && git branch --list 'wiggum/parked-*'; git log --all --oneline -n 5 --grep='parked'; gh run list --repo bevy-coven/bevy_grim
+196	11	orient	tool	read files	read	2026-11-01T10:23:06Z	4.3	Reading version audit test :: crates/bevy_grimoire_core/tests/every_format_carries_a_version.rs
+196	12	orient	model	model		2026-11-01T10:23:10Z	4.2	
+196	13	orient	tool	read files	read	2026-11-01T10:23:15Z	0.2	Reading the unversioned list and fixtures :: crates/bevy_grimoire_core/tests/every_format_carries_a_version.rs:19-95
+196	14	choose	tool	phase mark	bash	2026-11-01T10:23:15Z	0.6	Listing reload kinds :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark choose; grep -n "pub const KINDS" -A60 crates/bevy_grimoire_core/src/reload.rs | grep -n 
+196	15	choose	model	model		2026-11-01T10:23:15Z	5.1	
+196	16	choose	tool	shell	bash	2026-11-01T10:23:20Z	0.1	Locating checks for unversioned kinds :: cd /Users/ladvien/bevy_emerge_loop && grep -n "vocab\|repetition\|\"checks\"\|Vocabularies\|RepetitionRules\|\"people\"\|\"scripts\"" crates/bevy_grimoire_core/
+196	17	choose	model	model		2026-11-01T10:23:20Z	1.5	
+196	18	choose	tool	read files	read	2026-11-01T10:23:22Z	0.0	Reading reload_check :: crates/bevy_grimoire_core/src/reload_check.rs:1-224
+196	19	choose	model	model		2026-11-01T10:23:22Z	12.8	
+196	20	choose	tool	shell	bash	2026-11-01T10:23:35Z	0.1	Reading Standards version pattern and vocab type :: cd /Users/ladvien/bevy_emerge_loop && grep -n "version\|VERSION" crates/bevy_grimoire_core/src/standards.rs | head -30; echo ---VOCAB; grep -n "pub struct Vocab
+196	21	choose	model	model		2026-11-01T10:23:35Z	3.0	
+196	22	choose	tool	shell	bash	2026-11-01T10:23:38Z	1.1	Counting struct-literal sites for candidate types :: cd /Users/ladvien/bevy_emerge_loop && sed -n 20,75p crates/bevy_grimoire_core/src/standards.rs; echo; grep -rn "Vocabularies {" --include=*.rs . | grep -v "^./t
+196	23	choose	model	model		2026-11-01T10:23:39Z	12.6	
+196	24	choose	tool	remote command	bash	2026-11-01T10:23:51Z	0.8	Checking big and literal sites for vocab and repetition :: cd /Users/ladvien/bevy_emerge_loop && (ssh big 'bash -c "df -h ~ | tail -1; ls -d ~/p1* 2>/dev/null | head; uptime; free -g | head -2"' ) 2>&1 | tail -8; grep -
+196	25	choose	model	model		2026-11-01T10:23:52Z	10.2	
+196	26	choose	tool	edit files	write	2026-11-01T10:24:02Z	0.0	Writing base build script for big :: /tmp/p182_base.sh
+196	27	choose	tool	remote command	bash	2026-11-01T10:24:03Z	3.5	Launching detached warm build on big; checking consumers :: cd /Users/ladvien/bevy_emerge_loop && scp -q /tmp/p182_base.sh big:/tmp/p182_base.sh && ssh big 'bash -c "nohup bash /tmp/p182_base.sh </dev/null >/dev/null 2>&
+196	28	choose	model	model		2026-11-01T10:24:06Z	5.0	
+196	29	choose	tool	github	bash	2026-11-01T10:24:11Z	5.9	Claiming #202; reading repetition.rs :: cd /Users/ladvien/bevy_emerge_loop && gh label create worker:bevy_emerge_loop --color BFD4F2 2>/dev/null; gh issue edit 202 --repo bevy-coven/bevy_grimoire --ad
+196	30	choose	model	model		2026-11-01T10:24:17Z	7.2	
+196	31	choose	tool	shell	bash	2026-11-01T10:24:24Z	0.2	Finding readers and writers of vocab/repetition :: cd /Users/ladvien/bevy_emerge_loop && ls crates/bevy_grimoire_core/tests/old_data 2>/dev/null | head -30; grep -rn "Vocabularies::parse\|RepetitionRules::parse\
+196	32	choose	tool	shell	bash	2026-11-01T10:24:24Z	0.2	Finding callers by file name :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "fn read_named\|pub fn read\b" crates/bevy_grimoire_mapper/src/map_files.rs | head; grep -rn "\"vocab\"\|\"repeti
+196	33	choose	model	model		2026-11-01T10:24:24Z	19.0	
+196	34	choose	tool	shell	bash	2026-11-01T10:24:43Z	0.2	Reading old_data layout and vocab writer :: cd /Users/ladvien/bevy_emerge_loop && ls crates/bevy_grimoire_core/tests/old_data/*; grep -rn "old_data" crates --include=*.rs -l | head; sed -n 640,700p crates
+196	35	choose	model	model		2026-11-01T10:24:44Z	5.1	
+196	36	choose	tool	shell	bash	2026-11-01T10:24:49Z	0.1	Reading old_data test shape :: cd /Users/ladvien/bevy_emerge_loop && sed -n 1,60p crates/bevy_grimoire_core/tests/old_data.rs; grep -n "fn \|core-0" crates/bevy_grimoire_core/tests/old_data.r
+196	37	choose	model	model		2026-11-01T10:24:49Z	5.9	
+196	38	choose	tool	shell	bash	2026-11-01T10:24:55Z	0.2	Inspecting map-side data types and literal sites :: cd /Users/ladvien/bevy_emerge_loop && date +%T; grep -rn "Heightfield {\|WaterPlan {\|WaterField {\|Volume {" --include=*.rs crates | grep -v "impl\|pub struct\
+196	39	choose	model	model		2026-11-01T10:24:55Z	18.1	
+196	40	choose	tool	shell	bash	2026-11-01T10:25:13Z	0.2	Guide mentions of versions; Heightfield parse :: cd /Users/ladvien/bevy_emerge_loop && grep -n -i "unversioned\|version" docs/guide/reload-contract.md | head -30; grep -n "pub fn parse" -B2 -A22 crates/bevy_gr
+196	41	choose	model	model		2026-11-01T10:25:13Z	15.9	
+196	42	choose	tool	read files	read	2026-11-01T10:25:29Z	0.0	Reading version test body :: crates/bevy_grimoire_core/tests/every_format_carries_a_version.rs:96-210
+196	43	choose	model	model		2026-11-01T10:25:29Z	24.1	
+196	44	choose	tool	remote command	bash	2026-11-01T10:25:53Z	1.4	Finding readers of terrain, water, volume files in editor :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "read_named\|reload_check::read\|from_str::<\(Heightfield\|WaterPlan\|WaterField\|Volume\)\|Heightfield::parse\|W
+196	45	choose	model	model		2026-11-01T10:25:55Z	4.9	
+196	46	choose	tool	shell	bash	2026-11-01T10:26:00Z	0.1	Seeing volume/water readers and writers :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "WaterPlan\b" --include=*.rs crates/bevy_grimoire_mapper/src | grep -v "^.*://" | head -10; grep -rn "fn load\|fn
+196	47	choose	model	model		2026-11-01T10:26:00Z	11.6	
+196	48	choose	tool	shell	bash	2026-11-01T10:26:11Z	0.1	Reading Vocabularies fields and lib.rs modules :: cd /Users/ladvien/bevy_emerge_loop && sed -n 160,282p crates/bevy_grimoire_core/src/vocab.rs | grep -v "^\s*///" ; sed -n 20,60p crates/bevy_grimoire_core/src/l
+196	49	choose	model	model		2026-11-01T10:26:11Z	19.4	
+196	50	choose	tool	edit files	write	2026-11-01T10:26:31Z	3.7	Writing format_version helper module :: /Users/ladvien/bevy_emerge_loop/crates/bevy_grimoire_core/src/format_version.rs
+196	51	choose	model	model		2026-11-01T10:26:34Z	5.4	
+196	52	choose	tool	shell	bash	2026-11-01T10:26:40Z	0.1	Locating insertion points :: cd /Users/ladvien/bevy_emerge_loop && grep -n "^pub mod family;" crates/bevy_grimoire_core/src/lib.rs; grep -n "^use\|VERSION" crates/bevy_grimoire_core/src/voc
+196	53	choose	model	model		2026-11-01T10:26:40Z	3.3	
+196	54	choose	tool	read files	read	2026-11-01T10:26:43Z	0.0	Getting lib.rs tag :: crates/bevy_grimoire_core/src/lib.rs:42-44
+196	55	choose	tool	read files	read	2026-11-01T10:26:43Z	0.0	Getting repetition tag :: crates/bevy_grimoire_core/src/repetition.rs:30-72
+196	56	choose	model	model		2026-11-01T10:26:43Z	4.4	
+196	57	choose	tool	edit files	edit	2026-11-01T10:26:48Z	0.1	Versioning RepetitionRules and registering module :: [crates/bevy_grimoire_core/src/lib.rs#FE40] PUT >43: +pub mod format_version; [crates/bevy_grimoire_core/src/repetition.rs#0066] PUT >38: + +/// The format vers
+196	58	choose	model	model		2026-11-01T10:26:48Z	5.3	
+196	59	choose	tool	shell	bash	2026-11-01T10:26:53Z	0.1	cd /Users/ladvien/bevy_emerge_loop && grep -n "pub struct Vocabularies" -B3 crates/bevy_grimoire_core/src/vocab.rs; grep -n "pub slot: Vocabulary" -A3 crates/be
+196	60	choose	model	model		2026-11-01T10:26:53Z	1.5	
+196	61	choose	tool	read files	read	2026-11-01T10:26:55Z	0.0	Getting vocab tag and context :: crates/bevy_grimoire_core/src/vocab.rs:52-58
+196	62	choose	model	model		2026-11-01T10:26:55Z	5.9	
+196	63	choose	tool	edit files	edit	2026-11-01T10:27:01Z	0.0	Versioning Vocabularies :: [crates/bevy_grimoire_core/src/vocab.rs#0DA6] PUT >56: + +/// The format version of a `vocab.ron` (#202). A file with no `version` is the first. +pub const VOCA
+196	64	choose	model	model		2026-11-01T10:27:01Z	6.0	
+196	65	choose	tool	edit files	edit	2026-11-01T10:27:07Z	0.0	Versioning Vocabularies (retry) :: [crates/bevy_grimoire_core/src/vocab.rs#0DA6] PUT >56: + +/// The format version of a `vocab.ron` (#202). A file with no `version` is the first. +pub const VOCA
+196	66	choose	tool	shell	bash	2026-11-01T10:27:07Z	0.1	Edit vocab; view heightfield/water for next edits :: cd /Users/ladvien/bevy_emerge_loop && sed -n 60,84p crates/bevy_grimoire_core/src/heightfield.rs; grep -n "fn parse" -B2 -A8 crates/bevy_grimoire_core/src/water
+196	67	choose	model	model		2026-11-01T10:27:07Z	6.0	
+196	68	choose	tool	shell	bash	2026-11-01T10:27:13Z	0.2	cd /Users/ladvien/bevy_emerge_loop && grep -n "Self {\|Heightfield {" crates/bevy_grimoire_core/src/heightfield.rs; grep -n "use \|^pub const" crates/bevy_grimo
+196	69	choose	model	model		2026-11-01T10:27:13Z	2.3	
+196	70	choose	tool	read files	read	2026-11-01T10:27:15Z	0.0	Tag for heightfield :: crates/bevy_grimoire_core/src/heightfield.rs:8-14
+196	71	choose	tool	read files	read	2026-11-01T10:27:15Z	0.0	Display all heightfield edit lines :: crates/bevy_grimoire_core/src/heightfield.rs:64-102
+196	72	choose	model	model		2026-11-01T10:27:15Z	4.3	
+196	73	choose	tool	edit files	edit	2026-11-01T10:27:20Z	0.1	Versioning Heightfield :: [crates/bevy_grimoire_core/src/heightfield.rs#1CB4] PUT >64: +/// The format version of a terrain file (#202). A file with no `version` is the first. +pub const
+196	74	choose	tool	read files	read	2026-11-01T10:27:20Z	0.0	Water tag :: crates/bevy_grimoire_core/src/water.rs:44-56
+196	75	choose	model	model		2026-11-01T10:27:20Z	5.1	
+196	76	choose	tool	read files	read	2026-11-01T10:27:25Z	0.0	Display WaterField lines :: crates/bevy_grimoire_core/src/water.rs:106-122
+196	77	choose	tool	read files	read	2026-11-01T10:27:25Z	0.0	Display WaterField literal :: crates/bevy_grimoire_core/src/water.rs:296-298
+196	78	choose	model	model		2026-11-01T10:27:25Z	8.7	
+196	79	choose	tool	edit files	edit	2026-11-01T10:27:34Z	0.0	Versioning WaterPlan and WaterField :: [crates/bevy_grimoire_core/src/water.rs#754C] PUT >45: +/// The format version of a water plan file (#202). A file with no `version` is the first. +pub const WA
+196	80	choose	tool	read files	read	2026-11-01T10:27:34Z	0.0	Volume tag and imports :: crates/bevy_grimoire_core/src/volume.rs:1-12
+196	81	choose	model	model		2026-11-01T10:27:34Z	1.6	
+196	82	choose	tool	read files	read	2026-11-01T10:27:35Z	0.0	Volume struct lines :: crates/bevy_grimoire_core/src/volume.rs:90-100
+196	83	choose	model	model		2026-11-01T10:27:35Z	5.1	
+196	84	choose	tool	edit files	edit	2026-11-01T10:27:40Z	0.0	Versioning Volume :: [crates/bevy_grimoire_core/src/volume.rs#C0FB] PUT >92: +/// The format version of a volume file (#202). A file with no `version` is the first. +pub const VOLUM
+196	85	choose	tool	remote command	bash	2026-11-01T10:27:40Z	1.8	Edit volume; check base build; remaining literal sites :: cd /Users/ladvien/bevy_emerge_loop && ssh big 'bash -c "tail -4 ~/p182-base.log"'; grep -rn "Volume {\|WaterField {\|Heightfield {\|WaterPlan {" --include=*.rs 
+196	86	choose	model	model		2026-11-01T10:27:42Z	7.6	
+196	87	choose	tool	shell	bash	2026-11-01T10:27:50Z	0.1	cd /Users/ladvien/bevy_emerge_loop && sed -n 1,12p crates/bevy_grimoire_core/tests/a_terrain_file_that_does_not_fill_its_shape_is_refused.rs; sed -n 21,24p crat
+196	88	choose	model	model		2026-11-01T10:27:50Z	6.4	
+196	89	choose	tool	git	bash	2026-11-01T10:27:56Z	0.6	Fixing struct-literal sites in tests (schema-field exception) :: cd /Users/ladvien/bevy_emerge_loop && python3 - <<'EOF' import re def sub(path, old, new): s = open(path).read() assert s.count(old) == 1, (path, s.count(old)) 
+196	90	choose	model	model		2026-11-01T10:27:57Z	15.6	
+196	91	choose	tool	edit files	edit	2026-11-01T10:28:13Z	0.0	Moving six kinds from unversioned to versioned in the audit test :: [crates/bevy_grimoire_core/tests/every_format_carries_a_version.rs#A4A4] PUT 34.=35: + ("checks", "`checks.ron`, a list of checks read by the decision layer"), 
+196	92	choose	model	model		2026-11-01T10:28:13Z	8.6	
+196	93	choose	tool	edit files	edit	2026-11-01T10:28:21Z	0.0	Moving six kinds to versioned in audit test :: [crates/bevy_grimoire_core/tests/every_format_carries_a_version.rs#A4A4] PUT >21: +use bevy_grimoire_core::heightfield::Heightfield; PUT >24: +use bevy_grimoire
+196	94	choose	model	model		2026-11-01T10:28:21Z	13.2	
+196	95	choose	tool	remote command	bash	2026-11-01T10:28:35Z	1.7	Reading pattern for operation-path version test :: cd /Users/ladvien/bevy_emerge_loop && cat crates/bevy_grimoire_mapper/tests/a_destructible_file_of_another_version_is_refused.rs | head -90; grep -n "mod " crat
+196	96	choose	model	model		2026-11-01T10:28:36Z	4.3	
+196	97	choose	tool	shell	bash	2026-11-01T10:28:41Z	0.1	Reading terrain/water/volume op test patterns :: cd /Users/ladvien/bevy_emerge_loop && sed -n 1,75p crates/bevy_grimoire_mapper/tests/water_place_is_an_operation.rs; grep -n "\"op\"\|\"name\"\|json!" crates/be
+196	98	choose	model	model		2026-11-01T10:28:41Z	6.6	
+196	99	choose	tool	shell	bash	2026-11-01T10:28:47Z	0.1	Reading how ops read the files they rewrite :: cd /Users/ladvien/bevy_emerge_loop && sed -n 70,112p crates/bevy_grimoire_mapper/src/ops_water.rs; grep -n "from_str\|read_to_string\|unwrap_or_default\|Volume:
+196	100	choose	model	model		2026-11-01T10:28:47Z	26.1	
+196	101	choose	tool	edit files	write	2026-11-01T10:29:13Z	0.0	/Users/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper/tests/a_terrain_water_or_volume_file_of_another_version_is_refused.rs
+196	102	choose	tool	shell	bash	2026-11-01T10:29:13Z	0.1	cd /Users/ladvien/bevy_emerge_loop && grep -n "mod a_" crates/bevy_grimoire_mapper/tests/all.rs | head -5; grep -n "^mod a_t\|^mod a_s\|^mod a_u\|^mod a_w" crat
+196	103	choose	model	model		2026-11-01T10:29:13Z	5.1	
+196	104	choose	tool	edit files	edit	2026-11-01T10:29:19Z	0.0	Registering new mapper test in all.rs :: [crates/bevy_grimoire_mapper/tests/all.rs#0000] PUT >100: +mod a_terrain_water_or_volume_file_of_another_version_is_refused;
+196	105	choose	model	model		2026-11-01T10:29:19Z	18.8	
+196	106	choose	tool	edit files	edit	2026-11-01T10:29:37Z	0.0	Registering new mapper test in all.rs :: [crates/bevy_grimoire_mapper/tests/all.rs#6F2F] PUT >100: +mod a_terrain_water_or_volume_file_of_another_version_is_refused;
+196	107	choose	tool	edit files	write	2026-11-01T10:29:37Z	2.7	/Users/ladvien/bevy_emerge_loop/crates/bevy_grimoire_core/tests/a_format_that_gains_a_version_reads_the_files_it_did_not_have_one_in.rs
+196	108	choose	model	model		2026-11-01T10:29:40Z	7.6	
+196	109	choose	tool	shell	bash	2026-11-01T10:29:48Z	0.0	cd /Users/ladvien/bevy_emerge_loop && f=crates/bevy_grimoire_core/tests/a_format_that_gains_a_version_reads_the_files_it_did_not_have_one_in.rs && grep -n "kind
+196	110	choose	model	model		2026-11-01T10:29:48Z	1.7	
+196	111	choose	tool	read files	read	2026-11-01T10:29:49Z	0.0	Tag for core test :: crates/bevy_grimoire_core/tests/a_format_that_gains_a_version_reads_the_files_it_did_not_have_one_in.rs:66-70
+196	112	choose	model	model		2026-11-01T10:29:50Z	3.4	
+196	113	choose	tool	edit files	edit	2026-11-01T10:29:53Z	0.0	Fix vocab sample text :: [crates/bevy_grimoire_core/tests/a_format_that_gains_a_version_reads_the_files_it_did_not_have_one_in.rs#C680] PUT 68.=68: + ("vocab", Vocabularies::parse("(ver
+196	114	build	tool	phase mark	bash	2026-11-01T10:29:53Z	1.6	Check base build; mark build phase :: cd /Users/ladvien/bevy_emerge_loop && ssh big 'bash -c "tail -3 ~/p182-base.log; pgrep -fl cargo | head -3"'; python3 tools/loop/steps.py mark build; git status
+196	115	build	model	model		2026-11-01T10:29:55Z	3.8	
+196	116	build	tool	remote command	bash	2026-11-01T10:29:58Z	0.6	ssh big 'bash -c "pgrep -fl p182_base; pgrep -fl rustc | head -2; cat ~/p182-base.log | grep -v Executable | tail -8"'
+196	117	build	model	model		2026-11-01T10:29:59Z	11.8	
+196	118	build	tool	read files	read	2026-11-01T10:30:11Z	0.1	Reading guide version section :: docs/guide/reload-contract.md:94-104
+196	119	build	model	model		2026-11-01T10:30:11Z	3.0	
+196	120	build	tool	shell	bash	2026-11-01T10:30:14Z	0.0	cd /Users/ladvien/bevy_emerge_loop && sed -n 98p docs/guide/reload-contract.md | cut -c700-
+196	121	build	model	model		2026-11-01T10:30:14Z	10.7	
+196	122	build	tool	edit files	edit	2026-11-01T10:30:25Z	0.0	Updating guide version section :: [docs/guide/reload-contract.md#BBE7] PUT 98.=99: +- **Versioned** (24 kinds: `kits`, `vocab`, `library`, `policy`, `rules`, `compositions`, `standards`, `repeti
+196	123	build	tool	remote command	bash	2026-11-01T10:30:25Z	2.0	cd /Users/ladvien/bevy_emerge_loop && ssh big 'bash -c "grep -v Executable ~/p182-base.log | tail -4"'; grep -n "^version\|bevy_grimoire_core" Cargo.toml crates
+196	124	build	model	model		2026-11-01T10:30:27Z	5.6	
+196	125	build	tool	read files	read	2026-11-01T10:30:32Z	0.0	Reading line 98 raw :: docs/guide/reload-contract.md:98:raw
+196	126	build	model	model		2026-11-01T10:30:32Z	9.3	
+196	127	build	tool	edit files	edit	2026-11-01T10:30:42Z	0.0	Updating guide version section :: [docs/guide/reload-contract.md#BBE7] PUT 98.=99: +- **Versioned** (24 kinds: `kits`, `vocab`, `library`, `policy`, `rules`, `compositions`, `standards`, `repeti
+196	128	build	tool	remote command	bash	2026-11-01T10:30:42Z	1.6	cd /Users/ladvien/bevy_emerge_loop && ssh big 'bash -c "grep -v Executable ~/p182-base.log | tail -3"'
+196	129	build	model	model		2026-11-01T10:30:43Z	12.1	
+196	130	build	tool	remote wait	bash	2026-11-01T10:30:55Z	7.4	Staging the failing-first mapper test on big :: cd /Users/ladvien/bevy_emerge_loop && cat > /tmp/p182_before.sh <<'EOF' #!/bin/bash # failing-first: the new mapper test against the base source cd ~/p182 || ex
+196	131	build	model	model		2026-11-01T10:31:03Z	8.7	
+196	132	build	tool	loop tools	bash	2026-11-01T10:31:12Z	0.7	cd /Users/ladvien/bevy_emerge_loop && sed -n 1,14p CHANGELOG.md | cut -c1-700; python3 tools/changelog/changelog.py add --help | head -30
+196	133	build	model	model		2026-11-01T10:31:12Z	6.4	
+196	134	build	tool	shell	bash	2026-11-01T10:31:19Z	0.3	cd /Users/ladvien/bevy_emerge_loop && head -12 assets/grimoire/vocab.ron; find assets -name "repetition.ron" -o -name "*.vocab*" | head; find assets -path "*ter
+196	135	build	tool	remote command	bash	2026-11-01T10:31:19Z	1.5	ssh big 'bash -c "cat ~/p182-before.log 2>/dev/null | tail -30"'
+196	136	build	model	model		2026-11-01T10:31:20Z	6.6	
+196	137	build	tool	shell	bash	2026-11-01T10:31:27Z	0.1	cd /Users/ladvien/bevy_emerge_loop && grep -n "^(" assets/grimoire/vocab.ron | head -3; grep -n "^ kind:\|^ effects:" assets/grimoire/vocab.ron | head -3; ls as
+196	138	build	model	model		2026-11-01T10:31:27Z	1.5	
+196	139	build	tool	read files	read	2026-11-01T10:31:28Z	0.0	Reading vocab.ron root :: assets/grimoire/vocab.ron:33-44
+196	140	build	model	model		2026-11-01T10:31:28Z	2.8	
+196	141	build	tool	edit files	edit	2026-11-01T10:31:31Z	0.0	Adding version to shipped vocab.ron :: [assets/grimoire/vocab.ron#3D2A] PUT >35: + // The format version (`bevy_grimoire_core::vocab::VOCAB_VERSION`). A file without it is read as the first. + versio
+196	142	build	tool	remote command	bash	2026-11-01T10:31:31Z	0.8	ssh big 'bash -c "cat ~/p182-before.log 2>/dev/null | tail -30; grep -v Executable ~/p182-base.log | tail -2"'
+196	143	build	model	model		2026-11-01T10:31:32Z	6.9	
+196	144	build	tool	cargo test	bash	2026-11-01T10:31:39Z	2.0	cd /Users/ladvien/bevy_emerge_loop && cat > /tmp/p182_push.sh <<'EOF' #!/bin/bash # sync current changes onto the clone (tar from stdin is done by the caller); 
+196	145	build	model	model		2026-11-01T10:31:41Z	4.1	
+196	146	build	tool	remote command	bash	2026-11-01T10:31:45Z	60.0	[launched bg_4] Waiting for the failing-first run :: ssh big 'timeout 280 bash -c "until grep -q \"=== before done\" ~/p182-before.log 2>/dev/null; do sleep 4; done"; cat ~/p182-before.log | tail -40' 2>&1 | tail 
+196	147	build	model	model		2026-11-01T10:32:45Z	3.4	
+196	148	build	tool	wait: other	wait	2026-11-01T10:32:48Z	137.7	Waiting for failing-first result
+196	149	build	model	model		2026-11-01T10:35:06Z	4.0	
+196	150	build	tool	remote command	bash	2026-11-01T10:35:10Z	51.6	Syncing changes and running core tests on big :: cd /Users/ladvien/bevy_emerge_loop && tar -c -T /tmp/p182_files.txt | ssh big 'bash -c "tar -x -C ~/p182"' && scp -q /tmp/p182_push.sh /tmp/p182_files.txt big:/
+196	151	build	model	model		2026-11-01T10:36:02Z	3.5	
+196	152	build	tool	read files	read	2026-11-01T10:36:05Z	0.0	Reading test literal in vocab.rs :: crates/bevy_grimoire_core/src/vocab.rs:750-766
+196	153	build	model	model		2026-11-01T10:36:05Z	1.7	
+196	154	build	tool	shell	bash	2026-11-01T10:36:07Z	0.1	cd /Users/ladvien/bevy_emerge_loop && sed -n 770,780p crates/bevy_grimoire_core/src/vocab.rs
+196	155	build	model	model		2026-11-01T10:36:07Z	6.0	
+196	156	build	tool	edit files	edit	2026-11-01T10:36:13Z	0.1	Adding version to the vocab test literal (schema exception) :: [crates/bevy_grimoire_core/src/vocab.rs#2142] PUT >753: + version: VOCAB_VERSION,
+196	157	build	tool	shell	bash	2026-11-01T10:36:13Z	0.4	cd /Users/ladvien/bevy_emerge_loop && for spec in crates/bevy_grimoire_core/src/census.rs:174 crates/bevy_grimoire_core/src/library.rs:408 crates/bevy_grimoire_
+196	158	build	model	model		2026-11-01T10:36:14Z	3.2	
+196	159	build	tool	shell	bash	2026-11-01T10:36:17Z	0.1	cd /Users/ladvien/bevy_emerge_loop && for spec in crates/bevy_grimoire_core/src/library.rs:408 crates/bevy_grimoire_core/src/library.rs:422 crates/bevy_grimoire
+196	160	build	model	model		2026-11-01T10:36:17Z	5.6	
+196	161	build	tool	remote command	bash	2026-11-01T10:36:23Z	3.5	Check remaining literal sites; rerun core tests :: cd /Users/ladvien/bevy_emerge_loop && awk 'NR>=1853 && NR<=1900 && /Default::default|Vocabularies::default/ {print "labels.rs:" NR": "$0}' crates/bevy_grimoire_
+196	162	build	model	model		2026-11-01T10:36:26Z	2.1	
+196	163	build	tool	shell	bash	2026-11-01T10:36:28Z	0.1	cd /Users/ladvien/bevy_emerge_loop && sed -n 1853,1895p crates/bevy_grimoire_mapper/src/labels.rs | tail -22; sed -n 1777,1815p crates/bevy_grimoire_mapper/src/
+196	164	build	model	model		2026-11-01T10:36:28Z	5.5	
+196	165	build	tool	shell	bash	2026-11-01T10:36:34Z	0.1	cd /Users/ladvien/bevy_emerge_loop && sed -n 1777,1800p crates/bevy_grimoire_mapper/src/vlm.rs; echo ======; sed -n 1850,1856p crates/bevy_grimoire_mapper/src/l
+196	166	build	model	model		2026-11-01T10:36:34Z	4.5	
+196	167	build	tool	read files	read	2026-11-01T10:36:38Z	0.1	Tag vlm.rs :: crates/bevy_grimoire_mapper/src/vlm.rs:1776-1778
+196	168	build	tool	read files	read	2026-11-01T10:36:38Z	0.1	Tag labels.rs :: crates/bevy_grimoire_mapper/src/labels.rs:1852-1854
+196	169	build	model	model		2026-11-01T10:36:38Z	2.8	
+196	170	build	tool	edit files	edit	2026-11-01T10:36:41Z	0.1	Adding version to two mapper test literals (schema exception) :: [crates/bevy_grimoire_mapper/src/vlm.rs#1F38] PUT >1777: + version: bevy_grimoire_core::vocab::VOCAB_VERSION, [crates/bevy_grimoire_mapper/src/labels.rs#4DF9] P
+196	171	build	tool	remote command	bash	2026-11-01T10:36:41Z	1.7	ssh big 'tail -40 ~/p182-core.log'
+196	172	build	model	model		2026-11-01T10:36:43Z	4.6	
+196	173	build	tool	remote command	bash	2026-11-01T10:36:48Z	60.0	[launched bg_5] Waiting for core test result :: ssh big 'timeout 280 bash -c "until grep -q \"=== core done\" ~/p182-core.log 2>/dev/null; do sleep 4; done"; tail -50 ~/p182-core.log' 2>&1 | tail -60
+196	174	build	model	model		2026-11-01T10:37:48Z	4.8	
+196	175	build	tool	wait: tests	wait	2026-11-01T10:37:53Z	11.9	Waiting for core test result
+196	176	build	model	model		2026-11-01T10:38:04Z	11.2	
+196	177	build	tool	cargo test	bash	2026-11-01T10:38:16Z	5.7	Syncing and running editor tests, clippy and game tests on big :: cd /Users/ladvien/bevy_emerge_loop && sed -i.bak 's|^//! ```ignore$|//! ```text|' crates/bevy_grimoire_core/src/format_version.rs && rm crates/bevy_grimoire_cor
+196	178	build	model	model		2026-11-01T10:38:21Z	7.1	
+196	179	build	tool	shell	bash	2026-11-01T10:38:29Z	0.2	cd /Users/ladvien/bevy_emerge_loop && ls docs/loop/iterations | tail -3; sed -n 1,60p docs/loop/iterations/$(ls docs/loop/iterations | tail -1) | cut -c1-400
+196	180	build	model	model		2026-11-01T10:38:29Z	2.1	
+196	181	build	tool	shell	bash	2026-11-01T10:38:31Z	0.1	cd /Users/ladvien/bevy_emerge_loop && ls -t docs/loop/iterations | head -4; f=$(ls -t docs/loop/iterations/*.md | head -1); echo $f; cat $f | cut -c1-600
+196	182	build	model	model		2026-11-01T10:38:31Z	15.0	
+196	183	build	tool	subagents	task	2026-11-01T10:38:46Z	0.2	[launched VersionFieldReview] Reviewer over uncommitted version-field diff
+196	184	build	model	model		2026-11-01T10:38:46Z	3.6	
+196	185	build	tool	remote command	bash	2026-11-01T10:38:50Z	60.0	[launched bg_6] Waiting for editor test result :: ssh big 'timeout 280 bash -c "until grep -q \"=== editor done\" ~/p182-editor.log 2>/dev/null; do sleep 4; done"; tail -30 ~/p182-editor.log' 2>&1 | tail -40
+196	186	build	model	model		2026-11-01T10:39:50Z	1.4	
+196	187	build	tool	wait: tests	wait	2026-11-01T10:39:51Z	32.3	Waiting for editor tests / reviewer
+196	188	build	model	model		2026-11-01T10:40:23Z	3.7	
+196	189	build	tool	shell	bash	2026-11-01T10:40:27Z	0.1	cd /Users/ladvien/bevy_emerge_loop && grep -n 'Spring") ||' crates/bevy_grimoire_mapper/tests/a_terrain_water_or_volume_file_of_another_version_is_refused.rs
+196	190	build	model	model		2026-11-01T10:40:27Z	2.1	
+196	191	build	tool	read files	read	2026-11-01T10:40:29Z	0.1	Tag for mapper test :: crates/bevy_grimoire_mapper/tests/a_terrain_water_or_volume_file_of_another_version_is_refused.rs:80-84
+196	192	build	model	model		2026-11-01T10:40:29Z	2.6	
+196	193	build	tool	edit files	edit	2026-11-01T10:40:32Z	0.1	Fix weak assertion in my new test :: [crates/bevy_grimoire_mapper/tests/a_terrain_water_or_volume_file_of_another_version_is_refused.rs#4730] PUT 82.=82: + let plan: bevy_grimoire_core::water::Wate
+196	194	build	model	model		2026-11-01T10:40:32Z	4.1	
+196	195	build	tool	remote command	bash	2026-11-01T10:40:36Z	60.0	[launched bg_7] Waiting for clippy and game tests :: ssh big 'timeout 285 bash -c "until grep -q \"=== game done\" ~/p182-editor.log 2>/dev/null; do sleep 4; done"; grep -A40 "=== editor done" ~/p182-editor.log | 
+196	196	build	model	model		2026-11-01T10:41:36Z	1.3	
+196	197	build	tool	wait: clip	wait	2026-11-01T10:41:38Z	72.9	Waiting for clippy/game or reviewer
+196	198	build	model	model		2026-11-01T10:42:51Z	3.9	
+196	199	build	tool	read files	read	2026-11-01T10:42:54Z	0.0	Reading test body to restructure :: crates/bevy_grimoire_mapper/tests/a_terrain_water_or_volume_file_of_another_version_is_refused.rs:36-66
+196	200	build	model	model		2026-11-01T10:42:55Z	11.9	
+196	201	build	tool	edit files	edit	2026-11-01T10:43:06Z	0.1	Simplify the case table to satisfy clippy :: [crates/bevy_grimoire_mapper/tests/a_terrain_water_or_volume_file_of_another_version_is_refused.rs#7961] PUT 39.=64: + // The operation, the folder its file liv
+196	202	build	tool	cargo test	bash	2026-11-01T10:43:06Z	4.8	Resync and rerun my test and clippy :: cd /Users/ladvien/bevy_emerge_loop && (git diff --name-only; git ls-files --others --exclude-standard) > /tmp/p182_files.txt; tar -c -T /tmp/p182_files.txt | ss
+196	203	build	model	model		2026-11-01T10:43:11Z	4.4	
+196	204	build	tool	wait: review	wait	2026-11-01T10:43:16Z	39.2	Waiting for reviewer or rerun
+196	205	build	model	model		2026-11-01T10:43:55Z	2.6	
+196	206	build	tool	remote command	bash	2026-11-01T10:43:57Z	60.0	[launched bg_8] Waiting for rerun and clippy :: ssh big 'timeout 200 bash -c "until grep -q \"=== re done\" ~/p182-re.log 2>/dev/null; do sleep 4; done"; cat ~/p182-re.log' 2>&1 | tail -30
+196	207	build	model	model		2026-11-01T10:44:57Z	4.7	
+196	208	build	tool	wait: other	wait	2026-11-01T10:45:02Z	0.2	Waiting for rerun
+196	209	build	model	model		2026-11-01T10:45:02Z	10.6	
+196	210	prove	tool	phase mark	bash	2026-11-01T10:45:13Z	4.4	Committing the feature :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark prove >/dev/null; git add assets/grimoire/vocab.ron crates docs/guide/reload-contract.md 
+196	211	prove	model	model		2026-11-01T10:45:17Z	12.7	
+196	212	prove	tool	shell	bash	2026-11-01T10:45:30Z	1.1	cd /Users/ladvien/bevy_emerge_loop && sed -n 1,6p crates/bevy_grimoire_core/Cargo.toml; sed -n 1,5p crates/bevy_grimoire/Cargo.toml; sed -n 1,5p crates/bevy_gri
+196	213	prove	model	model		2026-11-01T10:45:31Z	6.7	
+196	214	prove	tool	shell	bash	2026-11-01T10:45:38Z	0.5	Bumping versions for the release :: cd /Users/ladvien/bevy_emerge_loop && sed -i.bak '3s/version = "0.4.1"/version = "0.5.0"/' crates/bevy_grimoire_core/Cargo.toml && sed -i.bak '3s/version = "0.3
+196	215	prove	model	model		2026-11-01T10:45:39Z	6.0	
+196	216	prove	tool	shell	bash	2026-11-01T10:45:44Z	6.6	cd /Users/ladvien/bevy_emerge_loop && ls crates/*/Cargo.toml.bak 2>&1 | head; git status --short; cargo metadata --offline --format-version 1 >/dev/null 2>&1; g
+196	217	prove	model	model		2026-11-01T10:45:51Z	4.4	
+196	218	prove	tool	push gate	bash	2026-11-01T10:45:56Z	7.3	Committing release bump and pushing a non-main branch :: cd /Users/ladvien/bevy_emerge_loop && git diff Cargo.lock | grep "^[+-]" | grep -v "^+++\|^---"; git add Cargo.lock crates/bevy_grimoire/Cargo.toml crates/bevy_
+196	219	prove	model	model		2026-11-01T10:46:03Z	13.8	
+196	220	prove	tool	remote command	bash	2026-11-01T10:46:17Z	0.9	ls -t /tmp/*.sh 2>/dev/null | head -20; ssh big 'bash -c "ls -t /tmp/*.sh ~/*.sh 2>/dev/null | head -12; cargo semver-checks --version"'
+196	221	prove	model	model		2026-11-01T10:46:18Z	2.4	
+196	222	prove	tool	remote command	bash	2026-11-01T10:46:20Z	0.8	Looking at earlier gate and release scripts :: ssh big 'bash -c "cat ~/g17_gate.sh | head -40; ls ~ | grep -i \"^p1[0-9][0-9]\" | head -20"'; cat /tmp/loop151_release.sh | head -50
+196	223	prove	model	model		2026-11-01T10:46:21Z	16.1	
+196	224	prove	tool	edit files	write	2026-11-01T10:46:37Z	0.0	/tmp/p182_gate.sh
+196	225	prove	model	model		2026-11-01T10:46:37Z	7.0	
+196	226	gate	tool	phase mark	bash	2026-11-01T10:46:44Z	22.4	Launching the gated push and release on big :: scp -q /tmp/p182_gate.sh big:/tmp/p182_gate.sh && ssh big 'bash -c "nohup bash /tmp/p182_gate.sh > ~/p182-gate.log 2>&1 </dev/null & disown; sleep 20; cat ~/p18
+196	227	gate	model	model		2026-11-01T10:47:06Z	8.6	
+196	228	gate	tool	loop tools	bash	2026-11-01T10:47:15Z	30.5	Adding the changelog line :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/changelog/changelog.py add --id 202-versions-2 --sha 0743196 --title "A vocabulary, the repetition rules, a 
+196	229	gate	model	model		2026-11-01T10:47:45Z	12.3	
+196	230	gate	tool	wait: gate	wait	2026-11-01T10:47:58Z	0.1	Waiting for the gate
+196	231	gate	model	model		2026-11-01T10:47:58Z	2.5	
+196	232	gate	tool	remote command	bash	2026-11-01T10:48:00Z	60.0	[launched bg_9] Waiting on the gate (part 1) :: ssh big 'timeout 285 bash -c "until grep -q \"=== push exit\" ~/p182-gate.log; do sleep 5; done"; grep -v "Filtering content" ~/p182-gate.log | tail -25' 2>&1 |
+196	233	gate	model	model		2026-11-01T10:49:00Z	20.8	
+196	234	gate	tool	edit files	write	2026-11-01T10:49:21Z	0.0	/Users/ladvien/bevy_emerge_loop/docs/loop/iterations/2026-11-01-reload-0743196.md
+196	235	gate	model	model		2026-11-01T10:49:21Z	1.6	
+196	236	gate	tool	wait: gate	wait	2026-11-01T10:49:23Z	204.6	Waiting for the gate
+196	237	gate	model	model		2026-11-01T10:52:48Z	3.6	
+196	238	gate	tool	remote command	bash	2026-11-01T10:52:51Z	60.0	[launched bg_10] Waiting on the gate (part 2) :: ssh big 'timeout 290 bash -c "until grep -q \"=== push exit\" ~/p182-gate.log; do sleep 5; done"; grep -v "Filtering content" ~/p182-gate.log | tail -14' 2>&1 |
+196	239	gate	model	model		2026-11-01T10:53:51Z	1.3	
+196	240	gate	tool	wait: gate	wait	2026-11-01T10:53:53Z	135.3	Waiting for the gate
+196	241	gate	model	model		2026-11-01T10:56:08Z	7.0	
+196	242	gate	tool	remote command	bash	2026-11-01T10:56:15Z	60.0	[launched bg_11] Waiting on the release :: ssh big 'timeout 290 bash -c "until grep -q \"=== release done\\|FAILED\\|not on the index\" ~/p182-gate.log; do sleep 5; done"; grep "^===\|error\|Published\|U
+196	243	gate	model	model		2026-11-01T10:57:15Z	1.5	
+196	244	gate	tool	wait: release	wait	2026-11-01T10:57:16Z	74.8	Waiting for the release
+196	245	gate	model	model		2026-11-01T10:58:31Z	7.6	
+196	246	gate	tool	loop tools	bash	2026-11-01T10:58:39Z	9.5	Verify crates.io and run accept.py on big :: cd /Users/ladvien/bevy_emerge_loop && cargo info bevy_grimoire_core@0.5.0 2>&1 | grep -i "^version\|^name\|crates.io" | head -3; git fetch -q origin --tags 2>&1
+196	247	gate	model	model		2026-11-01T10:58:48Z	4.2	
+196	248	gate	tool	shell	bash	2026-11-01T10:58:53Z	2.5	Confirming crates.io index and tree state :: cd /Users/ladvien/bevy_emerge_loop && for c in bevy_grimoire_core:be/vy/bevy_grimoire_core:0.5.0 bevy_grimoire:be/vy/bevy_grimoire:0.3.1 bevy_grimoire_anim:be/v
+196	249	gate	model	model		2026-11-01T10:58:55Z	7.0	
+196	250	gate	tool	remote command	bash	2026-11-01T10:59:02Z	1.7	Measuring what to clean up :: ssh big 'bash -c "du -sh ~/p182-target ~/p182 ~/p182g 2>/dev/null; df -h ~ | tail -1; git -C ~/p182g status --short | head -3; ls -d ~/p1[0-9][0-9]* /tmp/p182* 
+196	251	gate	model	model		2026-11-01T10:59:04Z	16.7	
+196	252	gate	tool	push gate	bash	2026-11-01T10:59:20Z	40.2	Committing docs and pushing through the fast path :: cd /Users/ladvien/bevy_emerge_loop && cat >> docs/loop/log.md <<'EOF' - 2026-11-01 04:59 loop (bevy_emerge_loop, laptop + big, pass 182): shipped #202 (H5) slic
+196	253	gate	model	model		2026-11-01T11:00:01Z	10.6	
+196	254	gate	tool	edit files	write	2026-11-01T11:00:11Z	0.0	/tmp/p182_comment.md
+196	255	gate	model	model		2026-11-01T11:00:11Z	3.6	
+196	256	gate	tool	remote command	bash	2026-11-01T11:00:15Z	49.4	Commenting on #202, releasing claim, cleaning up big and /tmp :: cd /Users/ladvien/bevy_emerge_loop && gh issue comment 202 --repo bevy-coven/bevy_grimoire --body-file /tmp/p182_comment.md | tail -1; gh issue edit 202 --repo 
+196	257	gate	model	model		2026-11-01T11:01:04Z	5.4	
+196	258	log	tool	phase mark	bash	2026-11-01T11:01:10Z	1.5	cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark log; git status --short | wc -l; git log origin/main..HEAD --oneline | wc -l
+196	259	log	model	model		2026-11-01T11:01:11Z	10.4	
