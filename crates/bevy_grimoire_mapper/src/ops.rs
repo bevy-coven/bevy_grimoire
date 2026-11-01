@@ -103,6 +103,10 @@ pub enum Source {
     Agent,
 }
 
+/// **The version of a log line's shape** (#202). A line with no `version` was written before it existed
+/// and is the first.
+pub const OPLOG_VERSION: u32 = 1;
+
 /// **One line of the operation log.**
 ///
 /// **Every field earns its place, and the two that look like bookkeeping are the ones an agent
@@ -111,6 +115,12 @@ pub enum Source {
 /// read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Entry {
+    /// **The shape of this line**: [`OPLOG_VERSION`]. A line from before it existed has none and reads as
+    /// the first; a line of another version does not read, and every reader that names what is wrong (the
+    /// reload verdict, the undo) refuses it naming `version` and the version this build reads, while the
+    /// readers that skip a line skip it like a damaged one. An append never rewrites it.
+    #[serde(default = "bevy_grimoire_core::format_version::first", deserialize_with = "bevy_grimoire_core::format_version::read::<_, OPLOG_VERSION>")]
+    pub version: u32,
     /// **Monotonic, from the log itself.** The count of lines before this one, so a reader can
     /// ask for "everything after what I saw" without a timestamp comparison.
     pub seq: u64,
@@ -3242,6 +3252,7 @@ fn dispatch_as(
     op.plan(ctx, params)?;
     let outcome = op.commit(ctx, params)?;
     let mut entry = Entry {
+        version: OPLOG_VERSION,
         seq: 0,
         operation_id: String::new(),
         at: now_rfc3339(),

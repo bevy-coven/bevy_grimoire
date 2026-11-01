@@ -38,11 +38,11 @@ use bevy_grimoire_core::water::{WATER_FIELD_VERSION, WaterField, WaterPlan};
 
 /// **The kinds whose format has no version today**, each with what is left to do. Checked in: a kind
 /// leaves this list in the commit that versions it.
-const UNVERSIONED: &[(&str, &str)] = &[("oplog", "the operation log: one JSON object per line, with no version of the line's shape")];
+const UNVERSIONED: &[(&str, &str)] = &[];
 
 /// **A literal, not `UNVERSIONED.len()`**: a number that is its own measure can never fail. Lower it with
 /// the list; raising it is a decision a reviewer must see.
-const UNVERSIONED_MAX: usize = 1;
+const UNVERSIONED_MAX: usize = 0;
 
 /// **Kinds whose type lives above this crate and carries a version there**: the kind, the test that proves
 /// it (a path from the workspace root) and what the type is. The proof reads a file one version ahead and
@@ -52,6 +52,7 @@ const VERSIONED_ABOVE: &[(&str, &str, &str)] = &[
     ("people", "crates/bevy_grimoire_mapper/tests/a_forest_people_or_scripts_file_of_another_version_is_refused.rs", "the editor's `People`, a map's people"),
     ("scripts", "crates/bevy_grimoire_mapper/tests/a_forest_people_or_scripts_file_of_another_version_is_refused.rs", "the editor's `Scripts`, a map's triggers"),
     ("checks", "crates/bevy_grimoire_decide/tests/a_checks_file_of_another_version_is_refused.rs", "the decision crate's `Checks`"),
+    ("oplog", "crates/bevy_grimoire_mapper/tests/an_oplog_line_of_another_version_is_refused.rs", "the editor's operation log entry, one JSON line each"),
 ];
 
 /// **Kinds whose format is not the editor's to version**, and whose it is.
