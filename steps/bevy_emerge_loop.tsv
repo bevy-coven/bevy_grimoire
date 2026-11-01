@@ -14979,3 +14979,91 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 200	439	log	tool	phase mark	bash	2026-11-01T13:55:16Z	1.0	Confirming clean pushed tree :: cd /Users/ladvien/bevy_emerge_loop && git status --short | head -3; git log --oneline -4; git log origin/main --oneline -1; python3 tools/loop/steps.py mark log
 200	440	log	tool	learn	learn	2026-11-01T13:55:16Z	1.0	Recording the LFS push lesson
 200	441	log	model	model		2026-11-01T13:55:17Z	8.9	
+201	1	orient	model	model		2026-11-01T13:56:05Z	4.0	
+201	2	orient	tool	phase mark	bash	2026-11-01T13:56:09Z	1.3	Orienting pass :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark orient; git status --short | head; git log --oneline -6; tail -n 3 docs/loop/log.md | cut 
+201	3	orient	tool	github	bash	2026-11-01T13:56:09Z	1.5	List hot-reload issues :: cd /home/ladvien/bevy_emerge_loop && gh issue list --repo bevy-coven/bevy_grimoire --state open --label hot-reload --json number,title,labels --jq '.[] | "#\(.n
+201	4	orient	model	model		2026-11-01T13:56:10Z	3.0	
+201	5	orient	tool	github	bash	2026-11-01T13:56:13Z	1.0	Read hot-reload issues :: cd /home/ladvien/bevy_emerge_loop && for n in 201 202; do echo "=== $n"; gh issue view $n --repo bevy-coven/bevy_grimoire --json body,labels,comments --jq '.bod
+201	6	orient	model	model		2026-11-01T13:56:14Z	4.2	
+201	7	orient	tool	github	bash	2026-11-01T13:56:18Z	1.0	Read last comments of 201/202, focus :: cd /home/ladvien/bevy_emerge_loop && for n in 201 202; do echo "=== $n"; gh issue view $n --repo bevy-coven/bevy_grimoire --json comments --jq '.comments[-3:][]
+201	8	orient	model	model		2026-11-01T13:56:19Z	6.7	
+201	9	orient	tool	github	bash	2026-11-01T13:56:26Z	0.8	Read UI-00 and UI-01 :: cd /home/ladvien/bevy_emerge_loop && gh issue view 208 --repo bevy-coven/bevy_grimoire --json body --jq .body | head -120; echo ======; gh issue view 209 --repo
+201	10	orient	model	model		2026-11-01T13:56:27Z	3.0	
+201	11	research	tool	phase mark	bash	2026-11-01T13:56:30Z	0.2	Find gooey gates :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark research; grep -rn "bevy_gooey\|ui_skin" --include=*.rs --include=Cargo.toml --include=*.p
+201	12	research	model	model		2026-11-01T13:56:30Z	4.4	
+201	13	research	tool	shell	bash	2026-11-01T13:56:35Z	0.0	Read leaf.rs gooey parts :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper && sed -n 1,60p tests/leaf.rs; echo ....; sed -n 60,200p tests/leaf.rs | grep -n "optional\|OPTION
+201	14	research	model	model		2026-11-01T13:56:35Z	8.2	
+201	15	research	tool	shell	bash	2026-11-01T13:56:43Z	0.0	Read ui_skin and call sites :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper && cat src/ui_skin.rs; sed -n 2190,2225p src/editor.rs; sed -n 1,60p src/family_host.rs; sed -n 95
+201	16	research	model	model		2026-11-01T13:56:43Z	6.3	
+201	17	research	tool	shell	bash	2026-11-01T13:56:49Z	0.2	Vision refs to EditorUiPlugin :: cd /home/ladvien/bevy_emerge_loop && grep -rn "EditorUiPlugin" docs crates README.md | cut -c1-300; grep -rn "features bevy_gooey\|feature bevy_gooey\|\`bevy_go
+201	18	research	model	model		2026-11-01T13:56:49Z	1.4	
+201	19	research	tool	shell	bash	2026-11-01T13:56:51Z	0.0	Vision §2/§7 text :: cd /home/ladvien/bevy_emerge_loop && grep -n "Plugin\|^## " docs/ui/vision.md | head -50
+201	20	research	model	model		2026-11-01T13:56:51Z	6.9	
+201	21	research	tool	shell	bash	2026-11-01T13:56:58Z	0.0	Read gooey test file :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper && sed -n 1,50p tests/family_gooey_skin.rs; grep -n "gooey\|^mod fixtures\|^mod ui\|^mod family" t
+201	22	research	model	model		2026-11-01T13:56:58Z	19.3	
+201	23	research	model	model		2026-11-01T13:57:17Z	29.2	
+201	24	research	tool	shell	bash	2026-11-01T13:57:46Z	0.0	Add failing test and wire all.rs :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper && cat > tests/editor_ui_plugin.rs <<'EOF' //! **The editor's UI is gooey, in every build, and one
+201	25	research	model	model		2026-11-01T13:57:46Z	4.0	
+201	26	research	tool	read files	read	2026-11-01T13:57:50Z	0.0	Get tag :: crates/bevy_grimoire_mapper/tests/all.rs:163-166
+201	27	research	tool	read files	read	2026-11-01T13:57:50Z	0.0	Get tag :: crates/bevy_grimoire_mapper/src/lib.rs:100-107
+201	28	research	tool	read files	read	2026-11-01T13:57:50Z	0.1	Get tag :: crates/bevy_grimoire_mapper/src/editor.rs:2205-2209
+201	29	research	model	model		2026-11-01T13:57:50Z	5.6	
+201	30	research	tool	edit files	edit	2026-11-01T13:57:56Z	0.0	Wire EditorUiPlugin, drop gates :: [crates/bevy_grimoire_mapper/tests/all.rs#8ACB] PUT <165: +mod editor_ui_plugin; [crates/bevy_grimoire_mapper/src/lib.rs#F4B8] PUT 104.=105: +pub mod ui; +pub m
+201	31	research	tool	edit files	write	2026-11-01T13:57:56Z	0.0	New EditorUiPlugin :: crates/bevy_grimoire_mapper/src/ui.rs
+201	32	research	model	model		2026-11-01T13:57:56Z	4.9	
+201	33	research	tool	read files	read	2026-11-01T13:58:01Z	0.0	Get tag :: crates/bevy_grimoire_mapper/src/ui_skin.rs:11-42
+201	34	research	tool	read files	read	2026-11-01T13:58:01Z	0.0	Get tag :: crates/bevy_grimoire_mapper/src/family_host.rs:8-12
+201	35	research	model	model		2026-11-01T13:58:01Z	4.6	
+201	36	research	tool	edit files	edit	2026-11-01T13:58:05Z	0.0	Remove gates in ui_skin and family_host :: [crates/bevy_grimoire_mapper/src/ui_skin.rs#9CA1] PUT 14.=14: +use bevy_gooey::GooeySkin; PUT 27.=40: +/// Copies a changed `family/bevy_gooey.ron` into the run
+201	37	research	model	model		2026-11-01T13:58:05Z	4.2	
+201	38	research	tool	edit files	edit	2026-11-01T13:58:10Z	0.0	Remove gates in ui_skin and family_host :: [crates/bevy_grimoire_mapper/src/ui_skin.rs#9CA1] PUT 14.=14: +use bevy_gooey::GooeySkin; CUT 27.=40 [crates/bevy_grimoire_mapper/src/family_host.rs#48A5] PUT 1
+201	39	research	model	model		2026-11-01T13:58:10Z	4.9	
+201	40	research	tool	edit files	edit	2026-11-01T13:58:14Z	0.0	Fix built() doc :: [crates/bevy_grimoire_mapper/src/family_host.rs#8FD4] PUT 20.=20: +/// The family crates this build was compiled with: `bevy_gooey` always (the editor's UI is g
+201	41	research	model	model		2026-11-01T13:58:14Z	1.6	
+201	42	research	tool	edit files	edit	2026-11-01T13:58:16Z	0.0	Fix built() doc :: [crates/bevy_grimoire_mapper/src/family_host.rs#8FD4] PUT 21.=21: +/// The family crates this build was compiled with: `bevy_gooey` always (the editor's UI is g
+201	43	research	model	model		2026-11-01T13:58:16Z	1.3	
+201	44	research	tool	edit files	edit	2026-11-01T13:58:17Z	0.0	Fix built() doc :: [crates/bevy_grimoire_mapper/src/family_host.rs#8FD4] PUT 21.=21: +/// The family crates this build was compiled with: `bevy_gooey` always (the editor's UI is g
+201	45	research	model	model		2026-11-01T13:58:17Z	4.6	
+201	46	research	tool	shell	bash	2026-11-01T13:58:22Z	0.0	Edit Cargo.toml and test gates :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper && python3 - <<'EOF' import re p='Cargo.toml'; s=open(p).read() s=s.replace('bevy_gooey = ["dep:be
+201	47	research	model	model		2026-11-01T13:58:22Z	6.0	
+201	48	research	tool	git	bash	2026-11-01T13:58:28Z	0.0	Strip gooey cfg gates in tests :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper && python3 - <<'EOF' p='tests/family_gooey_skin.rs'; s=open(p).read() s=s.replace('#![cfg(feature 
+201	49	research	model	model		2026-11-01T13:58:28Z	4.3	
+201	50	prove	tool	phase mark	bash	2026-11-01T13:58:32Z	60.0	[launched bg_2] Run targeted tests :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark prove; (time cargo test -p bevy_grimoire_mapper --test editor -- editor_ui_plugin:: family
+201	51	prove	model	model		2026-11-01T13:59:32Z	4.2	
+201	52	prove	tool	shell	bash	2026-11-01T13:59:37Z	0.0	Find docs mentioning gooey :: cd /home/ladvien/bevy_emerge_loop && grep -rln "bevy_gooey" README.md docs/guide docs/*.md crates/*/README.md 2>/dev/null; grep -rn "gooey" docs/guide README.md
+201	53	prove	model	model		2026-11-01T13:59:37Z	1.5	
+201	54	prove	tool	shell	bash	2026-11-01T13:59:38Z	0.0	Check that guide line :: cd /home/ladvien/bevy_emerge_loop && sed -n 141p docs/guide/reload-contract.md | grep -o ".\{200\}bevy_gooey.\{250\}"
+201	55	prove	model	model		2026-11-01T13:59:38Z	5.3	
+201	56	prove	tool	read files	read	2026-11-01T13:59:43Z	0.0	Read line to edit :: docs/guide/reload-contract.md:141
+201	57	prove	model	model		2026-11-01T13:59:44Z	4.1	
+201	58	prove	tool	read files	read	2026-11-01T13:59:48Z	0.0	Raw line :: docs/guide/reload-contract.md:raw:141-141
+201	59	prove	model	model		2026-11-01T13:59:48Z	3.9	
+201	60	prove	tool	edit files	edit	2026-11-01T13:59:52Z	0.0	Update guide: gooey always built :: [docs/guide/reload-contract.md#A457] PUT 141.=141: +**A family crate's settings are read as the crate's own type** (#200). The host called a settings file `appl
+201	61	prove	model	model		2026-11-01T13:59:52Z	4.4	
+201	62	prove	tool	wait: tests	wait	2026-11-01T13:59:56Z	189.7	Waiting for test build
+201	63	prove	model	model		2026-11-01T14:03:06Z	6.7	
+201	64	gate	tool	phase mark	bash	2026-11-01T14:03:12Z	60.0	[launched bg_3] leaf test and clippy :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark gate; cargo test -p bevy_grimoire_mapper --test editor -- leaf:: 2>&1 | tail -6; cargo cli
+201	65	gate	model	model		2026-11-01T14:04:12Z	6.3	
+201	66	gate	tool	wait: clip	wait	2026-11-01T14:04:19Z	4.1	Waiting for clippy
+201	67	gate	model	model		2026-11-01T14:04:23Z	4.3	
+201	68	gate	tool	loop tools	bash	2026-11-01T14:04:27Z	0.2	Commit code :: cd /home/ladvien/bevy_emerge_loop && git add -A crates docs/guide && git commit -q -F - <<'EOF' feat(ui): bevy_gooey is a required dependency and EditorUiPlugin
+201	69	gate	model	model		2026-11-01T14:04:27Z	4.3	
+201	70	ship	tool	phase mark	bash	2026-11-01T14:04:32Z	1.9	Changelog and backlog checks :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark ship; python3 tools/changelog/changelog.py add --id ui-01-gooey-required --sha 32b2aeb --t
+201	71	ship	model	model		2026-11-01T14:04:33Z	3.7	
+201	72	ship	tool	loop tools	bash	2026-11-01T14:04:37Z	0.0	[launched bg_4] Run accept.py :: cd /home/ladvien/bevy_emerge_loop && (time python3 tools/loop/accept.py --source $PWD/assets 2>&1 | tail -8)
+201	73	ship	model	model		2026-11-01T14:04:37Z	6.6	
+201	74	ship	tool	shell	bash	2026-11-01T14:04:44Z	0.0	Write report and log line :: cd /home/ladvien/bevy_emerge_loop && cat > docs/loop/iterations/2026-11-01-ui-32b2aeb.md <<'EOF' # 2026-11-01 ui: bevy_gooey is required and EditorUiPlugin owns
+201	75	ship	bg	loop tools	bash	2026-11-01T14:04:44Z	0.1	bg_4 completed: (time python3 tools/loop/accept.py --source $PWD/assets 2>&1 | tail -8)
+201	76	ship	model	model		2026-11-01T14:04:44Z	1.4	
+201	77	ship	tool	loop tools	bash	2026-11-01T14:04:45Z	2.6	Run accept.py with out :: cd /home/ladvien/bevy_emerge_loop && mkdir -p /tmp/accept-ui01 && (time python3 tools/loop/accept.py --source $PWD/assets --out /tmp/accept-ui01 2>&1 | tail -6)
+201	78	ship	model	model		2026-11-01T14:04:48Z	1.4	
+201	79	ship	tool	loop tools	bash	2026-11-01T14:04:49Z	3.7	Run accept.py with out file :: cd /home/ladvien/bevy_emerge_loop && (time python3 tools/loop/accept.py --source $PWD/assets --out /tmp/accept-ui01/out.json 2>&1 | tail -6)
+201	80	ship	model	model		2026-11-01T14:04:53Z	8.6	
+201	81	ship	tool	cargo test	bash	2026-11-01T14:05:02Z	1.6	Log, issues, push :: cd /home/ladvien/bevy_emerge_loop && rm -rf /tmp/accept-ui01 && cat >> docs/loop/log.md <<'EOF' - 2026-11-01 14:10 loop (bevy_emerge_loop, big, pass 187): shipp
+201	82	ship	model	model		2026-11-01T14:05:03Z	3.0	
+201	83	ship	tool	phase mark	bash	2026-11-01T14:05:06Z	60.1	[launched bg_5] Tick UI-00 and push :: cd /home/ladvien/bevy_emerge_loop && gh issue view 208 --repo bevy-coven/bevy_grimoire --json body --jq .body | sed 's/^- \[ \] UI-01 #209/- [x] UI-01 #209/' > 
+201	84	ship	model	model		2026-11-01T14:06:06Z	1.7	
+201	85	ship	tool	wait: gate	wait	2026-11-01T14:06:08Z	140.5	Waiting for push gate
+201	86	ship	model	model		2026-11-01T14:08:29Z	4.6	
+201	87	ship	tool	github	bash	2026-11-01T14:08:33Z	0.5	Verify issue closed :: cd /home/ladvien/bevy_emerge_loop && gh issue view 209 --repo bevy-coven/bevy_grimoire --json state --jq .state; git status --short | head -3
+201	88	ship	model	model		2026-11-01T14:08:34Z	6.1	

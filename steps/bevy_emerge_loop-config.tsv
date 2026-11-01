@@ -1,2 +1,3 @@
 pass	at	host	seconds	model	think	build_jobs	test_threads
 200	2026-11-01T13:55Z	Cs-MacBook-Pro	4547	anthropic/claude-sonnet-5-5	xhigh	4	-
+201	2026-11-01T14:08Z	big	762	anthropic/claude-sonnet-5-5	high	10	8
