@@ -113,6 +113,24 @@ The editor decides its own files the same way. The terrain view reads the open m
 
 With these two, every kind in the registry has a reader that names the file and the field when it does not read: core's `reload_check::check` for 24, the editor's readers for `forest`, `people`, `scripts` and `trees`, and its watchers for `checks`, `oplog`, `game_data`, `reference_images` and `family`. Two of them are not checked in every build: `family` is typed only with the crate's feature, `forest` and `trees` with `bevy_flora`.
 
+## Runtime state keeps its identity across a reload (#201)
+
+A reload that draws a piece again throws away whatever a game hung on its `Entity` (a booking, an animation phase, a camera target), even when the edit did not touch the piece. So the game-side `GrimoireLivePlugin` keeps an entity for every placement whose definition did not change, and the contract for what counts as a change is one function, `bevy_grimoire_core::live::same_but_id`, that the diff and the plan both use.
+
+|edit|what happens to the entity|
+|---|---|
+|move, turn, retint, retune a placement, or change its lift, tip, paint or owner|that placement's entity is despawned and drawn again (identity-changing for that entity only)|
+|change a placement's descriptor (its kind)|the same: that placement only, and what rests on it|
+|edit a descriptor in the library|every placement of that descriptor is drawn again; nothing else is|
+|change the id of a placement and nothing else|the entity is kept, its `Placement` component holds the new id (a rename)|
+|rename a host, and name it in the rows resting on it|the host and its riders keep their entities and the riders stay mounted|
+|rename a placement and edit it in the same save|the piece is a new piece: the old entity is despawned and a new one drawn|
+|write the same content again|nothing is drawn|
+
+A rename is found by content: an id only the old map has and an id only the new map has whose rows are equal in every other field (`MapDiff::renamed`, sorted by old id). It is not guessed when it is ambiguous: two rows that are the same as each other are never paired, so two stacked pieces that are both renamed are redrawn. `same_but_id` lists every field of `Placed` one by one, so a field added to the row stops the build until it is decided. The tests are `crates/bevy_grimoire_core/tests/live_diff_renames.rs` and `crates/bevy_grimoire/tests/live_identity.rs`, which counts the entities a reload draws.
+
+What is not done yet (#201 stays open): people. A society's people are not entities of this crate, so their position and ties are the game's to keep, keyed by the name in `people/<map>.ron`; a rename of a placement a person names (`home` or `work`) is not followed in that file, and there is no alias table for a rename together with an edit or for a renamed map.
+
 ## What the audit found
 
 These are the facts the later issues in the series start from.
