@@ -21,9 +21,9 @@ and no GPU.
 **While any issue labelled `hot-reload` is open, the pass's item is the first one of them that is ready, and nothing else.** The series is #198 → #204 (H1–H7); `gh issue list --repo bevy-coven/bevy_grimoire --state open --label hot-reload` lists what is left. Ready means every issue on its **Depends on** line is closed; take the lowest-numbered ready one, and #198 and #199 are both ready from the start. This rule outranks Phase 1's bug work, every rule in "Filed issues come before new features" (bugs, `consumer`, `owner` and other issues), "Your own claim first" in "Parallel workers", the focus file and Phase 2. A claim on any other issue is released, with a comment, before you start.
 
 - **One exception: a broken gate.** If the push gate refuses on `main` as it stands, or `main` does not build, fix exactly that first, because no slice can ship without it; then go back to the series in the same pass. Any other bug waits, and is filed if it is not already.
-- **One verified slice per pass**, with its failing-first test, as the issue's acceptance list says. Comment on the issue which acceptance items the slice meets, and close it with `Fixes #N` only in the commit that meets the last of them.
+- **One verified slice per issue**, with its failing-first test, as the issue's acceptance list says, taken as part of a cluster ("The owner's batch rule" below). Comment on the issue which acceptance items the slice meets, and close it with `Fixes #N` only in the commit that meets the last of them.
 - **A blocked issue does not end the series.** Comment exactly what it needs, then take the next ready `hot-reload` issue. Only when every open one is blocked does the rest of this command apply, and the log line names each blocker.
-- **When the last `hot-reload` issue closes, the editor's UI series is the item** ("The owner's next override" below), and only when no `ui` issue is ready does the pass grind through the other open issues (owner, 2026-11-01): bug issues oldest first, then `consumer`, then `owner` in the focus's order, then every other open issue oldest first, one verified slice per pass, before the backlog, the series or your own candidates. Skip an issue labelled `wontfix`, and say so in the log line. Only `bevy_emerge_loop` runs since 2026-10-31, so a `worker:bevy_emerge_w*` label is a retired worker's claim: remove it with a comment and take the issue. An issue that needs the owner's decision (`decide`) is decided by "Owner input: recommend, record, proceed", not skipped.
+- **When the last `hot-reload` issue closes, the editor's UI series is the item** ("The owner's next override" below), and only when no `ui` issue is ready does the pass grind through the other open issues (owner, 2026-11-01): bug issues oldest first, then `consumer`, then `owner` in the focus's order, then every other open issue oldest first, in clusters of five or six ("The owner's batch rule" below), before the backlog, the series or your own candidates. Skip an issue labelled `wontfix`, and say so in the log line. Only `bevy_emerge_loop` runs since 2026-10-31, so a `worker:bevy_emerge_w*` label is a retired worker's claim: remove it with a comment and take the issue. An issue that needs the owner's decision (`decide`) is decided by "Owner input: recommend, record, proceed", not skipped.
 
 ## The owner's next override: the editor's UI on bevy_gooey (2026-11-01)
 
@@ -31,8 +31,21 @@ After the hot-reload series, **the pass's item is the first ready issue labelled
 
 - **Ready** means every issue on its **Depends on** line is closed, and every `bevy-coven/bevy_gooey` issue on its **Needs** line is closed as completed. The slice's first commit moves the mapper's `bevy_gooey` git pin to a revision that has the fix (`git ls-remote https://github.com/bevy-coven/bevy_gooey main`), and the gate proves it builds.
 - **All of the UI is gooey.** Never build a widget, a palette or a layout primitive here that gooey lacks. File it on `bevy-coven/bevy_gooey` with the labels `enhancement`, `consumer`, `consumer:bevy_grimoire` and `grimoire-ui`. Use the title `G-NN: <what>`, with the next free NN after the highest `G-` title there, and the body shape of the existing `G-` issues (why, proposed API, edge cases, acceptance a test there can prove). Add it to this issue's **Needs** line and to UI-00's list, then take the next ready `ui` issue. gooey's loop starts by itself within 15 minutes of an open `grimoire-ui` issue, and stops when none is left.
-- **One verified slice per pass**, with its failing-first test. Comment on the issue which acceptance items the slice meets, close it with `Fixes #N` only in the commit that meets the last one, and tick it in UI-00.
+- **One verified slice per issue**, with its failing-first test, taken as part of a cluster ("The owner's batch rule" below). Comment on the issue which acceptance items the slice meets, close it with `Fixes #N` only in the commit that meets the last one, and tick it in UI-00.
 - **When no `ui` issue is ready** (all wait on gooey or on each other), say which ones and what each waits on in the log line, and take the other open issues as the hot-reload section's last bullet says. Never idle.
+
+## The owner's batch rule: five or six clustered issues a pass (2026-11-01)
+
+63 issues are open, and one issue a pass is too slow. **Every pass takes a cluster of five or six open issues and closes every one it can verify.** This rule outranks "one item a pass" anywhere else in this command, and the same broken-gate exception applies.
+
+- **Seed and cluster.** The seed is the item the sections above name (the first ready `hot-reload` issue, then the first ready `ui` issue, then the next open issue in the grind order). Add the next ready issues that sit beside it: the same file or module (the `Files today` lines), the same series group (launcher UI-10…14, loader UI-20…22, shell UI-30…41, panels UI-50…61, settings UI-70…75), the same bug cause, or a `Depends on` chain you can finish in order. **Take five or six; take fewer only when fewer are ready, and say which and why in the log line.** Never pad with an unrelated issue: a cluster is issues you can hold in your head together.
+- **Plan it in the first 10 minutes.** One line per issue: the files, the failing test, a rough size. Do a shared prerequisite (a new type, a `bevy_gooey` pin move) once, first. Then take the smallest first, so something verified lands early.
+- **One commit per issue**, each with its failing-first test and `Fixes #N` on the commit that meets its last acceptance item; comment on each issue and tick each in UI-00. Two issues that cannot be separated share a commit that names both. One changelog line per issue; one clip may show several issues when it shows them all (20 s at most).
+- **One gate, one push at the end.** Run only the touched crate's tests while building (Phase 4). Push once at the end of the pass, and once at the 90-minute checkpoint when two or more issues are already committed, so a killed pass loses nothing: each push is the full gate, and a green push never has to be redone. Do not run the gate by hand.
+- **An issue that grows past its share** (25 minutes with no green test) is committed as the verified slice it reached, with a comment on what remains, or dropped from the tree if nothing is verified; then take the next in the cluster. Never leave a half-done issue in the tree.
+- **Missing gooey widget:** file the `G-NN` request, skip that issue, and go on. Waiting is not allowed.
+- **When no `ui` issue is ready, the cluster comes from the rest:** bugs first, clustered by cause (#149, #150, #152, #193, #194, #205 to #207), then `consumer`, then the `decide` issues (#112 to #114, decided by "Owner input: recommend, record, proceed" together in one pass), then `owner`, then everything else, oldest first. Skip `wontfix`, and say so in the log line.
+- **The report** names every issue in the cluster and its state: closed, slice committed (what remains), or skipped (why).
 
 ## Mark your phases, so the loop's steps are timed
 
@@ -139,25 +152,26 @@ and the difference is invisible from inside the loop. So these paths are **read-
 **Append, never rewrite.** `docs/loop/log.md` is append-only: add your line at the bottom and do not
 touch another pass's.
 
-## Budget — a pass is 45 minutes of work, then stop
+## Budget — a pass is 2½ hours of work, then stop
 
-The Wiggum loop starts the next pass regardless, so **running long does not buy progress; it produces an
+The driver's ceiling is 3 hours (`WIGGUM_PASS_TIMEOUT=10800`). The Wiggum loop starts the next pass regardless, so **running long does not buy progress; it produces an
 unpushed half-diff**. This is the single most common way a headless pass goes wrong.
 
-- **Orient:** 5 minutes.
-- **Fix or build:** 25 minutes.
-- **Prove and ship:** 15 minutes.
+- **Orient and plan the cluster:** 10 minutes.
+- **Build the cluster, one issue after another:** 115 minutes.
+- **Prove and ship:** 25 minutes.
 
 **Checkpoints, in this order, and take the earliest one you reach as you run out of time:**
 
 | At | If time is short |
 |---|---|
-| 20 min | Commit the verified bug fixes only; log the enhancement as open; stop. |
-| 30 min | Commit the enhancement if its gate is green, without a report; log the report as owed; stop. |
-| 40 min | Finish the commit and push. **Never leave the tree uncommitted.** |
-| 45 min | Stop. The next pass continues. |
+| 45 min | At least one issue is committed with its test green. If not, stop adding issues, finish the one in hand and push it. |
+| 90 min | Push what is committed. Start no issue you cannot finish by 125 min. |
+| 125 min | Stop building. Commit what is green, drop what is not, write the report. |
+| 145 min | Finish the push. **Never leave the tree uncommitted.** |
+| 150 min | Stop. The next pass continues. |
 
-A pass that leaves a clean, pushed, green tree having done *nothing* is a success. A pass that leaves a
+A pass that leaves a clean, pushed, green tree having closed *fewer* issues than planned is a success. A pass that leaves a
 broken tree having done a lot is a failure the next pass must clean up first.
 
 ## Phase 0: Orient (5 minutes, no more)
@@ -165,7 +179,7 @@ broken tree having done a lot is a failure the next pass must clean up first.
 - `git status --short` and `git log --oneline -10`. **If the tree is dirty, that is the first bug** — a
   previous pass died mid-edit. Finish it, revert only your own pass's edits, or commit what is safe.
 - Read `docs/loop/backlog.json` (open items), `AGENTS.md`, and the **last 3** entries of
-  `docs/loop/log.md`. Not more: the log is long and the pass is 45 minutes.
+  `docs/loop/log.md`. Not more: the log is long and a pass has a budget.
 - Read `docs/loop/focus.md`: what is below its `---` line is the owner's focus; nothing there, or no file, means no focus. It governs Phase 2.
 - `python3 tools/loop/backlog.py check`.
 - Record `uptime`, `df -h /`, `free -g`. On a machine with fewer than 20 GB free or under 4 GB available
@@ -251,7 +265,7 @@ Then, in this order:
    the focus's other items, the series and your own candidates. The owner wrote it. Take them in the order
    `docs/loop/focus.md` lists them; an `owner` issue the focus does not list comes after the listed ones,
    oldest first. Its **Depends on** line is binding: an issue whose dependency is still open is not ready,
-   so take the next one that is. One is usually larger than a pass: **ship one verified slice per pass**
+   so take the next one that is. One is sometimes larger than its share of a pass: **ship one verified slice of it** (see the batch rule)
    (with its test and, if visible, its changelog clip), record which acceptance items are now met (on the
    issue with `gh issue comment`, or in the log line naming the issue when `gh` is not working), and close it with
    `Fixes #N` only in the commit that meets the last of them. Its **Decisions already made** are the design:
