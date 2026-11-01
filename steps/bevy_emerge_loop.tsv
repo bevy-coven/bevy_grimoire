@@ -15588,3 +15588,131 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 205	60	gate	model	model		2026-11-01T15:09:38Z	3.3	
 205	61	gate	tool	github	bash	2026-11-01T15:09:42Z	3.0	cd /home/ladvien/bevy_emerge_loop; for n in 205 207; do gh issue comment $n --repo bevy-coven/bevy_grimoire --body "Fixed on main (546643b). #207: Assumed decis
 205	62	gate	model	model		2026-11-01T15:09:45Z	6.4	
+206	1	orient	model	model		2026-11-01T15:10:12Z	5.9	
+206	2	orient	tool	phase mark	bash	2026-11-01T15:10:18Z	0.7	Orienting pass :: python3 tools/loop/steps.py mark orient; git status --short | head; git log --oneline -10; uptime; df -h / | tail -1; free -g | sed -n 2p; git fetch -q origin l
+206	3	orient	tool	github	bash	2026-11-01T15:10:18Z	1.3	Listing open issues :: gh issue list --repo bevy-coven/bevy_grimoire --state open --limit 100 --json number,title,labels,createdAt --jq '.[] | "#\(.number) [\(.labels | map(.name) | j
+206	4	orient	model	model		2026-11-01T15:10:20Z	5.1	
+206	5	orient	tool	github	bash	2026-11-01T15:10:25Z	0.8	Checking gooey state :: git ls-remote https://github.com/bevy-coven/bevy_gooey main; gh issue list --repo bevy-coven/bevy_gooey --state all --limit 60 --json number,title,state,stateRe
+206	6	orient	model	model		2026-11-01T15:10:26Z	3.9	
+206	7	bugs	tool	phase mark	bash	2026-11-01T15:10:29Z	1.4	Reading oldest bug issues :: python3 tools/loop/steps.py mark bugs; for n in 149 150 152; do echo "=== $n"; gh issue view $n --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body
+206	8	bugs	model	model		2026-11-01T15:10:31Z	2.9	
+206	9	bugs	tool	github	bash	2026-11-01T15:10:34Z	0.9	Reading viewport bugs :: for n in 193 194; do echo "=== $n"; gh issue view $n --repo bevy-coven/bevy_grimoire --json body,labels,comments --jq '.body[0:2500], (.comments[] | "--- " + .a
+206	10	bugs	model	model		2026-11-01T15:10:35Z	2.6	
+206	11	bugs	tool	github	bash	2026-11-01T15:10:37Z	1.0	Checking elements#55 and #193 tail :: gh issue view 55 --repo bevy-coven/bevy_elements --json state,stateReason,title,comments --jq '"\(.state) \(.stateReason) \(.title)", (.comments[-2:][].body[0:6
+206	12	bugs	model	model		2026-11-01T15:10:38Z	6.7	
+206	13	research	tool	phase mark	bash	2026-11-01T15:10:45Z	0.1	Locating dress_camera code :: python3 tools/loop/steps.py mark research; grep -n "fn dress_camera\|fn redress\|fn composite_surface\|ElementsCamera\|Hdr" crates/bevy_grimoire_mapper/src/envi
+206	14	research	model	model		2026-11-01T15:10:45Z	2.7	
+206	15	research	tool	read files	read	2026-11-01T15:10:48Z	0.0	crates/bevy_grimoire_mapper/src/environment.rs:340-470
+206	16	research	tool	shell	bash	2026-11-01T15:10:48Z	0.0	cd ~/.cargo/git/checkouts 2>/dev/null && ls | grep -i elements; grep -n "bevy_elements" /home/ladvien/bevy_emerge_loop/Cargo.toml /home/ladvien/bevy_emerge_loop
+206	17	research	model	model		2026-11-01T15:10:48Z	10.1	
+206	18	research	tool	shell	bash	2026-11-01T15:10:58Z	0.1	Reading ElementsCamera in pinned crate :: cd ~/.cargo/git/checkouts/bevy_elements-*/2fee42a 2>/dev/null || cd $(ls -d ~/.cargo/git/checkouts/bevy_elements-*/2fee42a* | head -1); pwd; grep -rn "struct El
+206	19	research	model	model		2026-11-01T15:10:58Z	1.8	
+206	20	research	tool	shell	bash	2026-11-01T15:11:00Z	0.0	Reading Dresser::dress :: cd ~/.cargo/git/checkouts/bevy_elements-27fcd041f12b073e/2fee42a; grep -n "fn dress" -B3 -A90 src/plugin.rs | sed -n 1,170p
+206	21	research	model	model		2026-11-01T15:11:00Z	12.8	
+206	22	research	tool	shell	bash	2026-11-01T15:11:13Z	0.1	Reading existing dressed camera test :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_grimoire_mapper; grep -rln "ElementsCamera" tests src; wc -l tests/a_dressed_camera_leaves_the_world_on_the_surfac
+206	23	research	model	model		2026-11-01T15:11:13Z	17.8	
+206	24	research	tool	github	bash	2026-11-01T15:11:30Z	0.5	Reading focus and elements#55 :: cd /home/ladvien/bevy_emerge_loop; sed -n '/---/,$p' docs/loop/focus.md | head -60; gh issue view 55 --repo bevy-coven/bevy_elements --json body,labels --jq '.b
+206	25	research	model	model		2026-11-01T15:11:31Z	6.9	
+206	26	research	tool	github	bash	2026-11-01T15:11:38Z	7.4	Scanning ui dependencies :: for n in 211 212 214 215 253 254 255 256 257 258 259 260 248 249 250 251 252; do echo "#$n: $(gh issue view $n --repo bevy-coven/bevy_grimoire --json title,body
+206	27	research	model	model		2026-11-01T15:11:45Z	4.4	
+206	28	research	tool	github	bash	2026-11-01T15:11:50Z	0.4	Reading UI-70 :: gh issue view 248 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body, (.comments[] | "--- " + .body[0:1500])'; grep -n "UI-70\|#248" docs/loop/log
+206	29	research	model	model		2026-11-01T15:11:50Z	5.6	
+206	30	research	tool	phase mark	bash	2026-11-01T15:11:56Z	0.2	Reading vision §6 and patterns :: python3 tools/loop/steps.py mark research; grep -n "^## 6" -A40 docs/ui/vision.md | head -80; wc -l crates/bevy_grimoire_core/src/reload.rs; grep -rn "recent.ro
+206	31	research	model	model		2026-11-01T15:11:56Z	2.4	
+206	32	research	tool	shell	bash	2026-11-01T15:11:58Z	0.0	Reading reload contract :: cd crates/bevy_grimoire_core/src; sed -n 1,200p reload.rs
+206	33	research	tool	shell	bash	2026-11-01T15:11:58Z	0.0	cd crates/bevy_grimoire_mapper/src; sed -n 1,140p recent.rs; ls ../../bevy_grimoire_core/src ../../bevy_grimoire_core/tests | head -80
+206	34	research	model	model		2026-11-01T15:11:58Z	7.9	
+206	35	research	tool	shell	bash	2026-11-01T15:12:06Z	0.1	Reading rest of reload.rs and users :: cd crates; sed -n 200,443p bevy_grimoire_core/src/reload.rs; grep -rn "recent" bevy_grimoire_core/src/reload.rs | head; grep -rln "reload::KINDS\|reload::\(KIND
+206	36	research	model	model		2026-11-01T15:12:06Z	12.1	
+206	37	research	tool	github	bash	2026-11-01T15:12:18Z	0.8	Finding which settings keys are planned :: grep -n -i "setting\|ui_scale\|reduce\|high contrast\|font size" docs/ui/vision.md | cut -c1-260 | head -40; gh issue view 251 --repo bevy-coven/bevy_grimoire -
+206	38	research	model	model		2026-11-01T15:12:19Z	9.0	
+206	39	research	tool	shell	bash	2026-11-01T15:12:28Z	0.0	Reading reload_files pattern :: cd crates/bevy_grimoire_mapper; wc -l src/reload_files.rs src/family_host.rs src/live_reload.rs 2>/dev/null; sed -n 1,120p src/reload_files.rs
+206	40	research	model	model		2026-11-01T15:12:28Z	4.6	
+206	41	research	tool	shell	bash	2026-11-01T15:12:33Z	0.0	Reading reload ratchet tests :: cd crates; grep -n "^fn \|^#\[test\]\|^//!" bevy_grimoire_core/tests/reload_contract.rs | head -60; grep -n "^fn \|fn [a-z_]*()" bevy_grimoire_mapper/tests/relo
+206	42	research	model	model		2026-11-01T15:12:33Z	5.3	
+206	43	research	tool	shell	bash	2026-11-01T15:12:38Z	0.0	Reading ratchets a new kind hits :: cd crates/bevy_grimoire_core; sed -n 237,300p tests/reload_verdicts.rs; sed -n 20,70p tests/every_format_carries_a_version.rs; sed -n 150,200p tests/every_forma
+206	44	research	model	model		2026-11-01T15:12:38Z	15.3	
+206	45	research	tool	shell	bash	2026-11-01T15:12:53Z	0.0	Studying live-reload mapper patterns :: cd crates/bevy_grimoire_mapper/src; grep -n "pub fn \|pub struct \|impl Plugin\|add_systems\|Timer\|mtime\|modified" family_host.rs | head -50; ls | tr '\n' ' '
+206	46	research	model	model		2026-11-01T15:12:53Z	2.1	
+206	47	research	tool	shell	bash	2026-11-01T15:12:56Z	0.0	Reading oplog_view watcher pattern :: cd crates/bevy_grimoire_mapper/src; sed -n 1,60p oplog_view.rs; grep -n "fn \|struct \|Resource" oplog_view.rs | sed -n 1,50p; grep -n "oplog_view\|OplogWatch" 
+206	48	research	model	model		2026-11-01T15:12:56Z	3.4	
+206	49	research	tool	shell	bash	2026-11-01T15:12:59Z	0.0	Reading sync pattern and registration :: cd crates/bevy_grimoire_mapper/src; sed -n 61,200p oplog_view.rs; grep -n "pub fn\|pub struct\|impl EditorReloads" live.rs | head -30; grep -rn "sync_oplog_view
+206	50	research	model	model		2026-11-01T15:12:59Z	17.0	
+206	51	research	tool	shell	bash	2026-11-01T15:13:16Z	0.0	Finding test harness patterns :: cd crates/bevy_grimoire_mapper; grep -rln "sync_oplog_view\|oplog_view" tests | head; grep -n "pub fn" ../bevy_grimoire_core/src/reload_check.rs | head -20; gre
+206	52	research	model	model		2026-11-01T15:13:16Z	2.2	
+206	53	research	tool	shell	bash	2026-11-01T15:13:18Z	0.0	Reading test harness and reload_check :: cd crates/bevy_grimoire_mapper; sed -n 1,70p tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs; sed -n 95,135p ../bevy_grimoire_core/src/reload_ch
+206	54	research	model	model		2026-11-01T15:13:18Z	14.6	
+206	55	research	tool	shell	bash	2026-11-01T15:13:33Z	0.0	Checking Refusal, verdict and status APIs :: cd crates; sed -n 20,60p bevy_grimoire_core/src/reload_check.rs; grep -n "pub fn \(applied\|refused\|sentence\)" -A8 bevy_grimoire_core/src/live.rs | head -50; 
+206	56	research	model	model		2026-11-01T15:13:33Z	30.0	
+206	57	build	tool	phase mark	bash	2026-11-01T15:14:03Z	0.1	Checking KindVerdict and main wiring :: python3 tools/loop/steps.py mark build; cd crates/bevy_grimoire_mapper; sed -n 85,135p src/live.rs; grep -n "fn refused\|fn applied\|fn sentence" -B1 -A10 ../be
+206	58	build	model	model		2026-11-01T15:14:03Z	26.5	
+206	59	build	model	model		2026-11-01T15:14:29Z	38.7	
+206	60	build	tool	edit files	write	2026-11-01T15:15:08Z	0.0	crates/bevy_grimoire_mapper/src/settings.rs
+206	61	build	model	model		2026-11-01T15:15:08Z	6.4	
+206	62	build	tool	shell	bash	2026-11-01T15:15:15Z	0.1	cd crates/bevy_grimoire_mapper; grep -rn "OplogView" src | grep -v "^src/oplog_view.rs"; sed -n 128,134p src/lib.rs
+206	63	build	model	model		2026-11-01T15:15:15Z	3.5	
+206	64	build	tool	shell	bash	2026-11-01T15:15:18Z	0.0	cd crates/bevy_grimoire_mapper; grep -n "enum Ownership" -B3 -A25 src/screen.rs; sed -n 625,650p src/screen.rs; grep -n "RecentProjects" src/screen.rs; sed -n 5
+206	65	build	model	model		2026-11-01T15:15:18Z	12.1	
+206	66	build	tool	git	bash	2026-11-01T15:15:30Z	0.1	Wiring module, kind row, ownership :: cd crates/bevy_grimoire_mapper; python3 - <<'EOF' import re p='src/lib.rs'; s=open(p).read(); s=s.replace("pub mod screen;\n","pub mod screen;\npub mod settings
+206	67	build	model	model		2026-11-01T15:15:30Z	9.5	
+206	68	build	tool	shell	bash	2026-11-01T15:15:40Z	0.0	cd crates/bevy_grimoire_mapper; grep -n "pub fn build_headless" -A6 src/harness.rs | head; grep -n "pub fn new\|pub fn build\|pub fn descriptor\|pub fn place" t
+206	69	build	model	model		2026-11-01T15:15:40Z	22.7	
+206	70	build	tool	remote wait	bash	2026-11-01T15:16:03Z	0.1	Writing failing-first test :: cd crates/bevy_grimoire_mapper; cat > tests/a_key_set_in_both_settings_layers_takes_the_projects.rs <<'EOF' //! **The editor's settings are three layers, and a 
+206	71	build	model	model		2026-11-01T15:16:03Z	4.8	
+206	72	build	tool	cargo test	bash	2026-11-01T15:16:08Z	60.1	[launched bg_3] Running new settings tests :: cd crates/bevy_grimoire_mapper; sed -i '48i mod a_key_set_in_both_settings_layers_takes_the_projects;' tests/all.rs; sed -n 46,50p tests/all.rs; (time cargo tes
+206	73	build	model	model		2026-11-01T15:17:08Z	9.7	
+206	74	build	tool	git	bash	2026-11-01T15:17:17Z	0.2	Adding ratchet rows for the new kind :: cd crates/bevy_grimoire_core/tests; python3 - <<'EOF' p='reload_verdicts.rs'; s=open(p).read() s=s.replace(' "family",\n "game_data",\n];',' "family",\n "game_d
+206	75	build	model	model		2026-11-01T15:17:18Z	4.3	
+206	76	build	tool	shell	bash	2026-11-01T15:17:22Z	0.0	ls docs/guide | head -40; grep -n "recent.ron\|Recent" README.md docs/guide/*.md | head
+206	77	build	model	model		2026-11-01T15:17:22Z	1.3	
+206	78	build	tool	shell	bash	2026-11-01T15:17:23Z	0.0	sed -n 170,215p docs/guide/data-files.md; grep -n "^## \|^# " docs/guide/data-files.md | head -40
+206	79	build	model	model		2026-11-01T15:17:23Z	5.9	
+206	80	build	tool	git	bash	2026-11-01T15:17:29Z	0.0	cat >> docs/guide/data-files.md <<'EOF' ## editor.ron and settings.ron The editor's settings, in two files that are laid over the built-in defaults, key by key:
+206	81	build	bg	shell	bash	2026-11-01T15:16:10Z	78.9	bg_3 completed: cd crates/bevy_grimoire_mapper; sed -i '48i mod a_key_set_in_both_settings_layers_takes_the_projects;' tests/all.rs; ...
+206	82	build	model	model		2026-11-01T15:17:29Z	5.9	
+206	83	prove	tool	phase mark	bash	2026-11-01T15:17:35Z	7.6	Regenerate guide, run ratchets :: python3 tools/loop/steps.py mark prove; (UPDATE_RELOAD_CONTRACT=1 cargo test -p bevy_grimoire_mapper --test editor reload_contract 2>&1 | tail -8; cargo test -p
+206	84	prove	model	model		2026-11-01T15:17:43Z	4.8	
+206	85	prove	tool	cargo test	bash	2026-11-01T15:17:47Z	47.9	Mutation check: test fails without the system :: sed -i 's/crate::settings::sync_settings, queue_after_edit/queue_after_edit/' crates/bevy_grimoire_mapper/src/after_edit.rs && cargo test -p bevy_grimoire_mappe
+206	86	prove	model	model		2026-11-01T15:18:35Z	4.3	
+206	87	prove	tool	cargo clippy	bash	2026-11-01T15:18:40Z	22.4	Clippy and changelog format :: cargo clippy -p bevy_grimoire_mapper -p bevy_grimoire_core --all-targets -- -D warnings 2>&1 | tail -5; head -12 CHANGELOG.md | cut -c1-300; git log -1 --format
+206	88	prove	model	model		2026-11-01T15:19:02Z	8.4	
+206	89	prove	tool	remote wait	bash	2026-11-01T15:19:10Z	0.2	git add -A && git commit -q -F - <<'EOF' feat(ui): the editor's settings are three layers that change the running editor (UI-70, fixes #248) Defaults, then <con
+206	90	prove	model	model		2026-11-01T15:19:11Z	3.2	
+206	91	prove	tool	loop tools	bash	2026-11-01T15:19:14Z	2.0	python3 tools/changelog/changelog.py add --id ui-70-settings-layers --sha 9b2a24d --title "The editor's settings are three layers (defaults, <config_dir>/Grimoi
+206	92	prove	model	model		2026-11-01T15:19:16Z	15.7	
+206	93	ship	tool	phase mark	bash	2026-11-01T15:19:32Z	2.1	cat > docs/loop/iterations/2026-11-01-ui-9b2a24d.md <<'EOF' # 2026-11-01 ui: UI-70 settings in three layers, live Focus: UI series (#208) · Commits: 9b2a24d · M
+206	94	ship	model	model		2026-11-01T15:19:34Z	3.6	
+206	95	ship	tool	push gate	bash	2026-11-01T15:19:37Z	0.0	[launched bg_4] Pushing through the gate :: sed -i '$ s/^- 2026-11-01 09:32 loop/- 2026-11-01 09:20 loop/' docs/loop/log.md && git add -A && git commit -q --amend --no-edit && (time git push origin HEAD:m
+206	96	ship	model	model		2026-11-01T15:19:37Z	1.7	
+206	97	ship	tool	github	bash	2026-11-01T15:19:39Z	0.6	gh issue view 208 --repo bevy-coven/bevy_grimoire --json body --jq .body | grep -n "248\|UI-70"
+206	98	ship	model	model		2026-11-01T15:19:39Z	6.0	
+206	99	ship	tool	github	bash	2026-11-01T15:19:46Z	7.1	gh issue view 208 --repo bevy-coven/bevy_grimoire --json body --jq .body | sed 's/^- \[ \] UI-70 #248/- [x] UI-70 #248/' > /tmp/ui00_body_192.md && gh issue edi
+206	100	ship	model	model		2026-11-01T15:19:53Z	2.9	
+206	101	ship	tool	wait: gate	wait	2026-11-01T15:19:56Z	214.3	Waiting for push gate
+206	102	ship	model	model		2026-11-01T15:23:30Z	2.5	
+206	103	ship	tool	cargo test	bash	2026-11-01T15:23:32Z	60.1	[launched bg_5] Finding the failing editor test :: cargo test -p bevy_grimoire_mapper --test editor 2>&1 | grep -E "^test .*FAILED|panicked|test result|^---- " -A3 | head -40
+206	104	ship	model	model		2026-11-01T15:24:32Z	2.1	
+206	105	ship	tool	shell	bash	2026-11-01T15:24:35Z	0.0	grep -n "the_kinds_nothing_reads_with_a_named_refusal_only_shrink" -B40 -A25 crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs
+206	106	ship	model	model		2026-11-01T15:24:35Z	3.0	
+206	107	ship	tool	shell	bash	2026-11-01T15:24:38Z	0.1	cd crates/bevy_grimoire_mapper/src; sed -n 15,40p map_files.rs; grep -n "WATCHED_HERE" -r . | head
+206	108	ship	model	model		2026-11-01T15:24:38Z	5.2	
+206	109	ship	tool	git	bash	2026-11-01T15:24:43Z	0.1	cd crates/bevy_grimoire_mapper/src; python3 - <<'EOF' p='map_files.rs'; s=open(p).read() s=s.replace('"reference_images", "family"];','"reference_images", "fami
+206	110	ship	model	model		2026-11-01T15:24:43Z	3.4	
+206	111	ship	tool	wait: tests	wait	2026-11-01T15:24:46Z	32.3	Waiting for editor test run
+206	112	ship	model	model		2026-11-01T15:25:19Z	2.6	
+206	113	ship	tool	cargo test	bash	2026-11-01T15:25:21Z	16.6	cargo test -p bevy_grimoire_mapper --test editor a_file_that_does_not_read 2>&1 | grep -E "test result|FAILED"; git add -A && git commit -q -m "fix(ui): editor_
+206	114	ship	model	model		2026-11-01T15:25:38Z	2.4	
+206	115	ship	tool	push gate	bash	2026-11-01T15:25:40Z	0.0	[launched bg_6] Pushing through the gate again :: (time git push origin HEAD:main 2>&1 | tail -12)
+206	116	ship	tool	wait: gate	wait	2026-11-01T15:25:40Z	101.1	Waiting for push
+206	117	ship	model	model		2026-11-01T15:27:21Z	3.4	
+206	118	ship	tool	cargo test	bash	2026-11-01T15:27:25Z	47.4	cargo test -p bevy_grimoire_mapper --test editor 2>&1 | grep -E "FAILED|panicked|test result" -A2 | head -30
+206	119	ship	model	model		2026-11-01T15:28:12Z	2.4	
+206	120	ship	tool	shell	bash	2026-11-01T15:28:15Z	0.0	sed -n 205,240p crates/bevy_grimoire_mapper/tests/a_refused_checks_file_keeps_the_last_good_checks.rs
+206	121	ship	model	model		2026-11-01T15:28:15Z	6.1	
+206	122	ship	tool	push gate	bash	2026-11-01T15:28:21Z	0.0	[launched bg_7] Fixing second ratchet, pushing :: cd crates/bevy_grimoire_mapper/tests; python3 - <<'EOF' p='a_refused_checks_file_keeps_the_last_good_checks.rs'; s=open(p).read() s=s.replace("`family` in `fami
+206	123	ship	tool	wait: gate	wait	2026-11-01T15:28:21Z	102.8	Waiting for push
+206	124	ship	model	model		2026-11-01T15:30:04Z	4.1	
+206	125	ship	tool	github	bash	2026-11-01T15:30:08Z	1.2	gh issue view 248 --repo bevy-coven/bevy_grimoire --json state,stateReason --jq '"\(.state) \(.stateReason)"'; git status --short | head -3; git fetch -q origin
+206	126	ship	model	model		2026-11-01T15:30:09Z	3.2	
+206	127	ship	tool	push gate	bash	2026-11-01T15:30:12Z	3.7	printf '%s\n' "- 2026-11-01 09:35 loop (bevy_emerge_loop, big, pass 192, addendum): UI-70 is on main (541d7b2). The first two pushes were refused by two more ra
+206	128	ship	model	model		2026-11-01T15:30:16Z	8.6	
