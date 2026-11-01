@@ -3,12 +3,18 @@
 //! that changed. An unchanged placement keeps its `Entity`, so whatever a game hung on it (an agent's
 //! booking, a camera target, an animation) survives an edit to the next table over.
 //!
+//! A piece an edit does change (a move, a turn, a new kind) is drawn again: its entity is despawned and a
+//! new one stands for it. What a game hung on the old entity moves across through one hook per kind of
+//! state, registered on the app with [`GrimoireLiveApp::carry_across_respawn`] (a component copied as it
+//! is) or [`GrimoireLiveApp::migrate_on_respawn`] (anything else), never at the call site that edits.
+//!
 //! The reload is `bevy_grimoire_core::project_data::load` plus `GrimoireWorld::with_compositions`, the
 //! same two doors a game's first load goes through. A reload either of them refuses leaves every
 //! entity and the [`GrimoireWorld`] as they were and writes no [`ProjectReloaded`].
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use bevy::prelude::*;
 use bevy_grimoire_core::live::{FileWatch, MapDiff, Verdict, diff_maps_renaming, same_but_id};
@@ -47,6 +53,49 @@ struct Live {
     seq: u64,
 }
 
+/// A hook run for one piece a reload drew again: the world, the entity that stood for it, the entity
+/// that stands for it now.
+type Migration = Arc<dyn Fn(&mut World, Entity, Entity) + Send + Sync>;
+
+/// The hooks a game registered, in the order it registered them.
+#[derive(Resource, Default)]
+struct ReloadMigrations(Vec<Migration>);
+
+/// **How a game's state follows a piece a reload draws again** (#201). A reload keeps the entity of every
+/// placement whose definition did not change, and draws the rest again: a moved, turned or retyped piece
+/// gets a new entity and the old one is despawned, and so does whatever rests on it. State a game hung on
+/// the old entity (a booking, an animation phase, a camera target) is lost unless the game says how it
+/// moves, and it says so here, once per kind of state, and not at every place that edits a piece.
+///
+/// A hook runs for each piece drawn again, **after** the new entity is drawn (its `Placement`,
+/// `OfDescriptor`, `Transform` and `MountedOn` are in place) and **before** the old one is despawned. It
+/// does not run for a piece an edit left alone (that piece keeps its entity and everything on it), for one
+/// that is removed (nothing stands for it any more), or for one that is renamed and edited in the same
+/// save (that is a new piece: its meaning changed).
+pub trait GrimoireLiveApp {
+    /// Run `migrate(world, old, new)` for each piece a reload draws again. Hooks run in registration
+    /// order, and the old entity is still alive, so one can read it and write the new one.
+    fn migrate_on_respawn(&mut self, migrate: impl Fn(&mut World, Entity, Entity) + Send + Sync + 'static) -> &mut Self;
+
+    /// Copy component `C` from the old entity to the new one, when the old one has it.
+    fn carry_across_respawn<C: Component + Clone>(&mut self) -> &mut Self {
+        self.migrate_on_respawn(|world, old, new| {
+            let Some(state) = world.get::<C>(old).cloned() else { return };
+            if let Ok(mut entity) = world.get_entity_mut(new) {
+                entity.insert(state);
+            }
+        })
+    }
+}
+
+impl GrimoireLiveApp for App {
+    fn migrate_on_respawn(&mut self, migrate: impl Fn(&mut World, Entity, Entity) + Send + Sync + 'static) -> &mut Self {
+        self.init_resource::<ReloadMigrations>();
+        self.world_mut().resource_mut::<ReloadMigrations>().0.push(Arc::new(migrate));
+        self
+    }
+}
+
 impl Plugin for GrimoireLivePlugin {
     fn build(&self, app: &mut App) {
         // Stat BEFORE loading: a write between the two is then a change the first poll sees.
@@ -60,6 +109,7 @@ impl Plugin for GrimoireLivePlugin {
             }
         };
         app.add_message::<ProjectReloaded>()
+            .init_resource::<ReloadMigrations>()
             .insert_resource(Live {
                 dir: self.dir.clone(),
                 maps: self.maps.clone(),
@@ -71,7 +121,8 @@ impl Plugin for GrimoireLivePlugin {
     }
 }
 
-/// What to do to the entities: despawn these ids' entities, then spawn these ids.
+/// What to do to the entities: draw these (new) ids, and despawn the entities that stood for these (old)
+/// ids. A reload draws first, runs the migration hooks, then despawns.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Plan {
     pub despawn: BTreeSet<String>,
@@ -189,6 +240,7 @@ fn reload(
     world: Option<ResMut<GrimoireWorld>>,
     mut live: ResMut<Live>,
     placed: Query<(Entity, &Placement)>,
+    migrations: Res<ReloadMigrations>,
     mut reloaded: MessageWriter<ProjectReloaded>,
 ) {
     if !live.watch.poll(time.elapsed_secs_f64()) {
@@ -219,9 +271,11 @@ fn reload(
     let plan = plan(&world, &new, &renamed);
 
     let mut kept: HashMap<String, Entity> = HashMap::new();
+    // The entities that stood for a piece drawn again, by the id they had.
+    let mut replaced: Vec<(&str, Entity)> = Vec::new();
     for (entity, Placement(id)) in &placed {
         if plan.despawn.contains(id) {
-            commands.entity(entity).despawn();
+            replaced.push((id.as_str(), entity));
         } else if let Some(now) = plan.renamed.get(id) {
             commands.entity(entity).insert(Placement(now.clone()));
             kept.insert(now.clone(), entity);
@@ -231,7 +285,35 @@ fn reload(
     }
     // A placement the old world never drew (no mesh, no footprint) has no entity to despawn, and one
     // whose entity is missing for any other reason is simply drawn.
-    let spawned = spawn_placements(&mut commands, &assets, &new, Some(&plan.spawn), &kept);
+    let drawn = spawn_placements(&mut commands, &assets, &new, Some(&plan.spawn), &kept);
+    let spawned = drawn.len();
+
+    // **One hook per kind of state** (#201): an old entity and the new entity for the same piece are
+    // paired here, once, so state a game registered follows it. The hooks run after the new entity is
+    // spawned and before the old one is despawned, both in this command queue's order. A piece that was
+    // removed, or renamed and edited together, has no new entity under its name and is not paired.
+    if !migrations.0.is_empty() {
+        let pairs: Vec<(Entity, Entity)> = replaced
+            .iter()
+            .filter_map(|&(id, old)| {
+                let now = plan.renamed.get(id).map_or(id, String::as_str);
+                drawn.get(now).map(|&new| (old, new))
+            })
+            .collect();
+        if !pairs.is_empty() {
+            let hooks = migrations.0.clone();
+            commands.queue(move |world: &mut World| {
+                for (old, new) in pairs {
+                    for hook in &hooks {
+                        hook(world, old, new);
+                    }
+                }
+            });
+        }
+    }
+    for (_, old) in replaced {
+        commands.entity(old).despawn();
+    }
 
     let summary = diffs
         .iter()
