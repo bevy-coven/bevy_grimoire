@@ -35,7 +35,10 @@ Storyboard format (JSON):
       {"at": 6.0, "caption": "person: ..."}
       {"at": 7.0, "write": {"path": "assets/grimoire/standards.ron", "text": "..."}}
                                                 a person saving a project file (path under --project),
-                                                for a live reload; the editor reads it, nothing is injected
+                                                for a live reload; the editor reads it, nothing is injected.
+                                                "$now_ms" in the text is the time of the write in Unix
+                                                milliseconds (a game's verdict is stamped with when it
+                                                decided); the path's directory is made if it is missing
     ]
   }
 Step times are seconds from the start of the chunk that covers them (see chunk_of), and each step runs
@@ -358,8 +361,9 @@ def do_step(step, timeline, inj, agent, named=None):
         # A person saving a file the editor watches. Stamped before the write, like an agent call:
         # the frames after it are the ones that show the editor reading it.
         t = timeline.now()
+        os.makedirs(os.path.dirname(step["_path"]), exist_ok=True)
         with open(step["_path"], "w") as fh:
-            fh.write(step["write"]["text"])
+            fh.write(step["write"]["text"].replace("$now_ms", str(int(time.time() * 1000))))
         timeline.add(t=t, type="file", path=step["write"]["path"])
     elif kind == "caption":
         timeline.add(t=timeline.now(), type="caption", text=step["caption"])

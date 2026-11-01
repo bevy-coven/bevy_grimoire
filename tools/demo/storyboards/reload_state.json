@@ -1,0 +1,57 @@
+{
+ "name": "reload_state",
+ "fps": 8,
+ "scale": 2,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": "map"
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 10
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    200,
+    300
+   ]
+  },
+  {
+   "at": 0.2,
+   "caption": "RELOAD: no game has answered an edit yet"
+  },
+  {
+   "at": 0.5,
+   "wheel": {
+    "y": -1,
+    "n": 14,
+    "at": [
+     200,
+     300
+    ]
+   }
+  },
+  {
+   "at": 6.0,
+   "write": {
+    "path": "assets/grimoire/.live/game.ron",
+    "text": "(version: 2, at_unix_ms: $now_ms, ok: false, message: \"furniture/library.ron: refused\", seq: 4, kinds: [(kind: \"kits\", file: \"kits.ron\", outcome: Applied, field: None, reason: \"\"), (kind: \"vocab\", file: \"vocab.ron\", outcome: Applied, field: None, reason: \"\"), (kind: \"library\", file: \"furniture/library.ron\", outcome: Refused, field: Some(\"descriptors[2].size[1]\"), reason: \"1:47: Expected float\")])"
+   },
+   "caption": "the game decides: one file refused with its field, the rest applied"
+  }
+ ],
+ "crop": [
+  0,
+  390,
+  480,
+  660
+ ]
+}
