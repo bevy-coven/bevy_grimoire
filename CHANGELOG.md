@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-01
 
+- **262-bedroom-demos** `39f762a` A bedroom map ships in the repository's own project, and the eight standing demos and editor.png are re-recorded on it *No clip: the change is the standing demos themselves, in docs/media/; proved by tools/demo/stale.py (every row fresh) and the_shipped_bedroom_map_loads_against_the_shipped_kits*
 - **oracle-rename** `cc40684` The decision-model crate is bevy_oracle (it was bevy_grimoire_decide): it asks typed questions and is not tied to one editor; the grimoire_decide MCP tool keeps its name *No clip: a crate rename; proved by the workspace gate*
 - **cauldron-help** bevy_cauldron --help prints the arguments the editor reads and exits, instead of opening a window that names --help as a project *No clip: a command-line text; run: cargo run -q -p bevy_cauldron -- --help*
 - **pre-push-lfs** A push through the gate hook uploads the clips' LFS objects, so a clip's file reaches GitHub with its pointer and a push whose upload fails is refused (#149, #150) *No clip: the push gate itself; proved by tools/loop/test_pre_push_lfs.py (both tests fail with the previous hook)*
