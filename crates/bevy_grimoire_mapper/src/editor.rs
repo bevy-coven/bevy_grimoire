@@ -6590,6 +6590,23 @@ pub struct Proposed {
     /// a crossing and a proposal could be mistaken for the one already drawn. [`ProposalClock`] is a
     /// resource, so it outlives the door exactly as the `Local` does.
     pub generation: u64,
+    /// **The part of the map this layout was laid in** (#192), or `None` for the whole map. Keeping
+    /// the layout replaces only the unpinned rows in it; see [`Proposed::replaces_placement`].
+    pub area: Option<bevy_grimoire_core::grammar::Area>,
+}
+
+impl Proposed {
+    /// **Does keeping this layout replace `row`?** An unpinned placement, and with an area only one
+    /// in a cell the area lays ([`bevy_grimoire_core::grammar::Area::holds`]); the author's pinned
+    /// pieces and everything outside the area stay.
+    pub fn replaces_placement(&self, map: &bevy_grimoire_core::map::Map, row: &Placed) -> bool {
+        !row.owned && self.area.is_none_or(|a| a.holds(map, self.cell, row.at))
+    }
+
+    /// [`Proposed::replaces_placement`] for a stamp.
+    pub fn replaces_stamp(&self, map: &bevy_grimoire_core::map::Map, row: &bevy_grimoire_core::composition::Stamped) -> bool {
+        !row.owned && self.area.is_none_or(|a| a.holds(map, self.cell, row.at))
+    }
 }
 
 /// **A counter that never resets**, for telling one proposal from the next.
@@ -15592,16 +15609,50 @@ pub fn propose(
     source: LayoutSource,
     seed: u64,
 ) -> Result<Laid, String> {
+    propose_in(project, open, source, None, seed)
+}
+
+/// **[`propose`], laying only the cells in `area`** (#192, research lens #6: graybox first). The
+/// rest of the map stays as it is: the cells around the area are pinned to what stands in them, so
+/// what is laid joins its neighbours, and keeping the proposal replaces only the unpinned rows in the
+/// area ([`Proposed::replaces_placement`]). `None` is the whole map, as [`propose`].
+///
+/// The project's block rules lay a whole block the game builds itself, so an area under them is
+/// refused rather than quietly laid over the whole map.
+pub fn propose_in(
+    project: &Project,
+    open: &OpenMap,
+    source: LayoutSource,
+    area: Option<bevy_grimoire_core::grammar::Area>,
+    seed: u64,
+) -> Result<Laid, String> {
     // **A rule answers first, and only for `Learned`.** `Declared` and `Composed` read other things
     // and a rule has nothing to say to them. When a rule applies it is the whole answer, refusals
     // included: falling back to the 1 m learned path after a rule refused would show the author a
     // layout the game will never build.
-    if source == LayoutSource::Learned
-        && let Some(laid) = propose_by_rules(project, open, seed)?
-    {
-        return Ok(laid);
+    if source == LayoutSource::Learned {
+        if let (Some(a), true) = (area, block_rules_apply(project, open)) {
+            return Err(format!(
+                "this map is laid by the project's block rules, which the game builds a whole block at a \
+                 time, so an area ({:?} to {:?}) cannot be laid on its own",
+                a.from, a.to
+            ));
+        }
+        if let Some(laid) = propose_by_rules(project, open, seed)? {
+            return Ok(laid);
+        }
     }
-    propose_from_grammar(project, open, source, seed)
+    propose_from_grammar(project, open, source, area, seed)
+}
+
+/// Does a block rule of the project say how this map is laid?
+fn block_rules_apply(project: &Project, open: &OpenMap) -> bool {
+    project.rules.blocks.iter().any(|r| r.example == open.map.name)
+        || open
+            .map
+            .placements
+            .iter()
+            .any(|p| project.rules.blocks.iter().any(|r| r.regions.contains(&p.descriptor)))
 }
 
 /// **`G` under the project's block rules**, for the one case where they apply.
@@ -15638,6 +15689,7 @@ fn propose_from_grammar(
     project: &Project,
     open: &OpenMap,
     source: LayoutSource,
+    area: Option<bevy_grimoire_core::grammar::Area>,
     seed: u64,
 ) -> Result<Laid, String> {
     // One metre: the tile the kits are authored on, and coarse enough that a 32 m map is a grid the
@@ -15710,12 +15762,18 @@ fn propose_from_grammar(
         format!("gen@{n}")
     };
     let enclosure = enclosure_wishes(&open.map);
-    let solved = match source {
-        LayoutSource::Composed => bevy_grimoire_core::grammar::solve_constrained(
+    let solved = match (source, area) {
+        (LayoutSource::Composed, None) => bevy_grimoire_core::grammar::solve_constrained(
             &scratch, &grammar, &faces, &enclosure, CELL, seed, &mut mint,
         ),
-        LayoutSource::Learned | LayoutSource::Declared => {
+        (LayoutSource::Composed, Some(a)) => bevy_grimoire_core::grammar::solve_constrained_in(
+            &scratch, &grammar, &faces, &enclosure, CELL, a, seed, &mut mint,
+        ),
+        (LayoutSource::Learned | LayoutSource::Declared, None) => {
             bevy_grimoire_core::grammar::solve(&scratch, &grammar, CELL, seed, &mut mint)
+        }
+        (LayoutSource::Learned | LayoutSource::Declared, Some(a)) => {
+            bevy_grimoire_core::grammar::solve_in(&scratch, &grammar, CELL, a, seed, &mut mint)
         }
     }?;
 
@@ -15738,10 +15796,15 @@ fn propose_from_grammar(
     let stamped = solved.stamps.len();
     // **The delta, not the absolute** — what would change if this were taken, next to what is there
     // now. `layout_accept` recomputes it against the live map at the moment of commitment.
-    let replaces = if composes {
-        open.map.stamps.iter().filter(|s| !s.owned).count()
-    } else {
-        open.map.placements.iter().filter(|p| !p.owned).count()
+    let replaces = match area {
+        Some(a) if composes => {
+            open.map.stamps.iter().filter(|s| !s.owned && a.holds(&open.map, CELL, s.at)).count()
+        }
+        Some(a) => {
+            open.map.placements.iter().filter(|p| !p.owned && a.holds(&open.map, CELL, p.at)).count()
+        }
+        None if composes => open.map.stamps.iter().filter(|s| !s.owned).count(),
+        None => open.map.placements.iter().filter(|p| !p.owned).count(),
     };
     let laid = if composes {
         format!("{stamped} stamp(s)")
@@ -15770,6 +15833,7 @@ fn propose_from_grammar(
             stamps: solved.stamps,
             cell: CELL,
             preview_only: false,
+            area,
             // Filled by the caller, which owns the clock: this function is a function of its
             // arguments, so a clock here would be a fifth thing it depends on.
             generation: 0,
@@ -15831,6 +15895,7 @@ fn propose_example_block(
             stamps: Vec::new(),
             cell: rule.cell,
             preview_only: false,
+            area: None,
             generation: 0,
         },
     })
@@ -15936,6 +16001,7 @@ fn propose_region_blocks(project: &Project, open: &OpenMap) -> Result<Laid, Stri
             stamps: Vec::new(),
             cell,
             preview_only: true,
+            area: None,
             generation: 0,
         },
     })

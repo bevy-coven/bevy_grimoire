@@ -132,6 +132,22 @@ pub struct Area {
     pub to: (f32, f32),
 }
 
+impl Area {
+    /// **Is the cell that `at` falls in one this area lays?** The test a caller keeping a solve's
+    /// rows uses to know which of the map's existing rows the solve replaced: a row is the area's
+    /// when its *cell* is, by the same rule the solve lays cells by, not when its centre happens to be
+    /// in the rectangle (a piece at a cell's edge can be outside it and still in a cell it lays).
+    /// `false` for an area that holds no cell of the map, which a solve refuses.
+    pub fn holds(&self, map: &Map, cell: f32, at: (f32, f32)) -> bool {
+        let Ok(win) = window(map, cell, Some(self)) else {
+            return false;
+        };
+        let c = to_cell(map, cell, at);
+        let (x0, z0, x1, z1) = win.area;
+        c.0 >= x0 as i64 && c.0 < x1 as i64 && c.1 >= z0 as i64 && c.1 < z1 as i64
+    }
+}
+
 /// The cells one solve works on: the area, and the ring of cells around it that it must join.
 ///
 /// Map cell coordinates, `[x0, x1) × [z0, z1)`. `grid` is the rectangle the solver collapses (the
