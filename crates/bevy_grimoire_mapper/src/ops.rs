@@ -2839,6 +2839,284 @@ pub mod piece_remove {
     }
 }
 
+/// **Turn one library piece's mesh a quarter turn about an axis, and re-measure it (E-002, #129
+/// slice 9).**
+///
+/// `N`, `O` and `P` on the Meshes tab, the three rotate chips and the labeler's righting turned a
+/// library piece with a write of their own, so an agent could place a piece and never turn its mesh
+/// upright, no log line named the turn, and the registry's two-front-end rule listed the three keys
+/// as unmigrated. This is the same turn, named: `id` picks the piece, `axis` (`x`, `y` or `z`) the
+/// axis and `quarters` (1 to 3, default 1) the count, in one act with one re-measure.
+///
+/// # The refusals are the key's own
+///
+/// A turn about X or Z swaps the piece's height with a floor axis and has no mapping for authored
+/// cells, so a piece that has some is refused, naming the count, unless `force` is true, which clears
+/// them. A piece with no mesh, a mesh the file system cannot open and a library the project would
+/// refuse after the turn (a placed piece that no longer fits its lattice) are refused before anything
+/// is written, by the plan as well as the commit ([`crate::tiles::turn_descriptor`] is the one rule).
+///
+/// # Undo is the descriptor, as it was
+///
+/// The inverse is this operation again with `restore` (the whole descriptor before the turn: its
+/// rotation, extent, pivot, lift and lattice), an undo-only form ([`Operation::only_as_undo`]) an
+/// agent cannot send. A turn needs the mesh to be on disk, a put-back does not.
+pub mod piece_turn {
+    use super::*;
+    use bevy_grimoire_core::descriptor::Descriptor;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// The library piece's id, as the Meshes shelf names it.
+        pub id: String,
+        /// `x`, `y` or `z`. Absent on an undo's put-back.
+        #[serde(default)]
+        pub axis: Option<String>,
+        /// Quarter turns, 1 to 3. Absent means one.
+        #[serde(default)]
+        pub quarters: Option<u8>,
+        /// Clear authored cells a turn about X or Z cannot carry, instead of refusing.
+        #[serde(default)]
+        pub force: bool,
+        /// **Undo only.** The descriptor to put back.
+        #[serde(default)]
+        pub restore: Option<Descriptor>,
+    }
+
+    enum Request {
+        Turn {
+            id: String,
+            axis: crate::tiles::RotateAxis,
+            quarters: u8,
+            force: bool,
+        },
+        Restore {
+            id: String,
+            restore: Box<Descriptor>,
+        },
+    }
+
+    fn request(raw: &serde_json::Value) -> Result<Request, Refusal> {
+        let p: Params = serde_json::from_value(raw.clone()).map_err(|e| {
+            Refusal::new(format!(
+                "this is not a turn: {e}. The fields are `id`, `axis` (`x`, `y` or `z`), `quarters` \
+                 (1 to 3) and `force`."
+            ))
+        })?;
+        match (p.axis, p.quarters, p.restore) {
+            (Some(axis), quarters, None) => {
+                let Some(axis) = crate::tiles::RotateAxis::parse(&axis) else {
+                    return Err(Refusal::new(format!(
+                        "`{axis}` is not an axis: give `x`, `y` or `z`. Nothing was turned."
+                    )));
+                };
+                let quarters = quarters.unwrap_or(1);
+                if !(1..=3).contains(&quarters) {
+                    return Err(Refusal::new(format!(
+                        "{quarters} quarter turns is not a turn: give 1, 2 or 3 (four is where the \
+                         piece started). Nothing was turned."
+                    )));
+                }
+                Ok(Request::Turn {
+                    id: p.id,
+                    axis,
+                    quarters,
+                    force: p.force,
+                })
+            }
+            (None, None, Some(restore)) if !p.force => {
+                if restore.id != p.id {
+                    return Err(Refusal::new(format!(
+                        "the put-back is `{}`, not `{}`. Nothing was changed.",
+                        restore.id, p.id
+                    )));
+                }
+                Ok(Request::Restore {
+                    id: p.id,
+                    restore: Box::new(restore),
+                })
+            }
+            (None, _, None) => Err(Refusal::new(
+                "a turn needs `id` and `axis` (`x`, `y` or `z`). Nothing was turned.",
+            )),
+            _ => Err(Refusal::new(
+                "`axis` turns a piece; `restore` puts one back and only an undo sends it, and not with \
+                 `axis`, `quarters` or `force`. Nothing was changed.",
+            )),
+        }
+    }
+
+    /// **What an undo compares, and what the change answers in `after`.** The key is `id`, the name
+    /// every library change is scoped by, so a newer change to another piece never blocks this undo.
+    fn state_json(d: &Descriptor) -> serde_json::Value {
+        json!({"id": d.id, "rotate": d.align.rotate})
+    }
+
+    struct Edit {
+        measured: bevy_grimoire_core::library::Library,
+        /// The descriptor as it stood, for the inverse.
+        before: Descriptor,
+        after: Descriptor,
+        summary: String,
+    }
+
+    /// **The edit, computed on a copy of the measured library.** Nothing is written here; the commit
+    /// does that, so a refused turn leaves the piece as it was.
+    fn edit(project: &Project, req: &Request) -> Result<Edit, Refusal> {
+        let id = match req {
+            Request::Turn { id, .. } | Request::Restore { id, .. } => id,
+        };
+        let mut measured = (*project.measured).clone();
+        let Some(index) = measured.descriptors.iter().position(|d| &d.id == id) else {
+            if let Some(ns) = project.other_kit_of(id) {
+                return Err(Refusal::new(format!(
+                    "`{id}` belongs to kit `{ns}`, not the kit being authored (`{}`), so nothing was turned.",
+                    project.namespace
+                )));
+            }
+            let ids: Vec<&str> = measured.descriptors.iter().map(|d| d.id.as_str()).collect();
+            let hint = match nearest_ids(&ids, id) {
+                near if near.is_empty() => String::new(),
+                near => format!(" Close ids: {}.", near.join(", ")),
+            };
+            return Err(Refusal::new(format!(
+                "no library piece is called `{id}`, so nothing was turned.{hint} Pick one from the \
+                 Meshes shelf."
+            )));
+        };
+        let before = measured.descriptors[index].clone();
+        let summary = match req {
+            Request::Turn {
+                axis,
+                quarters,
+                force,
+                ..
+            } => {
+                // **Before the extent moves**: a Y turn maps the cells onto the turned piece, and the
+                // mapping reads the divisions they were authored against, as the piece is placed.
+                let div_before = project
+                    .library
+                    .get(id)
+                    .and_then(|placed| project.divisions_of(placed).ok());
+                let d = &mut measured.descriptors[index];
+                crate::tiles::turn_descriptor(d, &project.root, *axis, *quarters, *force, div_before)
+                    .map_err(|why| Refusal::new(format!("{why}. Nothing was turned.")))?
+            }
+            Request::Restore { restore, .. } => {
+                measured.descriptors[index] = (**restore).clone();
+                format!("put `{id}` back as it was before it was turned")
+            }
+        };
+        let after = measured.descriptors[index].clone();
+        // **The project must take it, asked now**, so a preview refuses what the commit would refuse.
+        crate::tiles::check_measured(project, &measured).map_err(|why| {
+            Refusal::new(format!("the project would not take this, so nothing was turned: {why}"))
+        })?;
+        Ok(Edit {
+            measured,
+            before,
+            after,
+            summary,
+        })
+    }
+
+    /// **Turn one library piece's mesh, or (an undo) put it back.**
+    pub struct PieceTurn;
+
+    impl Operation for PieceTurn {
+        fn name(&self) -> &'static str {
+            "piece_turn"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["library"]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::Inverse
+        }
+
+        /// **It writes the library**, so its logged change joins the Meshes history, as an import's does.
+        fn writes_library(&self) -> bool {
+            true
+        }
+
+        /// **A put-back is never a request an agent may send.**
+        fn only_as_undo(&self, params: &serde_json::Value) -> bool {
+            matches!(request(params), Ok(Request::Restore { .. }))
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "axis"],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "The library piece's id, as grimoire/pieces names it, e.g. site/wall."
+                    },
+                    "axis": {
+                        "type": "string",
+                        "enum": ["x", "y", "z"],
+                        "description": "The axis to turn the piece's mesh about. A turn about x or z swaps its height with a floor axis and has no mapping for authored cells."
+                    },
+                    "quarters": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 3,
+                        "description": "How many quarter turns, in one act with one re-measure. Default 1."
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "Turn a piece that has authored cells about x or z anyway, clearing them. Without it such a piece is refused, naming the count."
+                    }
+                }
+            })
+        }
+
+        /// **The piece's rotation now**, against the one the change recorded. A piece that has gone
+        /// missing answers nothing, so an undo cannot match it.
+        fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
+            let id = after.get("id")?.as_str()?;
+            let project = ctx.project.as_ref()?;
+            let d = project.measured.descriptors.iter().find(|d| d.id == id)?;
+            Some(state_json(d))
+        }
+
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let req = request(params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no library to turn a piece in."));
+            };
+            Ok(state_json(&edit(project, &req)?.after))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let req = request(params)?;
+            let Some(project) = ctx.project.as_mut() else {
+                return Err(Refusal::new("no project is open, so there is no library to turn a piece in."));
+            };
+            let Edit {
+                measured,
+                before,
+                after,
+                summary,
+            } = edit(project, &req)?;
+            crate::tiles::commit_measured(project, measured).map_err(Refusal::new)?;
+            Ok(Outcome {
+                summary,
+                affected: 1,
+                saved: true,
+                // **Redo is the same put-back**, of the turned descriptor.
+                inverse: Some(json!({"id": before.id, "restore": before})),
+                after: Some(state_json(&after)),
+            })
+        }
+    }
+}
+
 /// **Every operation the editor knows, in one list.**
 ///
 /// **The one list.** The MCP tool surface, the parity test and the log's vocabulary are all read
@@ -2856,6 +3134,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(placement_add::PlacementAdd),
         Box::new(piece_import::PieceImport),
         Box::new(piece_remove::PieceRemove),
+        Box::new(piece_turn::PieceTurn),
         Box::new(placement_set_pin::PlacementSetPin),
         Box::new(placement_set_yaw::PlacementSetYaw),
         Box::new(placement_set_tip::PlacementSetTip),
@@ -3122,6 +3401,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The shelf's remove key (E-002, #129 slice 8)** — `Delete` on a library piece calls `remove_piece`
     // and dispatches `piece_remove`, the same write an agent's `apply` makes.
     ("piece_remove", "remove_piece("),
+    // **The mesh turn (E-002, #129 slice 9)** — `N`, `O`, `P` and the three rotate chips call
+    // `turn_piece` for a library piece and dispatch `piece_turn`, the same write an agent's `apply` makes.
+    ("piece_turn", "turn_piece("),
     // **The door and tab keys and the door switch**, which open a door through `open_door`, and that
     // runs the `door_open` operation (item 1 of cycle 8).
     ("door_open", "open_door("),

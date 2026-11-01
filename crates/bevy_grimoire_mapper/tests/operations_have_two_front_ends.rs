@@ -308,9 +308,6 @@ const UNMIGRATED: &[Action] = &[
     Action::CellEdge,
     Action::CellClear,
     Action::ScanMesh,
-    Action::RotateMeshX,
-    Action::RotateMeshY,
-    Action::RotateMeshZ,
     Action::FocusCandidates,
     Action::CopyInfo,
     Action::FocusLibrary,
@@ -353,7 +350,8 @@ const UNMIGRATED: &[Action] = &[
 // 105 -> 104: `CycleMount` -> `piece_set_mount` (E-002, #129 slice 6): `M` and a click on the mount value set a library piece's mount through the operation an agent calls.
 // 104 -> 103: `ExcludePack` -> `pack_set_excluded` (E-002, #129 slice 7): `Shift+R` leaves a pack out of the kit, or brings it back, through the operation an agent calls.
 // 103 -> 102: `RemoveTile` -> `piece_remove` (E-002, #129 slice 8): `Delete` on a library piece sends it back out of the library through the operation an agent calls.
-const UNMIGRATED_MAX: usize = 102;
+// 102 -> 99: `RotateMeshX`, `RotateMeshY` and `RotateMeshZ` -> `piece_turn` (E-002, #129 slice 9): `N`, `O`, `P`, the rotate chips and the labeler's righting turn a library piece through the operation an agent calls.
+const UNMIGRATED_MAX: usize = 99;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///

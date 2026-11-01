@@ -1633,6 +1633,16 @@ pub enum RotateAxis {
 }
 
 impl RotateAxis {
+    /// The axis a request names: `x`, `y` or `z`.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "x" => Some(RotateAxis::X),
+            "y" => Some(RotateAxis::Y),
+            "z" => Some(RotateAxis::Z),
+            _ => None,
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             RotateAxis::X => "rot x",
@@ -1692,43 +1702,66 @@ fn rotate_mesh(
     project: &mut Project,
     state: &mut ImportState,
 ) -> bool {
-    let Some(d) = state.editing(&project.measured) else {
+    // **A library piece is turned by `piece_turn` (E-002, #129 slice 9)**, the operation an agent
+    // calls, so the key, the chip, the labeler's righting and an agent are one change with one log
+    // line. A candidate is not in the library yet, so it has no operation to name: it is turned in
+    // memory, below, and written by Accept.
+    if let Some(id) = state.selected_library_id.clone() {
+        return crate::editor::turn_piece(state, project, &id, axis, quarters, force);
+    }
+    if state.editing(&project.measured).is_none() {
         state.status.note("no tile is selected".to_owned());
-        return false;
-    };
-    let Some(mesh) = d.mesh.clone() else {
-        state
-            .status
-            .problem(format!("`{}` has no mesh to turn", d.id));
-        return false;
-    };
-    let authored_cells = d.subgrid.as_ref().map_or(0, |g| g.cells.len());
-    if axis != RotateAxis::Y && authored_cells > 0 && !force {
-        state.status.problem(format!(
-            "`{}` has {authored_cells} authored cell(s). A {} turn swaps its height with a floor \
-             axis and there is no mapping for that — hold Shift to turn it anyway and clear them.",
-            d.id,
-            axis.label()
-        ));
         return false;
     }
     // **Before the extent moves.** A Y turn maps the cells onto the turned piece, and the mapping
     // reads the divisions they were authored against.
     let div_before = focused_div(state, project).ok();
-    let path = project.root.join("assets").join(&mesh);
-    let glb = match bevy_grimoire_core::glb::Glb::open(&path) {
-        Ok(glb) => glb,
-        Err(why) => {
-            state.status.problem(format!("{mesh}: {why}"));
-            return false;
-        }
-    };
-
     // Taken before the write — the only moment the old value still exists.
     let history_before = state.snapshot(project);
+    let root = project.root.clone();
     let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
         return false;
     };
+    match turn_descriptor(d, &root, axis, quarters, force, div_before) {
+        Ok(said) => {
+            state.record(history_before);
+            state.status.say(persist(project, where_to, said));
+            true
+        }
+        Err(why) => {
+            state.status.problem(why);
+            false
+        }
+    }
+}
+
+/// **Turn one descriptor and re-measure it**, or say why it cannot be, leaving it as it was. The
+/// body of [`rotate_mesh`] and of the `piece_turn` operation, so a candidate and a library piece
+/// turn by one rule. `div_before` is the lattice the piece's cells were authored against, read
+/// before the turn.
+pub(crate) fn turn_descriptor(
+    d: &mut Descriptor,
+    root: &std::path::Path,
+    axis: RotateAxis,
+    quarters: u8,
+    force: bool,
+    div_before: Option<(u32, u32, u32)>,
+) -> Result<String, String> {
+    let Some(mesh) = d.mesh.clone() else {
+        return Err(format!("`{}` has no mesh to turn", d.id));
+    };
+    let authored_cells = d.subgrid.as_ref().map_or(0, |g| g.cells.len());
+    if axis != RotateAxis::Y && authored_cells > 0 && !force {
+        return Err(format!(
+            "`{}` has {authored_cells} authored cell(s). A {} turn swaps its height with a floor \
+             axis and there is no mapping for that — turn it anyway with `force` (Shift held, on a key) to clear them.",
+            d.id,
+            axis.label()
+        ));
+    }
+    let path = root.join("assets").join(&mesh);
+    let glb = bevy_grimoire_core::glb::Glb::open(&path).map_err(|why| format!("{mesh}: {why}"))?;
+
     let want = axis.bumped(d.align.rotate.unwrap_or((0, 0, 0)), quarters);
     let before = d.align.rotate;
     // A rotation of nothing is not a rotation — keep the field absent rather than storing an
@@ -1736,8 +1769,7 @@ fn rotate_mesh(
     d.align.rotate = (want != (0, 0, 0)).then_some(want);
     if let Err(why) = bevy_grimoire_core::import::remeasure_rotated(d, &glb, before) {
         d.align.rotate = before;
-        state.status.problem(why);
-        return false;
+        return Err(why);
     }
     // The lattice, moved or dropped. Both halves of a Y turn together — the cells and the divisions —
     // because a lattice read off one without the other is the wrong shape; `rotate_div` is not called
@@ -1759,13 +1791,10 @@ fn rotate_mesh(
     };
     let (w, dep) = d.extent.footprint.unwrap_or((0.0, 0.0));
     let h = d.extent.height.unwrap_or(0.0);
-    let said = format!(
+    Ok(format!(
         "{} {},{},{} deg — now {w:.2} x {h:.2} x {dep:.2} m{lattice}",
         d.id, want.0, want.1, want.2
-    );
-    state.record(history_before);
-    state.status.say(persist(project, where_to, said));
-    true
+    ))
 }
 
 /// The chip.
