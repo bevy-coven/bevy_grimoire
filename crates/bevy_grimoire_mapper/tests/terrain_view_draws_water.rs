@@ -3,7 +3,7 @@
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use bevy_grimoire_core::heightfield::Heightfield;
-use bevy_grimoire_core::water::WaterField;
+use bevy_grimoire_core::water::{WATER_FIELD_VERSION, WaterField};
 use bevy_grimoire_mapper::terrain_view::{ground_mesh, water_mesh};
 
 fn positions(m: &Mesh) -> Vec<[f32; 3]> {
@@ -20,7 +20,7 @@ fn water_is_drawn_at_ground_plus_depth_and_only_where_it_is_wet() {
     let mut depth_m = vec![0.0; 16];
     depth_m[5] = 1.0; // fills the pit to 1 m
     depth_m[6] = 0.01; // a film, not drawn
-    let w = WaterField { origin: (0.0, 0.0), cell_m: 1.0, width: 4, depth: 4, depth_m, settled: true, steps: 1 };
+    let w = WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 4, depth: 4, depth_m, settled: true, steps: 1 };
     let ground = ground_mesh(&g);
     assert_eq!(positions(&ground).len(), 16);
     let mesh = water_mesh(&g, &w).expect("one wet cell");

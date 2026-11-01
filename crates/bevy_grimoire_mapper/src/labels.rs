@@ -1851,6 +1851,7 @@ mod tests {
 
     fn vocab() -> bevy_grimoire_core::vocab::Vocabularies {
         bevy_grimoire_core::vocab::Vocabularies {
+            version: bevy_grimoire_core::vocab::VOCAB_VERSION,
             kind: bevy_grimoire_core::vocab::Vocabulary {
                 tokens: vec![
                     bevy_grimoire_core::vocab::Token {

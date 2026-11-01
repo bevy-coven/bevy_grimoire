@@ -62,8 +62,15 @@ impl std::fmt::Display for HeightmapError {
 
 impl std::error::Error for HeightmapError {}
 
+/// The format version of a terrain file (#202). A file with no `version` is the first.
+pub const TERRAIN_VERSION: u32 = 1;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Heightfield {
+    /// The format version: [`TERRAIN_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "crate::format_version::first", deserialize_with = "crate::format_version::read::<_, TERRAIN_VERSION>")]
+    pub version: u32,
     /// World `(x, z)` of cell `(0, 0)`.
     pub origin: (f32, f32),
     pub cell_m: f32,
@@ -77,7 +84,7 @@ impl Heightfield {
     /// A flat field at `height_m`.
     pub fn flat(origin: (f32, f32), cell_m: f32, width: usize, depth: usize, height_m: f32) -> Self {
         assert!(width >= 2 && depth >= 2 && cell_m > 0.0, "a heightfield needs 2x2 cells of positive size");
-        Self { origin, cell_m, width, depth, heights: vec![height_m; width * depth] }
+        Self { version: TERRAIN_VERSION, origin, cell_m, width, depth, heights: vec![height_m; width * depth] }
     }
 
     /// A field from a 16-bit height map: sample `0` is `range_m.0`, `65535` is `range_m.1`.
@@ -97,7 +104,7 @@ impl Heightfield {
             return Err(HeightmapError::Range);
         }
         let heights = samples.iter().map(|&s| lo + (hi - lo) * (f32::from(s) / 65535.0)).collect();
-        Ok(Self { origin, cell_m, width, depth, heights })
+        Ok(Self { version: TERRAIN_VERSION, origin, cell_m, width, depth, heights })
     }
 
     /// **Read a terrain file** (`<grimoire_dir>/terrain/<map>.ron`), refusing one whose shape and data
