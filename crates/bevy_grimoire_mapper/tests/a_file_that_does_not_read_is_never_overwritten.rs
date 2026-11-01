@@ -1,13 +1,14 @@
-//! **A forest, people or triggers file that does not read is refused by the operation that would
+//! **A forest, people, triggers or tree file that does not read is refused by the operation that would
 //! rewrite it, naming the file and the field, and is never overwritten** (#200, H3).
 //!
-//! `forest_scatter`, `person_set` and `trigger_set` read the map's file, change one row and write the
-//! whole file back. A file that did not parse used to count as no file, so one typo in a hand edit made
-//! the next call write a file holding only its own row over everything else. For each of the three kinds:
-//! a corrupt file, a file with a field of the wrong type and a file missing a required field each
-//! refuse the call, the refusal names the file (and the field, where the file got that far), the bytes
-//! on disk stay exactly as they were, and once the file is fixed the same call applies and the rows
-//! that were there are still there.
+//! `forest_scatter`, `person_set`, `trigger_set` and `tree_edit` read the file, change one row and write
+//! the whole file back. A file that did not parse used to count as no file, so one typo in a hand edit
+//! made the next call write a file holding only its own row over everything else. For each of the four
+//! kinds: a corrupt file, a file with a field of the wrong type and a file missing a required field
+//! (a tree file has no required field, so a field the crate does not know) each refuse the call, the
+//! refusal names the file (and the field, where the file got that far), the bytes on disk stay exactly
+//! as they were, and once the file is fixed the same call applies and the rows that were there are
+//! still there.
 
 use bevy_grimoire_core::reload_check;
 use bevy_grimoire_mapper::map_files::READ_HERE;
@@ -167,7 +168,7 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 }
 
 /// **The kinds nothing reads with a named refusal**, checked in. Core's own list is
-/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the three kinds this layer reads are off it here. A kind
+/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads are off it here. A kind
 /// comes off when its type gains a reader that names the file and the field; none joins unseen.
 const STILL_UNCHECKED: &[&str] =
     &["checks", "oplog", "reference_images", "family", "destructible_marks", "destructible_bake", "game_data"];
