@@ -7565,6 +7565,7 @@ fn relations_readout(open: &OpenMap) -> (String, Color) {
                 Kind::MirrorOf { of: other, about, .. } => format!("{of} mirror of {other} about {about}"),
                 Kind::BacksOnto { of: other, .. } => format!("{of} backs onto {other}"),
                 Kind::Inside { of: other, .. } => format!("{of} inside {other}"),
+                Kind::Balances { with, about, .. } => format!("{of} balances {} about {about}", with.join(", ")),
             };
             let what = if r.hard { format!("{what} (hard)") } else { what };
             match outcome {
