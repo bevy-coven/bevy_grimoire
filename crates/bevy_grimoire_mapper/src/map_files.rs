@@ -28,15 +28,15 @@ pub const READ_HERE: &[&str] = &["forest", "people", "scripts", "trees"];
 /// registry's bounds by [`crate::data_view::DataView`]; `reference_images`: the pictures the open map
 /// lists, whose header [`crate::reference_view::ReferenceView`] reads; `family`: a family crate's
 /// settings, read as the crate's own type by [`crate::family_host::reload_settings`] in a build that
-/// has the type). No operation needs these files to read in order to rewrite them (`data_set` refuses a
+/// has the type; `editor_settings`: the project's settings layer, which [`crate::settings::sync_settings`] reads). No operation needs these files to read in order to rewrite them (`data_set` refuses a
 /// file that does not scan, but a wrong type or a missing leaf does not stop it setting another leaf), so
 /// they have no row in the table of operations that refuse to overwrite a file that does not read;
 /// `tests/a_refused_checks_file_keeps_the_last_good_checks.rs`,
 /// `tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs`,
 /// `tests/a_game_data_file_that_does_not_read_is_named.rs`,
-/// `tests/a_reference_image_that_does_not_read_is_named.rs` and `tests/family_settings_typed_verdicts.rs`
-/// have their bad files instead. Like [`READ_HERE`] they are on core's unchecked list and on no other.
-pub const WATCHED_HERE: &[&str] = &["checks", "oplog", "game_data", "reference_images", "family"];
+/// `tests/a_reference_image_that_does_not_read_is_named.rs`, `tests/family_settings_typed_verdicts.rs` and
+/// `tests/a_key_set_in_both_settings_layers_takes_the_projects.rs` have their bad files instead. Like [`READ_HERE`] they are on core's unchecked list and on no other.
+pub const WATCHED_HERE: &[&str] = &["checks", "oplog", "game_data", "reference_images", "family", "editor_settings"];
 
 /// **The path of `path` as the project's directory sees it**: what a verdict and a refusal name.
 pub fn file_name(project: &Project, path: &Path) -> String {
