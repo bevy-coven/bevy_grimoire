@@ -45,6 +45,7 @@ mod forest_stroke_is_an_operation;
 mod forest_view;
 mod a_hint_shares_the_receipts_slot;
 mod a_history_jump_is_one_undo_group;
+mod a_key_set_in_both_settings_layers_takes_the_projects;
 mod a_kit_edited_on_disk_reaches_the_screen;
 mod a_kit_s_dead_ends_are_shown;
 mod a_kit_save_rereads_only_that_kit;

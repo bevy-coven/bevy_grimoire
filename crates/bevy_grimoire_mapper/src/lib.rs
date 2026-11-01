@@ -131,6 +131,7 @@ pub mod ops_runs;
 pub mod project;
 pub mod recent;
 pub mod screen;
+pub mod settings;
 pub mod sequencer;
 pub mod snip;
 pub mod after_edit;

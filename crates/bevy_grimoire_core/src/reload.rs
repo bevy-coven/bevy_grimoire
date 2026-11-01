@@ -200,6 +200,8 @@ pub const KINDS: &[FileKind] = &[
         "One file per family crate: the editor applies it in place, polled every 0.1 s. The game-side `GrimoireLivePlugin` does not watch `<root>/family/`."),
     kind("family_list", Root, "family.ron", "Family", Live, Global, "by hand",
         "Which family crates the project uses, read when the editor needs the list; nothing holds it."),
+    kind("editor_settings", Grimoire, "editor.ron", "EditorSettings", Live, Global, "by hand",
+        "The project layer of the editor's settings, laid over the user's `<config_dir>/Grimoire/settings.ron` key by key. The editor looks at it while it runs and applies it in place; a file that does not read keeps the last good one and is refused in `grimoire_state.reloads`. The game has no reader."),
     kind("agent", Root, "agent.ron", "AgentSettings", Live, Global, "by hand",
         "The note agent's model and prompt, read each time a note is sent; nothing holds it."),
     kind("play", Root, "play.ron", "PlayConfig", Live, Global, "by hand",

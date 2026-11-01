@@ -197,3 +197,16 @@ Not a project file: one per user, so a project folder never carries where an aut
 | Live reload | No. |
 | Read by | The editor only. |
 | Format version | 1. A file of another version is refused by name and left as it is, and the project still opens. |
+
+## editor.ron and settings.ron
+
+The editor's settings, in two files that are laid over the built-in defaults, key by key: the user's `settings.ron` first, then the project's `editor.ron`. A key set in both takes the project's; a key a file leaves out comes from the layer below.
+
+| | |
+|---|---|
+| Where | The user's layer: `<config_dir>/Grimoire/settings.ron` (`~/.config` on Linux, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows). The project's layer: `assets/grimoire/editor.ron`. |
+| What it holds | Only the keys a file sets, each an `Option`: `theme` (`ToolDark`, `Parchment` or `HighContrast`), `text_scale` and `interface_scale` (0.5 to 3.0; 1.0 is as designed) and `reduced_motion`. Example: `(version: 1, text_scale: Some(1.5), reduced_motion: Some(true))`. |
+| Written by | A person, for now; the settings screen (UI-71) writes them. |
+| Live reload | Yes, in the editor: it looks at both files while it runs, so an edit, a deleted key or a deleted file changes the running editor at once. A file that does not read (not RON, an unknown key, a value out of range, another version) keeps that layer's last good content, is refused in `grimoire_state.reloads` with the file and the field, and is a problem on the status line. The game does not read it. |
+| Read by | The editor only (`settings::sync_settings`, resource `EditorSettings`). |
+| Format version | 1. An old file with fewer keys still reads; a file of another version is refused by name. |

@@ -643,6 +643,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **Derived from the open map's `references.ron` and the pictures it lists**: what the editor last found when it read their headers (#200). Another map or project starts it afresh.
     ("bevy_grimoire_mapper::reference_view::ReferenceView", Ownership::Project),
     ("bevy_grimoire_mapper::family_host::FamilySettings", Ownership::Session),
+    // **The editor's settings** (UI-70): the defaults, the user's file and the project's laid over them. The user's layer is the app's and the project's layer follows the open project's path (`sync_settings` starts afresh when it moves), so both are true for as long as the app runs.
+    ("bevy_grimoire_mapper::settings::EditorSettings", Ownership::Session),
+    ("bevy_grimoire_mapper::settings::SettingsView", Ownership::Session),
     // **`Door`, like the camera it sits beside**: the hour the Environment panel's clock buttons
     // hold the preview at (#98). It is a view of the open project, never written to its file, so a
     // door change lets the next project's own clock run.

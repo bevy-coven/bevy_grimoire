@@ -88,6 +88,10 @@ fn main() -> AppExit {
     if let Some(file) = bevy_grimoire_mapper::recent::user_file() {
         app.insert_resource(bevy_grimoire_mapper::recent::RecentProjects(file));
     }
+    // **The user's settings layer** (`settings.rs`, UI-70): only the binary names the file, as with the recent list.
+    if let Some(file) = bevy_grimoire_mapper::settings::user_file() {
+        app.insert_resource(bevy_grimoire_mapper::settings::UserSettingsFile(file));
+    }
 
     // **Both screens' plugins, always added.** Which one *runs* is the state's business, not the
     // plugin list's — a list that changed with the screen would be two plugin graphs, and only one

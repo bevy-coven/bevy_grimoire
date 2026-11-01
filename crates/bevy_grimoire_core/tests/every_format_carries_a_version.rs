@@ -53,6 +53,7 @@ const VERSIONED_ABOVE: &[(&str, &str, &str)] = &[
     ("scripts", "crates/bevy_grimoire_mapper/tests/a_forest_people_or_scripts_file_of_another_version_is_refused.rs", "the editor's `Scripts`, a map's triggers"),
     ("checks", "crates/bevy_grimoire_decide/tests/a_checks_file_of_another_version_is_refused.rs", "the decision crate's `Checks`"),
     ("oplog", "crates/bevy_grimoire_mapper/tests/an_oplog_line_of_another_version_is_refused.rs", "the editor's operation log entry, one JSON line each"),
+    ("editor_settings", "crates/bevy_grimoire_mapper/tests/a_key_set_in_both_settings_layers_takes_the_projects.rs", "the editor's `SettingsLayer`, one settings file"),
 ];
 
 /// **Kinds whose format is not the editor's to version**, and whose it is.
