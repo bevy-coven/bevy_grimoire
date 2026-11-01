@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-01
 
+- **129-accept-edges** `960f6a8` Enter on a mesh scan's derived edges keeps them through piece_set_cells, with a new per-cell edges verb an agent can call *No clip: a key's routing and an operation verb, nothing new on screen; proved by keeping_derived_edges_is_a_cell_operation*
 - **262-bedroom-demos** `39f762a` A bedroom map ships in the repository's own project, and the eight standing demos and editor.png are re-recorded on it *No clip: the change is the standing demos themselves, in docs/media/; proved by tools/demo/stale.py (every row fresh) and the_shipped_bedroom_map_loads_against_the_shipped_kits*
 - **oracle-rename** `cc40684` The decision-model crate is bevy_oracle (it was bevy_grimoire_decide): it asks typed questions and is not tied to one editor; the grimoire_decide MCP tool keeps its name *No clip: a crate rename; proved by the workspace gate*
 - **cauldron-help** bevy_cauldron --help prints the arguments the editor reads and exits, instead of opening a window that names --help as a project *No clip: a command-line text; run: cargo run -q -p bevy_cauldron -- --help*
