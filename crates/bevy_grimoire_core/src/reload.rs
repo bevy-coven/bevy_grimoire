@@ -206,10 +206,10 @@ pub const KINDS: &[FileKind] = &[
         "How the editor launches the game, read each time `play` runs; nothing holds it."),
     kind("destructible_marks", Root, "destructible.ron", "Marks", Live, Global,
         "`destructible_set` (only in a build with the carnage feature)",
-        "Read at each `destructible_hit`; nothing holds it."),
+        "Read at each `destructible_set` and `destructible_hit`; nothing holds it. A file that does not read refuses both, naming the file and the field, and is left as it is."),
     kind("destructible_bake", Root, "destructible/<name>.bake.ron", "a baked fracture", Live, Global,
         "`destructible_set` and `destructible_hit` (only in a build with the carnage feature)",
-        "A cache the next hit rebuilds when it is absent."),
+        "A cache the next hit rebuilds when it is absent or stale (another mesh or other cut settings). A file that does not read at all is refused, naming the file and the field, and is left as it is: remove it to bake afresh."),
     kind("game_data", Root, "", "the game's own RON", Restart, Global, "",
         "Written by `data_set` into files the game owns. This repository ships no reader that applies them, so a running game is restarted unless it re-reads them itself. The editor looks at each file `data.ron` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `needs_restart` when an edit leaves one that reads as other text than it first read, `applied` when it is back to that text."),
 ];

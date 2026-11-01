@@ -26,6 +26,7 @@ mod a_composed_proposal_draws_its_members;
 mod a_composition_can_be_renamed;
 mod a_damaged_oplog_line_is_named_and_the_rest_still_reads;
 mod a_dead_end_names_its_closest_piece;
+mod a_destructible_file_that_does_not_read_is_named;
 mod a_door_answer_says_whether_it_waits;
 mod a_dropped_image_becomes_a_reference;
 mod a_dressed_camera_leaves_the_world_on_the_surface;

@@ -42,7 +42,13 @@ pub fn file_name(project: &Project, path: &Path) -> String {
 /// **`text`, the contents of the file at `path`, as a `T`**, and a refusal that names the file and the
 /// field when it does not read.
 pub fn read_text<T: DeserializeOwned>(kind: &'static str, project: &Project, path: &Path, text: &str) -> Result<T, Refusal> {
-    reload_check::read(kind, &file_name(project, path), text).map_err(|r| {
+    read_named(kind, &file_name(project, path), text)
+}
+
+/// **`text` as a `T`, naming the file `file`**: for a file that is not under the project's directory
+/// (the game root's own, `destructible.ron`), where `file` is the path the author edits it by.
+pub fn read_named<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> Result<T, Refusal> {
+    reload_check::read(kind, file, text).map_err(|r| {
         Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))
     })
 }
