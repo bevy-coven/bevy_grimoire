@@ -241,7 +241,11 @@ pub const TOOLS: &[ToolDoc] = &[
                       each one's probability) or score (levels, a weighted score), with state in words, \
                       images (project files, at most four) and facts (JSON). A check that needs a picture or \
                       facts it was not given is refused and names what is missing; it never answers from \
-                      less. Advisory: it changes no map data and a finding never blocks or undoes an \
+                      less. game: also look at the running game that play started: a frame from its \
+                      bevy_fairy, named game, on the port in play.ron or game.port, and one BRP call's \
+                      answer (game.state) as facts.game; a check that asks for the image game takes it \
+                      itself, and a game's own checks live in the project's assets/grimoire/checks.ron. \
+                      Advisory: it changes no map data and a finding never blocks or undoes an \
                       operation. The endpoint is one per run, local by default; a Cloudflare endpoint sends \
                       pictures off the LAN and is opt-in.",
         read_only: true,
@@ -563,7 +567,11 @@ pub fn schemas() -> Value {
                 "state": {"type": "string", "description": "What the ad-hoc questions are about, in words."},
                 "images": {"type": "array", "maxItems": 4, "items": {"type": "object", "additionalProperties": false, "required": ["name", "path"], "properties": {"name": {"type": "string"}, "path": {"type": "string"}}}, "description": "Pictures, files under the project, each with the name a check asks for."},
                 "view": {"type": "boolean", "default": false, "description": "Also take the editor's current picture, named view."},
-                "facts": {"description": "The JSON facts: the operations run, the pieces, the camera."}
+                "facts": {"description": "The JSON facts: the operations run, the pieces, the camera."},
+                "game": {"type": "object", "additionalProperties": false, "description": "Also look at the running game: a frame from its bevy_fairy, named game, and one BRP call's answer as facts.game.", "properties": {
+                    "port": {"type": "integer", "minimum": 0, "maximum": 65535, "description": "The port the game's bevy_fairy answers on. Default: play.ron's port."},
+                    "state": {"type": "object", "additionalProperties": false, "required": ["method"], "properties": {"method": {"type": "string", "description": "The BRP method, such as world.query."}, "params": {"description": "Its parameters, if it takes any."}}, "description": "One BRP call to the game, whose answer becomes facts.game."}
+                }}
             }
         },
         "grimoire_list_snips": {
