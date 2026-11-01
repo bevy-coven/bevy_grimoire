@@ -634,7 +634,16 @@ impl Grimoire {
                        the editor keeps what it had) or needs_restart (the file reads but the editor \
                        holds that kind from when it started, as it does rigs.ron, so the edit is on \
                        disk and not in use); ok is false while any file is not applied, and seq counts \
-                       decisions, one per edit. frame is the editor's own \
+                       decisions, one per edit. reload_files is what became of the latest edit of \
+                       every file of the open project, as a running game says it: {now_unix_ms, game \
+                       {connected, watching (this editor runs with --live, the only way it reads a \
+                       game's verdict), at_unix_ms, seq}, files}, one entry per file {kind, file, state, \
+                       field, reason, at_unix_ms (when the game decided), modified_unix_ms (when the \
+                       file was written), editor (the editor's own verdict on it, or null)}; state is \
+                       no_game_connected (no game verdict has reached the editor, so nothing answered), pending \
+                       (written after the game's last decision, so its answer is about earlier text), \
+                       game_applied, game_refused (with field and reason), needs_restart or not_read \
+                       (the game's last decision did not read the file). frame is the editor's own \
                        clock: frame_ms (wall time between frames), busy_ms (work done inside one \
                        frame) and fps; a high frame_ms with a low busy_ms is the machine, not the \
                        editor. The notes section lists the sent and claimed notes (id, \
