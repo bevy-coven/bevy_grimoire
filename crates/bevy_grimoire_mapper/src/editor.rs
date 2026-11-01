@@ -2193,6 +2193,8 @@ impl Plugin for EditorPlugin {
         app.add_systems(Update, crate::forest_season::follow_date.after(crate::environment::scrub_clock));
         #[cfg(feature = "bevy_flora")]
         app.add_plugins(crate::forest_view::ForestViewPlugin);
+        #[cfg(feature = "bevy_lights")]
+        app.add_plugins(crate::light_view::LightViewPlugin);
         #[cfg(feature = "bevy_elements")]
         app.add_observer(on_environment_click);
         // **The light map (#103):** shown by its button, re-baked when the map changes, drawn over the floor.

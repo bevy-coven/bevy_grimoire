@@ -200,6 +200,7 @@ mod leaf;
 mod light_map;
 mod light_overlay;
 mod light_pool;
+mod light_view;
 mod live_writes_each_change_through;
 mod no_observer_hides_a_resource_in_a_bundle;
 mod no_system_writes_every_frame;
