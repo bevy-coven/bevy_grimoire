@@ -4219,6 +4219,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     #[cfg(all(feature = "bevy_orca", feature = "bevy_stigmergy"))]
     ("crowd_preview", "run_crowd_preview("),
     ("terrain_import", "import_terrain("),
+    // **The Terrain field's `preset` line (#99)** — `preset <name> <seed> <cell_m> <cells_x> <cells_z>`
+    // dispatches `terrain_preset` through `preset_terrain`, the same bake an agent's `apply` makes.
+    #[cfg(feature = "bevy_elements")]
+    ("terrain_preset", "preset_terrain("),
     // **The Terrain field's `forest` line (#102)** — `forest <x> <z> <radius_m> <spacing_m> <seed> <species>`
     // dispatches `forest_scatter` through `scatter_forest`, the same write an agent's `apply` makes.
     ("forest_scatter", "scatter_forest("),

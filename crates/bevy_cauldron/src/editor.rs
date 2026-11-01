@@ -5032,6 +5032,9 @@ fn terrain_edit_keys(
                 } else if cfg!(feature = "bevy_carnage") && raw.trim_start().starts_with("hit ") {
                     #[cfg(feature = "bevy_carnage")]
                     hit_destructible(project.as_deref(), &mut state, &raw);
+                } else if cfg!(feature = "bevy_elements") && raw.trim_start().starts_with("preset ") {
+                    #[cfg(feature = "bevy_elements")]
+                    preset_terrain(project.as_deref(), open.as_deref(), &mut state, &raw);
                 } else if raw.trim() == "water run" {
                     run_water(project.as_deref(), open.as_deref(), &mut state);
                 } else if raw.trim_start().starts_with("volume ") {
@@ -5357,6 +5360,40 @@ fn import_terrain(project: Option<&Project>, open: Option<&OpenMap>, state: &mut
     };
     let params = serde_json::json!({"map": open.map.name, "file": words[1], "cell_m": nums[0], "range_m": [nums[1], nums[2]]});
     match crate::ops::dispatch(&mut ctx, "terrain_import", &params) {
+        Ok(crate::ops::Applied::Done { outcome, operation_id, .. }) => {
+            state.status.note(outcome.summary.clone());
+            state.record(Undo::Logged { line: operation_id, phrase: outcome.summary, agent: false });
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    }
+}
+
+/// **Bake a `bevy_elements` preset into the map's terrain through the registry** as `terrain_preset`, from
+/// the terrain line `preset <hills|mountains|dunes|plains> <seed> <cell_m> <cells_x> <cells_z>`; the
+/// preset replaces the map's terrain and one undo takes it back, the same bake an agent's `apply` makes.
+#[cfg(feature = "bevy_elements")]
+pub fn preset_terrain(project: Option<&Project>, open: Option<&OpenMap>, state: &mut EditorState, raw: &str) {
+    let words: Vec<&str> = raw.split_whitespace().collect();
+    let parsed = (|| {
+        let [_, preset, seed, cell_m, w, d] = words.as_slice() else { return None };
+        Some((*preset, seed.parse::<u64>().ok()?, cell_m.parse::<f32>().ok()?, w.parse::<usize>().ok()?, d.parse::<usize>().ok()?))
+    })();
+    let (Some(open), Some((preset, seed, cell_m, w, d))) = (open, parsed) else {
+        state.status.problem(format!(
+            "`{}` is not `preset <hills|mountains|dunes|plains> <seed> <cell_m> <cells_x> <cells_z>`, so nothing was changed",
+            raw.trim()
+        ));
+        return;
+    };
+    let mut ctx = crate::ops::Ctx {
+        project: project.cloned(),
+        open: Some(open.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let params = serde_json::json!({"map": open.map.name, "preset": preset, "seed": seed, "cell_m": cell_m, "size": [w, d]});
+    match crate::ops::dispatch(&mut ctx, "terrain_preset", &params) {
         Ok(crate::ops::Applied::Done { outcome, operation_id, .. }) => {
             state.status.note(outcome.summary.clone());
             state.record(Undo::Logged { line: operation_id, phrase: outcome.summary, agent: false });
