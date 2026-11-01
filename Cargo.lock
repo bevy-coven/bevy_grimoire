@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "bevy",
  "bevy_grimoire_core",
@@ -1206,7 +1206,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_anim"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bevy",
  "bevy_grimoire_core",
@@ -1214,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_core"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",

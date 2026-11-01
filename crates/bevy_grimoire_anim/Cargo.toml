@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire_anim"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 description = "Clip-weight blending on a skinned rig's AnimationPlayer — no transitions, one shared gait phase."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
