@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-01
+
+- **200-game-data** `ace7b65` A game's data file that no longer reads is named instead of silently dropping its rows: a hand edit that cut a tuning file off, turned a bounded leaf into a word or removed it used to leave the Data panel empty and data_set refusing without a file, and now grimoire_state.reloads names the file and the leaf (kind game_data, `mob.speed`, one verdict per edit, the reason says what a registered file is missing or holds), says needs_restart for an edit that reads (a running game uses it only if it re-reads its data) and applied when the file is back to the text it first had, reports the registry itself as data_registry, and data_set over a file that does not scan refuses naming the file and the leaf and leaves its bytes *No clip: a reload verdict and a refusal's wording, nothing to see; proved by tests/a_game_data_file_that_does_not_read_is_named.rs (6 tests) and core tests/a_data_file_names_its_leaf_and_field.rs (8 tests)*
+
 ## 2026-10-31
 
 - **200-oplog-lines** `47777d7` A damaged line in oplog.jsonl is named instead of skipped without a word: a hand edit or a write cut short used to cost the author what that line recorded and say nothing, and now grimoire_state.reloads names the file, the line and the field of the first line that does not read (kind oplog, `line 3.seq`, `line 3.op` for a missing field, `line 3` for text that is not JSON, one verdict per edit, none for an append to a log that reads), the readers that skip still skip, and an undo past the line refuses naming it and writes nothing *No clip: a reload verdict and a refusal's wording, nothing to see; proved by tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs (4 tests) and core tests/a_json_lines_file_names_its_damaged_line_and_field.rs (7 tests)*
