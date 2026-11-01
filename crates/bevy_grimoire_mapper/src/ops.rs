@@ -3530,7 +3530,8 @@ pub mod vocab_add_token {
             std::process::id(),
             COPIES.fetch_add(1, Ordering::Relaxed)
         ));
-        std::fs::write(&copy, text).map_err(|e| Refusal::new(format!("{}: {e}", copy.display())))?;
+        bevy_grimoire_core::atomic_file::write_cache(&copy, text)
+            .map_err(|e| Refusal::new(format!("{}: {e}", copy.display())))?;
         let tried = bevy_grimoire_core::vocab::append_token(&copy, &p.axis, &p.name, &p.note);
         let _ = std::fs::remove_file(&copy);
         tried.map_err(|e| Refusal::new(format!("{e}. Nothing was added.")))
