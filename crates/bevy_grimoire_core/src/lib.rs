@@ -48,6 +48,7 @@ pub mod glb;
 pub mod grammar;
 pub mod grid;
 pub mod heightfield;
+pub mod image_header;
 pub mod import;
 pub mod kits;
 pub mod library;
