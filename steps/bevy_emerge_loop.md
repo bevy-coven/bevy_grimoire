@@ -1,6 +1,6 @@
 # Where bevy_emerge_loop's time goes
 
-Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-01 03:32Z.
+Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-01 04:01Z.
 
 ## What the last passes shipped
 
@@ -12,50 +12,51 @@ From [`bevy_emerge_loop-audit.tsv`](bevy_emerge_loop-audit.tsv): commits on main
 | 183 | 2026-11-01T02:03Z | 4 | 0 | 6 | bevy_grimoire_core-v0.2.1 | 2 | 0 | demo? |
 | 184 | 2026-11-01T02:45Z | 3 | 0 | 6 | - | 2 | 0 | demo? |
 | 185 | 2026-11-01T03:32Z | 6 | 0 | 10 | bevy_grimoire-v0.1.2,bevy_grimoire_anim-v0.1.2,bevy_grimoire_core-v0.3.0 | 3 | 0 | demo? |
+| 186 | 2026-11-01T04:01Z | 3 | 0 | 0 | - | 2 | 0 | - |
 
 ## The last 12 passes
 
 ```text
-12 pass(es), 2924 steps, 7.4 h of pass time
+12 pass(es), 2820 steps, 7.2 h of pass time
 
 category                       hours  share  steps  mean s
-model                           2.91  39.5%   1369     7.7
-wait: gate                      1.32  17.9%     23   207.0
-remote command                  0.80  10.8%    213    13.5
-wait: review                    0.49   6.7%     12   147.2
-wait: tests                     0.43   5.9%     13   120.3
+model                           2.83  39.0%   1320     7.7
+wait: gate                      1.38  19.1%     22   226.4
+remote command                  0.73  10.1%    181    14.5
+wait: review                    0.49   6.8%     12   147.5
+wait: tests                     0.43   6.0%     13   120.3
 wait: other                     0.30   4.1%     15    71.8
-cargo test                      0.26   3.6%     55    17.2
-push gate                       0.19   2.6%     40    17.0
-remote wait                     0.11   1.5%     14    28.6
+cargo test                      0.28   3.9%     58    17.6
+push gate                       0.18   2.4%     37    17.2
+loop tools                      0.10   1.4%     66     5.6
 wait: build                     0.09   1.3%      5    67.7
-loop tools                      0.09   1.2%     64     5.2
-phase mark                      0.09   1.2%     53     5.8
-github                          0.05   0.7%     43     4.2
+phase mark                      0.09   1.3%     59     5.6
+remote wait                     0.08   1.1%     11    26.5
 wait: release                   0.05   0.6%      2    82.8
-shell                           0.04   0.5%    339     0.4
+shell                           0.04   0.6%    336     0.4
+github                          0.03   0.5%     41     2.9
 
 phase                          hours  share  steps  mean s
-orient                          2.67  36.2%   1106     8.7
-prove                           1.42  19.3%    568     9.0
-gate                            1.20  16.2%    159    27.1
-build                           0.76  10.3%    310     8.9
-choose                          0.59   7.9%    458     4.6
-ship                            0.43   5.9%    157     9.9
+orient                          2.08  28.7%    845     8.8
+prove                           1.42  19.7%    568     9.0
+gate                            1.37  18.9%    167    29.6
+build                           0.97  13.4%    414     8.4
+choose                          0.63   8.7%    483     4.7
+ship                            0.47   6.5%    177     9.5
 release                         0.20   2.7%     77     9.2
 research                        0.05   0.6%     50     3.3
-log                             0.04   0.6%     16     9.4
+log                             0.04   0.6%     18     8.9
 bugs                            0.01   0.2%     13     4.1
 
 slowest single steps
   pass  176     641s  tool  wait: gate           Waiting for gate result
+  pass  186     592s  tool  wait: gate           Waiting for gate to finish
   pass  183     432s  tool  wait: gate           Waiting for the gate result
   pass  185     408s  tool  wait: gate           Waiting for gate and release to finish
   pass  174     340s  tool  wait: review         Waiting for reviewer result
   pass  172     336s  tool  wait: gate           Waiting for the gate result
   pass  176     331s  tool  wait: tests          Waiting for core test results or big build
   pass  177     320s  tool  wait: other          Waiting for the after-run
-  pass  169     300s  bg    shell                bg_2 failed: cat > /tmp/p160/build1.sh <<'EOF' cd ~/p160/grimoire export CARGO_TARGET_DIR=
   pass  173     288s  model model                
   pass  184     280s  bg    subagents            NotesViewReview completed: NotesViewReview
   pass  172     275s  tool  wait: tests          Waiting for the build/test or the reviewer
@@ -68,35 +69,35 @@ slowest single steps
 ## Every pass recorded
 
 ```text
-165 pass(es), 11264 steps, 82.0 h of pass time
+166 pass(es), 11432 steps, 82.5 h of pass time
 
 category                       hours  share  steps  mean s
-wait: other                    31.74  38.7%    174   656.7
-wait: tests                    18.79  22.9%     92   735.2
-wait: gate                     12.29  15.0%     67   660.5
-model                           8.54  10.4%   5305     5.8
-cargo test                      2.47   3.0%    283    31.4
+wait: other                    31.74  38.5%    174   656.7
+wait: tests                    18.79  22.8%     92   735.2
+wait: gate                     12.46  15.1%     68   659.5
+model                           8.71  10.6%   5385     5.8
+cargo test                      2.51   3.0%    290    31.1
 wait: build                     2.32   2.8%     14   597.2
-remote command                  0.95   1.2%    249    13.8
-push gate                       0.89   1.1%    285    11.2
+remote command                  0.97   1.2%    258    13.6
+push gate                       0.89   1.1%    286    11.2
 wait: clip                      0.66   0.8%     12   198.0
-wait: review                    0.58   0.7%     14   148.1
-shell                           0.49   0.6%   2387     0.7
+wait: review                    0.62   0.7%     15   147.9
+shell                           0.49   0.6%   2408     0.7
 wait: release                   0.46   0.6%      3   546.9
 cargo build                     0.40   0.5%     42    34.2
-loop tools                      0.30   0.4%    382     2.8
+loop tools                      0.31   0.4%    389     2.9
 cargo clippy                    0.29   0.4%     31    33.7
 
 phase                          hours  share  steps  mean s
-orient                         77.34  94.3%   9422    29.6
+orient                         77.35  93.7%   9431    29.5
 prove                           1.42   1.7%    568     9.0
-gate                            1.20   1.5%    159    27.1
-build                           0.76   0.9%    310     8.9
-choose                          0.59   0.7%    458     4.6
-ship                            0.43   0.5%    157     9.9
+gate                            1.37   1.7%    167    29.6
+build                           0.97   1.2%    414     8.4
+choose                          0.63   0.8%    483     4.7
+ship                            0.47   0.6%    177     9.5
 release                         0.20   0.2%     77     9.2
 research                        0.05   0.1%     50     3.3
-log                             0.04   0.1%     16     9.4
+log                             0.04   0.1%     18     8.9
 bugs                            0.01   0.0%     13     4.1
 
 slowest single steps
