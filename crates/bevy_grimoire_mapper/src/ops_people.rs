@@ -52,11 +52,24 @@ pub struct Tie {
     pub trust: f32,
 }
 
+/// The format version of a people file (#202). A file with no `version` is the first.
+pub const PEOPLE_VERSION: u32 = 1;
+
 /// A map's people: `<grimoire_dir>/people/<map>.ron`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct People {
+    /// The format version: [`PEOPLE_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "bevy_grimoire_core::format_version::first", deserialize_with = "bevy_grimoire_core::format_version::read::<_, PEOPLE_VERSION>")]
+    pub version: u32,
     pub people: Vec<Person>,
+}
+
+impl Default for People {
+    fn default() -> Self {
+        People { version: PEOPLE_VERSION, people: Vec::new() }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

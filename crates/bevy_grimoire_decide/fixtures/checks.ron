@@ -3,6 +3,7 @@
 // is a finding. `calibration` is None until a labelled set of real captures has earned one, and a
 // check without one is advisory: it can never block the loop's gate.
 (
+    version: 1,
     checks: [
         (
             name: "floating",

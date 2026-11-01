@@ -68,11 +68,24 @@ fn is_default_bind(b: &Bind) -> bool {
     *b == Bind::default()
 }
 
+/// The format version of a triggers file (#202). A file with no `version` is the first.
+pub const SCRIPTS_VERSION: u32 = 1;
+
 /// A map's triggers: `<grimoire_dir>/scripts/<map>.ron`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scripts {
+    /// The format version: [`SCRIPTS_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "bevy_grimoire_core::format_version::first", deserialize_with = "bevy_grimoire_core::format_version::read::<_, SCRIPTS_VERSION>")]
+    pub version: u32,
     pub triggers: Vec<Trigger>,
+}
+
+impl Default for Scripts {
+    fn default() -> Self {
+        Scripts { version: SCRIPTS_VERSION, triggers: Vec::new() }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

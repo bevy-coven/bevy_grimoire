@@ -102,6 +102,6 @@ fn only_a_calibrated_check_at_the_bar_may_block() {
         date: "2026-10-29".into(),
     });
     assert!(c.may_block(0.9) && !c.may_block(0.96));
-    let round = Checks { checks: vec![c.clone()] };
+    let round = Checks { checks: vec![c.clone()], ..Checks::default() };
     assert_eq!(Checks::from_ron(&round.to_ron().unwrap()).unwrap(), round);
 }

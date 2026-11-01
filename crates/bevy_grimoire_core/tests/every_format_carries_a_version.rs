@@ -3,12 +3,15 @@
 //!
 //! A format that carries no version cannot change shape without breaking the projects already on disk:
 //! a reader has no way to tell an old file from a damaged one. So each kind of
-//! `bevy_grimoire_core::reload::KINDS` is in exactly one of three places:
+//! `bevy_grimoire_core::reload::KINDS` is in exactly one of four places:
 //!
 //! - **versioned**: the type this crate parses has a root `version`, and the test below proves that a
 //!   file one version ahead of what this build reads is refused, naming the version the build reads, and
 //!   that a file from before the first version is read or refused the same way (a cache is the one
 //!   exception: a file of another version is stale, and made again);
+//! - **versioned above**: the type lives in a layer above this crate (the editor, the decision crate), so
+//!   this crate cannot parse a sample; the entry names the test over there that proves the same two
+//!   things, and a test here fails when that file is gone or does not name the kind;
 //! - **unversioned**: the debt. The list may shrink and never silently grow, and a kind comes off it in
 //!   the commit that gives its type a `version` (with `#[serde(default)]` so the files already on disk,
 //!   frozen in `tests/old_data/`, keep reading);
@@ -35,17 +38,21 @@ use bevy_grimoire_core::water::{WATER_FIELD_VERSION, WaterField, WaterPlan};
 
 /// **The kinds whose format has no version today**, each with what is left to do. Checked in: a kind
 /// leaves this list in the commit that versions it.
-const UNVERSIONED: &[(&str, &str)] = &[
-    ("checks", "`checks.ron`, a list of checks read by the decision layer"),
-    ("oplog", "the operation log: one JSON object per line, with no version of the line's shape"),
-    ("forest", "a map's planted forest, its trees in the order they were planted"),
-    ("people", "a map's people, each with their needs and ties"),
-    ("scripts", "a map's triggers and the scripts they run"),
-];
+const UNVERSIONED: &[(&str, &str)] = &[("oplog", "the operation log: one JSON object per line, with no version of the line's shape")];
 
 /// **A literal, not `UNVERSIONED.len()`**: a number that is its own measure can never fail. Lower it with
 /// the list; raising it is a decision a reviewer must see.
-const UNVERSIONED_MAX: usize = 5;
+const UNVERSIONED_MAX: usize = 1;
+
+/// **Kinds whose type lives above this crate and carries a version there**: the kind, the test that proves
+/// it (a path from the workspace root) and what the type is. The proof reads a file one version ahead and
+/// one from before the first the way this file does for the kinds core parses.
+const VERSIONED_ABOVE: &[(&str, &str, &str)] = &[
+    ("forest", "crates/bevy_grimoire_mapper/tests/a_forest_people_or_scripts_file_of_another_version_is_refused.rs", "the editor's `Forest`, a map's planted trees"),
+    ("people", "crates/bevy_grimoire_mapper/tests/a_forest_people_or_scripts_file_of_another_version_is_refused.rs", "the editor's `People`, a map's people"),
+    ("scripts", "crates/bevy_grimoire_mapper/tests/a_forest_people_or_scripts_file_of_another_version_is_refused.rs", "the editor's `Scripts`, a map's triggers"),
+    ("checks", "crates/bevy_grimoire_decide/tests/a_checks_file_of_another_version_is_refused.rs", "the decision crate's `Checks`"),
+];
 
 /// **Kinds whose format is not the editor's to version**, and whose it is.
 const OWNED_ELSEWHERE: &[(&str, &str)] = &[
@@ -143,20 +150,38 @@ fn names_number(reason: &str, n: u32) -> bool {
 #[test]
 fn every_kind_is_versioned_unversioned_or_owned_elsewhere() {
     let versioned: Vec<&str> = versioned().iter().map(|v| v.0).collect();
+    let above: Vec<&str> = VERSIONED_ABOVE.iter().map(|a| a.0).collect();
     let unversioned: Vec<&str> = UNVERSIONED.iter().map(|u| u.0).collect();
     let elsewhere: Vec<&str> = OWNED_ELSEWHERE.iter().map(|u| u.0).collect();
     let mut seen = BTreeSet::new();
-    for id in versioned.iter().chain(&unversioned).chain(&elsewhere) {
-        assert!(seen.insert(*id), "`{id}` is listed twice: a kind is versioned, unversioned or owned elsewhere, one of them");
+    for id in versioned.iter().chain(&above).chain(&unversioned).chain(&elsewhere) {
+        assert!(seen.insert(*id), "`{id}` is listed twice: a kind is versioned, versioned above, unversioned or owned elsewhere, one of them");
     }
     let all: BTreeSet<&str> = KINDS.iter().map(|k| k.id).collect();
     assert_eq!(
         seen,
         all,
-        "every kind of bevy_grimoire_core::reload::KINDS says how its format is versioned: add the new kind to `versioned()` (when its type has a `version`), to UNVERSIONED (and say why not) or to OWNED_ELSEWHERE (and say whose it is)"
+        "every kind of bevy_grimoire_core::reload::KINDS says how its format is versioned: add the new kind to `versioned()` (when its type has a `version`), to VERSIONED_ABOVE (when its type lives above this crate and has one), to UNVERSIONED (and say why not) or to OWNED_ELSEWHERE (and say whose it is)"
     );
     for (id, why) in UNVERSIONED.iter().chain(OWNED_ELSEWHERE) {
         assert!(why.split_whitespace().count() >= 4, "`{id}` says too little about why: `{why}`");
+    }
+    for (id, _, what) in VERSIONED_ABOVE {
+        assert!(what.split_whitespace().count() >= 3, "`{id}` says too little about what the type is: `{what}`");
+    }
+}
+
+/// **A kind versioned above this crate has its proof, and the proof is about that kind.** The proof is a
+/// test in the layer that owns the type; this crate only checks that the file is there and names the kind
+/// and the version, so an entry cannot outlive its test.
+#[test]
+fn a_kind_versioned_above_this_crate_names_a_proof_that_is_there() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (id, proof, _) in VERSIONED_ABOVE {
+        let text = std::fs::read_to_string(root.join(proof)).unwrap_or_else(|e| panic!("`{id}`: its proof `{proof}` is not there: {e}"));
+        assert!(text.contains("version"), "`{id}`: `{proof}` does not say anything about a version");
+        let named = text.split(|c: char| !c.is_alphanumeric() && c != '_').any(|word| word == *id);
+        assert!(named, "`{id}`: `{proof}` never names the kind, so it cannot be its proof");
     }
 }
 
