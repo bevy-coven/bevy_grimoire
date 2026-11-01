@@ -280,7 +280,6 @@ const UNMIGRATED: &[Action] = &[
     Action::CellBack,
     Action::LayerDown,
     Action::LayerUp,
-    Action::CellSolid,
     Action::TileListPrev,
     Action::TileListNext,
     Action::BuildForward,
@@ -305,8 +304,6 @@ const UNMIGRATED: &[Action] = &[
     Action::ClearTile,
     Action::BuildTurn,
     Action::BuildRung,
-    Action::CellEdge,
-    Action::CellClear,
     Action::ScanMesh,
     Action::FocusCandidates,
     Action::CopyInfo,
@@ -351,7 +348,8 @@ const UNMIGRATED: &[Action] = &[
 // 104 -> 103: `ExcludePack` -> `pack_set_excluded` (E-002, #129 slice 7): `Shift+R` leaves a pack out of the kit, or brings it back, through the operation an agent calls.
 // 103 -> 102: `RemoveTile` -> `piece_remove` (E-002, #129 slice 8): `Delete` on a library piece sends it back out of the library through the operation an agent calls.
 // 102 -> 99: `RotateMeshX`, `RotateMeshY` and `RotateMeshZ` -> `piece_turn` (E-002, #129 slice 9): `N`, `O`, `P`, the rotate chips and the labeler's righting turn a library piece through the operation an agent calls.
-const UNMIGRATED_MAX: usize = 99;
+// 99 -> 96: `CellSolid`, `CellEdge` and `CellClear` -> `piece_set_cells` (E-002, #129 slice 10): `Z`, `X`, `V`, the lattice grid's chips and headers edit a library piece's cells through the operation an agent calls.
+const UNMIGRATED_MAX: usize = 96;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///

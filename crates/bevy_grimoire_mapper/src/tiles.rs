@@ -2263,6 +2263,31 @@ fn apply_verb_to(
             return;
         }
     };
+    // **A library piece's cells are written by `piece_set_cells` (E-002, #129 slice 10)**, the operation
+    // an agent calls, so the key, the chip, the header and an agent are one change with one log line.
+    // A candidate is not in the library yet, so it has no operation to name: its cells are edited in
+    // memory, below, and written by Accept.
+    if let Some(id) = state.selected_library_id.clone() {
+        match verb {
+            CellVerb::Solid => {
+                // **A span is set, not toggled**; one cell keeps the toggle, because there the before
+                // and after are both visible.
+                let solid_now = project
+                    .measured
+                    .get(&id)
+                    .and_then(|d| d.subgrid.as_ref())
+                    .is_some_and(|g| g.cells.iter().any(|c| c.at == first && c.solid));
+                let want = many || !solid_now;
+                crate::editor::set_cells(state, project, &id, cells, serde_json::json!({"solid": want}));
+                return;
+            }
+            CellVerb::Clear => {
+                crate::editor::set_cells(state, project, &id, cells, serde_json::json!({"clear": true}));
+                return;
+            }
+            CellVerb::Edge => {}
+        }
+    }
     match verb {
         CellVerb::Solid => {
             // Taken before the write — the only moment the old value still exists.
@@ -2658,6 +2683,12 @@ fn cell_keys(
                     return;
                 };
                 let token = bevy_grimoire_core::naming::to_snake_case(&raw);
+                // **A library piece's token goes through `piece_set_cells`**, as the other two verbs'
+                // cells do; a candidate's stays in memory until Accept.
+                if let EditTarget::Library(id) = &target {
+                    crate::editor::set_cells(&mut state, &mut project, id, &targets, serde_json::json!({"edge": token}));
+                    return;
+                }
                 // Before the mutable borrow: the write is range-checked against these. Derived from
                 // **`target`**, the tile this field was opened on, and not from the live selection —
                 // see `ImportState::placed_at_target` for what that cost.

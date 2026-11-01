@@ -908,6 +908,7 @@ impl Action {
             Action::ExcludePack => Some("pack_set_excluded"),
             Action::RemoveTile => Some("piece_remove"),
             Action::RotateMeshX | Action::RotateMeshY | Action::RotateMeshZ => Some("piece_turn"),
+            Action::CellSolid | Action::CellEdge | Action::CellClear => Some("piece_set_cells"),
             Action::RenameMap => Some("map_rename"),
             Action::NoteTool => Some("note_add"),
             Action::SetRule => Some("rules_set"),

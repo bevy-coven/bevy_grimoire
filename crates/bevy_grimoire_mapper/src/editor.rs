@@ -4410,6 +4410,50 @@ pub fn turn_piece(
     }
 }
 
+/// **Edit cells of one library piece's lattice through the operation** (E-002, #129 slice 10). `Z`, `X`
+/// and `V` on the Meshes tab, the grid's chips and its headers call this, so a person's edit is the
+/// change an agent's `piece_set_cells` makes, with the person's source, and its log line is one Cmd+Z on
+/// the Meshes tab. `change` is the verb's own field (`{"solid": true}`, `{"edge": "wall"}` or
+/// `{"clear": true}`). Returns `true` when the write landed; a refusal goes to the status row.
+pub fn set_cells(
+    import: &mut crate::tiles::ImportState,
+    project: &mut crate::project::Project,
+    id: &str,
+    cells: &[(u32, u32, u32)],
+    change: serde_json::Value,
+) -> bool {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let mut params = serde_json::json!({"id": id, "cells": cells});
+    if let (Some(p), Some(c)) = (params.as_object_mut(), change.as_object()) {
+        p.extend(c.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
+    match crate::ops::dispatch(&mut ctx, "piece_set_cells", &params) {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            if let Some(fresh) = ctx.project {
+                adopt_library(project, &fresh);
+            }
+            import.record_logged(operation_id, outcome.summary.clone());
+            import.status.note(outcome.summary);
+            true
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            import.status.problem(e.0);
+            false
+        }
+    }
+}
+
 /// **Carry the library a label operation changed onto the live project.** Only the fields a
 /// library write touches move: the measured library and the layers the Map draws from it, and the
 /// kit's policy (a pack's exclusion). A clone is not the live state, so without this the write would

@@ -3117,6 +3117,358 @@ pub mod piece_turn {
     }
 }
 
+/// **Mark, open, type or forget cells of a library piece's lattice (E-002, #129 slice 10).**
+///
+/// The `Z`, `X` and `V` keys on the Meshes tab and the lattice grid's chips and headers wrote a
+/// piece's cells with a write of their own, so an agent could set a piece's edge tokens by labelling
+/// and never mark a cell solid or open, no log line named the edit, and the registry's two-front-end
+/// rule listed the three keys as unmigrated. This is the same edit, named: `id` picks the piece,
+/// `cells` the cells (`[x, y, z]`, any number, one act and one undo) and exactly one of `solid`
+/// (true marks them, false opens them), `edge` (a token; an empty one clears it) or `clear` (forget
+/// the cell) says what to do to them.
+///
+/// # The refusals are the grid's own
+///
+/// A cell outside the lattice the piece stands on is refused, naming it and the lattice's size,
+/// before any cell is written (the keys wrote the cells before it and then said the last was outside).
+/// An edit that would change nothing is refused too, so the log never holds an empty line.
+/// The plan asks the project as the commit does ([`crate::tiles::check_measured`]), so a token the
+/// vocabulary does not hold is refused in a preview.
+///
+/// # Undo is the lattice, as it was
+///
+/// The inverse is this operation again with `restore` (the whole lattice, or none), undo-only.
+pub mod piece_set_cells {
+    use super::*;
+    use bevy_grimoire_core::descriptor::{Descriptor, Subgrid};
+    use serde_json::json;
+
+    /// **What an undo puts back**: the lattice as it was, or none.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Restore {
+        pub subgrid: Option<Subgrid>,
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// The library piece's id, as the Meshes shelf names it.
+        pub id: String,
+        /// The cells, as `[x, y, z]`.
+        #[serde(default)]
+        pub cells: Vec<(u32, u32, u32)>,
+        /// `true` marks the cells solid, `false` opens them.
+        #[serde(default)]
+        pub solid: Option<bool>,
+        /// An edge token to put on the cells. An empty one takes the token off.
+        #[serde(default)]
+        pub edge: Option<String>,
+        /// Forget everything about the cells.
+        #[serde(default)]
+        pub clear: bool,
+        /// **Undo only.** The lattice to put back.
+        #[serde(default)]
+        pub restore: Option<Restore>,
+    }
+
+    enum Change {
+        Solid(bool),
+        Edge(String),
+        Clear,
+    }
+
+    enum Request {
+        Set {
+            id: String,
+            cells: Vec<(u32, u32, u32)>,
+            change: Change,
+        },
+        Restore {
+            id: String,
+            restore: Restore,
+        },
+    }
+
+    fn request(raw: &serde_json::Value) -> Result<Request, Refusal> {
+        let p: Params = serde_json::from_value(raw.clone()).map_err(|e| {
+            Refusal::new(format!(
+                "this is not a cell edit: {e}. The fields are `id`, `cells` (`[x, y, z]` each) and one \
+                 of `solid`, `edge` or `clear`."
+            ))
+        })?;
+        if let Some(restore) = p.restore {
+            if p.cells.is_empty() && p.solid.is_none() && p.edge.is_none() && !p.clear {
+                return Ok(Request::Restore { id: p.id, restore });
+            }
+            return Err(Refusal::new(
+                "a put-back is the whole lattice, so it takes `id` and `restore` and nothing else; \
+                 only an undo sends it. Nothing was changed.",
+            ));
+        }
+        let verbs = usize::from(p.solid.is_some()) + usize::from(p.edge.is_some()) + usize::from(p.clear);
+        if verbs != 1 {
+            return Err(Refusal::new(
+                "an edit does one thing to its cells: give exactly one of `solid` (true or false), \
+                 `edge` (a token, empty to clear it) or `clear`. Nothing was changed.",
+            ));
+        }
+        if p.cells.is_empty() {
+            return Err(Refusal::new("no cells to edit \u{2014} give `cells`, each `[x, y, z]`. Nothing was changed."));
+        }
+        let change = match (p.solid, p.edge) {
+            (Some(solid), _) => Change::Solid(solid),
+            (_, Some(edge)) => Change::Edge(bevy_grimoire_core::naming::to_snake_case(&edge)),
+            _ => Change::Clear,
+        };
+        Ok(Request::Set {
+            id: p.id,
+            cells: p.cells,
+            change,
+        })
+    }
+
+    fn state_json(d: &Descriptor) -> serde_json::Value {
+        json!({"id": d.id, "lattice": d.subgrid})
+    }
+
+    struct Edit {
+        measured: bevy_grimoire_core::library::Library,
+        before: Restore,
+        after: Option<Subgrid>,
+        summary: String,
+        id: String,
+    }
+
+    fn at_text(at: (u32, u32, u32)) -> String {
+        format!("{},{},{}", at.0, at.1, at.2)
+    }
+
+    /// **The edit, computed on a copy of the measured library.** Nothing is written here.
+    fn edit(project: &Project, req: &Request) -> Result<Edit, Refusal> {
+        let id = match req {
+            Request::Set { id, .. } | Request::Restore { id, .. } => id,
+        };
+        let mut measured = (*project.measured).clone();
+        let Some(index) = measured.descriptors.iter().position(|d| &d.id == id) else {
+            if let Some(ns) = project.other_kit_of(id) {
+                return Err(Refusal::new(format!(
+                    "`{id}` belongs to kit `{ns}`, not the kit being authored (`{}`), so nothing was changed.",
+                    project.namespace
+                )));
+            }
+            let ids: Vec<&str> = measured.descriptors.iter().map(|d| d.id.as_str()).collect();
+            let hint = match nearest_ids(&ids, id) {
+                near if near.is_empty() => String::new(),
+                near => format!(" Close ids: {}.", near.join(", ")),
+            };
+            return Err(Refusal::new(format!(
+                "no library piece is called `{id}`, so nothing was changed.{hint} Pick one from the \
+                 Meshes shelf."
+            )));
+        };
+        let before = Restore {
+            subgrid: measured.descriptors[index].subgrid.clone(),
+        };
+        let summary = match req {
+            Request::Restore { restore, .. } => {
+                measured.descriptors[index].subgrid = restore.subgrid.clone();
+                format!("put `{id}`'s lattice back as it was")
+            }
+            Request::Set { cells, change, .. } => {
+                // **The lattice as the piece is placed**, the one a write is range-checked against.
+                let div = project
+                    .library
+                    .get(id)
+                    .ok_or_else(|| Refusal::new(format!("`{id}` is not in the layered library, so it has no lattice.")))
+                    .and_then(|placed| project.divisions_of(placed).map_err(Refusal::new))?;
+                let mut cells = cells.clone();
+                cells.sort_unstable();
+                cells.dedup();
+                if let Some(&out) = cells
+                    .iter()
+                    .find(|c| c.0 >= div.0 || c.1 >= div.1 || c.2 >= div.2)
+                {
+                    return Err(Refusal::new(format!(
+                        "cell {} is outside `{id}`'s {}x{}x{} lattice, so nothing was changed.",
+                        at_text(out),
+                        div.0,
+                        div.1,
+                        div.2
+                    )));
+                }
+                let d = &mut measured.descriptors[index];
+                let solid_now = |d: &Descriptor, at| {
+                    d.subgrid
+                        .as_ref()
+                        .is_some_and(|g| g.cells.iter().any(|c| c.at == at && c.solid))
+                };
+                match change {
+                    Change::Solid(want) => {
+                        for &at in &cells {
+                            match (*want, solid_now(d, at)) {
+                                (true, false) => {
+                                    d.lattice_mut().set_solid(at, div);
+                                }
+                                (false, true) => {
+                                    d.lattice_mut().toggle_solid(at, div);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Change::Edge(token) => {
+                        for &at in &cells {
+                            d.lattice_mut().set_edge(at, div, token);
+                        }
+                    }
+                    Change::Clear => {
+                        if let Some(grid) = d.subgrid.as_mut() {
+                            for &at in &cells {
+                                grid.clear(at);
+                            }
+                        }
+                    }
+                }
+                d.settle_lattice();
+                if d.subgrid == before.subgrid {
+                    return Err(Refusal::new(format!(
+                        "that would change nothing on `{id}` (the cells already are so), so nothing was changed."
+                    )));
+                }
+                let many = cells.len() > 1;
+                let which = if many {
+                    format!("{} cells", cells.len())
+                } else {
+                    format!("cell {}", at_text(cells[0]))
+                };
+                match change {
+                    Change::Solid(true) if many => format!("{which} solid"),
+                    Change::Solid(true) => format!("{which} is solid"),
+                    Change::Solid(false) if many => format!("{which} open"),
+                    Change::Solid(false) => format!("{which} is open"),
+                    Change::Edge(t) if t.is_empty() && many => format!("{which}' tokens cleared"),
+                    Change::Edge(t) if t.is_empty() => format!("{which} token cleared"),
+                    Change::Edge(t) if many => format!("{which} = `{t}`"),
+                    Change::Edge(t) => format!("{which} = `{t}`"),
+                    Change::Clear => format!("{which} cleared"),
+                }
+            }
+        };
+        let after = measured.descriptors[index].subgrid.clone();
+        // **The project must take it, asked now**, so a preview refuses what the commit would refuse
+        // (an edge token the vocabulary does not hold).
+        crate::tiles::check_measured(project, &measured).map_err(|why| {
+            Refusal::new(format!("the project would not take this, so nothing was changed: {why}"))
+        })?;
+        Ok(Edit {
+            measured,
+            before,
+            after,
+            summary,
+            id: id.clone(),
+        })
+    }
+
+    /// **Edit cells of one library piece's lattice, or (an undo) put the lattice back.**
+    pub struct PieceSetCells;
+
+    impl Operation for PieceSetCells {
+        fn name(&self) -> &'static str {
+            "piece_set_cells"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            &["library"]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::Inverse
+        }
+
+        /// **It writes the library**, so its logged change joins the Meshes history.
+        fn writes_library(&self) -> bool {
+            true
+        }
+
+        /// **A put-back is never a request an agent may send.**
+        fn only_as_undo(&self, params: &serde_json::Value) -> bool {
+            matches!(request(params), Ok(Request::Restore { .. }))
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "cells"],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "The library piece's id, as grimoire/pieces names it, e.g. site/wall."
+                    },
+                    "cells": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 3, "maxItems": 3},
+                        "description": "The lattice cells to edit, each [x, y, z]. A cell outside the piece's lattice refuses the whole edit."
+                    },
+                    "solid": {
+                        "type": "boolean",
+                        "description": "true marks the cells solid, false opens them. Give exactly one of solid, edge or clear."
+                    },
+                    "edge": {
+                        "type": "string",
+                        "description": "An edge token to put on the cells, snake-cased; the project's vocabulary must hold it. An empty string takes the token off."
+                    },
+                    "clear": {
+                        "type": "boolean",
+                        "description": "true forgets everything about the cells (solid and token)."
+                    }
+                }
+            })
+        }
+
+        /// **The piece's lattice now**, against the one the change recorded.
+        fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
+            let id = after.get("id")?.as_str()?;
+            let project = ctx.project.as_ref()?;
+            let d = project.measured.descriptors.iter().find(|d| d.id == id)?;
+            Some(state_json(d))
+        }
+
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let req = request(params)?;
+            let Some(project) = ctx.project.as_ref() else {
+                return Err(Refusal::new("no project is open, so there is no library to edit a lattice in."));
+            };
+            let e = edit(project, &req)?;
+            Ok(json!({"id": e.id, "lattice": e.after, "summary": e.summary}))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let req = request(params)?;
+            let Some(project) = ctx.project.as_mut() else {
+                return Err(Refusal::new("no project is open, so there is no library to edit a lattice in."));
+            };
+            let Edit {
+                measured,
+                before,
+                after,
+                summary,
+                id,
+            } = edit(project, &req)?;
+            crate::tiles::commit_measured(project, measured).map_err(Refusal::new)?;
+            Ok(Outcome {
+                summary,
+                affected: 1,
+                saved: true,
+                // **Redo is the same put-back**, of the edited lattice.
+                inverse: Some(json!({"id": id, "restore": before})),
+                after: Some(json!({"id": id, "lattice": after})),
+            })
+        }
+    }
+}
+
 /// **Every operation the editor knows, in one list.**
 ///
 /// **The one list.** The MCP tool surface, the parity test and the log's vocabulary are all read
@@ -3135,6 +3487,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(piece_import::PieceImport),
         Box::new(piece_remove::PieceRemove),
         Box::new(piece_turn::PieceTurn),
+        Box::new(piece_set_cells::PieceSetCells),
         Box::new(placement_set_pin::PlacementSetPin),
         Box::new(placement_set_yaw::PlacementSetYaw),
         Box::new(placement_set_tip::PlacementSetTip),
@@ -3404,6 +3757,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The mesh turn (E-002, #129 slice 9)** — `N`, `O`, `P` and the three rotate chips call
     // `turn_piece` for a library piece and dispatch `piece_turn`, the same write an agent's `apply` makes.
     ("piece_turn", "turn_piece("),
+    // **The lattice's cell verbs (E-002, #129 slice 10)** — `Z`, `X`, `V`, the grid's chips and its headers
+    // call `set_cells` for a library piece and dispatch `piece_set_cells`, the same write an agent's `apply` makes.
+    ("piece_set_cells", "set_cells("),
     // **The door and tab keys and the door switch**, which open a door through `open_door`, and that
     // runs the `door_open` operation (item 1 of cycle 8).
     ("door_open", "open_door("),
