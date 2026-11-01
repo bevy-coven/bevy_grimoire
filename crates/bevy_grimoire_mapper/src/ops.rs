@@ -3773,13 +3773,21 @@ fn append(ctx: &Ctx, entry: &mut Entry) -> Result<(), String> {
     // `operation_id` (E-004). The lock is advisory and released when `f` is dropped; it is held
     // across processes, so an editor and an MCP server writing one project do not collide.
     f.lock().map_err(|e| format!("{}: {e}", path.display()))?;
-    let seq = {
+    let (seq, torn) = {
         use std::io::Read;
         let mut text = String::new();
         f.read_to_string(&mut text)
             .map_err(|e| format!("{}: {e}", path.display()))?;
-        text.lines().filter(|l| !l.trim().is_empty()).count() as u64
+        let seq = text.lines().filter(|l| !l.trim().is_empty()).count() as u64;
+        (seq, !text.is_empty() && !text.ends_with('\n'))
     };
+    // **A torn last line ends before the new one starts.** A write cut short leaves text with no
+    // `\n`; appending straight after it glued the next entry onto the torn text and lost both (#206).
+    // The torn text stays one damaged line, which `oplog_view` names, and the entry is on its own.
+    if torn {
+        use std::io::Write;
+        f.write_all(b"\n").map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     entry.seq = seq;
     entry.operation_id = operation_id_for(seq, &ctx.session);
     // **A line that cannot be serialised is a failure, not a substitute.** A log line that says
