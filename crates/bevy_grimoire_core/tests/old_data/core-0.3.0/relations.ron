@@ -1,4 +1,7 @@
 (
     version: 1,
-    relations: [],
+    relations: [
+        (of: "chair@1", kind: Near(to: "desk@1", within: 1.5), hard: true),
+        (of: "lamp@1", kind: Faces("desk@1")),
+    ],
 )

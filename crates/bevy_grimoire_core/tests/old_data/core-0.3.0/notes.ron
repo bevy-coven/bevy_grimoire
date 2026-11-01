@@ -1,5 +1,12 @@
 (
     version: 1,
-    notes: [],
+    notes: [
+        (
+            id: "n1",
+            targets: [Placement("chair@1"), Cell(1, 2)],
+            text: "move the chair to the window",
+            state: Open,
+        ),
+    ],
     lease_secs: 300,
 )

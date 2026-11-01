@@ -1,1 +1,6 @@
-(version: 1, files: [])
+(
+    version: 1,
+    files: [
+        (id: "tuning", path: "tuning.ron", note: Some("the game's tuning"), bounds: {}),
+    ],
+)

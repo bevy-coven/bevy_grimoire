@@ -1,5 +1,7 @@
 (
     version: 1,
-    refs: [],
-    issued: 0,
+    refs: [
+        (id: "r1", path: "references/sketch.png", caption: "the sketch of the yard"),
+    ],
+    issued: 1,
 )

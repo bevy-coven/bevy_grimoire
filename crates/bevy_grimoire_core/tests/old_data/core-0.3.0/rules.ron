@@ -1,1 +1,17 @@
-(version: 1, blocks: [])
+(
+    version: 1,
+    blocks: [
+        (
+            example: "site/yard",
+            regions: ["a"],
+            cell: 1.0,
+            size: (4, 4),
+            border: Some("site/wall"),
+            no_empty: true,
+            weights: [],
+            footprints: [],
+            attempts: 50,
+            seed: 7,
+        ),
+    ],
+)

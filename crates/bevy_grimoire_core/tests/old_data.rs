@@ -1,16 +1,19 @@
 //! **Data an earlier release wrote keeps reading** (#200 step 5, after Kleppmann on schema evolution).
 //!
 //! A settings struct may gain a field only if the field has a default, and may lose one only if no
-//! file still needs it: a reader that meets an old file with a field it never heard of, or without a
-//! field it now requires, refuses the file. The game's copy of the project is such a file, so an edit
-//! to a type that breaks them breaks every project already on disk.
+//! file still needs it: a reader that meets an old file without a field it now requires refuses the
+//! file, and so does one that meets a field it never heard of when its type denies unknown fields
+//! (`#[serde(deny_unknown_fields)]`; a type without it reads the old file and drops the field, which
+//! no test here can see). The game's copy of the project is such a file, so an edit to a type that
+//! breaks them breaks every project already on disk.
 //!
 //! `tests/old_data/` freezes one file of every kind [`reload_check::check`] reads, **as a release
 //! wrote it**, and this test reads each with the type's own reader. The first release's files
-//! (`core-0.1.0/`) are the project files exactly as `bevy_emerge_core` 0.1.0 shipped them; the others
-//! (`core-0.3.0/`) are what 0.3.0 writes, for the kinds the first release shipped no sample of. A type
-//! that no longer reads one of them is refused here, naming the kind, the file, the field and the
-//! release that wrote it.
+//! (`core-0.1.0/`) are the project files exactly as `bevy_emerge_core` 0.1.0, the first release, shipped
+//! them, taken from its git tag; the others (`core-0.3.0/`) are what `bevy_grimoire_core` 0.3.0 writes,
+//! for the kinds the first release shipped no sample of, each collection holding one element so that
+//! the element types are read too. A type that no longer reads one of them is refused here, naming the
+//! kind, the file, the field and the release that wrote it.
 //!
 //! A frozen file is never edited. A type that has to change shape bumps its version, migrates the old
 //! version and keeps the old file reading; the new version's file is added beside the old one.
@@ -33,34 +36,35 @@ macro_rules! frozen {
 }
 
 const FROZEN: &[Frozen] = &[
-    frozen!("kits", "kits.ron", "0.1.0", "old_data/core-0.1.0/kits.ron"),
-    frozen!("vocab", "vocab.ron", "0.1.0", "old_data/core-0.1.0/vocab.ron"),
-    frozen!("library", "scp/library.ron", "0.1.0", "old_data/core-0.1.0/library.ron"),
-    frozen!("policy", "site/project.ron", "0.1.0", "old_data/core-0.1.0/policy.ron"),
-    frozen!("policy", "furniture/project.ron", "0.1.0", "old_data/core-0.1.0/policy_furniture.ron"),
-    frozen!("compositions", "compositions.ron", "0.1.0", "old_data/core-0.1.0/compositions.ron"),
-    frozen!("rigs", "rigs.ron", "0.1.0", "old_data/core-0.1.0/rigs.ron"),
-    frozen!("rules", "rules.ron", "0.3.0", "old_data/core-0.3.0/rules.ron"),
-    frozen!("standards", "standards.ron", "0.3.0", "old_data/core-0.3.0/standards.ron"),
-    frozen!("repetition", "repetition.ron", "0.3.0", "old_data/core-0.3.0/repetition.ron"),
-    frozen!("map", "maps/yard.map.ron", "0.3.0", "old_data/core-0.3.0/map.ron"),
-    frozen!("notes", "maps/yard.notes.ron", "0.3.0", "old_data/core-0.3.0/notes.ron"),
-    frozen!("plan", "maps/yard.plan.ron", "0.3.0", "old_data/core-0.3.0/plan.ron"),
-    frozen!("references", "maps/yard.references.ron", "0.3.0", "old_data/core-0.3.0/references.ron"),
-    frozen!("relations", "maps/yard.relations.ron", "0.3.0", "old_data/core-0.3.0/relations.ron"),
-    frozen!("terrain", "site/terrain/yard.ron", "0.3.0", "old_data/core-0.3.0/terrain.ron"),
-    frozen!("water_plan", "site/water/yard.ron", "0.3.0", "old_data/core-0.3.0/water_plan.ron"),
-    frozen!("water_field", "site/water/yard.field.ron", "0.3.0", "old_data/core-0.3.0/water_field.ron"),
-    frozen!("volume", "site/volume/yard.ron", "0.3.0", "old_data/core-0.3.0/volume.ron"),
-    frozen!("data_registry", "site/data.ron", "0.3.0", "old_data/core-0.3.0/data_registry.ron"),
-    frozen!("family_list", "family.ron", "0.3.0", "old_data/core-0.3.0/family_list.ron"),
-    frozen!("agent", "agent.ron", "0.3.0", "old_data/core-0.3.0/agent.ron"),
-    frozen!("play", "play.ron", "0.3.0", "old_data/core-0.3.0/play.ron"),
+    frozen!("kits", "kits.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/kits.ron"),
+    frozen!("vocab", "vocab.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/vocab.ron"),
+    frozen!("library", "scp/library.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/library.ron"),
+    frozen!("library", "site/library.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/library_site.ron"),
+    frozen!("policy", "site/project.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/policy.ron"),
+    frozen!("policy", "furniture/project.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/policy_furniture.ron"),
+    frozen!("compositions", "compositions.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/compositions.ron"),
+    frozen!("rigs", "rigs.ron", "bevy_emerge_core 0.1.0", "old_data/core-0.1.0/rigs.ron"),
+    frozen!("rules", "rules.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/rules.ron"),
+    frozen!("standards", "standards.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/standards.ron"),
+    frozen!("repetition", "repetition.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/repetition.ron"),
+    frozen!("map", "maps/yard.map.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/map.ron"),
+    frozen!("notes", "maps/yard.notes.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/notes.ron"),
+    frozen!("plan", "maps/yard.plan.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/plan.ron"),
+    frozen!("references", "maps/yard.references.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/references.ron"),
+    frozen!("relations", "maps/yard.relations.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/relations.ron"),
+    frozen!("terrain", "site/terrain/yard.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/terrain.ron"),
+    frozen!("water_plan", "site/water/yard.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_plan.ron"),
+    frozen!("water_field", "site/water/yard.field.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/water_field.ron"),
+    frozen!("volume", "site/volume/yard.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/volume.ron"),
+    frozen!("data_registry", "site/data.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/data_registry.ron"),
+    frozen!("family_list", "family.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/family_list.ron"),
+    frozen!("agent", "agent.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/agent.ron"),
+    frozen!("play", "play.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/play.ron"),
 ];
 
 /// **A literal, not `FROZEN.len()`**: a number that is its own measure can never fail. Frozen files
 /// are added as releases write new shapes; this floor stops one being dropped to make a type pass.
-const FROZEN_MIN: usize = 23;
+const FROZEN_MIN: usize = 24;
 
 #[test]
 fn data_an_earlier_release_wrote_still_reads() {
@@ -69,7 +73,7 @@ fn data_an_earlier_release_wrote_still_reads() {
         let kind = reload::kind_by_id(f.kind).unwrap_or_else(|| panic!("`{}` is not a kind of the registry", f.kind));
         if let Check::Refused(r) = reload_check::check(kind, f.file, f.text) {
             broken.push(format!(
-                "`{}` ({}) written by core {} no longer reads{}: {}",
+                "`{}` ({}) written by {} no longer reads{}: {}",
                 r.kind,
                 r.file,
                 f.since,
@@ -80,7 +84,7 @@ fn data_an_earlier_release_wrote_still_reads() {
     }
     assert!(
         broken.is_empty(),
-        "an edit to a settings type refuses data already on disk. A field added with no default, or a field removed that old files still carry, is refused here; give the field `#[serde(default)]`, keep reading the old one, or bump the version and migrate it (the frozen file stays):\n{}",
+        "an edit to a settings type refuses data already on disk. A field added with no default, or (for a type that denies unknown fields) a field removed that old files still carry, is refused here; give the field `#[serde(default)]`, keep reading the old one, or bump the version and migrate it (the frozen file stays):\n{}",
         broken.join("\n")
     );
 }

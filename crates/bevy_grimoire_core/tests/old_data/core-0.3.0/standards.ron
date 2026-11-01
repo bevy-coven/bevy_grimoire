@@ -1,4 +1,13 @@
 (
     version: 1,
-    rules: [],
+    rules: [
+        (
+            name: "door_width",
+            kind: Some("door"),
+            dim: Width,
+            min: Some(0.9),
+            max: Some(1.2),
+            multiple_of: Some(0.1),
+        ),
+    ],
 )

@@ -1,1 +1,1 @@
-(edits: [])
+(edits: [(shape: Sphere(center: (0.0, 0.0, 0.0), radius_m: 1.0), mode: Carve, smooth_m: 0.25)])

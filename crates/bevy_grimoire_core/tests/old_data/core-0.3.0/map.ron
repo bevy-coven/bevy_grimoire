@@ -4,8 +4,12 @@
     origin: (0.0, 0.0, 0.0),
     bounds: (10.0, 4.0, 10.0),
     bash: None,
-    placements: [],
-    locations: [],
+    placements: [
+        (id: "chair@1", descriptor: "site/chair", at: (1.0, 2.0), yaw: 90.0),
+    ],
+    locations: [
+        (id: "desk", props: ["chair@1"], interactions: [], note: None),
+    ],
     note: None,
     enclosure: (
         wish: 0.25,
