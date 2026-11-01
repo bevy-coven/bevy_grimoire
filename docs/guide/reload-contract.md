@@ -73,6 +73,15 @@ The list lives in code, in `bevy_grimoire_core::reload::KINDS`, and the table be
 - `every_written_kind_has_a_reload_class` (`crates/bevy_grimoire_mapper/tests/reload_contract.rs`). Every operation declares the kinds it writes, and `Operation::writes` has no default, so a new operation cannot skip it. The test fails when an operation names a kind the list does not have. A second test runs an operation and checks that every file it changed is a kind it declares.
 - `the_restart_list_only_shrinks` (`crates/bevy_grimoire_core/tests/reload_contract.rs`). Every `Restart` kind is on a checked-in list. A kind joins `Restart` only by editing that list and raising its ceiling, so the debt can be paid down and never grows unseen. Today it is `rigs` and `game_data`.
 
+## What will always need a rebuild (#202)
+
+The restart list above is debt: a kind with a file that no running program re-reads yet. A different thing needs no file at all and is not on it: a setting that is a Rust type, and that a file cannot hold. The list lives in code, in `bevy_grimoire_core::reload::REBUILD`, with the reason for each entry, and the table below is rendered from it. `a_setting_is_never_both_a_file_kind_and_a_rebuild` fails if an entry gains a file kind and stays here, so an entry leaves the list in the commit that gives it a reload path.
+
+<!-- rebuild-list:start -->
+<!-- rebuild-list:end -->
+
+Bless this table after an honest change with `UPDATE_RELOAD_CONTRACT=1 cargo test -p bevy_grimoire_core --test the_always_rebuild_list_is_in_the_guide`.
+
 ## A request for a kind that was never loaded
 
 `reload_for(kind, loaded)` is the one policy. A change to a kind the program never loaded is the outcome `Reload::NotLoaded`: it is reported and nothing else happens. It is never an implicit load. A load in the middle of play is a hitch, and a program that did not ask for the file has no state to reload.
