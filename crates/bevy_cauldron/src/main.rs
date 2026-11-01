@@ -23,6 +23,10 @@ use bevy::prelude::*;
 /// app, run it.
 fn main() -> AppExit {
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    if args::asks_for_help(&argv) {
+        println!("{}", args::USAGE);
+        return AppExit::Success;
+    }
     let root = args::root_of(&argv);
     // A project from before the rename keeps its data in `assets/emerge`; move it once, or refuse to
     // guess when both folders exist.

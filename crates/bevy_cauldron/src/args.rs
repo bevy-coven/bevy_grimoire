@@ -153,6 +153,24 @@ fn root_from(positional: &[&str]) -> PathBuf {
     std::fs::canonicalize(&root).unwrap_or(root)
 }
 
+/// **What `--help` prints.** The arguments [`split`] takes, and nothing the editor does not read.
+pub const USAGE: &str = "\
+Cauldron: the editor that writes a grimoire, the book your game loads.
+
+usage: bevy_cauldron [ROOT] [MAP] [--door kit|map|rigs] [--kit NAME] [--live]
+
+  ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
+  MAP           the map to open on the Map door; naming one, or a --door, skips the launcher
+  --door DOOR   open a door directly: kit (reusable content), map (the level) or rigs (the rig bench)
+  --kit NAME    the kit to author in, when the project binds more than one
+  --live        write every committed change to disk at once, for a game that watches the project
+  -h, --help    print this and exit";
+
+/// Whether the arguments ask for [`USAGE`] rather than a window.
+pub fn asks_for_help(args: &[String]) -> bool {
+    args.iter().any(|a| a == "--help" || a == "-h")
+}
+
 /// Where the project is, for the asset root. `main` needs this before anything is opened.
 pub fn root_of(args: &[String]) -> PathBuf {
     root_from(&split(args).positional)
