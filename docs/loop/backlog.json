@@ -286,7 +286,7 @@
         {
           "id": "H6",
           "title": "The editor shows each file's reload state",
-          "status": "open",
+          "status": "fixed",
           "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/203"
         },
         {
