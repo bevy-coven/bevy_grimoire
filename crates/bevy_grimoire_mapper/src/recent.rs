@@ -95,15 +95,13 @@ impl Recent {
         }
     }
 
-    /// Writes the list to `file` through a temporary beside it, so a crash leaves the old list or the new one.
+    /// Writes the list to `file` through the one atomic write, so a reader and a crash see the old list or the new one.
     pub fn save(&self, file: &Path) -> Result<(), String> {
         let text = self.to_ron()?;
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("recent: {}: {e}", dir.display()))?;
         }
-        let tmp = file.with_extension("ron.tmp");
-        std::fs::write(&tmp, text).map_err(|e| format!("recent: {}: {e}", tmp.display()))?;
-        std::fs::rename(&tmp, file).map_err(|e| format!("recent: {}: {e}", file.display()))
+        bevy_grimoire_core::atomic_file::write(file, text).map_err(|e| format!("recent: {}: {e}", file.display()))
     }
 
     fn position(&self, path: &Path) -> Option<usize> {
