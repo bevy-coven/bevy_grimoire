@@ -23,7 +23,16 @@ and no GPU.
 - **One exception: a broken gate.** If the push gate refuses on `main` as it stands, or `main` does not build, fix exactly that first, because no slice can ship without it; then go back to the series in the same pass. Any other bug waits, and is filed if it is not already.
 - **One verified slice per pass**, with its failing-first test, as the issue's acceptance list says. Comment on the issue which acceptance items the slice meets, and close it with `Fixes #N` only in the commit that meets the last of them.
 - **A blocked issue does not end the series.** Comment exactly what it needs, then take the next ready `hot-reload` issue. Only when every open one is blocked does the rest of this command apply, and the log line names each blocker.
-- **When the last `hot-reload` issue closes, grind through the open issues (owner, 2026-11-01).** Every pass takes the next open issue in the order "Filed issues come before new features" gives (bug issues oldest first, then `consumer`, then `owner` in the focus's order, then every other open issue oldest first), one verified slice per pass, until none is left that can be worked; only then do the backlog, the series and your own candidates get a pass. Skip an issue labelled `wontfix`, and say so in the log line. Only `bevy_emerge_loop` runs since 2026-10-31, so a `worker:bevy_emerge_w*` label is a retired worker's claim: remove it with a comment and take the issue. An issue that needs the owner's decision (`decide`) is decided by "Owner input: recommend, record, proceed", not skipped.
+- **When the last `hot-reload` issue closes, the editor's UI series is the item** ("The owner's next override" below), and only when no `ui` issue is ready does the pass grind through the other open issues (owner, 2026-11-01): bug issues oldest first, then `consumer`, then `owner` in the focus's order, then every other open issue oldest first, one verified slice per pass, before the backlog, the series or your own candidates. Skip an issue labelled `wontfix`, and say so in the log line. Only `bevy_emerge_loop` runs since 2026-10-31, so a `worker:bevy_emerge_w*` label is a retired worker's claim: remove it with a comment and take the issue. An issue that needs the owner's decision (`decide`) is decided by "Owner input: recommend, record, proceed", not skipped.
+
+## The owner's next override: the editor's UI on bevy_gooey (2026-11-01)
+
+After the hot-reload series, **the pass's item is the first ready issue labelled `ui`**, in the order the tracking issue (`UI-00`, #208) lists them, and the design is `docs/ui/vision.md`. It outranks everything the hot-reload override outranks, and the same broken-gate exception applies.
+
+- **Ready** means every issue on its **Depends on** line is closed, and every `bevy-coven/bevy_gooey` issue on its **Needs** line is closed as completed. The slice's first commit moves the mapper's `bevy_gooey` git pin to a revision that has the fix (`git ls-remote https://github.com/bevy-coven/bevy_gooey main`), and the gate proves it builds.
+- **All of the UI is gooey.** Never build a widget, a palette or a layout primitive here that gooey lacks. File it on `bevy-coven/bevy_gooey` with the labels `enhancement`, `consumer`, `consumer:bevy_grimoire` and `grimoire-ui`. Use the title `G-NN: <what>`, with the next free NN after the highest `G-` title there, and the body shape of the existing `G-` issues (why, proposed API, edge cases, acceptance a test there can prove). Add it to this issue's **Needs** line and to UI-00's list, then take the next ready `ui` issue. gooey's loop starts by itself within 15 minutes of an open `grimoire-ui` issue, and stops when none is left.
+- **One verified slice per pass**, with its failing-first test. Comment on the issue which acceptance items the slice meets, close it with `Fixes #N` only in the commit that meets the last one, and tick it in UI-00.
+- **When no `ui` issue is ready** (all wait on gooey or on each other), say which ones and what each waits on in the log line, and take the other open issues as the hot-reload section's last bullet says. Never idle.
 
 ## Mark your phases, so the loop's steps are timed
 
@@ -168,22 +177,17 @@ humans and for grepping a specific fact. A pass that spends 20 minutes reading h
 
 ## Machines — where a pass may run
 
-Two machines run this loop, and they can do different things. **Say which one you are on in the report.**
+This loop runs on **big** (since 2026-11-01): a Ryzen 9 5900X with 24 threads and 31 GB of RAM, shared with HomeStill and gooey's loop. Its unit caps the loop at 11 GB (`MemoryMax`) and sets `CARGO_BUILD_JOBS=10` and `RUST_TEST_THREADS=8`. **Never ssh to another machine to build or test**: this is the biggest one, and the round trips cost 8% of pass time on big_mac.
 
-| | laptop (`mac_air`) | big |
-|---|---|---|
-| `cargo build/test/clippy` | yes | yes (24 cores, but see RAM) |
-| `accept.py` | yes, `--source ~/sanctuary/assets` → **11/11** | yes, `--source <repo>/assets` → **10/10** (no `import` step: the golem fixture is not there) |
-| `perf.py` | yes | **no**: it times a live editor and the harness needs a display |
-| Launching the editor / stills / sequences | yes | **no GPU display** — do not attempt |
-| Sanctuary's own `cargo test` | yes | **Sanctuary is not on big** |
+| | big |
+|---|---|
+| `cargo build/test/clippy` | yes, here |
+| `accept.py` | yes, `--source <repo>/assets` → **10/10** (no `import` step: the golem fixture is not here). Compare with the previous big run. |
+| `perf.py` | **no**: it times a live editor on a real display |
+| Stills and clips | `tools/demo/record.py` under the unit's Xvfb (`DISPLAY=:99`); when a capture comes out black or empty, write `--no-clip "visible, not yet recorded: no display on big"` |
+| Sanctuary's own `cargo test` | **no**: Sanctuary is not on big |
 
-**On big, `accept.py --source <repo>/assets` measuring 10/10 is the headline number.** It is the same
-script and the same steps; only `import` is missing. Compare like with like: a pass on big compares with
-the previous *big* run, not with the laptop's 11.
-
-**Big's checkout must be a real clone, not an rsync target.** If `git status --short` shows double-digit
-modified files at a stale commit, the tree is somebody's scratch: stop, log it, and do not commit there.
+**Big's checkout must be a real clone, not an rsync target.** If `git status --short` shows double-digit modified files at a stale commit, the tree is somebody's scratch: stop, log it, and do not commit there.
 
 ## Phase 1: Bugs (bounded)
 
@@ -370,12 +374,8 @@ stop and re-scope rather than run long.
 
 ## Phase 4: Prove it
 
-1. **Deterministic gate.** Build, clippy `-D warnings`, `cargo test --workspace`, the parity test,
-   `backlog.py check` and `python3 tools/changelog/changelog.py check`. The plan's check failed before and
-   passes after; quote the failing assertion.
-2. **Visual proof**, where a surface changed: stills and a sequence, reviewed against a reference. On big
-   this is impossible — say so and fall back to a layout assertion on `Text`/`ComputedNode` entities,
-   which is stronger than a capture for "is it drawn".
+1. **Deterministic gate, run once — by the push.** While building, run only what the change touches: that crate's tests (`cargo test -p bevy_grimoire_mapper --test editor <module>::` for the editor, `cargo test -p <crate>` otherwise) and `cargo clippy -p <crate> --all-targets -- -D warnings`. Never run `cargo test --workspace` by hand: the push is the full gate (`tools/loop/hooks/pre-push` runs clippy over every target and `cargo test --workspace`, and remembers a commit that passed), so one green push is the pass's one full run. Measured 2026-11-01: passes ran the full gate about 2.75 times each, 23% of pass time. Run `backlog.py check` and `changelog.py check` before the push (seconds). The plan's check failed before and passes after; quote the failing assertion.
+2. **Visual proof**, where a surface changed: stills and a sequence, reviewed against a reference, captured under the unit's Xvfb (`DISPLAY=:99`). If a capture comes out black or empty, fall back to a layout assertion on `Text`/`ComputedNode` entities, which is stronger than a capture for "is it drawn".
 3. **`accept.py` before and after**, same machine, same source. A pass that lowers `reached` is a bug.
 4. **Independent review** — one `reviewer` subagent over the diff. **If it cannot be spawned (a rate limit,
    no model), say so in one line and continue**: a Wiggum loop that stops for an unavailable reviewer

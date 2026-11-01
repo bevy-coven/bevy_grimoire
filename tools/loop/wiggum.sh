@@ -635,7 +635,7 @@ one_pass() {
   local steps_tool
   steps_tool="$(cd "$(dirname "$0")" && pwd)/steps.py"
   if [ -f "$steps_tool" ]; then
-    log "pass $n $(python3 "$steps_tool" record --repo "$REPO" --since "$pass_started_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
+    log "pass $n $(WIGGUM_MODEL="$MODEL" WIGGUM_THINK="$THINKING" python3 "$steps_tool" record --repo "$REPO" --since "$pass_started_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
     # **Did the pass ship?** Commits on origin/main, anything left unpushed, a release tag when the package
     # changed, docs and demo files. What the commands require and the pass skipped is named as `missing`,
     # and the next pass reads it from loop-stats (owner, 2026-10-31: every pass commits, pushes,

@@ -23,7 +23,8 @@ and a `phase`. Phases are marked by the pass itself with `python3 tools/loop/ste
 
     steps.py mark build                         # a pass marks a phase (prints one line)
     steps.py record --repo DIR --since EPOCH --pass N --state STATEDIR
-                                                # the driver, after a pass: append rows to STATEDIR/steps.tsv
+                                                # the driver, after a pass: append rows to STATEDIR/steps.tsv,
+                                                # and its host, wall time and settings to STATEDIR/config.tsv
     steps.py backfill --repo DIR --state STATEDIR [--last K]
                                                 # every past session of that clone, numbered by start time
     steps.py report --state STATEDIR [--last K] # where the time goes, across the last K passes
@@ -258,6 +259,46 @@ def write_rows(path, pass_no, rows):
                                r["detail"].replace("\t", " ")]) + "\n")
 
 
+CONFIG_COLUMNS = ["pass", "at", "host", "seconds", "model", "think", "build_jobs", "test_threads"]
+CONFIG_ENV = ["WIGGUM_MODEL", "WIGGUM_THINK", "CARGO_BUILD_JOBS", "RUST_TEST_THREADS"]
+
+
+def write_config(state, pass_no, since):
+    """One row in STATE/config.tsv: where the pass ran and with what settings, so passes can be compared
+    by host, model, thinking level and build parallelism. `record` runs right after the pass, so the
+    wall time is now minus the pass's start. A re-recorded pass replaces its row."""
+    import socket
+    import time
+    path = Path(state) / "config.tsv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    drop_passes(path, {pass_no})
+    new = not path.exists()
+    env = [os.environ.get(k) or "-" for k in CONFIG_ENV]
+    with open(path, "a", encoding="utf-8") as f:
+        if new:
+            f.write("\t".join(CONFIG_COLUMNS) + "\n")
+        f.write("\t".join([str(pass_no), dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
+                           socket.gethostname().split(".")[0], str(round(time.time() - since)), *env]) + "\n")
+
+
+def config_report(state, out=sys.stdout):
+    """The passes grouped by (host, model, thinking, build jobs, test threads): how many, mean and median
+    minutes, in the order each group first appeared."""
+    import statistics
+    path = Path(state) / "config.tsv"
+    if not path.exists():
+        print("no configuration recorded yet", file=out)
+        return
+    groups = {}
+    for r in load_tsv(path):
+        key = (r["host"], r["model"], r["think"], r["build_jobs"], r["test_threads"])
+        groups.setdefault(key, []).append(float(r["seconds"]) / 60)
+    print(f"{'host':<10} {'model':<28} {'think':<8} {'jobs':<5} {'threads':<8} {'passes':>6} {'mean min':>9} {'median min':>11}", file=out)
+    for (host, model, think, jobs, threads), mins in groups.items():
+        print(f"{host:<10} {model:<28} {think:<8} {jobs:<5} {threads:<8} {len(mins):>6} "
+              f"{statistics.mean(mins):>9.1f} {statistics.median(mins):>11.1f}", file=out)
+
+
 def summary(rows, top=3):
     total = sum(r["seconds"] for r in rows if r["kind"] in ("model", "tool", "wait"))
     by = collections.Counter()
@@ -408,6 +449,11 @@ def publish(repo, state, branch):
         for r in rows:
             buf.write("| " + " | ".join(r) + " |\n")
         buf.write("\n")
+    if (Path(state) / "config.tsv").exists():
+        buf.write(f"## How each configuration did\n\nFrom [`{name}-config.tsv`]({name}-config.tsv): one row per pass with its host, ")
+        buf.write("wall time, model, thinking level and build settings.\n\n```text\n")
+        config_report(state, out=buf)
+        buf.write("```\n\n")
     for title, last in (("The last 12 passes", 12), ("Every pass recorded", 0)):
         buf.write(f"## {title}\n\n```text\n")
         report(state, last, out=buf)
@@ -421,6 +467,9 @@ def publish(repo, state, branch):
             if base:
                 git(repo, "read-tree", base, env=env)
             files = [(f"steps/{name}.tsv", tsv.read_text(encoding="utf-8")), (f"steps/{name}.md", buf.getvalue())]
+            config_tsv = Path(state) / "config.tsv"
+            if config_tsv.exists():
+                files.append((f"steps/{name}-config.tsv", config_tsv.read_text(encoding="utf-8")))
             audit_tsv = Path(state) / "audit.tsv"
             if audit_tsv.exists():
                 files.append((f"steps/{name}-audit.tsv", audit_tsv.read_text(encoding="utf-8")))
@@ -471,6 +520,7 @@ def main(argv=None):
         print(f"phase: {a.phase} at {dt.datetime.now(dt.timezone.utc):%H:%M:%SZ}")
         return 0
     if a.cmd == "record":
+        write_config(a.state, a.pass_no, a.since)
         since = dt.datetime.fromtimestamp(a.since - 60, dt.timezone.utc)
         found = [p for start, p in sessions_for(a.repo) if start >= since]
         if not found:
