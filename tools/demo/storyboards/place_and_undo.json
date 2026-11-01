@@ -1,82 +1,20 @@
 {
   "name": "place_and_undo",
-  "fps": 15,
-  "scale": 2,
-  "width": 600,
-  "crop": [
-    470,
-    64,
-    950,
-    690
-  ],
-  "setup": [
-    {
-      "mcp": "grimoire_frame_view",
-      "args": {
-        "target": {
-          "rect": [
-            57,
-            -65,
-            71,
-            -55
-          ]
-        }
-      }
-    }
-  ],
-  "chunks": [
-    {
-      "seconds": 3.5
-    }
-  ],
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [0, 0, 1280, 703],
+  "setup": [{"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-3.4, -2.8, 3.4, 2.8]}}}],
+  "chunks": [{"seconds": 6}],
   "steps": [
-    {
-      "at": 0.2,
-      "click": [
-        1106,
-        133
-      ]
-    },
-    {
-      "at": 0.4,
-      "type": "house"
-    },
-    {
-      "at": 0.6,
-      "caption": "person: arms the gate house from the list"
-    },
-    {
-      "at": 0.8,
-      "click": [
-        1090,
-        203
-      ]
-    },
-    {
-      "at": 0.9,
-      "caption": "person: click the ground to place it"
-    },
-    {
-      "at": 1.0,
-      "click": [
-        710,
-        377
-      ]
-    },
-    {
-      "at": 1.5,
-      "clear_cursor": true
-    },
-    {
-      "at": 2.0,
-      "caption": "person: ⌘Z takes the gate house back"
-    },
-    {
-      "at": 2.2,
-      "key": "KeyZ",
-      "mods": [
-        "SuperLeft"
-      ]
-    }
+    {"at": 0.2, "click": [1118, 133]},
+    {"at": 0.4, "type": "dining"},
+    {"at": 0.8, "caption": "person: types dining in the PLACE filter"},
+    {"at": 1.2, "click": [1100, 203]},
+    {"at": 1.4, "caption": "person: arms the dining chair from the list"},
+    {"at": 2.0, "click": [770, 478]},
+    {"at": 2.2, "caption": "person: click the floor to place it"},
+    {"at": 3.0, "clear_cursor": true},
+    {"at": 3.8, "key": "KeyZ", "mods": ["ControlLeft"], "caption": "person: Ctrl+Z takes the chair back"}
   ]
 }

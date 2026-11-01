@@ -50,6 +50,9 @@ def change_fraction(scenes, fps, t):
     return max(frame_diff(scenes[before], scenes[i]) for i in after)
 
 
+UNDO_MODS = ("SuperLeft", "SuperRight", "ControlLeft", "ControlRight")
+
+
 def change_moments(rec):
     """(kind, t) for agent ops, MCP view changes, clicks, ⌘Z and Home, from the recorded chunks and events."""
     moments = []
@@ -64,7 +67,8 @@ def change_moments(rec):
                 moments.append(("place", e["t"]))
         elif e["type"] == "key":
             keys = e.get("keys", [])
-            if "KeyZ" in keys and "SuperLeft" in keys:
+            # the person's undo: Cmd+Z on a Mac, Ctrl+Z on Linux and Windows (keys.rs `MOD_KEYS`)
+            if "KeyZ" in keys and any(m in keys for m in UNDO_MODS):
                 moments.append(("undo", e["t"]))
             elif "Home" in keys:
                 moments.append(("home", e["t"]))
