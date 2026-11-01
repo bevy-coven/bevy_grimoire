@@ -13,7 +13,9 @@
 //! them, taken from its git tag; the others (`core-0.3.0/`) are what `bevy_grimoire_core` 0.3.0 writes,
 //! for the kinds the first release shipped no sample of, each collection holding one element so that
 //! the element types are read too. A type that no longer reads one of them is refused here, naming the
-//! kind, the file, the field and the release that wrote it.
+//! kind, the file, the field and the release that wrote it. The two destructible files (`editor-3f4084c/`)
+//! are what the editor wrote at that commit, real files of a fracture baked from a box, before core had
+//! a type for them.
 //!
 //! A frozen file is never edited. A type that has to change shape bumps its version, migrates the old
 //! version and keeps the old file reading; the new version's file is added beside the old one.
@@ -60,11 +62,13 @@ const FROZEN: &[Frozen] = &[
     frozen!("family_list", "family.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/family_list.ron"),
     frozen!("agent", "agent.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/agent.ron"),
     frozen!("play", "play.ron", "bevy_grimoire_core 0.3.0", "old_data/core-0.3.0/play.ron"),
+    frozen!("destructible_marks", "destructible.ron", "the editor at 3f4084c", "old_data/editor-3f4084c/destructible.ron"),
+    frozen!("destructible_bake", "destructible/site__cart.bake.ron", "the editor at 3f4084c", "old_data/editor-3f4084c/site__cart.bake.ron"),
 ];
 
 /// **A literal, not `FROZEN.len()`**: a number that is its own measure can never fail. Frozen files
 /// are added as releases write new shapes; this floor stops one being dropped to make a type pass.
-const FROZEN_MIN: usize = 24;
+const FROZEN_MIN: usize = 26;
 
 #[test]
 fn data_an_earlier_release_wrote_still_reads() {

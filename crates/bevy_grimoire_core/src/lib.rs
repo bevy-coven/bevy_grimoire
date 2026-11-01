@@ -37,6 +37,7 @@ pub mod composition;
 pub mod constraints;
 pub mod data_files;
 pub mod convert;
+pub mod destructible;
 pub mod descriptor;
 pub mod draw_order;
 pub mod family;

@@ -172,7 +172,8 @@ fn line_as<T: DeserializeOwned>(line: &str) -> Result<T, (Option<String>, String
 /// **Parse `text` as `kind`.** `file` is only what a refusal names.
 pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
     use crate::{
-        composition::Compositions, data_files::DataFiles, family::Family, heightfield::Heightfield,
+        composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family,
+        heightfield::Heightfield,
         kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
         play::PlayConfig, policy::Policy, references::References, relations::Relations,
         repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards,
@@ -201,6 +202,8 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "family_list" => run(text, Family::from_ron),
         "agent" => run(text, AgentSettings::from_ron),
         "play" => run(text, PlayConfig::from_ron),
+        "destructible_marks" => run(text, Marks::parse),
+        "destructible_bake" => run(text, Bake::parse),
         _ => return Check::Unchecked,
     };
     match result {

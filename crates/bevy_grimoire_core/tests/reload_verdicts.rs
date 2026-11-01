@@ -11,6 +11,7 @@
 
 use std::path::Path;
 
+use bevy_grimoire_core::destructible::{Bake, Chunk, DESTRUCTIBLE_VERSION, Marks};
 use bevy_grimoire_core::map::{MAP_VERSION, Map};
 use bevy_grimoire_core::notes::Notes;
 use bevy_grimoire_core::plan::Plan;
@@ -63,6 +64,8 @@ fn samples() -> Vec<Sample> {
         s("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "steps", true),
         s("volume", "site/volume/yard.ron", "(edits: [])".to_owned(), "edits", false),
         s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION), "version", true),
+        s("destructible_marks", "destructible.ron", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap(), "version", true),
+        s("destructible_bake", "destructible/site__cart.bake.ron", ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(), "key", true),
     ]
 }
 
@@ -251,13 +254,11 @@ const UNCHECKED: &[&str] = &[
     "scripts",
     "trees",
     "family",
-    "destructible_marks",
-    "destructible_bake",
     "game_data",
 ];
 
 /// **A literal, not `UNCHECKED.len()`**: a number that is its own measure can never fail.
-const UNCHECKED_MAX: usize = 11;
+const UNCHECKED_MAX: usize = 9;
 
 #[test]
 fn the_unchecked_list_only_shrinks() {
