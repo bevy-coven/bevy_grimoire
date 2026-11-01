@@ -252,6 +252,7 @@ mod relations_read_a_turned_piece_in_degrees;
 mod relations_solve_mends_the_open_map;
 mod reload_contract;
 mod repetition_vary_turns_the_open_maps_repeats;
+mod rig_adopt_measured_is_an_operation;
 mod roads_and_fields_do_not_z_fight;
 mod rows_become_a_run_through_an_operation;
 mod runs_are_edited_through_operations;
