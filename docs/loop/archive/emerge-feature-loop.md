@@ -48,7 +48,7 @@ The agent reaches the editor only through **the bevy_grimoire MCP server** (see 
 How the repo is laid out (check against the current README):
 - `bevy_grimoire_core` holds the engine-free schema, grammar learning, WFC and validation.
 - `bevy_grimoire` is the runtime that puts a library and a map into a Bevy world.
-- `bevy_grimoire_mapper` is the editor application. It opens a project directory and writes `<root>/assets/grimoire`, which games then load.
+- `bevy_cauldron` is the editor application. It opens a project directory and writes `<root>/assets/grimoire`, which games then load.
 
 That project directory is where the editor's data lives (see "Data-driven and hot-reloadable").
 

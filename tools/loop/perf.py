@@ -181,7 +181,7 @@ def main():
             finally:
                 map_path.write_text(original)
 
-            client = Client(str(binary("bevy_grimoire_mcp")), str(scratch), port, "perf")
+            client = Client(str(binary("bevy_cauldron_mcp")), str(scratch), port, "perf")
             try:
                 t0 = time.time()
                 answer = client.json_call("grimoire_apply_operation", {

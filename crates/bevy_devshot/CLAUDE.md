@@ -31,4 +31,4 @@ The whole API is one `Path::exists` per frame. Keep it that way — a watcher th
 
 ## In the monorepo
 
-The game reaches this as `crate::devshot` (`src/lib.rs:52`); `bevy_grimoire_mapper` depends on it directly. The root `CLAUDE.md` §Screenshots explains the capture workflow and the `debug_screenshots/` convention; neither it nor `TESTING.md` is part of this mirror.
+The game reaches this as `crate::devshot` (`src/lib.rs:52`); `bevy_cauldron` depends on it directly. The root `CLAUDE.md` §Screenshots explains the capture workflow and the `debug_screenshots/` convention; neither it nor `TESTING.md` is part of this mirror.

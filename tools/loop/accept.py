@@ -297,7 +297,7 @@ def run(source, out, glb=None):
         editor.wait_ready(lambda s: True)
         report["editor_port"] = editor.port
         report["ready_at_s"] = round(time.time() - stamp, 1)
-        client = Client(str(binary("bevy_grimoire_mcp")), str(scratch), editor.port, "accept")
+        client = Client(str(binary("bevy_cauldron_mcp")), str(scratch), editor.port, "accept")
         run_ = Run(client, editor, scratch)
 
         run_.step_tools()

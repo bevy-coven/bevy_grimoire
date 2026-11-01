@@ -47,11 +47,11 @@ markers=$(git grep -nE '^(<<<<<<<|>>>>>>>) ' "$target" -- . ':!*.patch' 2>/dev/n
 [ -z "$markers" ] || refuse "conflict markers in the commit: ${markers//$'\n'/; }"
 python3 tools/loop/backlog.py check >/dev/null || refuse "python3 tools/loop/backlog.py check failed"
 python3 tools/changelog/changelog.py check >/dev/null || refuse "python3 tools/changelog/changelog.py check failed"
-# The editor's integration tests are modules of one binary (`crates/bevy_grimoire_mapper/tests/all.rs`, `autotests = false`):
+# The editor's integration tests are modules of one binary (`crates/bevy_cauldron/tests/all.rs`, `autotests = false`):
 # a file missing from `all.rs` is never compiled, so its tests never run, and clippy alone (the clean-merge path) cannot see it.
-all=crates/bevy_grimoire_mapper/tests/all.rs
+all=crates/bevy_cauldron/tests/all.rs
 if [ -f "$all" ]; then
-  for f in crates/bevy_grimoire_mapper/tests/*.rs; do
+  for f in crates/bevy_cauldron/tests/*.rs; do
     s=$(basename "$f" .rs)
     [ "$s" = all ] || grep -qx "mod $s;" "$all" || refuse "$f is not a module of the editor's test binary: add \`mod $s;\` to $all (and \`use crate::fixtures;\`, not \`mod fixtures;\`, in the file)"
   done

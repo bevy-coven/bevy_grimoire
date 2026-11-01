@@ -1,7 +1,7 @@
 //! **Read a project's data at runtime**, the way a game does: every file the editor writes, in one
 //! call, validated against each other.
 //!
-//! The editor (`bevy_grimoire_mapper`) opens a project through its own `Project::open`, which carries
+//! The editor (`bevy_cauldron`) opens a project through its own `Project::open`, which carries
 //! editor state — undo, thumbnails, the authoring kit. A game wants none of that, only the answer to
 //! *"what is in `assets/grimoire`, and is it consistent?"*. This is that answer, engine-free, so a
 //! game, a test and a headless tool all read the same files in the same order and refuse the same

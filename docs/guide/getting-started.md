@@ -11,7 +11,7 @@ You need a Rust toolchain and a clone of this repo. Run every command from the r
 1. Run the editor on this project:
 
    ```
-   cargo run -p bevy_grimoire_mapper -- .
+   cargo run -p bevy_cauldron -- .
    ```
 
 2. Wait for the window. It opens on the menu.

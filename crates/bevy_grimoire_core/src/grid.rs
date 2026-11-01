@@ -315,7 +315,7 @@ mod tests {
     ///
     /// A `Shift` that jumped from the finest rung back to the whole tile would be the largest
     /// movement available dressed as the smallest, so the two step differently on purpose and this
-    /// pins both. `bevy_grimoire_mapper`'s `snap_level` reads the first; its `J` reads the second.
+    /// pins both. `bevy_cauldron`'s `snap_level` reads the first; its `J` reads the second.
     #[test]
     fn the_ladder_steps_one_way_for_a_modifier_and_another_for_a_cycle() {
         assert_eq!(SnapLevel::Tile.finer(), SnapLevel::Fine);

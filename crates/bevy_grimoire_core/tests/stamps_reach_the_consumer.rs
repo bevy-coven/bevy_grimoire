@@ -21,7 +21,7 @@
 //! itself belongs to `bevy_grimoire_core::composition`, which has its own tests.
 //!
 //! Elsewhere: that the editor's picture and the game's world are the same picture — which is a
-//! claim about two crates, and lives in `bevy_grimoire_mapper`'s suite.
+//! claim about two crates, and lives in `bevy_cauldron`'s suite.
 
 use std::path::{Path, PathBuf};
 

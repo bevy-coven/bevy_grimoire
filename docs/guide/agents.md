@@ -8,15 +8,15 @@ This page uses a few words you may not know yet. A **door** is one of the editor
 
 Goal: connect an MCP client to the running editor, so the agent can read and change the open project.
 
-1. Start the editor on your project folder. For the repo's own project, run `cargo run -p bevy_grimoire_mapper -- .` from the repo root. The editor serves the Bevy Remote Protocol (BRP) on port 15702 by default. Set `BEVY_BRP_PORT` before launching if that port is taken.
-2. Build the MCP server with `cargo build -p bevy_grimoire_mcp`. The binary is `target/debug/bevy_grimoire_mcp`.
+1. Start the editor on your project folder. For the repo's own project, run `cargo run -p bevy_cauldron -- .` from the repo root. The editor serves the Bevy Remote Protocol (BRP) on port 15702 by default. Set `BEVY_BRP_PORT` before launching if that port is taken.
+2. Build the MCP server with `cargo build -p bevy_cauldron_mcp`. The binary is `target/debug/bevy_cauldron_mcp`.
 3. Add the server to your client's config. Use absolute paths. Point `--project` at the project folder, the same folder you passed to the editor:
 
 ```json
 {
   "mcpServers": {
     "bevy_grimoire": {
-      "command": "/absolute/path/to/bevy_grimoire/target/debug/bevy_grimoire_mcp",
+      "command": "/absolute/path/to/bevy_grimoire/target/debug/bevy_cauldron_mcp",
       "args": ["--project", "/absolute/path/to/your/project"],
       "env": { "BEVY_BRP_PORT": "15702" }
     }

@@ -1,6 +1,6 @@
 # bevy_grimoire
 
-Editor, learned grammar and WFC for Bevy games. Workspace of crates under `crates/`; fixtures under `assets/`.
+The Cauldron (the editor), learned grammar and WFC for Bevy games. A grimoire is the book the Cauldron writes and a game loads (`bevy_grimoire`, `bevy_grimoire_core`, `assets/grimoire/`). Workspace of crates under `crates/`; fixtures under `assets/`.
 
 ## Force pushes and deletions need the user's express permission
 
@@ -37,7 +37,7 @@ A game asks for what it needs here through GitHub issues, and that is the only c
 
 ### Iterating from a consumer
 
-A game links only `bevy_grimoire_core` (with `bevy_grimoire_rng` and `bevy_grimoire_solver`); the editor crates are a separate binary run from this repo on the game's project: `cargo run -p bevy_grimoire_mapper -- <game-root> <map> --kit <kit>`, and with `--live` it writes every change through to disk for a game that watches its project (series S-003). So an editor-only change never touches the game's build, while a change to core is picked up by the game's next `cargo` run through its path dependency, with nothing to copy or bump. `cargo run -q -p bevy_grimoire_mapper --example boot_headless -- <game-root>` proves a game's project still opens without a window. The per-game loop (what to run, what to commit where) is in the game's `AGENTS.md`; Sanctuary's is under "bevy_grimoire: live editing, evolving with Sanctuary".
+A game links only `bevy_grimoire_core` (with `bevy_grimoire_rng` and `bevy_grimoire_solver`); the editor crates are a separate binary run from this repo on the game's project: `cargo run -p bevy_cauldron -- <game-root> <map> --kit <kit>`, and with `--live` it writes every change through to disk for a game that watches its project (series S-003). So an editor-only change never touches the game's build, while a change to core is picked up by the game's next `cargo` run through its path dependency, with nothing to copy or bump. `cargo run -q -p bevy_cauldron --example boot_headless -- <game-root>` proves a game's project still opens without a window. The per-game loop (what to run, what to commit where) is in the game's `AGENTS.md`; Sanctuary's is under "bevy_grimoire: live editing, evolving with Sanctuary".
 
 ## The changelog: a line for every change, a clip for every visible one
 
