@@ -10188,3 +10188,291 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 176	311	log	tool	phase mark	bash	2026-11-01T00:18:50Z	1.7	Confirming the tree is clean and pushed :: cd /Users/ladvien/bevy_emerge_loop && git status -sb | head -3; python3 tools/loop/steps.py mark log
 176	312	log	model	model		2026-11-01T00:18:51Z	45.0	
 176	313	log	model	model		2026-11-01T00:19:36Z	13.6	
+177	1	orient	model	model		2026-11-01T00:20:54Z	4.2	
+177	2	orient	tool	phase mark	bash	2026-11-01T00:20:58Z	3.3	Orienting: git status and host state :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark orient; git status --short | head -20; git log --oneline -10; basename "$(git rev-parse -
+177	3	orient	tool	shell	bash	2026-11-01T00:20:58Z	3.3	Reading last log entries and focus :: cd /Users/ladvien/bevy_emerge_loop && tail -n 3 docs/loop/log.md | cut -c1-1500; cat docs/loop/focus.md | head -60
+177	4	orient	tool	github	bash	2026-11-01T00:20:58Z	3.3	Listing open issues :: cd /Users/ladvien/bevy_emerge_loop && gh issue list --repo bevy-coven/bevy_grimoire --state open --limit 100 --json number,title,labels,createdAt --jq '.[] | "#
+177	5	orient	model	model		2026-11-01T00:21:01Z	6.2	
+177	6	orient	tool	github	bash	2026-11-01T00:21:08Z	2.9	Reading issue 200 with comments :: cd /Users/ladvien/bevy_emerge_loop && gh issue view 200 --repo bevy-coven/bevy_grimoire --comments | cut -c1-2500; gh run list --repo bevy-coven/bevy_grimoire -
+177	7	orient	model	model		2026-11-01T00:21:11Z	2.6	
+177	8	orient	tool	github	bash	2026-11-01T00:21:13Z	1.1	Reading issue 200 body :: cd /Users/ladvien/bevy_emerge_loop && gh issue view 200 --repo bevy-coven/bevy_grimoire --json body --jq .body
+177	9	orient	model	model		2026-11-01T00:21:14Z	4.9	
+177	10	bugs	tool	phase mark	bash	2026-11-01T00:21:19Z	1.8	Inspecting reload_check and big's availability :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark bugs; wc -l crates/bevy_grimoire_core/src/reload_check.rs crates/bevy_grimoire_core/tests
+177	11	bugs	model	model		2026-11-01T00:21:21Z	4.3	
+177	12	bugs	tool	read files	read	2026-11-01T00:21:25Z	0.1	Reading reload_check.rs :: crates/bevy_grimoire_core/src/reload_check.rs
+177	13	bugs	tool	read files	read	2026-11-01T00:21:25Z	0.1	Reading reload_verdicts test :: crates/bevy_grimoire_core/tests/reload_verdicts.rs
+177	14	bugs	model	model		2026-11-01T00:21:26Z	21.0	
+177	15	bugs	tool	read files	read	2026-11-01T00:21:47Z	0.1	Reading check function body :: crates/bevy_grimoire_core/src/reload_check.rs:28-126
+177	16	bugs	tool	read files	read	2026-11-01T00:21:47Z	0.1	Reading samples table :: crates/bevy_grimoire_core/tests/reload_verdicts.rs:12-68
+177	17	bugs	tool	read files	read	2026-11-01T00:21:47Z	0.1	Reading unchecked list :: crates/bevy_grimoire_core/tests/reload_verdicts.rs:230-271
+177	18	bugs	model	model		2026-11-01T00:21:47Z	3.4	
+177	19	choose	tool	phase mark	bash	2026-11-01T00:21:50Z	0.8	Listing unchecked kinds' registry rows :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark choose; grep -n 'id: "\(checks\|oplog\|reference_images\|forest\|people\|scripts\|trees\|
+177	20	choose	model	model		2026-11-01T00:21:51Z	1.5	
+177	21	choose	tool	search	grep	2026-11-01T00:21:53Z	0.1	Finding unchecked kinds in reload.rs :: crates/bevy_grimoire_core/src/reload.rs
+177	22	choose	model	model		2026-11-01T00:21:53Z	2.4	
+177	23	choose	tool	search	grep	2026-11-01T00:21:55Z	0.2	Locating types of unchecked kinds :: crates
+177	24	choose	model	model		2026-11-01T00:21:55Z	8.7	
+177	25	choose	tool	search	grep	2026-11-01T00:22:04Z	0.1	Finding existing verdict producers in mapper :: crates/bevy_grimoire_mapper/src
+177	26	choose	tool	search	grep	2026-11-01T00:22:04Z	0.1	Finding forest watcher and reader :: crates/bevy_grimoire_mapper/src
+177	27	choose	model	model		2026-11-01T00:22:04Z	14.7	
+177	28	choose	tool	shell	bash	2026-11-01T00:22:19Z	0.1	Checking parsers and deps for mapper-owned kinds :: cd /Users/ladvien/bevy_emerge_loop && grep -n "bevy_grimoire_decide\|bevy_flora\|^\[features\]" -A0 crates/bevy_grimoire_mapper/Cargo.toml; grep -n "ron::\|fn p
+177	29	choose	model	model		2026-11-01T00:22:19Z	5.6	
+177	30	choose	tool	read files	read	2026-11-01T00:22:24Z	0.1	Reading forest_of :: crates/bevy_grimoire_mapper/src/ops_forest.rs:160-180
+177	31	choose	tool	read files	read	2026-11-01T00:22:24Z	0.1	Reading people_of :: crates/bevy_grimoire_mapper/src/ops_people.rs:112-135
+177	32	choose	tool	read files	read	2026-11-01T00:22:24Z	0.1	Reading scripts_of :: crates/bevy_grimoire_mapper/src/ops_scripts.rs:110-130
+177	33	choose	model	model		2026-11-01T00:22:25Z	13.6	
+177	34	choose	tool	shell	bash	2026-11-01T00:22:38Z	0.1	Finding callers of the three lenient readers :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "forest_of(\|people_of(\|scripts_of(" crates --include=*.rs | grep -v "^crates/bevy_grimoire_mapper/tests" | cut 
+177	35	choose	model	model		2026-11-01T00:22:38Z	5.1	
+177	36	choose	tool	read files	read	2026-11-01T00:22:44Z	0.0	Reading forest apply :: crates/bevy_grimoire_mapper/src/ops_forest.rs:262-300
+177	37	choose	tool	read files	read	2026-11-01T00:22:44Z	0.1	Reading people apply :: crates/bevy_grimoire_mapper/src/ops_people.rs:196-232
+177	38	choose	tool	read files	read	2026-11-01T00:22:44Z	0.1	Reading scripts apply :: crates/bevy_grimoire_mapper/src/ops_scripts.rs:236-272
+177	39	choose	model	model		2026-11-01T00:22:44Z	6.7	
+177	40	choose	tool	shell	bash	2026-11-01T00:22:50Z	0.0	Checking feature gating for the three ops :: cd /Users/ladvien/bevy_emerge_loop && grep -n "cfg(" crates/bevy_grimoire_mapper/src/ops_people.rs crates/bevy_grimoire_mapper/src/ops_scripts.rs crates/bevy_gr
+177	41	choose	model	model		2026-11-01T00:22:50Z	18.3	
+177	42	choose	tool	shell	bash	2026-11-01T00:23:09Z	0.0	Checking guide mentions and forest_view body :: cd /Users/ladvien/bevy_emerge_loop && grep -n "unchecked\|not checked\|ratchet\|forest\|people" docs/guide/reload-contract.md | cut -c1-300; grep -n "cfg(featur
+177	43	choose	model	model		2026-11-01T00:23:09Z	8.3	
+177	44	choose	tool	read files	read	2026-11-01T00:23:17Z	0.0	Reading terrain_view decision code :: crates/bevy_grimoire_mapper/src/terrain_view.rs:240-340
+177	45	choose	tool	read files	read	2026-11-01T00:23:17Z	0.0	Reading EditorReloads API :: crates/bevy_grimoire_mapper/src/live.rs:75-150
+177	46	choose	model	model		2026-11-01T00:23:17Z	6.5	
+177	47	research	tool	phase mark	bash	2026-11-01T00:23:23Z	1.5	Checking sentence format and forest_view gating :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark research; grep -rn "fn sentence" -B2 -A14 crates/bevy_grimoire_core/src/live.rs | head -4
+177	48	research	model	model		2026-11-01T00:23:25Z	2.8	
+177	49	research	tool	shell	bash	2026-11-01T00:23:28Z	0.1	Finding sentence helper, forest tests, ops Refusal :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "fn sentence" -B3 -A14 crates/bevy_grimoire_core/src | head -40; sed -n 105,116p crates/bevy_grimoire_mapper/src/
+177	50	research	model	model		2026-11-01T00:23:28Z	8.8	
+177	51	research	tool	edit files	edit	2026-11-01T00:23:37Z	0.0	Adding read and sentence to core reload_check :: [crates/bevy_grimoire_core/src/reload_check.rs#00FD] PUT >41: + +impl Refusal { + /// `site/forest/yard.ron (trees[2].yaw): 1:47: Expected float`: the file, the
+177	52	research	model	model		2026-11-01T00:23:37Z	5.0	
+177	53	research	tool	edit files	edit	2026-11-01T00:23:42Z	0.0	Fixing doc link :: [crates/bevy_grimoire_core/src/reload_check.rs#C51C] PUT 45.=45: + /// got that far, and why. The same sentence `KindVerdict::sentence` says.
+177	54	research	model	model		2026-11-01T00:23:42Z	1.3	
+177	55	research	tool	edit files	edit	2026-11-01T00:23:43Z	0.1	Fixing doc link :: [crates/bevy_grimoire_core/src/reload_check.rs#C51C] PUT 45.=45: + /// got that far, and why. The same sentence `KindVerdict::sentence` says.
+177	56	research	model	model		2026-11-01T00:23:43Z	15.5	
+177	57	research	tool	edit files	write	2026-11-01T00:23:59Z	3.4	Creating the strict per-map file reader :: crates/bevy_grimoire_mapper/src/map_files.rs
+177	58	research	model	model		2026-11-01T00:24:02Z	2.4	
+177	59	research	tool	shell	bash	2026-11-01T00:24:04Z	0.1	Locating module registration and imports :: cd /Users/ladvien/bevy_emerge_loop && grep -n "pub mod ops_forest;\|pub mod ops_people\|pub mod ops_scripts" crates/bevy_grimoire_mapper/src/lib.rs; grep -n "^u
+177	60	research	model	model		2026-11-01T00:24:04Z	8.0	
+177	61	research	tool	edit files	edit	2026-11-01T00:24:13Z	0.1	Wiring strict readers into the three writers :: [crates/bevy_grimoire_mapper/src/ops_people.rs#01F1] PUT >128: + +/// **The saved people of a map for an operation that rewrites the file**: nobody when there i
+177	62	research	model	model		2026-11-01T00:24:13Z	2.7	
+177	63	research	tool	git	bash	2026-11-01T00:24:15Z	0.3	Checking which edits applied :: cd /Users/ladvien/bevy_emerge_loop && git status --short
+177	64	research	model	model		2026-11-01T00:24:16Z	4.1	
+177	65	research	tool	edit files	edit	2026-11-01T00:24:20Z	0.1	Wiring strict readers into the three writers :: [crates/bevy_grimoire_mapper/src/ops_people.rs#01F1] PUT >128: + +/// **The saved people of a map for an operation that rewrites the file**: nobody when there i
+177	66	research	model	model		2026-11-01T00:24:20Z	6.6	
+177	67	research	tool	shell	bash	2026-11-01T00:24:26Z	0.1	Checking KindVerdict constructors and terrain_view decide calls :: cd /Users/ladvien/bevy_emerge_loop && grep -n "pub fn applied\|pub fn refused" -B1 -A8 crates/bevy_grimoire_core/src/live_verdict.rs | head -40; sed -n 95,124p 
+177	68	research	model	model		2026-11-01T00:24:26Z	8.3	
+177	69	research	tool	shell	bash	2026-11-01T00:24:35Z	0.0	Checking terrain_view imports :: cd /Users/ladvien/bevy_emerge_loop && grep -n "^use" crates/bevy_grimoire_mapper/src/terrain_view.rs
+177	70	research	model	model		2026-11-01T00:24:35Z	3.9	
+177	71	research	tool	edit files	edit	2026-11-01T00:24:39Z	0.0	Forest view decides its file once per edit :: [crates/bevy_grimoire_mapper/src/forest_view.rs#D468] PUT 132.=143: + let file = forest_path.strip_prefix(&project.project_dir).unwrap_or(&forest_path).to_strin
+177	72	research	model	model		2026-11-01T00:24:39Z	2.5	
+177	73	research	tool	read files	read	2026-11-01T00:24:41Z	0.0	Re-reading forest_view region :: crates/bevy_grimoire_mapper/src/forest_view.rs:100-145
+177	74	research	model	model		2026-11-01T00:24:41Z	6.6	
+177	75	research	tool	edit files	edit	2026-11-01T00:24:48Z	0.0	Forest view decides its file once per edit :: [crates/bevy_grimoire_mapper/src/forest_view.rs#D468] PUT 130.=142: + // No file is an empty forest. A file that does not parse (broken by hand) keeps what is d
+177	76	research	model	model		2026-11-01T00:24:48Z	2.8	
+177	77	research	tool	edit files	edit	2026-11-01T00:24:51Z	0.0	Tidy import groups :: [crates/bevy_grimoire_mapper/src/forest_view.rs#1E95] PUT 27.=29: +use bevy_grimoire_core::live::KindVerdict; +use bevy_grimoire_core::reload_check; +
+177	78	research	model	model		2026-11-01T00:24:51Z	7.0	
+177	79	research	tool	shell	bash	2026-11-01T00:24:58Z	0.0	Looking at op names/params used in existing tests :: cd /Users/ladvien/bevy_emerge_loop && grep -n "dispatch(" crates/bevy_grimoire_mapper/tests/triggers.rs | head -5; grep -n "dispatch(.*person_set" crates/bevy_g
+177	80	research	model	model		2026-11-01T00:24:58Z	15.4	
+177	81	research	tool	shell	bash	2026-11-01T00:25:13Z	0.1	Looking at the terrain verdict test as a template :: cd /Users/ladvien/bevy_emerge_loop && date -u +%H:%M:%S; grep -n "EditorReloads\|reloads" crates/bevy_grimoire_mapper/tests/a_refused_terrain_file_keeps_the_las
+177	82	research	model	model		2026-11-01T00:25:13Z	21.9	
+177	83	research	tool	shell	bash	2026-11-01T00:25:35Z	0.1	Looking at forest_view test setup and Person :: cd /Users/ladvien/bevy_emerge_loop && sed -n 1,20p crates/bevy_grimoire_mapper/tests/forest_view.rs; grep -n "pub struct Person\b" -A22 crates/bevy_grimoire_map
+177	84	research	model	model		2026-11-01T00:25:35Z	19.4	
+177	85	research	tool	edit files	write	2026-11-01T00:25:55Z	0.0	Writing the failing-first regression test :: crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs
+177	86	research	model	model		2026-11-01T00:25:55Z	3.3	
+177	87	research	tool	shell	bash	2026-11-01T00:25:58Z	0.0	Finding mod placement in all.rs :: cd /Users/ladvien/bevy_emerge_loop && grep -n "^mod a" crates/bevy_grimoire_mapper/tests/all.rs | head -20
+177	88	research	model	model		2026-11-01T00:25:58Z	1.5	
+177	89	research	tool	shell	bash	2026-11-01T00:25:59Z	0.0	Viewing all.rs ordering near a_f :: cd /Users/ladvien/bevy_emerge_loop && sed -n 33,38p crates/bevy_grimoire_mapper/tests/all.rs; sed -n 1,18p crates/bevy_grimoire_mapper/tests/all.rs | head -20
+177	90	research	model	model		2026-11-01T00:25:59Z	1.1	
+177	91	research	tool	edit files	edit	2026-11-01T00:26:01Z	0.0	Registering the new test module :: [crates/bevy_grimoire_mapper/tests/all.rs] PUT <20: +mod a_file_that_does_not_read_is_never_overwritten;
+177	92	research	model	model		2026-11-01T00:26:01Z	2.5	
+177	93	research	tool	edit files	edit	2026-11-01T00:26:03Z	0.0	Registering the new test module :: [crates/bevy_grimoire_mapper/tests/all.rs#16E1] PUT <31: +mod a_file_that_does_not_read_is_never_overwritten;
+177	94	research	model	model		2026-11-01T00:26:03Z	1.0	
+177	95	research	tool	edit files	edit	2026-11-01T00:26:04Z	0.0	Registering the new test module :: [crates/bevy_grimoire_mapper/tests/all.rs#16E1] PUT <31: +mod a_file_that_does_not_read_is_never_overwritten;
+177	96	research	model	model		2026-11-01T00:26:04Z	6.3	
+177	97	build	tool	phase mark	bash	2026-11-01T00:26:10Z	1.5	Checking big for scratch dirs and remote head :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark build; ssh big 'bash -c "ls -d ~/p1* ~/*grimoire* ~/*emerge* 2>/dev/null; ls ~/target 2>/
+177	98	build	model	model		2026-11-01T00:26:12Z	4.6	
+177	99	build	tool	remote command	bash	2026-11-01T00:26:17Z	15.2	Cloning scratch repo on big :: cd /Users/ladvien/bevy_emerge_loop && time ssh big 'bash -c "GIT_LFS_SKIP_SMUDGE=1 git clone -q git@github.com:bevy-coven/bevy_grimoire.git ~/p168 && cd ~/p168 
+177	100	build	model	model		2026-11-01T00:26:32Z	6.7	
+177	101	build	tool	cargo test	bash	2026-11-01T00:26:39Z	5.0	Starting the before-run on big :: cd /Users/ladvien/bevy_emerge_loop && python3 - <<'EOF' t = open('crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs').read() t
+177	102	build	model	model		2026-11-01T00:26:43Z	3.2	
+177	103	build	tool	read files	read	2026-11-01T00:26:47Z	0.0	Reading guide sections to update :: docs/guide/reload-contract.md:66-100
+177	104	build	model	model		2026-11-01T00:26:47Z	9.5	
+177	105	build	tool	edit files	edit	2026-11-01T00:26:56Z	0.0	Updating the reload-contract guide :: [docs/guide/reload-contract.md#932D] PUT 90.=90: +**A file an operation rewrites is read strictly.** `forest_scatter`, `person_set` and `trigger_set` read their
+177	106	build	tool	remote command	bash	2026-11-01T00:26:56Z	1.5	Checking before-run progress :: ssh big 'cat /tmp/p168_before.log | tail -5; ls ~/p168-target/debug/deps 2>/dev/null | wc -l'
+177	107	build	model	model		2026-11-01T00:26:58Z	5.7	
+177	108	build	tool	shell	bash	2026-11-01T00:27:04Z	0.0	Looking at backlog H3 entry, iterations, changelog head :: cd /Users/ladvien/bevy_emerge_loop && grep -n "H3" docs/loop/backlog.json | cut -c1-300 | head; ls docs/loop/iterations | tail -3; head -c 1800 CHANGELOG.md
+177	109	build	model	model		2026-11-01T00:27:04Z	1.4	
+177	110	build	tool	shell	bash	2026-11-01T00:27:05Z	0.0	Reading backlog H3 entries and a report template example :: cd /Users/ladvien/bevy_emerge_loop && sed -n 245,300p docs/loop/backlog.json | cut -c1-1800; cat docs/loop/iterations/2026-10-31-viewport-ed2bec0.md | head -50
+177	111	build	model	model		2026-11-01T00:27:05Z	1.0	
+177	112	build	tool	remote command	bash	2026-11-01T00:27:06Z	1.5	Checking before-run :: ssh big 'tail -40 /tmp/p168_before.log'; date -u +%H:%M:%S
+177	113	build	model	model		2026-11-01T00:27:08Z	11.0	
+177	114	build	tool	shell	bash	2026-11-01T00:27:19Z	0.1	Looking at checks and tree readers :: cd /Users/ladvien/bevy_emerge_loop && sed -n 28,75p crates/bevy_grimoire_decide/src/check.rs; grep -n "for_project" -r crates --include=*.rs | grep -v "^crates/
+177	115	build	model	model		2026-11-01T00:27:19Z	5.8	
+177	116	build	tool	read files	read	2026-11-01T00:27:25Z	0.0	Reading tree_edit read path :: crates/bevy_grimoire_mapper/src/ops_tree.rs:74-110
+177	117	build	model	model		2026-11-01T00:27:25Z	6.3	
+177	118	build	tool	read files	read	2026-11-01T00:27:31Z	0.0	Reading people_run reader :: crates/bevy_grimoire_mapper/src/ops_people.rs:596-650
+177	119	build	tool	read files	read	2026-11-01T00:27:31Z	0.0	Reading scripts compile reader :: crates/bevy_grimoire_mapper/src/ops_scripts.rs:205-232
+177	120	build	model	model		2026-11-01T00:27:31Z	6.1	
+177	121	build	tool	edit files	edit	2026-11-01T00:27:37Z	0.0	people_run and trigger compile refuse an unreadable file :: [crates/bevy_grimoire_mapper/src/ops_people.rs#033A] PUT 621.=621: + let people = try_people_of(project, &p.map)?; [crates/bevy_grimoire_mapper/src/ops_scripts.
+177	122	build	tool	remote command	bash	2026-11-01T00:27:37Z	3.6	Checking before-run :: ssh big 'tail -30 /tmp/p168_before.log'; ssh big 'ls ~/p168-target/debug/deps | wc -l'
+177	123	build	model	model		2026-11-01T00:27:41Z	4.2	
+177	124	build	tool	edit files	edit	2026-11-01T00:27:45Z	0.0	Adding the gated run-refusal test :: [crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs#F096] PUT >$: + +/// A run that reads the file refuses it too, with the rea
+177	125	build	model	model		2026-11-01T00:27:45Z	7.4	
+177	126	build	tool	wait: build	wait	2026-11-01T00:27:52Z	0.0	Waiting for the before-run build
+177	127	build	model	model		2026-11-01T00:27:52Z	2.0	
+177	128	build	tool	remote command	bash	2026-11-01T00:27:54Z	0.0	[launched bg_3] Waiting for the before-run on big :: ssh big 'bash -c "timeout 900 bash -c \"until grep -q \\\"=== before done\\\" /tmp/p168_before.log; do sleep 5; done\"; tail -60 /tmp/p168_before.log"'
+177	129	build	model	model		2026-11-01T00:27:54Z	10.3	
+177	130	build	tool	subagents	task	2026-11-01T00:28:05Z	0.1	[launched ReviewSlice3] Reviewing the slice diff
+177	131	build	model	model		2026-11-01T00:28:05Z	28.2	
+177	132	build	tool	edit files	edit	2026-11-01T00:28:33Z	0.0	Adding the flora forest-view verdict test :: [crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs#AD23] PUT >$: + +/// The forest view decides its file once per edit: a refu
+177	133	build	model	model		2026-11-01T00:28:33Z	6.7	
+177	134	build	tool	search	grep	2026-11-01T00:28:40Z	0.0	Finding the mut cases line :: crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs
+177	135	build	model	model		2026-11-01T00:28:40Z	1.3	
+177	136	build	tool	edit files	edit	2026-11-01T00:28:41Z	0.1	Silencing unused_mut without the flora feature :: [crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs#25C4] PUT <35: + #[cfg_attr(not(feature = "bevy_flora"), allow(unused_mut))
+177	137	build	model	model		2026-11-01T00:28:41Z	5.8	
+177	138	build	tool	wait: review	wait	2026-11-01T00:28:47Z	229.5	Waiting for before-run and reviewer
+177	139	build	model	model		2026-11-01T00:32:36Z	18.2	
+177	140	prove	tool	phase mark	bash	2026-11-01T00:32:55Z	4.9	Syncing the slice to big and starting the after-run :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark prove && files=$(git status --short | awk '{print $2}') && rsync -aR $files big:p168/ && 
+177	141	prove	model	model		2026-11-01T00:32:59Z	1.8	
+177	142	prove	tool	remote command	bash	2026-11-01T00:33:01Z	0.0	[launched bg_4] Waiting for after-run on big :: ssh big 'bash -c "timeout 1500 bash -c \"until grep -q \\\"=== features done\\\" /tmp/p168_after.log; do sleep 5; done\"; cat /tmp/p168_after.log"'
+177	143	prove	model	model		2026-11-01T00:33:01Z	5.7	
+177	144	prove	tool	loop tools	bash	2026-11-01T00:33:07Z	0.8	Checking accept.py usage :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/accept.py --help 2>&1 | head -30; grep -n "accept.py" docs/loop/log.md | tail -2 | cut -c1-600
+177	145	prove	model	model		2026-11-01T00:33:08Z	15.8	
+177	146	prove	tool	shell	bash	2026-11-01T00:33:24Z	0.0	Finding how pass 167 ran accept.py :: cd /Users/ladvien/bevy_emerge_loop && sed -n 2014p docs/loop/log.md | grep -o "accept.py[^.]*\.[^.]*\." | head -3; grep -n "accept.py" docs/loop/iterations/2026
+177	147	prove	model	model		2026-11-01T00:33:24Z	1.4	
+177	148	prove	tool	shell	bash	2026-11-01T00:33:25Z	0.0	Reading prior accept run recipe :: cd /Users/ladvien/bevy_emerge_loop && grep -n "Acceptance" -A4 docs/loop/iterations/2026-10-31-reload-8f03593.md | cut -c1-900; ls tools/loop | head -30
+177	149	prove	model	model		2026-11-01T00:33:25Z	14.7	
+177	150	prove	model	model		2026-11-01T00:33:40Z	17.2	
+177	151	prove	model	model		2026-11-01T00:33:57Z	6.7	
+177	152	prove	tool	loop tools	bash	2026-11-01T00:34:04Z	0.1	How accept.py finds binaries :: cd /Users/ladvien/bevy_emerge_loop && grep -n "CARGO_TARGET_DIR\|target/debug\|target_dir\|cargo" tools/loop/common.py | head -12
+177	153	prove	model	model		2026-11-01T00:34:04Z	6.9	
+177	154	prove	tool	wait: review	wait	2026-11-01T00:34:11Z	203.7	Waiting for after-run or reviewer
+177	155	prove	model	model		2026-11-01T00:37:34Z	6.3	
+177	156	prove	tool	shell	bash	2026-11-01T00:37:41Z	0.0	Locating lines to fix from review :: cd /Users/ladvien/bevy_emerge_loop && grep -n "let edited" crates/bevy_grimoire_mapper/src/forest_view.rs; grep -n "let (mut ctx, project) = open(&format!(\"fix
+177	157	prove	model	model		2026-11-01T00:37:41Z	2.1	
+177	158	prove	tool	edit files	edit	2026-11-01T00:37:43Z	0.0	Applying review fixes :: [crates/bevy_grimoire_mapper/src/forest_view.rs#26EE] PUT 137.=137: + let edited = state.seen.as_ref().is_none_or(|s| s.forest != now.forest || s.map_path != no
+177	159	prove	model	model		2026-11-01T00:37:43Z	2.4	
+177	160	prove	tool	edit files	edit	2026-11-01T00:37:45Z	0.0	Applying review fixes :: [crates/bevy_grimoire_mapper/src/forest_view.rs#26EE] PUT 137.=137: + let edited = state.seen.as_ref().is_none_or(|s| s.forest != now.forest || s.map_path != no
+177	161	prove	model	model		2026-11-01T00:37:45Z	5.5	
+177	162	prove	tool	remote command	bash	2026-11-01T00:37:51Z	4.6	Restarting the after-run with the fixes :: cd /Users/ladvien/bevy_emerge_loop && ssh big 'bash -c "tail -5 /tmp/p168_after.log; pkill -f p168_after.sh; sleep 1; pkill -f p168-target; pgrep -fl cargo | he
+177	163	prove	model	model		2026-11-01T00:37:55Z	12.6	
+177	164	prove	tool	wait: other	wait	2026-11-01T00:38:08Z	320.3	Waiting for the after-run
+177	165	prove	model	model		2026-11-01T00:43:28Z	6.1	
+177	166	prove	tool	search	grep	2026-11-01T00:43:34Z	0.0	Finding prelude glob to replace :: crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs
+177	167	prove	model	model		2026-11-01T00:43:34Z	1.4	
+177	168	prove	tool	edit files	edit	2026-11-01T00:43:36Z	0.0	Avoid prelude glob shadowing ops :: [crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs#A0AA] PUT 192.=192: + use bevy::prelude::App;
+177	169	prove	model	model		2026-11-01T00:43:36Z	4.4	
+177	170	prove	tool	cargo test	bash	2026-11-01T00:43:40Z	34.0	Running the feature-gated tests on big :: cd /Users/ladvien/bevy_emerge_loop && f=crates/bevy_grimoire_mapper/tests/a_file_that_does_not_read_is_never_overwritten.rs && rsync -aR $f big:p168/ && cat > /
+177	171	prove	model	model		2026-11-01T00:44:14Z	12.2	
+177	172	ship	tool	phase mark	bash	2026-11-01T00:44:26Z	4.6	Committing the slice :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark ship && git add crates docs/guide/reload-contract.md && git status --short && git commit 
+177	173	ship	model	model		2026-11-01T00:44:31Z	4.7	
+177	174	ship	tool	cargo build	bash	2026-11-01T00:44:36Z	60.0	[launched bg_5] Running accept.py on big after the change :: cat > /tmp/p168_accept.sh <<'EOF' #!/bin/bash cd ~/p168 export CARGO_TARGET_DIR=$HOME/p168-target echo "=== accept start $(date +%T)" cargo build -p bevy_grimoi
+177	175	ship	model	model		2026-11-01T00:45:36Z	18.5	
+177	176	ship	tool	loop tools	bash	2026-11-01T00:45:54Z	27.1	Adding changelog line :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/changelog/changelog.py add --id 200-unread-files --sha c05f917 --title "A forest, people or triggers file th
+177	177	ship	model	model		2026-11-01T00:46:21Z	5.4	
+177	178	ship	tool	shell	bash	2026-11-01T00:46:27Z	0.2	Inspecting my changelog line ending :: cd /Users/ladvien/bevy_emerge_loop && grep -n "200-unread-files" CHANGELOG.md | cut -c1-60; grep -o "\*No clip:[^*]*\*" CHANGELOG.md | head -0; sed -n 7p CHANGE
+177	179	ship	model	model		2026-11-01T00:46:27Z	2.7	
+177	180	ship	tool	loop tools	bash	2026-11-01T00:46:30Z	34.6	Fixing the clip reason on my own changelog line :: cd /Users/ladvien/bevy_emerge_loop && python3 - <<'EOF' p='CHANGELOG.md' s=open(p).read().split('\n') i=[n for n,l in enumerate(s) if '**200-unread-files**' in 
+177	181	ship	model	model		2026-11-01T00:47:04Z	3.8	
+177	182	ship	tool	shell	bash	2026-11-01T00:47:08Z	0.3	Reading the end of the backlog evidence line :: cd /Users/ladvien/bevy_emerge_loop && sed -n 252p docs/loop/backlog.json | tail -c 1500
+177	183	ship	model	model		2026-11-01T00:47:08Z	3.5	
+177	184	ship	tool	read files	read	2026-11-01T00:47:12Z	0.1	Reading raw evidence line :: docs/loop/backlog.json:252:raw
+177	185	ship	model	model		2026-11-01T00:47:12Z	6.7	
+177	186	ship	tool	edit files	edit	2026-11-01T00:47:19Z	0.0	Appending slice 3 evidence to the H3 backlog item :: [docs/loop/backlog.json] PUT 252.=252: + "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 (pass
+177	187	ship	model	model		2026-11-01T00:47:19Z	6.5	
+177	188	ship	tool	edit files	edit	2026-11-01T00:47:25Z	0.1	Appending slice 3 evidence to the H3 backlog item :: [docs/loop/backlog.json#780D] PUT 252.=252: + "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 
+177	189	ship	model	model		2026-11-01T00:47:25Z	3.8	
+177	190	ship	tool	wait: other	wait	2026-11-01T00:47:29Z	64.1	Waiting for accept.py run
+177	191	ship	model	model		2026-11-01T00:48:33Z	16.5	
+177	192	ship	tool	edit files	write	2026-11-01T00:48:50Z	0.0	Writing the pass report :: docs/loop/iterations/2026-10-31-reload-c05f917.md
+177	193	ship	model	model		2026-11-01T00:48:50Z	5.0	
+177	194	ship	tool	shell	bash	2026-11-01T00:48:55Z	0.1	Checking pass 167's release statement :: cd /Users/ladvien/bevy_emerge_loop && grep -n "## Release" -A2 docs/loop/iterations/2026-10-31-reload-8f03593.md | cut -c1-700
+177	195	ship	model	model		2026-11-01T00:48:55Z	2.1	
+177	196	ship	tool	shell	bash	2026-11-01T00:48:57Z	0.5	Checking release state :: cd /Users/ladvien/bevy_emerge_loop && grep -n -i "release" docs/loop/iterations/2026-10-31-reload-8f03593.md docs/loop/iterations/2026-10-31-viewport-ed2bec0.md
+177	197	ship	model	model		2026-11-01T00:48:57Z	5.8	
+177	198	ship	tool	git	bash	2026-11-01T00:49:03Z	1.7	Checking release status of bevy_grimoire_core :: cd /Users/ladvien/bevy_emerge_loop && git log --oneline --grep='^release:' -5; git log -1 --format=%cd bevy_grimoire_core-v0.1.0; git diff --stat bevy_grimoire_
+177	199	ship	model	model		2026-11-01T00:49:05Z	12.6	
+177	200	ship	tool	shell	bash	2026-11-01T00:49:18Z	0.2	Checking clock and dependents of core :: date -u +%H:%M:%S; cd /Users/ladvien/bevy_emerge_loop && grep -n "bevy_grimoire_core" crates/bevy_grimoire_solver/Cargo.toml crates/bevy_grimoire_snip/Cargo.tom
+177	201	ship	model	model		2026-11-01T00:49:18Z	13.2	
+177	202	ship	tool	shell	bash	2026-11-01T00:49:31Z	0.2	Checking recent log mentions of release :: cd /Users/ladvien/bevy_emerge_loop && grep -n -i "release" docs/loop/log.md | tail -6 | cut -c1-420
+177	203	ship	model	model		2026-11-01T00:49:31Z	4.0	
+177	204	ship	tool	read files	read	2026-11-01T00:49:35Z	1.1	Reading the end of log.md for the tag :: docs/loop/log.md:-2
+177	205	ship	model	model		2026-11-01T00:49:36Z	7.1	
+177	206	ship	tool	edit files	edit	2026-11-01T00:49:43Z	1.2	Appending the pass log line :: [docs/loop/log.md#B030] PUT >$: +- 2026-10-31 19:55 loop (bevy_emerge_loop, laptop + big, pass 168): shipped #200 (H3) slice 3 (c05f917; the issue stays open, c
+177	207	ship	model	model		2026-11-01T00:49:45Z	4.6	
+177	208	ship	tool	push gate	bash	2026-11-01T00:49:49Z	36.5	Committing docs and pushing a non-main hop branch :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/backlog.py check 2>&1 | tail -2 && python3 tools/changelog/changelog.py check 2>&1 | tail -1 && git add
+177	209	ship	model	model		2026-11-01T00:50:26Z	12.7	
+177	210	ship	tool	push gate	bash	2026-11-01T00:50:39Z	22.8	Starting the real push gate on big :: cat > /tmp/p168_gate.sh <<'EOF' #!/bin/bash cd ~/p168 git fetch -q origin git worktree add -q --detach ~/p168g origin/loop/200-slice3 cd ~/p168g git log --oneli
+177	211	ship	model	model		2026-11-01T00:51:01Z	3.1	
+177	212	ship	tool	git	bash	2026-11-01T00:51:04Z	3.3	Seeing what moved on main :: cd /Users/ladvien/bevy_emerge_loop && git fetch -q origin && git log --oneline HEAD..origin/main | head; git diff --stat HEAD...origin/main | tail -5
+177	213	ship	model	model		2026-11-01T00:51:08Z	3.7	
+177	214	ship	tool	git	bash	2026-11-01T00:51:11Z	1.0	Reading the new tooling commits :: cd /Users/ladvien/bevy_emerge_loop && git log -2 --format='%h %s%n%b' HEAD..origin/main | head -40; git diff --stat HEAD...origin/main
+177	215	ship	model	model		2026-11-01T00:51:12Z	1.4	
+177	216	ship	tool	git	bash	2026-11-01T00:51:14Z	0.3	Reading the build-loop.md change :: cd /Users/ladvien/bevy_emerge_loop && git diff HEAD...origin/main -- .omp/commands/build-loop.md
+177	217	ship	model	model		2026-11-01T00:51:14Z	1.4	
+177	218	ship	tool	git	bash	2026-11-01T00:51:16Z	0.4	Reading the new owner rule in full :: cd /Users/ladvien/bevy_emerge_loop && git show origin/main:.omp/commands/build-loop.md | sed -n 29,45p
+177	219	ship	model	model		2026-11-01T00:51:16Z	5.9	
+177	220	ship	tool	git	bash	2026-11-01T00:51:22Z	4.4	Reading the last audit rows :: cd /Users/ladvien/bevy_emerge_loop && git fetch -q origin loop-stats 2>&1 | tail -1; git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv 2>&1 | tail -4
+177	221	ship	model	model		2026-11-01T00:51:26Z	17.0	
+177	222	ship	tool	git	bash	2026-11-01T00:51:43Z	1.4	Listing tags, publish flags and the game crate :: cd /Users/ladvien/bevy_emerge_loop && git tag --list | cat; for c in crates/*/Cargo.toml; do echo "$c: $(grep -m1 '^version' $c) $(grep -m1 '^publish' $c)"; don
+177	223	ship	model	model		2026-11-01T00:51:45Z	6.1	
+177	224	ship	tool	remote command	bash	2026-11-01T00:51:51Z	0.7	Checking where publish credentials exist :: ssh big 'bash -c "ls -la ~/.cargo/credentials* 2>&1 | head -2; which cargo-semver-checks"'; ls -la ~/.cargo/credentials* 2>&1 | head -2; cat /tmp/loop151_releas
+177	225	ship	model	model		2026-11-01T00:51:52Z	9.1	
+177	226	ship	tool	loop tools	bash	2026-11-01T00:52:01Z	0.7	Finding dependents of core and how the audit counts releases :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "bevy_grimoire_core\s*=" crates/*/Cargo.toml Cargo.toml | cut -c1-200; sed -n 2,5p tools/loop/steps.py | head -3;
+177	227	ship	model	model		2026-11-01T00:52:01Z	8.7	
+177	228	release	tool	phase mark	bash	2026-11-01T00:52:10Z	10.2	Running cargo semver-checks for core on big :: python3 /Users/ladvien/bevy_emerge_loop/tools/loop/steps.py mark release; ssh big 'bash -c "cd ~/p168g && export CARGO_TARGET_DIR=\$HOME/p168-target && cargo se
+177	229	release	model	model		2026-11-01T00:52:20Z	11.0	
+177	230	release	tool	shell	bash	2026-11-01T00:52:31Z	0.7	Checking whether dependents expose core types :: cd /Users/ladvien/bevy_emerge_loop && grep -rn "pub use bevy_grimoire_core\|pub use .*live_verdict\|Verdict" crates/bevy_grimoire_anim/src crates/bevy_grimoire/
+177	231	release	model	model		2026-11-01T00:52:32Z	10.3	
+177	232	release	tool	git	bash	2026-11-01T00:52:42Z	2.0	Merging origin/main :: cd /Users/ladvien/bevy_emerge_loop && git merge --no-edit origin/main 2>&1 | tail -5; git status --short | head
+177	233	release	model	model		2026-11-01T00:52:44Z	1.7	
+177	234	release	tool	shell	bash	2026-11-01T00:52:46Z	0.1	Looking at the changelog conflict :: cd /Users/ladvien/bevy_emerge_loop && grep -n "^<<<<<<<\|^=======\|^>>>>>>>" CHANGELOG.md; sed -n 1,16p CHANGELOG.md | cut -c1-120
+177	235	release	model	model		2026-11-01T00:52:46Z	3.4	
+177	236	release	tool	loop tools	bash	2026-11-01T00:52:50Z	26.8	Resolving the changelog conflict by keeping both lines :: cd /Users/ladvien/bevy_emerge_loop && python3 - <<'EOF' # resolve: drop the three conflict marker lines, keep both changelog lines (mine first) p='CHANGELOG.md'
+177	237	release	model	model		2026-11-01T00:53:16Z	3.1	
+177	238	release	tool	git	bash	2026-11-01T00:53:19Z	2.4	Committing the merge and viewing manifests :: cd /Users/ladvien/bevy_emerge_loop && git add CHANGELOG.md && git commit -q --no-edit && git log --oneline -1 && sed -n 1,5p crates/bevy_grimoire_core/Cargo.tom
+177	239	release	model	model		2026-11-01T00:53:22Z	2.1	
+177	240	release	tool	edit files	edit	2026-11-01T00:53:24Z	0.0	Bumping versions for the release :: [crates/bevy_grimoire_core/Cargo.toml] PUT 3.=3: +version = "0.2.0" [crates/bevy_grimoire_anim/Cargo.toml] PUT 3.=3: +version = "0.1.1" PUT 28.=28: +bevy_grimoi
+177	241	release	model	model		2026-11-01T00:53:24Z	2.9	
+177	242	release	tool	edit files	edit	2026-11-01T00:53:27Z	0.2	Bumping core version :: [crates/bevy_grimoire_core/Cargo.toml#6DC5] PUT 3.=3: +version = "0.2.0"
+177	243	release	tool	search	grep	2026-11-01T00:53:27Z	0.1	Getting tags for anim and bevy_grimoire manifests :: crates/bevy_grimoire_anim/Cargo.toml;crates/bevy_grimoire/Cargo.toml
+177	244	release	model	model		2026-11-01T00:53:27Z	2.0	
+177	245	release	tool	edit files	edit	2026-11-01T00:53:29Z	0.1	Bumping anim and bevy_grimoire versions and core requirements :: [crates/bevy_grimoire_anim/Cargo.toml#DD89] PUT 3.=3: +version = "0.1.1" PUT 28.=28: +bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.2.0" }
+177	246	release	model	model		2026-11-01T00:53:29Z	2.7	
+177	247	release	tool	shell	bash	2026-11-01T00:53:32Z	5.5	Checking other pins and refreshing Cargo.lock :: cd /Users/ladvien/bevy_emerge_loop && grep -rn 'bevy_grimoire\s*=\|bevy_grimoire_anim\s*=' crates/*/Cargo.toml Cargo.toml | cut -c1-200; cargo metadata --format
+177	248	release	model	model		2026-11-01T00:53:38Z	6.3	
+177	249	release	tool	push gate	bash	2026-11-01T00:53:44Z	24.8	Committing the release and starting the gate :: cd /Users/ladvien/bevy_emerge_loop && git add -A Cargo.lock crates/bevy_grimoire/Cargo.toml crates/bevy_grimoire_anim/Cargo.toml crates/bevy_grimoire_core/Cargo
+177	250	release	model	model		2026-11-01T00:54:09Z	4.8	
+177	251	release	tool	cargo publish	bash	2026-11-01T00:54:14Z	24.7	Dry-run publishing core on big :: ssh big 'bash -c "cd ~/p168g && export CARGO_TARGET_DIR=\$HOME/p168-pub && cargo publish -p bevy_grimoire_core --dry-run 2>&1 | tail -12"'
+177	252	release	model	model		2026-11-01T00:54:38Z	7.5	
+177	253	release	tool	remote command	bash	2026-11-01T00:54:46Z	0.0	[launched bg_6] Waiting for the push gate to finish :: ssh big 'bash -c "timeout 1500 bash -c \"until grep -q \\\"=== gate done\\\" /tmp/p168_gate2.log; do sleep 5; done\"; cat /tmp/p168_gate2.log"'
+177	254	release	model	model		2026-11-01T00:54:46Z	4.7	
+177	255	release	tool	wait: gate	wait	2026-11-01T00:54:51Z	216.6	Waiting for the gate
+177	256	release	model	model		2026-11-01T00:58:27Z	12.1	
+177	257	release	tool	cargo publish	bash	2026-11-01T00:58:39Z	48.2	Publishing core, anim and bevy_grimoire from big :: cat > /tmp/p168_pub.sh <<'EOF' #!/bin/bash set -o pipefail cd ~/p168g export CARGO_TARGET_DIR=$HOME/p168-pub echo "=== head $(git rev-parse --short HEAD)" idx()
+177	258	release	model	model		2026-11-01T00:59:28Z	7.5	
+177	259	release	tool	github	bash	2026-11-01T00:59:35Z	2.2	Commenting slice 3 on #200 :: cd /Users/ladvien/bevy_emerge_loop && gh issue comment 200 --repo bevy-coven/bevy_grimoire --body "$(cat <<'EOF' Slice 3 (pass 168, commits c05f917, 5c4960e, me
+177	260	release	model	model		2026-11-01T00:59:37Z	1.7	
+177	261	release	tool	remote command	bash	2026-11-01T00:59:39Z	60.0	[launched bg_7] Waiting for the publishes to finish :: ssh big 'bash -c "timeout 1500 bash -c \"until grep -qE \\\"=== DONE|FAILED|not on the index\\\" /tmp/p168_pub.log; do sleep 5; done\"; tail -20 /tmp/p168_pub.l
+177	262	release	model	model		2026-11-01T01:00:39Z	6.6	
+177	263	release	tool	wait: release	wait	2026-11-01T01:00:46Z	4.5	Waiting for publishes
+177	264	release	model	model		2026-11-01T01:00:50Z	3.3	
+177	265	release	tool	push gate	bash	2026-11-01T01:00:53Z	6.7	Tagging the releases and verifying on crates.io :: cd /Users/ladvien/bevy_emerge_loop && git fetch -q origin && git rev-parse --short HEAD origin/main && for c in "bevy_grimoire_core 0.2.0" "bevy_grimoire_anim 0
+177	266	release	model	model		2026-11-01T01:01:00Z	3.6	
+177	267	release	tool	push gate	bash	2026-11-01T01:01:04Z	6.5	Tagging and pushing release tags :: cd /Users/ladvien/bevy_emerge_loop && git rev-parse --short HEAD; git rev-parse --short origin/main; for c in "bevy_grimoire_core 0.2.0" "bevy_grimoire_anim 0.1
+177	268	release	model	model		2026-11-01T01:01:10Z	3.4	
+177	269	release	tool	search	grep	2026-11-01T01:01:14Z	0.0	Locating release section in the report :: docs/loop/iterations/2026-10-31-reload-c05f917.md
+177	270	release	model	model		2026-11-01T01:01:14Z	3.8	
+177	271	release	tool	edit files	edit	2026-11-01T01:01:17Z	0.0	Correcting the report's Release section :: [docs/loop/iterations/2026-10-31-reload-c05f917.md#47D5] PUT 33.=33: +Made, from big (its own crates.io login), after the gate passed on the pushed commit fb0d8
+177	272	release	model	model		2026-11-01T01:01:17Z	4.5	
+177	273	release	tool	git	bash	2026-11-01T01:01:22Z	0.3	Checking pub changes in bevy_grimoire since 0.1.0 :: cd /Users/ladvien/bevy_emerge_loop && git diff bevy_grimoire-v0.1.0 HEAD -- crates/bevy_grimoire/src | grep -E "^[+-]\s*pub " | head
+177	274	release	model	model		2026-11-01T01:01:22Z	3.1	
+177	275	release	tool	edit files	edit	2026-11-01T01:01:25Z	0.0	Stating how the bevy_grimoire bump was decided :: [docs/loop/iterations/2026-10-31-reload-c05f917.md#F99C] PUT 33.=33: +Made, from big (its own crates.io login), after the gate passed on the pushed commit fb0d8
+177	276	release	model	model		2026-11-01T01:01:25Z	6.8	
+177	277	release	tool	remote command	bash	2026-11-01T01:01:32Z	1.1	Sizing and removing my worktree on big :: ssh big 'bash -c "df -h /home | tail -1; du -sh ~/p168 ~/p168-target ~/p168-pub 2>/dev/null; cd ~/p168g && git status --short | head -5; cd ~/p168 && git worktr
+177	278	release	model	model		2026-11-01T01:01:33Z	2.0	
+177	279	release	tool	remote command	bash	2026-11-01T01:01:35Z	25.1	Removing my scratch clone, target dirs and temp files :: ssh big 'bash -c "rm -rf ~/p168 ~/p168-target ~/p168-pub /tmp/p168_*; ls -d ~/p168* /tmp/p168* 2>&1 | head -3; df -h /home | tail -1"'; rm -f /tmp/p168_* /tmp/m
+177	280	release	model	model		2026-11-01T01:02:00Z	4.0	
+177	281	release	tool	git	bash	2026-11-01T01:02:04Z	0.7	Listing worktrees and remote hop branches :: cd /Users/ladvien/bevy_emerge_loop && git worktree list; git branch -r --list 'origin/loop/*' | cat; git status --short | head -3
+177	282	release	model	model		2026-11-01T01:02:05Z	2.9	
+177	283	release	tool	read files	read	2026-11-01T01:02:08Z	0.0	Getting log.md tag for append :: docs/loop/log.md:-1
+177	284	release	model	model		2026-11-01T01:02:08Z	6.9	
+177	285	release	tool	edit files	edit	2026-11-01T01:02:15Z	0.2	Appending the pass close line :: [docs/loop/log.md#DC21] PUT >$: +- 2026-10-31 20:10 loop (bevy_emerge_loop, pass 168, close): pushed c05f917, 5c4960e, the merge 1393adf (main had moved by two 
+177	286	release	model	model		2026-11-01T01:02:15Z	3.2	
+177	287	release	tool	push gate	bash	2026-11-01T01:02:18Z	15.8	Pushing the docs-only close commit to main :: cd /Users/ladvien/bevy_emerge_loop && python3 tools/loop/backlog.py check 2>&1 | tail -1 && git add docs && git commit -q -m "docs(loop): pass 168 close line an
+177	288	release	model	model		2026-11-01T01:02:34Z	8.0	
