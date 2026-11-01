@@ -237,6 +237,16 @@ def pass_for(session_start, starts, fallback):
     return best if best is not None else fallback
 
 
+def drop_passes(path, passes):
+    """Remove the rows of the given passes, so rewriting a pass replaces it rather than doubling it."""
+    if not path.exists():
+        return
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    keep = [l for i, l in enumerate(lines) if i == 0 or l.split("\t", 1)[0] not in {str(p) for p in passes}]
+    if len(keep) != len(lines):
+        path.write_text("".join(keep), encoding="utf-8")
+
+
 def write_rows(path, pass_no, rows):
     new = not path.exists()
     with open(path, "a", encoding="utf-8") as f:
@@ -467,6 +477,7 @@ def main(argv=None):
             print(f"steps: no session for {a.repo} since {since:%H:%M:%SZ}")
             return 0
         rows = steps(read_session(found[0]))
+        drop_passes(Path(a.state) / "steps.tsv", {a.pass_no})
         write_rows(Path(a.state) / "steps.tsv", a.pass_no, rows)
         print(f"steps: {summary(rows)}")
         return 0
@@ -476,10 +487,12 @@ def main(argv=None):
             found = found[-a.last:]
         starts = pass_starts(Path(a.state) / "driver.log")
         out = Path(a.state) / "steps.tsv"
-        if out.exists():
-            out.unlink()  # a backfill rebuilds the whole record, so running it twice does not double it
-        for i, (start, path) in enumerate(found, start=1):
-            write_rows(out, pass_for(start, starts, -i), steps(read_session(path)))
+        found = [(pass_for(start, starts, -i), path) for i, (start, path) in enumerate(found, start=1)]
+        # A backfill rebuilds the passes it read and keeps every other pass's rows, so running it twice
+        # does not double them and `--last K` does not erase older passes.
+        drop_passes(out, {n for n, _ in found})
+        for n, path in found:
+            write_rows(out, n, steps(read_session(path)))
         print(f"steps: backfilled {len(found)} session(s) into {out}")
         return 0
     if a.cmd == "report":

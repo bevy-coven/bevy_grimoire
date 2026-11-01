@@ -187,6 +187,18 @@ class Steps(unittest.TestCase):
         self.assertEqual(steps.pass_for(T0, starts, -1), 41)
         self.assertEqual(steps.pass_for(T0 + dt.timedelta(days=1), starts, -1), -1)
 
+    def test_rewriting_a_pass_replaces_its_rows_and_keeps_every_other_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "steps.tsv"
+            for n in (10, 11, 12):
+                steps.write_rows(out, n, self.rows)
+            steps.drop_passes(out, {12})
+            steps.write_rows(out, 12, self.rows[:1])
+            passes = [l.split("\t", 1)[0] for l in out.read_text().splitlines()[1:]]
+        self.assertEqual(passes.count("10"), len(self.rows))
+        self.assertEqual(passes.count("11"), len(self.rows))
+        self.assertEqual(passes.count("12"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
