@@ -2100,7 +2100,9 @@ impl Plugin for OpsBridgePlugin {
         app.init_resource::<FrameBusy>()
             .add_systems(First, frame_busy_start)
             .add_systems(Last, frame_busy_end);
-        app.add_plugins(crate::command_run::CommandRunPlugin);
+        if !app.is_plugin_added::<crate::command_run::CommandRunPlugin>() {
+            app.add_plugins(crate::command_run::CommandRunPlugin);
+        }
 
         app.add_debug_command(
             DebugCommandInfo::new(

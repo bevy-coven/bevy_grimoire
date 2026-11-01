@@ -1139,8 +1139,8 @@ dependencies = [
 
 [[package]]
 name = "bevy_gooey"
-version = "0.14.0"
-source = "git+https://github.com/bevy-coven/bevy_gooey?rev=15116c14a070d58509d6e177c5508d491551c4ff#15116c14a070d58509d6e177c5508d491551c4ff"
+version = "0.16.0"
+source = "git+https://github.com/bevy-coven/bevy_gooey?rev=18de9edc280963fc96a32a8ea8d17b92cd982b27#18de9edc280963fc96a32a8ea8d17b92cd982b27"
 dependencies = [
  "bevy",
  "serde",
