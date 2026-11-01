@@ -2209,6 +2209,7 @@ impl Plugin for EditorPlugin {
             .init_resource::<NoteBox>()
             .init_resource::<NotesFilter>()
             .init_resource::<crate::notes_view::NotesView>()
+            .init_resource::<crate::checks_view::ChecksView>()
             .init_resource::<crate::family_host::FamilySettings>()
             .add_systems(Update, (crate::family_host::report_problems, crate::family_host::reload_settings.in_set(crate::family_host::Reloaded)))
             // Registered in the same commit as `drive_move` and `keys` read it — a missing `ResMut`
@@ -2526,6 +2527,7 @@ impl Plugin for EditorPlugin {
                         draw_map_grid,
                         crate::terrain_view::sync_terrain_view,
                         crate::notes_view::sync_notes_view,
+                        crate::checks_view::sync_checks_view,
                         fit_bounds_floor
                             .run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
                     ),

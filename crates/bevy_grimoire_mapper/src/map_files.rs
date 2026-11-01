@@ -22,6 +22,13 @@ use crate::project::Project;
 /// unchecked list and on no other.
 pub const READ_HERE: &[&str] = &["forest", "people", "scripts", "trees"];
 
+/// **The registry kinds a watcher in this layer reads with a named refusal** (`checks`: the decision
+/// crate's type, held by [`crate::checks_view::ChecksView`]). No operation rewrites these files, so
+/// they have no row in the table of operations that refuse to overwrite a file that does not read;
+/// `tests/a_refused_checks_file_keeps_the_last_good_checks.rs` has their three bad files instead. Like
+/// [`READ_HERE`] they are on core's unchecked list and on no other.
+pub const WATCHED_HERE: &[&str] = &["checks"];
+
 /// **The path of `path` as the project's directory sees it**: what a verdict and a refusal name.
 pub fn file_name(project: &Project, path: &Path) -> String {
     path.strip_prefix(&project.project_dir).unwrap_or(path).to_string_lossy().replace('\\', "/")
