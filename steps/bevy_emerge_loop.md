@@ -1,6 +1,14 @@
 # Where bevy_emerge_loop's time goes
 
-Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-01 00:19Z.
+Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-01 00:31Z.
+
+## What the last passes shipped
+
+From [`bevy_emerge_loop-audit.tsv`](bevy_emerge_loop-audit.tsv): commits on main, unpushed commits, package files changed, release tags, doc and demo files, and what was missing.
+
+| pass | at | commits | unpushed | package_files | released | docs_files | demo_files | missing |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 2026-11-01T00:31Z | 47 | 0 | 53 | bevy_grimoire_solver-v0.1.1 | 16 | 3 | - |
 
 ## The last 12 passes
 
