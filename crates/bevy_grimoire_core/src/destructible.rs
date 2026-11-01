@@ -41,9 +41,19 @@ pub struct Bake {
 }
 
 impl Marks {
-    /// **Read the marks from their file's text.**
+    /// **Read the marks from their file's text.** A file of another version is refused: `destructible_set`
+    /// reads the marks, adds a piece and writes them back at this version, so a file from a newer build
+    /// would be written back as this one's, and what the newer build put there lost. (A [`Bake`] of
+    /// another version is not refused: it is a cache, stale and baked again.)
     pub fn parse(text: &str) -> Result<Marks, String> {
-        ron::from_str(text).map_err(|e| format!("destructible marks: {e}"))
+        let marks: Marks = ron::from_str(text).map_err(|e| format!("destructible marks: {e}"))?;
+        if marks.version != DESTRUCTIBLE_VERSION {
+            return Err(format!(
+                "destructible marks: version {} is not the {DESTRUCTIBLE_VERSION} this program reads",
+                marks.version
+            ));
+        }
+        Ok(marks)
     }
 }
 

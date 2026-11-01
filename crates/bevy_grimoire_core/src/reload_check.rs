@@ -184,7 +184,13 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "vocab" => run(text, Vocabularies::parse),
         "library" => run(text, Library::parse),
         "policy" => run(text, Policy::parse),
-        "rules" => run(text, Rules::parse),
+        "rules" => run(text, |t| {
+            // `Rules::parse` only reads RON. What the editor refuses to open (a version it does not read, a
+            // number no block can use) is `validate_numbers`, so a reload that said `applied` for a file the
+            // project open refuses was telling the author the edit had landed.
+            let rules = Rules::parse(t)?;
+            rules.validate_numbers().map(|()| rules)
+        }),
         "compositions" => run(text, Compositions::parse),
         "standards" => run(text, Standards::parse),
         "repetition" => run(text, RepetitionRules::parse),

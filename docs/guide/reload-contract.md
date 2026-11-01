@@ -73,6 +73,32 @@ The list lives in code, in `bevy_grimoire_core::reload::KINDS`, and the table be
 - `every_written_kind_has_a_reload_class` (`crates/bevy_grimoire_mapper/tests/reload_contract.rs`). Every operation declares the kinds it writes, and `Operation::writes` has no default, so a new operation cannot skip it. The test fails when an operation names a kind the list does not have. A second test runs an operation and checks that every file it changed is a kind it declares.
 - `the_restart_list_only_shrinks` (`crates/bevy_grimoire_core/tests/reload_contract.rs`). Every `Restart` kind is on a checked-in list. A kind joins `Restart` only by editing that list and raising its ceiling, so the debt can be paid down and never grows unseen. Today it is `rigs` and `game_data`.
 
+## What will always need a rebuild (#202)
+
+The restart list above is debt: a kind with a file that no running program re-reads yet. A different thing needs no file at all and is not on it: a setting that is a Rust type, and that a file cannot hold. The list lives in code, in `bevy_grimoire_core::reload::REBUILD`, with the reason for each entry, and the table below is rendered from it. `a_setting_is_never_both_a_file_kind_and_a_rebuild` fails if an entry gains a file kind and stays here, so an entry leaves the list in the commit that gives it a reload path.
+
+<!-- rebuild-list:start -->
+| setting | what | why a file cannot hold it |
+|---|---|---|
+| `family_crates` | Which family crates a build of the editor can host: one cargo feature each. | A family crate is compiled in, as an optional dependency pinned by git revision. `family.ron` says which a project uses and reloads live, but a build without the crate cannot run it: the editor names the entry as a problem until it is built with the feature. |
+| `operations` | The editor's verbs: the registered operations, each a Rust type with its parameters, preview, undo and the kinds it writes. | An operation is code. A new verb, or a changed one, is a type change; the MCP tool list and the parity test are read from the registry, so they follow the next build and no earlier. |
+| `file_kinds` | The set of file kinds the editor reads and writes, and the Rust type each parses to (`reload::KINDS`). | A kind needs a type that reads it, a class and a reader that applies it. A file cannot teach a running program to read a file of a new shape. |
+| `format_shapes` | The fields of every saved format, and its version number. | A field is a field of a Rust type. Adding one with a default keeps old files reading (`tests/old_data` freezes them), and a change that cannot is a new version with a migration. Either way the type changes and the build with it. |
+| `algorithms` | The solvers: the constraint solver, wave function collapse, the relation solver and the sight and reach checks. | An algorithm is code. Its tuning (a radius, a weight, a seed) is data where a file already carries it, such as `repetition.ron` and `standards.ron`; the search itself is not. |
+| `editor_surface` | The editor's own panels, colours and key chords. | The panels are spawned by systems, the colours are constants and the chords are a table in code; no file reads them today. They could take a file form, and until one does a change is a rebuild. |
+| `game_systems` | A game's own systems, components and schedule, and the host that runs its scripts. | A trigger's script reloads (`scripts`), but the interpreter that runs it, the components it acts on and the order systems run in are Rust. Behaviour that can be a script or a row of data is moved there under #202. |
+<!-- rebuild-list:end -->
+
+Bless this table after an honest change with `UPDATE_RELOAD_CONTRACT=1 cargo test -p bevy_grimoire_core --test the_always_rebuild_list_is_in_the_guide`.
+
+## Every format carries a version (#202)
+
+A format with no version number cannot change shape without breaking the projects already on disk: a reader cannot tell an old file from a damaged one, and a file from a newer build is read as if it were this one's. `crates/bevy_grimoire_core/tests/every_format_carries_a_version.rs` puts every kind of the table in exactly one of three places, and a new kind fails it until it says which.
+
+- **Versioned** (18 kinds: `kits`, `library`, `policy`, `rules`, `compositions`, `standards`, `rigs`, `map`, `notes`, `plan`, `references`, `relations`, `data_registry`, `family_list`, `agent`, `play`, `destructible_marks`, `destructible_bake`). A file one version ahead of what the build reads is refused, and the refusal names the version the build reads, so an author knows the project came from a newer release and is not damaged. A file from before the first version (version 0) is read or refused naming the version. `rules` and `destructible_marks` read a newer file as their own until #202 slice 1: the reload verdict said `applied` for a `rules.ron` that the project open refuses, and `destructible_set` would have written a newer marks file back at the older version. A cache is the one exception: a `destructible_bake` of another version is stale, not damaged, and is baked again.
+- **Unversioned** (11 kinds: `vocab`, `repetition`, `checks`, `oplog`, `terrain`, `water_plan`, `water_field`, `volume`, `forest`, `people`, `scripts`). This is the debt. `the_unversioned_list_only_shrinks` fails when the list grows, and a kind comes off it in the commit that gives its type a `version` with `#[serde(default)]`, so the files already on disk (frozen in `tests/old_data/`) keep reading.
+- **Owned elsewhere** (4 kinds: `reference_images`, `game_data`, `family`, `trees`). The file's format is somebody else's to version: an image's own header, a game's own RON, a family crate's own settings. The entry in the test says whose.
+
 ## A request for a kind that was never loaded
 
 `reload_for(kind, loaded)` is the one policy. A change to a kind the program never loaded is the outcome `Reload::NotLoaded`: it is reported and nothing else happens. It is never an implicit load. A load in the middle of play is a hitch, and a program that did not ask for the file has no state to reload.

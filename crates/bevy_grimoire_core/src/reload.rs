@@ -335,6 +335,75 @@ pub fn table(writers: &dyn Fn(&str) -> Vec<String>) -> String {
     out
 }
 
+/// **One setting that always needs a type change and a rebuild** (#202, H5).
+///
+/// The hot-reload series moves what can be data out of Rust types, so a change to it reloads. What
+/// cannot move is listed here, once, with the reason, so "why does this need a rebuild" has an answer
+/// in one place and a setting nobody can reload is a fact on a list and not a surprise. These are not
+/// file kinds, so [`ReloadClass::Restart`] does not hold them: a `Restart` kind is debt that a reload
+/// path can pay, and none of these has a file to reload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rebuild {
+    /// A stable word for the entry.
+    pub id: &'static str,
+    /// What changes when it changes, and where it lives.
+    pub what: &'static str,
+    /// **Why a file cannot hold it.** The reason, not the symptom.
+    pub reason: &'static str,
+}
+
+/// **What needs a rebuild, and why.** Short on purpose: an entry that gains a file form leaves this list
+/// and joins [`KINDS`] in the commit that gives it a reload path.
+pub const REBUILD: &[Rebuild] = &[
+    Rebuild {
+        id: "family_crates",
+        what: "Which family crates a build of the editor can host: one cargo feature each.",
+        reason: "A family crate is compiled in, as an optional dependency pinned by git revision. `family.ron` says which a project uses and reloads live, but a build without the crate cannot run it: the editor names the entry as a problem until it is built with the feature.",
+    },
+    Rebuild {
+        id: "operations",
+        what: "The editor's verbs: the registered operations, each a Rust type with its parameters, preview, undo and the kinds it writes.",
+        reason: "An operation is code. A new verb, or a changed one, is a type change; the MCP tool list and the parity test are read from the registry, so they follow the next build and no earlier.",
+    },
+    Rebuild {
+        id: "file_kinds",
+        what: "The set of file kinds the editor reads and writes, and the Rust type each parses to (`reload::KINDS`).",
+        reason: "A kind needs a type that reads it, a class and a reader that applies it. A file cannot teach a running program to read a file of a new shape.",
+    },
+    Rebuild {
+        id: "format_shapes",
+        what: "The fields of every saved format, and its version number.",
+        reason: "A field is a field of a Rust type. Adding one with a default keeps old files reading (`tests/old_data` freezes them), and a change that cannot is a new version with a migration. Either way the type changes and the build with it.",
+    },
+    Rebuild {
+        id: "algorithms",
+        what: "The solvers: the constraint solver, wave function collapse, the relation solver and the sight and reach checks.",
+        reason: "An algorithm is code. Its tuning (a radius, a weight, a seed) is data where a file already carries it, such as `repetition.ron` and `standards.ron`; the search itself is not.",
+    },
+    Rebuild {
+        id: "editor_surface",
+        what: "The editor's own panels, colours and key chords.",
+        reason: "The panels are spawned by systems, the colours are constants and the chords are a table in code; no file reads them today. They could take a file form, and until one does a change is a rebuild.",
+    },
+    Rebuild {
+        id: "game_systems",
+        what: "A game's own systems, components and schedule, and the host that runs its scripts.",
+        reason: "A trigger's script reloads (`scripts`), but the interpreter that runs it, the components it acts on and the order systems run in are Rust. Behaviour that can be a script or a row of data is moved there under #202.",
+    },
+];
+
+/// **The guide's second table**, one row per entry of [`REBUILD`], rendered like [`table`] so a test can
+/// compare it with `docs/guide/reload-contract.md`.
+pub fn rebuild_table() -> String {
+    let mut out = String::new();
+    out.push_str("| setting | what | why a file cannot hold it |\n");
+    out.push_str("|---|---|---|\n");
+    for r in REBUILD {
+        let _ = writeln!(out, "| `{}` | {} | {} |", r.id, r.what, r.reason);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
