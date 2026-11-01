@@ -13,11 +13,11 @@
 //! Moved from Sanctuary's `grimoire_data::watch` (its `due` rule and its three tests unchanged) and
 //! generalised to any directory and any set of extensions.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::map::Map;
+use crate::map::{Map, Placed};
 
 #[path = "live_verdict.rs"]
 mod verdict;
@@ -150,6 +150,13 @@ pub struct MapDiff {
     pub removed: Vec<String>,
     /// Ids in both maps whose [`crate::map::Placed`] differs.
     pub changed: Vec<String>,
+    /// `(old id, new id)`, sorted by old id: **the same piece under another name** (#201). The old
+    /// id is in the old map only, the new id in the new map only, and the two rows are equal but
+    /// for the id ([`same_but_id`]). Neither id is in `added` or `removed`, so a reader that keeps
+    /// state by id moves it from the old to the new instead of dropping it. A piece renamed and
+    /// edited in one save is an addition and a removal (its meaning changed), and so is a pair the
+    /// rows cannot tell apart (two stacked pieces with one row, both renamed).
+    pub renamed: Vec<(String, String)>,
 }
 
 /// How many ids [`MapDiff::summary`] names before it counts the rest.
@@ -157,24 +164,29 @@ const SUMMARY_IDS: usize = 12;
 
 impl MapDiff {
     pub fn is_empty(&self) -> bool {
-        self.added.is_empty() && self.removed.is_empty() && self.changed.is_empty()
+        self.added.is_empty() && self.removed.is_empty() && self.changed.is_empty() && self.renamed.is_empty()
     }
 
-    /// `"1 added, 0 removed, 2 changed: +smithy ~wagon ~well"`. At most twelve ids, then
+    /// `"1 added, 0 removed, 2 changed: +smithy ~wagon ~well"`, with `", 1 renamed"` after the
+    /// counts and `old→new` after the ids when something was renamed. At most twelve ids, then
     /// `"…and N more"`.
     pub fn summary(&self) -> String {
-        let counts = format!(
+        let mut counts = format!(
             "{} added, {} removed, {} changed",
             self.added.len(),
             self.removed.len(),
             self.changed.len()
         );
+        if !self.renamed.is_empty() {
+            counts.push_str(&format!(", {} renamed", self.renamed.len()));
+        }
         let ids: Vec<String> = self
             .added
             .iter()
             .map(|id| format!("+{id}"))
             .chain(self.removed.iter().map(|id| format!("-{id}")))
             .chain(self.changed.iter().map(|id| format!("~{id}")))
+            .chain(self.renamed.iter().map(|(was, now)| format!("{was}→{now}")))
             .collect();
         if ids.is_empty() {
             return counts;
@@ -187,25 +199,118 @@ impl MapDiff {
     }
 }
 
-/// **The placements `new` added, removed and changed against `old`**, keyed by
+/// **Is `now` the row `was` was, under `now`'s own id?** Every field but the id is compared, and
+/// what the piece rests on is compared by the name it has now: `renamed` maps an old id to the id
+/// it was renamed to, so a lamp on a table that was renamed is the same lamp. The fields are
+/// listed one by one so that a field added to [`Placed`] cannot be forgotten here: this stops
+/// compiling.
+pub fn same_but_id(was: &Placed, now: &Placed, renamed: &BTreeMap<String, String>) -> bool {
+    let Placed { id: _, descriptor, at, yaw, lift, tip, on, owned, owned_because, patch, paint, note, family } = was;
+    let host = on.as_deref().map(|h| renamed.get(h).map_or(h, String::as_str));
+    *descriptor == now.descriptor
+        && *at == now.at
+        && *yaw == now.yaw
+        && *lift == now.lift
+        && *tip == now.tip
+        && host == now.on.as_deref()
+        && *owned == now.owned
+        && *owned_because == now.owned_because
+        && *patch == now.patch
+        && *paint == now.paint
+        && *note == now.note
+        && *family == now.family
+}
+
+/// The run a row id belongs to, if it is `<run id>/<n>` for a run in `runs`.
+fn run_of<'a>(runs: &BTreeSet<&'a str>, id: &str) -> Option<&'a str> {
+    let (run, n) = id.rsplit_once('/')?;
+    let run = runs.get(run).copied()?;
+    (!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())).then_some(run)
+}
+
+/// **The renames between two maps' hand-placed rows**: an id only `before` has and an id only
+/// `after` has whose rows are equal but for the id. A pair is made only when it is the only one:
+/// the old row has exactly one equal among the ids only `after` has, and that row has exactly one
+/// among the ids only `before` has, so two rows that cannot be told apart are not guessed between.
+/// Ids both maps have are never candidates.
+///
+/// A row resting on a piece renamed in the same save is the same row only once that rename is
+/// known (renaming a stamp renames every row it lays and rewrites each rider's host), so the
+/// pairing runs in rounds, hosts first, each round reading the renames the rounds before it found,
+/// until one finds nothing new. Candidates are found through their descriptor and position, so a
+/// map replaced wholesale costs a pass over each side and not a comparison of every pair.
+fn renames(
+    before: &BTreeMap<&str, &Placed>,
+    after: &BTreeMap<&str, &Placed>,
+    runs: &BTreeSet<&str>,
+) -> BTreeMap<String, String> {
+    // `+ 0.0` makes -0.0 and 0.0 one key, as `==` does.
+    fn key(p: &Placed) -> (&str, u32, u32) {
+        (p.descriptor.as_str(), (p.at.0 + 0.0).to_bits(), (p.at.1 + 0.0).to_bits())
+    }
+    let hand = |id: &str| run_of(runs, id).is_none();
+    let mut gone: Vec<(&str, &Placed)> =
+        before.iter().filter(|(id, _)| !after.contains_key(*id) && hand(id)).map(|(id, p)| (*id, *p)).collect();
+    let mut fresh: Vec<(&str, &Placed)> =
+        after.iter().filter(|(id, _)| !before.contains_key(*id) && hand(id)).map(|(id, p)| (*id, *p)).collect();
+    let mut renamed: BTreeMap<String, String> = BTreeMap::new();
+    while !gone.is_empty() && !fresh.is_empty() {
+        let mut at: HashMap<(&str, u32, u32), Vec<usize>> = HashMap::with_capacity(fresh.len());
+        for (j, (_, now)) in fresh.iter().enumerate() {
+            at.entry(key(now)).or_default().push(j);
+        }
+        let mut twins = vec![0usize; fresh.len()];
+        let mut picked: Vec<(usize, usize)> = Vec::new();
+        for (i, (_, was)) in gone.iter().enumerate() {
+            let (mut found, mut n) = (0usize, 0usize);
+            for &j in at.get(&key(was)).map_or(&[][..], Vec::as_slice) {
+                if same_but_id(was, fresh[j].1, &renamed) {
+                    (found, n) = (j, n + 1);
+                    twins[j] += 1;
+                }
+            }
+            if n == 1 {
+                picked.push((i, found));
+            }
+        }
+        picked.retain(|&(_, j)| twins[j] == 1);
+        if picked.is_empty() {
+            break;
+        }
+        let (mut paired_gone, mut paired_fresh) = (vec![false; gone.len()], vec![false; fresh.len()]);
+        for &(i, j) in &picked {
+            renamed.insert(gone[i].0.to_owned(), fresh[j].0.to_owned());
+            (paired_gone[i], paired_fresh[j]) = (true, true);
+        }
+        let mut paired = paired_gone.into_iter();
+        gone.retain(|_| !paired.next().unwrap_or(false));
+        let mut paired = paired_fresh.into_iter();
+        fresh.retain(|_| !paired.next().unwrap_or(false));
+    }
+    renamed
+}
+
+/// **The placements `new` added, removed, changed and renamed against `old`**, keyed by
 /// [`crate::map::Placed::id`]. A row a run lays (`<run id>/<n>`, see [`crate::run::post_id`]) is
 /// not named: its run is, once, as added, removed or changed. Run ids share the placement
-/// namespace (`Map::validate` refuses a collision), so the lists stay unambiguous.
+/// namespace (`Map::validate` refuses a collision), so the lists stay unambiguous. A placement
+/// that only changed its id is `renamed` (see [`MapDiff::renamed`]), and a row resting on it is
+/// not changed by the new name.
 pub fn diff_maps(old: &Map, new: &Map) -> MapDiff {
     let runs: BTreeSet<&str> = old.runs.iter().chain(&new.runs).map(|r| r.id.as_str()).collect();
-    fn run_of<'a>(runs: &BTreeSet<&'a str>, id: &str) -> Option<&'a str> {
-        let (run, n) = id.rsplit_once('/')?;
-        let run = runs.get(run).copied()?;
-        (!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())).then_some(run)
-    }
-    let before: BTreeMap<&str, _> = old.placements.iter().map(|p| (p.id.as_str(), p)).collect();
-    let after: BTreeMap<&str, _> = new.placements.iter().map(|p| (p.id.as_str(), p)).collect();
+    let before: BTreeMap<&str, &Placed> = old.placements.iter().map(|p| (p.id.as_str(), p)).collect();
+    let after: BTreeMap<&str, &Placed> = new.placements.iter().map(|p| (p.id.as_str(), p)).collect();
+    let renamed = renames(&before, &after, &runs);
+    let renamed_to: BTreeSet<&str> = renamed.values().map(String::as_str).collect();
     let mut diff = MapDiff::default();
     // A run is changed when its definition differs or any of its rows does (a library edit moves
     // posts without touching the run).
     let mut moved: BTreeSet<&str> = BTreeSet::new();
     for (id, placed) in &after {
-        let differs = before.get(id).is_none_or(|was| *was != *placed);
+        let differs = match before.get(id) {
+            Some(was) => !same_but_id(was, placed, &renamed),
+            None => !renamed_to.contains(id),
+        };
         match (run_of(&runs, id), differs) {
             (Some(run), true) => {
                 moved.insert(run);
@@ -216,7 +321,7 @@ pub fn diff_maps(old: &Map, new: &Map) -> MapDiff {
         }
     }
     for id in before.keys() {
-        if !after.contains_key(id) {
+        if !after.contains_key(id) && !renamed.contains_key(*id) {
             match run_of(&runs, id) {
                 Some(run) => {
                     moved.insert(run);
@@ -238,6 +343,7 @@ pub fn diff_maps(old: &Map, new: &Map) -> MapDiff {
     diff.added.sort();
     diff.removed.sort();
     diff.changed.sort();
+    diff.renamed = renamed.into_iter().collect();
     diff
 }
 
@@ -404,6 +510,7 @@ mod tests {
                 added: vec!["smithy".to_owned()],
                 removed: vec!["gone".to_owned()],
                 changed: vec!["wagon".to_owned()],
+                renamed: Vec::new(),
             }
         );
         assert_eq!(diff.summary(), "1 added, 1 removed, 1 changed: +smithy -gone ~wagon");

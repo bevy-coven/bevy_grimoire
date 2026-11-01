@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use bevy::prelude::*;
-use bevy_grimoire_core::live::{FileWatch, MapDiff, Verdict, diff_maps};
+use bevy_grimoire_core::live::{FileWatch, MapDiff, Verdict, diff_maps, same_but_id};
 use bevy_grimoire_core::map::Map;
 use bevy_grimoire_core::project_data::{self, ProjectData};
 
@@ -76,6 +76,9 @@ impl Plugin for GrimoireLivePlugin {
 pub(crate) struct Plan {
     pub despawn: BTreeSet<String>,
     pub spawn: BTreeSet<String>,
+    /// Old id to new id (#201): the entity that stood for the old id is kept and stands for the
+    /// new one, so whatever a game hung on it follows the rename.
+    pub renamed: BTreeMap<String, String>,
     pub library_changed: bool,
 }
 
@@ -84,8 +87,9 @@ pub(crate) struct Plan {
 /// A placement is respawned when it is new, when its row differs, when its resolved height differs
 /// (a table moved, so the lamp on it did not change but stands elsewhere), when its descriptor or the
 /// descriptor's masks differ, or when what it rests on is respawned (a relationship points at an
-/// entity, and a despawned host takes it away).
-pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld) -> Plan {
+/// entity, and a despawned host takes it away). A placement that only changed its id (`renamed`,
+/// from [`diff_maps`]) is compared with its old row and kept when nothing else differs.
+pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld, renamed: &BTreeMap<String, String>) -> Plan {
     let before: HashMap<&str, usize> = old
         .map
         .placements
@@ -93,13 +97,16 @@ pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld) -> Plan {
         .enumerate()
         .map(|(i, p)| (p.id.as_str(), i))
         .collect();
+    let was_of: HashMap<&str, &str> = renamed.iter().map(|(was, now)| (now.as_str(), was.as_str())).collect();
     let mut out = Plan {
         library_changed: old.library != new.library || old.masks != new.masks,
+        renamed: renamed.clone(),
         ..Plan::default()
     };
     for (i, p) in new.map.placements.iter().enumerate() {
-        let same = before.get(p.id.as_str()).is_some_and(|&j| {
-            old.map.placements[j] == *p
+        let was = was_of.get(p.id.as_str()).copied().unwrap_or(p.id.as_str());
+        let same = before.get(was).is_some_and(|&j| {
+            same_but_id(&old.map.placements[j], p, renamed)
                 && old.y.get(j) == new.y.get(i)
                 && old.entry(&p.descriptor) == new.entry(&p.descriptor)
                 && old.map.origin == new.map.origin
@@ -122,7 +129,8 @@ pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld) -> Plan {
     }
     let now: BTreeSet<&str> = new.map.placements.iter().map(|p| p.id.as_str()).collect();
     for p in &old.map.placements {
-        if !now.contains(p.id.as_str()) || out.spawn.contains(&p.id) {
+        let current = renamed.get(&p.id).unwrap_or(&p.id);
+        if !now.contains(current.as_str()) || out.spawn.contains(current) {
             out.despawn.insert(p.id.clone());
         }
     }
@@ -196,7 +204,6 @@ fn reload(
             return;
         }
     };
-    let plan = plan(&world, &new);
 
     // The world's own map is diffed against what is on screen; the others against their last load.
     let empty = Map::default();
@@ -208,11 +215,16 @@ fn reload(
     if !diffs.contains_key(&new.map.name) {
         diffs.insert(new.map.name.clone(), diff_maps(&world.map, &new.map));
     }
+    let renamed: BTreeMap<String, String> = diffs[&new.map.name].renamed.iter().cloned().collect();
+    let plan = plan(&world, &new, &renamed);
 
     let mut kept: HashMap<String, Entity> = HashMap::new();
     for (entity, Placement(id)) in &placed {
         if plan.despawn.contains(id) {
             commands.entity(entity).despawn();
+        } else if let Some(now) = plan.renamed.get(id) {
+            commands.entity(entity).insert(Placement(now.clone()));
+            kept.insert(now.clone(), entity);
         } else {
             kept.insert(id.clone(), entity);
         }

@@ -119,6 +119,7 @@ app.add_plugins(bevy_grimoire::live::GrimoireLivePlugin {
 It needs an `GrimoireWorld` resource, which `GrimoirePlugin` spawns from. About a second after the last write, the plugin reloads the project and redraws only what changed.
 
 - A placement that is new, edited, removed, or resting on something that was redrawn is despawned and spawned again. A placement that did not change keeps its `Entity`.
+- A placement that only changed its id is a rename and keeps its `Entity` too: its row is the same in every other field, and no other row is the same, so it is the same piece under another name. Its `Placement` component now holds the new id and whatever you hung on the entity stays. `MapDiff::renamed` lists `(old id, new id)`, and neither id is in `added` or `removed`. A piece renamed and edited in one save is redrawn, and so is a pair of identical rows that were both renamed, because nothing says which is which.
 - A placement whose height changed is redrawn too. Moving a table moves the lamp on it.
 - Editing a descriptor redraws every placement of that descriptor. `ProjectReloaded::library_changed` says so.
 - A successful reload replaces the `GrimoireWorld` resource and writes a `ProjectReloaded` message. Its `diffs` hold one `MapDiff` per map you listed, so a game can react to the ids that changed.
