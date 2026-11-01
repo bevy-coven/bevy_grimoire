@@ -234,6 +234,7 @@ mod pieces_stand_on_sculpted_ground;
 mod piece_remove_is_an_operation;
 mod piece_turn_is_an_operation;
 mod piece_select_is_an_operation;
+mod keeping_derived_edges_is_a_cell_operation;
 mod piece_set_cells_is_an_operation;
 mod piece_set_mount_is_an_operation;
 mod play_starts_and_stops_the_game;
