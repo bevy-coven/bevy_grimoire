@@ -55,6 +55,9 @@ use crate::descriptor::{Descriptor, Mount};
 /// The most tokens one axis can hold, set by the width of the mask they pack into.
 pub const MAX_TOKENS: usize = 64;
 
+/// The format version of a `vocab.ron` (#202). A file with no `version` is the first.
+pub const VOCAB_VERSION: u32 = 1;
+
 /// One axis's closed token table.
 ///
 /// Order is significant — see the module docs. Serialized as a plain list so a project's vocabulary
@@ -184,9 +187,13 @@ impl Vocabulary {
 /// One file per project rather than a table in this crate, for the same reason `stretch_y` is a
 /// project patch: a library shared between games must not carry one game's idea of what a prop can be.
 /// The *mechanism* — closed tables, position bits, two-sided checking — is what is reusable.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Vocabularies {
+    /// The format version: [`VOCAB_VERSION`]. A file from before it existed has none and reads as the
+    /// first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "crate::format_version::first", deserialize_with = "crate::format_version::read::<_, VOCAB_VERSION>")]
+    pub version: u32,
     /// What a thing **is**. Immutable identity: `"seating"`, `"light"`, `"food"`.
     pub kind: Vocabulary,
     /// What it **does to the world**, and what it needs in order to: `"emit"`,
@@ -232,6 +239,21 @@ pub struct Vocabularies {
     /// replaced, because it is the same question asked of the right object.
     #[serde(default)]
     pub slot: Vocabulary,
+}
+
+impl Default for Vocabularies {
+    fn default() -> Self {
+        Vocabularies {
+            version: VOCAB_VERSION,
+            kind: Vocabulary::default(),
+            effects: Vocabulary::default(),
+            look: Vocabulary::default(),
+            surfaces: Vocabulary::default(),
+            capabilities: Vocabulary::default(),
+            edge: Vocabulary::default(),
+            slot: Vocabulary::default(),
+        }
+    }
 }
 
 /// A descriptor's tokens, resolved to masks. Cheap to compare, which is the point.
@@ -729,6 +751,7 @@ mod tests {
 
     fn vocabs() -> Vocabularies {
         Vocabularies {
+            version: VOCAB_VERSION,
             kind: Vocabulary::of(&[
                 ("seating", "a thing to sit on"),
                 ("table", "a thing with a top"),

@@ -3,10 +3,10 @@
 //! index past the end of `heights` (or underflow `width - 1`) in every reader. `Heightfield::parse`
 //! refuses them and names the shape, as `Relations::parse` and `Standards::parse` refuse theirs.
 
-use bevy_grimoire_core::heightfield::Heightfield;
+use bevy_grimoire_core::heightfield::{Heightfield, TERRAIN_VERSION};
 
 fn field(origin: (f32, f32), cell_m: f32, width: usize, depth: usize, heights: Vec<f32>) -> String {
-    ron::to_string(&Heightfield { origin, cell_m, width, depth, heights }).unwrap()
+    ron::to_string(&Heightfield { version: TERRAIN_VERSION, origin, cell_m, width, depth, heights }).unwrap()
 }
 
 #[test]

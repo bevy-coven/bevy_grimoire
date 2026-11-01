@@ -98,6 +98,7 @@ mod a_stale_entry_is_dropped_on_its_second_refusal;
 mod a_stale_snip_is_swept_on_open;
 mod a_stamp_turns_by_the_unit_its_schema_names;
 mod a_terrain_file_that_does_not_fill_its_shape_is_refused;
+mod a_terrain_water_or_volume_file_of_another_version_is_refused;
 mod a_trigger_binds_to_a_notes_area;
 mod a_two_way_mount_is_seated_by_every_door;
 mod a_two_way_mount_seats_on_either;

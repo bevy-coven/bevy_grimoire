@@ -43,15 +43,31 @@ pub enum Placed {
     Lake(Lake),
 }
 
+/// The format version of a water plan file (#202). A file with no `version` is the first.
+pub const WATER_PLAN_VERSION: u32 = 1;
+
+/// The format version of a water field file (#202). A file with no `version` is the first.
+pub const WATER_FIELD_VERSION: u32 = 1;
+
 /// Every water source, sink and lake of a map, in the order they were placed.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WaterPlan {
+    /// The format version: [`WATER_PLAN_VERSION`]. A file from before it existed has none and reads as
+    /// the first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "crate::format_version::first", deserialize_with = "crate::format_version::read::<_, WATER_PLAN_VERSION>")]
+    pub version: u32,
     #[serde(default)]
     pub springs: Vec<Spring>,
     #[serde(default)]
     pub sinks: Vec<Sink>,
     #[serde(default)]
     pub lakes: Vec<Lake>,
+}
+
+impl Default for WaterPlan {
+    fn default() -> Self {
+        WaterPlan { version: WATER_PLAN_VERSION, springs: Vec::new(), sinks: Vec::new(), lakes: Vec::new() }
+    }
 }
 
 impl WaterPlan {
@@ -107,6 +123,10 @@ impl WaterPlan {
 /// ran on, kept as the map's starting water.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WaterField {
+    /// The format version: [`WATER_FIELD_VERSION`]. A file from before it existed has none and reads as
+    /// the first; a file of another version is refused, naming the one this build reads.
+    #[serde(default = "crate::format_version::first", deserialize_with = "crate::format_version::read::<_, WATER_FIELD_VERSION>")]
+    pub version: u32,
     /// World `(x, z)` of cell `(0, 0)`, the ground's.
     pub origin: (f32, f32),
     pub cell_m: f32,
@@ -294,5 +314,5 @@ pub fn simulate(ground: &crate::heightfield::Heightfield, plan: &WaterPlan, sett
             break;
         }
     }
-    WaterField { origin: ground.origin, cell_m: l, width: w, depth: h, depth_m: d, settled, steps }
+    WaterField { version: WATER_FIELD_VERSION, origin: ground.origin, cell_m: l, width: w, depth: h, depth_m: d, settled, steps }
 }

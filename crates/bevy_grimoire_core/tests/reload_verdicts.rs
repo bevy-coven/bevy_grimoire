@@ -211,7 +211,7 @@ fn a_file_that_parses_but_is_not_valid_is_refused_and_says_why() {
     let cases = [
         ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "3 depths for 2x2"),
         ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 0.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "cell_m"),
-        ("volume", "site/volume/yard.ron", ron::to_string(&Volume { edits: vec![carve] }).unwrap(), "above zero"),
+        ("volume", "site/volume/yard.ron", ron::to_string(&Volume { edits: vec![carve], ..Volume::default() }).unwrap(), "above zero"),
         ("data_registry", "site/data.ron", "(version: 99, files: [])".to_owned(), "version 99"),
         (
             "data_registry",

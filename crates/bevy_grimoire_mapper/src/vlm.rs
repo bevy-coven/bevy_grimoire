@@ -1775,6 +1775,7 @@ mod tests {
 
     fn vocab() -> Vocabularies {
         Vocabularies {
+            version: bevy_grimoire_core::vocab::VOCAB_VERSION,
             kind: Vocabulary::of(&[
                 ("light", "casts light"),
                 ("table", "a flat-topped piece"),
