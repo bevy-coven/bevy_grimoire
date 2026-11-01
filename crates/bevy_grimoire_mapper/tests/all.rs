@@ -80,6 +80,7 @@ mod a_refusal_names_the_kit_that_owns_the_piece;
 mod a_refusal_reaches_the_author;
 mod a_refused_checks_file_keeps_the_last_good_checks;
 mod a_refused_notes_file_keeps_the_last_good_notes;
+mod a_refused_operation_says_the_same_thing_on_every_surface;
 mod a_refused_redo_keeps_its_entry;
 mod a_refused_terrain_file_keeps_the_last_good_drawing;
 mod a_refused_tree_file_keeps_the_last_good_tree;

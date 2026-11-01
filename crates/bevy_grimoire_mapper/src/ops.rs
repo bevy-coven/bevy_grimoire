@@ -219,12 +219,53 @@ pub enum Undo {
 /// the same place, with the same text — which is what makes the two front ends interchangeable
 /// rather than merely similar.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Refusal(pub String);
+pub struct Refusal(pub String, Option<Box<bevy_grimoire_core::problem::Detail>>);
 
 impl Refusal {
+    /// A refusal that is its sentence. The sentence is `.0`, and is the problem's `what`.
     pub fn new(text: impl Into<String>) -> Refusal {
-        Refusal(text.into())
+        Refusal(text.into(), None)
     }
+
+    /// **A refusal that says where, why and what to do** (UI-05). The toast, the log row and an
+    /// agent's answer are all printed from [`Self::problem`], so none of them can leave a part out.
+    /// The detail is boxed so `Result<_, Refusal>`, which every operation returns, stays small.
+    pub fn with(text: impl Into<String>, detail: bevy_grimoire_core::problem::Detail) -> Refusal {
+        Refusal(text.into(), (!detail.is_empty()).then(|| Box::new(detail)))
+    }
+
+    /// **The one shape every surface prints**: `what` is `.0`, the rest is what the refusal was
+    /// given.
+    pub fn problem(&self) -> bevy_grimoire_core::problem::Problem {
+        match &self.1 {
+            Some(detail) => bevy_grimoire_core::problem::Problem::with(self.0.clone(), (**detail).clone()),
+            None => bevy_grimoire_core::problem::Problem::new(self.0.clone()),
+        }
+    }
+}
+
+/// **The refusal for a row a recorded change names and the map no longer has**: where it is (the
+/// row's id) and what to do, which is the order `undo_target` already enforces.
+fn gone_since_recorded(id: &str) -> Refusal {
+    use bevy_grimoire_core::problem::{Detail, Location};
+    Refusal::with(
+        format!("`{id}` is not on the map any more, so this cannot be taken back — something changed it since"),
+        Detail::default()
+            .at(Location::entity(id))
+            .fix("take back the newer change that touched it first, then this one"),
+    )
+}
+
+/// **The refusal for a placement id the map does not have** (`verb`: "removed", "turned"): where it
+/// is (the id named) and what to do. The sentence is the one every such refusal has always said.
+fn no_such_placement(id: &str, verb: &str) -> Refusal {
+    use bevy_grimoire_core::problem::{Detail, Location};
+    Refusal::with(
+        format!("no placement is called `{id}` on this map, so nothing was {verb}."),
+        Detail::default()
+            .at(Location::entity(id))
+            .fix("name a placement that is on the map, by the `id` its row has in the map file"),
+    )
 }
 
 /// **One row of a map, with where it sits** — so a removal can be put back exactly where it was.
@@ -286,10 +327,7 @@ impl RowDelta {
                 .iter()
                 .position(|p| &p.id == id)
                 .ok_or_else(|| {
-                    Refusal::new(format!(
-                        "`{id}` is not on the map any more, so this cannot be taken back — \
-                         something changed it since"
-                    ))
+                    gone_since_recorded(id)
                 })?;
             doomed_placements.push((at, map.placements[at].clone()));
         }
@@ -300,10 +338,7 @@ impl RowDelta {
                 .iter()
                 .position(|s| &s.id == id)
                 .ok_or_else(|| {
-                    Refusal::new(format!(
-                        "`{id}` is not on the map any more, so this cannot be taken back — \
-                         something changed it since"
-                    ))
+                    gone_since_recorded(id)
                 })?;
             doomed_stamps.push((at, map.stamps[at].clone()));
         }
@@ -3311,7 +3346,7 @@ fn take_back(ctx: &mut Ctx, op: &dyn Operation, outcome: &Outcome, log_error: St
             "the operation could not be logged, so it was taken back and nothing was changed: \
              {log_error}"
         )),
-        Err(Refusal(why)) => Refusal::new(format!(
+        Err(Refusal(why, _)) => Refusal::new(format!(
             "the operation was applied but could not be logged, and taking it back failed, so the \
              change is still in place: {log_error}. Taking it back said: {why}"
         )),
@@ -6957,9 +6992,7 @@ pub mod placement_remove {
     /// row back, so the editor and the file agree.
     fn remove(project: &Project, open: &mut OpenMap, id: &str) -> Result<Outcome, Refusal> {
         let Some(index) = index_of(open, id) else {
-            return Err(Refusal::new(format!(
-                "no placement is called `{id}` on this map, so nothing was removed."
-            )));
+            return Err(no_such_placement(id, "removed"));
         };
         // **A stack goes whole**, by the same function the editor's delete has always used.
         let mut group = bevy_grimoire_core::stack::group_of(&open.map, index);
@@ -7103,9 +7136,7 @@ pub mod placement_remove {
                 return Err(Refusal::new("a removal names one placement by `id`."));
             };
             let Some(index) = index_of(open, id) else {
-                return Err(Refusal::new(format!(
-                    "no placement is called `{id}` on this map, so nothing was removed."
-                )));
+                return Err(no_such_placement(id, "removed"));
             };
             let group = bevy_grimoire_core::stack::group_of(&open.map, index);
             if let Some(project) = ctx.project.as_ref() {

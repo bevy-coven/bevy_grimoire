@@ -109,7 +109,7 @@ pub fn sync_notes_view(
             let refused = KindVerdict::refused("notes", file, field, reason);
             if let Some(state) = state.as_deref_mut() {
                 let kept = if same_file { "the notes already shown stay" } else { "no notes are shown from it" };
-                state.status.problem(format!("{}: refused, so {kept}", refused.sentence()));
+                state.status.raise("", refused.problem(kept));
             }
             refused
         }

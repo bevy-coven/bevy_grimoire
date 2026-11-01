@@ -62,6 +62,7 @@ pub mod placement;
 pub mod plan;
 pub mod plot;
 pub mod policy;
+pub mod problem;
 pub mod project_data;
 pub mod range;
 pub mod references;

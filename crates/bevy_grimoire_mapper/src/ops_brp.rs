@@ -1144,11 +1144,7 @@ fn operation_preview(
             "outcome": "previewed",
             "would_change": plan,
         })),
-        Err(e) => Ok(json!({
-            "operation": p.operation,
-            "outcome": "refused",
-            "refusal": e.0,
-        })),
+        Err(e) => Ok(refused_answer(&p.operation, &e)),
     }
 }
 
@@ -1325,11 +1321,7 @@ fn operation_apply(
                 "outcome": "previewed",
                 "would_change": plan,
             })),
-            Err(e) => Ok(json!({
-                "operation": p.operation,
-                "outcome": "refused",
-                "refusal": e.0,
-            })),
+            Err(e) => Ok(refused_answer(&p.operation, &e)),
         };
     }
     // **And the real thing**, which takes the editor's own map and project and gives them back.
@@ -1528,12 +1520,12 @@ fn operation_apply(
     // `+crop -tile` appeared nowhere on screen.
     let says = match &applied {
         Ok(ops::Applied::Done { outcome, .. }) => Ok(outcome.summary.clone()),
-        Ok(ops::Applied::Refused(e)) | Err(e) => Err(e.0.clone()),
+        Ok(ops::Applied::Refused(e)) | Err(e) => Err(e.problem()),
     };
     if let Some(state) = state.as_mut() {
         match &says {
             Ok(summary) => state.receipt_agent_change(&p.operation, summary),
-            Err(why) => state.problem_agent_refusal(&p.operation, why),
+            Err(why) => state.problem_agent_problem(&p.operation, why.clone()),
         }
     }
     if let Some(import) = import.as_mut() {
@@ -1541,9 +1533,7 @@ fn operation_apply(
             Ok(summary) => import
                 .status
                 .note(format!("agent: {}: {summary}", p.operation)),
-            Err(why) => import
-                .status
-                .problem(format!("agent: {}: {why}", p.operation)),
+            Err(why) => import.status.raise(&format!("agent: {}: ", p.operation), why.clone()),
         }
     }
     match applied {
@@ -1578,19 +1568,23 @@ fn operation_apply(
                 "log_entry": entry,
             }))
         }
-        Ok(ops::Applied::Refused(e)) => Ok(json!({
-            "operation": p.operation,
-            "outcome": "refused",
-            "refusal": e.0,
-        })),
-        // **A refusal from the dispatch itself** — the plan refused, or the log could not be
-        // written. It is a refusal like any other, and it says why.
-        Err(e) => Ok(json!({
-            "operation": p.operation,
-            "outcome": "refused",
-            "refusal": e.0,
-        })),
+        // **A refusal from the dispatch itself** (`Err`) — the plan refused, or the log could not be
+        // written — is a refusal like any other, and it says why.
+        Ok(ops::Applied::Refused(e)) | Err(e) => Ok(refused_answer(&p.operation, &e)),
     }
+}
+
+/// **The answer to a refused operation** (UI-05): `refusal` is the sentence it always was, and
+/// `problem` is the [`bevy_grimoire_core::problem::Problem`] the toast and the journal row were
+/// printed from, with the `where`, `why` and `fix` the refusal has. An agent reads the same parts a
+/// person sees.
+pub(crate) fn refused_answer(operation: &str, refusal: &ops::Refusal) -> Value {
+    json!({
+        "operation": operation,
+        "outcome": "refused",
+        "refusal": refusal.0,
+        "problem": refusal.problem().to_json(),
+    })
 }
 
 /// **`grimoire/operation_undo` — take one change back, by its id.**
@@ -1723,7 +1717,7 @@ fn operation_undo(
                 "undoes": plan.line.operation_id,
                 "would_set": plan.inverse,
             }),
-            Err(e) => json!({"operation": "undo", "outcome": "refused", "refusal": e.0}),
+            Err(e) => refused_answer("undo", &e),
         });
     }
     let mut ctx = take(&project, &open);
@@ -1789,7 +1783,7 @@ fn operation_undo(
                 state.receipt_agent_change("undo", &outcome.summary);
             }
             Ok((_, ops::Applied::Refused(e))) | Err(e) => {
-                state.problem_agent_refusal("undo", &e.0);
+                state.problem_agent_problem("undo", e.problem());
             }
         }
     }
@@ -1815,9 +1809,7 @@ fn operation_undo(
             "operation_id": operation_id,
             "log_entry": entry,
         }),
-        Ok((_, ops::Applied::Refused(e))) | Err(e) => {
-            json!({"operation": "undo", "outcome": "refused", "refusal": e.0})
-        }
+        Ok((_, ops::Applied::Refused(e))) | Err(e) => refused_answer("undo", &e),
     })
 }
 

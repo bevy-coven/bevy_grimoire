@@ -158,7 +158,7 @@ pub fn sync_checks_view(
             let refused = KindVerdict::refused("checks", file, field, reason);
             if let Some(state) = state.as_deref_mut() {
                 let kept = if view.good.is_some() { "the checks already held stay" } else { "no project checks run until it reads" };
-                state.status.problem(format!("{}: refused, so {kept}", refused.sentence()));
+                state.status.raise("", refused.problem(kept));
             }
             refused
         }

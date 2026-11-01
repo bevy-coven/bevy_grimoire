@@ -437,7 +437,7 @@ fn drive_sequencer(
                         state.receipt_agent_change(&op.name, &outcome.summary);
                     }
                     Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
-                        state.problem_agent_refusal(&op.name, &e.0);
+                        state.problem_agent_problem(&op.name, e.problem());
                     }
                 }
             }
@@ -453,10 +453,9 @@ fn drive_sequencer(
                         .filter(|_| op.name == "door_open");
                     json!({"outcome": if waiting.is_some() { "waiting" } else { "applied" }, "waiting_on": waiting, "summary": outcome.summary, "saved": outcome.saved, "checks": checks})
                 }
-                Ok(crate::ops::Applied::Refused(e)) => {
-                    json!({"outcome": "refused", "refusal": e.0})
+                Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                    json!({"outcome": "refused", "refusal": e.0, "problem": e.problem().to_json()})
                 }
-                Err(e) => json!({"outcome": "refused", "refusal": e.0}),
             });
             // **The map and the library go back, changed or not** (gap 4). The same write-back
             // `grimoire/operation_apply` makes, so a label a sequence sets is on the screen the person sees.

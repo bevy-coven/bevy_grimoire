@@ -549,7 +549,7 @@ fn record_problems(
         // Oldest of the tail first, so the journal reads in the order the refusals happened.
         for (n, p) in problems[problems.len() - back..].iter().enumerate() {
             let times = if n == 0 { oldest_times } else { p.count };
-            journal.record(&p.text, times);
+            journal.record_problem(&p.text, times, p.problem.as_ref());
         }
         // **The watermark moves by what was recorded, not by what was raised.** It moved first, and
         // to `now`, so a raise whose text was already gone by the time this looked — `Esc` or a

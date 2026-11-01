@@ -1272,6 +1272,10 @@ pub struct Status {
 pub struct Problem {
     pub text: String,
     pub count: usize,
+    /// **What `text` was printed from** (UI-05): the problem's `what`, `where`, `why` and `fix`, kept
+    /// unprefixed so the log, the journal and an agent's answer carry the same parts. `None` for a
+    /// journal row written from a bare string ([`Journal::record`]).
+    pub problem: Option<bevy_grimoire_core::problem::Problem>,
 }
 
 impl Problem {
@@ -1333,6 +1337,20 @@ impl Status {
     /// minute later.
     pub fn problem(&mut self, text: impl Into<String>) {
         let text = text.into();
+        let problem = bevy_grimoire_core::problem::Problem::new(text.clone());
+        self.push_problem(text, problem);
+    }
+
+    /// **A [`bevy_grimoire_core::problem::Problem`], raised with its parts.** The line the toast and
+    /// the log show is `prefix` and the problem's own [`line`](bevy_grimoire_core::problem::Problem::line),
+    /// and the problem itself is kept on the row, unprefixed, so the journal and an agent's answer
+    /// read the same `what`, `where` and `fix` from it that the line was printed from.
+    pub fn raise(&mut self, prefix: &str, problem: bevy_grimoire_core::problem::Problem) {
+        let text = format!("{prefix}{}", problem.line());
+        self.push_problem(text, problem);
+    }
+
+    fn push_problem(&mut self, text: String, problem: bevy_grimoire_core::problem::Problem) {
         // Counted before the fold, because a repeat is a thing that happened — see [`Self::raised`].
         self.raised += 1;
         if let Some(last) = self.problems.last_mut()
@@ -1341,7 +1359,7 @@ impl Status {
             last.count += 1;
             return;
         }
-        self.problems.push(Problem { text, count: 1 });
+        self.problems.push(Problem { text, count: 1, problem: Some(problem) });
         if self.problems.len() > MAX_PROBLEMS {
             self.problems.remove(0);
             self.dropped += 1;
@@ -1481,6 +1499,18 @@ impl Journal {
     /// **Record `times` occurrences of one refusal.** Consecutive repeats fold, exactly as they do
     /// in a [`Status`] — the same rule, so the journal reads like the toast that raised it.
     pub fn record(&mut self, text: &str, times: usize) {
+        self.record_problem(text, times, None);
+    }
+
+    /// **[`Self::record`], with the structured [`bevy_grimoire_core::problem::Problem`] the text was
+    /// printed from**, so a row in the journal carries the same `what`, `where` and `fix` as the toast
+    /// that raised it and the answer an agent got.
+    pub fn record_problem(
+        &mut self,
+        text: &str,
+        times: usize,
+        problem: Option<&bevy_grimoire_core::problem::Problem>,
+    ) {
         if times == 0 {
             return;
         }
@@ -1490,7 +1520,7 @@ impl Journal {
             last.count += times;
             return;
         }
-        self.entries.push(Problem { text: text.to_owned(), count: times });
+        self.entries.push(Problem { text: text.to_owned(), count: times, problem: problem.cloned() });
         if self.entries.len() > JOURNAL_CAP {
             self.entries.remove(0);
             self.dropped += 1;

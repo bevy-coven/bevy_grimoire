@@ -85,6 +85,20 @@ impl KindVerdict {
             None => format!("{}: {}", self.file, self.reason),
         }
     }
+
+    /// **A refused file as a [`crate::problem::Problem`]**: the file and the field it is wrong at,
+    /// the type's own reason, and what the editor kept (`kept`: "the rigs already loaded stay"). The
+    /// journal, the toast and an agent's answer all print this one value.
+    pub fn problem(&self, kept: &str) -> crate::problem::Problem {
+        use crate::problem::{Detail, Location, Problem};
+        let mut detail = Detail::default()
+            .at(Location::file(self.file.clone()).field(self.field.clone()))
+            .fix(format!("correct {} and save it; the editor reads it again at once", self.file));
+        if !self.reason.is_empty() {
+            detail = detail.because(self.reason.clone());
+        }
+        Problem::with(format!("{} was refused, so {kept}", self.file), detail)
+    }
 }
 
 /// **What the game said about its latest reload.**
