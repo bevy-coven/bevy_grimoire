@@ -168,13 +168,13 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 }
 
 /// **The kinds nothing reads with a named refusal**, checked in. Core's own list is
-/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads (`READ_HERE`) and the three it
+/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads (`READ_HERE`) and the five it
 /// watches (`WATCHED_HERE`) are off it here. A kind comes off when its type gains a reader that names the
-/// file and the field; none joins unseen.
-const STILL_UNCHECKED: &[&str] = &["reference_images", "family"];
+/// file and the field; none joins unseen. Empty since #200 slice 12: every kind in the registry has one.
+const STILL_UNCHECKED: &[&str] = &[];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 2;
+const STILL_UNCHECKED_MAX: usize = 0;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {

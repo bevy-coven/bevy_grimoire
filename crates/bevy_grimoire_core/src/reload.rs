@@ -163,7 +163,7 @@ pub const KINDS: &[FileKind] = &[
         "Appended by the dispatcher and read by the log tools, the undo walk and the steps feed; nothing holds it. The editor looks at it when its size or modification time moves and says in `grimoire_state.reloads` whether every line reads: a line that does not is named (`line 3.seq`), the readers skip it and an undo refuses until it is repaired."),
     kind("reference_images", Root, "references/<file>", "image bytes", Live, Global,
         "the editor, when a person drops an image on a map",
-        "Copied into the project, where `reference_set` checks that the file exists; nothing watches it and nothing holds it."),
+        "Copied into the project, where `reference_set` lists it and `grimoire_state.references` says whether it is there; nothing holds it. The editor looks at each picture the open map lists when its size or modification time moves and says in `grimoire_state.reloads` whether it is still the picture its name says: `refused` with the file and the header field (`signature`, `format`, `header`, `width` or `height`) when it is not, `applied` once it is again."),
     // ---- a map's own files ----
     kind("map", Grimoire, "maps/<name>.map.ron", "Map", Respawn, PerMap,
         "the project chooser (create, settings, rename)",
