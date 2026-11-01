@@ -22,7 +22,7 @@ Storyboard format (JSON):
     "chunks": [ {"seconds": 6}, {"seconds": 4, "operation": {"name": "...", "parameters": {...}}} ],
     "steps": [
       {"at": 0.5, "cursor": [x, y]},            logical px
-      {"at": 0.8, "click": [x, y]},             "mods": ["ShiftLeft"] holds keys through it
+      {"at": 0.8, "click": [x, y]},             "mods": ["ShiftLeft"] holds keys through it; "button": "Right" is a right-click
       {"at": 1.0, "key": "KeyZ", "mods": ["SuperLeft"]},
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
@@ -303,7 +303,7 @@ def do_step(step, timeline, inj, agent, named=None):
             timeline.add(t=timeline.now(), type="key", keys=list(mods))
             time.sleep(0.05)
         timeline.add(t=timeline.now(), type="click", x=x, y=y)
-        inj.send(kind="Mouse", button="Left", action="Tap")
+        inj.send(kind="Mouse", button=step.get("button", "Left"), action="Tap")
         if mods:
             time.sleep(0.1)
         for m in reversed(mods):

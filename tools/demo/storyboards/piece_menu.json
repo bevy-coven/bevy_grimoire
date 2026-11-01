@@ -1,0 +1,22 @@
+{
+  "name": "piece_menu",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-6, -4, 6, 4]}}}
+  ],
+  "chunks": [
+    {"seconds": 10}
+  ],
+  "steps": [
+    {"at": 0.0, "cursor": [400, 520]},
+    {"at": 0.8, "cursor": [652, 362]},
+    {"at": 1.6, "click": [652, 362], "button": "Right", "caption": "person: right-click a piece, and its menu opens"},
+    {"at": 3.6, "cursor": [690, 411]},
+    {"at": 4.4, "cursor": [690, 570], "caption": "person: Remove"},
+    {"at": 5.6, "click": [690, 570]},
+    {"at": 7.0, "key": "KeyZ", "mods": ["ControlLeft"], "caption": "person: Ctrl+Z puts it back"},
+    {"at": 9.0, "clear_cursor": true}
+  ]
+}
