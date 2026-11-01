@@ -72,6 +72,7 @@ mod a_refusal_names_the_kit_that_owns_the_piece;
 mod a_refusal_reaches_the_author;
 mod a_refused_redo_keeps_its_entry;
 mod a_refused_terrain_file_keeps_the_last_good_drawing;
+mod a_refused_tree_file_keeps_the_last_good_tree;
 mod a_refused_undo_keeps_its_entry;
 mod a_rename_carries_the_rules_example_with_it;
 mod a_rename_is_all_or_nothing;
