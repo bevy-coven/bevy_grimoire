@@ -1,0 +1,14 @@
+(
+    version: 9,
+    name: "yard",
+    origin: (0.0, 0.0, 0.0),
+    bounds: (10.0, 4.0, 10.0),
+    bash: None,
+    placements: [],
+    locations: [],
+    note: None,
+    enclosure: (
+        wish: 0.25,
+        weight: 200,
+    ),
+)

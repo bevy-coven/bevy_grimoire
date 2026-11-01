@@ -1,0 +1,259 @@
+// **This game's tag vocabulary.** The mechanism lives in `emerge_core::vocab`; the tokens live here,
+// because a library shared between games must not carry one game's idea of what a prop can be.
+//
+// Five rules. Four of them a program refuses at the door; the one that does not says so, because a
+// rule nothing checks is a rule the next author has to remember, and this file's whole argument is
+// that remembering is what failed. (It used to claim all of them were enforced by
+// `Vocabularies::validate_tables` and `validate_library`, and named neither the enforcer per rule
+// nor the implication rule at all — which was how an invented implied token came to load clean.)
+//
+//   1. A token not in a table is an ERROR naming the descriptor, the axis and the token. The whole
+//      reason this file exists is `docs/2026-08-03-asset-schema-audit.md` §2: of eight free-text
+//      affordance tokens shipped, FOUR were never read by anything, and nothing ever said so.
+//      Refused by `Vocabularies::masks`, per descriptor, at open.
+//   2. Tokens take their bit from their POSITION. **Append freely; never reorder or delete.**
+//      Reordering silently re-points every mask already computed. NOTHING CHECKS THIS, and nothing
+//      can: a reordered file is indistinguishable from a file that always read that way. Use
+//      `vocab::append_token`, which is the one writer that cannot get it wrong.
+//   3. Every token carries a note. A token nobody can describe in a sentence is a token whose meaning
+//      has not been decided yet — which is exactly how `sleep`/`store`/`decor`/`hygiene` happened.
+//      Refused by `vocab::append_token`; a hand edit is on its honour.
+//   4. `surfaces` is checked from BOTH sides: a class something needs and nothing offers is an error,
+//      because a prop that can never be placed looks exactly like a prop nobody authored. Refused by
+//      `Vocabularies::validate_library`, which needs the whole library and so cannot be a table check.
+//   5. `implies` lives on `kind` and nowhere else, and names an `effects` token that exists. Only
+//      `kind` implications are resolved, so one written on any other axis is a sentence nothing will
+//      ever perform. Refused at PARSE by `Vocabularies::validate_tables`, whose last step is the one
+//      that reads implications — last so a duplicate token wins over an implication message. It was
+//      checked once per descriptor from `masks` until then, so a vocabulary naming an effect nobody
+//      defines loaded clean and exploded the first time an author reached for the kind.
+//
+// The three semantic axes are all IMMUTABLE properties — what a thing IS, DOES, and LOOKS LIKE.
+// Dynamic state (is it lit, is someone sitting on it) belongs on the entity at runtime, never here.
+// The split is Kapadia et al.'s: attributes "identify immutable properties of a smart object such as
+// its role (e.g., a button or a person) which never changes", as against `IsPressed`/`IsStanding`.
+(
+    // WHAT A THING IS.
+    //
+    // Seeded from the 14 `category` values already authored across `assets/config/*.ron`. Those were
+    // hand-curated by whoever dressed the kit and then never read by anything (`category` has no
+    // consumer and carries `#[allow(dead_code)]`) — so this axis is not new vocabulary, it is the
+    // existing vocabulary finally being enforced.
+    kind: (
+        // **`implies` is a fact about the word, resolved by `Vocabularies::masks`.**
+        //
+        // A bed restores stamina because this game says beds do; a light draws power because it is
+        // a light. Neither is visible in a render, so neither is ever asked of the labelling model
+        // — and neither should have to be remembered by an author. Stating it here means the game,
+        // the editor and anything else reading a library all derive the same answer from the same
+        // row, which is what it could not do while it was a Rust table inside the editor.
+        tokens: [
+            ( name: "appliance",  note: "a machine that does something when powered", implies: ["uses-electricity"] ),
+            ( name: "bed",        note: "a thing to lie on", implies: ["stamina-recharge"] ),
+            ( name: "bin",        note: "a thing to put refuse in" ),
+            ( name: "container",  note: "a thing that holds other things — crates, boxes" ),
+            ( name: "decor",      note: "present to be looked at; no other function" ),
+            ( name: "door",       note: "fills an opening and can be passed through" ),
+            ( name: "fixture",    note: "fixed to the building — pipes, buttons, vents" ),
+            ( name: "light",      note: "a lamp, sconce or luminous panel", implies: ["uses-electricity"] ),
+            ( name: "plant",      note: "a growing thing" ),
+            ( name: "prop",       note: "small hand-scale dressing with no stronger classification" ),
+            ( name: "seating",    note: "a thing to sit on — chairs, stools, benches" ),
+            ( name: "storage",    note: "a thing to store in — shelving, lockers, racks" ),
+            ( name: "structure",  note: "the building itself — floors, walls, corners, headers" ),
+            ( name: "table",      note: "a thing with a top to work or eat at" ),
+
+            // Beyond the shipped `category` list. `marking` is what `is_floor_marking`'s HEIGHT
+            // HEURISTIC was standing in for — the audit records that threshold misclassifying a mug.
+            // Stated, it cannot be guessed wrong.
+            ( name: "marking",    note: "paint, decal or sign applied to a surface — carries no volume" ),
+            ( name: "food",       note: "a thing that can be eaten or drunk" ),
+
+            // **Appended 2026-08-18, from the two kits the labeller is being run over**, on the
+            // same rule the colours were appended under: add a token the first time you want to
+            // search by it, and append rather than slot in, because a token's bit is its POSITION.
+            //
+            // `machinery` is the one with measured evidence behind it. Labelling the ten
+            // `scifi_i_004` industrial parts twice, an hour apart at temperature 0.1, produced the
+            // same answer for eight of them — and `Industrial_Wheel` and `Tube_Bundle` flipped
+            // between `prop` and `decor` across the two runs. Neither word is wrong and neither is
+            // right: a motor is not hand-scale dressing and it is not there to be looked at. The
+            // flip was the gap in this axis showing up as noise in the model.
+            ( name: "machinery",  note: "an industrial mechanism or a part of one — motors, gears, pistons, valves, radiators", implies: ["uses-electricity"] ),
+            ( name: "terminal",   note: "a console, screen or control panel a person operates", implies: ["uses-electricity"] ),
+            ( name: "weapon",     note: "a turret, emplacement or firearm" ),
+            ( name: "barrier",    note: "blocks passage without being the building — railings, bollards, fences" ),
+            ( name: "resource",   note: "raw or refined material carried as an item — ore, ingots, bricks" ),
+        ],
+    ),
+
+    // WHAT A THING DOES TO THE WORLD, and what it needs in order to. This is the axis gameplay
+    // matches on, so it is the axis to be strictest about.
+    //
+    // NOTE what is deliberately absent. `sit` and `back_to_wall` were affordance tokens, but they are
+    // PLACEMENT CONSTRAINTS, not effects — under this schema `sit` is a socket with a role and
+    // `back_to_wall` is a mount plus clearance. Carrying them here would be two spellings of one idea.
+    // `sleep`, `store`, `decor` and `hygiene` are absent because nothing has ever read them; they come
+    // back the day something does, one row at a time. `support` is absent for a different reason: it
+    // was an affordance before surfaces got their own axis, and `furniture_kenney.ron:15,18` still
+    // authors it there. The live spelling is in `surfaces` below; migrating the dead one onto this
+    // axis would revive a word that was deliberately retired.
+    effects: (
+        tokens: [
+            ( name: "emit",             note: "casts light into the world. The one shipped tag with real gameplay consequence: light::LightEmitter -> LightField -> crab/manca photophobia, SCP-150 steering, mold recoil, mushroom phototropism" ),
+            ( name: "screen",           note: "a lit display surface. Cosmetic (light::ScreenEmitter), windowed-only and determinism-neutral" ),
+            ( name: "uses-electricity", note: "stops working when the power does" ),
+            ( name: "stamina-recharge", note: "restores stamina to whoever uses it" ),
+
+            // These two were nearly dropped as unreachable. The audit records `pass`/`door` as read
+            // by `constraint.rs:92` "and unreachable: no shipped row has Anchor{Opening}" — which is
+            // true of `config.ron` and FALSE of `furniture_kenney.ron`, whose `door` row is exactly
+            // that. A second kit is why the game has two manifests, and it is why this pair lives.
+            ( name: "pass",             note: "an opening something can be walked through; read by placement::solvers::constraint" ),
+            ( name: "door",             note: "fills an opening and can be opened; read by placement::solvers::constraint" ),
+
+            // **Appended 2026-08-18, and NOTHING READS THESE YET.** That is stated rather than
+            // discovered, because being unread is the exact failure this file was written after:
+            // four of eight shipped affordance tokens turned out to have no consumer and nothing
+            // said so (`docs/2026-08-03-asset-schema-audit.md` §2). The difference between then and
+            // now is this paragraph — an author reading the table can see which tokens are wiring
+            // and which are vocabulary waiting for a system.
+            //
+            // Added at the keyboard's request, 2026-08-18, over the objection above.
+            ( name: "flammable",        note: "burns when lit. NO READER YET — authored ahead of the system that will read it" ),
+            ( name: "fragile",          note: "breaks when struck or dropped. NO READER YET" ),
+            ( name: "blocks-sight",     note: "you cannot see past it. NO READER YET — fog reads geometry, not this" ),
+            ( name: "conceals",         note: "something can hide behind or inside it. NO READER YET" ),
+            ( name: "hazardous",        note: "harms whoever touches or is near it. NO READER YET" ),
+        ],
+    ),
+
+    // WHAT A THING LOOKS LIKE. Never matched by gameplay — present so an author can find a piece by
+    // eye in a library of hundreds.
+    //
+    // The one axis with NO shipped source: the existing schema records no appearance data at all. It
+    // is seeded small and on purpose. Add a token the first time you want to search by it.
+    look: (
+        tokens: [
+            ( name: "white",   note: "" ),
+            ( name: "grey",    note: "" ),
+            ( name: "black",   note: "" ),
+            ( name: "brown",   note: "" ),
+            ( name: "orange",  note: "the kit's accent colour" ),
+            ( name: "metal",   note: "bare or brushed metal" ),
+            ( name: "plastic", note: "" ),
+            ( name: "glass",   note: "" ),
+            ( name: "worn",    note: "scuffed, chipped, used" ),
+            ( name: "clean",   note: "clinical, unmarked" ),
+
+            // **Appended 2026-08-15, on the rule three lines up: add a token the first time you
+            // want to search by it.** A 778-mesh labelling pass is that moment, and it stopped on
+            // its tenth mesh — `plant_a` is blue, `blue` was not a token, and the reprompt could
+            // not rescue it because there was no right answer to reprompt towards. Five colours
+            // that describe a real kit rather than only this one's accent palette.
+            //
+            // Appended rather than slotted in beside the other colours, because a token's bit is
+            // its POSITION and reordering silently re-points every mask already computed.
+            ( name: "blue",    note: "" ),
+            ( name: "green",   note: "" ),
+            ( name: "red",     note: "" ),
+            ( name: "yellow",  note: "" ),
+            ( name: "beige",   note: "cream, tan, off-white — the colour most 'white' props actually are" ),
+
+            // **Appended 2026-08-18.** The colours went in first because a colour is what an author
+            // searches by; these are the MATERIALS, and their absence was the louder gap — a
+            // library with a bed, a sofa, four chairs and a bookcase in it had no word for `wood`
+            // and no word for `fabric`, so every soft furnishing in the kit was describable only by
+            // its colour.
+            //
+            // `emissive` is not `emit`. This axis says how a thing LOOKS; `emit` (effects) says it
+            // casts light into the world that `light::LightField` carries to the AI. An orange
+            // indicator strip is emissive and emits nothing.
+            ( name: "wood",    note: "worked timber" ),
+            ( name: "fabric",  note: "woven or upholstered — cushions, mattresses, curtains" ),
+            ( name: "concrete", note: "poured or precast stone" ),
+            ( name: "emissive", note: "lit from within — glowing panels, indicator strips. LOOKS lit; casting light is `emit`" ),
+            ( name: "striped", note: "hazard striping — the yellow-and-black caution pattern" ),
+        ],
+    ),
+
+    // SUPPORT-SURFACE CLASSES. The two-sided axis, and the only vocabulary this project already had.
+    //
+    // `placement::surfaces` has called its table "THE single source of truth" since before there was a
+    // crate; these are its two tokens, unchanged. A support piece OFFERS the OR of its `surfaces`; a
+    // prop REQUIRES the bit for its `Mount::OnSurface { class }`, and rests only where they intersect.
+    // Typed rather than a generic shelf, per Tutenel et al. 2010 and Infinigen Indoors.
+    surfaces: (
+        tokens: [
+            ( name: "support", note: "any support top — a drawer, table or desk. Never a bed" ),
+            ( name: "worktop", note: "a desk or table worktop specifically" ),
+
+            // **Appended 2026-08-18.** A bookcase and a desk both offer somewhere to put something
+            // and they are not the same offer: a shelf is a narrow ledge inside a unit, and what
+            // sits on one is not what sits on a worktop. Its bit lives in
+            // `placement::surfaces::SURFACE_CLASSES`, which is the table this axis is checked
+            // against — a token here with no row there matches nothing.
+            //
+            // Rule 4 is two-sided, and this token is currently offered by nothing and needed by
+            // nothing, which is legal: the error is a class something NEEDS and nothing offers.
+            ( name: "shelf",   note: "a narrow ledge inside a unit — what a bookcase or rack offers, as against a desk top" ),
+        ],
+    ),
+
+    // ── capabilities ─────────────────────────────────────────────────────────────────────────────
+    //
+    // The only axis about PEOPLE. A `RoleSlot` says which of these an occupant must have, and an
+    // actor carries the ones it has; the match is one `&`, per Game AI Pro 4 ch.4.
+    //
+    // Kept apart from `effects` deliberately. Both answer "what does it do", but `effects` is about a
+    // thing standing in a room and this is about somebody who could walk into it. One shared table
+    // would let a chair be authored as able to cook, and that error surfaces as a scene that silently
+    // never starts — the worst shape a content bug can take.
+    capabilities: (
+        tokens: [
+            ( name: "eat", note: "can take a meal — the diner role at a table" ),
+            ( name: "cook", note: "can prepare food, as the galley's server" ),
+            ( name: "rest", note: "can sleep or sit idle in a bunk or chair" ),
+            ( name: "guard", note: "can stand a post — a watch role at a checkpoint" ),
+            ( name: "repair", note: "can work on a broken fixture" ),
+            ( name: "converse", note: "can take part in a talking scene" ),
+        ],
+    ),
+
+    // ── edge ─────────────────────────────────────────────────────────────────────────────────────
+    //
+    // What one lattice cell presents to whatever abuts it. `adjacency::faults` matches these by
+    // EQUALITY — the rule Merrell & Manocha 2009 §4.3 gives — so an unlisted token does not read as
+    // the wrong answer, it reads as an answer nothing can ever match. Closing the axis is what turns
+    // a typo from a fault the author cannot account for into a refusal that names the file.
+    //
+    // An unlabelled cell is `None`, and `None` equals only `None`. That is deliberately not a
+    // wildcard, and it is why the whole feature stays inert until somebody authors a token.
+    edge: (
+        tokens: [
+            ( name: "wall", note: "a solid run-face — what a wall segment presents end to end" ),
+        ],
+    ),
+
+    // ── anchor ───────────────────────────────────────────────────────────────────────────────────
+    //
+    // A role an ITEM may occupy on a piece, as distinct from `capabilities` (about people) and
+    // `surfaces` (about what holds what up). Nothing in the shipped corpus authors one; the axis is
+    // here so the first one has to be written down rather than invented at a keyboard.
+    // What may fill a hole in a tile -- the token a composition's `Body::Slot` accepts.
+    // Was `anchor`, a role an item could occupy on a MESH's lattice: authored, validated, drawn,
+    // saved, and read by nothing. A hole belongs to a tile, so it can sit in open air and two tiles
+    // sharing a wall can differ about whether one has a socket in it.
+    slot: (
+        tokens: [
+            (
+                name: "wall-fixture",
+                note: "Something bolted to a wall face -- a sconce, a vent, a socket. Read by `composition::Body::Slot`; a tile declares the position and the solver or game code decides what fills it.",
+            ),
+            (
+                name: "floor-decal",
+                note: "Something lying flat on a tile's floor -- a marking, a stain, a hatch cover. Same mechanism as `wall-fixture`, different plane.",
+            ),
+        ],
+    ),
+)
