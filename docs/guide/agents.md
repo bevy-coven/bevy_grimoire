@@ -32,16 +32,16 @@ If it goes wrong: a refusal that says no editor answered means the editor is not
 
 ## A worked session
 
-Goal: remove a piece that blocks a gate, and undo the removal if you change your mind.
+Goal: remove a piece that is in the way, and undo the removal if you change your mind.
 
-Say to the agent what you see. For example: "The abbey blocks the gate. Take it out." The agent then does the following.
+Say to the agent what you see. For example: "The bed is in the way. Take it out." The agent then does the following.
 
-1. It calls `grimoire_state` to read the open map and the placements. The answer gives the abbey's id.
-2. It calls `grimoire_capture_still` to see the gate before the change.
-3. It calls `grimoire_preview_operation` with `operation: "placement_remove"` and `parameters: {"id": "<the abbey's id>"}`. The answer says what would change. Nothing changes yet.
+1. It calls `grimoire_state` to read the open map and the placements. The answer gives the bed's id.
+2. It calls `grimoire_capture_still` to see the room before the change.
+3. It calls `grimoire_preview_operation` with `operation: "placement_remove"` and `parameters: {"id": "<the bed's id>"}`. The answer says what would change. Nothing changes yet.
 4. It calls `grimoire_apply_operation` with the same operation and parameters. The answer carries an `operation_id`.
-5. It calls `grimoire_capture_still` again. The gate is clear.
-6. You press Cmd+Z in the editor. The abbey comes back. `grimoire_read_oplog` shows the undo as a new line.
+5. It calls `grimoire_capture_still` again. The bed is gone.
+6. You press Cmd+Z in the editor. The bed comes back. `grimoire_read_oplog` shows the undo as a new line.
 
 To turn a placement instead of removing it, use `placement_set_yaw` with `id` and `yaw`. Yaw wraps to 0 to 360, so `-15` is `345`. To lay it on its side, use `placement_set_tip` with `id` and `tip`, two quarter-turn counts (about X, then Z) from 0 to 3; `[0, 0]` is upright. To raise a lamp off its table, use `placement_set_lift` with `id` and `lift` in metres; `0` puts it back. To set the turn and the tip in one change, use `placement_set_pose` with `id`, `yaw` and `tip`; `0` and `[0, 0]` stand it straight, as `V` does.
 
@@ -51,7 +51,7 @@ The inspector on the left shows the same thing you would read in the tool answer
 
 ![An agent removes the abbey with placement_remove, and the person's Cmd+Z puts it back.](../media/agent-removes-then-undo.gif)
 
-What you see: after step 4 the abbey is gone from the map and the gate is open. After your Cmd+Z the abbey stands on the gate again, and the operation log has one new undo line.
+What you see: after step 4 the bed is gone from the map. After your Cmd+Z the bed stands where it was, and the operation log has one new undo line.
 
 If it goes wrong: `placement_remove` takes away any piece standing on the placement too, so check the still in step 2 before you apply.
 

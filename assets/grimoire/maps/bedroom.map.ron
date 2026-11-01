@@ -1,0 +1,23 @@
+(
+    version: 9,
+    name: "bedroom",
+    origin: (0.0, 0.0, 0.0),
+    bounds: (6.0, 3.0, 5.0),
+    bash: None,
+    placements: [
+        (id: "bed", descriptor: "bed_double", at: (-1.7, -1.1), yaw: 0.0),
+        (id: "bedside", descriptor: "dresser_tall", at: (-0.5, -2.0), yaw: 0.0),
+        (id: "drawer", descriptor: "drawer", at: (0.7, -2.0), yaw: 0.0),
+        (id: "bookcase", descriptor: "bookcase_tall", at: (2.4, -2.0), yaw: 0.0),
+        (id: "desk", descriptor: "writing_desk", at: (2.5, -0.5), yaw: 270.0),
+        (id: "desk_chair", descriptor: "chair", at: (1.8, -0.5), yaw: 90.0),
+        (id: "sofa", descriptor: "sofa", at: (-0.4, 2.0), yaw: 180.0),
+        (id: "coffee_table", descriptor: "coffee_table", at: (-0.4, 0.9), yaw: 0.0),
+        (id: "armchair", descriptor: "armchair", at: (1.6, 1.8), yaw: 200.0),
+        (id: "pouffe", descriptor: "pouffe", at: (1.1, 0.8), yaw: 0.0),
+        (id: "plant", descriptor: "plant_a", at: (-2.5, 1.1), yaw: 0.0),
+        (id: "floor_lamp", descriptor: "lamp_tall", at: (-2.4, 2.0), yaw: 0.0),
+    ],
+    locations: [],
+    note: None,
+)
