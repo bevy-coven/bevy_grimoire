@@ -8,6 +8,8 @@ The owner's steer for `/build-loop`. A pass reads it in Orient and uses it when 
 
 **Then the editor's UI on bevy_gooey (owner, 2026-11-01).** Issues labelled `ui`, UI-01 → UI-99, tracked by #208, designed in `docs/ui/vision.md`; `build-loop.md`, "The owner's next override", says how they are taken. They come after #198 → #204 and before every other item in this file.
 
+**Five or six issues a pass (owner, 2026-11-01).** 63 issues are open, so a pass takes a cluster of five or six that sit together (same files, same series group, same bug cause), one commit and one test each, one gate by the push; `build-loop.md`, "The owner's batch rule", says how, and its budget is now 2½ hours.
+
 After hot reloading, the owner's crates become the heart of the editor; then notes for agents and performance. When more than one is ready, take them in this order:
 
 1. **A blocked item sends the pass down this list; it never ends the pass.** When item 2's next issue is blocked (a crate, a GPU, a change that would weaken a protected check), the pass takes item 3, and so on. A decision the owner has not made is not a block: recommend, record and build it (`build-loop.md`, "Owner input: recommend, record, proceed"). **#89 is first in item 3 and is no longer paused**: the pause held only while #96 could be worked. #89 still owes Shift-click pieces selection and its clip; then #90. Passes 107–110 (2026-10-28) each found #96 blocked, read "#89 is paused", shipped nothing and copied the last pass's list of blockers. That is the failure this item exists to stop.
