@@ -4063,8 +4063,12 @@ fn on_row_click(
     // **And it takes the keyboard back from the filter box.** `drive_place` is gated on `not_typing`,
     // so leaving the box focused made *the most natural way to find a piece* — type a few letters —
     // the way to break placing it, with no message. Clicking the row you filtered for blurs it, as a
-    // click on the world already does.
-    filters.blur();
+    // click on the world already does. Only when the box has it: `blur` is a write, a write marks
+    // `Filters` changed, and a changed `Filters` respawns every row, so a click on an unfocused palette
+    // used to take the row it was on (and a context menu's target) away.
+    if filters.typing() {
+        filters.blur();
+    }
     let Some(d) = project.library.descriptors.get(row.0) else {
         return;
     };

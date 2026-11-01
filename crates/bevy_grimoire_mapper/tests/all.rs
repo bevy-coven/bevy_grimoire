@@ -62,6 +62,7 @@ mod a_meshes_undo_takes_back_the_agents_newest_label;
 mod a_note_box_can_say_auto;
 mod a_note_on_picked_pieces_is_saved;
 mod a_palette_click_arms_the_piece;
+mod a_palette_click_leaves_the_rows_standing;
 mod a_person_finds_and_runs_a_command_in_the_palette;
 mod a_person_removes_a_box_and_undoes_it;
 mod a_person_removes_a_piece_and_undoes_it;
