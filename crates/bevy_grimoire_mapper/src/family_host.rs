@@ -7,6 +7,9 @@
 use bevy::prelude::*;
 use bevy_grimoire_core::family::{Family, FamilyWatch, SettingsChange};
 use bevy_grimoire_core::live::KindVerdict;
+#[cfg(any(feature = "bevy_elements", feature = "bevy_gooey"))]
+use bevy_grimoire_core::reload_check;
+use bevy_grimoire_core::reload_check::Refusal;
 use std::path::PathBuf;
 
 use crate::editor::EditorState;
@@ -96,6 +99,27 @@ fn settings_file(krate: &str) -> String {
     format!("family/{krate}.ron")
 }
 
+/// **What the crate's own type makes of a settings file** (#200): for the crates this build has the type
+/// of (`bevy_elements`' [`ElementsSettings`](crate::environment::ElementsSettings), `bevy_gooey`'s skin)
+/// the file is read as that type with [`reload_check::read`], so a refusal names the file and the field
+/// it is wrong at (`family/bevy_elements.ron (clock)`), and the words returned with it say what stays.
+/// The editor holds no schema of its own: the type is the crate's. Any other crate's file is held to
+/// being RON, which [`FamilyWatch`] has already seen.
+fn read_as(krate: &str, text: &str) -> Result<(), (Refusal, &'static str)> {
+    #[cfg(feature = "bevy_elements")]
+    if krate == crate::environment::CRATE {
+        let file = settings_file(krate);
+        return reload_check::read::<crate::environment::ElementsSettings>("family", &file, text).map(drop).map_err(|r| (r, "the previous environment stays"));
+    }
+    #[cfg(feature = "bevy_gooey")]
+    if krate == crate::ui_skin::CRATE {
+        let file = settings_file(krate);
+        return reload_check::read::<bevy_gooey::GooeySkin>("family", &file, text).map(drop).map_err(|r| (r, "the previous skin stays"));
+    }
+    let _ = (krate, text);
+    Ok(())
+}
+
 /// How often a refused settings file is compared with the disk, seconds.
 const SETTLE_REFUSED_SECS: f64 = 0.5;
 
@@ -110,6 +134,9 @@ pub struct Held {
     /// The text of each refused file as last decided, so the same bytes are decided once: the watch
     /// says a file is invalid again whenever another settings file changes.
     bad: std::collections::BTreeMap<String, String>,
+    /// The crates whose refusal is their type's, not RON's: the watch reports their next edit, so the
+    /// comparison with the settings in force that clears a refused file (`settle_refused`) is not theirs.
+    typed: std::collections::BTreeSet<String>,
 }
 
 /// **The settings files that were not valid RON when the project opened**, with their text and why.
@@ -143,6 +170,7 @@ fn settle_refused(
     root: &std::path::Path,
     good: &std::collections::BTreeMap<String, String>,
     bad: &mut std::collections::BTreeMap<String, String>,
+    typed: &std::collections::BTreeSet<String>,
     reloads: &mut crate::live::EditorReloads,
 ) {
     let refused: Vec<String> = reloads
@@ -154,6 +182,9 @@ fn settle_refused(
     let mut decided = Vec::new();
     for file in refused {
         let Some(krate) = file.strip_prefix("family/").and_then(|f| f.strip_suffix(".ron")) else { continue };
+        if typed.contains(krate) {
+            continue;
+        }
         match std::fs::read_to_string(root.join(&file)) {
             Err(_) => {
                 bad.remove(krate);
@@ -174,11 +205,12 @@ fn settle_refused(
 /// **Follow the settings files, and say what became of each edit** (#96, #200).
 ///
 /// A file that reads replaces the crate's settings; one that is not valid RON is refused and the last
-/// good ones stay ([`FamilyWatch`] holds them). Each poll's changes are one decision in
-/// [`crate::live::EditorReloads`], kind `family`, so `grimoire_state.reloads` names the file and why,
-/// once per edit; a file that is gone is no longer listed, and one that was already broken when the
-/// project opened is named from the start. What the crate's own type makes of a file that is valid
-/// RON but the wrong shape is not decided here: the type lives in the crate.
+/// good ones stay ([`FamilyWatch`] holds them). A file that is RON but is not the crate's own type
+/// (`read_as`: the elements settings, the gooey skin) is refused the same way, naming the file and the
+/// field, and never reaches [`FamilySettings`], so what a crate applies is always a text its type reads.
+/// Each poll's changes are one decision in [`crate::live::EditorReloads`], kind `family`, so
+/// `grimoire_state.reloads` names the file and why, once per edit; a file that is gone is no longer
+/// listed, and one that was already broken when the project opened is named from the start.
 pub fn reload_settings(
     project: Option<Res<Project>>,
     mut settings: ResMut<FamilySettings>,
@@ -189,12 +221,28 @@ pub fn reload_settings(
     let Some(project) = project else { return };
     if held.as_ref().is_none_or(|h| h.root != project.root) {
         let fresh = FamilyWatch::new(&project.root);
-        settings.text = fresh.current().clone();
-        let mut verdicts: Vec<KindVerdict> = settings.text.keys().map(|k| KindVerdict::applied("family", settings_file(k))).collect();
+        settings.text.clear();
+        let mut verdicts = Vec::new();
         let mut bad = std::collections::BTreeMap::new();
-        for (krate, text, error) in unread_at_launch(&project.root, &settings.text) {
+        let mut typed = std::collections::BTreeSet::new();
+        for (krate, text) in fresh.current() {
+            match read_as(krate, text) {
+                Ok(()) => {
+                    settings.text.insert(krate.clone(), text.clone());
+                    verdicts.push(KindVerdict::applied("family", settings_file(krate)));
+                }
+                Err((refusal, _)) => {
+                    state.status.problem(format!("{}; its defaults apply", refusal.sentence()));
+                    verdicts.push(KindVerdict::refused("family", refusal.file, refusal.field, refusal.reason));
+                    bad.insert(krate.clone(), text.clone());
+                    typed.insert(krate.clone());
+                }
+            }
+        }
+        for (krate, text, error) in unread_at_launch(&project.root, fresh.current()) {
             state.status.problem(format!("{krate} settings are not valid RON, so its defaults apply: {error}"));
-            verdicts.push(KindVerdict::refused("family", settings_file(&krate), None, error));
+            let field = read_as(&krate, &text).err().and_then(|(r, _)| r.field);
+            verdicts.push(KindVerdict::refused("family", settings_file(&krate), field, error));
             bad.insert(krate, text);
         }
         if let Some(reloads) = reloads.as_deref_mut() {
@@ -204,7 +252,7 @@ pub fn reload_settings(
                 reloads.decide(verdicts);
             }
         }
-        *held = Some(Held { root: project.root.clone(), watch: fresh, started: std::time::Instant::now(), settled_at: 0.0, bad });
+        *held = Some(Held { root: project.root.clone(), watch: fresh, started: std::time::Instant::now(), settled_at: 0.0, bad, typed });
     }
     let Some(held) = held.as_mut() else { return };
     let now = held.started.elapsed().as_secs_f64();
@@ -212,10 +260,21 @@ pub fn reload_settings(
     for change in held.watch.poll(now) {
         match change {
             SettingsChange::Reloaded { krate, text } => {
-                state.status.note(format!("{krate} settings reloaded"));
-                held.bad.remove(&krate);
-                decided.push(KindVerdict::applied("family", settings_file(&krate)));
-                settings.text.insert(krate, text);
+                held.typed.remove(&krate);
+                match read_as(&krate, &text) {
+                    Ok(()) => {
+                        state.status.note(format!("{krate} settings reloaded"));
+                        held.bad.remove(&krate);
+                        decided.push(KindVerdict::applied("family", settings_file(&krate)));
+                        settings.text.insert(krate, text);
+                    }
+                    Err((refusal, stays)) => {
+                        state.status.problem(format!("{}; {stays}", refusal.sentence()));
+                        decided.push(KindVerdict::refused("family", refusal.file, refusal.field, refusal.reason));
+                        held.bad.insert(krate.clone(), text);
+                        held.typed.insert(krate);
+                    }
+                }
             }
             SettingsChange::Invalid { krate, error } => {
                 // The same bytes are decided once, however often the watch says so.
@@ -223,14 +282,18 @@ pub fn reload_settings(
                 if text.is_some() && held.bad.get(&krate) == text.as_ref() {
                     continue;
                 }
+                held.typed.remove(&krate);
                 state.status.problem(format!("{krate} settings are not valid RON, so the previous ones stay: {error}"));
-                decided.push(KindVerdict::refused("family", settings_file(&krate), None, error));
+                // Where the crate's own type stopped reading, when this build has it.
+                let field = text.as_deref().and_then(|t| read_as(&krate, t).err()).and_then(|(r, _)| r.field);
+                decided.push(KindVerdict::refused("family", settings_file(&krate), field, error));
                 if let Some(text) = text {
                     held.bad.insert(krate, text);
                 }
             }
             SettingsChange::Removed { krate } => {
                 state.status.note(format!("{krate} settings removed; its defaults apply"));
+                held.typed.remove(&krate);
                 held.bad.remove(&krate);
                 gone.push(settings_file(&krate));
                 settings.text.remove(&krate);
@@ -246,7 +309,7 @@ pub fn reload_settings(
         }
         if now - held.settled_at >= SETTLE_REFUSED_SECS {
             held.settled_at = now;
-            settle_refused(&held.root, &settings.text, &mut held.bad, reloads);
+            settle_refused(&held.root, &settings.text, &mut held.bad, &held.typed, reloads);
         }
     }
 }
