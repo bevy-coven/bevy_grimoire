@@ -1,12 +1,12 @@
 {
   "name": "agent_removes_then_undo",
   "fps": 15,
-  "scale": 2,
+  "scale": 1,
   "width": 600,
   "crop": [
-    470,
+    440,
     64,
-    950,
+    980,
     690
   ],
   "setup": [
@@ -15,10 +15,10 @@
       "args": {
         "target": {
           "rect": [
-            29.6,
-            -59.9,
-            43.6,
-            -49.9
+            -3.4,
+            -2.8,
+            3.4,
+            2.8
           ]
         }
       }
@@ -30,7 +30,7 @@
       "operation": {
         "name": "placement_remove",
         "parameters": {
-          "id": "abbey"
+          "id": "bed"
         }
       }
     },
@@ -41,15 +41,15 @@
   "steps": [
     {
       "at": 0.0,
-      "caption": "agent: placement_remove abbey"
+      "caption": "agent: placement_remove bed"
     },
     {
       "at": 0.9,
       "key": "KeyZ",
       "mods": [
-        "SuperLeft"
+        "ControlLeft"
       ],
-      "caption": "person: ⌘Z takes the agent's change back"
+      "caption": "person: Ctrl+Z takes the agent's change back"
     }
   ]
 }
