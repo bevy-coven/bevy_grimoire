@@ -160,7 +160,7 @@ pub const KINDS: &[FileKind] = &[
         "Read when the animation tab loads (its first entry, and again after a door change) and held in between; an edit while it is held is reported as `needs_restart` (a file that does not read, as `refused`) in `grimoire_state.reloads`."),
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
         "the dispatcher appends a line for every operation",
-        "Appended and read on request by the log tools; nothing holds it."),
+        "Appended by the dispatcher and read by the log tools, the undo walk and the steps feed; nothing holds it. The editor looks at it when its size or modification time moves and says in `grimoire_state.reloads` whether every line reads: a line that does not is named (`line 3.seq`), the readers skip it and an undo refuses until it is repaired."),
     kind("reference_images", Root, "references/<file>", "image bytes", Live, Global,
         "the editor, when a person drops an image on a map",
         "Copied into the project, where `reference_set` checks that the file exists; nothing watches it and nothing holds it."),

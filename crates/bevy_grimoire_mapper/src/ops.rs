@@ -3349,19 +3349,16 @@ pub fn undo_target(ctx: &Ctx, target: Option<&str>) -> Result<UndoPlan, Refusal>
     // undo of its id can say what it is rather than that it is not in the log.
     let mut silent: HashMap<String, String> = HashMap::new();
     let mut lines = Vec::new();
-    for (n, raw) in text
-        .lines()
-        .enumerate()
-        .filter(|(_, l)| !l.trim().is_empty())
-    {
-        let entry: Entry = serde_json::from_str(raw).map_err(|e| {
-            Refusal::new(format!(
-                "line {} of {} is not a log entry ({e}), so the log cannot say what the newest \
-                 change is. Nothing was changed.",
-                n + 1,
-                path.display()
-            ))
-        })?;
+    // **The one reader of the log's lines that names what is wrong** (`oplog_view` decides the same
+    // refusal into `grimoire_state.reloads`): a damaged line is not guessed around, because the newest
+    // change in effect may be the line that does not read.
+    let entries: Vec<Entry> = bevy_grimoire_core::reload_check::read_lines("oplog", &crate::map_files::file_name(project, &path), &text).map_err(|r| {
+        Refusal::new(format!(
+            "the log does not read, so it cannot say what the newest change is: {}. Nothing was changed.",
+            r.sentence()
+        ))
+    })?;
+    for entry in entries {
         let records_no_undo = find(&entry.op).is_some_and(|op| op.undo() == Undo::None);
         if entry.outcome == "applied" {
             if records_no_undo {
