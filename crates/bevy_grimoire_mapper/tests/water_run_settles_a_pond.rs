@@ -86,7 +86,7 @@ fn running_and_keeping_is_one_undo() {
 
 #[test]
 fn a_run_with_no_water_or_no_ground_is_refused() {
-    let (mut ctx, dir) = project("refuse");
+    let (mut ctx, dir) = project("water_run_settles_a_pond_refuse");
     let r = ops::dispatch(&mut ctx, "water_run", &json!({"map": "m"}));
     assert!(matches!(r, Err(_) | Ok(Applied::Refused(_))));
     done(ops::dispatch(&mut ctx, "water_place", &json!({"map": "m", "place": {"Spring": {"x": 1.0, "z": 1.0, "rate_m3_s": 1.0, "radius_m": 1.0}}})));

@@ -64,7 +64,7 @@ fn a_dry_run_names_the_old_and_new_value_and_writes_nothing() {
 
 #[test]
 fn refusals_change_nothing() {
-    let (mut ctx, file) = project("refuse", true);
+    let (mut ctx, file) = project("data_set_is_an_operation_refuse", true);
     assert!(refused(set(&mut ctx, "mob.speed", json!(99.0))).contains("outside its bounds"));
     assert!(refused(set(&mut ctx, "mob.name", json!(3))).contains("string"));
     assert!(refused(set(&mut ctx, "mob.nope", json!(3))).contains("not a leaf"));

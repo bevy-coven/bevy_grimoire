@@ -36,7 +36,7 @@ fn a_field_is_written_in_place_and_one_undo_puts_it_back() {
 
 #[test]
 fn an_unlisted_crate_or_a_bad_value_changes_nothing() {
-    let (mut ctx, file) = project("refuse", "bevy_flora");
+    let (mut ctx, file) = project("family_set_is_an_operation_refuse", "bevy_flora");
     let before = std::fs::read_to_string(&file).unwrap();
     let e = match set(&mut ctx, "6.5") {
         Err(e) | Ok(Applied::Refused(e)) => e.0,
