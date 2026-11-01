@@ -2231,8 +2231,9 @@ fn editor_present(
         crate::confirm::Asked::Presentation,
         p.title.clone(),
         body,
-        // **Yes is the destructive answer**, so the button is red and Enter answers nothing.
-        "Undo all",
+        // **Yes is the destructive answer**, so `Enter` answers nothing and the button says how much
+        // it takes back: a turn's worth of changes must not be discarded by a label that reads "Yes".
+        format!("Undo {} operation{}", p.operation_ids.len(), if p.operation_ids.len() == 1 { "" } else { "s" }),
         "Keep",
     );
     let Some(presenting) = presenting.as_mut() else {

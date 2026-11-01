@@ -74,6 +74,7 @@ mod a_projects_repetition_rules_decide_what_is_structure;
 mod a_proposal_is_drawn_before_it_is_kept;
 mod a_proposal_offers_options;
 mod a_proposal_says_how_varied_it_is;
+mod a_question_is_asked_in_a_gooey_dialog;
 mod a_receipt_does_not_move_the_panel;
 mod a_rectangle_frames_what_stands_in_it;
 mod a_reference_image_that_does_not_read_is_named;
