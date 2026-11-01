@@ -80,7 +80,7 @@ enum Generator {
 
 /// How much of the region the `rooms` arm asks to close, and what the wish is worth.
 ///
-/// The same numbers `bevy_grimoire_mapper` ships (`editor.rs`), so this measures the generator an author
+/// The same numbers `bevy_cauldron` ships (`editor.rs`), so this measures the generator an author
 /// actually drives rather than a tuned variant of it.
 const ROOMS_WISH: f32 = 0.25;
 const ROOMS_WEIGHT: u32 = 200;

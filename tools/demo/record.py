@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a demo storyboard against a live bevy_grimoire editor and record it.
 
-usage: record.py <storyboard.json> --port <brp-port> --project <project-root> [--server <bevy_grimoire_mcp>]
+usage: record.py <storyboard.json> --port <brp-port> --project <project-root> [--server <bevy_cauldron_mcp>]
 
 The editor must already be running on the project, with BEVY_BRP_PORT set to the port. The recorder
 never launches or closes the editor.
@@ -60,7 +60,7 @@ import urllib.request
 
 
 class McpClient:
-    """One bevy_grimoire_mcp process, spoken to over its stdio transport."""
+    """One bevy_cauldron_mcp process, spoken to over its stdio transport."""
 
     def __init__(self, server, project, port, label):
         self.proc = subprocess.Popen(
@@ -385,10 +385,10 @@ def main():
     ap.add_argument("storyboard")
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--project", required=True)
-    ap.add_argument("--server", default=os.environ.get("BEVY_GRIMOIRE_MCP") or shutil.which("bevy_grimoire_mcp"))
+    ap.add_argument("--server", default=os.environ.get("BEVY_GRIMOIRE_MCP") or shutil.which("bevy_cauldron_mcp"))
     args = ap.parse_args()
     if not args.server:
-        sys.exit("bevy_grimoire_mcp not found: pass --server or set BEVY_GRIMOIRE_MCP")
+        sys.exit("bevy_cauldron_mcp not found: pass --server or set BEVY_GRIMOIRE_MCP")
 
     with open(args.storyboard) as fh:
         sb = json.load(fh)

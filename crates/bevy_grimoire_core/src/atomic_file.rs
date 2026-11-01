@@ -6,7 +6,7 @@
 //! parses an empty or half-written file (#187, #158). Every write of a project file goes through
 //! [`write`] (or [`write_new`], which refuses to replace), and a ratchet test
 //! (`tests/atomic_writes_only.rs`) fails on a new plain `fs::write`, `File::create`, `fs::copy`
-//! or `OpenOptions` in the non-test source of `bevy_grimoire_core` and `bevy_grimoire_mapper`
+//! or `OpenOptions` in the non-test source of `bevy_grimoire_core` and `bevy_cauldron`
 //! (a write through another API, such as a bare imported `write(`, is not seen by it).
 //!
 //! # What a write does

@@ -35,4 +35,4 @@ That is what keeps feet planted through a walk→run crossover — a transition 
 
 ## In the monorepo
 
-The game reaches this as `crate::anim` (`src/lib.rs:23`); `bevy_grimoire_mapper`'s Anim tab drives the **real** blender rather than a preview copy, on purpose. `docs/animation.md` is the engineering guide and `docs/artist_guide.md` §4 holds the per-asset clip tables and the authoring contract — neither those, nor the root `CLAUDE.md`, nor `TESTING.md`, is part of this mirror.
+The game reaches this as `crate::anim` (`src/lib.rs:23`); `bevy_cauldron`'s Anim tab drives the **real** blender rather than a preview copy, on purpose. `docs/animation.md` is the engineering guide and `docs/artist_guide.md` §4 holds the per-asset clip tables and the authoring contract — neither those, nor the root `CLAUDE.md`, nor `TESTING.md`, is part of this mirror.

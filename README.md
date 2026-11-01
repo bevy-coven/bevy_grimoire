@@ -1,8 +1,8 @@
-# Grimoire (`bevy_grimoire`)
+# Cauldron (`bevy_grimoire`)
 
 > ⚠️ **Vibe Coded.** Written by AI agents working from a human's direction, covered by tests rather than a line-by-line human review. Read the code before you rely on it for something you care about.
 
-A world editor for Bevy games, for developers who build levels with an AI agent, the Familiar, working beside them.
+The Cauldron is a world editor for Bevy games, for developers who build levels with an AI agent, the Familiar, working beside them. A grimoire is what it writes and your game loads.
 
 [![crates.io](https://img.shields.io/crates/v/bevy_grimoire.svg)](https://crates.io/crates/bevy_grimoire) [![docs.rs](https://img.shields.io/docsrs/bevy_grimoire_core)](https://docs.rs/bevy_grimoire_core) [![CI](https://github.com/bevy-coven/bevy_grimoire/actions/workflows/ci.yml/badge.svg)](https://github.com/bevy-coven/bevy_grimoire/actions/workflows/ci.yml) [![Bevy 0.20](https://img.shields.io/badge/bevy-0.20-purple.svg)](https://bevyengine.org) [![licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue.svg)](#who-and-licence)
 
@@ -19,7 +19,7 @@ A world editor for Bevy games, for developers who build levels with an AI agent,
 ```sh
 git clone https://github.com/bevy-coven/bevy_grimoire
 cd bevy_grimoire
-cargo run -p bevy_grimoire_mapper -- .
+cargo run -p bevy_cauldron -- .
 ```
 
 The editor opens a menu of the project's kits and maps; choose a map in the MAPS column. On your own game, pass its root instead of `.`; a project from before the rename has its `assets/emerge` folder moved to `assets/grimoire` the first time it opens. [Getting started](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/getting-started.md) walks through your first map.
@@ -28,14 +28,14 @@ To let the Familiar drive the open editor, add the MCP server to your MCP client
 
 ```json
 { "mcpServers": { "bevy_grimoire": {
-    "command": "cargo", "args": ["run", "-q", "-p", "bevy_grimoire_mcp", "--", "--project", "/path/to/project"],
+    "command": "cargo", "args": ["run", "-q", "-p", "bevy_cauldron_mcp", "--", "--project", "/path/to/project"],
     "cwd": "/path/to/bevy_grimoire" } } }
 ```
 
 ## Try it
 
 ```sh
-cargo run -p bevy_grimoire_mapper -- . --kit furniture
+cargo run -p bevy_cauldron -- . --kit furniture
 ```
 
 Opens the repository's own project on its `furniture` kit (`site` and `scp` are the others); choose `+ new map` in the MAPS column for a map to place them on. [The MCP tools](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/mcp-tools.md) list what an agent can call.
@@ -59,14 +59,14 @@ Opens the repository's own project on its `furniture` kit (`site` and `scp` are 
 
 ## Part of the Coven
 
-Grimoire is the editor of the [Bevy Coven](https://github.com/bevy-coven): it takes each family crate as an optional cargo feature and edits that crate's own serde settings, so what it saves is what your game loads with the crate alone. [Using a crate with Grimoire](https://bevy-coven.github.io/with-grimoire.html) explains the arrangement.
+The Cauldron is the editor of the [Bevy Coven](https://github.com/bevy-coven): it takes each family crate as an optional cargo feature and edits that crate's own serde settings, so what it saves is what your game loads with the crate alone. [Using a crate with Grimoire](https://bevy-coven.github.io/with-grimoire.html) explains the arrangement.
 
 ## The crates
 
 | Crate | What it is |
 |---|---|
-| `bevy_grimoire_mapper` | The editor. Opens a project directory and writes the files a game loads. Not on crates.io: run it from a clone. |
-| `bevy_grimoire_mcp` | The MCP server that gives an agent the editor's operations over stdio. |
+| `bevy_cauldron` | The editor. Opens a project directory and writes the files a game loads. Not on crates.io: run it from a clone. |
+| `bevy_cauldron_mcp` | The MCP server that gives an agent the editor's operations over stdio. |
 | [`bevy_grimoire`](https://crates.io/crates/bevy_grimoire) | The runtime half: loads a library and a map into a Bevy world (`GrimoirePlugin`, `GrimoireLivePlugin`). |
 | [`bevy_grimoire_core`](https://crates.io/crates/bevy_grimoire_core) | The engine-free core: the constraint representation, solvers, WFC and the grammar learner. |
 | [`bevy_grimoire_solver`](https://crates.io/crates/bevy_grimoire_solver), [`_rng`](https://crates.io/crates/bevy_grimoire_rng), [`_anim`](https://crates.io/crates/bevy_grimoire_anim), [`_snip`](https://crates.io/crates/bevy_grimoire_snip) | A deterministic SAT back-end, one ChaCha8 random stream, clip-weight blending, and cutting a rectangle out of a picture of the editor. |

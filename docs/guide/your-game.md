@@ -98,7 +98,7 @@ The height depends on what a piece rests on. `bevy_grimoire_core::stack::resolve
 The editor is a separate program. It opens a project and writes its files:
 
 ```sh
-cargo run -p bevy_grimoire_mapper -- <game root> <map> --kit <kit>
+cargo run -p bevy_cauldron -- <game root> <map> --kit <kit>
 ```
 
 Use `--kit` to name the kit you are working on. The editor watches the files it reads and reloads them when they change. It checks for changes four times a second.
@@ -156,8 +156,8 @@ Use `bevy_grimoire_rng::seeded(seed)` for any randomness in your game. It return
 | `bevy_grimoire` | The runtime half of grimoire: load a library and a map, and put it in a Bevy world. |
 | `bevy_grimoire_anim` | Blends a skinned model's clip weights on its AnimationPlayer, in place of transitions. |
 | `bevy_grimoire_core` | Engine-free world-building core: constraint IR, solvers, WFC, deterministic RNG. |
-| `bevy_grimoire_mapper` | A standalone world-building editor: author maps from an asset library, save what a game can load. |
-| `bevy_grimoire_mcp` | An MCP server for the bevy_grimoire world editor: typed operations over stdio, and a BRP client for the running editor. |
+| `bevy_cauldron` | A standalone world-building editor: author maps from an asset library, save what a game can load. |
+| `bevy_cauldron_mcp` | An MCP server for the bevy_grimoire world editor: typed operations over stdio, and a BRP client for the running editor. |
 | `bevy_grimoire_rng` | One deterministic RNG for a whole simulation: a seeded ChaCha8 stream plus the unbiased integer and float draws generators actually need, reproducible from a single u64 across platforms and thread counts. |
 | `bevy_grimoire_snip` | Cutting one rectangle out of a PNG of the bevy_grimoire editor, shared by the editor and the MCP server. |
 | `bevy_grimoire_solver` | A Boolean satisfiability back-end that answers the same way every run, on every machine: no clock, no threads, no entropy, and a give-up budget counted in conflicts rather than seconds. |

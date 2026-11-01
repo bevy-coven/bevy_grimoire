@@ -691,6 +691,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_cauldron"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "arboard",
+ "base64 0.22.1",
+ "bevy",
+ "bevy_carnage",
+ "bevy_devshot",
+ "bevy_elements",
+ "bevy_fairy",
+ "bevy_flora",
+ "bevy_gooey",
+ "bevy_grimoire",
+ "bevy_grimoire_anim",
+ "bevy_grimoire_core",
+ "bevy_grimoire_decide",
+ "bevy_grimoire_snip",
+ "bevy_light_grid",
+ "bevy_lights",
+ "bevy_orca",
+ "bevy_society",
+ "bevy_speech_bubbles",
+ "bevy_stigmergy",
+ "dirs",
+ "image",
+ "isomesh 0.0.11",
+ "ron",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "bevy_cauldron_mcp"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bevy_grimoire_core",
+ "bevy_grimoire_decide",
+ "bevy_grimoire_snip",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "ureq",
+]
+
+[[package]]
 name = "bevy_clipboard"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1183,56 +1233,6 @@ dependencies = [
  "ron",
  "serde",
  "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "bevy_grimoire_mapper"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "arboard",
- "base64 0.22.1",
- "bevy",
- "bevy_carnage",
- "bevy_devshot",
- "bevy_elements",
- "bevy_fairy",
- "bevy_flora",
- "bevy_gooey",
- "bevy_grimoire",
- "bevy_grimoire_anim",
- "bevy_grimoire_core",
- "bevy_grimoire_decide",
- "bevy_grimoire_snip",
- "bevy_light_grid",
- "bevy_lights",
- "bevy_orca",
- "bevy_society",
- "bevy_speech_bubbles",
- "bevy_stigmergy",
- "dirs",
- "image",
- "isomesh 0.0.11",
- "ron",
- "serde",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "bevy_grimoire_mcp"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "bevy_grimoire_core",
- "bevy_grimoire_decide",
- "bevy_grimoire_snip",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "tokio",
  "ureq",
 ]
 

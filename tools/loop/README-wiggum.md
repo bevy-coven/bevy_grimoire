@@ -33,7 +33,7 @@ flowchart TD
   drv -->|"one pass, then sleep 60s"| omp["omp -p /build-loop<br/>fresh context"]
   omp --> gate["cargo build · clippy · test --workspace"]
   omp --> acc["accept.py --source ~/bevy_emerge_loop/assets → 10/10"]
-  acc --> ed["bevy_grimoire_mapper<br/>windowed — needs a display"]
+  acc --> ed["bevy_cauldron<br/>windowed — needs a display"]
   unit -->|"ExecStartPre"| xvfb["Xvfb, one number per loop"]
   drv -->|"git commit + push"| gh["origin"]
 ```

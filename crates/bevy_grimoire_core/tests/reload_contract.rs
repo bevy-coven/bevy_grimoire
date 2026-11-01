@@ -4,7 +4,7 @@
 //! `Restart` is the one that means *a running program that holds this file cannot take a change to it*,
 //! so it is debt, and the debt may be paid down but never run up silently: a kind joins `Restart` only
 //! by editing the list below, and a reviewer sees that edit. The operations' half of the contract
-//! (every written kind has a class) is `crates/bevy_grimoire_mapper/tests/reload_contract.rs`.
+//! (every written kind has a class) is `crates/bevy_cauldron/tests/reload_contract.rs`.
 
 use bevy_grimoire_core::reload::{self, Base, Lifetime, ReloadClass, KINDS};
 

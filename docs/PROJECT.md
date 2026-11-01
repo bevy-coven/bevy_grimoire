@@ -45,9 +45,9 @@ operations, 14 MCP tools, 56 recorded loop iterations.
 
 | Crate | Lines | What it is |
 |---|---:|---|
-| `bevy_grimoire_mapper` | 122,506 | The editor application. Opens a project directory, writes `<root>/assets/grimoire`. |
+| `bevy_cauldron` | 122,506 | The editor application. Opens a project directory, writes `<root>/assets/grimoire`. |
 | `bevy_grimoire_core` | 37,058 | The engine-free schema, grammar learner, WFC, validators. No Bevy. |
-| `bevy_grimoire_mcp` | 4,016 | The MCP server: 14 tools over stdio, talking to the running editor over BRP. |
+| `bevy_cauldron_mcp` | 4,016 | The MCP server: 14 tools over stdio, talking to the running editor over BRP. |
 | `bevy_grimoire_anim` | 1,327 | Clip-weight blending on a skinned rig. |
 | `bevy_grimoire_solver` | 1,304 | A deterministic SAT back-end. |
 | `bevy_grimoire` | 1,275 | The runtime: load a library and a map into a game. |
@@ -202,7 +202,7 @@ This is the section I would want if I were reading someone else's project.
 
 **1. The editor crate is enormous and unaudited.**
 
-122,506 lines in `bevy_grimoire_mapper`, and the README says it plainly: *"Vibe Coded — written by an AI
+122,506 lines in `bevy_cauldron`, and the README says it plainly: *"Vibe Coded — written by an AI
 agent working from a human's direction… no line-by-line human audit."* I think that is the single
 biggest risk in the repository. It is covered by tests, and the tests are good, but a test suite proves
 the properties someone thought to assert — not that the code is comprehensible to the next person.
@@ -216,7 +216,7 @@ not remove the duplication. **A shared params crate would.**
 
 **3. The editor and the game load the same data through two implementations.**
 
-`bevy_grimoire` (the runtime) and `bevy_grimoire_mapper` (the editor) both read a library and a map. The
+`bevy_grimoire` (the runtime) and `bevy_cauldron` (the editor) both read a library and a map. The
 repo's own convention is "consistent and wrong beats inconsistent", which is true, but it means a
 schema change has two readers to update and one of them is checked less often.
 

@@ -36,12 +36,12 @@ incremental = false
 [profile.dev.package."*"]
 opt-level = 3
 
-# **The editor crate's test binaries are stripped of symbols.** `bevy_grimoire_mapper` has ~90 integration
+# **The editor crate's test binaries are stripped of symbols.** `bevy_cauldron` has ~90 integration
 # tests, each linking a full Bevy app into its own ~250 MB executable; `strip -x` takes one from 252 MB
 # to 137 MB, ~45% of the ~22 GB they occupy in the shared target dir. The cost is that a panic's
 # backtrace shows no function names (the panic message and line are unaffected). Only this package is
 # overridden, so every dependency keeps the build it already has.
-[profile.dev.package.bevy_grimoire_mapper]
+[profile.dev.package.bevy_cauldron]
 strip = "symbols"
 
 # One isomesh for the whole build: `bevy_elements`' `isomesh` feature asks the registry for 0.0.11, and a

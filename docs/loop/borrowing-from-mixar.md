@@ -2,7 +2,7 @@
 
 **Who reads this:** an agent working on how a person and an agent work together in bevy_grimoire — the loop's Collaboration lens, a series step that names a Mixar beat, or any task that says "like Mixar".
 
-Mixar (https://github.com/Mixar-AI/mixar-app) is a Blender fork with an in-app agent. bevy_grimoire copies how its agent collaborates, not how it is built. **Mixar's agent lives inside the app while bevy_grimoire's agent sits outside and drives the editor over MCP (`bevy_grimoire_mcp`).** So a Mixar chat element becomes two things here: a surface in the editor the person watches, and the value an `grimoire_*` tool returns to the agent.
+Mixar (https://github.com/Mixar-AI/mixar-app) is a Blender fork with an in-app agent. bevy_grimoire copies how its agent collaborates, not how it is built. **Mixar's agent lives inside the app while bevy_grimoire's agent sits outside and drives the editor over MCP (`bevy_cauldron_mcp`).** So a Mixar chat element becomes two things here: a surface in the editor the person watches, and the value an `grimoire_*` tool returns to the agent.
 
 ## Licence: borrow behaviour, never expression
 
@@ -41,7 +41,7 @@ Rules:
    - `Refuses:` what it refuses, and how it says so.
    - `Source:` one `mixar@39b9d27:<path>` per file read.
 4. **Translate.** Map every line of the note onto bevy_grimoire, reusing what exists:
-   - A change to project data becomes a registered operation in `crates/bevy_grimoire_mapper/src/ops.rs` with both front ends. `tests/operations_have_two_front_ends.rs` enforces this.
+   - A change to project data becomes a registered operation in `crates/bevy_cauldron/src/ops.rs` with both front ends. `tests/operations_have_two_front_ends.rs` enforces this.
    - A presentation or conversation element that changes no data becomes an `grimoire_*` MCP tool backed by an editor-side resource (the pattern of `grimoire_present` / `present.rs`).
    - Anything the person sees is shown on an existing surface: `Status::problem` for refusals, `Status::note` for answers, the confirm modal (`confirm.rs`) for a yes/no, or a dock panel for a persistent feed. Name the surface in the note.
    - Undo goes through the oplog (`Undo::Inverse` or `Undo::Logged`).

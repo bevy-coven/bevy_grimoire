@@ -51,7 +51,7 @@ use crate::wfc::{E, N, S, W};
 
 /// How close a yaw must be to a quarter turn to count as one, in degrees.
 ///
-/// Yaws are authored in 15° steps (`bevy_grimoire_mapper`'s `YAW_STEP`) and stored as `f32`, so a value that
+/// Yaws are authored in 15° steps (`bevy_cauldron`'s `YAW_STEP`) and stored as `f32`, so a value that
 /// went through a serialize/parse round trip can be a hair off. A thousandth of a degree is far below
 /// anything an author can express and far above `f32`'s error at these magnitudes.
 pub(crate) const SQUARE_EPSILON: f32 = 1e-3;

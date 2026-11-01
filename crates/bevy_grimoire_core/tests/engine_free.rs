@@ -91,7 +91,7 @@ const FORBIDDEN_DEP_MARKERS: &[&str] = &["bevy", "avian", "wgpu", "winit"];
 /// **Crate names that contain the marker `bevy` and are not an engine.** This crate and its two
 /// engine-free siblings are all named `bevy_grimoire_*`, so the substring `bevy` alone no longer
 /// separates "an engine crate" from "us". Exactly these identifiers are exempt, matched whole (an
-/// identifier boundary on both sides) so `bevy`, `bevy_ecs` or a hypothetical `bevy_grimoire_mapper`
+/// identifier boundary on both sides) so `bevy`, `bevy_ecs` or a hypothetical `bevy_cauldron`
 /// still trip the check. Adding a name here is a design decision, like widening `ALLOWED_DEPS`.
 const SIBLING_DEPS: &[&str] = &["bevy_grimoire_rng", "bevy_grimoire_solver"];
 

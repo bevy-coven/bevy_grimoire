@@ -35,7 +35,7 @@ def binary(name):
     target = Path(json.loads(out.stdout)["target_directory"])
     path = target / "debug" / name
     if not path.is_file():
-        sys.exit(f"{path} is not built: run `cargo build -p bevy_grimoire_mapper -p bevy_grimoire_mcp` first")
+        sys.exit(f"{path} is not built: run `cargo build -p bevy_cauldron -p bevy_cauldron_mcp` first")
     return path
 
 
@@ -84,13 +84,13 @@ class Editor:
     """One editor process on a scratch project, closed by its own pid.
 
     **Closed by pid, never by name.** The person may have an editor open on their own project, and
-    `pkill -f bevy_grimoire_mapper` would take theirs down with ours.
+    `pkill -f bevy_cauldron` would take theirs down with ours.
     """
 
     def __init__(self, project, *args, capture_log=True):
         self.project = Path(project)
         self.port = free_port()
-        self.mapper = binary("bevy_grimoire_mapper")
+        self.mapper = binary("bevy_cauldron")
         log = self.project / "target" / "loop" / "editor.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         self.log_path = log
