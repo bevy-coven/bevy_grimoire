@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-01
 
+- **oracle-rename** `cc40684` The decision-model crate is bevy_oracle (it was bevy_grimoire_decide): it asks typed questions and is not tied to one editor; the grimoire_decide MCP tool keeps its name *No clip: a crate rename; proved by the workspace gate*
 - **cauldron-help** bevy_cauldron --help prints the arguments the editor reads and exits, instead of opening a window that names --help as a project *No clip: a command-line text; run: cargo run -q -p bevy_cauldron -- --help*
 - **pre-push-lfs** A push through the gate hook uploads the clips' LFS objects, so a clip's file reaches GitHub with its pointer and a push whose upload fails is refused (#149, #150) *No clip: the push gate itself; proved by tools/loop/test_pre_push_lfs.py (both tests fail with the previous hook)*
 - **cauldron-rename** `0e69943` The editor is the Cauldron: crates/bevy_cauldron and bevy_cauldron_mcp, the window and the launcher say Cauldron, and a grimoire is what it writes and a game loads (bevy_grimoire, bevy_grimoire_core and assets/grimoire/ keep their names) *No clip: a rename and a window title; proved by the workspace gate and cargo run -p bevy_cauldron --example boot_headless*
