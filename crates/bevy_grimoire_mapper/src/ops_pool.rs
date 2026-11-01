@@ -7,11 +7,15 @@
 //! answer is the game's, not a second ranking rule. Read-only; positions are on the ground plane.
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Activate;
 use bevy_lights::{Flicker, FlickerPlugin, LightPool, LightPoolPlugin, PoolBudget, PoolCandidate};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::editor::EditorState;
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::project::{OpenMap, Project};
+use crate::view::Rig;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -112,5 +116,47 @@ impl Operation for LightPoolBudget {
     fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
         let (summary, after) = Self::run(ctx, params)?;
         Ok(Outcome { summary, affected: 0, saved: false, inverse: None, after: Some(after) })
+    }
+}
+
+/// The LIGHTS section's one button: the pool's budget from where the camera looks.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct PoolHere;
+
+/// The LIGHTS section of the controls panel.
+pub fn spawn_section(s: &mut ChildSpawnerCommands) {
+    use crate::chrome::{Severity, button, section};
+    section(s, "LIGHTS");
+    button(s, PoolHere, "Pool here", Severity::Plain);
+}
+
+/// **The button** dispatches `light_pool` with the camera's ground point, in map space, as the focus, and
+/// says the operation's own receipt. `Option`, because this is a GLOBAL observer: see
+/// `editor::on_size_field_click`.
+pub fn on_pool_click(
+    activate: On<Activate>,
+    buttons: Query<(), With<PoolHere>>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
+    rig: Option<Res<Rig>>,
+    state: Option<ResMut<EditorState>>,
+) {
+    let (Some(mut state), Some(open), Some(rig)) = (state, open, rig) else {
+        return;
+    };
+    if buttons.get(activate.entity).is_err() {
+        return;
+    }
+    let focus = [rig.focus.x - open.map.origin.0, rig.focus.z - open.map.origin.2];
+    let mut ctx = Ctx {
+        project: project.as_deref().cloned(),
+        open: Some(open.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..Ctx::default()
+    };
+    match crate::ops::dispatch(&mut ctx, "light_pool", &json!({ "focus": focus })) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => state.status.note(outcome.summary),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
     }
 }
