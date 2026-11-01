@@ -1352,6 +1352,10 @@ struct PlanList;
 #[derive(Component, Clone, Copy)]
 struct NotesList;
 
+/// **The Reload panel's list** (#203): whether a game is connected, then a line per file with news.
+#[derive(Component, Clone, Copy)]
+struct ReloadList;
+
 #[derive(Component, Clone)]
 struct NoteRow {
     id: String,
@@ -2516,6 +2520,7 @@ impl Plugin for EditorPlugin {
                         refresh_data_list,
                         refresh_notes_list,
                         refresh_scripts_list,
+                        refresh_reload_list,
                         refresh_plan_list,
                     ),
                     refresh_triangle_total,
@@ -3466,6 +3471,26 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 crate::chrome::section(s, "NOTES");
                 s.spawn((
                     NotesList,
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                        ..default()
+                    },
+                ));
+            });
+
+            // **Reload (#203).** What became of each file's latest edit: whether a game is connected, and
+            // for every file a game or the editor has news on, applied, refused (with why), pending or
+            // needs restart, and how long ago.
+            p.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            })
+            .with_children(|s| {
+                crate::chrome::section(s, "RELOAD");
+                s.spawn((
+                    ReloadList,
                     Node {
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(crate::chrome::GAP_TIGHT),
@@ -5950,6 +5975,54 @@ fn on_notes_click(
             Err(why) => state.status.problem(why),
         }
     }
+}
+
+/// Keep [`ReloadList`] equal to what became of each file's latest edit (#203, H6): a header that says
+/// whether a game has answered, then a line per file with news, drawn from the same
+/// [`crate::reload_files`] rows `grimoire_state.reload_files` reports. The project is looked at twice a
+/// second; the lines are rebuilt only when their text changes, which includes the age moving on a
+/// second.
+fn refresh_reload_list(
+    mut commands: Commands,
+    time: Res<Time>,
+    project: Option<Res<Project>>,
+    game: Option<Res<crate::live::LiveGame>>,
+    reloads: Option<Res<crate::live::EditorReloads>>,
+    lists: Query<Entity, With<ReloadList>>,
+    mut local: Local<(Vec<(String, crate::reload_files::Tone)>, f32, bool)>,
+) {
+    use crate::reload_files::{self, Tone};
+    let (shown, since, drawn) = &mut *local;
+    *since += time.delta_secs();
+    if *drawn && *since < 0.5 {
+        return;
+    }
+    *since = 0.0;
+    let Some(project) = project else { return };
+    let verdict = game.as_deref().and_then(|g| g.verdict.as_ref());
+    let editor = reloads.as_deref().map_or(&[][..], |r| r.kinds());
+    let files = reload_files::files(&project.project_dir, &project.root, verdict, editor);
+    let now = reload_files::panel_lines(&files, verdict, reload_files::now_ms());
+    if *drawn && *shown == now {
+        return;
+    }
+    for list in &lists {
+        commands.entity(list).despawn_related::<Children>();
+        commands.entity(list).with_children(|p| {
+            for (line, tone) in &now {
+                let colour = match tone {
+                    Tone::Dim => DIM,
+                    Tone::Text => TEXT,
+                    Tone::Accent => ACCENT,
+                    Tone::Danger => DANGER,
+                };
+                let size = if *tone == Tone::Dim { crate::chrome::text::LABEL } else { crate::chrome::text::BODY };
+                p.spawn((Text::new(line.clone()), TextColor(colour), crate::chrome::font(size)));
+            }
+        });
+    }
+    *shown = now;
+    *drawn = true;
 }
 
 /// Keep [`PlanList`] equal to the open map's plan: a count, then `<n> [<status>] <text>` per step in

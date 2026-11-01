@@ -592,10 +592,21 @@ fn editor_state(
         "presentation": presentation,
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),
         // **The game's verdict on the last reload** (S3.5): null, "pending", or {ok, message, at_unix_ms}.
-        "game": game.map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
+        "game": game.as_deref().map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
         // **The editor's own verdicts** on the files it watches and draws (#200, H3): `{ok, seq, kinds}`,
         // one entry per file with its kind, path, `applied` or `refused`, and the field and reason.
-        "reloads": reloads.map_or(Value::Null, |r| r.state_json()),
+        "reloads": reloads.as_deref().map_or(Value::Null, |r| r.state_json()),
+        // **What became of each file's latest edit, as a running game says it** (#203, H6): `{now_unix_ms,
+        // game: {connected, at_unix_ms, seq}, files}`, one entry per file of the open project with its
+        // kind, path, `state` (`no_game_connected`, `pending`, `game_applied`, `game_refused`,
+        // `needs_restart`, `not_read`), field, reason, the game's decision time, the file's last write and
+        // the editor's own verdict. The directory is walked on every call, like `standards` and `repetition`.
+        "reload_files": project.as_ref().map(|p| {
+            let verdict = game.as_deref().and_then(|g| g.verdict.as_ref());
+            let editor = reloads.as_deref().map_or(&[][..], |r| r.kinds());
+            let files = crate::reload_files::files(&p.project_dir, &p.root, verdict, editor);
+            crate::reload_files::state_json(&files, verdict)
+        }),
         "armed_composition": armed.and_then(|a| a.id().map(|s| s.to_owned())),
         "selected": tiles.as_ref().map(|t| t.selected_library_id.clone()),
         "door": door.map(|d| d.label()),

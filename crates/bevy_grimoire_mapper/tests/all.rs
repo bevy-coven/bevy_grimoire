@@ -32,6 +32,7 @@ mod a_destructible_file_that_does_not_read_is_named;
 mod a_door_answer_says_whether_it_waits;
 mod a_dropped_image_becomes_a_reference;
 mod a_dressed_camera_leaves_the_world_on_the_surface;
+mod a_file_says_what_the_game_made_of_its_edit;
 mod a_file_that_does_not_read_is_never_overwritten;
 mod a_fill_tells_the_truth;
 mod a_forest_people_or_scripts_file_of_another_version_is_refused;

@@ -119,6 +119,7 @@ pub mod checks_view;
 pub mod oplog_view;
 pub mod data_view;
 pub mod reference_view;
+pub mod reload_files;
 pub mod ops_play;
 pub mod ops_notes;
 pub mod ops_references;
