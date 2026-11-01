@@ -18,3 +18,4 @@ pass	at	host	seconds	model	think	build_jobs	test_threads
 216	2026-11-01T18:40Z	big	3024	anthropic/claude-sonnet-5-5	high	10	8
 217	2026-11-01T19:24Z	big	2625	anthropic/claude-sonnet-5-5	high	10	8
 219	2026-11-01T21:24Z	big	4488	anthropic/claude-sonnet-5-5	high	10	8
+220	2026-11-01T22:54Z	big	5283	anthropic/claude-sonnet-5-5	high	6	4
