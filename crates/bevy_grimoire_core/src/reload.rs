@@ -211,7 +211,7 @@ pub const KINDS: &[FileKind] = &[
         "`destructible_set` and `destructible_hit` (only in a build with the carnage feature)",
         "A cache the next hit rebuilds when it is absent."),
     kind("game_data", Root, "", "the game's own RON", Restart, Global, "",
-        "Written by `data_set` into files the game owns. This repository ships no reader for them, so a running game is restarted unless it re-reads them itself."),
+        "Written by `data_set` into files the game owns. This repository ships no reader that applies them, so a running game is restarted unless it re-reads them itself. The editor looks at each file `data.ron` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `needs_restart` when an edit leaves one that reads as other text than it first read, `applied` when it is back to that text."),
 ];
 
 /// **The kind with this id.**

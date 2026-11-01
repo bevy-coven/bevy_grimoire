@@ -534,9 +534,10 @@ impl Plugin for AfterEditPlugin {
             // checks belong to the project, not to the open map.
             .init_resource::<crate::checks_view::ChecksView>()
             .init_resource::<crate::oplog_view::OplogView>()
+            .init_resource::<crate::data_view::DataView>()
             .add_systems(
                 Update,
-                (crate::checks_view::sync_checks_view, crate::oplog_view::sync_oplog_view, queue_after_edit, start_checks, launch_shot_checks, collect_reports).chain(),
+                (crate::checks_view::sync_checks_view, crate::oplog_view::sync_oplog_view, crate::data_view::sync_data_view, queue_after_edit, start_checks, launch_shot_checks, collect_reports).chain(),
             );
     }
 }

@@ -78,8 +78,9 @@ impl DataSet {
         let (path, f) = path_of(ctx, &p.file)?;
         let text = std::fs::read_to_string(&path)
             .map_err(|e| Refusal::new(format!("{} cannot be read, so nothing was changed: {e}", path.display())))?;
-        let old = data_files::leaves(&text)
-            .map_err(Refusal::new)?
+        let shown = ctx.project.as_ref().map_or_else(|| path.display().to_string(), |p| crate::map_files::file_name(p, &path));
+        let old = data_files::read(&shown, &text)
+            .map_err(|r| Refusal::new(format!("{}. The file is left as it is: fix it, then try again. Nothing was changed.", r.sentence())))?
             .into_iter()
             .find(|(l, _)| *l == p.path)
             .map(|(_, t)| t);
