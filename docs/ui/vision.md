@@ -159,7 +159,7 @@ New third-party dependencies, each logged because no family crate does the job: 
 For every user-facing string:
 
 - Sentence case. A button is a verb ("Open folder…", "Delete 3 pieces").
-- No abbreviations: "vertices", not "verts"; "location", not "loc". The refused list is in the test of UI-07.
+- No abbreviations: "vertices", not "verts"; "location", not "loc". The refused list, which `tests/every_label_follows_the_writing_style.rs` checks over every command title, is `verts`, `loc`, `rot`, `fac`, `obj`, `cfg` and `info`.
 - No implementation terms in labels: no "RON", "entity" or "struct".
 - No contractions.
 - A message names the file and the field, and says what to do next.
