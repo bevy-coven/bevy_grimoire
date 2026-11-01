@@ -47,32 +47,6 @@
       "first_seen": "2026-10-22"
     },
     {
-      "id": "E-033",
-      "kind": "enhancement",
-      "area": "docs",
-      "title": "README demos show each change: re-shoot the five clips so every change is visible at README size",
-      "status": "open",
-      "evidence": "Cycle 2 (99c764c): the re-shoot failed tools/demo/check.py on every clip, so the README keeps cycle 1's GIFs. Bars: scene >= 40% of frame, change >= 5% per change moment, static <= 1.5 s, size cap. Measured: hero attempt A scene 75.2%, agent 34.2%, undo 33.9%, static 0.93 s, 0.45 MB, numbers pass but the house is off-crop; hero attempt B scene 87.7%, agent 3.2%, undo 3.0%; place_and_undo scene 90.4%, place 0.8%, undo 1.1%, static 2.0 s; agent_removes_then_undo scene 92.4%, agent 4.1%, undo 4.3%, static 2.1 s; frame_the_map scene 30.8%, Home 85.2%, static 1.27 s; move_the_camera scene 29.5%, static 0.67 s, 3.89 MB. Leads: the crop is not centred on the view centre (the editor reports focus for block_3_1 at (18.29, -18.29), but the house is off-centre in frame 0); the MIN_ZOOM floor keeps small targets far (the barrel is a 2 px dot); pick large pieces; the camera pan leaves the town. The tooling (tools/demo record.py, render.py, check.py, storyboards) ships in 9064805 and 99c764c. Cycle 3 (52d7f84), check.py with the corrected crop [470, 64, 950, 690]: frame_the_map FAIL, static run 1.67 s (limit 1.5), home change 77.66%, size 0.90 MB; move_the_camera FAIL, scene 17.1% (need >= 40%), size 26.77 MB (limit 3.0 MB), static 0.53 s; place_and_undo FAIL, undo change 0.36% (need >= 5%). hero and agent_removes_then_undo not recorded: the sequencer drops screenshots (B-038). Storyboards and record.py on loop/2026-10-23-video (f8942d3), merged in 446334b. Cycle 4 (0286624): place_and_undo PASS on attempt 2 and SHIPPED (README; docs/media/place-and-undo.gif, 8.7 s): scene min 91.2%, place 5.38% at 1.10 s, undo 5.17% at 2.22 s, static 1.13 s, 0.28 MB. Not shipped: frame_the_map PASS on attempt 2 but f21-f150 identical (about 8.6 s), an agent framing rather than the Home key; check.py gap, E-035. agent_removes_then_undo PASS only on attempt 3 (over the two-attempt budget), recording discarded: scene 91.7%, agent 6.16% at 0.07 s, undo 7.22% at 1.41 s, static 0.20 s, 0.49 MB. move_the_camera FAIL twice: attempt 2 scene 57.8%, static 0.70 s, 3.20 MB (limit 3.0). hero FAIL on attempt 1, not retried: scene 91.3%, agent 3.68% at 9.90 s, undo 0.23%, static 4.73 s, 0.67 MB; chunk 0 ran about 9.8 s, not 6 s (E-036). 1 of 5 clips shipped; 4 open. Cycle 5 (ca6d1ef): place_and_undo re-shot and shipped (8a3e462: scene 80.7%, place 22.54%, undo 22.38%, static 1.33 s, 0.30 MB). frame_the_map shipped in fc5063a and reverted in f75ce09 (agent framing on a 300x240 m rect; the map is 300x1120 m). move_the_camera FAIL x2 (scene min 34.6%, 19.6%); hero FAIL x2 (static 3.12 s); agent_removes_then_undo FAIL x2 (static 3.75-3.88 s). Still 1 of 5 shipped. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md Cycle 6 (0024999): agent_removes_then_undo re-shot and shipped (scene min 77.7%; agent 43.19% at 0.10 s; undo 43.36% at 1.46 s; static 1.27 s; 0.57 MB; in the README Agents section). Two of five re-shot. Still open: hero, frame_the_map, move_the_camera. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md | Cycle 7 (75711d6, 900c8cf): 4 of 5 README clips re-shot (place-and-undo, agent-removes, frame-the-map, move-the-camera). Hero (E-039) is the fifth. Still open. Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
-      "last_failure": "",
-      "first_seen": "2026-10-22"
-    },
-    {
-      "id": "E-038",
-      "kind": "enhancement",
-      "area": "docs",
-      "title": "The remaining demo clips need short holds, small pans, a larger snip rect, and the Home key for frame_the_map",
-      "must_fix": {
-        "blocks": false,
-        "common": false,
-        "no_workaround": false,
-        "evidence": "Not judged: unconfirmed. Set when reproduced."
-      },
-      "status": "open",
-      "evidence": "Cycle 5 video runs: move_the_camera FAIL x2 (scene min 34.6% and 19.6%; the pan leaves the map). hero FAIL x2 (static 3.12 s; snip drag change 0.38%). agent_removes_then_undo FAIL x2 (static 3.75-3.88 s; the removal holds the full 3 s chunk). frame_the_map reverted in f75ce09 (agent framing, not Home). Next: holds of 1.5 s or less between moments, pans of 0.2 s or less per key, a larger snip rect, and the Home key step for frame_the_map. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md Cycle 6: agent_removes_then_undo shipped in 0024999 after an attempt failed static (1.60 s). move_the_camera passed check.py (scene 91%, static <= 0.67 s) but visual review rejected both attempts: the last 1.5 s shows an empty plaza. frame_the_map: Home on town gives scene 32.2% on both attempts (bar 40%); moved to E-040. hero FAIL x2: houses about 2 m, a removal is 1.76% of the frame; snip drag outline 0.87% at README size (B-043, E-039). Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md | Cycle 7: move-the-camera ships short holds and small pans (75711d6); frame-the-map uses the Home key (900c8cf). Hero (E-039) still needs its holds and pans. Still open. Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
-      "last_failure": "",
-      "first_seen": "2026-10-23"
-    },
-    {
       "id": "E-039",
       "kind": "enhancement",
       "area": "docs",
@@ -85,16 +59,6 @@
       },
       "status": "open",
       "evidence": "Cycle 6: the hero clip on house-sized pieces failed twice: a removal of a 2 m house is 1.76% of the frame, and the snip outline 0.87%. A building the size of the abbey should fill enough of the frame to pass the change bar. Not started. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md",
-      "last_failure": "",
-      "first_seen": "2026-10-23"
-    },
-    {
-      "id": "E-053",
-      "kind": "enhancement",
-      "area": "harness",
-      "title": "bevy_debugger_mcp's input tool cannot type text, so no field can be filled over BRP",
-      "status": "open",
-      "evidence": "bevy_debugger_bevy/src/commands.rs has no text/logical-key path; typing letters into the new-map NAME field and the shelf filter did nothing (2026-10-23 live tutorial run and cycle 6/9 agents). Fix belongs in the bevy_debugger_mcp repo.",
       "last_failure": "",
       "first_seen": "2026-10-23"
     },
