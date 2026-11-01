@@ -132,6 +132,7 @@ mod an_f32_in_the_log_still_undoes;
 mod an_imported_piece_names_the_standards_it_breaks;
 mod an_undo_across_a_rename_names_the_rename;
 mod an_unsaved_edit_survives_the_watcher;
+mod asset_spike;
 mod b027_the_pin_reason_names_its_piece;
 mod before_picture_is_the_last_after;
 mod brush_arm_is_an_operation;
