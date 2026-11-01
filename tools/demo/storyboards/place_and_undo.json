@@ -1,12 +1,12 @@
 {
   "name": "place_and_undo",
-  "fps": 15,
-  "scale": 2,
-  "width": 600,
+  "fps": 10,
+  "scale": 1,
+  "width": 760,
   "crop": [
-    470,
+    440,
     64,
-    950,
+    1270,
     690
   ],
   "setup": [
@@ -15,10 +15,10 @@
       "args": {
         "target": {
           "rect": [
-            57,
-            -65,
-            71,
-            -55
+            1.2,
+            0.2,
+            3.2,
+            2.2
           ]
         }
       }
@@ -26,57 +26,58 @@
   ],
   "chunks": [
     {
-      "seconds": 3.5
+      "seconds": 4.5
     }
   ],
   "steps": [
     {
       "at": 0.2,
       "click": [
-        1106,
+        1118,
         133
       ]
     },
     {
       "at": 0.4,
-      "type": "house"
+      "type": "sofa"
     },
     {
-      "at": 0.6,
-      "caption": "person: arms the gate house from the list"
-    },
-    {
-      "at": 0.8,
-      "click": [
-        1090,
-        203
-      ]
-    },
-    {
-      "at": 0.9,
-      "caption": "person: click the ground to place it"
+      "at": 0.5,
+      "caption": "person: filters the PLACE list to the sofa"
     },
     {
       "at": 1.0,
       "click": [
-        710,
-        377
+        1100,
+        203
       ]
     },
     {
-      "at": 1.5,
+      "at": 1.1,
+      "caption": "person: arms the sofa from the list"
+    },
+    {
+      "at": 1.7,
+      "click": [
+        710,
+        400
+      ]
+    },
+    {
+      "at": 1.8,
+      "caption": "person: click the floor to place the sofa"
+    },
+    {
+      "at": 2.4,
       "clear_cursor": true
     },
     {
-      "at": 2.0,
-      "caption": "person: ⌘Z takes the gate house back"
-    },
-    {
-      "at": 2.2,
+      "at": 2.8,
       "key": "KeyZ",
       "mods": [
-        "SuperLeft"
-      ]
+        "ControlLeft"
+      ],
+      "caption": "person: Ctrl+Z takes the sofa back"
     }
   ]
 }

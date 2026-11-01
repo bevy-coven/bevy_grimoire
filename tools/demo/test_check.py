@@ -22,7 +22,7 @@ FRAMES = 24
 EVENT_T = 1.0
 
 
-def write_clip(directory, changed_frames):
+def write_clip(directory, changed_frames, keys=("Home",)):
     base = np.random.default_rng(7).integers(60, 201, size=(H, W, 3), dtype=np.uint8)
     frames = []
     for i in range(FRAMES):
@@ -36,12 +36,12 @@ def write_clip(directory, changed_frames):
     events = os.path.join(directory, "synthetic.events.json")
     with open(events, "w") as fh:
         json.dump({"name": "synthetic", "fps": FPS, "chunks": [],
-                   "events": [{"t": EVENT_T, "type": "key", "keys": ["Home"]}]}, fh)
+                   "events": [{"t": EVENT_T, "type": "key", "keys": list(keys)}]}, fh)
     return events, gif
 
 
 def change_line(events, gif):
-    """Run check.py and return its 'change home' line."""
+    """Run check.py and return its one 'change ...' line."""
     done = subprocess.run([sys.executable, CHECK, events, gif], capture_output=True, text=True, cwd=HERE)
     lines = [ln for ln in done.stdout.splitlines() if ln.startswith("change ")]
     if len(lines) != 1:
@@ -50,9 +50,9 @@ def change_line(events, gif):
 
 
 class ChangeWindow(unittest.TestCase):
-    def check(self, changed_frames):
+    def check(self, changed_frames, keys=("Home",)):
         with tempfile.TemporaryDirectory() as directory:
-            events, gif = write_clip(directory, changed_frames)
+            events, gif = write_clip(directory, changed_frames, keys)
             return change_line(events, gif)
 
     def test_a_change_on_the_event_frame_passes(self):
@@ -66,6 +66,12 @@ class ChangeWindow(unittest.TestCase):
     def test_a_change_half_a_second_after_the_event_fails(self):
         # starts at frame 13 (0.625 s after the event): outside the 0.2 s window, after the 0.5 s-after frame
         self.assertIn("FAIL", self.check(set(range(13, FRAMES))))
+
+    def test_ctrl_z_is_an_undo_moment_like_cmd_z(self):
+        # a recording made on Linux presses Ctrl+Z; an undo that changed nothing on screen must still fail
+        for mod in ("ControlLeft", "SuperLeft"):
+            self.assertIn("change undo", self.check(set(range(8, FRAMES)), (mod, "KeyZ")))
+            self.assertIn("FAIL", self.check(set(), (mod, "KeyZ")))
 
 
 if __name__ == "__main__":

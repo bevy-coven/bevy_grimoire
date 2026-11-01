@@ -1,40 +1,119 @@
 {
   "name": "build_a_map",
   "fps": 10,
-  "scale": 2,
-  "width": 1200,
-  "crop": [0, 0, 1280, 703],
+  "scale": 1,
+  "width": 760,
+  "crop": [
+    440,
+    64,
+    1270,
+    690
+  ],
   "setup": [
-    {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [44, -93, 69, -75]}}}
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            1.2,
+            0.2,
+            3.2,
+            2.2
+          ]
+        }
+      }
+    }
   ],
   "chunks": [
-    {"seconds": 10.0}
+    {
+      "seconds": 7.0
+    }
   ],
   "steps": [
-    {"at": 0.2, "cursor": [700, 420]},
-    {"at": 0.3, "caption": "person: frame a clear 25 by 18 m patch beside the abbey"},
-    {"at": 0.9, "caption": "person: walk the PLACE list to landmark_gate_house"},
-    {"at": 1.0, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 1.15, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 1.3, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 1.45, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 1.6, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 1.75, "key": "ArrowDown", "mods": ["ShiftLeft"]},
-    {"at": 1.9, "key": "ArrowDown"},
-    {"at": 2.05, "key": "ArrowDown"},
-    {"at": 2.4, "caption": "R turns the armed gate house: YAW 330"},
-    {"at": 2.6, "key": "KeyR"},
-    {"at": 2.8, "key": "KeyR"},
-    {"at": 3.1, "cursor": [710, 377]},
-    {"at": 3.3, "caption": "person: click to place it"},
-    {"at": 3.6, "click": [710, 377]},
-    {"at": 4.4, "caption": "person: click again, a second gate house"},
-    {"at": 4.7, "click": [850, 380]},
-    {"at": 5.6, "caption": "person: press X, then click the gate house to remove it"},
-    {"at": 5.9, "key": "KeyX"},
-    {"at": 6.2, "click": [850, 380]},
-    {"at": 7.2, "caption": "person: Cmd+Z brings it back; LAST names each step"},
-    {"at": 7.6, "key": "KeyZ", "mods": ["SuperLeft"]},
-    {"at": 9.7, "clear_cursor": true}
+    {
+      "at": 0.2,
+      "cursor": [
+        600,
+        300
+      ]
+    },
+    {
+      "at": 0.3,
+      "caption": "person: furnish the bedroom: filter the PLACE list and arm the sofa"
+    },
+    {
+      "at": 0.5,
+      "click": [
+        1118,
+        133
+      ]
+    },
+    {
+      "at": 0.7,
+      "type": "sofa"
+    },
+    {
+      "at": 1.3,
+      "click": [
+        1100,
+        203
+      ]
+    },
+    {
+      "at": 2.0,
+      "caption": "R turns the armed sofa a quarter turn"
+    },
+    {
+      "at": 2.1,
+      "key": "KeyR"
+    },
+    {
+      "at": 2.7,
+      "cursor": [
+        710,
+        400
+      ]
+    },
+    {
+      "at": 2.9,
+      "caption": "person: click to place it"
+    },
+    {
+      "at": 3.1,
+      "click": [
+        710,
+        400
+      ]
+    },
+    {
+      "at": 4.0,
+      "caption": "person: press X, then click the sofa to remove it"
+    },
+    {
+      "at": 4.2,
+      "key": "KeyX"
+    },
+    {
+      "at": 4.7,
+      "click": [
+        710,
+        400
+      ]
+    },
+    {
+      "at": 5.7,
+      "caption": "person: Ctrl+Z brings it back"
+    },
+    {
+      "at": 5.9,
+      "key": "KeyZ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 6.8,
+      "clear_cursor": true
+    }
   ]
 }
