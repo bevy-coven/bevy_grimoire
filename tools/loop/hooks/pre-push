@@ -13,6 +13,8 @@ set -u
 cargo="${LOOP_GATE_CARGO:-cargo}"
 zero=0000000000000000000000000000000000000000
 target="" remote="" code=0
+# The pushed refs arrive on stdin once; `git lfs pre-push` below needs them too.
+refs=$(cat)
 while read -r _local_ref local_sha remote_ref remote_sha; do
   [ "$remote_ref" = "refs/heads/main" ] || continue
   [ "$local_sha" = "$zero" ] && continue
@@ -32,7 +34,7 @@ while read -r _local_ref local_sha remote_ref remote_sha; do
   elif git diff --name-only "$remote_sha" "$local_sha" | grep -qvE '^docs/|\.md$|\.(gif|mp4|png|jpg|webp)$'; then
     code=1
   fi
-done
+done <<<"$refs"
 [ -n "$target" ] || exit 0
 # Every gate run leaves one line per step in `<git-dir>/gate.log` (time, commit, step, seconds), so how long
 # the gate costs each worker is measured, not guessed: pass logs hold only the agent's final message.
@@ -42,6 +44,11 @@ refuse() { note "REFUSED $*"; echo "pre-push gate: REFUSED: $*" >&2; echo "pre-p
 timed() { local name=$1 t0 rc; shift; t0=$(date +%s); "$@"; rc=$?; note "$name rc=$rc $(( $(date +%s) - t0 ))s"; return $rc; }
 [ "$(git rev-parse HEAD)" = "$target" ] || refuse "push the checked-out commit (HEAD $(git rev-parse --short HEAD), pushing ${target:0:9})"
 [ -z "$(git status --porcelain -- crates Cargo.toml Cargo.lock tools)" ] || refuse "uncommitted changes under crates/, Cargo.*, tools/ would be tested instead of the commit; commit or stash them"
+# **A clip's file reaches GitHub, not only its pointer** (owner, 2026-11-01). `core.hooksPath` replaces git-lfs's own
+# `pre-push`, so a push from this clone sent a clip's pointer to main and kept the file: eight changelog media files were
+# missing on the server (GH008, and a fresh checkout failing "smudge filter lfs failed"). Upload the pushed commits' LFS
+# objects first, with the refs this hook was given, and refuse the push when that fails.
+printf '%s\n' "$refs" | git lfs pre-push "$@" >&2 || refuse "git lfs pre-push failed: the commit's LFS objects (a changelog clip) are not on the server, so the push would leave their pointers without files. Is git-lfs installed (git lfs install)?"
 # A merge resolved by hand can leave its conflict markers behind (a10b342 removed six from CHANGELOG.md and ops.rs, 2026-10-29).
 markers=$(git grep -nE '^(<<<<<<<|>>>>>>>) ' "$target" -- . ':!*.patch' 2>/dev/null | head -5)
 [ -z "$markers" ] || refuse "conflict markers in the commit: ${markers//$'\n'/; }"
