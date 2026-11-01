@@ -1761,6 +1761,56 @@ fn note_cell(v: f32) -> i32 {
     (v / grid::TILE).floor() as i32
 }
 
+/// **A piece becomes (part of) a note's subject**, the one way both the Note tool's Shift-click and a
+/// piece menu's Note item say "this piece is what the note is about" (UI-36, #230). The box opens, or
+/// stays open, on the pieces picked, and `area` is the cells they span. `toggle` is the Shift-click:
+/// picking a piece already in the box takes it out; the menu's item only ever adds it.
+///
+/// A box holding a note being typed or edited is left as it is and says so: a second pick must not
+/// throw away what the person has written.
+pub(crate) fn note_pick_piece(
+    open: &OpenMap,
+    state: &mut EditorState,
+    note_box: &mut NoteBox,
+    id: String,
+    toggle: bool,
+) {
+    if note_box.draft.as_ref().is_some_and(|d| d.editing.is_some() || d.pieces.is_empty()) {
+        state.status.note("finish or cancel the open note first (Enter saves, Esc cancels)");
+        return;
+    }
+    let mut draft = note_box.draft.take().unwrap_or(NoteDraft {
+        area: [0; 4],
+        editing: None,
+        text: String::new(),
+        pieces: Vec::new(),
+        auto: false,
+    });
+    match draft.pieces.iter().position(|p| *p == id) {
+        Some(k) if toggle => {
+            draft.pieces.remove(k);
+        }
+        Some(_) => {}
+        None => draft.pieces.push(id),
+    }
+    if draft.pieces.is_empty() {
+        state.status.note("note: no pieces picked");
+        return;
+    }
+    let mut area = [i32::MAX, i32::MAX, i32::MIN, i32::MIN];
+    for p in open.map.placements.iter().filter(|p| draft.pieces.contains(&p.id)) {
+        let (x, z) = (note_cell(p.at.0), note_cell(p.at.1));
+        area = [area[0].min(x), area[1].min(z), area[2].max(x), area[3].max(z)];
+    }
+    draft.area = area;
+    state.status.note(format!(
+        "note on {} piece(s): Shift-click more, type it, Enter saves, Esc cancels",
+        draft.pieces.len()
+    ));
+    note_box.draft = Some(draft);
+    state.tool = Tool::Note;
+}
+
 /// **The Note tool**: press, drag, release over the ground. A drag is the note's area; a click on a
 /// standing note's area opens that note, and a click on bare ground is a one-cell area.
 #[allow(clippy::too_many_arguments)]
@@ -1803,33 +1853,7 @@ fn drive_note(
             && let Some(i) = pick_at(project, &open, at)
         {
             let id = open.map.placements[i].id.clone();
-            let mut draft = note_box.draft.take().unwrap_or(NoteDraft {
-                area: [0; 4],
-                editing: None,
-                text: String::new(),
-                pieces: Vec::new(),
-                auto: false,
-            });
-            if let Some(k) = draft.pieces.iter().position(|p| *p == id) {
-                draft.pieces.remove(k);
-            } else {
-                draft.pieces.push(id);
-            }
-            if draft.pieces.is_empty() {
-                state.status.note("note: no pieces picked");
-            } else {
-                let mut area = [i32::MAX, i32::MAX, i32::MIN, i32::MIN];
-                for p in open.map.placements.iter().filter(|p| draft.pieces.contains(&p.id)) {
-                    let (x, z) = (note_cell(p.at.0), note_cell(p.at.1));
-                    area = [area[0].min(x), area[1].min(z), area[2].max(x), area[3].max(z)];
-                }
-                draft.area = area;
-                state.status.note(format!(
-                    "note on {} piece(s): Shift-click more, type it, Enter saves, Esc cancels",
-                    draft.pieces.len()
-                ));
-                note_box.draft = Some(draft);
-            }
+            note_pick_piece(&open, &mut state, &mut note_box, id, true);
         }
         return;
     }
@@ -13914,6 +13938,27 @@ pub(crate) fn piece_verb(
         }
         PieceVerb::Remove => delete_index(commands, project, index, open, state, placed),
     }
+}
+
+/// **Pick the placement `id` up with the move tool**, as the first click of a move does, for a menu
+/// that already knows which piece it means (UI-36, #230). Arms the move tool exactly as its key does
+/// (the brush is not also asking to place, a clone set in hand is dropped), and leaves the drop to the
+/// next click on the map: one `placement_move` and one `Cmd+Z`, the same as a carry the keys began.
+pub(crate) fn carry_piece(
+    open: &OpenMap,
+    state: &mut EditorState,
+    move_drag: &mut MoveDrag,
+    clone_drag: &mut CloneDrag,
+    id: &str,
+) {
+    if !open.map.placements.iter().any(|p| p.id == id) {
+        state.status.note(format!("{id} is no longer on the map"));
+        return;
+    }
+    state.tool = Tool::Move;
+    clone_drag.held = None;
+    move_drag.held = Some(Held::Piece(id.to_owned()));
+    state.status.note(format!("{id} in hand — click to put it down, Esc to put it back"));
 }
 
 /// **A carried piece leaves its spot.**

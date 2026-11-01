@@ -92,6 +92,7 @@ mod a_rename_carries_the_rules_example_with_it;
 mod a_rename_is_all_or_nothing;
 mod a_rename_whose_old_file_cannot_go_changes_nothing;
 mod a_right_click_on_a_library_piece_opens_its_menu;
+mod a_right_click_on_a_piece_can_move_or_note_it;
 mod a_right_click_on_a_piece_opens_its_menu;
 mod a_rigs_edit_says_what_became_of_it;
 mod a_rule_can_be_changed;
