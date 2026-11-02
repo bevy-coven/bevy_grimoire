@@ -1,0 +1,88 @@
+{
+ "name": "terrain_import",
+ "fps": 10,
+ "scale": 1,
+ "width": 640,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "terrain_import",
+    "parameters": {
+     "map": "bedroom",
+     "file": "assets/grimoire/maps/hills16.png",
+     "cell_m": 1.0,
+     "range_m": [
+      0.0,
+      6.0
+     ]
+    }
+   }
+  },
+  {
+   "seconds": 3
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the bedroom on a flat ground: no terrain file yet"
+  },
+  {
+   "at": 0.9,
+   "key": "KeyE"
+  },
+  {
+   "at": 2.7,
+   "caption": "agent: terrain_import hills16.png, a dome 6 m high, one metre a cell"
+  },
+  {
+   "at": 3.3,
+   "key": "KeyQ"
+  },
+  {
+   "at": 4.6,
+   "key": "KeyE"
+  },
+  {
+   "at": 5.8,
+   "caption": "the ground is the height map now \u2014 4225 cells from one PNG"
+  },
+  {
+   "at": 6.3,
+   "key": "KeyE"
+  },
+  {
+   "at": 7.2,
+   "key": "KeyQ"
+  },
+  {
+   "at": 7.9,
+   "key": "KeyE"
+  }
+ ],
+ "crop": [
+  8,
+  58,
+  960,
+  700
+ ]
+}
