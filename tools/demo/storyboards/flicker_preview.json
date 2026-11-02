@@ -1,0 +1,24 @@
+{
+ "name": "flicker_preview",
+ "fps": 10,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {"mcp": "grimoire_frame_view", "args": {"target": {"placements": ["floor_lamp", "bed"]}}}
+ ],
+ "chunks": [
+  {"seconds": 3},
+  {"seconds": 3.5, "operation": {"name": "placement_set_family", "parameters": {"id": "floor_lamp", "crate": "bevy_lights", "value": "(base: 150.0, depth: 0.05)"}}},
+  {"seconds": 4.5, "operation": {"name": "placement_set_family", "parameters": {"id": "floor_lamp", "crate": "bevy_lights", "value": "(base: 150.0, depth: 0.3)"}}},
+  {"seconds": 2.5, "operation": {"name": "placement_set_family", "parameters": {"id": "floor_lamp", "crate": "bevy_lights"}}},
+  {"seconds": 4.5, "operation": {"name": "placement_set_family", "parameters": {"id": "floor_lamp", "crate": "bevy_lights", "value": "(base: 150.0, depth: 0.3)"}}}
+ ],
+ "steps": [
+  {"at": 0.2, "caption": "the bedroom at 23:00, the floor lamp carries no light"},
+  {"at": 3.2, "caption": "agent: a bevy_lights Flicker on the floor lamp, depth 0.05: a calm light"},
+  {"at": 6.7, "caption": "retuned live to depth 0.3: the light flickers"},
+  {"at": 11.2, "caption": "the settings taken off: the light is taken down"},
+  {"at": 13.7, "caption": "put back: a new light, flickering again"},
+  {"at": 16.0, "caption": "the crate's own FlickerPlugin dims and lifts the light every frame"}
+ ]
+}
