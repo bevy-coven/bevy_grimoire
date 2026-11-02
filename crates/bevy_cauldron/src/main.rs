@@ -133,7 +133,7 @@ fn main() -> AppExit {
     // main thread, so a slow project shows a spinner and then a progress bar instead of a window that
     // does not answer, and a project that will not open is said on that screen (and on the terminal
     // the flag was typed into) with a way back to the launcher. `GRIMOIRE_LOAD_STAGE_DELAY_MS` pauses
-    // after each stage, to see the screen on a project that opens too fast to.
+    // as each stage starts, to see the screen on a project that opens too fast to.
     if args::names_a_door(&argv) {
         app.insert_resource(bevy_cauldron::loading::LoadRequest(argv.clone()));
         if let Some(ms) = std::env::var("GRIMOIRE_LOAD_STAGE_DELAY_MS").ok().and_then(|v| v.parse::<u64>().ok()) {

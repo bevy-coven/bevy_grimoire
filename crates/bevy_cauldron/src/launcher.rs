@@ -1,16 +1,16 @@
 //! **The launcher: the first screen of a Cauldron started with no project** (UI-10, #216).
 //!
-//! `bevy_cauldron` with no argument lists the projects it has opened, most recent first, with each one's
+//! `bevy_cauldron` with no argument (and `--live`, which names no project) lists the projects it has opened, most recent first, with each one's
 //! name, folder and when it was last opened (`recent.rs`, UI-11), and offers to open a folder a person
 //! types, or the example project that ships with the source. A project named on the command line skips
-//! this screen ([`crate::args::names_a_door`] and a bare `ROOT` both go straight to the chooser).
+//! this screen: a bare `ROOT` goes to the chooser, and a door or a map goes through the loading screen (`loading.rs`) into the editor.
 //!
 //! # Opening a project is a hand-off, not a swap
 //!
 //! Bevy resolves the asset root once, when `AssetPlugin` is built, and a project's meshes are named
 //! relative to it (`main.rs`). A second project cannot be opened in the same process without that root
 //! moving, so the launcher chooses and the **next process opens**: [`Handoff`] carries the argv
-//! (`<root>`, and `--kit`/`--door` when chosen), [`HandoffPlugin`] starts the same executable with it and
+//! (`<root>`, and `--live` when this process has it; `--kit` and `--door` are for the workbench to add), [`HandoffPlugin`] starts the same executable with it and
 //! exits this one. That is also what makes [`command_line`] honest: the line the launcher copies is the
 //! argv the launcher itself hands off.
 //!
@@ -198,7 +198,7 @@ pub struct LauncherCard;
 
 /// The line that shows the refusal.
 #[derive(Component)]
-struct ProblemLine;
+pub(crate) struct ProblemLine;
 
 /// The line that shows the command line last asked for.
 #[derive(Component)]
@@ -355,6 +355,7 @@ fn open_requested(
     mut requests: MessageReader<OpenRequest>,
     mut launcher: ResMut<Launcher>,
     recents: Option<Res<RecentProjects>>,
+    live: Option<Res<crate::live::LiveWrite>>,
 ) {
     let Some(OpenRequest(root)) = requests.read().last().cloned() else { return };
     match check_project(&root) {
@@ -365,7 +366,12 @@ fn open_requested(
             {
                 warn!("recent projects not updated: {e}");
             }
-            commands.insert_resource(Handoff(argv_for(&root, None, None)));
+            // `--live` is a way of running, not a choice of project: the next process keeps it.
+            let mut argv = argv_for(&root, None, None);
+            if live.is_some() {
+                argv.push("--live".to_owned());
+            }
+            commands.insert_resource(Handoff(argv));
         }
         Err(e) => launcher.problem = Some(e),
     }

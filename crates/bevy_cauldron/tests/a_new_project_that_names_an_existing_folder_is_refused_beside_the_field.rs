@@ -94,6 +94,12 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
     press(&mut app, "Create");
     assert!(app.world().get_resource::<Handoff>().is_none());
     assert!(app.world().resource::<Launcher>().problem.as_deref().is_some_and(|p| p.contains("already exists")));
+    let said = app.world().resource::<Launcher>().problem.clone().unwrap();
+    let mut shown = app.world_mut().query::<(&Role, &Text, &bevy::ui::ComputedNode)>();
+    assert!(
+        shown.iter(app.world()).any(|(r, t, _)| *r == Role::Label && t.0 == said),
+        "a refusal raised by Create is on the form's own card, not only on the list card the form replaced: {said}"
+    );
 
     type_into::<NameField>(&mut app, "harbour");
     assert_eq!(problem_on::<NameField>(&mut app), None, "a free name clears the problem");

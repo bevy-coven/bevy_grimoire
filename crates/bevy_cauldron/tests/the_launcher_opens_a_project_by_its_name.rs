@@ -141,3 +141,17 @@ fn a_typed_folder_that_is_not_a_project_is_refused_by_name_and_a_project_is_hand
     assert_eq!(app.world().get_resource::<Handoff>(), Some(&Handoff(launcher::argv_for(&alpha, None, None))));
     assert_eq!(app.world().resource::<Launcher>().problem, None, "a choice that works clears the last refusal");
 }
+
+#[test]
+fn a_launcher_run_with_live_hands_the_next_process_live_too() {
+    let s = Scratch::new("live");
+    let alpha = project(&s.0, "alpha");
+    let mut app = on_the_launcher("live", &s, &[&alpha], &[]);
+    app.insert_resource(bevy_cauldron::live::LiveWrite);
+    press(&mut app, "alpha");
+    assert_eq!(
+        app.world().get_resource::<Handoff>(),
+        Some(&Handoff(vec![alpha.to_string_lossy().into_owned(), "--live".to_owned()])),
+        "`bevy_cauldron --live` asked for live writes; the project it opens must have them"
+    );
+}

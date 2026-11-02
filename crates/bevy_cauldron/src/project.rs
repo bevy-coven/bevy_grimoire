@@ -219,7 +219,7 @@ pub enum Stage {
     Kits,
     /// Every mesh's triangle count, read from its file.
     MeasureMeshes,
-    /// The map the door opens on.
+    /// The door's map. Told on every door so the stages are always the same four; instant on a door that has no map.
     Maps,
 }
 

@@ -198,3 +198,15 @@ fn back_from_the_report_returns_to_the_launcher_with_no_door_left_open() {
     assert_eq!(screen_of(&app), Screen::Launcher);
     assert!(app.world().get_resource::<Chosen>().is_none(), "the project that was held is let go");
 }
+
+#[test]
+fn cancel_after_the_answer_was_taken_lets_the_opened_project_go() {
+    let (root, _) = project_with_a_broken_terrain_file("report_cancel");
+    let mut app = loading_app("report_cancel", vec![root.to_string_lossy().into_owned(), "m".to_owned()], 0);
+    until(&mut app, |app| app.world().get_resource::<LoadReport>().is_some());
+    assert!(app.world().get_resource::<Chosen>().is_some(), "the premise: the project is open and waiting");
+    // The loading panel's own Cancel is still on the screen (hidden by the card), as it is for the frame the answer is taken in.
+    press(&mut app, "Cancel");
+    assert_eq!(screen_of(&app), Screen::Launcher);
+    assert!(app.world().get_resource::<Chosen>().is_none(), "a cancelled open leaves no project waiting in the world");
+}

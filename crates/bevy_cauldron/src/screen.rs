@@ -56,7 +56,7 @@ use bevy::prelude::*;
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Screen {
     /// The launcher: the projects opened before, and a way to open another (`launcher.rs`). `main` starts here
-    /// when no project is named; a project named on the command line starts at [`Screen::Menu`].
+    /// when no project is named; a bare `ROOT` starts at [`Screen::Menu`] and a door or a map at [`Screen::Loading`].
     Launcher,
     /// A project being opened as named stages, with a spinner and a progress bar when it takes long
     /// (`loading.rs`). `main` starts here when the command line names a door; it ends in [`Screen::Editor`],
@@ -69,7 +69,7 @@ pub enum Screen {
     Editor,
 }
 
-/// **The plugin that owns the two transitions.**
+/// **The plugin that owns the transitions into and out of a door** (the menu's exit, the loader's, and the editor's).
 ///
 /// `OnExit(Menu)` opens the project, because a state transition runs every `OnExit` before any
 /// `OnEnter` — so by the time the editor's own spawns run, `Project` is already in the World and the
@@ -103,7 +103,7 @@ impl Plugin for ScreenPlugin {
 /// `StateTransition` runs `ExitSchedules` then `EnterSchedules` in one pass, so the `NextState` was
 /// not read until the following pass and `OnEnter(Editor)` ran regardless — against a world with no
 /// `Project` and no `Door`, which panics rather than returning. The open moved to
-/// `chooser::drive_chooser` and to `main`, both of which can refuse in place; what arrives here is a
+/// `chooser::drive_chooser` and to the loading screen (`loading.rs`), both of which can refuse in place; what arrives here is a
 /// door already open. See [`crate::chooser::Chosen`].
 fn open_the_door(world: &mut World) {
     let Some(chosen) = world.remove_resource::<crate::chooser::Chosen>() else {

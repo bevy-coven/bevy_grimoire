@@ -19,7 +19,7 @@ use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy_gooey::{FieldProblem, TextHint, ValueChange, button, choice, heading, label, observe, panel, text_input};
 
-use crate::launcher::{Launcher, OpenRequest};
+use crate::launcher::{Launcher, OpenRequest, ProblemLine};
 use crate::screen::Screen;
 
 /// The vocabulary every new project starts from, byte for byte as the example project keeps it.
@@ -172,7 +172,7 @@ impl Plugin for NewProjectPlugin {
     }
 }
 
-/// The launcher's "New project…" button asks for the form by setting [`Launcher::new_project`]; the form is a
+/// The launcher's "New project…" button asks for the form by setting [`Launcher::new_project_asked`]; the form is a
 /// resource so that the screen's own state (`Launcher`) stays about the list.
 fn open_the_form(mut commands: Commands, mut launcher: ResMut<Launcher>, form: Option<Res<NewProjectForm>>) {
     if launcher.new_project_asked && form.is_none() {
@@ -217,6 +217,9 @@ fn spawn_the_card(
                 }),
             ));
             card.spawn((label(""), ReasonLine));
+            // A Create that fails after the form is ready (a folder that cannot be made, a kit that was not) says so here:
+            // the launcher's own line is on the card this form replaces.
+            card.spawn((label(""), ProblemLine));
             card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
                 row.spawn((
                     button("Create"),

@@ -194,7 +194,8 @@ pub fn names_a_door(args: &[String]) -> bool {
 
 /// **Whether these arguments ask for the launcher**: no project and no door named, so a person who ran the
 /// editor bare is shown the projects they have opened (`launcher.rs`). A `ROOT`, a map, `--door` or `--kit`
-/// names what to open, and the chooser takes it from there as before.
+/// names what to open: a bare `ROOT` goes to the chooser as before, and a door or a map goes through the loading
+/// screen (`loading.rs`). `--live` names no project, so a bare `--live` opens the launcher, which keeps it for the hand-off.
 pub fn opens_the_launcher(args: &[String]) -> bool {
     let split = split(args);
     split.positional.is_empty() && split.door.is_none() && split.kit.is_none()

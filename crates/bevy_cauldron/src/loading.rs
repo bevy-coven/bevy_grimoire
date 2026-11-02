@@ -47,8 +47,8 @@ use crate::screen::Screen;
 #[derive(Resource, Clone, Debug)]
 pub struct LoadRequest(pub Vec<String>);
 
-/// A pause after each stage, so a project that opens at once can be watched. `main` sets it from
-/// `GRIMOIRE_LOAD_STAGE_DELAY_MS`; a test sets it to slow one stage down.
+/// A pause as each stage starts, before its work, so a project that opens at once can be watched; the same pause for every
+/// stage. `main` sets it from `GRIMOIRE_LOAD_STAGE_DELAY_MS`; a test sets it to make the phases visible.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct StageDelay(pub Duration);
 
@@ -201,6 +201,8 @@ fn build_the_screen(mut commands: Commands) {
                         job.cancel.store(true, Ordering::Relaxed);
                     }
                     commands.remove_resource::<LoadJob>();
+                    // An answer already taken this frame left the opened project waiting as `Chosen`; cancelling lets it go.
+                    commands.remove_resource::<crate::chooser::Chosen>();
                     next.set(Screen::Launcher);
                 }),
             ));

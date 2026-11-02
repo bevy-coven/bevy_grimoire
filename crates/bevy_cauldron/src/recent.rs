@@ -10,8 +10,9 @@
 //! listed as [`Listed::missing`], never dropped: the author moved it, and [`Recent::locate`] points
 //! the entry at where it went.
 //!
-//! The editor records an opening in one place, `screen::open_the_door`, which every way into the
-//! editor (the menu, the command line, an agent's `map_open`) goes through. It records only when a
+//! The editor records an opening in `screen::open_the_door`, which every way into the editor (the menu, the
+//! command line, an agent's `map_open`) goes through, and the launcher records the one it hands off ([`record_seen`],
+//! which also remembers the changelog entry it has shown). It records only when a
 //! [`RecentProjects`] resource names the file, which `main` inserts; a test's editor does not, so no
 //! test writes to the real data directory.
 
