@@ -87,12 +87,18 @@ fn the_toolbar_shows_registered_commands_that_have_icons() {
 
 /// **A click on a mode option arms that tool through the key's own chord.**
 ///
-/// **Not passing.** `bevy_gooey::testing::click` on the group's Move option reaches the group (the value
-/// moves) but `on_tool_mode_chosen` never runs, so no chord is queued and the tool stays `Place`. A probe
-/// in the observer logged nothing at all, so the `ValueChange` is not reaching it — the next slice starts
-/// there rather than guessing. Left in place, ignored, so the gap is in the code that would catch it; the
-/// two passing cases and the group's own test are what this commit claims.
-#[ignore = "the group's ValueChange does not reach `on_tool_mode_chosen`; see #231's comment"]
+/// **Not passing, and the reason is now measured rather than guessed.** `bevy_gooey::testing::click` on
+/// the group's Move option sends no `Activate` at all: a counter in the editor's observer read **0**, and
+/// the group's `ToggleGroupValue` was still `0` afterwards, while the option itself is laid out and live
+/// (`ComputedNode` 36 x 29, not `Overflowed`). The click is aimed at the option's own `UiGlobalTransform`
+/// centre, so what is in doubt is whether that point reaches it inside a toolbar that also holds a
+/// `Dock`-laid window and a viewport image — not whether the group or the editor's observer is right.
+/// That is the next slice's first question.
+///
+/// **Correction to pass 241's claim:** that pass's comment said the click "moves the group's value". It
+/// does not; the earlier run had no counter, and its `warn!` never printed because a headless app has no
+/// `LogPlugin`. The value never moved.
+#[ignore = "testing::click sends no Activate to a toolbar group option; measured, see #231's comment"]
 #[test]
 fn a_click_on_the_move_button_asks_for_the_chord_and_the_key_arms_it() {
     let (_root, mut app) = editor("toolbar-click");
