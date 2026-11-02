@@ -57,13 +57,13 @@ fn undo_and_redo_share_a_key_and_differ_by_shift() {
 #[test]
 fn a_command_says_why_it_cannot_run_here() {
     let flush = commands::by_id("tiles.align_forward").expect("tiles.align_forward");
-    let on = |tab, stance| flush.enabled(Live(tab, stance, Holder::Tab));
+    let on = |tab, stance| flush.enabled(Live(tab, stance, Holder::Tab, bevy_cauldron::keys::Rebound::NONE));
     assert_eq!(on(Context::Tiles, Stance::Holding), Ok(()));
     assert_eq!(on(Context::Tiles, Stance::Idle), Err("Only while holding a piece"));
     assert_eq!(on(Context::Map, Stance::Holding), Err("Not on this tab"));
     assert_eq!(on(Context::Typing, Stance::Holding), Err("A text field is taking the keys"));
 
     let save: Command = commands::by_id("file.save").expect("file.save");
-    assert_eq!(save.enabled(Live(Context::Anim, Stance::Idle, Holder::Tab)), Ok(()), "a global command runs on every tab");
-    assert_eq!(save.enabled(Live(Context::Map, Stance::Idle, Holder::Filter)), Err("A filter box is taking the keys"));
+    assert_eq!(save.enabled(Live(Context::Anim, Stance::Idle, Holder::Tab, bevy_cauldron::keys::Rebound::NONE)), Ok(()), "a global command runs on every tab");
+    assert_eq!(save.enabled(Live(Context::Map, Stance::Idle, Holder::Filter, bevy_cauldron::keys::Rebound::NONE)), Err("A filter box is taking the keys"));
 }

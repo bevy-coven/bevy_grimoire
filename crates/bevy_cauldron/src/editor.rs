@@ -8054,6 +8054,9 @@ pub fn sense_context(
     // of [`Fields`] knows about, so "a palette is open" is asked of the palette's marker: without
     // it, typing `undo` in the palette would also press U, N, D and O on the tab behind it.
     palette: Query<(), With<bevy_gooey::CommandPalette>>,
+    // What the user and the project rebound ([`crate::settings`]); absent in a test that builds no settings.
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut rebound: Local<keys::Rebound>,
 ) {
     let InHand {
         move_drag,
@@ -8133,7 +8136,16 @@ pub fn sense_context(
     // the verbs. What `Holder::Filter` buys is the exemption for that pane's own list walk, and
     // `keys::allowed` consults the tab through the row's own context — so the walk that stays live is
     // the one belonging to the tab the box is on, and no other.
-    let want = keys::live(mode.context(), typing || filter_typing, stance, holder);
+    let mut want = keys::live(mode.context(), typing || filter_typing, stance, holder);
+    // **The chords the settings gave to commands** (UI-72b, #265), rebuilt only when the settings
+    // changed: a command's id names its action, and a chord the dispatcher then answers to instead of
+    // the census's.
+    if settings.as_ref().is_some_and(|s| s.is_changed()) {
+        *rebound = keys::Rebound::of(settings.as_ref().into_iter().flat_map(|s| {
+            s.keymap.iter().filter_map(|(id, chord)| Some((crate::commands::by_id(id)?.action, *chord)))
+        }));
+    }
+    want.3 = *rebound;
     // Written through the change detector only when it actually moves, so `Live` staying put does not
     // wake every `resource_changed` reader in the editor on every frame.
     if *live != want {
