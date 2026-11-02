@@ -9724,7 +9724,21 @@ struct DetailInputs<'w, 's> {
     build: Res<'w, crate::build::Build>,
     // The tag block narrows by typing, so the pane that draws it has to know what was typed.
     filters: Res<'w, crate::filter::Filters>,
+    /// **The running skin** (UI-02, #210): this pane draws a model-written label in
+    /// `GooeySkin::unchecked`, so a theme edit reaches "a machine decided this" everywhere it is said.
+    /// `Option` for a headless harness that never ran `EditorUiPlugin`; the constant is the fallback.
+    skin: Option<Res<'w, bevy_gooey::GooeySkin>>,
     panes: Query<'w, 's, Entity, With<DetailPane>>,
+}
+
+/// **The ink a model-written label is drawn in** (UI-02, #210): the running skin's `unchecked`, or
+/// `chrome::UNCHECKED` when there is no skin (a headless harness that never ran `EditorUiPlugin`).
+///
+/// One function, read by the pane and by
+/// `tests/the_model_written_ink_comes_from_the_skin.rs`, so an assertion about it is an assertion about
+/// what is painted rather than about a resource that happens to hold the same value.
+pub fn unchecked_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
+    skin.and_then(|s| s.unchecked).unwrap_or(crate::chrome::UNCHECKED)
 }
 
 /// **What the Meshes pane says about `piece` and the project's standards** (#138 slice 4): one line
@@ -9782,7 +9796,20 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
         build,
         filters,
         panes,
+        skin,
     } = detail;
+    // **The colour a model-written label is drawn in** (UI-02, #210): the skin's `unchecked` when there
+    // is a skin, `chrome::UNCHECKED` otherwise. Both draw sites in this pane use it, so a theme edit
+    // reaches every "a machine decided this" in one place.
+    // **The pane's ink, from the skin** (UI-02, #210): `suggest` (a model's proposal), `danger` (a
+    // refusal) and `accent` (the one live-edit colour). Each falls back to its constant for a harness
+    // with no skin, exactly as `unchecked_ink` does.
+    // `SUGGEST` is a **tone**, not a skin field (gooey#33's `tones` is where a host keeps its own
+    // colours), and `danger`/`accent` are plain fields rather than `Option`s.
+    let suggest_ink = skin.as_deref().and_then(|s| s.tone("suggest")).unwrap_or(crate::chrome::SUGGEST);
+    let danger_ink = skin.as_deref().map_or(DANGER, |s| s.danger);
+    let accent_ink = skin.as_deref().map_or(ACCENT, |s| s.accent);
+    let unchecked_ink = unchecked_ink(skin.as_deref());
     for pane in &panes {
         commands.entity(pane).despawn_related::<Children>();
         commands.entity(pane).with_children(|p| {
@@ -9918,7 +9945,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         "PROPOSED {}{attempts}, confidence {}",
                         p_.date, s.confidence
                     )),
-                    TextColor(crate::chrome::SUGGEST),
+                    TextColor(suggest_ink),
                     crate::chrome::font(crate::chrome::text::LABEL),
                 ));
                 // **The identification is not a second line here.** It used to be, in a third
@@ -9940,7 +9967,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             turn.axis.to_uppercase(),
                             turn.why
                         )),
-                        TextColor(crate::chrome::SUGGEST),
+                        TextColor(suggest_ink),
                         crate::chrome::font(crate::chrome::text::HINT),
                     ));
                 }
@@ -9955,7 +9982,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                              slop/llm/vocab_proposals.ron",
                             t.token, t.axis, t.why
                         )),
-                        TextColor(crate::chrome::SUGGEST),
+                        TextColor(suggest_ink),
                         crate::chrome::font(crate::chrome::text::HINT),
                     ));
                 }
@@ -10085,7 +10112,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         for line in standards_lines {
                             col.spawn((
                                 Text::new(line),
-                                TextColor(crate::chrome::DANGER),
+                                TextColor(danger_ink),
                                 crate::chrome::font(crate::chrome::text::LABEL),
                             ));
                         }
@@ -10137,7 +10164,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         for line in dead {
                             col.spawn((
                                 Text::new(line),
-                                TextColor(crate::chrome::DANGER),
+                                TextColor(danger_ink),
                                 crate::chrome::font(crate::chrome::text::LABEL),
                             ));
                         }
@@ -10168,7 +10195,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // pending proposal simply *is* what the chip says, in `SUGGEST`, until
             // `apply_what_arrives` settles it. Clicking steps the mount, which is what `M` does.
             let (mount_text, mount_ink) = match (proposed_mount, d.mount.as_ref()) {
-                (Some(m), _) => (mount_label(Some(m)), crate::chrome::SUGGEST),
+                (Some(m), _) => (mount_label(Some(m)), suggest_ink),
                 (None, Some(m)) => (mount_label(Some(m)), TEXT),
                 (None, None) => (mount_label(None), ACCENT),
             };
@@ -10180,7 +10207,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 .and_then(|e| e.suggestion.front)
                 .filter(|f| d.align.front != Some(*f));
             let (front_text, front_ink) = match (proposed_front, d.align.front) {
-                (Some(f), _) => (format!("{} face", f.label()), crate::chrome::SUGGEST),
+                (Some(f), _) => (format!("{} face", f.label()), suggest_ink),
                 (None, Some(f)) => (format!("{} face", f.label()), TEXT),
                 (None, None) => ("none".to_owned(), LABEL),
             };
@@ -10301,7 +10328,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         if !human_axes.is_empty() {
                             parts.push(Some(format!("by hand set {human_axes}")));
                         }
-                        (joined(&parts), crate::chrome::UNCHECKED)
+                        (joined(&parts), unchecked_ink)
                     }
                 }
             };
@@ -10549,7 +10576,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 // `LABEL`. Held and ghost are told apart by the fill, which is why
                                 // the two blues can be siblings rather than rivals.
                                 if on && unchecked {
-                                    crate::chrome::UNCHECKED
+                                    unchecked_ink
                                 } else if on {
                                     TEXT
                                 } else if ghost {
@@ -10579,7 +10606,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 if ghost {
                                     crate::chrome::SUGGEST
                                 } else if on {
-                                    crate::chrome::ACCENT
+                                    accent_ink
                                 } else {
                                     Color::NONE
                                 },
@@ -10631,7 +10658,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         // `apply_what_arrives` settles it. The same rule the description and the
                         // mount now follow, so the block has one grammar instead of three.
                         let (value, ink) = match (prop, now.is_empty()) {
-                            (Some(p), _) => (p, crate::chrome::SUGGEST),
+                            (Some(p), _) => (p, suggest_ink),
                             (None, false) => (now, TEXT),
                             (None, true) => ("-".to_owned(), LABEL),
                         };

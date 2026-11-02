@@ -1087,12 +1087,27 @@ pub fn spawn_frame(mut commands: Commands) {
             bevy::picking::Pickable::IGNORE,
         )
     };
-    let left = commands.spawn(dock()).id();
-    let right = commands.spawn(dock()).id();
+    // **Each side dock is a focus region too** (UI-35, #229). A `Host` viewport with no other region is
+    // a keyboard trap: F6 would cycle to itself and Tab would be the only way out. The docks navigate
+    // normally — `ArrowPolicy::Navigate` — so F6 walks viewport → left dock → right dock and back, and
+    // the arrows in a dock move between its fields, which is what a person expects there.
+    let left = commands
+        .spawn((dock(), bevy_gooey::FocusRegion::navigate()))
+        .id();
+    let right = commands
+        .spawn((dock(), bevy_gooey::FocusRegion::navigate()))
+        .id();
 
     let viewport = commands
         .spawn((
             ViewportSlot,
+            // **A focus region that keeps the arrows for the map** (UI-35, #229). The viewport pans and
+            // orbits on the arrow keys, so it asks gooey for `ArrowPolicy::Host` — with focus on or
+            // inside it, the arrows move no focus and stay readable, while Tab and F6 still leave
+            // (WCAG 2.1.2: a region never traps the keyboard). `TabIndex(0)` makes the viewport its own
+            // first widget, so a click or F6 puts focus here.
+            bevy_gooey::FocusRegion::host(),
+            bevy::input_focus::tab_navigation::TabIndex(0),
             Node {
                 // **The centre is what is left**, which is the whole idea. `min_width: 0` because a
                 // flex item's automatic minimum size is its content, and without it a wide panel
@@ -2350,22 +2365,68 @@ type RowState = (
 /// because a global `Activate` observer taking a door's resource panics on the menu. So a quiet row
 /// would have been the one shape in the editor that never acknowledged a click. Hover plus a held
 /// primary button is the same fact one layer down, and it is what the author actually did.
+/// **The colours a list row takes from the skin**, in one place, so a test can ask what the editor
+/// would paint without a pointer it cannot place (UI-02, #210).
+///
+/// `Hovered` is bevy's `Immutable` picking component: only the picker may write it, and a headless app
+/// has none, so a row's hover colour cannot be observed by hovering. What *can* be observed is the
+/// expression [`style_list_rows`] paints from, which is this — one function, called by the system and
+/// by the test alike, so an assertion here is an assertion about the row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RowFills {
+    pub rest_panel: Color,
+    pub hover: Color,
+    pub pressed: Color,
+}
+
+impl RowFills {
+    /// From the running skin when there is one, the constants when there is not (a headless harness
+    /// that never ran `EditorUiPlugin`).
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> RowFills {
+        match skin {
+            Some(s) => RowFills {
+                rest_panel: s.surface,
+                hover: s.hover.unwrap_or(ROW_HOVER),
+                pressed: s.pressed.unwrap_or(ROW_PRESSED),
+            },
+            None => RowFills { rest_panel: PANEL_BG, hover: ROW_HOVER, pressed: ROW_PRESSED },
+        }
+    }
+}
+
+/// [`RowFills`] for the world as it stands.
+pub fn row_fills(world: &World) -> RowFills {
+    RowFills::of(world.get_resource::<bevy_gooey::GooeySkin>())
+}
+
 fn style_list_rows(
     mouse: Res<ButtonInput<MouseButton>>,
+    // **The rows' states come from the skin** (UI-02, #210). This is the one chokepoint every list
+    // row's fill passes through — `style_list_rows` keys on `RowRest`, so a row spawned by any tab is
+    // painted here — which makes it the first place the editor's own chrome can read `GooeySkin`
+    // rather than the constants beside it. The constants stay for the callers that have not moved
+    // yet (131 sites outside this module); what changes is that a *theme edit* now reaches every row
+    // in the editor, which is the thing #210 exists for.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut rows: Query<(RowState, &mut BackgroundColor)>,
 ) {
+    let fills = RowFills::of(skin.as_deref());
+    let (panel, pressed_col, hover_col) = (fills.rest_panel, fills.pressed, fills.hover);
+    // gooey has no `selected` role, so a selected row keeps the editor's own colour — the honest
+    // half-measure until that constant group moves.
+    let selected_col = ROW_SELECTED;
     let held = mouse.pressed(MouseButton::Left);
     for ((rest, hovered, pressed, disabled), mut bg) in &mut rows {
         let want = if disabled {
             // Not a fill of its own: a disabled control drops back to the panel it sits on, so it
             // reads as part of the surface rather than as a thing that is merely quiet today.
-            PANEL_BG
+            panel
         } else if pressed || (hovered.0 && held) {
-            ROW_PRESSED
+            pressed_col
         } else if rest.0 == ROW_SELECTED {
-            ROW_SELECTED
+            selected_col
         } else if hovered.0 {
-            ROW_HOVER
+            hover_col
         } else {
             rest.0
         };
@@ -2868,7 +2929,8 @@ impl Plugin for ChromePlugin {
             // spawned, and never again.
             .add_systems(
                 Update,
-                show_selection_count.run_if(in_state(crate::screen::Screen::Editor)),
+                (show_selection_count, show_problems_count)
+                    .run_if(in_state(crate::screen::Screen::Editor)),
             )
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
@@ -3441,6 +3503,17 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
         // the band answers the one question a person asks before a stamp — how many am I carrying —
         // without them counting from the ghost. Empty when nothing is held rather than `"0 selected"`:
         // a count of nothing is a row that says the same thing on every frame and teaches nobody.
+        // **What the reloads say** (UI-34, #228): a count of files refused or needing a restart, in the
+        // warning ink when there are any, empty when every file applied. A person driving over BRP asks
+        // this in `grimoire_state.reloads`; the band answers it where they are looking.
+        band.spawn((
+            ProblemsCount,
+            bevy_gooey::StatusKind::Info,
+            Text::new(String::new()),
+            TextColor(DIM),
+            font(text::LABEL),
+            bevy::picking::Pickable::IGNORE,
+        ));
         band.spawn((
             SelectionCount,
             Text::new(String::new()),
@@ -3470,6 +3543,95 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
 /// `labels::Labeler`'s, so this module does not learn what a model is.
 #[derive(Component)]
 pub struct LabelerLine;
+
+/// **How many files the last reload refused or could not take without a restart**, in the status band
+/// (UI-34, #228). Written by [`show_problems_count`].
+#[derive(Component)]
+pub struct ProblemsCount;
+
+/// **What the band says about the reloads, and the kind it says it as** (UI-34, #228).
+///
+/// The system and `tests/the_status_band_says_when_a_file_needs_attention.rs` both call this, so an
+/// assertion about the band is an assertion about what is painted, not about a resource that happens
+/// to hold the same value.
+///
+/// **Four rules, each with a reason:**
+///
+/// - An `applied` file is not counted. The status line already writes a receipt for every edit, and a
+///   band that said "3 reloaded" on every keystroke would be a row nobody reads.
+/// - **Both a refusal and a restart are the warning kind**, which is the issue's own wording ("a
+///   refused reload turns the problems item to the warning kind"). A refusal keeps the previous state
+///   and the editor keeps running; nothing is lost, but something a person wrote did not take, and
+///   that is what the mark is for.
+/// - **Both counts are named when both exist**, because a person who fixes the refusal still has a
+///   restart owed, and one number in place of the other would hide half the work.
+/// - **Nothing wrong says nothing**, rather than `"0 problems"` — the band is silent in the state it
+///   is in almost all the time.
+///
+/// The ink comes from the running skin, so a theme edit reaches the band in the same frame; with no
+/// skin (a hand-built harness, never the editor) it falls back to the panel colours.
+pub fn reload_readout(
+    kinds: &[bevy_grimoire_core::live::KindVerdict],
+    skin: Option<&bevy_gooey::GooeySkin>,
+) -> (String, bevy_gooey::StatusKind, Color) {
+    use bevy_grimoire_core::live::Outcome;
+    let refused = kinds.iter().filter(|k| k.outcome == Outcome::Refused).count();
+    let waiting = kinds.iter().filter(|k| k.outcome == Outcome::NeedsRestart).count();
+
+    let mut parts: Vec<String> = Vec::new();
+    if refused > 0 {
+        parts.push(if refused == 1 { "1 refused".to_owned() } else { format!("{refused} refused") });
+    }
+    if waiting > 0 {
+        parts.push(if waiting == 1 {
+            "1 needs a restart".to_owned()
+        } else {
+            format!("{waiting} need a restart")
+        });
+    }
+
+    let kind = if refused + waiting == 0 {
+        bevy_gooey::StatusKind::Info
+    } else {
+        bevy_gooey::StatusKind::Warning
+    };
+    let ink = match (kind, skin) {
+        (bevy_gooey::StatusKind::Info, Some(s)) => s.text_muted,
+        (bevy_gooey::StatusKind::Info, None) => DIM,
+        (_, Some(s)) => s.accent,
+        (_, None) => ACCENT,
+    };
+    (parts.join(" \u{b7} "), kind, ink)
+}
+
+/// **Say what became of the reloads, when the answer changes.**
+///
+/// Gated on `EditorReloads` (a file was decided) or `GooeySkin` (a theme edit), so a band with nothing
+/// wrong writes no text on any frame. Every write is compared in place as well, which is
+/// `tests/no_system_writes_every_frame.rs`'s rule: the text, the kind and the ink are change-detected,
+/// and everything downstream reads that detection.
+pub fn show_problems_count(
+    reloads: Option<Res<crate::live::EditorReloads>>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+    mut counts: Query<(&mut Text, &mut TextColor, &mut bevy_gooey::StatusKind), With<ProblemsCount>>,
+) {
+    let Some(reloads) = reloads else { return };
+    if !reloads.is_changed() && !skin.as_ref().is_some_and(|s| s.is_changed()) {
+        return;
+    }
+    let (said, kind, ink) = reload_readout(reloads.kinds(), skin.as_deref());
+    for (mut text, mut painted, mut told) in &mut counts {
+        if text.0 != said {
+            text.0 = said.clone();
+        }
+        if painted.0 != ink {
+            painted.0 = ink;
+        }
+        if *told != kind {
+            *told = kind;
+        }
+    }
+}
 
 /// **How many pieces are in hand**, in the status band (UI-34, #228). Written by
 /// [`show_selection_count`] from [`crate::editor::CloneDrag`], which owns the answer.
