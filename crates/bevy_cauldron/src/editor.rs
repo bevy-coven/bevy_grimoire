@@ -2371,6 +2371,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
+        app.add_plugins(crate::toolbar::ToolbarPlugin);
         app.add_observer(on_play_click);
         app.init_resource::<EditorState>()
             .init_resource::<MapFraming>()

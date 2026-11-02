@@ -309,6 +309,7 @@ mod the_shell_is_a_gooey_dock;
 mod the_viewport_keeps_the_arrow_keys;
 mod the_status_band_counts_the_set_in_hand;
 mod the_status_band_says_when_a_file_needs_attention;
+mod the_toolbar_arms_a_tool_through_its_key;
 mod the_layout_score_counts_crossings;
 mod the_library_seed_is_a_selection;
 mod the_map_opens_framed;
