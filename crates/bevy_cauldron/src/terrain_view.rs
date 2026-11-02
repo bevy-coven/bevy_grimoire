@@ -133,6 +133,40 @@ pub fn volume_base() -> StandardMaterial {
     StandardMaterial { base_color: Color::srgb(0.49, 0.53, 0.35), perceptual_roughness: 1.0, ..default() } // CHROME-OK: world ink — the relief tint's middle
 }
 
+/// An entity that is drawn every frame, far off screen, so the pipeline a carved chunk is drawn with is
+/// compiled before the first carve (#268). Bevy does not draw an entity whose pipeline is still
+/// compiling, and the first carve despawned the ground in the same frame it spawned the chunks: the
+/// slab showed through for 0.2 s with the plain material and 0.5 s with the weathered one (measured on
+/// big, 15 fps capture).
+#[derive(Component)]
+pub struct PipelineWarm;
+
+/// **A one-triangle mesh with the vertex layout of a carved chunk** (position and normal, no colour,
+/// `u32` indices), so its pipeline is the chunk's.
+pub fn warm_mesh() -> Mesh {
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0f32, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 1.0, 0.0]; 3]);
+    mesh.insert_indices(Indices::U32(vec![0, 2, 1]));
+    mesh
+}
+
+/// Far under the map, and out of its depth range, so the warm triangle is never seen.
+pub const WARM_AT: Vec3 = Vec3::new(0.0, -1.0e5, 0.0);
+
+/// **Keep the plain carved-ground pipeline compiled** (#268): one [`PipelineWarm`] triangle wearing
+/// [`volume_base`], spawned entering the editor. `NoFrustumCulling`, because a culled entity queues no
+/// pipeline.
+pub fn warm_volume_pipeline(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+    commands.spawn((
+        PipelineWarm,
+        bevy::camera::visibility::NoFrustumCulling,
+        Mesh3d(meshes.add(warm_mesh())),
+        MeshMaterial3d(materials.add(volume_base())),
+        Transform::from_translation(WARM_AT),
+    ));
+}
+
 /// **The last good value of each file the view draws from**, kept in memory (#200): a refused file
 /// leaves its slot as it was, so a bad edit never forces a reload from a bad file, and the drawing
 /// can be rebuilt (the origin moved, the ground dropped) from what is known to be good.

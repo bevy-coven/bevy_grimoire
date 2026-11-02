@@ -285,6 +285,7 @@ mod terrain_view_draws_water;
 mod the_arm_crosses_the_door;
 mod the_arm_survives_the_door_change;
 mod the_carved_ground_is_not_white;
+mod the_carved_ground_pipeline_is_warm;
 mod the_door_switch_crosses;
 mod the_editor_and_the_game_agree;
 mod the_enclosure_wish_is_the_maps_to_set;
