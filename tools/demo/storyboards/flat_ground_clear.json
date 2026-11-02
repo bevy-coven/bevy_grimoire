@@ -1,0 +1,77 @@
+{
+ "name": "flat_ground_clear",
+ "fps": 10,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -14,
+      -14,
+      14,
+      14
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2
+  },
+  {
+   "seconds": 4,
+   "operation": {
+    "name": "terrain_stroke",
+    "parameters": {
+     "map": "valley",
+     "stroke": {
+      "brush": "Raise",
+      "radius_m": 9.0,
+      "strength": 6.0,
+      "points": [
+       [
+        -12.0,
+        -10.0
+       ],
+       [
+        -8.0,
+        -6.0
+       ]
+      ]
+     },
+     "create": {
+      "origin": [
+       -30.0,
+       -30.0
+      ],
+      "cell_m": 1.25,
+      "width": 49,
+      "depth": 49,
+      "height_m": 0.0
+     }
+    }
+   }
+  },
+  {
+   "seconds": 3
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "a map with no ground yet"
+  },
+  {
+   "at": 2.3,
+   "caption": "agent: terrain_stroke, a flat ground at height 0 with one hill"
+  },
+  {
+   "at": 6.3,
+   "caption": "the flat ground is one clean surface, under the grid"
+  }
+ ]
+}
