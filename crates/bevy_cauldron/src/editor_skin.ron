@@ -36,4 +36,21 @@
     spacing: (3.0, 5.0, 12.0, 16.0, 20.0, 24.0),
     radii: (3.0, 4.0, 8.0),
     type_scale: (9.0, 10.0, 11.0, 13.0, 15.0),
+    // The editor's own colours that no field above carries, by name (bevy_gooey#33): `chrome.rs` draws
+    // with the constant of the same name in capitals, and `tests/the_skin_carries_the_editors_other_colours.rs`
+    // says the two are one colour. In name order, as gooey writes them.
+    tones: {
+        "bounds_line": Srgba((red: 0.52, green: 0.47, blue: 0.37, alpha: 1.0)),
+        "focus_bg": Srgba((red: 0.088, green: 0.082, blue: 0.071, alpha: 1.0)),
+        "grid_line": Srgba((red: 0.3, green: 0.279, blue: 0.243, alpha: 1.0)),
+        "key": Srgba((red: 0.79, green: 0.77, blue: 0.735, alpha: 1.0)),
+        "label": Srgba((red: 0.615, green: 0.6, blue: 0.575, alpha: 1.0)),
+        "labeled": Srgba((red: 0.55, green: 0.83, blue: 0.5, alpha: 1.0)),
+        "muted": Srgba((red: 0.575, green: 0.56, blue: 0.54, alpha: 1.0)),
+        "overlay_bg": Srgba((red: 0.195, green: 0.181, blue: 0.158, alpha: 1.0)),
+        "row_pressed": Srgba((red: 0.11, green: 0.102, blue: 0.089, alpha: 1.0)),
+        "snip_wash": Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 0.28)),
+        "suggest": Srgba((red: 0.53, green: 0.71, blue: 0.81, alpha: 1.0)),
+        "veil": Srgba((red: 0.0, green: 0.0, blue: 0.0, alpha: 0.35)),
+    },
 )
