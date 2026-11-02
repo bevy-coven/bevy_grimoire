@@ -122,6 +122,7 @@ mod a_trigger_binds_to_a_notes_area;
 mod a_two_way_mount_is_seated_by_every_door;
 mod a_two_way_mount_seats_on_either;
 mod a_weight_names_the_pieces_it_tunes;
+mod a_widget_is_clicked_by_its_label;
 mod after_edit_checks_say_what_they_found;
 mod after_edit_waits_for_the_picture;
 mod an_agent_can_define_a_composition;

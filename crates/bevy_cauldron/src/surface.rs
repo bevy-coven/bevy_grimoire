@@ -697,11 +697,20 @@ fn inject_clicks(
 fn retarget_pointer(
     surface: Option<Res<Surface>>,
     pointer: Option<Res<crate::view::Pointer>>,
+    window: Query<(), With<bevy::window::PrimaryWindow>>,
     mut pointers: Query<&mut PointerLocation>,
 ) {
     let (Some(surface), Some(pointer)) = (surface, pointer) else {
         return;
     };
+    // **With no window and no pointer, nothing here knows where the pointer is, so it leaves it where
+    // picking's own input put it** (UI-06, #214). `view::sense_pointer` answers `None` for "no window"
+    // as much as for "off the window", and clearing on the first would erase every `PointerInput` a
+    // headless test app writes (`bevy_gooey::testing::click` puts the pointer on the surface's image) before
+    // picking reads it. A window that has the cursor off it still clears, below.
+    if pointer.0.is_none() && window.is_empty() {
+        return;
+    }
     let onto = bevy::camera::NormalizedRenderTarget::Image(ImageRenderTarget {
         handle: surface.image.clone(),
         scale_factor: 1.0,
