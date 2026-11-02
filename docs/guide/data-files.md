@@ -131,6 +131,18 @@ enclosure: (wish: 0.25, weight: 200),
 
 **Absent means those two numbers**, which is what the editor shipped before the field existed (E-005), so a map written earlier generates exactly as it did. Set it through `map_set_settings` (`enclosure_wish`, `enclosure_weight`) or by editing the file; both write the same field, and neither needs a rebuild.
 
+### A placement's `bevy_lights` value
+
+A placement carries one `bevy_lights` value in its `family` row (`placement_set_family`, with `bevy_lights` in `family.ron`), and the value is the crate's own RON type. A value that names a field only `Fire` has (`kind`, `lumens`, `color`, `embers`, `smoke`, `tongues`, `bed`) is a `Fire`; any other is a `Flicker`.
+
+```ron
+(kind: Campfire)                       // a whole fire: flame, pooled light, sparks, smoke
+(kind: Brazier, lumens: Some(40.0))    // its own brightness, in the preview's exposure
+(base: 900.0, phase: 1.3, depth: 0.15) // a bare light that breathes
+```
+
+A `Fire` standing on a placement draws the crate's flame and the light the pool hands it in the running editor (build with `--features bevy_lights`); the light map and `light_pool` read the lumens the crate sizes for its kind, or the `lumens` the value names. A kind or field the crate does not have is refused, and nothing is set. RON writes an `Option` as `Some(..)`.
+
 ## forest/<map>.ron
 
 | | |

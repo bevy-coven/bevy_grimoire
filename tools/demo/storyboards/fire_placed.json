@@ -1,0 +1,68 @@
+{
+ "name": "fire_placed",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "setup": [],
+ "chunks": [
+  {
+   "seconds": 3.5
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_set_family",
+    "parameters": {
+     "id": "floor_lamp",
+     "crate": "bevy_lights",
+     "value": "(kind: Torch, lumens: Some(60.0))"
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_add",
+    "parameters": {
+     "piece": "lamp_tall",
+     "at": [
+      2.5,
+      0.5
+     ]
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_set_family",
+    "parameters": {
+     "id": "lamp_tall@1",
+     "crate": "bevy_lights",
+     "value": "(kind: Brazier, lumens: Some(60.0))"
+    }
+   }
+  },
+  {
+   "seconds": 5.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the bedroom at 23:00: bevy_elements' sky, the Environment clock held there"
+  },
+  {
+   "at": 3.6,
+   "caption": "agent: the floor lamp becomes a bevy_lights Fire, kind Torch"
+  },
+  {
+   "at": 6.6,
+   "caption": "agent: places a second lamp"
+  },
+  {
+   "at": 9.6,
+   "caption": "agent: it becomes a Brazier: flame, sparks and a pooled light"
+  }
+ ]
+}

@@ -1434,8 +1434,8 @@ dependencies = [
 
 [[package]]
 name = "bevy_lights"
-version = "0.2.5"
-source = "git+https://github.com/bevy-coven/bevy_lights?rev=15af29a7dc05ada701caa4c154a00cee363c84b3#15af29a7dc05ada701caa4c154a00cee363c84b3"
+version = "0.5.0"
+source = "git+https://github.com/bevy-coven/bevy_lights?rev=ae3b818e06cfcde24a0cbfed1a897732c1dfb444#ae3b818e06cfcde24a0cbfed1a897732c1dfb444"
 dependencies = [
  "bevy",
  "serde",

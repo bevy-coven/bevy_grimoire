@@ -1,7 +1,7 @@
 //! **The light map** (#103): `bevy_light_grid`'s illuminance field over the open map, as one
 //! registered, read-only operation.
 //!
-//! Every placement that carries a `bevy_lights` `Flicker` (set by `placement_set_family`) is a fixture:
+//! Every placement that carries a `bevy_lights` `Flicker` or `Fire` (set by `placement_set_family`) is a fixture:
 //! its `base` over `reference` is the intensity and the map's cells are `cell_m` metres. A placement
 //! whose descriptor is `kind: ["wall"]` blocks line of sight, so a torch behind a wall does not light
 //! the room beyond it. The values are the crate's own `LightGrid::sample_cell`, not a second formula,
@@ -23,7 +23,7 @@ pub struct Params {
     /// How far a fixture reaches, in metres.
     #[serde(default = "six")]
     pub range_m: f32,
-    /// The `Flicker::base` that counts as intensity 1.0.
+    /// The `Flicker::base` (or `Fire` lumens) that counts as intensity 1.0.
     #[serde(default = "thousand")]
     pub reference: f32,
     /// Map-space points `[x, z]` to read; each answers with the grid's own value for its cell.
@@ -80,8 +80,8 @@ pub fn bake(map: &bevy_grimoire_core::map::Map, library: &bevy_grimoire_core::li
             walls.insert(cell(pl.at));
         }
         if let Some(text) = pl.family.get("bevy_lights") {
-            let f: bevy_lights::Flicker = ron::from_str(text).map_err(|e| Refusal::new(format!("{}'s bevy_lights settings do not read: {e}", pl.id)))?;
-            fixtures.push((cell(pl.at), f.base / p.reference, p.range_m / p.cell_m));
+            let f = crate::fixture::Fixture::read(text).map_err(|e| Refusal::new(format!("{}'s bevy_lights settings do not read: {e}", pl.id)))?;
+            fixtures.push((cell(pl.at), f.lumens() / p.reference, p.range_m / p.cell_m));
         }
     }
     let floor = (0..h as i32).flat_map(|y| (0..w as i32).map(move |x| IVec2::new(x, y))).filter(|c| !walls.contains(c));

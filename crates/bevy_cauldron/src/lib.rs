@@ -112,6 +112,8 @@ pub mod ops_light;
 pub mod ops_pool;
 #[cfg(feature = "bevy_lights")]
 pub mod light_view;
+#[cfg(feature = "bevy_lights")]
+pub mod fixture;
 pub mod palette_menu;
 pub mod piece_menu;
 pub mod ui;
