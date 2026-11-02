@@ -13,6 +13,8 @@
 //! is at or above the viewport's bottom, not below it. A headless `App` draws the same nodes the window
 //! does, so this is the rule, not a picture of it.
 
+#![cfg(feature = "bevy_elements")]
+
 use bevy::prelude::*;
 use bevy::ui::ComputedNode;
 
