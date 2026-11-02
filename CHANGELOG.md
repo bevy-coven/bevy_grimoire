@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **231-fill-answers** `957f8fe` A fill asked for with the pointer off the map says where a fill starts, instead of doing nothing (UI-37, #231) *No clip: a receipt line; the clip is owed and its storyboard is dropped, proved by the_fill_button_is_the_fill_key*
 - **242-pointer-windowless** `7679cef` A windowless app's pointer is left where picking put it, so a test's click on a widget is not re-aimed at the viewport image *No clip: a harness fix nobody sees; proved by a_widget_is_clicked_by_its_label and the eight pointer tests*
 - **231-toggle-group** `d5e946d` The six tool modes are one gooey toggle group: exactly one is lit, and it is the armed tool (UI-37, #231) *No clip: the group is drawn by gooey and looks like the bar its clip already shows; proved by the_mode_group_follows_the_armed_tool*
 - **231-toolbar** `ce51911` The toolbar: every tool mode, undo, redo and save as a gooey icon button, and a click dispatches the same chord its key does, so the armed mode lights on the button and nowhere else (UI-37, #231)<br><a href="docs/changelog/media/2026-11-02-toolbar.mp4"><img src="docs/changelog/media/2026-11-02-toolbar.png" width="320" alt="clip"></a>
