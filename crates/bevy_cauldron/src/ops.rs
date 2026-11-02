@@ -4081,12 +4081,11 @@ pub const CHOOSER_ENTRY_POINTS: &[(&str, &str)] = &[
 /// of source the editor, screen, chooser or tiles module must contain for that entry point to be
 /// there. Read by the parity test (E-086).
 pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
-    // **The keep-as-group key** (Shift+B's box, then the group key) and `composition_define` are two
-    // fronts of one function, `keep_as_group`: the key hands it the set in hand, the operation hands
-    // it the placements an agent named, so the refusals, the replace rule and the write are shared
-    // (E-072). The held set carries no placement ids, which is why the key does not dispatch the
-    // operation itself.
-    ("composition_define", "keep_as_group("),
+    // **The keep-as-group key** (Shift+B's box, then the group key `M`, a name and Enter) reaches
+    // `keep_set_as_group`, which dispatches `composition_define` with the set in hand as its `set`
+    // (E-002, #129 slice 14); an agent names placements as `from`, or a set of its own. Both end in
+    // `keep_as_group`, so the refusals, the replace rule and the write are shared (E-072).
+    ("composition_define", "keep_set_as_group("),
     // **The Compose list's second click**: a click on the already-selected group toggles its
     // envelope between anchored and bounded through `set_envelope`, which dispatches
     // `composition_set_envelope` (E-072 slice 3).
