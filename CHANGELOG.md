@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **242-pointer-windowless** `7679cef` A windowless app's pointer is left where picking put it, so a test's click on a widget is not re-aimed at the viewport image *No clip: a harness fix nobody sees; proved by a_widget_is_clicked_by_its_label and the eight pointer tests*
 - **231-toggle-group** `d5e946d` The six tool modes are one gooey toggle group: exactly one is lit, and it is the armed tool (UI-37, #231) *No clip: the group is drawn by gooey and looks like the bar its clip already shows; proved by the_mode_group_follows_the_armed_tool*
 - **231-toolbar** `ce51911` The toolbar: every tool mode, undo, redo and save as a gooey icon button, and a click dispatches the same chord its key does, so the armed mode lights on the button and nowhere else (UI-37, #231)<br><a href="docs/changelog/media/2026-11-02-toolbar.mp4"><img src="docs/changelog/media/2026-11-02-toolbar.png" width="320" alt="clip"></a>
 - **siren-audio-panel** `7029b20` The Cauldron hosts `bevy_siren` and draws its audio panel: a row per bus with its level, duck and live voices, the project's cue table, and an Audition that writes the crate's own `Play` (#274, S-01) *No clip: visible, not yet recorded: the panel is one text block in the controls panel and needs the editor on a display to record; proved by crates/bevy_cauldron/tests/audio_panel_reads_the_crates_file.rs*
