@@ -141,7 +141,7 @@ A placement carries one `bevy_lights` value in its `family` row (`placement_set_
 (base: 900.0, phase: 1.3, depth: 0.15) // a bare light that breathes
 ```
 
-A `Fire` standing on a placement draws the crate's flame and the light the pool hands it in the running editor (build with `--features bevy_lights`); the light map and `light_pool` read the lumens the crate sizes for its kind, or the `lumens` the value names. A kind or field the crate does not have is refused, and nothing is set. RON writes an `Option` as `Some(..)`.
+A `Fire` standing on a placement draws the crate's flame and the light the pool hands it in the running editor (build with `--features bevy_lights`); the light map and `light_pool` read the lumens the crate sizes for its kind, or the `lumens` the value names. A kind the crate does not have, or a value that does not read, is refused and nothing is set; a misspelt field name is dropped without a word, because the crate's types ignore fields they do not know. RON writes an `Option` as `Some(..)`.
 
 ## forest/<map>.ron
 
