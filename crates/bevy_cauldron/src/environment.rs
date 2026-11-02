@@ -397,6 +397,25 @@ pub fn dress_camera(
     }
 }
 
+/// **The editor's own key light steps aside while the camera wears the crate's sky** (#103).
+///
+/// `bevy_elements` meters the camera's exposure for the sky's physical light: a moonlit night is a gain of
+/// about ten stops. The editor's key light is a fixed 6,000 lux, so at that gain it lit every piece to
+/// white and the viewport at 22:00 was one white sheet (measured on big with `clock.hour = 22.0`). While
+/// the camera is dressed the sun and the moon are the key light, so this one is hidden; it comes back when
+/// the file goes.
+pub fn key_light_follows_dressing(
+    dressed: Query<(), (With<crate::view::MainCamera>, With<bevy_elements::ElementsCamera>)>,
+    mut lights: Query<&mut Visibility, With<crate::view::EditorKeyLight>>,
+) {
+    let want = if dressed.is_empty() { Visibility::Inherited } else { Visibility::Hidden };
+    for mut visibility in &mut lights {
+        if *visibility != want {
+            *visibility = want;
+        }
+    }
+}
+
 /// **Sets the surface's cameras to compose an HDR world (`dressed`) or the shared texture (not).**
 pub fn composite_surface<'a>(
     dressed: bool,
