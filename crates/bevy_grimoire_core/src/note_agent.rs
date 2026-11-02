@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use crate::trust::{CommandKind, CommandSpec, Decision, TrustStore};
+
 pub const AGENT_VERSION: u32 = 1;
 
 /// The model an agent is started with when the file does not name one.
@@ -84,11 +86,31 @@ impl AgentSettings {
             .collect()
     }
 
-    /// **Start the agent, once.** `Ok(None)` when no command is set. The child runs in the project folder
-    /// with `BEVY_GRIMOIRE_PROJECT` set; a thread reaps it when it ends. A program that cannot start is an
-    /// `Err` naming it, so the editor reports it rather than dropping the send silently.
-    pub fn launch(&self, root: &Path) -> Result<Option<u32>, String> {
-        let Some(program) = &self.command else { return Ok(None) };
+    /// The command as a person reads and trusts it, or `None` when no command is set. It is the template
+    /// (`{model}` and `{prompt}` unfilled), so trust follows what the file says, and it is the form the
+    /// default arguments take when the file names none.
+    pub fn spec(&self) -> Option<CommandSpec> {
+        let program = self.command.clone()?;
+        let args = if self.args.is_empty() {
+            ["-p", "--model", "{model}", "{prompt}"].map(str::to_owned).to_vec()
+        } else {
+            self.args.clone()
+        };
+        Some(CommandSpec { kind: CommandKind::Notes, program, args, cwd: None })
+    }
+
+    /// **Start the agent, once, if a person has allowed it.** `Ok(None)` when no command is set. A command
+    /// no person has allowed is [`LaunchError::Untrusted`] and nothing is started. The child runs in the
+    /// project folder with `BEVY_GRIMOIRE_PROJECT` set; a thread reaps it when it ends. A program that
+    /// cannot start is [`LaunchError::Failed`] naming it, so the editor reports it rather than dropping
+    /// the send silently.
+    pub fn launch(&self, root: &Path, trust: &TrustStore) -> Result<Option<u32>, LaunchError> {
+        let Some(spec) = self.spec() else { return Ok(None) };
+        match trust.decision(root, &spec).map_err(LaunchError::Failed)? {
+            Decision::Trusted(_) => {}
+            Decision::Untrusted => return Err(LaunchError::Untrusted(spec)),
+        }
+        let program = &spec.program;
         let mut child = Command::new(program)
             .args(self.argv(root))
             .current_dir(root)
@@ -97,12 +119,30 @@ impl AgentSettings {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|e| format!("could not start the notes agent `{program}`: {e}"))?;
+            .map_err(|e| LaunchError::Failed(format!("could not start the notes agent `{program}`: {e}")))?;
         let pid = child.id();
         std::thread::spawn(move || {
             let _ = child.wait();
         });
         Ok(Some(pid))
+    }
+}
+
+/// **Why a launch did not start anything.**
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LaunchError {
+    /// No person has allowed this command in this project. The editor asks; nothing was started.
+    Untrusted(CommandSpec),
+    /// It was allowed and still could not start, or the trust could not be decided.
+    Failed(String),
+}
+
+impl std::fmt::Display for LaunchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LaunchError::Untrusted(spec) => write!(f, "the {} `{}` is not allowed yet", spec.kind.noun(), spec.display()),
+            LaunchError::Failed(why) => f.write_str(why),
+        }
     }
 }
 

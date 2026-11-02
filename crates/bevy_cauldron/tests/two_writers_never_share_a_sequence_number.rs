@@ -10,7 +10,7 @@ use serde_json::json;
 use crate::fixtures;
 
 fn writer(root: std::path::PathBuf, session: String) -> Ctx {
-    Ctx {
+    Ctx { trust_file: None,
         root: Some(root),
         project: None,
         open: None,

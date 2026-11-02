@@ -12,6 +12,8 @@ use crate::fixtures;
 struct Rig {
     app: App,
     root: PathBuf,
+    /// The person's trust store: trusts the project unless a test swaps it.
+    trust_file: PathBuf,
 }
 
 fn rig(tag: &str) -> Rig {
@@ -20,7 +22,8 @@ fn rig(tag: &str) -> Rig {
     for _ in 0..4 {
         app.update();
     }
-    Rig { app, root }
+    let trust_file = fixtures::trusted_store(&root);
+    Rig { app, root, trust_file }
 }
 
 impl Rig {
@@ -44,6 +47,7 @@ impl Rig {
         let mut project = self.app.world().resource::<Project>().clone();
         let mut open = self.app.world().resource::<OpenMap>().clone();
         let mut state = self.app.world_mut().remove_resource::<EditorState>().unwrap();
+        state.trust.file = Some(self.trust_file.clone());
         send_notes(Some(&mut project), &mut open, &mut state);
         let problem = state.status.problem_text().to_owned();
         self.app.world_mut().insert_resource(state);
@@ -170,4 +174,23 @@ fn the_guides_worked_example_runs_against_a_headless_editor() {
     let notes = bevy_grimoire_core::notes::Notes::load(&bevy_grimoire_core::notes::path_for_map(&ctx.open.as_ref().unwrap().map_path)).unwrap();
     assert!(matches!(notes.notes[0].state, bevy_grimoire_core::notes::State::Resolved { .. }), "{:?}", notes.notes[0].state);
     let _ = &mut r;
+}
+
+/// **Send in a project no person has allowed starts nothing**, says so where a person looks, and
+/// leaves the question for the person (the review of 2026-11-02, risk 1).
+#[test]
+fn send_from_an_untrusted_project_starts_nothing_and_asks_the_person() {
+    let mut r = rig(&format!("send_untrusted_{}", std::process::id()));
+    let log = agent(&r.root, "");
+    r.draft("tidy the wall");
+    let nothing = r.root.join("nothing-trusted.ron");
+    bevy_grimoire_core::trust::TrustStore::default().save(&nothing).unwrap();
+    r.trust_file = nothing;
+
+    let problem = r.send();
+    assert!(problem.contains("no person has allowed"), "the refusal says why: {problem}");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(!log.exists(), "the agent must not have started");
+    let state = r.app.world().resource::<EditorState>();
+    assert!(state.trust.pending.is_some(), "the question is left for the person");
 }

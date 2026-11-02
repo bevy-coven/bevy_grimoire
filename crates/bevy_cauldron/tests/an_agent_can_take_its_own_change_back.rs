@@ -145,7 +145,7 @@ fn a_human_edit_after_the_agents_blocks_the_older_undo() {
 
     // **The human's edit, through the same path the size field takes** (`editor.rs`'s size field
     // builds this context and dispatches this operation).
-    let mut ctx = ops::Ctx {
+    let mut ctx = ops::Ctx { trust_file: None,
         root: None,
         project: Some(
             app.world()
@@ -437,7 +437,7 @@ fn a_change_on_another_map_does_not_block_this_maps_undo() {
     let mut other = here.map.clone();
     other.name = "m2".to_owned();
     let other_path = here.map_path.with_file_name("m2.map.ron");
-    let mut ctx = ops::Ctx {
+    let mut ctx = ops::Ctx { trust_file: None,
         root: None,
         project: Some(
             app.world()

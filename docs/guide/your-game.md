@@ -175,6 +175,18 @@ The editor never links your game. A project says how to run it in `play.ron` bes
 
 `{map}`, `{root}` and `{camera}` (`x,y,z`) in an argument are replaced by the open map, the project root and the editor camera's position; the game also gets them as `GRIMOIRE_PLAY_MAP`, `GRIMOIRE_PLAY_ROOT` and `GRIMOIRE_PLAY_CAMERA`. **Play** in the PLAY section of the controls panel (or the `play` operation, with `wait_s` to wait until the game's `bevy_fairy/status` says `ready: true`) starts it; **Stop** (`play_stop`) ends the process the editor started, by pid. A second Play while one runs is refused. Neither is an edit, so neither has an undo. An agent then reads the running game through `bevy_fairy`'s own MCP.
 
+## A project's commands need your permission
+
+`play.ron` and `agent.ron` name programs, and a project you cloned brings its own. The editor starts neither until a person has allowed it, so opening a project is never one key press from running its author's command.
+
+When Play or Send meets a command you have not allowed, nothing starts. The status line says which command and in which project, and a question appears with three answers:
+
+- **Y: allow this command.** The exact program, arguments and working directory you were shown. Edit `play.ron` or `agent.ron` afterwards, by hand or by an agent, and the editor asks again.
+- **P: trust the whole project.** Every command in it, including later edits. Use it for your own game.
+- **N or Esc: not now.** Nothing is allowed and nothing starts.
+
+After you allow one, press Play or Send again; nothing starts on its own. What you allowed is kept in your own file, `<data dir>/Grimoire/trusted.ron` (on macOS, `~/Library/Application Support/Grimoire/trusted.ron`), and never in the project, so a project cannot ship its own permission. An agent cannot allow anything: `play` over MCP is refused with the same sentence, and no operation grants trust. If `trusted.ron` is damaged the editor says so and starts nothing; fix or delete the file.
+
 ## Conversations over the speaker
 
 With the editor built with `--features bevy_speech_bubbles` and `bevy_speech_bubbles` listed in `family.ron`, a project's conversations are `bevy_speech_bubbles`' own `DialogueScript`, saved as `family/bevy_speech_bubbles.ron`; a graph `validate_script` refuses is not written. A placed piece carries one by name (`placement_set_family` with `"crate": "bevy_speech_bubbles"` and `"value": "\"market\""`, or `@<id> bevy_speech_bubbles "market"` in FAMILY SETTINGS). Typing `dialogue market 0` in FAMILY SETTINGS walks that conversation (`dialogue_preview`), each number picking an option at the next choice (0 is the first), and draws the lines it says as one balloon over the piece carrying it; a choice with no number left stops the walk there.

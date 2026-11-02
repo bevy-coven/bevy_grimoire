@@ -87,6 +87,7 @@ pub mod session;
 pub mod smart;
 pub mod stack;
 pub mod standards;
+pub mod trust;
 pub mod vocab;
 pub mod wfc;
 pub mod volume;

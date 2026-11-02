@@ -42,7 +42,8 @@ fn stop_ends_a_game_started_through_a_launcher() {
         format!(r#"(version: 1, command: ["sh", "-c", "{} game.py {port} & wait"], port: {port})"#, fixtures_python()),
     )
     .unwrap();
-    let mut c = Ctx { root: Some(root), session: "test".to_owned(), ..Ctx::default() };
+    let trust_file = Some(fixtures::trusted_store(&root));
+    let mut c = Ctx { root: Some(root), session: "test".to_owned(), trust_file, ..Ctx::default() };
 
     let Applied::Done { outcome, .. } =
         ops::dispatch(&mut c, "play", &json!({"map": "town", "wait_s": 20.0})).unwrap()
