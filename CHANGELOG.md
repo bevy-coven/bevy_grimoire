@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **112-checker** `0af1193` tools/decide/check.py runs the editor's checks over a directory of captures; a calibrated check that finds something fails the run, and an uncalibrated one only prints (D4, #112) *No clip: the rule is a command's exit code and a test; nothing on screen; proved by crates/bevy_oracle/tests/checks_that_earn_their_authority.rs*
+- **269-note-pick** `0af1193` A Shift-click that picks no piece says so, naming the rectangle, instead of doing nothing and letting the next Enter send every draft (#269) *No clip: a one-line status change on a miss; proved by tests/enter_with_a_note_box_open_saves_it.rs::a_shift_click_that_picks_no_piece_says_what_to_do_instead*
 - **268-warm** `9f6383b` The ground no longer vanishes for up to half a second after the first carve: the carved ground's pipelines are compiled before it is needed (#268)<br><a href="docs/changelog/media/2026-11-02-268-warm.mp4"><img src="docs/changelog/media/2026-11-02-268-warm.png" width="320" alt="clip"></a>
 - **267-ground** `5a8d630` A flat ground is drawn clean: the bounds floor sits a centimetre under it, so the two are no longer one plane and the hatched pattern is gone (#267)<br><a href="docs/changelog/media/2026-11-02-267-ground.mp4"><img src="docs/changelog/media/2026-11-02-267-ground.png" width="320" alt="clip"></a>
 - **101-ground-base** `fb7088f` The carved ground is an earth tone, not white, so the snow and wetness of volume_cover read against bare ground (#101)<br><a href="docs/changelog/media/2026-11-02-101-cover.mp4"><img src="docs/changelog/media/2026-11-02-101-cover.png" width="320" alt="clip"></a>
