@@ -1,0 +1,142 @@
+{
+ "name": "cover_the_carved_ground",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -16,
+      -16,
+      16,
+      16
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 1.5
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "terrain_stroke",
+    "parameters": {
+     "map": "valley",
+     "stroke": {
+      "brush": "Raise",
+      "radius_m": 9.0,
+      "strength": 6.0,
+      "points": [
+       [
+        -12.0,
+        -10.0
+       ],
+       [
+        -8.0,
+        -6.0
+       ]
+      ]
+     },
+     "create": {
+      "origin": [
+       -30.0,
+       -30.0
+      ],
+      "cell_m": 1.25,
+      "width": 49,
+      "depth": 49,
+      "height_m": 3.0
+     }
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "volume_edit",
+    "parameters": {
+     "map": "valley",
+     "edit": {
+      "shape": {
+       "Sphere": {
+        "center": [
+         0.0,
+         3.0,
+         0.0
+        ],
+        "radius_m": 7.0
+       }
+      },
+      "mode": "Carve",
+      "smooth_m": 0.5
+     }
+    }
+   }
+  },
+  {
+   "seconds": 3.5,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "volume_cover",
+     "value": "Some((snow: (amount: 1.0, max_slope_deg: 45.0, slope_soft_deg: 15.0)))"
+    }
+   }
+  },
+  {
+   "seconds": 3.5,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "volume_cover",
+     "value": "Some((snow: (amount: 1.0, max_slope_deg: 45.0, slope_soft_deg: 15.0), wetness: (amount: 1.0, max_slope_deg: 150.0, slope_soft_deg: 30.0)))"
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "volume_cover",
+     "value": "None"
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "a map with no ground yet, at noon in June"
+  },
+  {
+   "at": 1.6,
+   "caption": "agent: terrain_stroke Raise, a hill on flat ground"
+  },
+  {
+   "at": 4.1,
+   "caption": "agent: volume_edit Carve, a hollow: bare ground"
+  },
+  {
+   "at": 7.1,
+   "caption": "family_set volume_cover snow: the carved ground wears snow, no remesh"
+  },
+  {
+   "at": 10.6,
+   "caption": "wetness added to the snow: the same field, one more edit"
+  },
+  {
+   "at": 14.1,
+   "caption": "volume_cover None: the scene's weather decides again, bare"
+  }
+ ]
+}
