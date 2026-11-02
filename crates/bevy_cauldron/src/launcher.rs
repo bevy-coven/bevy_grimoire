@@ -21,7 +21,7 @@
 //!
 //! A typed folder path, not the OS folder dialog: no family crate opens one and `rfd`'s Linux backends
 //! pull a D-Bus stack or GTK into every build, which wants its own reviewed step. The thumbnail on each
-//! row and the Settings button wait for the thumbnail cache and the settings screen (UI-71).
+//! row waits for the thumbnail cache; the Settings button opens the settings screen (`settings_screen.rs`, UI-71).
 
 use std::path::{Path, PathBuf};
 
@@ -283,6 +283,12 @@ fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, 
                     actions.spawn((
                         button("New project…"),
                         observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true),
+                    ));
+                    actions.spawn((
+                        button("Settings"),
+                        observe(|_: On<bevy_gooey::Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
+                            out.write(crate::settings_screen::OpenSettings);
+                        }),
                     ));
                     if let Some(example) = launcher.example.clone() {
                         actions.spawn((

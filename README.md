@@ -55,6 +55,7 @@ Opens the repository's own project on its `furniture` kit (`site` and `scp` are 
 - **Continue a layout you started**: the editor learns the rules of a corner you laid out and continues it with WFC (wave function collapse), drawn as translucent pieces before you keep it: [building maps](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/building-maps.md).
 - **Make kits and labels**: bring in meshes, group them into kits, and confirm the labels a vision model proposes: [kits and labels](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/kits-and-labels.md).
 - **Edit the files your game loads, live**: the editor re-reads changed project files every quarter of a second, and a game can reload them too: [data files](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/data-files.md), [your game](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/your-game.md).
+- **Set the editor up the way you work**: Cmd+, opens the settings screen, where every setting shows its default, can be searched and reset, and is written to your own file or to the project's; the project configuration screen turns the family crates the project uses on and off: [data files](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/data-files.md).
 - **Configure the rest of the Coven**: sky, forests, lights, villagers, dialogue and destructible props, each as that crate's own settings: [the book](https://bevy-coven.github.io/with-grimoire.html).
 
 ## Part of the Coven

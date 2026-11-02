@@ -205,8 +205,8 @@ The editor's settings, in two files that are laid over the built-in defaults, ke
 | | |
 |---|---|
 | Where | The user's layer: `<config_dir>/Grimoire/settings.ron` (`~/.config` on Linux, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows). The project's layer: `assets/grimoire/editor.ron`. |
-| What it holds | Only the keys a file sets, each an `Option`: `theme` (`ToolDark`, `Parchment` or `HighContrast`), `text_scale` and `interface_scale` (0.5 to 3.0; 1.0 is as designed) and `reduced_motion`. Example: `(version: 1, text_scale: Some(1.5), reduced_motion: Some(true))`. |
-| Written by | A person, for now; the settings screen (UI-71) writes them. |
+| What it holds | Only the keys a file sets, each an `Option`: `theme` (`ToolDark`, `Parchment` or `HighContrast`), `text_scale` and `interface_scale` (0.5 to 3.0; 1.0 is as designed), `reduced_motion`, `show_grid` (draw the map's grid; on by default) and `grid_strength` (0.1 to 1.0; how strongly the grid is drawn). Example: `(version: 1, text_scale: Some(1.5), reduced_motion: Some(true))`. |
+| Written by | A person, or the settings screen (`Cmd/Ctrl+,`), which sets or resets one key at a time and leaves the rest of the file as it is. A file that does not read is never written over. |
 | Live reload | Yes, in the editor: it looks at both files while it runs, so an edit, a deleted key or a deleted file changes the running editor at once. A file that does not read (not RON, an unknown key, a value out of range, another version) keeps that layer's last good content, is refused in `grimoire_state.reloads` with the file and the field, and is a problem on the status line. The game does not read it. |
 | Read by | The editor only (`settings::sync_settings`, resource `EditorSettings`). |
 | Format version | 1. An old file with fewer keys still reads; a file of another version is refused by name. |
