@@ -1,0 +1,97 @@
+{
+ "name": "clock_scrub",
+ "fps": 8,
+ "scale": 1,
+ "width": 640,
+ "crop": [
+  8,
+  58,
+  960,
+  700
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.0
+  },
+  {
+   "seconds": 2
+  },
+  {
+   "seconds": 2
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "cursor": [
+    260,
+    470
+   ]
+  },
+  {
+   "at": 0.4,
+   "wheel": {
+    "y": 1,
+    "n": 2,
+    "at": [
+     260,
+     470
+    ]
+   }
+  },
+  {
+   "at": 0.6,
+   "wheel": {
+    "y": -1,
+    "n": 3,
+    "at": [
+     260,
+     470
+    ]
+   }
+  },
+  {
+   "at": 1.0,
+   "caption": "the ENVIRONMENT panel: the settings file's noon, June"
+  },
+  {
+   "at": 2.0,
+   "click": [
+    60,
+    531
+   ],
+   "caption": "person: 6:00 \u2014 the preview is held at dawn, no file write, no undo step"
+  },
+  {
+   "at": 3.3,
+   "click": [
+    170,
+    531
+   ],
+   "caption": "person: 18:30 \u2014 dusk; LAST still before the first change, UNDO nothing"
+  },
+  {
+   "at": 4.5,
+   "click": [
+    225,
+    531
+   ],
+   "caption": "person: 23:00 \u2014 night"
+  }
+ ]
+}
