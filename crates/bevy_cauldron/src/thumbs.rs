@@ -233,11 +233,24 @@ fn load_cached(path: &Path) -> Option<Image> {
 /// drew into (all zeros), which is what the first version wrote to the cache. The portrait itself
 /// keeps what the earlier settle frames drew; only the captured frame goes to the capture texture.
 struct Capture {
-    screenshot: Entity,
     /// Set by the observer once the PNG is written (or has failed, which is a missing optimisation
     /// and no reason to hold the booth).
     done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Set when the portrait is given up, so a readback that lands later writes nothing.
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     waited: u32,
+}
+
+impl Capture {
+    /// **Give the portrait up without despawning its screenshot.** A readback in flight is still owned by
+    /// `bevy_render`: when it lands it inserts `Captured` on the entity, and a despawned entity makes that
+    /// command an error that Bevy's default handler turns into a panic (bevy-coven/bevy_grimoire#264: a fresh
+    /// editor, still baking palette thumbnails, exited on the first capture sequence the moment the PLACE
+    /// list was filtered and the booth's subject changed). The entity is left for `bevy_render` to despawn
+    /// once it has landed, and the flag keeps the late image out of the cache.
+    fn cancel(&self) {
+        self.cancelled.store(true, std::sync::atomic::Ordering::Release);
+    }
 }
 
 /// Frames to wait for a capture before giving the portrait up for the cache. The copy lands a frame
@@ -247,15 +260,17 @@ const CAPTURE_WAIT_FRAMES: u32 = 120;
 /// Ask for the readback of `handle`, which the booth camera is drawing into right now.
 fn request_capture(commands: &mut Commands, handle: Handle<Image>, path: PathBuf) -> Capture {
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let flag = done.clone();
-    let screenshot = commands
+    let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (flag, cancel) = (done.clone(), cancelled.clone());
+    commands
         .spawn(Screenshot::image(handle))
         .observe(move |shot: On<ScreenshotCaptured>| {
-            write_cached(&shot.image, &path);
+            if !cancel.load(std::sync::atomic::Ordering::Acquire) {
+                write_cached(&shot.image, &path);
+            }
             flag.store(true, std::sync::atomic::Ordering::Release);
-        })
-        .id();
-    Capture { screenshot, done, waited: 0 }
+        });
+    Capture { done, cancelled, waited: 0 }
 }
 
 /// PNG-encode `image` and write it through [`bevy_grimoire_core::atomic_file::write_cache`], so a
@@ -476,7 +491,7 @@ fn bake(
         thumbs.settled = 0;
         thumbs.waited = 0;
         if let Some(capture) = thumbs.capture.take() {
-            commands.entity(capture.screenshot).try_despawn();
+            capture.cancel();
         }
         // Restaged for the right piece next frame.
         return;
@@ -581,8 +596,7 @@ fn bake(
         if !landed {
             warn!("`{}`: the portrait readback never landed; it is not cached", d.id);
         }
-        let screenshot = capture.screenshot;
-        commands.entity(screenshot).try_despawn();
+        capture.cancel();
         thumbs.capture = None;
     } else if let (Some(path), Some(handle)) = (cache_path(&project.root, &d), thumbs.images.get(&d.id)) {
         let capture = request_capture(&mut commands, handle.clone(), path);
