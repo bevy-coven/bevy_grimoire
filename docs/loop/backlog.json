@@ -1,265 +1,265 @@
 {
-  "items": [
+ "items": [
+  {
+   "id": "E-002",
+   "kind": "enhancement",
+   "area": "mcp",
+   "title": "An operation per editor verb, with the UI and the agent both dispatching it",
+   "must_fix": {
+    "blocks": false,
+    "common": true,
+    "no_workaround": false,
+    "evidence": "The registry has one operation (map_set_settings) and 128 actions are on the unmigrated allowlist. The brief asks for one workflow first, with the allowlist shrinking."
+   },
+   "status": "open",
+   "evidence": "crates/bevy_cauldron/tests/operations_have_two_front_ends.rs::the_allowlist_of_unmigrated_actions_only_shrinks | 2026-10-30 #129 slice 1 (a97b657): ComposeArm and ArmComposition dispatch composition_arm; UNMIGRATED_MAX 113 -> 111; proved by tests/composition_arm_is_an_operation.rs. | slice 2 (7828e55): composition_rename, 111 -> 110. | slice 3 (aab1f59, 2026-10-31): placement_set_tip, Y and U (TipX, TipZ) dispatch it, 110 -> 108; proved by tests/placement_set_tip_is_an_operation.rs (3 tests) and operations_have_two_front_ends:: (8), 11 passed on big in a scratch clone at b664cd8 + the patch (5 min build; the laptop's own build was starved, #195). | slice 4 (8455e35, 2026-10-31): placement_set_lift, [ and ] (LiftUp, LiftDown) dispatch it, 108 -> 106; proved by tests/placement_set_lift_is_an_operation.rs (3 tests) and operations_have_two_front_ends:: (8) on big. Next: slice 5, any action still in UNMIGRATED whose edit has one write path (the list in tests/operations_have_two_front_ends.rs; Straighten is two writes today, yaw and tip, one undo group). | slice 5 (0f79607, 2026-10-31, pass 158): placement_set_pose (id, yaw, tip), V (Straighten) dispatches it, Undo::Turned and Undo::Tipped removed, 106 -> 105; proved by tests/placement_set_pose_is_an_operation.rs (3 tests) and operations_have_two_front_ends:: (8), 26 passed on big with the turn, tip, lift and f32 tests. | slice 6 (7898146, 2026-10-31): piece_set_mount, M and the mount chip (CycleMount) dispatch it for a library piece, 105 -> 104; proved by tests/piece_set_mount_is_an_operation.rs (4 tests) and operations_have_two_front_ends:: (8), 27 passed on big in a scratch clone; the reviewer's bare-undo hole (a library line was undone instead of the map's newest change) is closed for every library-writing operation, test failed on the old scoping. | slice 7 (9e310f2, 2026-10-31, pass 162): pack_set_excluded (pack, excluded), Shift+R (ExcludePack) dispatches it, 104 -> 103; proved by tests/pack_set_excluded_is_an_operation.rs (5 tests, the first 4 failed on the base) and operations_have_two_front_ends:: (8); 27 passed on big with piece_set_mount's, the undo tests and headless::the_excluded_band_opens_from_the_keyboard. | slice 8 (237e9ac, 2026-10-31, pass 163): piece_remove (id), Delete (RemoveTile) dispatches it, 103 -> 102; proved by tests/piece_remove_is_an_operation.rs (4 tests, all 4 failed on the base in a separate worktree) and operations_have_two_front_ends:: (8), 12 passed on big. Next: slice 9, AcceptEdges (the target may be a candidate, which no operation can name: a library piece dispatches, a candidate stays a staged edit) or ClearTile (BUILD tab, one edit call). Hot reloading (#198) outranks it per the owner's 2026-10-31 focus. | slice 9 (2026-11-01, 1a9de8e): piece_turn; N, O, P, the rotate chips and the labeler's righting (RotateMeshX/Y/Z) turn a library piece through it, 102 -> 99; proved by tests/piece_turn_is_an_operation.rs (4). | slice 10 (e23a86e): piece_set_cells; Z, X, V, the grid's chips and headers (CellSolid/CellEdge/CellClear), 99 -> 96; tests/piece_set_cells_is_an_operation.rs (4). | slice 11 (b57758f): vocab_add_token; Shift+T and the + chip (NewToken), 96 -> 95, Undo::None because a token is only ever appended; tests/vocab_add_token_is_an_operation.rs (4). Not migratable as they stand: GroupFromSet (keep_as_group needs the held set, which carries no placement ids, and CloneSet is built field-by-field in protected tests), Accept (folds, re-writes and imports on one key). | slice 12 (2026-11-01): AcceptEdges dispatches piece_set_cells with its new `edges` verb (a token for each of several cells, one act), 95 -> 94; proved by tests/keeping_derived_edges_is_a_cell_operation.rs (4). | pass 207 (2026-11-01): slices 14-19 (bb0af0f, da12b50, fd7a197, 1f79a61): GroupFromSet -> composition_define set, ScanMesh -> piece_set_cells scan, 93 -> 91; the tile save, wall height, description and width (no action) are operations too (piece_set_note, piece_set_width, composition_define composition). What is left is view/selection/tab-draft verbs; moves and clone-set stamping wait on the owner (two protected tests pin a move as an unsaved edit outside the log), see the comment on #129.",
+   "last_failure": "",
+   "first_seen": "2026-10-21"
+  },
+  {
+   "last_failure": "",
+   "first_seen": "2026-10-21",
+   "id": "E-015",
+   "kind": "enhancement",
+   "area": "keys",
+   "status": "deferred",
+   "title": "An action search palette over keys::Action::ALL (renzora's command palette)",
+   "evidence": "From the renzora/engine survey (crates/renzora_command_palette/src/modal.rs). User problem: an action is reachable only by knowing its chord; frequency: high (128+ actions); saving: two keystrokes instead of a chord hunt; risk: the palette must refuse what the current keys::Context refuses, through Status::problem. Cycle 2 (99c764c): not built (budget); depends on E-025 open-key migration; next cycle. Cycle 3 (52d7f84): deferred, not built. Its open key has no honest migration to pay for it under E-025, and UNMIGRATED_MAX (125) was not raised to make room."
+  },
+  {
+   "id": "E-023",
+   "kind": "enhancement",
+   "area": "perf",
+   "status": "open",
+   "title": "Possible +1.5 ms frame time between b6ee5af and 8c97677 (not significant: paired t = 1.79, n = 9)",
+   "evidence": "target/loop/2026-10-21-b6ee5af/ab*.txt; the commit adds no per-frame work beyond view::drive reading the viewport aspect. Check with a profiler (Tracy or bevy_debugger frame timings) before claiming either way.",
+   "last_failure": "",
+   "first_seen": "2026-10-21"
+  },
+  {
+   "id": "E-031",
+   "kind": "enhancement",
+   "area": "ci",
+   "title": "The loop must not wait on CI: a PR merges on the local gate, and hosted CI runs in parallel",
+   "status": "open",
+   "evidence": "Developer decision 2026-10-22, recorded in the loop handoff (local://iteration-handoff.md), not in the repo: do not wait on CI, merge on the local gate. CI wall times reported by the main agent (18, 56 and 61 minutes, plus queue; not re-measured here). CI run 39842732867 on 360b9af was still queued at merge time. The hosted-versus-big timing probe (CiSpeedProbe) is not finished; its PR is separate.",
+   "last_failure": "",
+   "first_seen": "2026-10-22"
+  },
+  {
+   "id": "E-039",
+   "kind": "enhancement",
+   "area": "docs",
+   "title": "A hero storyboard on a big building: snip the abbey, the agent turns or removes it, then Cmd+Z",
+   "must_fix": {
+    "blocks": false,
+    "common": false,
+    "no_workaround": false,
+    "evidence": "Not judged: unconfirmed. Set when reproduced."
+   },
+   "status": "fixed",
+   "evidence": "Confirmed **already fixed** on main (measured 2026-11-02, pass 226): `hero.json` as it stands records PASS \u2014 agent `placement_remove bed` 6.20%, Ctrl+Z 6.31%, longest static 1.40 s, 0.23 MB, scene 42.3%. The abbey was never needed; E-039's premise (a big building is required) is wrong. The change bar is cleared by FRAMING: the same bed removal framed tight measures 10.24%. A clip on any piece passes when `setup.grimoire_frame_view` lands the piece across most of the viewport, and `render.py` is given `scale: 1` with a crop matching the capture (its default scale is 2, which crops 2560x1406 out of a 1280x720 frame and shrinks the editor to a corner).",
+   "last_failure": "",
+   "first_seen": "2026-10-23"
+  },
+  {
+   "id": "E-056",
+   "kind": "enhancement",
+   "area": "mcp",
+   "title": "grimoire_capture_sequence is annotated destructiveHint true but only writes frame files",
+   "status": "blocked",
+   "evidence": "DocAgents 2026-10-23 from docs/mcp-tools.md. Blocked 2026-10-27: tests/an_agent_calls_the_server.rs:228 pins (\"grimoire_capture_sequence\", false, true, false), a protected file; flipping destructive in docs.rs:221 fails it. Needs an evaluator pass.",
+   "last_failure": "",
+   "first_seen": "2026-10-23"
+  },
+  {
+   "id": "E-058",
+   "kind": "enhancement",
+   "area": "docs",
+   "title": "Whole-window GIFs for build-a-map, label-a-kit and generate-a-layout",
+   "status": "open",
+   "evidence": "2026-10-23 round: agent-drives shipped as the README hero. build-a-map failed on caption sync and small pieces; label-a-kit waits on B-047; generate-a-layout waits on B-046. Storyboards and attempts in /tmp/gifs/ (not committed). Pass 226: the 'small pieces' failure is a framing problem, not a size problem \u2014 see E-039's fix. `hero` on the bed now passes at 6.20%/6.31%.",
+   "last_failure": "",
+   "first_seen": "2026-10-23"
+  },
+  {
+   "id": "S-003",
+   "kind": "series",
+   "area": "live",
+   "title": "Live editing: the running game shows every edit, with no recompile",
+   "goal": "An agent or a person edits a map, a kit, a game data file or a tuning number in the editor, and the running game shows it within about a second, with the game's verdict reported back to the editor",
+   "approved_by": "owner 2026-10-28",
+   "acceptance": [
+    "a placement_set_yaw on Sanctuary's town reaches the running game",
+    "the game's refusal of a reload is visible in grimoire_state",
+    "a data_set on a registered tuning file reaches the running game",
+    "the bevy_grimoire runtime reloads a map without a restart"
+   ],
+   "status": "open",
+   "evidence": "Sanctuary decision 0404; docs/design/grimoire-coevolution.md in Sanctuary. Every registered operation that changes a map already saves as it commits; --live reaches the keys that are not yet operations (lift, tip, move, straighten, the editor's undo).",
+   "last_failure": "",
+   "first_seen": "2026-10-28",
+   "steps": [
     {
-      "id": "E-002",
-      "kind": "enhancement",
-      "area": "mcp",
-      "title": "An operation per editor verb, with the UI and the agent both dispatching it",
-      "must_fix": {
-        "blocks": false,
-        "common": true,
-        "no_workaround": false,
-        "evidence": "The registry has one operation (map_set_settings) and 128 actions are on the unmigrated allowlist. The brief asks for one workflow first, with the allowlist shrinking."
-      },
-      "status": "open",
-      "evidence": "crates/bevy_cauldron/tests/operations_have_two_front_ends.rs::the_allowlist_of_unmigrated_actions_only_shrinks | 2026-10-30 #129 slice 1 (a97b657): ComposeArm and ArmComposition dispatch composition_arm; UNMIGRATED_MAX 113 -> 111; proved by tests/composition_arm_is_an_operation.rs. | slice 2 (7828e55): composition_rename, 111 -> 110. | slice 3 (aab1f59, 2026-10-31): placement_set_tip, Y and U (TipX, TipZ) dispatch it, 110 -> 108; proved by tests/placement_set_tip_is_an_operation.rs (3 tests) and operations_have_two_front_ends:: (8), 11 passed on big in a scratch clone at b664cd8 + the patch (5 min build; the laptop's own build was starved, #195). | slice 4 (8455e35, 2026-10-31): placement_set_lift, [ and ] (LiftUp, LiftDown) dispatch it, 108 -> 106; proved by tests/placement_set_lift_is_an_operation.rs (3 tests) and operations_have_two_front_ends:: (8) on big. Next: slice 5, any action still in UNMIGRATED whose edit has one write path (the list in tests/operations_have_two_front_ends.rs; Straighten is two writes today, yaw and tip, one undo group). | slice 5 (0f79607, 2026-10-31, pass 158): placement_set_pose (id, yaw, tip), V (Straighten) dispatches it, Undo::Turned and Undo::Tipped removed, 106 -> 105; proved by tests/placement_set_pose_is_an_operation.rs (3 tests) and operations_have_two_front_ends:: (8), 26 passed on big with the turn, tip, lift and f32 tests. | slice 6 (7898146, 2026-10-31): piece_set_mount, M and the mount chip (CycleMount) dispatch it for a library piece, 105 -> 104; proved by tests/piece_set_mount_is_an_operation.rs (4 tests) and operations_have_two_front_ends:: (8), 27 passed on big in a scratch clone; the reviewer's bare-undo hole (a library line was undone instead of the map's newest change) is closed for every library-writing operation, test failed on the old scoping. | slice 7 (9e310f2, 2026-10-31, pass 162): pack_set_excluded (pack, excluded), Shift+R (ExcludePack) dispatches it, 104 -> 103; proved by tests/pack_set_excluded_is_an_operation.rs (5 tests, the first 4 failed on the base) and operations_have_two_front_ends:: (8); 27 passed on big with piece_set_mount's, the undo tests and headless::the_excluded_band_opens_from_the_keyboard. | slice 8 (237e9ac, 2026-10-31, pass 163): piece_remove (id), Delete (RemoveTile) dispatches it, 103 -> 102; proved by tests/piece_remove_is_an_operation.rs (4 tests, all 4 failed on the base in a separate worktree) and operations_have_two_front_ends:: (8), 12 passed on big. Next: slice 9, AcceptEdges (the target may be a candidate, which no operation can name: a library piece dispatches, a candidate stays a staged edit) or ClearTile (BUILD tab, one edit call). Hot reloading (#198) outranks it per the owner's 2026-10-31 focus. | slice 9 (2026-11-01, 1a9de8e): piece_turn; N, O, P, the rotate chips and the labeler's righting (RotateMeshX/Y/Z) turn a library piece through it, 102 -> 99; proved by tests/piece_turn_is_an_operation.rs (4). | slice 10 (e23a86e): piece_set_cells; Z, X, V, the grid's chips and headers (CellSolid/CellEdge/CellClear), 99 -> 96; tests/piece_set_cells_is_an_operation.rs (4). | slice 11 (b57758f): vocab_add_token; Shift+T and the + chip (NewToken), 96 -> 95, Undo::None because a token is only ever appended; tests/vocab_add_token_is_an_operation.rs (4). Not migratable as they stand: GroupFromSet (keep_as_group needs the held set, which carries no placement ids, and CloneSet is built field-by-field in protected tests), Accept (folds, re-writes and imports on one key). | slice 12 (2026-11-01): AcceptEdges dispatches piece_set_cells with its new `edges` verb (a token for each of several cells, one act), 95 -> 94; proved by tests/keeping_derived_edges_is_a_cell_operation.rs (4). | pass 207 (2026-11-01): slices 14-19 (bb0af0f, da12b50, fd7a197, 1f79a61): GroupFromSet -> composition_define set, ScanMesh -> piece_set_cells scan, 93 -> 91; the tile save, wall height, description and width (no action) are operations too (piece_set_note, piece_set_width, composition_define composition). What is left is view/selection/tab-draft verbs; moves and clone-set stamping wait on the owner (two protected tests pin a move as an unsaved edit outside the log), see the comment on #129.",
-      "last_failure": "",
-      "first_seen": "2026-10-21"
+     "id": "S3.1",
+     "title": "The parity tables are product code (E-086)",
+     "status": "fixed"
     },
     {
-      "last_failure": "",
-      "first_seen": "2026-10-21",
-      "id": "E-015",
-      "kind": "enhancement",
-      "area": "keys",
-      "status": "deferred",
-      "title": "An action search palette over keys::Action::ALL (renzora's command palette)",
-      "evidence": "From the renzora/engine survey (crates/renzora_command_palette/src/modal.rs). User problem: an action is reachable only by knowing its chord; frequency: high (128+ actions); saving: two keystrokes instead of a chord hunt; risk: the palette must refuse what the current keys::Context refuses, through Status::problem. Cycle 2 (99c764c): not built (budget); depends on E-025 open-key migration; next cycle. Cycle 3 (52d7f84): deferred, not built. Its open key has no honest migration to pay for it under E-025, and UNMIGRATED_MAX (125) was not raised to make room."
+     "id": "S3.2",
+     "title": "A map is written one placement a line",
+     "status": "fixed"
     },
     {
-      "id": "E-023",
-      "kind": "enhancement",
-      "area": "perf",
-      "status": "open",
-      "title": "Possible +1.5 ms frame time between b6ee5af and 8c97677 (not significant: paired t = 1.79, n = 9)",
-      "evidence": "target/loop/2026-10-21-b6ee5af/ab*.txt; the commit adds no per-frame work beyond view::drive reading the viewport aspect. Check with a profiler (Tracy or bevy_debugger frame timings) before claiming either way.",
-      "last_failure": "",
-      "first_seen": "2026-10-21"
+     "id": "S3.3",
+     "title": "core live::FileWatch and diff_maps",
+     "status": "fixed"
     },
     {
-      "id": "E-031",
-      "kind": "enhancement",
-      "area": "ci",
-      "title": "The loop must not wait on CI: a PR merges on the local gate, and hosted CI runs in parallel",
-      "status": "open",
-      "evidence": "Developer decision 2026-10-22, recorded in the loop handoff (local://iteration-handoff.md), not in the repo: do not wait on CI, merge on the local gate. CI wall times reported by the main agent (18, 56 and 61 minutes, plus queue; not re-measured here). CI run 39842732867 on 360b9af was still queued at merge time. The hosted-versus-big timing probe (CiSpeedProbe) is not finished; its PR is separate.",
-      "last_failure": "",
-      "first_seen": "2026-10-22"
+     "id": "S3.4",
+     "title": "--live writes every change through",
+     "status": "fixed"
     },
     {
-      "id": "E-039",
-      "kind": "enhancement",
-      "area": "docs",
-      "title": "A hero storyboard on a big building: snip the abbey, the agent turns or removes it, then Cmd+Z",
-      "must_fix": {
-        "blocks": false,
-        "common": false,
-        "no_workaround": false,
-        "evidence": "Not judged: unconfirmed. Set when reproduced."
-      },
-      "status": "open",
-      "evidence": "Cycle 6: the hero clip on house-sized pieces failed twice: a removal of a 2 m house is 1.76% of the frame, and the snip outline 0.87%. A building the size of the abbey should fill enough of the frame to pass the change bar. Not started. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md",
-      "last_failure": "",
-      "first_seen": "2026-10-23"
+     "id": "S3.5",
+     "title": "The game's verdict reaches the editor",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/84"
     },
     {
-      "id": "E-056",
-      "kind": "enhancement",
-      "area": "mcp",
-      "title": "grimoire_capture_sequence is annotated destructiveHint true but only writes frame files",
-      "status": "blocked",
-      "evidence": "DocAgents 2026-10-23 from docs/mcp-tools.md. Blocked 2026-10-27: tests/an_agent_calls_the_server.rs:228 pins (\"grimoire_capture_sequence\", false, true, false), a protected file; flipping destructive in docs.rs:221 fails it. Needs an evaluator pass.",
-      "last_failure": "",
-      "first_seen": "2026-10-23"
+     "id": "S3.6",
+     "title": "core data_files: a registry of game data files and type-keeping leaf edits",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/85"
     },
     {
-      "id": "E-058",
-      "kind": "enhancement",
-      "area": "docs",
-      "title": "Whole-window GIFs for build-a-map, label-a-kit and generate-a-layout",
-      "status": "open",
-      "evidence": "2026-10-23 round: agent-drives shipped as the README hero. build-a-map failed on caption sync and small pieces; label-a-kit waits on B-047; generate-a-layout waits on B-046. Storyboards and attempts in /tmp/gifs/ (not committed).",
-      "last_failure": "",
-      "first_seen": "2026-10-23"
+     "id": "S3.7",
+     "title": "The data_set operation and the Data panel",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/86"
     },
     {
-      "id": "S-003",
-      "kind": "series",
-      "area": "live",
-      "title": "Live editing: the running game shows every edit, with no recompile",
-      "goal": "An agent or a person edits a map, a kit, a game data file or a tuning number in the editor, and the running game shows it within about a second, with the game's verdict reported back to the editor",
-      "approved_by": "owner 2026-10-28",
-      "acceptance": [
-        "a placement_set_yaw on Sanctuary's town reaches the running game",
-        "the game's refusal of a reload is visible in grimoire_state",
-        "a data_set on a registered tuning file reaches the running game",
-        "the bevy_grimoire runtime reloads a map without a restart"
-      ],
-      "status": "open",
-      "evidence": "Sanctuary decision 0404; docs/design/grimoire-coevolution.md in Sanctuary. Every registered operation that changes a map already saves as it commits; --live reaches the keys that are not yet operations (lift, tip, move, straighten, the editor's undo).",
-      "last_failure": "",
-      "first_seen": "2026-10-28",
-      "steps": [
-        {
-          "id": "S3.1",
-          "title": "The parity tables are product code (E-086)",
-          "status": "fixed"
-        },
-        {
-          "id": "S3.2",
-          "title": "A map is written one placement a line",
-          "status": "fixed"
-        },
-        {
-          "id": "S3.3",
-          "title": "core live::FileWatch and diff_maps",
-          "status": "fixed"
-        },
-        {
-          "id": "S3.4",
-          "title": "--live writes every change through",
-          "status": "fixed"
-        },
-        {
-          "id": "S3.5",
-          "title": "The game's verdict reaches the editor",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/84"
-        },
-        {
-          "id": "S3.6",
-          "title": "core data_files: a registry of game data files and type-keeping leaf edits",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/85"
-        },
-        {
-          "id": "S3.7",
-          "title": "The data_set operation and the Data panel",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/86"
-        },
-        {
-          "id": "S3.8",
-          "title": "bevy_grimoire::live: the runtime reloads and respawns what changed",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/87",
-          "evidence": "crates/bevy_grimoire/tests/live_reload.rs (4 tests) and live.rs unit tests (10) green on bmb; clippy -D warnings clean for bevy_grimoire, mapper, mcp"
-        }
-      ]
-    },
-    {
-      "id": "S-004",
-      "kind": "series",
-      "area": "notes",
-      "title": "Notes for agents: a person marks tiles or meshes with a note, an agent works it, and the sign goes away",
-      "goal": "A person selects one or more tiles or placed meshes and leaves a note for an agent. The note stands in the viewport as a small 3D construction sign; clicking it opens the note to read and edit. An agent lists open notes over MCP, does the work through ordinary operations and resolves the note, and its sign disappears while the change it made stays on screen. Resolved notes stay on record, so what has been worked can still be read.",
-      "approved_by": "owner 2026-10-28",
-      "acceptance": [
-        "a note left on two placements and one tile is saved with the map's project and survives an editor restart",
-        "each open note shows one construction sign above its targets, and a resolved note shows none",
-        "clicking a sign opens its note; an edit to the text is saved and is one undo step",
-        "an agent over MCP lists the open notes with their targets, makes the change, resolves the note naming the operations it ran, and the sign is gone within a second while the change is on screen",
-        "resolved notes are listed with what resolved them, and an undo of the resolve brings the sign back"
-      ],
-      "status": "deferred",
-      "evidence": "Owner's request 2026-10-28, with the focus in docs/loop/focus.md. Design defaults, so no pass has to stop for them: notes are data in the game's project beside the map they mark (one file per map, written like the map, hot-reloaded through bevy_grimoire_core::live::FileWatch); a note has an id, its targets (placement ids and cells), its text, open or resolved, and on resolve the operation ids and one line of what changed; the sign is orange and white, about knee height on the map's scale, standing above the centre of its targets and never hiding them; every note change is a registered operation with undo, reachable from both the UI and MCP. The sign starts as a mesh built from Bevy primitives; a golem-made .glb replaces it only when the owner supplies one (AGENTS.md: meshes come from golem, not from this repo). A new keys::Action needs a row in the protected keys.rs census (see S3.7): ship click and button entry first and log a key as blocked rather than editing the census. 2026-10-28: moved to GitHub issues #89-#95 (label `owner`), which the owner approved as the plan and which extend it: drag a rectangle or Shift-click pieces, a box at the selection, Send, any MCP agent claims with a lease, a fence of area plus one cell, ask-first rules, review with Keep or Undo this note, and every note's history. Work the issues, not these steps; S4.1 stays the core they extend.",
-      "last_failure": "",
-      "first_seen": "2026-10-28",
-      "steps": [
-        {
-          "id": "S4.1",
-          "title": "core notes: the note data, its file beside the map, round-trip and hot-reload",
-          "status": "fixed",
-          "evidence": "crates/bevy_grimoire_core/src/notes.rs; tests/notes.rs 6 green; clippy -D warnings clean"
-        },
-        {
-          "id": "S4.2",
-          "title": "note_add, note_edit, note_resolve as registered operations with undo, and notes in grimoire_state over MCP",
-          "status": "blocked",
-          "evidence": "2026-10-28: a new registered operation needs a UI row (tests/operations_have_two_front_ends.rs::every_operation_has_a_ui_entry_point_and_the_other_way_round reads ops::UI_ENTRY_POINTS and requires the place string in editor/chooser/tiles/screen source). The editor has no selection and no text-field path for notes yet (that is S4.4), and the only existing person-side route is a key: a new keys::Action needs the Context::Map count and action list in keys.rs's #[cfg(test)] block raised, which is protected. Owner decision needed: either allow S4.4's panel/click UI to land together with S4.2 (a mouse path with no new Action), or an evaluator pass raises the keys.rs count for a note key. Design when unblocked: note_add/note_edit/note_resolve/note_reopen each read and write <map>.notes.ron through bevy_grimoire_core::notes (path_for_map), inverse = same op with a `restore` of the whole Notes (only_as_undo), state = the Notes value; grimoire_state gains notes (open with targets, resolved with ops and summary). 2026-10-28: moved to #89 (write a note) and #90 (list, history, send)."
-        },
-        {
-          "id": "S4.3",
-          "title": "The construction sign: one per open note, above its targets, gone when resolved",
-          "status": "open",
-          "evidence": "2026-10-28: moved to #89 (the sign)."
-        },
-        {
-          "id": "S4.4",
-          "title": "The person's side: select tiles or meshes and leave a note; click a sign to read and edit it; a list of open and resolved notes",
-          "status": "open",
-          "evidence": "2026-10-28: moved to #89, #90 and #93 (the person side)."
-        },
-        {
-          "id": "S4.5",
-          "title": "End to end on Sanctuary's town: a person's note, an agent's fix over MCP, the sign gone and the change on screen, captured",
-          "status": "open",
-          "evidence": "2026-10-28: moved to #95 (end to end)."
-        }
-      ]
-    },
-    {
-      "id": "S-005",
-      "kind": "series",
-      "area": "live",
-      "title": "Hot reload: every file the editor writes reaches a running program by a declared path",
-      "goal": "A new kind of file cannot ship without a declared reload class, every editor write is atomic, a bad file never replaces a good state, runtime state keeps its identity across a reload, and the editor shows each file's reload state",
-      "approved_by": "owner 2026-10-31",
-      "acceptance": [
-        "docs/guide/reload-contract.md lists every kind the editor writes, with class and lifetime",
-        "every_written_kind_has_a_reload_class and the_restart_list_only_shrinks fail when a kind is added without a class or to Restart without the list",
-        "every editor write is atomic",
-        "a reload that does not parse keeps the last good state and reports a verdict per kind",
-        "the editor shows each file's reload state"
-      ],
-      "status": "open",
-      "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 (pass 164, 2026-10-31, closed #198): core reload::KINDS (33 kinds, class and lifetime), Operation::writes on all 70 impls, docs/guide/reload-contract.md, core tests/reload_contract.rs and mapper tests/reload_contract.rs. H2 (pass 165, 2026-10-31, closed #199): bevy_grimoire_core::atomic_file is the one write path (unique hidden temp beside the target, flushed, renamed, directory flushed); 19 plain writes moved onto it; core tests/atomic_writes.rs, atomic_file_contract.rs and the ratchet atomic_writes_only.rs. H3 slice 1 (pass 166, 2026-10-31, #200 stays open): core reload_check::check parses a file as its kind (18 of 33 kinds) and names the file and the field (serde_path_to_error, only after a refusal); Verdict v2 adds seq and per-file kinds (applied or refused); project_data::verdicts gives one entry per file the game's load reads; the game writes one verdict per edit; grimoire_state.game and the journal carry them. Tests: core tests/reload_verdicts.rs, bevy_grimoire tests/live_verdicts.rs, mapper tests/the_games_per_file_verdicts_reach_grimoire_state.rs. H3 slice 2 (pass 167, 2026-10-31, #200 stays open): core WaterPlan/WaterField/Volume/DataFiles::parse and reload_check::check reads water_plan, water_field, volume and data_registry (22 of 33 kinds; the unchecked ratchet 15 -> 11); mapper live::EditorReloads and grimoire_state.reloads; terrain_view holds the last good Heightfield, WaterField and Volume in memory, decides each file once per edit, leaves the drawing alone on a refusal. Tests: mapper tests/a_refused_terrain_file_keeps_the_last_good_drawing.rs, core tests/reload_verdicts.rs. H3 slice 3 (pass 168, 2026-11-01, c05f917, #200 stays open): a forest, people or triggers file that does not parse is refused by forest_scatter, person_set, trigger_set, people_run and the trigger compile, naming the file and the field, and is never overwritten (it used to count as no file and the next write dropped every other row); core reload_check::read and Refusal::sentence, mapper map_files::read_or_empty and READ_HERE (forest, people, scripts), the forest view decides its file once per edit into EditorReloads. Tests: mapper tests/a_file_that_does_not_read_is_never_overwritten.rs (STILL_UNCHECKED ratchet, 8 kinds). H3 slice 4 (pass 169, 2026-11-01, 0b3a0c9, #200 stays open): a tree file that does not read keeps the trees drawn from its last good value (forest_view HeldTree/decide_tree/Verdicts: the view holds the last good TreeParams per .tree.ron, decides each file once per edit, redraws nothing on a refusal, reports kind trees with the file and the field in EditorReloads, one decision per look); tree_edit set over an unreadable file is refused naming the file and the field (map_files::read_text, READ_HERE gains trees); core reload_check::field_of names an unknown field once (it said undergrow.undergrow). Tests: mapper tests/a_refused_tree_file_keeps_the_last_good_tree.rs, the trees case of a_file_that_does_not_read_is_never_overwritten.rs (STILL_UNCHECKED ratchet 8 -> 7), core tests/an_unknown_field_is_named_once.rs. H3 slice 5 (pass 170, 2026-11-01, 20872c1, #200 stays open): a notes file that does not read keeps the notes the signs and the Notes panel show (mapper notes_view::NotesView and sync_notes_view hold the last good Notes, decide each edit once into EditorReloads as kind notes with the file and the field; draw_notes and refresh_notes_list read the view; NotesView is Ownership::Project in screen::OWNERSHIP); family_host::reload_settings reports kind family (applied, refused, gone) per poll, naming family/<crate>.ron under the game root; EditorReloads::forget_file. Tests: mapper tests/a_refused_notes_file_keeps_the_last_good_notes.rs (2) and tests/family_settings_verdicts.rs. Still to do in #200: a reader that names the file and the field for the 7 kinds nothing reads yet (checks in the decision crate; family settings (the crate's own type); oplog, reference_images, destructible_*, game_data have no RON type here), H3 slice 6 (pass 171, 2026-11-01, #200 stays open): the third outcome. core Outcome::NeedsRestart (word needs_restart) and KindVerdict::needs_restart (a breaking change: bevy_grimoire_core 0.3.0); mapper anim_watch::sync_rigs_reload compares rigs.ron with the text the animation tab holds (BenchState.text) and decides each distinct (disk, held) pair once into EditorReloads as kind rigs: needs_restart when it reads, refused with the file and the field when it does not, needs_restart when it is gone; the tab's own writes agree and say nothing; an edit put back, or a door change (BenchState is the door's), clears the verdict; a manifest that did not read at load says no rigs are loaded from it. Tests: core tests/a_restart_verdict_says_so.rs, mapper tests/a_rigs_edit_says_what_became_of_it.rs (5). Still to do in #200: a reader that names the file and the field for the 7 kinds nothing reads yet (checks in the decision crate; family settings (the crate's own type); oplog, reference_images, destructible_*, game_data have no RON type here), the settings-struct refusal rule (build step 5). Next ready: #200 (H3 slice 7), #202 (H5), #204 (H7). H3 slice 7 (pass 172, 2026-11-01, #200 stays open): build step 5, the settings-struct refusal rule. core tests/old_data/ freezes one file of each of the 22 kinds reload_check::check reads as a release wrote it (core-0.1.0/: 8 project files byte for byte from tag bevy_emerge_core-v0.1.0; core-0.3.0/: 16 files for the kinds the first release had no sample of, one element in every collection) and tests/old_data.rs reads each with the type's own reader, refusing an edit that breaks one by naming kind, file, field and release; a floor stops a file being dropped, a second test keeps every checked kind covered. Failed before: with a required review_m added to Standards, reload_verdicts passes (8) and old_data fails at field review_m. Slice 8 (pass 173, 2026-11-01, #200 stays open): checks. mapper checks_view::ChecksView holds the last good Checks (the editor's with the project's over them), sync_checks_view (AfterEditPlugin, every door) decides each edit once into grimoire_state.reloads as kind checks (applied or refused with file and field; a broken rule or an unreadable file has no one field), and after_edit asks checks_view::checks_for so a refused edit leaves the checks running; map_files::WATCHED_HERE is the new list of kinds a watcher here reads, STILL_UNCHECKED 7 -> 6. mapper tests/a_refused_checks_file_keeps_the_last_good_checks.rs (6 tests) fail with the watcher unregistered (never saw: the good file applied) and pass with it. Still to do in #200: a reader that names the file and the field for the 6 kinds nothing reads yet (oplog, reference_images, family, destructible_marks, destructible_bake, game_data). Slice 9 (pass 174, 2026-11-01, #200 stays open): oplog. core reload_check::read_lines names the first damaged line of a JSON-lines file as `line N.<path>` (or `line N`), counts the rest and reads as serde_json::from_str does (trailing text is damage); mapper oplog_view::sync_oplog_view (AfterEditPlugin, every door; looks by size and modification time and once a second, parsing only changed text) decides into grimoire_state.reloads as kind oplog only when what it found differs from the look before, so an append to a log that reads is no verdict; ops::undo_target reads the log with the same reader and names file, line and field. 28 of 33 kinds have a named refusal; 5 remain on the ratchet (reference_images, family, destructible_marks, destructible_bake, game_data). Failed before: at base with only the new test file, 4 of 4 fail with `never saw: the log applied`; after, mapper tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs 4/4, core tests/a_json_lines_file_names_its_damaged_line_and_field.rs 7/7, the whole editor binary 915/915. Found, not fixed: ops::append glues the next line to a torn last line that has no newline. Released bevy_grimoire_core 0.3.1 (read_lines). Slice 10 (pass 175, 2026-11-01, #200 stays open): game_data. core data_files::read (the one reader: scan + ron::Value, refusing with a Refusal naming the file and the leaf where a cut-off file stopped) and data_files::check (every leaf the registry bounds must be there, a number and inside its bounds, refused by its path); mapper data_view::sync_data_view (AfterEditPlugin, every door) decides into grimoire_state.reloads kind game_data per file (refused with file/leaf/reason; needs_restart when an edit leaves a file that reads as other text than it first read; applied when back to that text; a file first seen reading is a baseline kept across a refused registry) and kind data_registry; data_set over a file that does not scan refuses naming file and leaf. STILL_UNCHECKED 5 to 4. Proof: core tests/a_data_file_names_its_leaf_and_field.rs (8) and mapper tests/a_game_data_file_that_does_not_read_is_named.rs (6) fail on the base (never saw: the registry refused; core does not compile) and pass. Still to do in #200: a reader that names the file and the field for the 4 kinds nothing reads yet (reference_images, family, destructible_marks, destructible_bake); destructible_* sit behind the bevy_carnage feature, which the push gate does not build, so run clippy and the editor binary with that feature on big first. Found, outside the series: #205 (shared fixture tag) and #206 (ops::append glues onto a torn last line) wait under the override. Slice 11 (pass 176, 2026-11-01, #200 stays open): destructible_marks and destructible_bake. core destructible::{Marks, Chunk, Bake} (moved from the mapper's ops_destructible) and reload_check::check reads both (24 of 33 kinds; core's unchecked ratchet 11 -> 9); mapper map_files::read_named; load_marks and read_bake refuse a file that does not read with its path and field and write nothing (a stale bake is still baked again; taking a mark off reads no bake); STILL_UNCHECKED 4 -> 2; core tests/old_data.rs freezes two real files (editor-3f4084c/). Proof: with only the new test files applied to the base, core did not compile and 4 of the 8 selected mapper tests failed (3 of the 4 new ones and the ratchet); after, core whole, the whole editor binary with --features bevy_carnage 928/928, clippy clean with the feature. Released bevy_grimoire_core 0.3.3. Still to do in #200: reference_images (image bytes) and family (the crate's own type). Slice 12 (pass 177, 2026-11-01, closes #200): reference_images and family. core image_header::read (PNG, JPEG, GIF, WebP headers, no image crate; refusals name signature, format, header, width, height, extension), the editor's reference_view::sync_reference_view (the open map's pictures, one verdict per edit, kind reference_images) and family_host::read_as (a settings file is read as ElementsSettings or GooeySkin before it is taken: refused naming family/<crate>.ron and the field, never reaches FamilySettings; settle_refused says only the return the watch cannot see). All 33 kinds now name their file and field; the mapper's STILL_UNCHECKED is empty. core tests/a_reference_image_names_its_field.rs (5) and mapper tests/a_reference_image_that_does_not_read_is_named.rs (4) fail on the base (core does not compile; never saw the verdict) and pass; tests/family_settings_typed_verdicts.rs (3) needs --features bevy_elements,bevy_gooey (not built by the push gate) and, with them, three existing tests whose fixture is not an ElementsSettings now fail like family_settings_reload did (#152, fixture text in protected files). Gate 637 s on big; core 0.3.4 released. #201 and #203 are ready, #202 and #204 were. H4 slice 1 (pass 178, 2026-11-01, #201 stays open): core live::diff_maps_renaming and MapDiff::renamed (a rename found by content, unambiguous pairs only, in rounds so riders on a renamed host follow; diff_maps unchanged), live::same_but_id; the game's plan keeps a renamed placement's entity and retags its Placement; tests core live_diff_renames.rs (9) and game live_identity.rs (6, counts spawns). Acceptance 2-4 met for placements; item 1 (a society's people keep position and ties) and a rename together with an edit or a renamed map (an explicit alias) are open. Assumed decision on #201: content inference over a schema alias. H4 slice 2 (pass 179, 2026-11-01, #201 stays open): bevy_grimoire::live::GrimoireLiveApp (carry_across_respawn::<C>, migrate_on_respawn), one hook per kind of state run once per piece a reload draws again (a rider drawn again with its host, a piece renamed and drawn again), after the new entity is spawned and before the old is despawned; test game live_migrate.rs (6, the file did not compile before); bevy_grimoire 0.2.1. Build step 5 (a move keeps the entity, updated in place) is blocked on an owner decision: live_reload.rs::an_edit_respawns_only_what_changed pins that a moved placement is respawned and a loop cannot change an existing assertion; recommendation is on #201. Still open on #201: that split, the explicit alias (a rename plus an edit, a renamed map) and people. H4 slice 3 (pass 180, 2026-11-01, #201 stays open): bevy_grimoire::live::GrimoireLiveApp::follow_respawn::<C>(|c, respawned| ...) and live::Respawned::follow, so what points at a piece (a person's Home(entity), a list of bound places) follows it when a reload draws it again, run once per reload after the per-piece hooks, a component marked changed only when something moved; a closure and not MapEntities because a game cannot implement that for another crate's component; test game live_references.rs (4, did not compile before); bevy_grimoire 0.3.0 (a required trait method is a semver-major change). Item 1 (a society's people) is shown with stand-in components: an edit to an unrelated piece leaves every person, tie and home alone, and moving a house gives its tenant the new entity; no bevy_society run in this repository. Still open on #201: the in-place split (owner), the explicit alias and a society that runs inside the editor.",
-      "last_failure": "",
-      "first_seen": "2026-10-31",
-      "steps": [
-        {
-          "id": "H1",
-          "title": "One reload contract for every file the editor writes, and a ratchet test",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/198"
-        },
-        {
-          "id": "H2",
-          "title": "Every editor write is atomic",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/199"
-        },
-        {
-          "id": "H3",
-          "title": "Last good wins on every kind, and every reload reports a verdict",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/200"
-        },
-        {
-          "id": "H4",
-          "title": "Runtime state keeps its identity across a reload",
-          "status": "open",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/201"
-        },
-        {
-          "id": "H5",
-          "title": "Move gameplay behaviour into data and scripts, so the restart list shrinks",
-          "status": "open",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/202"
-        },
-        {
-          "id": "H6",
-          "title": "The editor shows each file's reload state",
-          "status": "fixed",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/203"
-        },
-        {
-          "id": "H7",
-          "title": "A spike: Bevy's asset system against the custom watcher, for one file kind",
-          "status": "open",
-          "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/204"
-        }
-      ]
+     "id": "S3.8",
+     "title": "bevy_grimoire::live: the runtime reloads and respawns what changed",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/87",
+     "evidence": "crates/bevy_grimoire/tests/live_reload.rs (4 tests) and live.rs unit tests (10) green on bmb; clippy -D warnings clean for bevy_grimoire, mapper, mcp"
     }
-  ]
+   ]
+  },
+  {
+   "id": "S-004",
+   "kind": "series",
+   "area": "notes",
+   "title": "Notes for agents: a person marks tiles or meshes with a note, an agent works it, and the sign goes away",
+   "goal": "A person selects one or more tiles or placed meshes and leaves a note for an agent. The note stands in the viewport as a small 3D construction sign; clicking it opens the note to read and edit. An agent lists open notes over MCP, does the work through ordinary operations and resolves the note, and its sign disappears while the change it made stays on screen. Resolved notes stay on record, so what has been worked can still be read.",
+   "approved_by": "owner 2026-10-28",
+   "acceptance": [
+    "a note left on two placements and one tile is saved with the map's project and survives an editor restart",
+    "each open note shows one construction sign above its targets, and a resolved note shows none",
+    "clicking a sign opens its note; an edit to the text is saved and is one undo step",
+    "an agent over MCP lists the open notes with their targets, makes the change, resolves the note naming the operations it ran, and the sign is gone within a second while the change is on screen",
+    "resolved notes are listed with what resolved them, and an undo of the resolve brings the sign back"
+   ],
+   "status": "deferred",
+   "evidence": "Owner's request 2026-10-28, with the focus in docs/loop/focus.md. Design defaults, so no pass has to stop for them: notes are data in the game's project beside the map they mark (one file per map, written like the map, hot-reloaded through bevy_grimoire_core::live::FileWatch); a note has an id, its targets (placement ids and cells), its text, open or resolved, and on resolve the operation ids and one line of what changed; the sign is orange and white, about knee height on the map's scale, standing above the centre of its targets and never hiding them; every note change is a registered operation with undo, reachable from both the UI and MCP. The sign starts as a mesh built from Bevy primitives; a golem-made .glb replaces it only when the owner supplies one (AGENTS.md: meshes come from golem, not from this repo). A new keys::Action needs a row in the protected keys.rs census (see S3.7): ship click and button entry first and log a key as blocked rather than editing the census. 2026-10-28: moved to GitHub issues #89-#95 (label `owner`), which the owner approved as the plan and which extend it: drag a rectangle or Shift-click pieces, a box at the selection, Send, any MCP agent claims with a lease, a fence of area plus one cell, ask-first rules, review with Keep or Undo this note, and every note's history. Work the issues, not these steps; S4.1 stays the core they extend.",
+   "last_failure": "",
+   "first_seen": "2026-10-28",
+   "steps": [
+    {
+     "id": "S4.1",
+     "title": "core notes: the note data, its file beside the map, round-trip and hot-reload",
+     "status": "fixed",
+     "evidence": "crates/bevy_grimoire_core/src/notes.rs; tests/notes.rs 6 green; clippy -D warnings clean"
+    },
+    {
+     "id": "S4.2",
+     "title": "note_add, note_edit, note_resolve as registered operations with undo, and notes in grimoire_state over MCP",
+     "status": "blocked",
+     "evidence": "2026-10-28: a new registered operation needs a UI row (tests/operations_have_two_front_ends.rs::every_operation_has_a_ui_entry_point_and_the_other_way_round reads ops::UI_ENTRY_POINTS and requires the place string in editor/chooser/tiles/screen source). The editor has no selection and no text-field path for notes yet (that is S4.4), and the only existing person-side route is a key: a new keys::Action needs the Context::Map count and action list in keys.rs's #[cfg(test)] block raised, which is protected. Owner decision needed: either allow S4.4's panel/click UI to land together with S4.2 (a mouse path with no new Action), or an evaluator pass raises the keys.rs count for a note key. Design when unblocked: note_add/note_edit/note_resolve/note_reopen each read and write <map>.notes.ron through bevy_grimoire_core::notes (path_for_map), inverse = same op with a `restore` of the whole Notes (only_as_undo), state = the Notes value; grimoire_state gains notes (open with targets, resolved with ops and summary). 2026-10-28: moved to #89 (write a note) and #90 (list, history, send)."
+    },
+    {
+     "id": "S4.3",
+     "title": "The construction sign: one per open note, above its targets, gone when resolved",
+     "status": "open",
+     "evidence": "2026-10-28: moved to #89 (the sign)."
+    },
+    {
+     "id": "S4.4",
+     "title": "The person's side: select tiles or meshes and leave a note; click a sign to read and edit it; a list of open and resolved notes",
+     "status": "open",
+     "evidence": "2026-10-28: moved to #89, #90 and #93 (the person side)."
+    },
+    {
+     "id": "S4.5",
+     "title": "End to end on Sanctuary's town: a person's note, an agent's fix over MCP, the sign gone and the change on screen, captured",
+     "status": "open",
+     "evidence": "2026-10-28: moved to #95 (end to end)."
+    }
+   ]
+  },
+  {
+   "id": "S-005",
+   "kind": "series",
+   "area": "live",
+   "title": "Hot reload: every file the editor writes reaches a running program by a declared path",
+   "goal": "A new kind of file cannot ship without a declared reload class, every editor write is atomic, a bad file never replaces a good state, runtime state keeps its identity across a reload, and the editor shows each file's reload state",
+   "approved_by": "owner 2026-10-31",
+   "acceptance": [
+    "docs/guide/reload-contract.md lists every kind the editor writes, with class and lifetime",
+    "every_written_kind_has_a_reload_class and the_restart_list_only_shrinks fail when a kind is added without a class or to Restart without the list",
+    "every editor write is atomic",
+    "a reload that does not parse keeps the last good state and reports a verdict per kind",
+    "the editor shows each file's reload state"
+   ],
+   "status": "open",
+   "evidence": "Issues #198 to #204, labelled owner and hot-reload; the focus puts them first (437eece, d8f9566). H1 (pass 164, 2026-10-31, closed #198): core reload::KINDS (33 kinds, class and lifetime), Operation::writes on all 70 impls, docs/guide/reload-contract.md, core tests/reload_contract.rs and mapper tests/reload_contract.rs. H2 (pass 165, 2026-10-31, closed #199): bevy_grimoire_core::atomic_file is the one write path (unique hidden temp beside the target, flushed, renamed, directory flushed); 19 plain writes moved onto it; core tests/atomic_writes.rs, atomic_file_contract.rs and the ratchet atomic_writes_only.rs. H3 slice 1 (pass 166, 2026-10-31, #200 stays open): core reload_check::check parses a file as its kind (18 of 33 kinds) and names the file and the field (serde_path_to_error, only after a refusal); Verdict v2 adds seq and per-file kinds (applied or refused); project_data::verdicts gives one entry per file the game's load reads; the game writes one verdict per edit; grimoire_state.game and the journal carry them. Tests: core tests/reload_verdicts.rs, bevy_grimoire tests/live_verdicts.rs, mapper tests/the_games_per_file_verdicts_reach_grimoire_state.rs. H3 slice 2 (pass 167, 2026-10-31, #200 stays open): core WaterPlan/WaterField/Volume/DataFiles::parse and reload_check::check reads water_plan, water_field, volume and data_registry (22 of 33 kinds; the unchecked ratchet 15 -> 11); mapper live::EditorReloads and grimoire_state.reloads; terrain_view holds the last good Heightfield, WaterField and Volume in memory, decides each file once per edit, leaves the drawing alone on a refusal. Tests: mapper tests/a_refused_terrain_file_keeps_the_last_good_drawing.rs, core tests/reload_verdicts.rs. H3 slice 3 (pass 168, 2026-11-01, c05f917, #200 stays open): a forest, people or triggers file that does not parse is refused by forest_scatter, person_set, trigger_set, people_run and the trigger compile, naming the file and the field, and is never overwritten (it used to count as no file and the next write dropped every other row); core reload_check::read and Refusal::sentence, mapper map_files::read_or_empty and READ_HERE (forest, people, scripts), the forest view decides its file once per edit into EditorReloads. Tests: mapper tests/a_file_that_does_not_read_is_never_overwritten.rs (STILL_UNCHECKED ratchet, 8 kinds). H3 slice 4 (pass 169, 2026-11-01, 0b3a0c9, #200 stays open): a tree file that does not read keeps the trees drawn from its last good value (forest_view HeldTree/decide_tree/Verdicts: the view holds the last good TreeParams per .tree.ron, decides each file once per edit, redraws nothing on a refusal, reports kind trees with the file and the field in EditorReloads, one decision per look); tree_edit set over an unreadable file is refused naming the file and the field (map_files::read_text, READ_HERE gains trees); core reload_check::field_of names an unknown field once (it said undergrow.undergrow). Tests: mapper tests/a_refused_tree_file_keeps_the_last_good_tree.rs, the trees case of a_file_that_does_not_read_is_never_overwritten.rs (STILL_UNCHECKED ratchet 8 -> 7), core tests/an_unknown_field_is_named_once.rs. H3 slice 5 (pass 170, 2026-11-01, 20872c1, #200 stays open): a notes file that does not read keeps the notes the signs and the Notes panel show (mapper notes_view::NotesView and sync_notes_view hold the last good Notes, decide each edit once into EditorReloads as kind notes with the file and the field; draw_notes and refresh_notes_list read the view; NotesView is Ownership::Project in screen::OWNERSHIP); family_host::reload_settings reports kind family (applied, refused, gone) per poll, naming family/<crate>.ron under the game root; EditorReloads::forget_file. Tests: mapper tests/a_refused_notes_file_keeps_the_last_good_notes.rs (2) and tests/family_settings_verdicts.rs. Still to do in #200: a reader that names the file and the field for the 7 kinds nothing reads yet (checks in the decision crate; family settings (the crate's own type); oplog, reference_images, destructible_*, game_data have no RON type here), H3 slice 6 (pass 171, 2026-11-01, #200 stays open): the third outcome. core Outcome::NeedsRestart (word needs_restart) and KindVerdict::needs_restart (a breaking change: bevy_grimoire_core 0.3.0); mapper anim_watch::sync_rigs_reload compares rigs.ron with the text the animation tab holds (BenchState.text) and decides each distinct (disk, held) pair once into EditorReloads as kind rigs: needs_restart when it reads, refused with the file and the field when it does not, needs_restart when it is gone; the tab's own writes agree and say nothing; an edit put back, or a door change (BenchState is the door's), clears the verdict; a manifest that did not read at load says no rigs are loaded from it. Tests: core tests/a_restart_verdict_says_so.rs, mapper tests/a_rigs_edit_says_what_became_of_it.rs (5). Still to do in #200: a reader that names the file and the field for the 7 kinds nothing reads yet (checks in the decision crate; family settings (the crate's own type); oplog, reference_images, destructible_*, game_data have no RON type here), the settings-struct refusal rule (build step 5). Next ready: #200 (H3 slice 7), #202 (H5), #204 (H7). H3 slice 7 (pass 172, 2026-11-01, #200 stays open): build step 5, the settings-struct refusal rule. core tests/old_data/ freezes one file of each of the 22 kinds reload_check::check reads as a release wrote it (core-0.1.0/: 8 project files byte for byte from tag bevy_emerge_core-v0.1.0; core-0.3.0/: 16 files for the kinds the first release had no sample of, one element in every collection) and tests/old_data.rs reads each with the type's own reader, refusing an edit that breaks one by naming kind, file, field and release; a floor stops a file being dropped, a second test keeps every checked kind covered. Failed before: with a required review_m added to Standards, reload_verdicts passes (8) and old_data fails at field review_m. Slice 8 (pass 173, 2026-11-01, #200 stays open): checks. mapper checks_view::ChecksView holds the last good Checks (the editor's with the project's over them), sync_checks_view (AfterEditPlugin, every door) decides each edit once into grimoire_state.reloads as kind checks (applied or refused with file and field; a broken rule or an unreadable file has no one field), and after_edit asks checks_view::checks_for so a refused edit leaves the checks running; map_files::WATCHED_HERE is the new list of kinds a watcher here reads, STILL_UNCHECKED 7 -> 6. mapper tests/a_refused_checks_file_keeps_the_last_good_checks.rs (6 tests) fail with the watcher unregistered (never saw: the good file applied) and pass with it. Still to do in #200: a reader that names the file and the field for the 6 kinds nothing reads yet (oplog, reference_images, family, destructible_marks, destructible_bake, game_data). Slice 9 (pass 174, 2026-11-01, #200 stays open): oplog. core reload_check::read_lines names the first damaged line of a JSON-lines file as `line N.<path>` (or `line N`), counts the rest and reads as serde_json::from_str does (trailing text is damage); mapper oplog_view::sync_oplog_view (AfterEditPlugin, every door; looks by size and modification time and once a second, parsing only changed text) decides into grimoire_state.reloads as kind oplog only when what it found differs from the look before, so an append to a log that reads is no verdict; ops::undo_target reads the log with the same reader and names file, line and field. 28 of 33 kinds have a named refusal; 5 remain on the ratchet (reference_images, family, destructible_marks, destructible_bake, game_data). Failed before: at base with only the new test file, 4 of 4 fail with `never saw: the log applied`; after, mapper tests/a_damaged_oplog_line_is_named_and_the_rest_still_reads.rs 4/4, core tests/a_json_lines_file_names_its_damaged_line_and_field.rs 7/7, the whole editor binary 915/915. Found, not fixed: ops::append glues the next line to a torn last line that has no newline. Released bevy_grimoire_core 0.3.1 (read_lines). Slice 10 (pass 175, 2026-11-01, #200 stays open): game_data. core data_files::read (the one reader: scan + ron::Value, refusing with a Refusal naming the file and the leaf where a cut-off file stopped) and data_files::check (every leaf the registry bounds must be there, a number and inside its bounds, refused by its path); mapper data_view::sync_data_view (AfterEditPlugin, every door) decides into grimoire_state.reloads kind game_data per file (refused with file/leaf/reason; needs_restart when an edit leaves a file that reads as other text than it first read; applied when back to that text; a file first seen reading is a baseline kept across a refused registry) and kind data_registry; data_set over a file that does not scan refuses naming file and leaf. STILL_UNCHECKED 5 to 4. Proof: core tests/a_data_file_names_its_leaf_and_field.rs (8) and mapper tests/a_game_data_file_that_does_not_read_is_named.rs (6) fail on the base (never saw: the registry refused; core does not compile) and pass. Still to do in #200: a reader that names the file and the field for the 4 kinds nothing reads yet (reference_images, family, destructible_marks, destructible_bake); destructible_* sit behind the bevy_carnage feature, which the push gate does not build, so run clippy and the editor binary with that feature on big first. Found, outside the series: #205 (shared fixture tag) and #206 (ops::append glues onto a torn last line) wait under the override. Slice 11 (pass 176, 2026-11-01, #200 stays open): destructible_marks and destructible_bake. core destructible::{Marks, Chunk, Bake} (moved from the mapper's ops_destructible) and reload_check::check reads both (24 of 33 kinds; core's unchecked ratchet 11 -> 9); mapper map_files::read_named; load_marks and read_bake refuse a file that does not read with its path and field and write nothing (a stale bake is still baked again; taking a mark off reads no bake); STILL_UNCHECKED 4 -> 2; core tests/old_data.rs freezes two real files (editor-3f4084c/). Proof: with only the new test files applied to the base, core did not compile and 4 of the 8 selected mapper tests failed (3 of the 4 new ones and the ratchet); after, core whole, the whole editor binary with --features bevy_carnage 928/928, clippy clean with the feature. Released bevy_grimoire_core 0.3.3. Still to do in #200: reference_images (image bytes) and family (the crate's own type). Slice 12 (pass 177, 2026-11-01, closes #200): reference_images and family. core image_header::read (PNG, JPEG, GIF, WebP headers, no image crate; refusals name signature, format, header, width, height, extension), the editor's reference_view::sync_reference_view (the open map's pictures, one verdict per edit, kind reference_images) and family_host::read_as (a settings file is read as ElementsSettings or GooeySkin before it is taken: refused naming family/<crate>.ron and the field, never reaches FamilySettings; settle_refused says only the return the watch cannot see). All 33 kinds now name their file and field; the mapper's STILL_UNCHECKED is empty. core tests/a_reference_image_names_its_field.rs (5) and mapper tests/a_reference_image_that_does_not_read_is_named.rs (4) fail on the base (core does not compile; never saw the verdict) and pass; tests/family_settings_typed_verdicts.rs (3) needs --features bevy_elements,bevy_gooey (not built by the push gate) and, with them, three existing tests whose fixture is not an ElementsSettings now fail like family_settings_reload did (#152, fixture text in protected files). Gate 637 s on big; core 0.3.4 released. #201 and #203 are ready, #202 and #204 were. H4 slice 1 (pass 178, 2026-11-01, #201 stays open): core live::diff_maps_renaming and MapDiff::renamed (a rename found by content, unambiguous pairs only, in rounds so riders on a renamed host follow; diff_maps unchanged), live::same_but_id; the game's plan keeps a renamed placement's entity and retags its Placement; tests core live_diff_renames.rs (9) and game live_identity.rs (6, counts spawns). Acceptance 2-4 met for placements; item 1 (a society's people keep position and ties) and a rename together with an edit or a renamed map (an explicit alias) are open. Assumed decision on #201: content inference over a schema alias. H4 slice 2 (pass 179, 2026-11-01, #201 stays open): bevy_grimoire::live::GrimoireLiveApp (carry_across_respawn::<C>, migrate_on_respawn), one hook per kind of state run once per piece a reload draws again (a rider drawn again with its host, a piece renamed and drawn again), after the new entity is spawned and before the old is despawned; test game live_migrate.rs (6, the file did not compile before); bevy_grimoire 0.2.1. Build step 5 (a move keeps the entity, updated in place) is blocked on an owner decision: live_reload.rs::an_edit_respawns_only_what_changed pins that a moved placement is respawned and a loop cannot change an existing assertion; recommendation is on #201. Still open on #201: that split, the explicit alias (a rename plus an edit, a renamed map) and people. H4 slice 3 (pass 180, 2026-11-01, #201 stays open): bevy_grimoire::live::GrimoireLiveApp::follow_respawn::<C>(|c, respawned| ...) and live::Respawned::follow, so what points at a piece (a person's Home(entity), a list of bound places) follows it when a reload draws it again, run once per reload after the per-piece hooks, a component marked changed only when something moved; a closure and not MapEntities because a game cannot implement that for another crate's component; test game live_references.rs (4, did not compile before); bevy_grimoire 0.3.0 (a required trait method is a semver-major change). Item 1 (a society's people) is shown with stand-in components: an edit to an unrelated piece leaves every person, tie and home alone, and moving a house gives its tenant the new entity; no bevy_society run in this repository. Still open on #201: the in-place split (owner), the explicit alias and a society that runs inside the editor.",
+   "last_failure": "",
+   "first_seen": "2026-10-31",
+   "steps": [
+    {
+     "id": "H1",
+     "title": "One reload contract for every file the editor writes, and a ratchet test",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/198"
+    },
+    {
+     "id": "H2",
+     "title": "Every editor write is atomic",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/199"
+    },
+    {
+     "id": "H3",
+     "title": "Last good wins on every kind, and every reload reports a verdict",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/200"
+    },
+    {
+     "id": "H4",
+     "title": "Runtime state keeps its identity across a reload",
+     "status": "open",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/201"
+    },
+    {
+     "id": "H5",
+     "title": "Move gameplay behaviour into data and scripts, so the restart list shrinks",
+     "status": "open",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/202"
+    },
+    {
+     "id": "H6",
+     "title": "The editor shows each file's reload state",
+     "status": "fixed",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/203"
+    },
+    {
+     "id": "H7",
+     "title": "A spike: Bevy's asset system against the custom watcher, for one file kind",
+     "status": "open",
+     "issue": "https://github.com/bevy-coven/bevy_grimoire/issues/204"
+    }
+   ]
+  }
+ ]
 }
