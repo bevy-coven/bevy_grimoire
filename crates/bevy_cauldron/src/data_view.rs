@@ -1,18 +1,18 @@
 //! **A game's data files, as the editor looks at them** (#200, H3).
 //!
 //! `<grimoire dir>/data.ron` registers the tuning files a game owns (`data_files`), and the Data panel
-//! and `data_set` read them. This repository ships no reader that applies them: the registry classes
-//! them `Restart`, a running game uses an edit only if it re-reads its data. So the editor owes the
-//! author two things, and neither used to be said: that a hand edit which no longer reads (a cut-off
-//! save, a bounded leaf that became a word) left the panel with no rows and nothing to say why, and that
-//! an edit which does read has not reached a running game.
+//! and `data_set` read them. A game follows them with
+//! `bevy_grimoire::live::GrimoireLiveApp::reload_data_file` (#263), and the registry classes the kind
+//! `Live`. So the editor owes the author two things, and neither used to be said: that a hand edit which
+//! no longer reads (a cut-off save, a bounded leaf that became a word) left the panel with no rows and
+//! nothing to say why, and whether an edit which does read is one the game can take.
 //!
 //! One system looks at the registry and every file it lists when one of them moved, or once a second,
 //! and decides into `grimoire_state.reloads`:
 //!
 //! - kind `game_data`, per file: `refused` with the file, the leaf and why when it does not pass
-//!   [`data_files::check`] (or is registered and gone), and `needs_restart` when an edit leaves a file
-//!   that reads;
+//!   [`data_files::check`] (or is registered and gone), and `applied` when an edit leaves a file that
+//!   reads (the game's own reader says in its own verdict whether it took it);
 //! - kind `data_registry`: `applied` when an edit leaves a registry that reads, `refused` with the field
 //!   when it does not (the same reader `data_set` uses).
 //!
@@ -162,8 +162,7 @@ pub fn sync_data_view(
         let verdict = match look {
             Look::Reads(hash) if *kind == "game_data" => {
                 // The text the editor first saw reading is what a game started with, as far as it can
-                // tell, and it is the one a file can come back to: a net-zero edit leaves nothing waiting.
-                // A file first seen refused has no baseline, so what mends it is news.
+                // tell. A file first seen refused has no baseline, so what mends it is news.
                 match (view.baseline.get(file).copied(), before) {
                     (None, None) => {
                         view.baseline.insert(file.clone(), *hash);
@@ -171,12 +170,9 @@ pub fn sync_data_view(
                     }
                     // A file registered again unchanged: nothing is waiting.
                     (Some(b), None) if b == *hash => continue,
-                    (Some(b), Some(_)) if b == *hash => KindVerdict::applied(*kind, file.clone()),
-                    _ => KindVerdict::needs_restart(
-                        *kind,
-                        file.clone(),
-                        "reads, and the editor uses it at once (the Data panel, `data_set`); this repository ships no reader that applies it to a running game, which uses it only if it re-reads its data, and otherwise at its next start",
-                    ),
+                    // Any other change that reads is an edit the game can take, whoever made it: the
+                    // game's own reader (`reload_data_file`) says in its verdict whether it did.
+                    _ => KindVerdict::applied(*kind, file.clone()),
                 }
             }
             // A registry seen reading for the first time is a baseline too.

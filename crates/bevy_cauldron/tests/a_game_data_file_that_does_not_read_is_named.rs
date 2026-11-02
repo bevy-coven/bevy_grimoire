@@ -1,12 +1,12 @@
 //! **A game's data file that no longer reads is refused naming the file and the leaf, once per edit, and
-//! one that does read says a running game has not got it** (#200, H3).
+//! one that does read is applied** (#200, H3; the `game_data` re-pin of #263).
 //!
 //! `<grimoire dir>/data.ron` registers the tuning files a game owns and bounds the leaves the editor
-//! tunes. Nothing here applies them to a running game (the registry classes them `Restart`), so a hand
-//! edit that stopped reading used to cost the Data panel its rows with no word, and one that did read
-//! was never said to be waiting for a restart. One look at the registry and its files now decides into
-//! `grimoire_state.reloads`: `game_data` per file (`refused` with the file and the leaf, or
-//! `needs_restart`) and `data_registry` (`applied`, or `refused` with the field).
+//! tunes. A game follows them with `GrimoireLiveApp::reload_data_file` (the registry classes them
+//! `Live`), so a hand edit that stopped reading used to cost the Data panel its rows with no word. One
+//! look at the registry and its files now decides into `grimoire_state.reloads`: `game_data` per file
+//! (`refused` with the file and the leaf, or `applied`) and `data_registry` (`applied`, or `refused`
+//! with the field).
 
 use std::time::{Duration, Instant};
 
@@ -149,7 +149,7 @@ fn a_file_that_does_not_read_is_named_once_per_edit_and_the_bytes_stay() {
     write(&ctx, "mob.ron", BAD[0].1);
     until(&mut app, "the file refused again", |a| verdict(a, "game_data")["outcome"] == json!("refused"));
     write(&ctx, "mob.ron", &GOOD.replace("1.50", "2.50"));
-    until(&mut app, "the mended file reads as other text", |a| verdict(a, "game_data")["outcome"] == json!("needs_restart"));
+    until(&mut app, "the mended file reads as other text", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 
     // A data edit over a file that does not scan names the file and the leaf and leaves the bytes.
     write(&ctx, "mob.ron", BAD[0].1);
@@ -174,10 +174,9 @@ fn a_leaf_outside_its_bounds_is_refused_by_its_path_and_the_range() {
 }
 
 /// An edit of a file that reads is one decision, whoever made it: a person in an editor, or `data_set`.
-/// What the file says is judged against the text first seen reading, so a net-zero edit leaves nothing
-/// waiting.
+/// It is `applied`: the game's own reader takes it (`reload_data_file`).
 #[test]
-fn an_edit_of_a_file_that_reads_is_one_needs_restart_and_the_registry_one_applied() {
+fn an_edit_of_a_file_that_reads_is_one_applied_decision_and_the_registry_one_applied() {
     let (mut app, mut ctx) = project("data_view_edit");
     let file = named(&ctx, "mob.ron");
     // The first logged operation creates the log, and the log's own verdict is one decision of its own:
@@ -191,11 +190,11 @@ fn an_edit_of_a_file_that_reads_is_one_needs_restart_and_the_registry_one_applie
     let before = seq(&mut app);
 
     write(&ctx, "mob.ron", "// tuning\n(mob: (speed: 2.50, name: \"orc\", hp: 7), fast: false)\n");
-    until(&mut app, "the hand edit decided", |a| verdict(a, "game_data")["outcome"] == json!("needs_restart"));
+    until(&mut app, "the hand edit decided", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
     let v = verdict(&mut app, "game_data");
     assert_eq!(v["file"], json!(file), "{v}");
-    assert!(v["reason"].as_str().unwrap().contains("next start"), "the reason says what a running game does: {v}");
-    assert_eq!(reloads(&mut app)["ok"], json!(false), "an edit that did not land in the game is not ok");
+    assert_eq!(v["field"], Value::Null, "a file that reads has no leaf it is wrong at: {v}");
+    assert_eq!(reloads(&mut app)["ok"], json!(true), "an edit the game takes is ok");
     assert_eq!(seq(&mut app), before + 1);
     pump(&mut app, 0.4);
     assert_eq!(seq(&mut app), before + 1, "frames without an edit decide nothing");
@@ -212,12 +211,14 @@ fn an_edit_of_a_file_that_reads_is_one_needs_restart_and_the_registry_one_applie
     write(&ctx, "data.ron", &REGISTRY.replace("max: 9.0", "max: 20.0"));
     until(&mut app, "the registry edit decided", |a| verdict(a, "data_registry")["outcome"] == json!("applied"));
     assert_eq!(verdict(&mut app, "data_registry")["file"], json!(named(&ctx, "data.ron")));
-    assert_eq!(verdict(&mut app, "game_data")["outcome"], json!("needs_restart"), "the file's own verdict stands");
+    assert_eq!(verdict(&mut app, "game_data")["outcome"], json!("applied"), "the file's own verdict stands");
 
-    // Back to the text it was first seen with: nothing is waiting any more.
+    // Back to the text it was first seen with: that is one more edit, taken the same way.
+    let before_back = seq(&mut app);
     write(&ctx, "mob.ron", GOOD);
-    until(&mut app, "the file back to its first text", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
-    assert_eq!(reloads(&mut app)["ok"], json!(true), "a net-zero edit leaves nothing for a restart");
+    until(&mut app, "the file back to its first text decided", |a| seq(a) > before_back);
+    assert_eq!(verdict(&mut app, "game_data")["outcome"], json!("applied"));
+    assert_eq!(reloads(&mut app)["ok"], json!(true));
 }
 
 /// A registry that does not read is refused with its field and the files it listed are no longer said
@@ -262,7 +263,7 @@ fn an_edit_made_while_the_registry_was_broken_is_said_when_it_reads_again() {
     write(&ctx, "mob.ron", "// tuning\n(mob: (speed: 2.50, name: \"orc\", hp: 7), fast: false)\n");
     pump(&mut app, 0.4);
     write(&ctx, "data.ron", REGISTRY);
-    until(&mut app, "the edit made meanwhile said", |a| verdict(a, "game_data")["outcome"] == json!("needs_restart"));
+    until(&mut app, "the edit made meanwhile said", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 }
 
 /// A file first seen refused has no first text, so what mends it is news, even if it is the text it was.
@@ -273,5 +274,5 @@ fn a_file_first_seen_refused_is_said_when_it_is_mended() {
     write(&ctx, "data.ron", REGISTRY);
     until(&mut app, "refused at open", |a| verdict(a, "game_data")["outcome"] == json!("refused"));
     write(&ctx, "mob.ron", GOOD);
-    until(&mut app, "mended", |a| verdict(a, "game_data")["outcome"] == json!("needs_restart"));
+    until(&mut app, "mended", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 }

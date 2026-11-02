@@ -212,8 +212,8 @@ pub const KINDS: &[FileKind] = &[
     kind("destructible_bake", Root, "destructible/<name>.bake.ron", "a baked fracture", Live, Global,
         "`destructible_set` and `destructible_hit` (only in a build with the carnage feature)",
         "A cache the next hit rebuilds when it is absent or stale (another mesh or other cut settings). A file that does not read at all is refused, naming the file and the field, and is left as it is: remove it to bake afresh."),
-    kind("game_data", Root, "", "the game's own RON", Restart, Global, "",
-        "Written by `data_set` into files the game owns. This repository ships no reader that applies them, so a running game is restarted unless it re-reads them itself. The editor looks at each file `data.ron` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `needs_restart` when an edit leaves one that reads as other text than it first read, `applied` when it is back to that text."),
+    kind("game_data", Root, "", "the game's own RON", Live, Global, "",
+        "Written by `data_set` into files the game owns, and followed by a running game that registers a reader for one (`bevy_grimoire::live::GrimoireLiveApp::reload_data_file`): about a second after the file's last write it is checked against its `data.ron` entry and handed to the game's own parse, and the game's verdict (`.live/game.ron`) says `applied`, or `refused` with the file and the leaf and the old value kept. The editor looks at each file `data.ron` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `applied` when it does."),
 ];
 
 /// **The kind with this id.**
@@ -441,6 +441,10 @@ mod tests {
         assert_eq!(by("family"), Reload::InPlace);
         assert_eq!(by("map"), Reload::Respawn);
         assert_eq!(by("rigs"), Reload::InPlace);
-        assert_eq!(by("game_data"), Reload::NeedsRestart);
+        assert_eq!(by("game_data"), Reload::InPlace);
+        // No kind is `Restart` any more (#263), so the mapping is pinned on a row of its own.
+        let held = kind("held", Grimoire, "held.ron", "Held", Restart, Global, "", "");
+        assert_eq!(reload_for(&held, true), Reload::NeedsRestart);
+        assert_eq!(reload_for(&held, false), Reload::NotLoaded);
     }
 }
