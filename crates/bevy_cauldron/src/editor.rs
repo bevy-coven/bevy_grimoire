@@ -16905,7 +16905,15 @@ fn flood_from_cursor(
         return;
     };
     let (cam, cam_tf) = *camera;
+    // **A fill with the pointer off the map says so** (UI-37, #231). Both front ends reach here — `F`
+    // and the toolbar's Fill button — and with the pointer over a panel or on a button neither of them
+    // has a ground point to flood from. The silence was indistinguishable from a key that is not bound
+    // or a button that does nothing: the same defect `build.rs` records as *"an arrow that answers
+    // nothing at all"*, and the note names the gesture that does work.
     let Some(hit) = cursor_ground(pointer.0, cam, cam_tf) else {
+        state.status.note(
+            "a fill starts from the map: put the pointer over the ground, then press F".to_owned(),
+        );
         return;
     };
     // Said rather than silent: `F` with nothing armed used to be indistinguishable from `F` not being
