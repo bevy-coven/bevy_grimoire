@@ -18,10 +18,12 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use bevy::ecs::component::Mutable;
 use bevy::prelude::*;
-use bevy_grimoire_core::live::{FileWatch, MapDiff, Verdict, diff_maps_renaming, same_but_id};
+use bevy_grimoire_core::data_files::{self, DataFiles};
+use bevy_grimoire_core::live::{FileWatch, KindVerdict, MapDiff, Outcome, Verdict, diff_maps_renaming, same_but_id};
 use bevy_grimoire_core::map::Map;
 use bevy_grimoire_core::project_data::{self, ProjectData};
 
@@ -138,12 +140,48 @@ pub trait GrimoireLiveApp {
         &mut self,
         follow: impl Fn(&mut C, &Respawned) + Send + Sync + 'static,
     ) -> &mut Self;
+
+    /// **Re-read one of the game's own data files when it changes** (#263). A game keeps tuning numbers in
+    /// RON files of its own types and lists them in `data.ron` (`bevy_grimoire_core::data_files`); `id` is
+    /// the entry's id there (`tuning/mob`). About a second after the file's last write, the file is checked
+    /// against its entry (it must read, and every leaf the entry bounds must be there, a number and in
+    /// range) and then handed to `apply(world, text)`, which is the game's own parse: it replaces the
+    /// game's value and returns `Err(reason)` for a file its type does not take. Either refusal keeps the
+    /// value the game had and is the game's verdict for that file (`.live/game.ron`, kind `game_data`,
+    /// the file as `data.ron` names it, the leaf when there is one); a file that reads is `applied`.
+    ///
+    /// ```ignore
+    /// app.reload_data_file("tuning/mob", |world, text| {
+    ///     let tuning: MobTuning = ron::from_str(text).map_err(|e| e.to_string())?;
+    ///     world.insert_resource(tuning);
+    ///     Ok(())
+    /// });
+    /// ```
+    ///
+    /// The game loads the file itself when it starts, and registers its reader before the first frame:
+    /// the first frame's look at the file is the baseline and decides nothing. A registry that is absent
+    /// or does not list `id` is no data to follow, and nothing is decided.
+    fn reload_data_file(
+        &mut self,
+        id: &str,
+        apply: impl Fn(&mut World, &str) -> Result<(), String> + Send + Sync + 'static,
+    ) -> &mut Self;
 }
 
 impl GrimoireLiveApp for App {
     fn migrate_on_respawn(&mut self, migrate: impl Fn(&mut World, Entity, Entity) + Send + Sync + 'static) -> &mut Self {
         self.init_resource::<ReloadMigrations>();
         self.world_mut().resource_mut::<ReloadMigrations>().pieces.push(Arc::new(migrate));
+        self
+    }
+
+    fn reload_data_file(
+        &mut self,
+        id: &str,
+        apply: impl Fn(&mut World, &str) -> Result<(), String> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.init_resource::<DataReaders>();
+        self.world_mut().resource_mut::<DataReaders>().readers.push(DataReader { id: id.to_owned(), apply: Arc::new(apply), seen: None, pending: None });
         self
     }
 
@@ -188,7 +226,8 @@ impl Plugin for GrimoireLivePlugin {
                 last,
                 seq: 0,
             })
-            .add_systems(Update, reload);
+            .init_resource::<DataReaders>()
+            .add_systems(Update, (reload, reload_data));
     }
 }
 
@@ -268,13 +307,131 @@ fn map_names(live: &Live, current: &GrimoireWorld) -> Vec<String> {
     names
 }
 
+/// The kind a game's own data file's verdict carries (`bevy_grimoire_core::reload::KINDS`).
+const DATA_KIND: &str = "game_data";
+
+/// **The data files' last verdicts**, read back from the file the game last wrote: a project reload
+/// rewrites the whole decision, and must not forget what the data files said.
+fn carried_data_kinds(dir: &std::path::Path) -> Vec<KindVerdict> {
+    Verdict::read(dir)
+        .ok()
+        .flatten()
+        .map(|v| v.kinds.into_iter().filter(|k| k.kind == DATA_KIND).collect())
+        .unwrap_or_default()
+}
+
 /// **Write the decision on this edit**, once: the per-file verdicts (every file the load reads, with
-/// the field of each one it refused) and the message, under the next sequence number.
+/// the field of each one it refused, and the data files' last verdicts) and the message, under the next
+/// sequence number.
 fn decide(live: &mut Live, names: &[String], error: Option<&str>, message: String) {
     live.seq += 1;
     let names: Vec<&str> = names.iter().map(String::as_str).collect();
-    let kinds = project_data::verdicts(&live.dir, &names, error);
+    let mut kinds = project_data::verdicts(&live.dir, &names, error);
+    kinds.extend(carried_data_kinds(&live.dir));
     if let Err(e) = Verdict::with_kinds(live.seq, message, kinds).write(&live.dir) {
+        warn!("grimoire live: could not write the verdict: {e}");
+    }
+}
+
+/// A data file's last look: its modification time and size, `None` when it is not there.
+type DataStat = Option<(SystemTime, u64)>;
+
+/// Seconds between looks at the registered data files, and how long a changed file must stay as it is
+/// before it is read (an editor's own write is atomic, but a hand edit need not be).
+const DATA_POLL_SECS: f64 = 0.5;
+const DATA_SETTLE_SECS: f64 = 0.5;
+
+/// The game's parse of one data file of its own: replace its value, or refuse with a reason.
+type DataApply = Arc<dyn Fn(&mut World, &str) -> Result<(), String> + Send + Sync>;
+
+/// One registered data file and what the watch knows of it.
+struct DataReader {
+    id: String,
+    apply: DataApply,
+    /// What the file was when it was last decided about, or first seen (the baseline). `None` until the
+    /// first look.
+    seen: Option<DataStat>,
+    /// A change that has not yet held still for [`DATA_SETTLE_SECS`], and when it was first seen.
+    pending: Option<(DataStat, f64)>,
+}
+
+/// The data files a game asked to follow ([`GrimoireLiveApp::reload_data_file`]).
+#[derive(Resource, Default)]
+struct DataReaders {
+    readers: Vec<DataReader>,
+    last_poll: Option<f64>,
+}
+
+/// **Follow the game's registered data files** (#263): look at each twice a second, and when one has
+/// changed and held still, check it against its `data.ron` entry, hand it to the game's reader and write
+/// the decision. An exclusive system, because the reader takes the whole `World`.
+fn reload_data(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs_f64();
+    let Some(mut readers) = world.remove_resource::<DataReaders>() else { return };
+    if !readers.readers.is_empty() && readers.last_poll.is_none_or(|last| now - last >= DATA_POLL_SECS) {
+        readers.last_poll = Some(now);
+        follow_data_files(world, &mut readers, now);
+    }
+    world.insert_resource(readers);
+}
+
+fn follow_data_files(world: &mut World, readers: &mut DataReaders, now: f64) {
+    let Some(dir) = world.get_resource::<Live>().map(|live| live.dir.clone()) else { return };
+    // No registry, or one that does not read, is no data to follow: the editor says what is wrong with it.
+    let Ok(Some(registry)) = DataFiles::load(&dir) else { return };
+    let mut verdicts: Vec<KindVerdict> = Vec::new();
+    for reader in &mut readers.readers {
+        let Some(entry) = registry.get(&reader.id) else { continue };
+        let path = registry.resolve(entry);
+        let stat: DataStat = std::fs::metadata(&path).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
+        let Some(seen) = reader.seen else {
+            reader.seen = Some(stat);
+            continue;
+        };
+        if seen == stat {
+            reader.pending = None;
+            continue;
+        }
+        match reader.pending {
+            Some((pending, since)) if pending == stat => {
+                if now - since < DATA_SETTLE_SECS {
+                    continue;
+                }
+            }
+            _ => {
+                reader.pending = Some((stat, now));
+                continue;
+            }
+        }
+        reader.pending = None;
+        reader.seen = Some(stat);
+        let file = entry.path.clone();
+        verdicts.push(match std::fs::read_to_string(&path) {
+            Err(e) => KindVerdict::refused(DATA_KIND, file, None, format!("cannot read it: {e}")),
+            Ok(text) => match data_files::check(&file, entry, &text) {
+                Err(r) => KindVerdict::refused(r.kind, r.file, r.field, r.reason),
+                Ok(()) => match (reader.apply.clone())(world, &text) {
+                    Ok(()) => KindVerdict::applied(DATA_KIND, file),
+                    Err(reason) => KindVerdict::refused(DATA_KIND, file, None, reason),
+                },
+            },
+        });
+    }
+    if verdicts.is_empty() {
+        return;
+    }
+    let Some(mut live) = world.get_resource_mut::<Live>() else { return };
+    live.seq += 1;
+    let seq = live.seq;
+    let mut kinds = Verdict::read(&dir).ok().flatten().map(|v| v.kinds).unwrap_or_default();
+    kinds.retain(|k| !verdicts.iter().any(|v| v.kind == k.kind && v.file == k.file));
+    let message = verdicts
+        .iter()
+        .map(|v| if v.outcome == Outcome::Applied { format!("{}: applied", v.file) } else { v.sentence() })
+        .collect::<Vec<_>>()
+        .join("; ");
+    kinds.extend(verdicts);
+    if let Err(e) = Verdict::with_kinds(seq, message, kinds).write(&dir) {
         warn!("grimoire live: could not write the verdict: {e}");
     }
 }
