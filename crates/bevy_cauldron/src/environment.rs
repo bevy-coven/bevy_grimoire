@@ -223,6 +223,25 @@ pub fn dress_volume(
     }
 }
 
+/// **Keep the weathered carved-ground pipeline compiled** (#268), as
+/// [`crate::terrain_view::warm_volume_pipeline`] does the plain one: the first carve of a project with
+/// a `family/bevy_elements.ron` drew nothing for 0.5 s while `WeatheredMaterial`'s pipeline compiled.
+/// Does nothing without `bevy_elements`' material store.
+pub fn warm_weathered_pipeline(
+    mut commands: Commands,
+    weathered: Option<ResMut<Assets<WeatheredMaterial>>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    let Some(mut weathered) = weathered else { return };
+    commands.spawn((
+        crate::terrain_view::PipelineWarm,
+        bevy::camera::visibility::NoFrustumCulling,
+        Mesh3d(meshes.add(crate::terrain_view::warm_mesh())),
+        MeshMaterial3d(weathered.add(WeatheredMaterial { base: crate::terrain_view::volume_base(), extension: WeatheredExtension::default() })),
+        Transform::from_translation(crate::terrain_view::WARM_AT),
+    ));
+}
+
 /// **The clock scrubber** (#98): camera-style state, not an operation. `Some(hour)` holds the
 /// preview's clock at that hour of day without touching `family/bevy_elements.ron`, so scrubbing
 /// writes no file and leaves no undo step; `None` lets the file's clock run.

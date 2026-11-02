@@ -2260,6 +2260,9 @@ pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(OnEnter(crate::screen::Screen::Editor), crate::terrain_view::warm_volume_pipeline);
+        #[cfg(feature = "bevy_elements")]
+        app.add_systems(OnEnter(crate::screen::Screen::Editor), crate::environment::warm_weathered_pipeline);
         #[cfg(feature = "bevy_elements")]
         app.init_resource::<crate::environment::ClockScrub>().add_systems(
             Update,
