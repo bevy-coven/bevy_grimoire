@@ -221,23 +221,30 @@ impl SettingsLayer {
 /// throw away what a person typed. A file that is not there is made, with its folder. The write is
 /// atomic ([`bevy_grimoire_core::atomic_file::write`]), so the watcher never sees half a file.
 pub fn write_key(path: &Path, key: &str, value: Option<Value>) -> Result<(), String> {
+    edit_layer(path, |layer| match value {
+        Some(v) if !layer.set(key, v) => Err(format!("`{key}` is not a {KIND} key that takes {v:?}")),
+        Some(_) => Ok(()),
+        None => {
+            layer.clear(key);
+            Ok(())
+        }
+    })
+}
+
+/// **Changes the settings file at `path` through `change`**, with every guarantee of [`write_key`]: the
+/// file is read as the editor reads it and left alone when it does not read, what `change` leaves must read
+/// back, and the write is atomic.
+pub fn edit_layer(path: &Path, change: impl FnOnce(&mut SettingsLayer) -> Result<(), String>) -> Result<(), String> {
     let file = path.to_string_lossy().replace('\\', "/");
     let mut layer = match std::fs::read_to_string(path) {
         Ok(text) => SettingsLayer::read(&file, &text).map_err(|r| format!("{file} does not read ({}): {}; not changed", r.field.as_deref().unwrap_or("file"), r.reason))?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => SettingsLayer::default(),
         Err(e) => return Err(format!("{file}: {e}")),
     };
-    match value {
-        Some(v) => {
-            if !layer.set(key, v) {
-                return Err(format!("`{key}` is not a {KIND} key that takes {v:?}"));
-            }
-        }
-        None => layer.clear(key),
-    }
+    change(&mut layer)?;
     // Refuse a value the next read would refuse: the file must read back.
     let text = ron::ser::to_string_pretty(&layer, ron::ser::PrettyConfig::default()).map_err(|e| e.to_string())?;
-    SettingsLayer::read(&file, &text).map_err(|r| format!("{key}: {}", r.reason))?;
+    SettingsLayer::read(&file, &text).map_err(|r| r.reason)?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }

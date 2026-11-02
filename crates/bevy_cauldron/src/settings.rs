@@ -24,6 +24,7 @@
 //! their keys to [`SettingsLayer`]; a new key is an `Option` there with its default in
 //! [`EditorSettings`], and an old file still reads.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -31,6 +32,7 @@ use bevy::prelude::*;
 use bevy_grimoire_core::live::{KindVerdict, Outcome};
 use bevy_grimoire_core::reload_check::{self, Refusal};
 use serde::{Deserialize, Serialize};
+use bevy_gooey::Shortcut;
 
 use crate::editor::EditorState;
 use crate::live::EditorReloads;
@@ -83,6 +85,9 @@ pub struct EditorSettings {
     pub show_grid: bool,
     /// How strongly the map's grid is drawn: 1.0 is the skin's grid colour, less is fainter.
     pub grid_strength: f32,
+    /// The rebound commands of every layer, by command id: what the keymap screen shows against each
+    /// command's default chord.
+    pub keymap: BTreeMap<String, Shortcut>,
 }
 
 impl Default for EditorSettings {
@@ -94,6 +99,7 @@ impl Default for EditorSettings {
             reduced_motion: false,
             show_grid: true,
             grid_strength: 1.0,
+            keymap: BTreeMap::new(),
         }
     }
 }
@@ -118,6 +124,10 @@ pub struct SettingsLayer {
     pub show_grid: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grid_strength: Option<f32>,
+    /// **Rebound commands**: a command's id (`file.save`, `commands::Command::id`) and the chord that
+    /// now runs it. A command the file leaves out keeps its default chord (UI-72, #250).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub keymap: BTreeMap<String, Shortcut>,
 }
 
 impl Default for SettingsLayer {
@@ -130,6 +140,7 @@ impl Default for SettingsLayer {
             reduced_motion: None,
             show_grid: None,
             grid_strength: None,
+            keymap: BTreeMap::new(),
         }
     }
 }
@@ -158,6 +169,15 @@ impl SettingsLayer {
         {
             return Err(refuse("grid_strength", format!("{v} is outside {} to {}", GRID_STRENGTH_RANGE.0, GRID_STRENGTH_RANGE.1)));
         }
+        for (id, chord) in &layer.keymap {
+            let field = format!("keymap.{id}");
+            if crate::commands::by_id(id).is_none() {
+                return Err(refuse(&field, format!("`{id}` is not a command the editor has")));
+            }
+            if !chord.is_valid() {
+                return Err(refuse(&field, "this chord has no key (a modifier alone is not a shortcut)".to_owned()));
+            }
+        }
         Ok(layer)
     }
 }
@@ -173,6 +193,8 @@ impl EditorSettings {
             out.reduced_motion = layer.reduced_motion.unwrap_or(out.reduced_motion);
             out.show_grid = layer.show_grid.unwrap_or(out.show_grid);
             out.grid_strength = layer.grid_strength.unwrap_or(out.grid_strength);
+            // Per command: a later layer's binding replaces the earlier one's for that command alone.
+            out.keymap.extend(layer.keymap.iter().map(|(id, chord)| (id.clone(), *chord)));
         }
         out
     }

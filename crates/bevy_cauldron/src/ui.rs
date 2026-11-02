@@ -32,7 +32,7 @@ impl Plugin for EditorUiPlugin {
             app.add_plugins(GooeyNavPlugin);
         }
         // **The settings screen** (UI-71, #249): Cmd/Ctrl+, over any screen.
-        app.add_plugins((crate::settings_screen::SettingsScreenPlugin, crate::project_config::ProjectConfigPlugin));
+        app.add_plugins((crate::settings_screen::SettingsScreenPlugin, crate::project_config::ProjectConfigPlugin, crate::keymap_screen::KeymapScreenPlugin));
         app.insert_resource(editor_skin());
         // **Refusals stand at the top of the viewport** (UI-39, #233), where the card they replace stood.
         app.insert_resource(bevy_gooey::ToastSettings { anchor: bevy_gooey::ToastAnchor::TopCenter, ..default() });
