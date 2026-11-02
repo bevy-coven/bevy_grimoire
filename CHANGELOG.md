@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-02
+
+- **233-refusal-toast** `5d85713` A refusal is a sticky bevy_gooey toast at the top of the viewport with Dismiss, and Show when it names a piece or a placement: Show selects it on the Meshes shelf (or targets it on the Map); the journal keeps the line (#233 slice 1)<br><a href="docs/changelog/media/2026-11-02-233-refusal-toast.mp4"><img src="docs/changelog/media/2026-11-02-233-refusal-toast.png" width="320" alt="clip"></a>
+
 ## 2026-11-01
 
 - **221-loading** `4d0c23e` A project named on the command line opens on a loading screen as named stages: nothing for a second, then a spinner with the stage, then from ten seconds a bar with N of M; Cancel returns to the launcher with the project untouched (UI-20, #221)<br><a href="docs/changelog/media/2026-11-02-221-loading.mp4"><img src="docs/changelog/media/2026-11-02-221-loading.png" width="320" alt="clip"></a>
