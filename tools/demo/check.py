@@ -84,6 +84,16 @@ def change_moments(rec):
                 moments.append(("undo", e["t"]))
             elif "Home" in keys:
                 moments.append(("home", e["t"]))
+            # **A held reveal is a change.** The editor's shortcut overlay is shown while a key is
+            # held (`keys::Action::Shortcuts`, `K`; bevy-coven/bevy_gooey#36), so the picture gains a
+            # dozen chord chips and then loses them — two changes, at the press and at the release.
+            # Nothing else in this list describes that: it is a key, not a click, an agent op or a
+            # settle, so a storyboard of the overlay reported `change_moments` as empty and failed
+            # with no change line at all. Both stamps are moments because the overlay appears and
+            # goes away; `hold` steps are stamped once at the press, so the release is found the
+            # same way the press is.
+            elif "KeyK" in keys:
+                moments.append(("reveal", e["t"]))
         elif e["type"] == "agent" and e.get("tool") == "grimoire_frame_view":
             moments.append(("view", e["t"]))
         elif e["type"] == "settle":

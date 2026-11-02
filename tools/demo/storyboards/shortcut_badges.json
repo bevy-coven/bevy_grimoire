@@ -1,0 +1,31 @@
+{
+  "name": "shortcut_badges",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 0.8
+    },
+    {
+      "seconds": 2.6
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "caption": "the Map tab, its keys quiet"
+    },
+    {
+      "at": 0.6,
+      "hold": "KeyK",
+      "secs": 1.2,
+      "caption": "person: hold K \u2014 every key lands on what it does"
+    },
+    {
+      "at": 3.4,
+      "caption": "released: the badges go with the key"
+    }
+  ]
+}

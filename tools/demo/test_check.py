@@ -74,6 +74,27 @@ class ChangeWindow(unittest.TestCase):
             self.assertIn("FAIL", self.check(set(), (mod, "KeyZ")))
 
 
+class HeldReveal(unittest.TestCase):
+    """**A held reveal is a change moment** (UI-41, #235).
+
+    The editor's shortcut overlay is shown while `K` is held, so the picture gains a dozen chord chips
+    and then loses them. Before this rule `change_moments` knew only `Ctrl/Cmd+Z` and `Home` among the
+    keys, so a storyboard of the overlay reported **no change moment at all** and failed with no change
+    line — which is how the first `shortcut_badges` take failed."""
+
+    def test_k_is_a_reveal_moment(self):
+        sys.path.insert(0, HERE)
+        import check
+        rec = {"chunks": [], "events": [{"t": 1.4, "type": "key", "keys": ["KeyK"]}]}
+        self.assertEqual(check.change_moments(rec), [("reveal", 1.4)])
+
+    def test_another_key_is_not(self):
+        sys.path.insert(0, HERE)
+        import check
+        rec = {"chunks": [], "events": [{"t": 1.4, "type": "key", "keys": ["KeyJ"]}]}
+        self.assertEqual(check.change_moments(rec), [])
+
+
 class DragPress(unittest.TestCase):
     def test_a_press_whose_first_move_carries_its_own_timestamp_is_a_drag_not_a_placement(self):
         sys.path.insert(0, HERE)
