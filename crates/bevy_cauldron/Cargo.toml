@@ -87,7 +87,7 @@ bevy_stigmergy = { git = "https://github.com/bevy-coven/bevy_stigmergy", rev = "
 bevy_grimoire_core = { path = "../bevy_grimoire_core" }
 bevy_flora = { git = "https://github.com/bevy-coven/bevy_flora", rev = "25e956b3f88ba32a1b6d75957360c6840da6afd9", features = ["ron"], optional = true }
 # The editor's UI library (UI-01, #209): required, not a family-crate feature. `EditorUiPlugin` owns it.
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "cb65e5bb106ce34c7b496159563ced5964bd3984", features = ["serde"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "91953463e588d2c4680fe7e0b0b99c346d137ad2", features = ["serde"] }
 # The runtime half. The editor spawns pieces through `bevy_grimoire::spawn_descriptor` rather than its
 # own copy, so a map cannot look one way here and another in the game — the failure `bake.rs` and
 # `site_editor::source_map` demonstrated by independently growing the same RON writer.
@@ -150,6 +150,11 @@ arboard = { version = "3", default-features = false }
 # editor uses (guide overlay, screenshot, cursor) are on: no server, no tokio. A fix the editor needs
 # is made and pushed there, then the rev here is bumped.
 bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-coven/bevy_fairy", rev = "06c9c1805651fabb2474a9d09af84c761be406aa", default-features = false, features = ["plugin", "plugin-guide", "plugin-screenshot"], optional = true }
+
+[dev-dependencies]
+# gooey's headless test helpers (UI-06, #214): a test finds a widget by its words and clicks it through the real
+# pointer path, so it cannot pass while a button is covered, hidden or mislabelled. Off in every shipped build.
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "91953463e588d2c4680fe7e0b0b99c346d137ad2", features = ["serde", "testing"] }
 
 [[test]]
 name = "editor"
