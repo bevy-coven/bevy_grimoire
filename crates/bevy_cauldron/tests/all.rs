@@ -237,6 +237,7 @@ mod piece_turn_is_an_operation;
 mod piece_select_is_an_operation;
 mod keeping_derived_edges_is_a_cell_operation;
 mod keeping_a_set_is_a_composition_operation;
+mod saving_a_tile_is_a_composition_operation;
 mod piece_set_cells_is_an_operation;
 mod piece_set_mount_is_an_operation;
 mod play_starts_and_stops_the_game;

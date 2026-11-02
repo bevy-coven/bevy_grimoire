@@ -32,6 +32,10 @@ pub struct Params {
     /// Redefine a composition that already has this id. Every stamp of it then expands to the new body.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub replace: bool,
+    /// A whole definition, as `compositions.ron` holds it, instead of members to convert: what the Tiles tab's
+    /// `Cmd+S` sends, and how an agent writes a tile with slots, nested groups or an envelope of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition: Option<Composition>,
     /// Undo only: put this definition back whole.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restore: Option<Composition>,
@@ -61,6 +65,7 @@ impl Params {
                         "half": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Half the footprint's width and depth in metres, [x, z]. It becomes the group's bounded envelope, so it must enclose the pieces; a zero is refused (a bounded group has to enclose something)."}
                     }
                 },
+                "composition": {"type": "object", "description": "A whole definition as compositions.ron holds it ({id, envelope, members, locations, note}); its id must be `id`. Written as it is, validated against the library and every other group, with no map needed. Name `composition`, `from` or `set`, one."},
                 "replace": {"type": "boolean", "description": "Redefine a group that already has this id. Without it an existing id is refused and nothing is written."}
             }
         })
@@ -90,13 +95,15 @@ impl CompositionDefine {
     fn go(ctx: &mut Ctx, params: &serde_json::Value, write: bool) -> Result<Option<Outcome>, Refusal> {
         let p = Params::parse(params)?;
         let id = bevy_grimoire_core::naming::to_snake_case(&p.id);
-        let (Some(project), Some(open)) = (ctx.project.as_mut(), ctx.open.as_ref()) else {
-            return Err(Refusal::new("no map is open, so there are no placements to make a group from."));
+        let open = ctx.open.as_ref();
+        let Some(project) = ctx.project.as_mut() else {
+            return Err(Refusal::new("no project is open."));
         };
         let prior = project.compositions.compositions.iter().find(|c| c.id == id).cloned();
+        let named = usize::from(!p.from.is_empty()) + usize::from(p.set.is_some()) + usize::from(p.composition.is_some());
 
         let (summary, members) = if p.undo_only() {
-            if !p.from.is_empty() || p.set.is_some() || p.restore.is_some() && p.remove {
+            if named > 0 || p.restore.is_some() && p.remove {
                 return Err(Refusal::new("an undo either restores a definition or removes one, and names no placements."));
             }
             if let Some(c) = &p.restore {
@@ -113,13 +120,42 @@ impl CompositionDefine {
                 }
                 (format!("took group {id} back out"), 0)
             }
+        } else if named > 1 {
+            return Err(Refusal::new("name the members one way: `from` (placement ids), `set` (the pieces themselves) or `composition` (a whole definition), not two."));
+        } else if let Some(c) = &p.composition {
+            if c.id != id {
+                return Err(Refusal::new(format!("the definition is `{}` and `id` is `{id}`: a definition has one name.", c.id)));
+            }
+            if prior.is_some() && !p.replace {
+                return Err(Refusal::new(format!(
+                    "a group named `{id}` already exists. Pass `replace: true` to redefine it, or pick another name. Nothing was written."
+                )));
+            }
+            if prior.is_some()
+                && let Some(open) = open
+            {
+                crate::editor::strand_check(open, c).map_err(Refusal::new)?;
+            }
+            if write {
+                project.commit_composition(c.clone()).map_err(Refusal::new)?;
+            } else {
+                project.check_composition(c).map_err(Refusal::new)?;
+                return Ok(Some(Outcome {
+                    summary: format!("would write group {id} ({} member(s))", c.members.len()),
+                    affected: c.members.len(),
+                    saved: false,
+                    inverse: None,
+                    after: None,
+                }));
+            }
+            (format!("wrote group {id} ({} member(s))", c.members.len()), c.members.len())
         } else {
-            let set = match (&p.set, p.from.is_empty()) {
-                (Some(_), false) => {
-                    return Err(Refusal::new("name the members as `from` (placement ids) or as `set`, not both."));
-                }
-                (Some(set), true) => set.clone(),
-                (None, _) => crate::editor::set_of_placements(project, &open.map, &p.from).map_err(Refusal::new)?,
+            let Some(open) = open else {
+                return Err(Refusal::new("no map is open, so there are no placements to make a group from."));
+            };
+            let set = match &p.set {
+                Some(set) => set.clone(),
+                None => crate::editor::set_of_placements(project, &open.map, &p.from).map_err(Refusal::new)?,
             };
             if prior.is_some() && !p.replace {
                 return Err(Refusal::new(format!(
