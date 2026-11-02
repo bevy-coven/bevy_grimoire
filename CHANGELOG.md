@@ -8,6 +8,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-01
 
+- **214-click-by-label** `6bc0cea` A UI test finds a widget by its label and clicks it with no window (the click used to be erased before picking read it) *No clip: a test-only change and a headless pointer fix; proved by tests/a_widget_is_clicked_by_its_label.rs*
 - **221-loading** `4d0c23e` A project named on the command line opens on a loading screen as named stages: nothing for a second, then a spinner with the stage, then from ten seconds a bar with N of M; Cancel returns to the launcher with the project untouched (UI-20, #221)<br><a href="docs/changelog/media/2026-11-02-221-loading.mp4"><img src="docs/changelog/media/2026-11-02-221-loading.png" width="320" alt="clip"></a>
 - **222-load-report** `5e8e0b3` After a project loads, a report card lists every file that does not read, one row each with the file, the field and why, with Open anyway and Back (UI-21, #222)<br><a href="docs/changelog/media/2026-11-02-221-loading.mp4"><img src="docs/changelog/media/2026-11-02-221-loading.png" width="320" alt="clip"></a>
 - **216-launcher** `8ce3b16` A bare bevy_cauldron opens the launcher: the recent projects as a gooey list with their folder and when they were opened, a typed folder, Open example, and the changelog since you last opened (UI-10, #216)<br><a href="docs/changelog/media/2026-11-02-216-launcher.mp4"><img src="docs/changelog/media/2026-11-02-216-launcher.png" width="320" alt="clip"></a>

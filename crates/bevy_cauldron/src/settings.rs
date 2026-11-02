@@ -79,13 +79,27 @@ pub struct EditorSettings {
     pub interface_scale: f32,
     /// Animation is skipped: a change lands without easing.
     pub reduced_motion: bool,
+    /// The map's grid is drawn in the viewport.
+    pub show_grid: bool,
+    /// How strongly the map's grid is drawn: 1.0 is the skin's grid colour, less is fainter.
+    pub grid_strength: f32,
 }
 
 impl Default for EditorSettings {
     fn default() -> Self {
-        EditorSettings { theme: Theme::default(), text_scale: 1.0, interface_scale: 1.0, reduced_motion: false }
+        EditorSettings {
+            theme: Theme::default(),
+            text_scale: 1.0,
+            interface_scale: 1.0,
+            reduced_motion: false,
+            show_grid: true,
+            grid_strength: 1.0,
+        }
     }
 }
+
+/// The faintest and fullest the grid may be drawn: below the first it cannot be seen.
+pub const GRID_STRENGTH_RANGE: (f32, f32) = (0.1, 1.0);
 
 /// **One file's worth of settings**: only the keys it sets.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -100,11 +114,23 @@ pub struct SettingsLayer {
     pub interface_scale: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reduced_motion: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_grid: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grid_strength: Option<f32>,
 }
 
 impl Default for SettingsLayer {
     fn default() -> Self {
-        SettingsLayer { version: SETTINGS_VERSION, theme: None, text_scale: None, interface_scale: None, reduced_motion: None }
+        SettingsLayer {
+            version: SETTINGS_VERSION,
+            theme: None,
+            text_scale: None,
+            interface_scale: None,
+            reduced_motion: None,
+            show_grid: None,
+            grid_strength: None,
+        }
     }
 }
 
@@ -127,6 +153,11 @@ impl SettingsLayer {
                 return Err(refuse(field, format!("{v} is outside {} to {}", SCALE_RANGE.0, SCALE_RANGE.1)));
             }
         }
+        if let Some(v) = layer.grid_strength
+            && !(GRID_STRENGTH_RANGE.0..=GRID_STRENGTH_RANGE.1).contains(&v)
+        {
+            return Err(refuse("grid_strength", format!("{v} is outside {} to {}", GRID_STRENGTH_RANGE.0, GRID_STRENGTH_RANGE.1)));
+        }
         Ok(layer)
     }
 }
@@ -140,6 +171,8 @@ impl EditorSettings {
             out.text_scale = layer.text_scale.unwrap_or(out.text_scale);
             out.interface_scale = layer.interface_scale.unwrap_or(out.interface_scale);
             out.reduced_motion = layer.reduced_motion.unwrap_or(out.reduced_motion);
+            out.show_grid = layer.show_grid.unwrap_or(out.show_grid);
+            out.grid_strength = layer.grid_strength.unwrap_or(out.grid_strength);
         }
         out
     }
