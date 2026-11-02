@@ -37,6 +37,10 @@ use std::path::{Path, PathBuf};
 /// The version of the store's file.
 pub const TRUST_VERSION: u32 = 1;
 
+/// **The project files whose content names a program to start.** Nothing may edit these as data: see
+/// `data_files::DataFiles::parse`.
+pub const COMMAND_FILES: [&str; 2] = ["agent.ron", "play.ron"];
+
 /// The store's file name, inside the editor's own folder of the user's data directory.
 pub const STORE_FILE: &str = "trusted.ron";
 
