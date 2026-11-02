@@ -14,6 +14,23 @@ use serde_json::Value;
 
 use crate::fixtures;
 
+/// **A real `ElementsSettings`, as `bevy_elements` writes one, at a given hour.**
+///
+/// These tests wrote `(sun: (hour: 6.0))`, which is not an `ElementsSettings`: the host's typed read
+/// refuses it (`Unexpected field named sun`), so nothing was stored and the tests asserted on a
+/// fixture the crate throws away (#152). The base is `ElementsSettings::defaults().to_ron()` with
+/// `clock.hour` set; `hour` names the hour by rewriting **that one line**, so every call is a whole,
+/// valid settings file and the edit between any two is exactly the clock.
+fn settings_at(hour: &str) -> String {
+    let base = include_str!("fixtures/bevy_elements.ron");
+    let line = "        hour: 6.0,";
+    assert!(
+        base.contains(line),
+        "the fixture's clock line changed; this helper edits exactly one line and must not guess"
+    );
+    base.replace(line, &format!("        hour: {hour},"))
+}
+
 const FILE: &str = "family/bevy_elements.ron";
 
 fn kinds(app: &App) -> Vec<Value> {
@@ -49,7 +66,7 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
     let root = fixtures::Fixture::new("family_verdicts").descriptor("site/wall", "alpha").build("m");
     let file = root.join("family").join("bevy_elements.ron");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    std::fs::write(&file, "(sun: (hour: 6.0))").unwrap();
+    std::fs::write(&file, settings_at("6.0")).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The editor's own `reload_settings` runs in the harness; a second copy would watch the same
     // files with its own state and decide every edit twice.
@@ -61,8 +78,8 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
     // A good edit.
     let before = seq(&app);
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(&file, "(sun: (hour: 18.5))").unwrap();
-    until(&mut app, "the edit applied", |a| a.world().resource::<FamilySettings>().text["bevy_elements"] == "(sun: (hour: 18.5))");
+    std::fs::write(&file, settings_at("18.5")).unwrap();
+    until(&mut app, "the edit applied", |a| a.world().resource::<FamilySettings>().text["bevy_elements"] == settings_at("18.5"));
     assert_eq!(seq(&app), before + 1, "one edit, one decision");
     assert_eq!(kinds(&app)[0]["outcome"], "applied");
 
@@ -73,7 +90,11 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
     let v = kinds(&app)[0].clone();
     assert_eq!(v["file"], FILE, "{v}");
     assert!(!v["reason"].as_str().unwrap().is_empty(), "the verdict says why: {v}");
-    assert_eq!(app.world().resource::<FamilySettings>().text["bevy_elements"], "(sun: (hour: 18.5))", "the last good settings stay");
+    assert_eq!(
+        app.world().resource::<FamilySettings>().text["bevy_elements"],
+        settings_at("18.5"),
+        "the last good settings stay"
+    );
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], false);
     let refused_at = seq(&app);
     assert_eq!(refused_at, before + 2);
@@ -83,7 +104,7 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
     // Undoing the typo, back to exactly the settings in force, is no change to the settings, and the
     // refusal still goes.
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(&file, "(sun: (hour: 18.5))").unwrap();
+    std::fs::write(&file, settings_at("18.5")).unwrap();
     until(&mut app, "the undo applied", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "applied"));
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
 
@@ -92,10 +113,13 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
     std::fs::write(&file, "(sun: (hour: ").unwrap();
     until(&mut app, "the second refusal", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "refused"));
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(&file, "(sun: (hour: 7.0))").unwrap();
+    std::fs::write(&file, settings_at("7.0")).unwrap();
     until(&mut app, "the fix applied", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "applied"));
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
-    assert_eq!(app.world().resource::<FamilySettings>().text["bevy_elements"], "(sun: (hour: 7.0))");
+    assert_eq!(
+        app.world().resource::<FamilySettings>().text["bevy_elements"],
+        settings_at("7.0")
+    );
     std::thread::sleep(Duration::from_millis(50));
     std::fs::remove_file(&file).unwrap();
     until(&mut app, "the verdict gone", |a| kinds(a).is_empty());
@@ -110,7 +134,7 @@ fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_d
     let root = fixtures::Fixture::new("family_verdicts_launch").descriptor("site/wall", "alpha").build("m");
     let dir = root.join("family");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("bevy_elements.ron"), "(sun: (hour: 6.0))").unwrap();
+    std::fs::write(dir.join("bevy_elements.ron"), settings_at("6.0")).unwrap();
     std::fs::write(dir.join("bevy_lights.ron"), "(budget: (").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.update();
@@ -124,8 +148,8 @@ fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_d
     // Another file's edit makes the watch say the broken one is invalid again; it is not decided twice.
     let before = seq(&app);
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(dir.join("bevy_elements.ron"), "(sun: (hour: 9.0))").unwrap();
-    until(&mut app, "the other file applied", |a| a.world().resource::<FamilySettings>().text["bevy_elements"] == "(sun: (hour: 9.0))");
+    std::fs::write(dir.join("bevy_elements.ron"), settings_at("9.0")).unwrap();
+    until(&mut app, "the other file applied", |a| a.world().resource::<FamilySettings>().text["bevy_elements"] == settings_at("9.0"));
     pump(&mut app, 0.6);
     assert_eq!(seq(&app), before + 1, "one edit, one decision: the broken file was not re-decided");
     assert_eq!(kinds(&app).len(), 2);
