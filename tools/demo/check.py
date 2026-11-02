@@ -62,9 +62,19 @@ def change_moments(rec):
     cursors = [e["t"] for e in rec["events"] if e["type"] == "cursor"]
     for e in rec["events"]:
         if e["type"] == "click" and VIEWPORT_X[0] <= e["x"] <= VIEWPORT_X[1]:
-            # a press that starts a drag (snip box) is followed at once by cursor moves (the first may carry the press's own
-            # timestamp): not a placement
-            if not any(0 <= t - e["t"] <= 0.1 for t in cursors):
+            # **A press that starts a drag is followed by cursor MOVES; a click is not** (#270).
+            #
+            # `record.py`'s click step moves the cursor to the point and *then* presses, so the click
+            # carries a cursor at its own timestamp — and the rule used to accept `0 <= t - e["t"]`,
+            # which that self-event always satisfies. No click could ever be a change moment, so a
+            # storyboard that demonstrates a widget (the journal's Check view, a palette row) could
+            # never pass this check; measured on `check_view.json`, `change_moments` returned `[]`
+            # for a click at 1.46 s with cursors [1.084, 1.461].
+            #
+            # A `drag` step is a different shape: the click is stamped first and the eight moves
+            # follow it (`do_step`). So the test is strictly AFTER the press, and a drag's own
+            # post-press moves still disqualify it — including one in the same frame's later tick.
+            if not any(1e-6 < t - e["t"] <= 0.1 for t in cursors):
                 moments.append(("place", e["t"]))
         elif e["type"] == "key":
             keys = e.get("keys", [])

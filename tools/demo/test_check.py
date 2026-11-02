@@ -78,11 +78,30 @@ class DragPress(unittest.TestCase):
     def test_a_press_whose_first_move_carries_its_own_timestamp_is_a_drag_not_a_placement(self):
         sys.path.insert(0, HERE)
         import check
+        # **`record.py`'s two shapes, measured** (#270). A `drag` step stamps the click first and the
+        # eight moves after it; a `click` step moves the cursor *then* presses, so its cursor carries
+        # an earlier timestamp by a few microseconds. The old rule accepted `0 <= t - e["t"]`, which
+        # the click's own cursor never satisfies, and this test pinned a shape (`cursor` and `click`
+        # at one identical `t`) that no storyboard produces.
         rec = {"chunks": [], "events": [
             {"t": 1.0, "type": "click", "x": 600, "y": 300},
-            {"t": 1.0, "type": "cursor", "x": 614, "y": 322},
+            {"t": 1.000002, "type": "cursor", "x": 614, "y": 322},
             {"t": 1.2, "type": "cursor", "x": 644, "y": 345},
             {"t": 3.0, "type": "click", "x": 600, "y": 300},
+        ]}
+        # The press at 1.0 begins a drag, so it is not a placement; the click at 3.0 has no move after
+        # it and is one.
+        self.assertEqual([k for k, _ in check.change_moments(rec)], ["place"])
+        self.assertEqual(check.change_moments(rec)[0][1], 3.0)
+
+    def test_a_widget_click_is_a_change_moment(self):
+        """#270: a click whose own cursor precedes it must count, or no widget demo can pass."""
+        sys.path.insert(0, HERE)
+        import check
+        rec = {"chunks": [], "events": [
+            {"t": 1.084, "type": "cursor", "x": 700, "y": 205},
+            {"t": 1.461, "type": "cursor", "x": 700, "y": 205},
+            {"t": 1.461004, "type": "click", "x": 700, "y": 205},
         ]}
         self.assertEqual([k for k, _ in check.change_moments(rec)], ["place"])
 
