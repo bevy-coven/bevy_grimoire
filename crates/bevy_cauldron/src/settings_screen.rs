@@ -323,7 +323,8 @@ fn refresh(
         return;
     }
     *since = 0.0;
-    let snapshot = Snapshot { dialog: (*dialog).clone(), user: Layer::of(files.user().as_ref()), project: Layer::of(files.project().as_ref()) };
+    // The tab is not part of what the rows are built from (every tab's page is built), so turning one rebuilds nothing.
+    let snapshot = Snapshot { dialog: SettingsDialog { tab: 0, ..(*dialog).clone() }, user: Layer::of(files.user().as_ref()), project: Layer::of(files.project().as_ref()) };
     if built.0.as_ref() == Some(&snapshot) {
         return;
     }

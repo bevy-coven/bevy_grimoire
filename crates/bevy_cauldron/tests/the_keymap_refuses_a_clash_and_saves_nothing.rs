@@ -123,4 +123,48 @@ fn commands_clash_only_where_both_can_fire() {
     let none = Default::default();
     assert!(taken_by(&none, "edit.undo", ctrl_s()).iter().any(|c| c.id == "file.save"));
     assert!(taken_by(&none, "file.save", ctrl_s()).is_empty(), "a command never clashes with itself");
+    let comma = Shortcut::primary(KeyCode::Comma);
+    assert!(!taken_by(&none, "file.save", comma).is_empty(), "the settings screen's own chord is taken, though it is no command");
+}
+
+#[test]
+fn a_reset_that_would_hand_back_a_chord_another_command_took_is_refused() {
+    use bevy_cauldron::keymap_screen::rebind;
+    use std::collections::BTreeMap;
+    let dir = std::env::temp_dir().join(format!("grimoire_keymap_reset_clash_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("settings.ron");
+    let elsewhere = Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyY);
+    // Save moves off Ctrl+S, then Undo takes Ctrl+S: both fine at the time.
+    rebind(&file, "file.save", Some(elsewhere), &BTreeMap::new(), None).unwrap();
+    let mut others = BTreeMap::new();
+    others.insert("file.save".to_owned(), elsewhere);
+    rebind(&file, "edit.undo", Some(ctrl_s()), &others, None).unwrap();
+    // Reset on Save would put it back on Ctrl+S, which Undo has now.
+    let mut others = BTreeMap::new();
+    others.insert("edit.undo".to_owned(), ctrl_s());
+    let before = std::fs::read_to_string(&file).unwrap();
+    let err = rebind(&file, "file.save", None, &others, None).unwrap_err();
+    assert!(err.contains("already Undo") && err.contains("Nothing was saved"), "{err}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before, "a refused Reset writes nothing");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn choosing_a_commands_default_in_the_project_keeps_it_when_the_user_rebound_it() {
+    use bevy_cauldron::keymap_screen::rebind;
+    use std::collections::BTreeMap;
+    let dir = std::env::temp_dir().join(format!("grimoire_keymap_project_default_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let project = dir.join("editor.ron");
+    let users = Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyY);
+    // The user's file gives Save Ctrl+Shift+Y; the project asks for Ctrl+S, the default, which is not what is in force.
+    rebind(&project, "file.save", Some(ctrl_s()), &BTreeMap::new(), Some(users)).unwrap();
+    let layer = SettingsLayer::read("editor.ron", &std::fs::read_to_string(&project).unwrap()).unwrap();
+    assert_eq!(layer.keymap.get("file.save"), Some(&ctrl_s()), "the project's choice is saved, because the layer below says something else");
+    // And choosing what the user's layer already gives is no rebinding in the project's file.
+    rebind(&project, "file.save", Some(users), &BTreeMap::new(), Some(users)).unwrap();
+    let layer = SettingsLayer::read("editor.ron", &std::fs::read_to_string(&project).unwrap()).unwrap();
+    assert!(layer.keymap.is_empty(), "{:?}", layer.keymap);
+    let _ = std::fs::remove_dir_all(&dir);
 }

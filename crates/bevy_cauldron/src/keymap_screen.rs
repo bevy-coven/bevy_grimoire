@@ -86,10 +86,33 @@ pub fn effective(keymap: &BTreeMap<String, Shortcut>) -> Vec<(Command, Shortcut)
     commands::all().into_iter().map(|c| (c, keymap.get(c.id).copied().unwrap_or(c.shortcut))).collect()
 }
 
-/// **The commands that already answer to `chord` where `id` would fire**, other than `id` itself.
-pub fn taken_by(keymap: &BTreeMap<String, Shortcut>, id: &str, chord: Shortcut) -> Vec<Command> {
+/// One command, or one of the editor's modal chords, that answers to a chord.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Taker {
+    pub id: &'static str,
+    pub title: &'static str,
+}
+
+/// **The chords the editor answers to outside the command registry**: the settings screen's and the
+/// command palette's (`command_palette.rs`), which are modals over every tab and so clash with a command
+/// anywhere.
+fn reserved() -> Vec<(Taker, Shortcut)> {
+    let mut out = vec![(Taker { id: "settings.open", title: "Open the settings" }, Shortcut::primary(KeyCode::Comma))];
+    out.extend(crate::command_palette::chords().into_iter().map(|c| (Taker { id: "palette.open", title: "Open the command palette" }, c)));
+    out
+}
+
+/// **What already answers to `chord` where `id` would fire**, other than `id` itself.
+pub fn taken_by(keymap: &BTreeMap<String, Shortcut>, id: &str, chord: Shortcut) -> Vec<Taker> {
     let Some(me) = commands::by_id(id) else { return Vec::new() };
-    effective(keymap).into_iter().filter(|(c, now)| c.id != id && *now == chord && overlaps(c.context, me.context)).map(|(c, _)| c).collect()
+    let mut taken: Vec<Taker> = effective(keymap)
+        .into_iter()
+        .filter(|(c, now)| c.id != id && *now == chord && overlaps(c.context, me.context))
+        .map(|(c, _)| Taker { id: c.id, title: c.title })
+        .collect();
+    taken.extend(reserved().into_iter().filter(|(_, c)| *c == chord).map(|(t, _)| t));
+    taken.dedup();
+    taken
 }
 
 /// The rebindings of both files as the editor lays them: the user's, then the project's over them.
@@ -110,32 +133,37 @@ fn own_keymap(layer: &Layer) -> BTreeMap<String, Shortcut> {
     }
 }
 
-/// **Rebinds `id` to `chord` in the file at `path`**, or takes the rebinding out with `None`; a chord another
-/// command has refuses and writes nothing.
-pub fn rebind(path: &std::path::Path, id: &str, chord: Option<Shortcut>, others: &BTreeMap<String, Shortcut>) -> Result<(), String> {
+/// **Rebinds `id` to `chord` in the file at `path`**, or takes the rebinding out with `None`, so the command
+/// answers to what the layer below gives it: `below`, the chord a lower layer rebinds it to, else its
+/// default. A chord another command has refuses and writes nothing, and so does a Reset that would hand a
+/// command back a chord something else has taken since.
+pub fn rebind(
+    path: &std::path::Path,
+    id: &str,
+    chord: Option<Shortcut>,
+    others: &BTreeMap<String, Shortcut>,
+    below: Option<Shortcut>,
+) -> Result<(), String> {
     let Some(command) = commands::by_id(id) else { return Err(format!("`{id}` is not a command")) };
-    if let Some(chord) = chord {
-        let clash = taken_by(others, id, chord);
-        if !clash.is_empty() {
-            let who: Vec<String> = clash.iter().map(|c| format!("{} ({})", c.title, c.id)).collect();
-            return Err(format!(
-                "{} is already {}. Nothing was saved: rebind {} first, or choose another chord for {}.",
-                chord.label(),
-                who.join(" and "),
-                if who.len() == 1 { "it" } else { "them" },
-                command.title
-            ));
-        }
+    let fallback = below.unwrap_or(command.shortcut);
+    let target = chord.unwrap_or(fallback);
+    let clash = taken_by(others, id, target);
+    if !clash.is_empty() {
+        let who: Vec<String> = clash.iter().map(|c| format!("{} ({})", c.title, c.id)).collect();
+        return Err(format!(
+            "{} is already {}. Nothing was saved: rebind {} first, or choose another chord for {}.",
+            target.label(),
+            who.join(" and "),
+            if who.len() == 1 { "it" } else { "them" },
+            command.title
+        ));
     }
     crate::setting_catalogue::edit_layer(path, |layer| {
-        match chord {
-            // Back on its default is no rebinding at all.
-            Some(chord) if chord != command.shortcut => {
-                layer.keymap.insert(id.to_owned(), chord);
-            }
-            _ => {
-                layer.keymap.remove(id);
-            }
+        // The chord the layer below already gives is no rebinding at all.
+        if target == fallback {
+            layer.keymap.remove(id);
+        } else {
+            layer.keymap.insert(id.to_owned(), target);
         }
         Ok(())
     })
@@ -154,8 +182,13 @@ impl Writer<'_, '_> {
         // What every other command answers to: both layers, with the one being edited minus this command.
         let mut others = resolved(&user, &project);
         others.remove(id);
+        // What the layer below the one being edited gives this command: the user's rebinding, for the project's file.
+        let below = match dialog.scope {
+            Scope::User => None,
+            Scope::Project => own_keymap(&user).get(id).copied(),
+        };
         let outcome = match self.files.path(dialog.scope) {
-            Some(path) => rebind(&path, id, chord, &others),
+            Some(path) => rebind(&path, id, chord, &others, below),
             None => Err("there is no file to write this to".to_owned()),
         };
         dialog.problem = outcome.err();
@@ -284,7 +317,11 @@ fn refresh(
             c.spawn(label(format!("No command matches \"{}\".", dialog.query.trim())));
         });
     } else {
-        let items: Vec<_> = found.into_iter().map(|(command, chord)| command_row(command, chord, own.contains_key(command.id))).collect();
+        let below = |c: &Command| match dialog.scope {
+            Scope::User => c.shortcut,
+            Scope::Project => own_keymap(&snapshot.user).get(c.id).copied().unwrap_or(c.shortcut),
+        };
+        let items: Vec<_> = found.into_iter().map(|(command, chord)| command_row(command, chord, own.contains_key(command.id), below(&command))).collect();
         commands.entity(column).with_children(|c| {
             c.spawn(list(LIST_ROWS, Children::spawn(SpawnIter(items.into_iter()))));
         });
@@ -293,7 +330,7 @@ fn refresh(
 }
 
 /// One command: the rebinding row, and while the file being edited rebinds it, its default and a Reset.
-fn command_row(command: Command, chord: Shortcut, modified: bool) -> impl Bundle {
+fn command_row(command: Command, chord: Shortcut, modified: bool, default_chord: Shortcut) -> impl Bundle {
     let id = command.id;
     (
         Node { flex_direction: FlexDirection::Column, ..default() },
@@ -309,7 +346,7 @@ fn command_row(command: Command, chord: Shortcut, modified: bool) -> impl Bundle
             if modified {
                 row.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() })
                     .with_children(|line| {
-                        line.spawn(label(format!("Modified; the default is {}", command.shortcut.label())));
+                        line.spawn(label(format!("Modified; without it the chord is {}", default_chord.label())));
                         line.spawn((button(format!("Reset {}", command.title)), observe(move |_: On<Activate>, mut w: Writer| w.set(id, None))));
                     });
             }
