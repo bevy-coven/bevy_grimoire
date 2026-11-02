@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **build-strip** `074f248` The workspace's own test binaries are stripped of symbols, so a Bevy test binary links at 56 MB instead of 2 GB and an aborted link cannot leave 2 GB of debris on a full disk *No clip: a build profile setting; proved by the relinked binary size and tests/live_reload.rs passing on it*
 - **112-clip-check** `217b838` The clip check: a labelled set of every changelog clip plus a mismatched twin, and a check that asks the frames whether they show the line's claim (D4, #112) *No clip: the agreement needs a served model; the set and its shape are proved by tests/checks_that_earn_their_authority.rs::the_committed_clip_set_is_two_sided_and_well_formed*
 - **112-checker** `0af1193` tools/decide/check.py runs the editor's checks over a directory of captures; a calibrated check that finds something fails the run, and an uncalibrated one only prints (D4, #112) *No clip: the rule is a command's exit code and a test; nothing on screen; proved by crates/bevy_oracle/tests/checks_that_earn_their_authority.rs*
 - **269-note-pick** `0af1193` A Shift-click that picks no piece says so, naming the rectangle, instead of doing nothing and letting the next Enter send every draft (#269) *No clip: a one-line status change on a miss; proved by tests/enter_with_a_note_box_open_saves_it.rs::a_shift_click_that_picks_no_piece_says_what_to_do_instead*
