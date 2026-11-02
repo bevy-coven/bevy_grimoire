@@ -77,8 +77,11 @@ pub struct ScreenPlugin;
 
 impl Plugin for ScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<Screen>()
-            .add_systems(OnExit(Screen::Menu), open_the_door)
+        // `main` starts a bare `bevy_cauldron` on the launcher by inserting the state first; leave that one alone.
+        if !app.world().contains_resource::<State<Screen>>() {
+            app.init_state::<Screen>();
+        }
+        app.add_systems(OnExit(Screen::Menu), open_the_door)
             .add_systems(OnExit(Screen::Editor), close_the_door);
     }
 }

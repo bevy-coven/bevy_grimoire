@@ -8,6 +8,9 @@ You need a Rust toolchain and a clone of this repo. Run every command from the r
 
 ## Start the editor
 
+With no argument, `cargo run -p bevy_cauldron` opens the **launcher** before any project: your recent projects (a missing folder is listed as missing, not dropped), a field to type a project's folder, **Open example**, **New project…** (a name, a place and a template; a name that is already a folder is refused beside the field and Create stays off until it is free) and, when the changelog has grown since you last opened a project, what it added. Choosing a project starts the editor on it, at its kit and map menu, as step 1 below does by hand. **Copy command line** on a recent project puts that line on your clipboard.
+
+
 1. Run the editor on this project:
 
    ```

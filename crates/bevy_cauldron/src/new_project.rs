@@ -166,7 +166,7 @@ impl Plugin for NewProjectPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (open_the_form, spawn_the_card, show_the_form, close_the_form).chain().run_if(in_state(Screen::Launcher)),
+            (open_the_form, spawn_the_card, show_the_form, close_the_form, swap_the_cards).chain().run_if(in_state(Screen::Launcher)),
         )
         .add_systems(OnExit(Screen::Launcher), |mut commands: Commands| commands.remove_resource::<NewProjectForm>());
     }
@@ -194,12 +194,14 @@ fn spawn_the_card(
     let Ok(root) = root.single() else { return };
     let start = form.0.clone();
     commands.entity(root).with_children(|root| {
-        root.spawn((panel(), FormCard)).with_children(|card| {
+        root.spawn((panel(), FormCard))
+            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+            .with_children(|card| {
             card.spawn(heading("New project"));
             card.spawn((
                 text_input("Name", start.name.clone()),
                 NameField,
-                TextHint("lowercase letters, digits and underscores".into()),
+                TextHint("project name".into()),
                 observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
             ));
             card.spawn((
@@ -290,4 +292,14 @@ fn close_the_form(mut commands: Commands, mut launcher: ResMut<Launcher>, cards:
         commands.entity(card).despawn();
     }
     commands.remove_resource::<NewProjectForm>();
+}
+
+/// The launcher's list gives its place to the form while the form is open, so neither is cut off by the window.
+fn swap_the_cards(form: Option<Res<NewProjectForm>>, mut cards: Query<&mut Node, With<crate::launcher::LauncherCard>>) {
+    let want = if form.is_some() { Display::None } else { Display::Flex };
+    for mut node in &mut cards {
+        if node.display != want {
+            node.display = want;
+        }
+    }
 }

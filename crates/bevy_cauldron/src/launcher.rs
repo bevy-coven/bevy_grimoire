@@ -48,6 +48,9 @@ pub struct News {
     pub title: String,
 }
 
+/// How wide the launcher's card is, in logical pixels: wide enough for a project's row, narrower than the window.
+pub const CARD_WIDTH: f32 = 840.0;
+
 /// How many new entries the launcher lists before it says how many more there are.
 const NEWS_ROWS: usize = 6;
 
@@ -189,6 +192,10 @@ struct CopyLine(PathBuf);
 #[derive(Component)]
 pub struct LauncherRoot;
 
+/// The launcher's list card, which the new-project form replaces while it is open.
+#[derive(Component)]
+pub struct LauncherCard;
+
 /// The line that shows the refusal.
 #[derive(Component)]
 struct ProblemLine;
@@ -242,7 +249,9 @@ fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, 
         .spawn((screen(), DespawnOnExit(Screen::Launcher), LauncherRoot, Name::new("launcher")))
         .insert(Pickable::default())
         .with_children(|root| {
-            root.spawn(panel()).with_children(|card| {
+            root.spawn((panel(), LauncherCard))
+                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+                .with_children(|card| {
                 card.spawn(heading("Cauldron"));
                 card.spawn(label("The editor that writes a grimoire, the book your game loads."));
                 if !launcher.whats_new.is_empty() {
@@ -263,7 +272,7 @@ fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, 
                 }
                 card.spawn((
                     text_input("Open a folder", ""),
-                    TextHint("a project's folder, then Enter".into()),
+                    TextHint("a folder, then Enter".into()),
                     observe(|change: On<ValueChange<String>>, mut out: MessageWriter<OpenRequest>| {
                         if change.is_final && !change.value.trim().is_empty() {
                             out.write(OpenRequest(typed_path(&change.value)));
@@ -303,7 +312,7 @@ fn project_row(row: &Listed, now: u64) -> impl Bundle {
     let open = path.clone();
     let copy = path.clone();
     (
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() },
+        Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() },
         children![
             (
                 button(name_of(&path)),

@@ -1,0 +1,23 @@
+{
+  "name": "launcher",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [{"seconds": 7.5}, {"seconds": 7.5}],
+  "steps": [
+    {"at": 0.2, "caption": "launcher: the projects opened before, and what the changelog added since the last one"},
+    {"at": 3.0, "cursor": [640, 517]},
+    {"at": 3.6, "caption": "person: New project"},
+    {"at": 4.0, "click": [640, 517]},
+    {"at": 5.0, "cursor": [1050, 297]},
+    {"at": 5.4, "click": [1050, 297]},
+    {"at": 5.8, "caption": "person: a name that is already a folder here"},
+    {"at": 6.0, "type": "harbour"},
+    {"at": 9.0, "caption": "refused beside the field, and Create stays off with the reason"},
+    {"at": 10.0, "key": "Backspace"}, {"at": 10.1, "key": "Backspace"}, {"at": 10.2, "key": "Backspace"},
+    {"at": 10.3, "key": "Backspace"}, {"at": 10.4, "key": "Backspace"}, {"at": 10.5, "key": "Backspace"}, {"at": 10.6, "key": "Backspace"},
+    {"at": 11.0, "type": "orchard"},
+    {"at": 12.2, "caption": "a free name: the problem is gone and Create is on"}
+  ]
+}
