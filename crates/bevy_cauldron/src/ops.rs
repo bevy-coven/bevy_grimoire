@@ -3903,6 +3903,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(piece_select::PieceSelect),
         Box::new(label_set::LabelSet),
         Box::new(piece_set_mount::PieceSetMount),
+        Box::new(crate::ops_piece::PieceSetNote),
+        Box::new(crate::ops_piece::PieceSetWidth),
         Box::new(pack_set_excluded::PackSetExcluded),
         Box::new(crate::ops_label_vlm::LabelSuggest),
         Box::new(crate::ops_label_vlm::LabelApply),
@@ -4174,6 +4176,11 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // mount through `step_mount`, which calls `set_mount` and dispatches `piece_set_mount` for a
     // library piece, the same write an agent's `apply` makes.
     ("piece_set_mount", "set_mount("),
+    // **The Meshes tab's description field and SIZE field** (E-002, #129 slices 17 and 18): Enter in either
+    // reaches `set_note` or `set_width`, which dispatch `piece_set_note` and `piece_set_width` for a library
+    // piece.
+    ("piece_set_note", "set_note("),
+    ("piece_set_width", "set_width("),
     // **The pack key (E-002, #129 slice 7)** — `Shift+R` on the Meshes tab calls `set_pack_excluded`
     // and dispatches `pack_set_excluded`, the same policy write an agent's `apply` makes.
     ("pack_set_excluded", "set_pack_excluded("),
@@ -4879,7 +4886,7 @@ fn append(ctx: &Ctx, entry: &mut Entry) -> Result<(), String> {
 }
 
 /// The three ids closest to `bad`, nearest first.
-fn nearest_ids(ids: &[&str], bad: &str) -> Vec<String> {
+pub(crate) fn nearest_ids(ids: &[&str], bad: &str) -> Vec<String> {
     let mut scored: Vec<(usize, &str)> =
         ids.iter().map(|id| (bevy_grimoire_core::vocab::edit_distance(id, bad), *id)).collect();
     scored.sort();

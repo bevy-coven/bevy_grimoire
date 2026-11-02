@@ -744,7 +744,24 @@ pub fn save(build: &Build, project: &mut crate::project::Project) -> Result<Stri
         .compositions
         .iter()
         .any(|c| c.id == comp.id);
-    project.commit_composition(comp.clone())?;
+    // **Through the registry** (E-002, #129 slice 15): the write, the refusals and the undo are
+    // `composition_define`'s, so the tile a person saves is the tile an agent can write, as one log
+    // line a person's undo can take back. A tile that exists is replaced, as it always was.
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let params = serde_json::json!({"id": comp.id, "composition": comp, "replace": existed});
+    match crate::ops::dispatch(&mut ctx, "composition_define", &params) {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(fresh) = ctx.project {
+                project.compositions = fresh.compositions;
+            }
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => return Err(e.0),
+    }
     Ok(if existed {
         format!("`{}` updated — {} members", comp.id, comp.members.len())
     } else {

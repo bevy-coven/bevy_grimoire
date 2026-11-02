@@ -763,6 +763,12 @@ impl NoteEdit {
     pub fn typing(&self) -> bool {
         self.active.is_some()
     }
+
+    /// Open the field on a library piece, as a click on its description does, for a test that cannot
+    /// click.
+    pub fn open_for_test(&mut self, id: &str) {
+        self.active = Some((EditTarget::Library(id.to_owned()), String::new()));
+    }
 }
 
 /// **`Option<Res<Project>>`, because this is a GLOBAL observer.** See [`on_cell_verb`] for the whole
@@ -837,14 +843,29 @@ fn note_keys(
                 };
                 // Empty clears, the same rule the edge and anchor tokens follow — one keystroke path
                 // for setting and unsetting rather than a second control for "remove".
-                d.note = (!text.is_empty()).then(|| text.clone());
-                crate::labels::stamp_human(d, bevy_grimoire_core::descriptor::Axis::Note);
-                state.record(before);
                 let said = if text.is_empty() {
                     "description cleared".to_owned()
                 } else {
                     format!("described: {text}")
                 };
+                // **A library piece is written by `piece_set_note` (E-002, #129 slice 17)**, the
+                // operation an agent calls, so a typed description is one validated, saved and logged
+                // change. A candidate is not in the library and keeps its note in memory until Accept.
+                if where_to == Persist::Library {
+                    let id = d.id.clone();
+                    if d.note.as_deref().unwrap_or("") == text {
+                        state.status.note("description unchanged".to_owned());
+                        return;
+                    }
+                    if crate::editor::set_note(&mut state, &mut project, &id, &text) {
+                        state.record(before);
+                        state.status.note(said);
+                    }
+                    return;
+                }
+                d.note = (!text.is_empty()).then(|| text.clone());
+                crate::labels::stamp_human(d, bevy_grimoire_core::descriptor::Axis::Note);
+                state.record(before);
                 state.status.say(persist(&mut project, where_to, said));
             }
             Key::Escape => {
@@ -900,6 +921,12 @@ impl ScaleEdit {
     pub fn typing(&self) -> bool {
         self.active.is_some()
     }
+
+    /// Open the field on a library piece, as a click on its SIZE readout does, for a test that cannot
+    /// click.
+    pub fn open_for_test(&mut self, id: &str) {
+        self.active = Some((EditTarget::Library(id.to_owned()), String::new()));
+    }
 }
 
 /// The clickable width field.
@@ -928,7 +955,7 @@ const SCALE_EPS: f32 = 1e-4;
 /// Pure, and split out of [`scale_keys`] for the reason the rest of this crate splits its arithmetic
 /// out of its systems: the rule is the whole content of the feature, and proving it through an `App`
 /// means driving a text field with a synthetic keyboard.
-fn bake_width(d: &mut Descriptor, want: f32) -> Result<f32, String> {
+pub(crate) fn bake_width(d: &mut Descriptor, want: f32) -> Result<f32, String> {
     if !want.is_finite() || want <= 0.0 {
         return Err(format!("a piece cannot stand {want} m wide"));
     }
@@ -1069,7 +1096,12 @@ fn scale_keys(
                 let id = d.id.clone();
                 // Refused rather than clamped — a width of zero is a piece that reserves nothing and
                 // sits inside a wall with every rule reporting success.
-                let r = match bake_width(d, want) {
+                let sized = if where_to == Persist::Library {
+                    bake_width(&mut d.clone(), want)
+                } else {
+                    bake_width(d, want)
+                };
+                let r = match sized {
                     Ok(r) => r,
                     Err(e) => {
                         state.status.problem(format!("`{id}`: {e}"));
@@ -1081,6 +1113,29 @@ fn scale_keys(
                     state
                         .status
                         .note(format!("{id} already stands {want:.2} m wide"));
+                    return;
+                }
+                // **A library piece is written by `piece_set_width` (E-002, #129 slice 18)**, the
+                // operation an agent calls; the probe above ran on a copy, so the live entry moves
+                // only when the operation's write lands. A candidate keeps its size in memory.
+                if where_to == Persist::Library {
+                    if crate::editor::set_width(&mut state, &mut project, &id, want) {
+                        let said = project
+                            .measured
+                            .descriptors
+                            .iter()
+                            .find(|d| d.id == id)
+                            .map(|d| {
+                                let (w, dep) = d.extent.footprint.unwrap_or((want, 0.0));
+                                match d.align.scale {
+                                    Some(s) => format!("{id} — {w:.2} x {dep:.2} m (mesh scaled {s:.3}x)"),
+                                    None => format!("{id} — {w:.2} x {dep:.2} m, back at its authored size"),
+                                }
+                            })
+                            .unwrap_or_default();
+                        state.record(before);
+                        state.status.note(said);
+                    }
                     return;
                 }
                 let (w, dep) = d.extent.footprint.unwrap_or((want, 0.0));
@@ -1135,6 +1190,12 @@ pub struct HeightEdit {
 impl HeightEdit {
     pub fn typing(&self) -> bool {
         self.active.is_some()
+    }
+
+    /// Open the field on a library piece, as a click on its height chip does, for a test that cannot
+    /// click (the same reason `editor::hold_set_for_test` exists).
+    pub fn open_for_test(&mut self, id: &str) {
+        self.active = Some((EditTarget::Library(id.to_owned()), String::new()));
     }
 }
 
@@ -1254,6 +1315,17 @@ fn mount_height_keys(
                     return;
                 };
                 let before = state.snapshot(&project);
+                // **A library piece is written by `piece_set_mount` (E-002, #129 slice 16)**, the
+                // operation an agent calls with `{"OnWall": {"height": h}}`, so a typed height is one
+                // validated, saved and logged change. A candidate is not in the library and keeps its
+                // height in memory until Accept.
+                if where_to == Persist::Library {
+                    if crate::editor::set_mount(&mut state, &mut project, &id, &next) {
+                        state.record(before);
+                        state.status.note(format!("{id} — {want:.2} m up the wall"));
+                    }
+                    return;
+                }
                 let Some((d, _)) = state.at_target(&target, &mut project.measured) else {
                     state
                         .status
