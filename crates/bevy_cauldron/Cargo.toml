@@ -87,7 +87,7 @@ bevy_stigmergy = { git = "https://github.com/bevy-coven/bevy_stigmergy", rev = "
 bevy_grimoire_core = { path = "../bevy_grimoire_core" }
 bevy_flora = { git = "https://github.com/bevy-coven/bevy_flora", rev = "25e956b3f88ba32a1b6d75957360c6840da6afd9", features = ["ron"], optional = true }
 # The editor's UI library (UI-01, #209): required, not a family-crate feature. `EditorUiPlugin` owns it.
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "1ca58b2bd171ea83213043d75104fbcc7cfec6d8", features = ["serde"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "5d156cb57d3d8d4e742d6914c835d1185d4937a6", features = ["serde"] }
 # The runtime half. The editor spawns pieces through `bevy_grimoire::spawn_descriptor` rather than its
 # own copy, so a map cannot look one way here and another in the game — the failure `bake.rs` and
 # `site_editor::source_map` demonstrated by independently growing the same RON writer.
@@ -154,7 +154,7 @@ bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-co
 # `bevy_gooey::testing` finds a widget by its label and clicks it (UI-06, #214). A test dependency only:
 # the editor itself ships none of it.
 [dev-dependencies]
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "1ca58b2bd171ea83213043d75104fbcc7cfec6d8", features = ["serde", "testing"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "5d156cb57d3d8d4e742d6914c835d1185d4937a6", features = ["serde", "testing"] }
 
 [[test]]
 name = "editor"

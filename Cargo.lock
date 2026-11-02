@@ -1189,8 +1189,8 @@ dependencies = [
 
 [[package]]
 name = "bevy_gooey"
-version = "0.31.1"
-source = "git+https://github.com/bevy-coven/bevy_gooey?rev=1ca58b2bd171ea83213043d75104fbcc7cfec6d8#1ca58b2bd171ea83213043d75104fbcc7cfec6d8"
+version = "0.32.0"
+source = "git+https://github.com/bevy-coven/bevy_gooey?rev=5d156cb57d3d8d4e742d6914c835d1185d4937a6#5d156cb57d3d8d4e742d6914c835d1185d4937a6"
 dependencies = [
  "accesskit",
  "bevy",
