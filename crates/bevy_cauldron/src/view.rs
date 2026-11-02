@@ -32,6 +32,11 @@ use bevy::camera::ScalingMode;
 #[derive(Component)]
 pub struct MainCamera;
 
+/// The editor's own key light, the one [`setup`] spawns. A project that dresses the camera with
+/// `bevy_elements` has a sun and a moon, so this light steps aside (`environment::key_light_follows_dressing`).
+#[derive(Component)]
+pub struct EditorKeyLight;
+
 /// Where the camera sits relative to what it is looking at, before yaw. The game's own iso offset.
 const ISO_OFFSET: Vec3 = Vec3::new(12.0, 12.0, 12.0);
 
@@ -238,6 +243,7 @@ fn setup(
     // A key light and enough ambient to read a mesh's form. Directional rather than point, because
     // this scene is not a room — it is a plane an author is looking down at.
     commands.spawn((
+        EditorKeyLight,
         DirectionalLight {
             illuminance: 6_000.0,
             shadow_maps_enabled: true,

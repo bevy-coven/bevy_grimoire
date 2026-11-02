@@ -1,0 +1,120 @@
+{
+ "name": "night_lights",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "setup": [],
+ "chunks": [
+  {
+   "seconds": 4.5
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_set_family",
+    "parameters": {
+     "id": "floor_lamp",
+     "crate": "bevy_lights",
+     "value": "(base: 1000.0)"
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_add",
+    "parameters": {
+     "piece": "lamp_tall",
+     "at": [
+      2.5,
+      0.5
+     ]
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "placement_set_family",
+    "parameters": {
+     "id": "lamp_tall@1",
+     "crate": "bevy_lights",
+     "value": "(base: 1000.0)"
+    }
+   }
+  },
+  {
+   "seconds": 3.5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the bedroom at noon, previewed with bevy_elements' sky"
+  },
+  {
+   "at": 0.6,
+   "wheel": {
+    "y": -3,
+    "n": 12,
+    "at": [
+     220,
+     500
+    ]
+   }
+  },
+  {
+   "at": 1.8,
+   "wheel": {
+    "y": 1,
+    "n": 3,
+    "at": [
+     220,
+     500
+    ]
+   }
+  },
+  {
+   "at": 2.8,
+   "cursor": [
+    249,
+    216
+   ]
+  },
+  {
+   "at": 3.2,
+   "click": [
+    249,
+    216
+   ],
+   "caption": "person: 23:00 on the Environment clock; the sky is the key light"
+  },
+  {
+   "at": 4.6,
+   "caption": "agent: lights the floor lamp"
+  },
+  {
+   "at": 7.6,
+   "caption": "agent: places a second lamp"
+  },
+  {
+   "at": 10.6,
+   "caption": "agent: lights it"
+  },
+  {
+   "at": 13.6,
+   "cursor": [
+    222,
+    495
+   ]
+  },
+  {
+   "at": 14.0,
+   "click": [
+    222,
+    495
+   ],
+   "caption": "person: LIGHT MAP, bright where the lamps reach"
+  }
+ ]
+}

@@ -82,7 +82,7 @@ fn main() -> AppExit {
     {
         use bevy::prelude::*;
         app.add_plugins(bevy_elements::ElementsPlugins)
-            .add_systems(Update, bevy_cauldron::environment::dress_camera);
+            .add_systems(Update, (bevy_cauldron::environment::dress_camera, bevy_cauldron::environment::key_light_follows_dressing));
     }
 
     // **A bare `bevy_cauldron` opens the launcher** (`launcher.rs`, UI-10); a project named on the command
