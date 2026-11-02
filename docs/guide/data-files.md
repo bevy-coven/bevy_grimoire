@@ -43,7 +43,7 @@ This page lists every file in a bevy_grimoire project. Each table says where the
 |---|---|
 | Where | Each bound kit's folder, such as `assets/grimoire/<kit>/project.ron` |
 | What it holds | How this project uses the kit. `exclude` lists path prefixes the project does not use. `patches` are changes to a kit's pieces that apply to this project only. `note` is free text. |
-| Written by | The editor's kit chooser (patches) and its exclude action. |
+| Written by | The editor's kit chooser (patches) and its exclude action: `Shift+R` on the Meshes tab, a switch under *Packs the kit leaves out* on the project configuration screen, or an agent's `pack_set_excluded`. |
 | Live reload | Yes. |
 | Read by | The game's loader and the editor, through the layered library. |
 | Format version | 2 |

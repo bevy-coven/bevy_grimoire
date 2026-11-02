@@ -86,7 +86,7 @@ fn a_switch_leaves_a_pack_out_through_the_operation_and_the_same_switch_brings_i
 }
 
 #[test]
-fn a_pack_the_policy_already_leaves_out_has_its_switch_and_a_refusal_is_said_and_writes_nothing() {
+fn a_refusal_is_said_under_the_switches_and_writes_nothing() {
     let mut app = rig("project_config_pack_refused");
     // A folder deleted behind the screen's back: the operation refuses to leave out what is not there.
     let root: PathBuf = app.world().resource::<Project>().root.clone();
