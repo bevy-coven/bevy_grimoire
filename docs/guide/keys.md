@@ -50,7 +50,7 @@ These keys work on every tab.
 | `Cmd+S` | Any time | Save. |
 | `Cmd+\` | Any time | Snip an area. |
 | `Cmd+O` | Any time | Go back to the menu. |
-| `Cmd+,` | Any time | Open the settings screen, or close it: every setting with its default, a search, and Reset. It is also the launcher's Settings button; its Project configuration button lists the family crates the project uses, and its Keymap button rebinds a command (a chord another command has is refused). |
+| `Cmd+,` | Any time | Open the settings screen, or close it: every setting with its default, a search, and Reset. It is also the launcher's Settings button; its Project configuration button lists the family crates the project uses, and its Keymap button rebinds a command (a chord another command has is refused). A rebound command answers to its new chord at once; this page lists the chords it ships with. |
 | `Cmd+E` | Any time | Show every error this session. |
 | `Cmd+C` | Any time | Copy this tab's text. |
 | `Cmd+F` | Any time | Filter the list. |

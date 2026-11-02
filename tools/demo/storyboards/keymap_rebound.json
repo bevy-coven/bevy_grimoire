@@ -1,0 +1,58 @@
+{
+  "name": "keymap_rebound",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 9
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "a person's editor.ron moves Save to Ctrl+Shift+Y"
+    },
+    {
+      "at": 0.6,
+      "write": {
+        "path": "assets/grimoire/editor.ron",
+        "text": "(version:1,keymap:{\"file.save\":(modifiers:(ctrl:true,shift:true,alt:false,meta:false),key:KeyY)})"
+      }
+    },
+    {
+      "at": 2.0,
+      "key": "KeyS",
+      "mods": [
+        "ControlLeft"
+      ],
+      "caption": "person: Ctrl+S, Save's old chord, does nothing"
+    },
+    {
+      "at": 3.6,
+      "key": "KeyY",
+      "mods": [
+        "ControlLeft",
+        "ShiftLeft"
+      ],
+      "caption": "person: Ctrl+Shift+Y saves"
+    },
+    {
+      "at": 5.2,
+      "key": "KeyK",
+      "mods": [
+        "ControlLeft"
+      ],
+      "caption": "person: opens the command palette"
+    },
+    {
+      "at": 6.4,
+      "type": "save"
+    },
+    {
+      "at": 7.4,
+      "caption": "the palette's Save row names Ctrl+Shift+Y"
+    }
+  ]
+}

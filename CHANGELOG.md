@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **265-rebound** `b8fbd06` A rebound command answers to its new chord and no longer to the old one: the palette and the badges name it, and run_command presses it<br><a href="docs/changelog/media/2026-11-02-265-rebound.mp4"><img src="docs/changelog/media/2026-11-02-265-rebound.png" width="320" alt="clip"></a>
 - **252-family-toggle** `e54b9cd` The project configuration screen: a switch lists a family crate in family.ron, written atomically, and the screen shows the reload verdict<br><a href="docs/changelog/media/2026-11-02-252-family-toggle.mp4"><img src="docs/changelog/media/2026-11-02-252-family-toggle.png" width="320" alt="clip"></a>
 - **250-keymap** `75c9c74` The keymap screen: rebind a command's chord, and a chord another command has is refused with nothing saved<br><a href="docs/changelog/media/2026-11-02-250-keymap-clash.mp4"><img src="docs/changelog/media/2026-11-02-250-keymap-clash.png" width="320" alt="clip"></a>
 - **249-settings-screen** `dd0c703` The settings screen: Cmd+, opens every setting with its default, a search, tabs and a Reset that takes the key out of the file<br><a href="docs/changelog/media/2026-11-02-249-settings-screen.mp4"><img src="docs/changelog/media/2026-11-02-249-settings-screen.png" width="320" alt="clip"></a>

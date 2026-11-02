@@ -19,9 +19,8 @@
 //! chosen as on the settings screen), keyed by the command's stable id (`file.save`), so it survives a
 //! title being reworded. Per command the project's chord wins over the user's, which wins over the default.
 //!
-//! **The editor's key dispatcher does not read the table yet.** The keys still do what `keys::BINDINGS`
-//! says; the screen says so under its heading, so nobody rebinds a key and waits for it. Making the
-//! dispatcher follow `EditorSettings::keymap` is the next step of this issue.
+//! **The editor's key dispatcher follows the table** (UI-72b, #265): `keys::Live` carries the rebound
+//! chords, so a rebound command answers to its new chord at once and no longer to the old one.
 
 use std::collections::BTreeMap;
 
@@ -222,7 +221,7 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
                 .with_children(|card| {
                     card.spawn(heading("Keymap"));
                     card.spawn(label(
-                        "Press a row, then the chord. A clash is refused and nothing is saved. The editor's keys follow the table built in until its key dispatcher reads this one.",
+                        "Press a row, then the chord. A clash is refused and nothing is saved. The rebound chord works at once.",
                     ));
                     if available.len() > 1 {
                         card.spawn((
