@@ -184,3 +184,11 @@ pub fn names_a_door(args: &[String]) -> bool {
     let split = split(args);
     split.door.is_some() || split.positional.len() >= 2
 }
+
+/// **Whether these arguments ask for the launcher**: no project and no door named, so a person who ran the
+/// editor bare is shown the projects they have opened (`launcher.rs`). A `ROOT`, a map, `--door` or `--kit`
+/// names what to open, and the chooser takes it from there as before.
+pub fn opens_the_launcher(args: &[String]) -> bool {
+    let split = split(args);
+    split.positional.is_empty() && split.door.is_none() && split.kit.is_none()
+}

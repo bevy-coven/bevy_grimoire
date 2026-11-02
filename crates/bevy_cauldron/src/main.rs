@@ -85,8 +85,14 @@ fn main() -> AppExit {
             .add_systems(Update, bevy_cauldron::environment::dress_camera);
     }
 
+    // **A bare `bevy_cauldron` opens the launcher** (`launcher.rs`, UI-10); a project named on the command
+    // line skips it. `insert_state` before `ScreenPlugin`, whose `init_state` leaves a state that exists as it is.
+    if args::opens_the_launcher(&argv) {
+        app.insert_state(Screen::Launcher);
+    }
     // The state both halves are gated by, and the two transitions that load and unload a door.
     app.add_plugins(screen::ScreenPlugin);
+    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::launcher::HandoffPlugin));
     // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the
     // binary names the file: a test's editor has none, so no test writes to the real data directory.
     if let Some(file) = bevy_cauldron::recent::user_file() {
@@ -164,6 +170,7 @@ fn name_the_window(
     mut windows: Query<&mut Window>,
 ) {
     let want = match (screen.get(), door.as_deref()) {
+        (Screen::Launcher, _) => "Cauldron".to_owned(),
         (Screen::Menu, _) => "Cauldron — choose a kit or a map".to_owned(),
         (Screen::Editor, Some(d)) => {
             let door = d.label().to_lowercase();

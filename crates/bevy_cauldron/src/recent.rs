@@ -42,6 +42,11 @@ pub struct Recent {
     /// Most recently opened first. A pinned entry keeps its own place in this order; [`Recent::listing`]
     /// is what puts the pinned ones above the rest.
     pub projects: Vec<RecentProject>,
+    /// The id of the newest `CHANGELOG.md` entry the person had been shown when they last opened a project
+    /// from the launcher (UI-14, #220): what the launcher lists as new is every entry above it. A file
+    /// written before this field has none, which shows nothing as new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changelog_seen: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -64,7 +69,7 @@ pub struct Listed {
 
 impl Default for Recent {
     fn default() -> Self {
-        Recent { version: RECENT_VERSION, projects: Vec::new() }
+        Recent { version: RECENT_VERSION, projects: Vec::new(), changelog_seen: None }
     }
 }
 
@@ -183,5 +188,16 @@ pub fn now() -> u64 {
 pub fn record(file: &Path, root: &Path) -> Result<(), String> {
     let mut recent = Recent::load(file)?;
     recent.opened(root, now());
+    recent.save(file)
+}
+
+/// [`record`], and the newest `CHANGELOG.md` entry id `changelog_seen` is remembered as the one this person
+/// has now been shown: the launcher's way of opening a project (`launcher.rs`).
+pub fn record_seen(file: &Path, root: &Path, changelog_seen: Option<&str>) -> Result<(), String> {
+    let mut recent = Recent::load(file)?;
+    recent.opened(root, now());
+    if let Some(id) = changelog_seen {
+        recent.changelog_seen = Some(id.to_owned());
+    }
     recent.save(file)
 }

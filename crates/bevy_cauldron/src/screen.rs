@@ -55,6 +55,9 @@ use bevy::prelude::*;
 /// The menu, or a door.
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Screen {
+    /// The launcher: the projects opened before, and a way to open another (`launcher.rs`). `main` starts here
+    /// when no project is named; a project named on the command line starts at [`Screen::Menu`].
+    Launcher,
     /// The chooser: kits, maps, and what each one is.
     #[default]
     Menu,
