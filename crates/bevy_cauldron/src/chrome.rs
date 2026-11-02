@@ -1087,12 +1087,27 @@ pub fn spawn_frame(mut commands: Commands) {
             bevy::picking::Pickable::IGNORE,
         )
     };
-    let left = commands.spawn(dock()).id();
-    let right = commands.spawn(dock()).id();
+    // **Each side dock is a focus region too** (UI-35, #229). A `Host` viewport with no other region is
+    // a keyboard trap: F6 would cycle to itself and Tab would be the only way out. The docks navigate
+    // normally — `ArrowPolicy::Navigate` — so F6 walks viewport → left dock → right dock and back, and
+    // the arrows in a dock move between its fields, which is what a person expects there.
+    let left = commands
+        .spawn((dock(), bevy_gooey::FocusRegion::navigate()))
+        .id();
+    let right = commands
+        .spawn((dock(), bevy_gooey::FocusRegion::navigate()))
+        .id();
 
     let viewport = commands
         .spawn((
             ViewportSlot,
+            // **A focus region that keeps the arrows for the map** (UI-35, #229). The viewport pans and
+            // orbits on the arrow keys, so it asks gooey for `ArrowPolicy::Host` — with focus on or
+            // inside it, the arrows move no focus and stay readable, while Tab and F6 still leave
+            // (WCAG 2.1.2: a region never traps the keyboard). `TabIndex(0)` makes the viewport its own
+            // first widget, so a click or F6 puts focus here.
+            bevy_gooey::FocusRegion::host(),
+            bevy::input_focus::tab_navigation::TabIndex(0),
             Node {
                 // **The centre is what is left**, which is the whole idea. `min_width: 0` because a
                 // flex item's automatic minimum size is its content, and without it a wide panel
