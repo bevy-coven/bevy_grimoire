@@ -1905,11 +1905,23 @@ fn drive_note(
     let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     if shift && mouse.just_pressed(MouseButton::Left) {
         // Shift-click: a piece joins (or leaves) the note's subject; the box opens at the selection.
-        if let Some(project) = project.as_deref()
-            && let Some(i) = pick_at(project, &open, at)
-        {
-            let id = open.map.placements[i].id.clone();
-            note_pick_piece(&open, &mut state, &mut note_box, id, true);
+        match project.as_deref().and_then(|project| pick_at(project, &open, at)) {
+            Some(i) => {
+                let id = open.map.placements[i].id.clone();
+                note_pick_piece(&open, &mut state, &mut note_box, id, true);
+            }
+            // **An empty pick is guidance, not silence.** It was a bare `return` inside the `if let`,
+            // so a Shift-click on ground between the pieces did nothing at all — no box, no line —
+            // and the words typed after it went to the status line while the next `Enter` took the
+            // no-box branch and sent drafts (#269, measured while recording the note clip: the
+            // receipt saying `Enter saves` had already gone). `build.rs` states the rule this
+            // follows: *"an arrow that answers nothing at all is the defect"*. A note rather than a
+            // problem, because nothing went wrong — a click beside a piece is a near miss, not a
+            // refusal — and it names the gesture that does work, which is the rectangle.
+            None => state.status.note(format!(
+                "no piece there — Shift-click a piece, or drag a rectangle for {}",
+                crate::keys::chord(Action::NoteTool)
+            )),
         }
         return;
     }
