@@ -89,10 +89,12 @@ fn main() -> AppExit {
     // line skips it. `insert_state` before `ScreenPlugin`, whose `init_state` leaves a state that exists as it is.
     if args::opens_the_launcher(&argv) {
         app.insert_state(Screen::Launcher);
+    } else if args::names_a_door(&argv) {
+        app.insert_state(Screen::Loading);
     }
     // The state both halves are gated by, and the two transitions that load and unload a door.
     app.add_plugins(screen::ScreenPlugin);
-    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::launcher::HandoffPlugin));
+    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::launcher::HandoffPlugin, bevy_cauldron::loading::LoadingPlugin));
     // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the
     // binary names the file: a test's editor has none, so no test writes to the real data directory.
     if let Some(file) = bevy_cauldron::recent::user_file() {
@@ -127,22 +129,15 @@ fn main() -> AppExit {
     // output IS this argv (`args::open`), so `bevy_cauldron . --door kit --kit ozea` and pressing
     // Enter on the same row take the identical path in.
     //
-    // **Opened here, before the app runs**, for the same reason `install_font` refuses here: a door
-    // that will not open has to be said on the terminal the flag was typed into. There is no screen
-    // to draw it on yet, and entering `Screen::Editor` without a project is a panic rather than a
-    // message — see `chooser::Chosen`.
+    // **Opened on the loading screen** (`loading.rs`, UI-20): the open runs as named stages off the
+    // main thread, so a slow project shows a spinner and then a progress bar instead of a window that
+    // does not answer, and a project that will not open is said on that screen (and on the terminal
+    // the flag was typed into) with a way back to the launcher. `GRIMOIRE_LOAD_STAGE_DELAY_MS` pauses
+    // after each stage, to see the screen on a project that opens too fast to.
     if args::names_a_door(&argv) {
-        match args::open(&argv) {
-            Ok(opened) => {
-                app.insert_resource(chooser::Chosen(opened));
-                app.add_systems(Startup, |mut next: ResMut<NextState<Screen>>| {
-                    next.set(Screen::Editor);
-                });
-            }
-            Err(e) => {
-                eprintln!("bevy_cauldron: {e}");
-                std::process::exit(1);
-            }
+        app.insert_resource(bevy_cauldron::loading::LoadRequest(argv.clone()));
+        if let Some(ms) = std::env::var("GRIMOIRE_LOAD_STAGE_DELAY_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
+            app.insert_resource(bevy_cauldron::loading::StageDelay(std::time::Duration::from_millis(ms)));
         }
     }
 
@@ -171,6 +166,7 @@ fn name_the_window(
 ) {
     let want = match (screen.get(), door.as_deref()) {
         (Screen::Launcher, _) => "Cauldron".to_owned(),
+        (Screen::Loading, _) => "Cauldron — opening a project".to_owned(),
         (Screen::Menu, _) => "Cauldron — choose a kit or a map".to_owned(),
         (Screen::Editor, Some(d)) => {
             let door = d.label().to_lowercase();

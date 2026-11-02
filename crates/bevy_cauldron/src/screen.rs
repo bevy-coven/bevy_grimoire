@@ -58,6 +58,10 @@ pub enum Screen {
     /// The launcher: the projects opened before, and a way to open another (`launcher.rs`). `main` starts here
     /// when no project is named; a project named on the command line starts at [`Screen::Menu`].
     Launcher,
+    /// A project being opened as named stages, with a spinner and a progress bar when it takes long
+    /// (`loading.rs`). `main` starts here when the command line names a door; it ends in [`Screen::Editor`],
+    /// or back in [`Screen::Launcher`] when it is cancelled or the project will not open.
+    Loading,
     /// The chooser: kits, maps, and what each one is.
     #[default]
     Menu,
@@ -82,6 +86,10 @@ impl Plugin for ScreenPlugin {
             app.init_state::<Screen>();
         }
         app.add_systems(OnExit(Screen::Menu), open_the_door)
+            // The loader leaves for the editor only with a door in hand; leaving for the launcher (cancelled,
+            // or a project that would not open) has nothing to open, so it is the one exit that is not
+            // `OnExit(Loading)`.
+            .add_systems(OnTransition { exited: Screen::Loading, entered: Screen::Editor }, open_the_door)
             .add_systems(OnExit(Screen::Editor), close_the_door);
     }
 }

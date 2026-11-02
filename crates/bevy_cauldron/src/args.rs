@@ -99,6 +99,12 @@ pub fn split(args: &[String]) -> Split<'_> {
 }
 
 pub fn open(args: &[String]) -> Result<Opened, String> {
+    open_staged(args, &mut |_| {})
+}
+
+/// [`open`], telling `at` which [`crate::project::Stage`] it is entering, for the loading screen
+/// (`loading.rs`).
+pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -> Result<Opened, String> {
     let Split {
         positional,
         kit,
@@ -121,8 +127,9 @@ pub fn open(args: &[String]) -> Result<Opened, String> {
         })?,
     };
 
-    let mut project =
-        Project::open(&root, kit).map_err(|e| format!("cannot open {}: {e}", root.display()))?;
+    let mut project = Project::open_staged(&root, kit, at)
+        .map_err(|e| format!("cannot open {}: {e}", root.display()))?;
+    at(crate::project::Stage::Maps);
 
     // **Only the Maps door takes a map**, and it is the only one that needs the second positional.
     let open_map = if door == Door::Map {
