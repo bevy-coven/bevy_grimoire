@@ -677,6 +677,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.
     #[cfg(feature = "bevy_siren")]
     ("bevy_cauldron::audio_panel::AudioPanel", Ownership::Door),
+    // **`Session`, not `Door`**: the icon sheet is decoded from the binary (`icons::ATLAS_PNG`) once and
+    // its handles live in `Assets`, which outlives a door crossing. Decoding it again on every door
+    // would leak one image per crossing.
+    ("bevy_cauldron::toolbar::ToolbarAtlas", Ownership::Session),
     ("bevy_cauldron::editor::Folded", Ownership::Door),
     ("bevy_cauldron::editor::StampPicture", Ownership::Door),
     ("bevy_cauldron::editor::TargetLock", Ownership::Door),
