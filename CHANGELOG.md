@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **275-palette-positions** `87c09ff` A palette row reports a position inside the palette or clearly outside it, so a caller can tell which rows it can click (#275) *No clip: a test over components a caller reads; nobody can see it, proved by a_palette_row_reports_a_clickable_position*
 - **231-fill-answers** `957f8fe` A fill asked for with the pointer off the map says where a fill starts, instead of doing nothing (UI-37, #231)<br><a href="docs/changelog/media/2026-11-02-231-fill-button.mp4"><img src="docs/changelog/media/2026-11-02-231-fill-button.png" width="320" alt="clip"></a>
 - **242-pointer-windowless** `7679cef` A windowless app's pointer is left where picking put it, so a test's click on a widget is not re-aimed at the viewport image *No clip: a harness fix nobody sees; proved by a_widget_is_clicked_by_its_label and the eight pointer tests*
 - **231-toggle-group** `d5e946d` The six tool modes are one gooey toggle group: exactly one is lit, and it is the armed tool (UI-37, #231) *No clip: the group is drawn by gooey and looks like the bar its clip already shows; proved by the_mode_group_follows_the_armed_tool*
