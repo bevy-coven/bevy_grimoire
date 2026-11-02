@@ -86,6 +86,25 @@ impl BenchState {
         self.undo.push(before);
         self.redo.clear();
     }
+
+    /// **Take a manifest that was edited under the tab** (`anim_watch::sync_rigs_reload`, #202): hold it,
+    /// keep the rig the author was on selected by NAME (a rig added ahead of it moves its index), and make
+    /// the text it replaces one step of the tab's undo, as an adopt does. A selected rig the edit removed
+    /// leaves the selection at the same place in the list, or at the last rig.
+    pub(crate) fn take_edit(&mut self, rigs: Rigs, text: String) {
+        let was = self.names().get(self.selected).map(|n| (*n).to_owned());
+        if let Some(before) = self.text.take() {
+            self.record(before);
+        }
+        self.rigs = Some(rigs);
+        self.text = Some(text);
+        let at = {
+            let names = self.names();
+            was.and_then(|name| names.iter().position(|n| *n == name))
+                .unwrap_or_else(|| self.selected.min(names.len().saturating_sub(1)))
+        };
+        self.selected = at;
+    }
 }
 
 /// One rig row, carrying its index.
@@ -121,7 +140,7 @@ impl AdoptExclude {
         }
     }
 
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.rig = None;
         self.slots.clear();
     }

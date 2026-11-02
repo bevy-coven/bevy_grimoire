@@ -155,9 +155,9 @@ pub const KINDS: &[FileKind] = &[
     kind("data_registry", Grimoire, "<kit>/data.ron", "DataFiles", Live, Global,
         "by hand",
         "The registry of a game's own tuning files, read at each `data_set`; nothing holds it."),
-    kind("rigs", Grimoire, "rigs.ron", "Rigs", Restart, Global,
+    kind("rigs", Grimoire, "rigs.ron", "Rigs", Live, Global,
         "the animation tab",
-        "Read when the animation tab loads (its first entry, and again after a door change) and held in between; an edit while it is held is reported as `needs_restart` (a file that does not read, as `refused`) in `grimoire_state.reloads`."),
+        "Read when the animation tab loads, and again at once when the file changes: the tab takes a good edit (`applied`), measures its rigs again and keeps the rig the author was on selected by name; a file that does not read is `refused` with the file and the field and the tab keeps what it holds; a file that is gone is `needs_restart`, because the tab has no manifest to take in its place."),
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
         "the dispatcher appends a line for every operation",
         "Appended by the dispatcher and read by the log tools, the undo walk and the steps feed; nothing holds it. The editor looks at it when its size or modification time moves and says in `grimoire_state.reloads` whether every line reads: a line that does not is named (`line 3.seq`), the readers skip it and an undo refuses until it is repaired."),
@@ -440,6 +440,7 @@ mod tests {
         let by = |id| reload_for(kind_by_id(id).unwrap(), true);
         assert_eq!(by("family"), Reload::InPlace);
         assert_eq!(by("map"), Reload::Respawn);
-        assert_eq!(by("rigs"), Reload::NeedsRestart);
+        assert_eq!(by("rigs"), Reload::InPlace);
+        assert_eq!(by("game_data"), Reload::NeedsRestart);
     }
 }
