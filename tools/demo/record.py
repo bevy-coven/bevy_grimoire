@@ -23,6 +23,10 @@ Storyboard format (JSON):
     "steps": [
       {"at": 0.5, "cursor": [x, y]},            logical px
       {"at": 0.8, "click": [x, y]},             "mods": ["ShiftLeft"] holds keys through it; "button": "Right" is a right-click
+      {"at": 0.9, "click_label": "sofa"},       a widget found by the words on it: the recorder asks
+                                                BRP's `world.query` where its `Text` is drawn and clicks
+                                                that centre. Use it instead of a guessed pixel — a
+                                                coordinate drifts the moment a bar above it is added.
       {"at": 1.0, "key": "KeyZ", "mods": ["SuperLeft"]},
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
@@ -281,6 +285,57 @@ def resolve(value, named):
     return value
 
 
+def widget_centre(port, label):
+    """Where the interface draws the visible `Text` node whose words are `label`, in logical pixels.
+
+    **Asks the running editor, never a guess.** `world.query` returns every `Text` with its
+    `ComputedNode` (size, physical pixels) and `UiGlobalTransform` (its node's centre, same space); the
+    click target is the middle of the text's own rect, which is inside the row, tab or button the words
+    sit on — a click there lands on whatever `Pickable` ancestor the words belong to, exactly as a
+    person's would.
+    """
+    want = label.strip()
+    reply = brp(port, "world.query", {
+        "data": {"components": ["bevy_ui::widget::text::Text",
+                                "bevy_ui::ui_node::ComputedNode",
+                                "bevy_ui::ui_transform::UiGlobalTransform"]},
+    })
+    rows = reply.get("result", reply)
+    for row in rows:
+        comps = row.get("components", {})
+        text = comps.get("bevy_ui::widget::text::Text")
+        node = comps.get("bevy_ui::ui_node::ComputedNode")
+        at = comps.get("bevy_ui::ui_transform::UiGlobalTransform")
+        if not text or not node or not at:
+            continue
+        # **`Text` reflects as its bare string** (`'Turn left'`), not as an object with a field.
+        if not isinstance(text, str) or text.strip() != want:
+            continue
+        # **`UiGlobalTransform` reflects as an affine array** `[a, b, c, d, tx, ty]`, not as an object
+        # with a `translation`: reading it as an object skipped every row and the step reported "no
+        # visible widget" for a palette of 394 texts.
+        if not isinstance(at, list) or len(at) < 6:
+            continue
+        if not isinstance(node, dict):
+            continue
+        size = node.get("size")
+        inverse = node.get("inverse_scale_factor", 1.0) or 1.0
+        if not isinstance(size, list) or len(size) < 2 or size[0] <= 0 or size[1] <= 0:
+            continue
+        # **Logical pixels**, the space `bevy_fairy/input` reads. The node's centre and its size are in
+        # physical ones, and `inverse_scale_factor` is what turns them back: 0.833 for the editor's
+        # 1.2 UI scale, which a hard-coded 1.0 would have got wrong on every click.
+        x, y = at[4] * inverse, at[5] * inverse
+        # **A node dragged out of its panel is not a target.** The palette scrolls, so most of its rows
+        # sit at y = 1900 in a 720 px window; clicking there lands off the window and the take fails
+        # with a click that changed nothing. A word whose centre is outside the window is not the
+        # widget the storyboard means, and saying so is better than aiming at nothing.
+        if not (0.0 <= x <= 1280.0 and 0.0 <= y <= 720.0):
+            continue
+        return (x, y)
+    raise RuntimeError(f"click_label: no visible widget says {want!r}")
+
+
 def do_step(step, timeline, inj, agent, named=None):
     named = {} if named is None else named
     kind = step.get("_kind")
@@ -308,6 +363,16 @@ def do_step(step, timeline, inj, agent, named=None):
             time.sleep(0.1)
         for m in reversed(mods):
             inj.release(m)
+    elif kind == "click_label":
+        # **A widget found by its words, then clicked where it is drawn.** The editor reports every
+        # `Text` node's rect through BRP's `world.query`, so the click lands on the row a storyboard
+        # means however far up or down the layout has moved: two passes lost takes to a bar inserted
+        # above the palette, which shifted every guessed pixel by its height.
+        x, y = widget_centre(inj.port, step["click_label"])
+        inj.cursor(x, y)
+        timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
+        timeline.add(t=timeline.now(), type="click", x=x, y=y)
+        inj.send(kind="Mouse", button=step.get("button", "Left"), action="Tap")
     elif kind == "key":
         mods = step.get("mods", [])
         for m in mods:

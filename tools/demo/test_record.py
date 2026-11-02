@@ -81,3 +81,55 @@ class EventsLandOnTheFrameThatShowsThem(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClickLabelAsksTheEditor(unittest.TestCase):
+    """**A label click asks the running editor where the words are**, never a guessed pixel.
+
+    Three passes lost takes to a coordinate that drifted when a bar was added above the palette, so the
+    step this file added reads BRP's `world.query` instead. These tests pin the two things that cost a
+    run each to get wrong: `UiGlobalTransform` reflects as an **affine array**, not an object with a
+    `translation`, and a row scrolled out of its panel must be refused rather than clicked off-window.
+    """
+
+    def rows(self, texts):
+        out = []
+        for words, at, size in texts:
+            out.append({"entity": 1, "components": {
+                "bevy_ui::widget::text::Text": words,
+                "bevy_ui::ui_node::ComputedNode": {"size": size, "inverse_scale_factor": 1.0},
+                "bevy_ui::ui_transform::UiGlobalTransform": at,
+            }})
+        return out
+
+    def test_the_centre_comes_from_the_affine_array(self):
+        rows = self.rows([("sofa", [1.0, 0.0, 0.0, 1.0, 400.0, 300.0], [40.0, 20.0])])
+        answer = {"result": rows}
+        original = record.brp
+        record.brp = lambda port, method, params: answer
+        try:
+            self.assertEqual(record.widget_centre(1, "sofa"), (400.0, 300.0))
+        finally:
+            record.brp = original
+
+    def test_a_row_outside_the_window_is_refused(self):
+        rows = self.rows([("floor", [1.0, 0.0, 0.0, 1.0, 400.0, 1900.0], [40.0, 20.0])])
+        answer = {"result": rows}
+        original = record.brp
+        record.brp = lambda port, method, params: answer
+        try:
+            with self.assertRaises(RuntimeError):
+                record.widget_centre(1, "floor")
+        finally:
+            record.brp = original
+
+    def test_the_exact_words_are_matched(self):
+        rows = self.rows([("floor_light", [1.0, 0.0, 0.0, 1.0, 10.0, 10.0], [4.0, 4.0]),
+                          ("floor", [1.0, 0.0, 0.0, 1.0, 900.0, 200.0], [40.0, 20.0])])
+        answer = {"result": rows}
+        original = record.brp
+        record.brp = lambda port, method, params: answer
+        try:
+            self.assertEqual(record.widget_centre(1, "floor"), (900.0, 200.0))
+        finally:
+            record.brp = original
