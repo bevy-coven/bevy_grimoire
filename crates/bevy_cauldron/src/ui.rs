@@ -34,6 +34,15 @@ impl Plugin for EditorUiPlugin {
         // **The settings screen** (UI-71, #249): Cmd/Ctrl+, over any screen.
         app.add_plugins((crate::settings_screen::SettingsScreenPlugin, crate::project_config::ProjectConfigPlugin, crate::keymap_screen::KeymapScreenPlugin));
         app.insert_resource(editor_skin());
+        // **The shell's regions as gooey panels** (UI-30, #224). A `Dock` shows only what a
+        // `PanelRegistry` names, so the regions the editor draws are registered here — the one place
+        // that owns the UI library — and the dock that arranges them is spawned in
+        // `chrome::frame`, where the outer layout already lives.
+        //
+        // The contents keep the editor's own colours for now; UI-02 (#210) moves those onto the skin.
+        // What changes here is the *arrangement*: a region can be dragged and resized by gooey rather
+        // than by a hand-built flex row nothing can move.
+        app.add_systems(PreStartup, register_the_shell_panels);
         // **`K` is the reveal, and gooey owns the rule** (UI-41, #235; bevy-coven/bevy_gooey#36).
         //
         // `ShortcutBadges` is ExposeHK's overlay, and until G-32 it could only be shown by a
@@ -58,4 +67,44 @@ impl Plugin for EditorUiPlugin {
                 .before(bevy_gooey::GooeySystems::Style),
         );
     }
+}
+
+/// **The regions of the shell, as `bevy_gooey` panels** (UI-30, #224).
+///
+/// Each is registered with the id a dock layout names. A `Dock` shows what the registry holds when it
+/// is built and skips anything it cannot find (`DockPanelSkipped`), so this runs before the frame.
+///
+/// **Registered once, at `PreStartup`.** The spawn closure fills the panel; a region whose contents
+/// the editor draws elsewhere — the viewport is a texture — gets the node that holds them, so the
+/// dock's own arrangement is what a person drags.
+fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
+    for (id, title) in [
+        ("inspector", "INSPECTOR"),
+        ("viewport", "VIEWPORT"),
+        ("place", "PLACE"),
+        ("status", "STATUS"),
+    ] {
+        registry.register(id, title, move |c| {
+            c.insert(bevy_gooey::DockPanel(id.to_owned()));
+        });
+    }
+}
+
+/// **The shell's arrangement**, as a dock layout a divider can move (UI-30, #224).
+///
+/// A left dock, the viewport in the middle with the most room, and a right dock — the shape the
+/// hand-built frame has had since 2026-08-17, now data that gooey keeps and a person edits.
+pub fn shell_layout() -> bevy_gooey::DockLayout {
+    use bevy_gooey::{DockLayout, SplitAxis};
+    DockLayout::split(
+        SplitAxis::Horizontal,
+        0.22,
+        DockLayout::group(["inspector"]),
+        DockLayout::split(
+            SplitAxis::Horizontal,
+            0.78,
+            DockLayout::group(["viewport"]),
+            DockLayout::group(["place"]),
+        ),
+    )
 }

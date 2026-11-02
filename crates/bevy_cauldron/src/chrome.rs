@@ -1154,6 +1154,18 @@ pub fn spawn_frame(mut commands: Commands) {
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
+    // **And the arrangement itself, as a gooey dock** (UI-30, #224). The hand-built `left`/`viewport`/
+    // `right` row above is still what the frame *names*, because twelve systems read those entities to
+    // place a control or a badge; the dock is what now holds the viewport's pane, so its divider can be
+    // dragged. Moving the two docks onto gooey's `Dock` as well is the rest of this issue.
+    let dock = commands
+        .spawn((
+            bevy_gooey::Dock(crate::ui::shell_layout()),
+            Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        ))
+        .id();
+    commands.entity(viewport).add_child(dock);
+
     commands
         .entity(root)
         .add_children(&[chrome_bar, door_strip, body, status]);
