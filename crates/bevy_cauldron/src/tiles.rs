@@ -1510,7 +1510,7 @@ fn replay_logged(
     project: &mut Project,
     state: &mut ImportState,
 ) {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -5028,7 +5028,7 @@ mod pack_fold_tests {
         for d in fresh.measured.descriptors.iter_mut().filter(|d| d.id == "wall") {
             d.look = vec!["worn".to_owned()];
         }
-        let mut ctx = crate::ops::Ctx {
+        let mut ctx = crate::ops::Ctx { trust_file: None,
             project: Some(fresh),
             open: None,
             source: crate::ops::Source::Human,

@@ -36,7 +36,7 @@ fn ctx(tag: &str, port: u16) -> (Ctx, std::path::PathBuf) {
         format!(r#"(version: 1, command: ["{py}", "game.py", "{{map}}", "{{camera}}", "{port}"], port: {port})"#, py = fixtures_python()),
     )
     .unwrap();
-    (Ctx { root: Some(root.clone()), session: "test".to_owned(), ..Ctx::default() }, root)
+    (Ctx { root: Some(root.clone()), session: "test".to_owned(), trust_file: Some(fixtures::trusted_store(&root)), ..Ctx::default() }, root)
 }
 
 /// The interpreter the fixture game runs on: the system's `/usr/bin/python3` where there is one.

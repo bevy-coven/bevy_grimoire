@@ -57,6 +57,14 @@ impl CommandKind {
             CommandKind::Play => "game",
         }
     }
+
+    /// The button a person presses to start it again once it is allowed.
+    pub fn verb(self) -> &'static str {
+        match self {
+            CommandKind::Notes => "Send",
+            CommandKind::Play => "Play",
+        }
+    }
 }
 
 /// **A command as the project's file writes it**, before `{map}`, `{model}` and the like are filled in:
