@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **201-move-keeps-identity** `bd91af7` A moved or turned piece keeps its entity, so a game's people, animation phases and fire flicker on it are not restarted by an edit elsewhere (#201) *No clip: engine behaviour with no surface of its own; proved by live_reload::an_edit_respawns_only_what_changed and live_migrate::a_registered_component_follows_a_piece_that_is_drawn_again*
 - **271-clock-walk** `67c1084` A family_set clock edit is walked to its new hour over a second instead of jumped, so the sky goes from noon to dusk without the viewport blowing white for 1.5 seconds (#271)<br><a href="docs/changelog/media/2026-11-02-271-clock-walk.mp4"><img src="docs/changelog/media/2026-11-02-271-clock-walk.png" width="320" alt="clip"></a>
 - **272-settle** `48b27d4` A demo storyboard can say when a faded change has landed: record.py's settle step, and check.py measuring that moment instead of the operation's own frame (#272) *No clip: demo tooling; nothing on screen; proved by tools/demo/test_check.py (9 tests)*
 - **build-strip** `074f248` The workspace's own test binaries are stripped of symbols, so a Bevy test binary links at 56 MB instead of 2 GB and an aborted link cannot leave 2 GB of debris on a full disk *No clip: a build profile setting; proved by the relinked binary size and tests/live_reload.rs passing on it*
