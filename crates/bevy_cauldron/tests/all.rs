@@ -18,6 +18,7 @@ mod fixtures;
 
 mod a_broken_stack_still_opens_framed;
 mod a_capture_sequence_takes_one_frame_at_a_time;
+mod a_clock_edit_walks_the_hour;
 mod a_change_says_what_it_broke;
 mod a_change_whose_log_line_cannot_be_written_is_taken_back;
 mod a_chip_click_writes_the_library_once;

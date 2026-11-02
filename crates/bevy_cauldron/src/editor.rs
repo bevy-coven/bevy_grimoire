@@ -2276,10 +2276,17 @@ impl Plugin for EditorPlugin {
         #[cfg(feature = "bevy_elements")]
         app.add_systems(OnEnter(crate::screen::Screen::Editor), crate::environment::warm_weathered_pipeline);
         #[cfg(feature = "bevy_elements")]
-        app.init_resource::<crate::environment::ClockScrub>().add_systems(
+        app.init_resource::<crate::environment::ClockScrub>()
+            .init_resource::<crate::environment::ClockRamp>()
+            .add_systems(
             Update,
             (
                 crate::environment::apply_environment.after(crate::family_host::Reloaded),
+                // **After the settings, before the scrubber**: the walk moves the hour the file
+                // asked for, and a held scrubber then wins, as it always has (#271).
+                crate::environment::walk_the_clock
+                    .after(crate::environment::apply_environment)
+                    .before(crate::environment::scrub_clock),
                 crate::environment::scrub_clock.after(crate::environment::apply_environment),
                 crate::environment::dress_volume.after(crate::family_host::Reloaded).after(crate::terrain_view::sync_terrain_view),
             ),
