@@ -87,18 +87,24 @@ fn the_toolbar_shows_registered_commands_that_have_icons() {
 
 /// **A click on a mode option arms that tool through the key's own chord.**
 ///
-/// **Not passing, and the reason is now measured rather than guessed.** `bevy_gooey::testing::click` on
-/// the group's Move option sends no `Activate` at all: a counter in the editor's observer read **0**, and
-/// the group's `ToggleGroupValue` was still `0` afterwards, while the option itself is laid out and live
-/// (`ComputedNode` 36 x 29, not `Overflowed`). The click is aimed at the option's own `UiGlobalTransform`
-/// centre, so what is in doubt is whether that point reaches it inside a toolbar that also holds a
-/// `Dock`-laid window and a viewport image — not whether the group or the editor's observer is right.
-/// That is the next slice's first question.
+/// **Not passing, and two hypotheses have been ruled out by measurement rather than assumed away.**
 ///
-/// **Correction to pass 241's claim:** that pass's comment said the click "moves the group's value". It
-/// does not; the earlier run had no counter, and its `warn!` never printed because a headless app has no
-/// `LogPlugin`. The value never moved.
-#[ignore = "testing::click sends no Activate to a toolbar group option; measured, see #231's comment"]
+/// Measured, with a counter the test can read (a `warn!` is not evidence here: a headless app has no
+/// `LogPlugin`, which is what made pass 241's first note wrong):
+///
+/// 1. `bevy_gooey::testing::click` on the group's Move option produces **no `Activate` at all** — the
+///    editor's observer ran **0** times and the group's `ToggleGroupValue` was still `0` — while the
+///    option is live (`ComputedNode` 36 x 29, not `Overflowed`).
+/// 2. **`surface::retarget_pointer` was suspected and is not the cause.** Its guard skipped only when the
+///    app had no window *and* no pointer position, so a headless editor re-pointed the click from the
+///    interface camera onto the viewport image. The guard now returns whenever there is no window at all
+///    — a real fix, kept — and the case still fails, so the pointer is not what swallows the click.
+///
+/// What is left to look at, for the next slice: whether `testing::click`'s surface (`surface_of` reads the
+/// option's `ComputedUiTargetCamera`) resolves to the same target picking uses in this app, which draws
+/// its interface through `surface.image` and a second camera onto the map. That is a question about the
+/// harness's mapping, not about the group or the observer.
+#[ignore = "no Activate reaches a toolbar group option; retarget_pointer ruled out, see the doc and #231"]
 #[test]
 fn a_click_on_the_move_button_asks_for_the_chord_and_the_key_arms_it() {
     let (_root, mut app) = editor("toolbar-click");

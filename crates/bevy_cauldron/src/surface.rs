@@ -703,12 +703,19 @@ fn retarget_pointer(
     let (Some(surface), Some(pointer)) = (surface, pointer) else {
         return;
     };
-    // **With no window and no pointer, nothing here knows where the pointer is, so it leaves it where
-    // picking's own input put it** (UI-06, #214). `view::sense_pointer` answers `None` for "no window"
-    // as much as for "off the window", and clearing on the first would erase every `PointerInput` a
-    // headless test app writes (`bevy_gooey::testing::click` puts the pointer on the surface's image) before
-    // picking reads it. A window that has the cursor off it still clears, below.
-    if pointer.0.is_none() && window.is_empty() {
+    // **With no window at all, nothing here knows where the pointer is, so it leaves it where picking's
+    // own input put it** (UI-06, #214). `view::sense_pointer` answers `None` for "no window" as much as
+    // for "off the window", and clearing on the first would erase every `PointerInput` a headless test
+    // app writes (`bevy_gooey::testing::click` puts the pointer on the surface's image) before picking
+    // reads it. A window that has the cursor off it still clears, below.
+    //
+    // **`window.is_empty()` alone, not `&& pointer.0.is_none()`** (UI-37, #231). A headless app has no
+    // window but the editor's own `view::Pointer` *does* hold a position — `sense_pointer` reads the
+    // cursor through `bevy_fairy`, not through the window — so the old guard fell through and this
+    // system re-pointed a gooey test's click from the interface camera onto the **viewport image**.
+    // Picking then hit the map, the click never reached the button, and the failure looked like a
+    // toolbar that ignored clicks: measured as an observer that ran 0 times on a live 36 x 29 option.
+    if window.is_empty() {
         return;
     }
     let onto = bevy::camera::NormalizedRenderTarget::Image(ImageRenderTarget {
