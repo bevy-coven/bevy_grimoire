@@ -119,7 +119,12 @@ fn note_edit(project: &Project, source: Source, req: &NoteRequest) -> Result<Not
     let before = NoteRestore { note: d.note.clone(), labels: d.labels.clone() };
     let summary = match req {
         NoteRequest::Set { note, .. } => {
-            if before.note.as_deref().unwrap_or("") == note {
+            // **The same words by the same writer change nothing**; the same words by another writer
+            // are a person confirming a model's note (or an agent's), which moves the axis to them and
+            // is the point of confirming it. A blank over no description is nothing to clear.
+            let same_text = before.note.as_deref().unwrap_or("") == note;
+            let same_by = before.labels.as_ref().and_then(|l| l.by.get(Axis::Note)) == Some(by_of(source));
+            if same_text && (same_by || note.is_empty()) {
                 return Err(Refusal::new(format!("`{id}` is already described that way, so nothing was set.")));
             }
             d.note = (!note.is_empty()).then(|| note.clone());

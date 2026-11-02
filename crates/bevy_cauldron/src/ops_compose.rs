@@ -177,6 +177,9 @@ impl CompositionDefine {
                 if prior.is_some() {
                     crate::editor::strand_check(open, &comp).map_err(Refusal::new)?;
                 }
+                // The whole-set check the commit makes (a group nesting itself, a depth past the cap), so
+                // a preview refuses what the write will.
+                project.check_composition(&comp).map_err(Refusal::new)?;
                 return Ok(Some(Outcome {
                     summary: format!("would define group {id} from {} piece(s)", comp.members.len()),
                     affected: comp.members.len(),

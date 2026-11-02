@@ -292,3 +292,32 @@ fn a_persons_typed_width_is_one_logged_change_and_cmd_z_takes_it_back() {
     app.update();
     assert_eq!(piece(&app, "site/crate").extent, before.extent, "one Cmd+Z must take the resize back");
 }
+
+/// **A person typing the words an agent already wrote confirms them**: nothing in the text changes, the
+/// note axis moves to the person, and that is one logged change. (The same words by the same writer
+/// change nothing and are refused.)
+#[test]
+fn a_person_retyping_an_agents_description_confirms_it() {
+    let mut app = editor("note-confirm");
+    select(&mut app, "site/crate");
+    let a = apply(&mut app, "piece_set_note", serde_json::json!({"id": "site/crate", "note": "abc a"}));
+    assert_eq!(a["outcome"], "applied", "{a}");
+    assert_eq!(piece(&app, "site/crate").labels.as_ref().and_then(|l| l.by.get(Axis::Note)), Some(By::Agent));
+    let same = apply(&mut app, "piece_set_note", serde_json::json!({"id": "site/crate", "note": "abc a"}));
+    assert_eq!(same["outcome"], "refused", "the same words by the same writer were accepted: {same}");
+    let lines = log(&app).len();
+
+    app.world_mut().resource_mut::<NoteEdit>().open_for_test("site/crate");
+    app.update();
+    type_text(&mut app, "abc a");
+    tap(&mut app, Key::Enter, KeyCode::Enter);
+    app.update();
+
+    assert_eq!(piece(&app, "site/crate").note.as_deref(), Some("abc a"));
+    assert_eq!(
+        piece(&app, "site/crate").labels.as_ref().and_then(|l| l.by.get(Axis::Note)),
+        Some(By::Human),
+        "confirming an agent's words must make the note a person's"
+    );
+    assert_eq!(log(&app).len(), lines + 1, "the confirmation is one log line");
+}

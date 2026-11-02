@@ -262,3 +262,25 @@ fn keeping_a_set_over_an_existing_name_asks_then_redefines() {
     let c = project.compositions.compositions.iter().find(|c| c.id == "abc").expect("abc");
     assert_eq!(c.members.len(), 2, "the group is now the two pieces in hand");
 }
+
+/// **A preview refuses what the write will**: a set that carries a stamp of the group it redefines would
+/// make the group contain itself, which the whole-set check refuses at the commit and, now, in a dry run.
+#[test]
+fn a_preview_of_a_group_that_would_contain_itself_is_refused() {
+    let (root, mut app) = editor("keep_set_self_nest");
+    let made = define(&mut app, serde_json::json!({"id": "a", "set": literal_set()}));
+    assert_eq!(made["outcome"], "applied", "{made}");
+    let before = comps(&root);
+    let mut set = literal_set();
+    set["stamps"] = serde_json::json!([{"of": "a", "offset": [0.0, 0.0]}]);
+    let params = serde_json::json!({"id": "a", "replace": true, "set": set});
+    let dry = call(
+        &mut app,
+        "grimoire/operation_apply",
+        serde_json::json!({"operation": "composition_define", "parameters": params.clone(), "dry_run": true}),
+    );
+    assert_eq!(dry["outcome"], "refused", "the preview said yes to a group that contains itself: {dry}");
+    let real = define(&mut app, params);
+    assert_eq!(real["outcome"], "refused", "the write agrees: {real}");
+    assert_eq!(comps(&root), before, "a refusal wrote compositions.ron");
+}

@@ -853,7 +853,14 @@ fn note_keys(
                 // change. A candidate is not in the library and keeps its note in memory until Accept.
                 if where_to == Persist::Library {
                     let id = d.id.clone();
-                    if d.note.as_deref().unwrap_or("") == text {
+                    // The same words by a person change nothing; the same words over a model's or an
+                    // agent's are the person confirming them, which `piece_set_note` records.
+                    let mine = d
+                        .labels
+                        .as_ref()
+                        .and_then(|l| l.by.get(bevy_grimoire_core::descriptor::Axis::Note))
+                        == Some(bevy_grimoire_core::descriptor::By::Human);
+                    if d.note.as_deref().unwrap_or("") == text && (mine || text.is_empty()) {
                         state.status.note("description unchanged".to_owned());
                         return;
                     }
