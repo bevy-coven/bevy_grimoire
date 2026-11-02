@@ -444,3 +444,30 @@ bmb also needs `brew install git-lfs` and `git lfs install` (found 2026-10-29 st
 3. nothing is driving a human's tree: `git -C <human checkout> status --short` unchanged.
 4. **a pass reached its own gate once.** This is the only proof the loop can do anything; watch one pass
    to completion and read its own verdict, not just the exit code.
+
+## An hourly check clears the ground, and says so in one page (owner, 2026-11-02)
+
+> "check in on this every hour and make sure this space is clear and any impediments are removed so that
+> these work processes can continue on."
+
+`~/.local/share/wiggum/hourly-check.sh` runs from `loops-hourly.timer` (`OnCalendar=hourly`,
+`Persistent=true`, so a reboot that skips an hour runs it once on the way back up). It does **not**
+replace `loops-watchdog.sh`; it runs it first, then looks for the four things a 20-minute check leaves
+alone, and writes `~/.local/state/wiggum/hourly-report.txt` — one page a person can read without ssh
+surgery. History is appended to `hourly.log`, one summary line per run.
+
+What it clears, and what it only reports:
+
+| Finding | Action |
+|---|---|
+| a `drain` file with **no driver alive** to read it | **removed.** A drain is read by the driver between passes, so with no driver it is litter — and measured 2026-11-02 it bites later: `bevy_emerge_loop/drain` was left at 06:01 and a hand-driven pass then started on that state dir, where the next automatic start would have exited at once. |
+| a `stop` file | **reported only.** On a stopped loop it is a person's latch, and clearing it would start a loop somebody stopped. |
+| commits in a clone with **no pass in flight** and unpushed | **reported.** This is the one failure a loop cannot recover from by itself, so it leads the report. |
+| two `omp` processes in one clone | **reported** (two drivers). |
+| a hand-driven loop between passes | **reported as normal**, not as a fault: a person's pace is not a fault, the same rule `loops-watchdog.sh` already uses for the `manual` marker. |
+
+It never resets, cleans, rebases, force-pushes or kills a pass, exactly like the watchdog. Its own
+`is-enabled` test is not used for "meant to run": both units are `disabled` for boot **on purpose**
+(gooey is started by `gooey-grimoire-watch.timer` while a `grimoire-ui` issue is open, and the editor's
+is hand-driven), so that test would have been a dead branch — it was written, caught by testing the
+branch with a planted file, and replaced.
