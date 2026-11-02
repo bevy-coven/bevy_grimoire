@@ -204,7 +204,9 @@ fn an_edit_to_an_unrelated_piece_leaves_every_person_and_what_they_point_at_alon
     assert_eq!(app.world().get::<Ties>(people.anna), Some(&Ties(vec![people.ben])));
     assert_eq!(app.world().get::<Ties>(people.ben), Some(&Ties(vec![people.anna])));
     assert!(app.world().resource::<Flagged>().0.lock().unwrap().is_empty(), "no reference was rewritten, so none is flagged as changed");
-    assert_ne!(after["well"], at["well"], "the edited well is drawn again");
+    // **The edited well keeps its entity** (#201 acceptance item 5: a move is identity-preserving), so
+    // no reference to it is stale and nothing has to be followed.
+    assert_eq!(after["well"], at["well"], "the moved well keeps its Entity");
     for id in ["house_a", "lamp", "house_b"] {
         assert_eq!(after[id], at[id], "{id} was not edited, so it keeps its entity");
     }
@@ -224,15 +226,18 @@ fn a_reference_follows_the_piece_it_names_when_a_reload_draws_it_again() {
     settle(&mut app);
 
     let after = entities(&mut app);
-    assert_ne!(after["house_a"], at["house_a"], "the moved house is drawn again");
-    assert_ne!(after["lamp"], at["lamp"], "and so is what rests on it");
+    // **The house is not drawn again, and neither is the lamp** (#201 item 5): both keep their
+    // entities, so a reference that names them is never stale and the hook has nothing to repair.
+    // That is a stronger claim than "it followed them": the reference was right all along.
+    assert_eq!(after["house_a"], at["house_a"], "the moved house keeps its Entity");
+    assert_eq!(after["lamp"], at["lamp"], "and so does what rests on it");
     assert_eq!(after["house_b"], at["house_b"]);
 
     assert_eq!(app.world().get::<Home>(people.anna), Some(&Home(after["house_a"])), "Anna's home is the new entity");
     assert_eq!(
         app.world().get::<Places>(people.anna),
-        Some(&Places(vec![("lamp".to_owned(), after["lamp"])])),
-        "a list of places is followed entry by entry, and the rider follows with its host"
+        Some(&Places(vec![("lamp".to_owned(), at["lamp"])])),
+        "a list of places still names the same lamp, because the lamp was never drawn again"
     );
     assert_eq!(app.world().get::<Home>(people.ben), Some(&Home(at["house_b"])), "Ben's house was not drawn again");
     assert_eq!(
@@ -244,10 +249,14 @@ fn a_reference_follows_the_piece_it_names_when_a_reload_draws_it_again() {
     assert_eq!(app.world().get::<Transform>(people.anna).map(|t| t.translation), Some(Vec3::new(1.5, 0.0, 1.5)), "the person did not move");
     assert_eq!(app.world().get::<Ties>(people.anna), Some(&Ties(vec![people.ben])));
     assert_eq!(app.world().get::<Ties>(people.ben), Some(&Ties(vec![people.anna])));
-    assert_eq!(
-        *app.world().resource::<Flagged>().0.lock().unwrap(),
-        vec![people.anna],
-        "only the reference that was rewritten is flagged as changed"
+    // **Nothing was rewritten, so nothing is flagged** (#201 item 5). This used to expect Anna's
+    // `Home` in the list, because the house she lives in was respawned and the hook had to point it
+    // at the new entity. The house keeps its entity now, so the hook never runs, the reference is
+    // never touched, and a game that watches `Changed<Home>` sees nothing — which is the point: an
+    // edit elsewhere in the yard no longer wakes every person in it.
+    assert!(
+        app.world().resource::<Flagged>().0.lock().unwrap().is_empty(),
+        "nothing was respawned, so no reference was rewritten and none is flagged as changed"
     );
 }
 
@@ -299,7 +308,9 @@ fn a_reference_to_a_removed_piece_is_left_as_it_was_and_one_nobody_registered_is
     assert_eq!(app.world().get::<Home>(people.ben), Some(&Home(at["house_b"])), "nothing stands for a removed piece, so the reference is not invented");
     assert!(app.world().get_entity(at["house_b"]).is_err(), "and it names an entity that is gone: the game's to handle");
     assert_eq!(app.world().get::<Home>(people.anna), Some(&Home(after["house_a"])));
-    assert_ne!(after["lamp"], at["lamp"], "the lamp was drawn again with its host, so the old reference is stale unless followed");
+    // **The lamp keeps its entity with its host** (#201 item 5), so the unregistered `Places` needs no
+    // following and is simply still right.
+    assert_eq!(after["lamp"], at["lamp"], "the lamp kept its entity with its host");
     assert_eq!(
         app.world().get::<Places>(people.anna),
         Some(&Places(vec![("lamp".to_owned(), at["lamp"])])),

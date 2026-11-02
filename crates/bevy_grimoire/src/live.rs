@@ -23,7 +23,7 @@ use std::time::SystemTime;
 use bevy::ecs::component::Mutable;
 use bevy::prelude::*;
 use bevy_grimoire_core::data_files::{self, DataFiles};
-use bevy_grimoire_core::live::{FileWatch, KindVerdict, MapDiff, Outcome, Verdict, diff_maps_renaming, same_but_id};
+use bevy_grimoire_core::live::{FileWatch, KindVerdict, MapDiff, Outcome, Verdict, diff_maps_renaming};
 use bevy_grimoire_core::map::Map;
 use bevy_grimoire_core::project_data::{self, ProjectData};
 
@@ -240,16 +240,22 @@ pub(crate) struct Plan {
     /// Old id to new id (#201): the entity that stood for the old id is kept and stands for the
     /// new one, so whatever a game hung on it follows the rename.
     pub renamed: BTreeMap<String, String>,
+    /// **Placements whose pose changed but whose identity did not** (#201, acceptance item 5): moved,
+    /// turned, lifted or tipped, with the same descriptor and the same host. The entity is kept and
+    /// its `Transform` retargeted, because a person's position, an animation phase and a fire's
+    /// flicker are things a game hung on that entity and none of them should restart because a crate
+    /// slid a metre. A different descriptor, or a different host, is a respawn: the meaning changed.
+    pub moved: BTreeSet<String>,
     pub library_changed: bool,
 }
 
 /// **Which placements must be drawn again to turn `old` into `new`.**
 ///
-/// A placement is respawned when it is new, when its row differs, when its resolved height differs
-/// (a table moved, so the lamp on it did not change but stands elsewhere), when its descriptor or the
-/// descriptor's masks differ, or when what it rests on is respawned (a relationship points at an
-/// entity, and a despawned host takes it away). A placement that only changed its id (`renamed`,
-/// from [`diff_maps_renaming`]) is compared with its old row and kept when nothing else differs.
+/// A placement is respawned when it is new, when its descriptor or the descriptor's masks differ, when
+/// what it rests on is respawned (a relationship points at an entity, and a despawned host takes it
+/// away), or when its resolved height differs **for a reason other than its own move**. A placement
+/// that only changed its id (`renamed`, from [`diff_maps_renaming`]) is kept when nothing else
+/// differs, and one that only changed its pose is kept and retargeted — see [`Plan::moved`].
 pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld, renamed: &BTreeMap<String, String>) -> Plan {
     let before: HashMap<&str, usize> = old
         .map
@@ -266,14 +272,32 @@ pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld, renamed: &BTreeMap<
     };
     for (i, p) in new.map.placements.iter().enumerate() {
         let was = was_of.get(p.id.as_str()).copied().unwrap_or(p.id.as_str());
-        let same = before.get(was).is_some_and(|&j| {
-            same_but_id(&old.map.placements[j], p, renamed)
-                && old.y.get(j) == new.y.get(i)
-                && old.entry(&p.descriptor) == new.entry(&p.descriptor)
-                && old.map.origin == new.map.origin
-        });
-        if !same {
+        // **What makes two rows the same piece** (#201 acceptance item 5): the same descriptor, the
+        // same host, and the same map. Pose — `at`, `yaw`, `lift`, `tip` — is deliberately *not* in
+        // this list: a piece that moved or turned is the same piece, and respawning it would restart
+        // every run's people, animation phase and fire flicker that a game hung on it.
+        let Some(&j) = before.get(was) else {
             out.spawn.insert(p.id.clone());
+            continue;
+        };
+        let was_row = &old.map.placements[j];
+        let same_piece = was_row.descriptor == p.descriptor
+            && was_row.on.as_deref().map(|h| renamed.get(h).map_or(h, String::as_str))
+                == p.on.as_deref()
+            && old.entry(&p.descriptor) == new.entry(&p.descriptor)
+            && old.map.origin == new.map.origin;
+        // The pose, and the height that follows from it: a moved piece stands at a new `y`, which is
+        // its own move rather than something that happened to it.
+        let pose_same = was_row.at == p.at
+            && was_row.yaw == p.yaw
+            && was_row.lift == p.lift
+            && was_row.tip == p.tip
+            && old.y.get(j) == new.y.get(i);
+        if !same_piece {
+            out.spawn.insert(p.id.clone());
+        } else if !pose_same {
+            // Kept, and moved where it stands rather than drawn again.
+            out.moved.insert(p.id.clone());
         }
     }
     // Riders follow their host, transitively.
@@ -291,6 +315,8 @@ pub(crate) fn plan(old: &GrimoireWorld, new: &GrimoireWorld, renamed: &BTreeMap<
     let now: BTreeSet<&str> = new.map.placements.iter().map(|p| p.id.as_str()).collect();
     for p in &old.map.placements {
         let current = renamed.get(&p.id).unwrap_or(&p.id);
+        // **A moved piece is deliberately not in this test** (#201, item 5): it keeps its entity and
+        // is retargeted, so despawning it here would take back exactly what the split exists to keep.
         if !now.contains(current.as_str()) || out.spawn.contains(current) {
             out.despawn.insert(p.id.clone());
         }
@@ -508,6 +534,27 @@ fn reload(
             commands.entity(entity).insert(Placement(now.clone()));
             kept.insert(now.clone(), entity);
         } else {
+            // **A moved piece keeps its entity and is put where it now stands** (#201, item 5). The
+            // same `Transform` write a respawn would have made, without the despawn that would take
+            // a person's position, an animation phase or a fire's flicker with it.
+            if plan.moved.contains(id)
+                && let Some(now) = new.map.placements.iter().position(|p| &p.id == id)
+                && let Some(&y) = new.y.get(now)
+                && let Some((d, _)) = new.entry(&new.map.placements[now].descriptor)
+            {
+                let p = &new.map.placements[now];
+                commands
+                    .entity(entity)
+                    .insert(crate::placed_transform(d, p.at, p.yaw, p.tip, new.map.origin, y));
+                // **A moved host takes its riders with it, in place.** `MountedOn` is a relationship,
+                // so the guest holds an `Entity` pointing at the host; a host that keeps its entity
+                // therefore needs no rewrite, but a host that *moved* while its guest was respawned
+                // would leave the guest pointing at nothing. Both halves are moved together, so the
+                // guest is asked to follow the host it already names.
+                if let Some(&host) = p.on.as_ref().and_then(|h| kept.get(h.as_str()).or_else(|| kept.get(h))) {
+                    commands.entity(entity).insert(crate::MountedOn(host));
+                }
+            }
             kept.insert(id.clone(), entity);
         }
     }

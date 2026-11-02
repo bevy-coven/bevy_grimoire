@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime};
 use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
 use bevy_grimoire::live::{GrimoireLiveApp, GrimoireLivePlugin};
-use bevy_grimoire::{GrimoirePlugin, GrimoireWorld, OfDescriptor, Placement};
+use bevy_grimoire::{GrimoirePlugin, GrimoireWorld, MountedOn, OfDescriptor, Placement};
 use bevy_grimoire_core::descriptor::{Descriptor, Extent};
 use bevy_grimoire_core::kits::{Bind, KITS_VERSION, Kits, Lattice};
 use bevy_grimoire_core::library::{LIBRARY_VERSION, Library};
@@ -171,9 +171,14 @@ fn a_registered_component_follows_a_piece_that_is_drawn_again() {
     settle(&mut app);
 
     let after = entities(&mut app);
-    assert_ne!(after["crate_b"], before["crate_b"], "a moved piece is drawn again");
-    assert_eq!(app.world().get::<Booked>(after["crate_b"]), Some(&Booked(7)), "the registered state moved to the new entity");
-    assert_eq!(app.world().get::<Mood>(after["crate_b"]), None, "a component nobody registered is not carried");
+    // **A moved piece is not drawn again, so nothing has to be carried** (#201 acceptance item 5).
+    // This test used to assert the opposite — `assert_ne!`, the registered component moved by the
+    // hook, and an unregistered one `Mood` deliberately dropped — because a move was a respawn. It
+    // no longer is: the entity survives, so *everything* on it survives, registered or not, which is
+    // the whole point of the split and is strictly more than the hook could promise.
+    assert_eq!(after["crate_b"], before["crate_b"], "a moved piece keeps its Entity");
+    assert_eq!(app.world().get::<Booked>(after["crate_b"]), Some(&Booked(7)), "and the registered state on it");
+    assert_eq!(app.world().get::<Mood>(after["crate_b"]), Some(&Mood(3)), "and a component nobody registered, because nothing was respawned");
     assert_eq!(after["crate_a"], before["crate_a"], "an untouched piece keeps its entity");
     assert_eq!(app.world().get::<Mood>(after["crate_a"]), Some(&Mood(3)), "and everything on it");
 }
@@ -251,8 +256,12 @@ fn a_rider_drawn_again_with_its_host_carries_its_state_too() {
     settle(&mut app);
 
     let after = entities(&mut app);
-    assert_ne!(after["table"], before["table"]);
-    assert_ne!(after["lamp"], before["lamp"], "the rider follows its host");
+    // **Neither is respawned**: a moved host keeps its entity and its rider follows it in place
+    // (#201 item 5), so the state on both is the state it always had rather than something a hook
+    // had to carry.
+    assert_eq!(after["table"], before["table"], "a moved host keeps its Entity");
+    assert_eq!(after["lamp"], before["lamp"], "and its rider follows it in place");
+    assert_eq!(app.world().get::<MountedOn>(after["lamp"]).map(|m| m.0), Some(after["table"]), "still mounted, on the same host");
     assert_eq!(app.world().get::<Booked>(after["table"]), Some(&Booked(1)));
     assert_eq!(app.world().get::<Booked>(after["lamp"]), Some(&Booked(2)));
 }

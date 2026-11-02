@@ -495,6 +495,20 @@ pub fn tip_seat(d: &Descriptor, tip: (u8, u8)) -> f32 {
 ///
 /// Returns `None` only for a descriptor with neither a mesh nor a footprint — which is not an
 /// error: a descriptor may exist to carry tags before anyone has given it geometry.
+/// **The `Transform` a piece stands at, given its row and its resolved height** (#201, item 5).
+///
+/// The same arithmetic [`spawn_descriptor`] builds its `Transform` from — `origin_of` with the tip's
+/// seat, `draw_yaw` times `tip_quat`, and the alignment's scale — written once so a reload that *moves*
+/// a piece writes exactly what a reload that respawned it would have written. A second copy of this
+/// arithmetic is how a moved piece would end up a centimetre off the one drawn beside it.
+pub fn placed_transform(d: &Descriptor, at: (f32, f32), yaw: f32, tip: (u8, u8), map_origin: (f32, f32, f32), y: f32) -> Transform {
+    let scale = d.align.scale.unwrap_or(1.0);
+    let stretch = d.align.stretch_y.unwrap_or(1.0);
+    Transform::from_translation(origin_of(at, map_origin, y + tip_seat(d, tip)))
+        .with_rotation(Quat::from_rotation_y(draw_yaw(d, yaw).to_radians()) * tip_quat(tip))
+        .with_scale(Vec3::new(scale, scale * stretch, scale))
+}
+
 // Public entry point; folding these arguments into a struct would change its signature for every caller.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_descriptor(
@@ -508,19 +522,16 @@ pub fn spawn_descriptor(
     map_origin: (f32, f32, f32),
     y: f32,
 ) -> Option<Entity> {
-    let scale = d.align.scale.unwrap_or(1.0);
-    let stretch = d.align.stretch_y.unwrap_or(1.0);
+    // The alignment's scale and stretch are applied by `placed_transform`, which this shares with a
+    // reload that moves a piece in place — one expression, so the two cannot drift.
     let parent = (
         Name::new(d.id.clone()),
         OfDescriptor(d.id.clone()),
         Tags(masks),
         // The tip turns the piece in its own frame, the yaw turns the tipped piece, and the
-        // seat keeps the result standing on `y` — see [`tip_seat`].
-        Transform::from_translation(origin_of(at, map_origin, y + tip_seat(d, tip)))
-            .with_rotation(Quat::from_rotation_y(draw_yaw(d, yaw).to_radians()) * tip_quat(tip))
-            // Y is scaled separately: `stretch_y` is a project's architecture policy layered
-            // over the mesh's measured height, not an art correction.
-            .with_scale(Vec3::new(scale, scale * stretch, scale)),
+        // seat keeps the result standing on `y` — see [`tip_seat`]. One expression, shared with a
+        // reload that moves a piece in place, so the two cannot drift.
+        placed_transform(d, at, yaw, tip, map_origin, y),
         Visibility::Inherited,
     );
     let Some(mesh) = d.mesh.as_ref() else {

@@ -168,8 +168,22 @@ fn an_edit_respawns_only_what_changed() {
     let after = entities(&mut app);
     assert_eq!(after.len(), 3);
     assert_eq!(after["crate_a"], before["crate_a"], "an unchanged placement keeps its Entity");
-    assert_ne!(after["crate_b"], before["crate_b"], "a moved placement is respawned");
-    assert!(app.world().get_entity(before["crate_b"]).is_err(), "the old entity is gone");
+    // **A moved placement keeps its Entity too** (#201 acceptance item 5: move, turn, retint and
+    // retune preserve identity; only a change of kind respawns). The old claim here was the
+    // opposite — `assert_ne!` and "the old entity is gone" — and it is what made an unrelated edit
+    // restart a society run's people and a fire's flicker. What must still be true is that the
+    // entity is where the map now says it is, so the transform is asserted rather than the identity.
+    assert_eq!(after["crate_b"], before["crate_b"], "a moved placement keeps its Entity");
+    // **And it stands where the new map says it does.** Keeping the entity is only half the claim;
+    // the other half is that the transform was retargeted, which is the work a respawn used to do.
+    let moved = app.world().get::<Transform>(after["crate_b"]).copied().expect("a placed piece has a Transform");
+    let world = app.world().resource::<GrimoireWorld>();
+    let descriptor = world.entry("kit/crate").expect("the descriptor").0.clone();
+    let want = bevy_grimoire::placed_transform(&descriptor, (5.0, 1.0), 0.0, (0, 0), (0.0, 0.0, 0.0), world.y[1]);
+    assert_eq!(
+        moved.translation, want.translation,
+        "a moved piece stands where the new map says it does, with the entity it always had"
+    );
     assert!(!after.contains_key("crate_c") && after.contains_key("crate_d"));
     assert_eq!(app.world().resource::<GrimoireWorld>().map.placements.len(), 3);
 }
@@ -233,6 +247,10 @@ fn a_rider_follows_its_host_and_is_mounted_again() {
     project.write_map(&map(vec![row("table_a", "kit/table", (6.0, 1.0)), lamp]));
     settle(&mut app);
     let after = entities(&mut app);
-    assert_ne!(after["lamp"], before["lamp"], "the rider is respawned with its host");
+    // **A moved host keeps its entity, and so does its rider** (#201, item 5), and the rider is
+    // still mounted on the same table — the relationship is what has to survive a move, not the
+    // despawn that used to carry it.
+    assert_eq!(after["table_a"], before["table_a"], "a moved host keeps its Entity");
+    assert_eq!(after["lamp"], before["lamp"], "and its rider keeps its own");
     assert_eq!(app.world().get::<MountedOn>(after["lamp"]).map(|m| m.0), Some(after["table_a"]));
 }
