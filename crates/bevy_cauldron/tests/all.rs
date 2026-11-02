@@ -127,6 +127,7 @@ mod a_widget_is_clicked_by_its_label;
 mod the_settings_screen_searches_and_resets;
 mod the_keymap_refuses_a_clash_and_saves_nothing;
 mod the_project_configuration_toggles_a_family_crate;
+mod the_project_configuration_leaves_a_pack_out;
 mod after_edit_checks_say_what_they_found;
 mod after_edit_waits_for_the_picture;
 mod an_agent_can_define_a_composition;

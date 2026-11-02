@@ -16,9 +16,12 @@
 //! words the status line uses (`family_host::problems_with`), and the switch still works. A `family.ron`
 //! that does not read is shown and **never written over**: the switches wait until it reads.
 //!
-//! The kits the project binds are listed under the switches, the one being authored marked; editing a kit
-//! and the policy's exclusions go through their operations (`kit_create`, `kit_set_authoring`,
-//! `pack_set_excluded`) and are not on this screen yet.
+//! The kits the project binds are listed under the switches, the one being authored marked. Under them
+//! is the kit's **policy**: every folder directly under `assets/` and every pack `project.ron` already
+//! leaves out, one switch each, on while the pack is left out. A switch is the operation
+//! `pack_set_excluded` (the one `Shift+R` on the Meshes tab and an agent's `apply` dispatch), so the
+//! file's prose stays, a refusal is shown under the switches, and one log line names the change. Kit
+//! edits stay the operations `kit_create` and `kit_set_authoring` and are not on this screen yet.
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -31,6 +34,7 @@ use bevy_gooey::{Activate, Cancel, ValueChange, button, dialog, heading, label, 
 use crate::family_host;
 use crate::live::EditorReloads;
 use crate::project::Project;
+use crate::tiles::ImportState;
 
 /// How many switches the list shows before it scrolls.
 const FAMILY_ROWS: f32 = 7.5;
@@ -62,6 +66,8 @@ struct Snapshot {
     dialog: ProjectConfigDialog,
     family: Result<Vec<String>, String>,
     verdict: Option<String>,
+    /// The packs the policy leaves out.
+    left_out: Vec<String>,
 }
 
 /// The column the switches, the verdict and the kits are built into.
@@ -71,7 +77,8 @@ struct Lines;
 #[derive(SystemParam)]
 struct Writer<'w, 's> {
     dialog: Query<'w, 's, &'static mut ProjectConfigDialog>,
-    project: Option<Res<'w, Project>>,
+    project: Option<ResMut<'w, Project>>,
+    import: Option<ResMut<'w, ImportState>>,
     reloads: Option<ResMut<'w, EditorReloads>>,
 }
 
@@ -86,6 +93,18 @@ impl Writer<'_, '_> {
         }
         if let Ok(mut dialog) = self.dialog.single_mut() {
             dialog.problem = outcome.err();
+            dialog.writes += 1;
+        }
+    }
+
+    /// Leaves `pack` out of the kit when `excluded`, brings it back otherwise, through the operation
+    /// `pack_set_excluded`; what it refused is shown under the switches.
+    fn leave_out(&mut self, pack: &str, excluded: bool) {
+        let (Some(project), Some(import)) = (self.project.as_deref_mut(), self.import.as_deref_mut()) else { return };
+        let landed = crate::editor::set_pack_excluded(import, project, pack, excluded);
+        let problem = (!landed).then(|| import.status.problem_text().to_owned());
+        if let Ok(mut dialog) = self.dialog.single_mut() {
+            dialog.problem = problem;
             dialog.writes += 1;
         }
     }
@@ -178,7 +197,7 @@ fn refresh(
     // The file is read when its size or modification time moved, the screen changed, or it was never read:
     // a `stat` a frame, not a parse a frame.
     let stat = std::fs::metadata(family::path_for_project(&project.root)).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
-    if *seen == Some(stat) && !dialog.is_changed() && built.0.is_some() {
+    if *seen == Some(stat) && !dialog.is_changed() && !project.is_changed() && built.0.is_some() {
         return;
     }
     *seen = Some(stat);
@@ -190,7 +209,8 @@ fn refresh(
             bevy_grimoire_core::live::Outcome::Applied => v.outcome.word().to_owned(),
             _ => format!("{}: {}", v.outcome.word(), v.sentence()),
         });
-    let snapshot = Snapshot { dialog: (*dialog).clone(), family: family.clone(), verdict: verdict.clone() };
+    let left_out = project.policy.exclude.iter().map(|e| e.trim_end_matches('/').to_owned()).collect::<Vec<_>>();
+    let snapshot = Snapshot { dialog: (*dialog).clone(), family: family.clone(), verdict: verdict.clone(), left_out: left_out.clone() };
     if built.0.as_ref() == Some(&snapshot) {
         return;
     }
@@ -236,6 +256,28 @@ fn refresh(
             let mark = if kit.dir == project.grimoire_dir { " (authoring)" } else { "" };
             lines.spawn(label(format!("{dir}: provides {}{mark}", kit.namespace)));
         }
+        lines.spawn(heading("Packs the kit leaves out"));
+        lines.spawn(label("A pack on this list is not offered or labelled; project.ron keeps its prose when a switch rewrites it."));
+        let assets = project.root.join("assets");
+        let mut folders: Vec<String> = std::fs::read_dir(&assets)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().is_dir() && !project.kits.iter().any(|k| k.dir == e.path()))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        folders.extend(left_out.iter().cloned());
+        folders.sort();
+        folders.dedup();
+        let rows: Vec<_> = folders
+            .into_iter()
+            .map(|pack| {
+                let out = left_out.contains(&pack);
+                let name = pack.clone();
+                (toggle(pack, out), observe(move |c: On<ValueChange<bool>>, mut w: Writer| w.leave_out(&name, c.value)))
+            })
+            .collect();
+        lines.spawn(list(FAMILY_ROWS, Children::spawn(SpawnIter(rows.into_iter()))));
     });
     built.0 = Some(snapshot);
 }
