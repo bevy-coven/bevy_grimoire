@@ -12,8 +12,10 @@
 //! **One endpoint per run, no fallback.** A wrong endpoint or a refused request is an [`Error`] naming
 //! the endpoint, never a default answer.
 
+mod b64;
 mod calibrate;
 mod check;
+mod clip;
 mod run;
 mod config;
 mod transport;
@@ -21,6 +23,8 @@ mod types;
 
 pub use calibrate::{Calibration, Sample, calibrate};
 pub use check::{BUILTIN_CHECKS_RON, CHECKS_VERSION, Check, PROJECT_CHECKS_FILE, Checks, Evidence, Finding};
+pub use clip::{FRAMES, LABELLED_FILE, Labelled, clip_check, load_labelled, score_set};
+pub use b64::data_url;
 pub use run::{Verdict, evidence_from, run_checks};
 pub use config::Config;
 pub use transport::{Http, Recorder, Replay, Transport};

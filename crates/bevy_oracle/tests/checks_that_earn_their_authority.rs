@@ -136,3 +136,36 @@ fn a_check_whose_capture_is_missing_is_an_error_and_never_a_failure() {
     assert!(verdict.errors[0].1.contains("after"), "and says which: {:?}", verdict.errors);
     assert!(!verdict.fails(), "an error is not evidence of a problem in the picture");
 }
+
+/// **The committed clip set reads, has both labels, and names every image it needs.**
+///
+/// The set is data (`fixtures/clip_samples.ron`), so the things that can be wrong with it are the things a
+/// file can do: not parse, be one-sided, or point at images that are not there. The first two are refused by
+/// the loader; the third is checked here against the manifest's own directory, which is the one thing a
+/// test can verify without the clip images (they are extracted on demand, not committed).
+#[test]
+fn the_committed_clip_set_is_two_sided_and_well_formed() {
+    use bevy_oracle::{LABELLED_FILE, load_labelled};
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(LABELLED_FILE);
+    let set = load_labelled(&manifest).unwrap_or_else(|e| panic!("{e}"));
+    assert!(set.len() >= 20, "a set this small cannot measure a check: {} samples", set.len());
+    let matches = set.iter().filter(|s| s.truth).count();
+    let mismatches = set.len() - matches;
+    assert!(matches > 0 && mismatches > 0, "{matches} matches, {mismatches} mismatches");
+    assert!(
+        (matches as f64 / set.len() as f64 - 0.5).abs() < 0.2,
+        "a set that is {matches}/{len} puts a check's false-negative rate and its false-positive rate on \
+         very different footings; this one should be about half and half",
+        len = set.len()
+    );
+    // Every sample's title is a whole line, not an id: a title that is `268-warm` tests nothing.
+    for s in &set {
+        assert!(s.title.len() > 20, "`{}` has a title that is not a line: {:?}", s.id, s.title);
+    }
+    // And a mismatch is a *different* title from the one its frames belong to.
+    for s in set.iter().filter(|s| !s.truth) {
+        let own = s.id.strip_suffix("-mismatch").unwrap_or(&s.id);
+        let twin = set.iter().find(|t| t.id == own && t.truth).expect("every mismatch has its match");
+        assert_ne!(s.title, twin.title, "`{}` is labelled a mismatch but carries its own line's title", s.id);
+    }
+}

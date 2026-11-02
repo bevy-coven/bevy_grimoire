@@ -53,3 +53,33 @@ never fatal — which is what lets a new check be added to a project on its firs
 The calibration run itself needs a served model: see `serving-clef-flash.md`. `check.py --ask` against a
 down endpoint reports every check as an error naming the endpoint, and exits 0: nothing was found because
 nothing was asked, and the tool never invents an answer.
+
+## The clip check
+
+`clip_shows_its_title` tests the thing this repository has got wrong before: whether a changelog clip shows
+what its line claims. It sends four images — the still beside the MP4 and three frames spread through it
+(the API's limit, with the still as the fourth) — and asks one yes/no question: *do these frames fail to show
+what the line says?* The line's title is carried in the question, because a model asked "does this match?"
+without the claim answers from nothing.
+
+**Its labelled set is data**: `crates/bevy_oracle/fixtures/clip_samples.ron`, every changelog clip with a
+clip as a *match* (its own line) and a *mismatch* (the same frames under another line's title). The second
+half is what stops a check that always says "that is fine" from scoring 100 %. The images are derived, not
+committed; remake them with:
+
+```sh
+python3 tools/decide/clip_set.py --out target/clip_set
+```
+
+then point the manifest's `dir` fields at `target/clip_set/<id>`. A relative `dir` is resolved against the
+manifest, so a committed set works from any clone.
+
+**Not measured yet.** The agreement figure needs a served model (`score_set` → `calibrate`), and big has none
+(`127.0.0.1:8093` refuses). Until it does, the check carries no `calibration` and is **advisory**: it prints
+every run and can never fail one. That is the issue's own rule, not a shortcut — a check that has earned
+nothing must not be able to block.
+
+What the set *can* be proved for without a model is that it is well formed, and a test does
+(`checks_that_earn_their_authority.rs::the_committed_clip_set_is_two_sided_and_well_formed`): it must hold at
+least 20 samples, be about half matches and half mismatches, carry whole titles rather than ids, and each
+mismatch must genuinely differ from the line its frames belong to.
