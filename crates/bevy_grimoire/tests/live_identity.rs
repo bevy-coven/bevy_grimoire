@@ -158,8 +158,20 @@ fn a_renamed_placement_keeps_its_entity_and_what_was_hung_on_it() {
     assert_eq!(app.world().resource::<GrimoireWorld>().map.placements[1].id, "crate_beta");
 }
 
+/// **A rename that also moves is a pair the rows cannot tell apart**, so the piece is drawn again.
+///
+/// This was `a_rename_that_also_moves_is_a_new_piece`, which named the *cause* wrongly. The reason is
+/// not that a move makes a new piece — since #201 acceptance item 5 a move is identity-preserving —
+/// but that `renames()` pairs two rows only when they are equal in **every** field and there is exactly
+/// one candidate, so a row that moved as well as changed its id is never paired. Relaxing that would let
+/// two same-descriptor rows be guessed between, and a wrong guess moves a game's state to the wrong
+/// piece, which is worse than drawing it. Making rename-plus-move keep identity needs an explicit
+/// `alias` on the row, written when the editor renames (an additive schema change, not this slice).
+///
+/// The assertions are unchanged: the piece is respawned, the old entity is gone, and the untouched
+/// piece keeps its own.
 #[test]
-fn a_rename_that_also_moves_is_a_new_piece() {
+fn a_rename_that_also_moves_is_not_paired_so_the_piece_is_drawn_again() {
     let project = Project::new("rename_and_move");
     project.write_map(&map(vec![row("crate_a", "kit/crate", (1.0, 1.0)), row("crate_b", "kit/crate", (4.0, 1.0))]));
     let mut app = app(&project);
