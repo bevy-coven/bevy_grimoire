@@ -617,6 +617,13 @@ pub fn create_kit(root: &Path, raw_name: &str) -> Result<PathBuf, String> {
 /// makes one. Nothing is opened in-process — switching the live root is a separate change — so the
 /// caller reports `bevy_cauldron <dir>` and the author runs it.
 pub fn create_project(parent: &Path, raw_name: &str, vocab_source: &Path) -> Result<PathBuf, String> {
+    let vocab = std::fs::read(vocab_source).map_err(|e| format!("cannot copy {} to vocab.ron: {e}", vocab_source.display()))?;
+    create_project_with(parent, raw_name, &vocab)
+}
+
+/// [`create_project`] with the vocabulary's bytes in hand rather than a file to copy: the launcher's new-project
+/// wizard (`new_project.rs`) has no open project to copy one from, and writes the one built into the editor.
+pub fn create_project_with(parent: &Path, raw_name: &str, vocab: &[u8]) -> Result<PathBuf, String> {
     let name = naming::to_snake_case(raw_name);
     if name.is_empty() {
         return Err(format!(
@@ -646,9 +653,8 @@ pub fn create_project(parent: &Path, raw_name: &str, vocab_source: &Path) -> Res
     // **Copy the vocabulary byte-for-byte.** A copy preserves the rationale comments; serializing
     // `Vocabularies` would delete them. The source is the current project's `vocab.ron`, which is
     // the only vocabulary on hand.
-    let vocab = std::fs::read(vocab_source).map_err(|e| format!("cannot copy {} to vocab.ron: {e}", vocab_source.display()))?;
     bevy_grimoire_core::atomic_file::write(&grimoire.join("vocab.ron"), vocab)
-        .map_err(|e| format!("cannot copy {} to vocab.ron: {e}", vocab_source.display()))?;
+        .map_err(|e| format!("cannot write {}: {e}", grimoire.join("vocab.ron").display()))?;
 
     // **Write nothing else.** No `compositions.ron` (absence and empty are the same state, per
     // `create_kit`'s own note), no `maps/` (`save_atomic` creates it), no kit — the `+ new kit`

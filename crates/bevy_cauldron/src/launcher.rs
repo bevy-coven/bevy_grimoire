@@ -103,6 +103,10 @@ pub struct Launcher {
     pub whats_new: Vec<News>,
     /// The id of the newest changelog entry, remembered when a project is opened.
     pub newest: Option<String>,
+    /// "New project…" was pressed; `new_project.rs` opens its form and clears it.
+    pub new_project_asked: bool,
+    /// Create or Cancel was pressed on that form; `new_project.rs` takes it down and clears this.
+    pub new_project_done: bool,
     /// The command line last asked for with "Copy command line", shown whether or not the clipboard took it.
     pub line: Option<String>,
 }
@@ -181,6 +185,10 @@ struct ProjectRow(PathBuf);
 #[derive(Component)]
 struct CopyLine(PathBuf);
 
+/// The launcher's own root node, which the new-project form is added to.
+#[derive(Component)]
+pub struct LauncherRoot;
+
 /// The line that shows the refusal.
 #[derive(Component)]
 struct ProblemLine;
@@ -210,7 +218,7 @@ pub struct LauncherPlugin;
 
 impl Plugin for LauncherPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<OpenRequest>()
+        app.add_plugins(crate::new_project::NewProjectPlugin).add_message::<OpenRequest>()
             .add_systems(OnEnter(Screen::Launcher), build_launcher)
             .add_systems(
                 Update,
@@ -228,10 +236,10 @@ fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, 
     let problem = recents.as_deref().and_then(|r| recent::Recent::load(&r.0).err());
     let example = example_project();
     let now = recent::now();
-    let launcher = Launcher { rows, problem, example, whats_new, newest, line: None };
+    let launcher = Launcher { rows, problem, example, whats_new, newest, ..default() };
 
     commands
-        .spawn((screen(), DespawnOnExit(Screen::Launcher), Name::new("launcher")))
+        .spawn((screen(), DespawnOnExit(Screen::Launcher), LauncherRoot, Name::new("launcher")))
         .insert(Pickable::default())
         .with_children(|root| {
             root.spawn(panel()).with_children(|card| {
@@ -262,16 +270,20 @@ fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, 
                         }
                     }),
                 ));
-                if let Some(example) = launcher.example.clone() {
-                    card.spawn(menu()).with_children(|actions| {
+                card.spawn(menu()).with_children(|actions| {
+                    actions.spawn((
+                        button("New project…"),
+                        observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true),
+                    ));
+                    if let Some(example) = launcher.example.clone() {
                         actions.spawn((
                             button("Open example"),
                             observe(move |_: On<bevy_gooey::Activate>, mut out: MessageWriter<OpenRequest>| {
                                 out.write(OpenRequest(example.clone()));
                             }),
                         ));
-                    });
-                }
+                    }
+                });
                 card.spawn((label(launcher.problem.clone().unwrap_or_default()), ProblemLine));
                 card.spawn((label(""), CommandLine));
             });
