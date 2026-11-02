@@ -79,6 +79,7 @@ pub mod keys;
 pub mod launcher;
 pub mod label_booth;
 pub mod labels;
+pub mod new_project;
 pub mod notice;
 pub mod live;
 pub mod present;

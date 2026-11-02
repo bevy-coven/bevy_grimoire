@@ -59,6 +59,7 @@ mod a_made_map_can_be_taken_away_by_undo;
 mod a_map_can_be_renamed_through_the_registry;
 mod a_map_edited_on_disk_reaches_the_screen;
 mod a_meshes_undo_takes_back_the_agents_newest_label;
+mod a_new_project_that_names_an_existing_folder_is_refused_beside_the_field;
 mod a_note_box_can_say_auto;
 mod a_note_on_picked_pieces_is_saved;
 mod a_palette_click_arms_the_piece;
