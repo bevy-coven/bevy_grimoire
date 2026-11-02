@@ -712,6 +712,7 @@ dependencies = [
  "bevy_lights",
  "bevy_oracle",
  "bevy_orca",
+ "bevy_siren",
  "bevy_society",
  "bevy_speech_bubbles",
  "bevy_stigmergy",
@@ -1910,6 +1911,16 @@ dependencies = [
  "rand_distr",
  "serde",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "bevy_siren"
+version = "0.1.0"
+source = "git+https://github.com/bevy-coven/bevy_siren?rev=7029b20#7029b20c6250d5ec05db3b50282bacfcaf2089a9"
+dependencies = [
+ "bevy",
+ "ron",
+ "serde",
 ]
 
 [[package]]

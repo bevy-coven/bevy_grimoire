@@ -2319,6 +2319,13 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::forest_view::ForestViewPlugin);
         #[cfg(feature = "bevy_lights")]
         app.add_plugins(crate::light_view::LightViewPlugin).add_observer(crate::ops_pool::on_pool_click);
+        // **The audio panel (S-01):** `bevy_siren`'s own plugins, never `AudioPlugin` (the editor's
+        // `DefaultPlugins` has it and a second add panics), plus this crate's panel state and its observers.
+        #[cfg(feature = "bevy_siren")]
+        app.add_plugins(bevy_siren::SirenPlugins)
+            .init_resource::<crate::audio_panel::AudioPanel>()
+            .add_observer(crate::audio_panel::on_audition)
+            .add_systems(Update, crate::audio_panel::read_audio);
         #[cfg(feature = "bevy_elements")]
         app.add_observer(on_environment_click);
         // **The light map (#103):** shown by its button, re-baked when the map changes, drawn over the floor.
@@ -3513,6 +3520,15 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(crate::ops_pool::spawn_section);
+
+            // **Audio (S-01):** `bevy_siren`'s buses and cues, with an audition and its log.
+            #[cfg(feature = "bevy_siren")]
+            p.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            })
+            .with_children(crate::audio_panel::spawn_section);
 
             // **Light map (#103):** show or hide `bevy_light_grid`'s field over the open map.
             #[cfg(feature = "bevy_light_grid")]

@@ -17,6 +17,7 @@
 mod fixtures;
 
 mod a_broken_stack_still_opens_framed;
+mod audio_panel_reads_the_crates_file;
 mod a_capture_sequence_takes_one_frame_at_a_time;
 mod a_clock_edit_walks_the_hour;
 mod a_change_says_what_it_broke;

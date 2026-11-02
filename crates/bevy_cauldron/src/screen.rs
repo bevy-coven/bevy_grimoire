@@ -462,6 +462,9 @@ door_state![
     // The light map's shown/hidden and its last bake (#103): a view of this door's map, released with it.
     #[cfg(feature = "bevy_light_grid")]
     crate::light_overlay::LightOverlay,
+    // The audio panel's buses, cues and selection (S-01): a view of this door's project's sound.
+    #[cfg(feature = "bevy_siren")]
+    crate::audio_panel::AudioPanel,
 ];
 
 /// **Despawn every root a screen could have spawned.** The one implementation, called by both
@@ -670,6 +673,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::environment::ClockScrub", Ownership::Door),
     #[cfg(feature = "bevy_light_grid")]
     ("bevy_cauldron::light_overlay::LightOverlay", Ownership::Door),
+    // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
+    // this door's `family/bevy_siren.ron`, and another project's sound is another file.
+    #[cfg(feature = "bevy_siren")]
+    ("bevy_cauldron::audio_panel::AudioPanel", Ownership::Door),
     ("bevy_cauldron::editor::Folded", Ownership::Door),
     ("bevy_cauldron::editor::StampPicture", Ownership::Door),
     ("bevy_cauldron::editor::TargetLock", Ownership::Door),
