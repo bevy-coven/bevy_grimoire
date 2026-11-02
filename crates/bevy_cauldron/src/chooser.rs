@@ -545,6 +545,25 @@ fn strands(label: &str, users: &[String]) -> Option<String> {
     ))
 }
 
+/// **The two files a new kit is made of**, as text: its `library.ron` and its `project.ron`. One place,
+/// so `kit_create` can tell on undo that a kit's files are still exactly what it wrote.
+pub(crate) fn new_kit_files(name: &str) -> (String, String) {
+    let library = format!(
+        "(\n    version: 1,\n    note: Some(\"Empty on purpose — `{name}` is a new kit. Import \
+         meshes on the Meshes tab; they land here.\"),\n    descriptors: [],\n)\n"
+    );
+    // **No lattice setting here, and that is the change of 2026-08-16.** `face_bands` and
+    // `snap_divisor` describe a lattice, and a kit does not have one — a map has exactly one, so
+    // they live on `Map` now. A new kit's policy is genuinely empty, and it says so rather than
+    // carrying a number it cannot own.
+    let policy = format!(
+        "(\n    version: 2,\n    note: Some(\"The policy layer for `{name}`. No patches yet: \
+         `Project::open` refuses a rule that matches nothing, so one cannot be added before the \
+         pieces it names exist.\"),\n)\n"
+    );
+    (library, policy)
+}
+
 /// **Make a new, empty kit** — a directory the editor will accept as one.
 ///
 /// A kit is four decisions and two files: a `library.ron` saying it has no pieces yet, and a
@@ -576,21 +595,9 @@ pub fn create_kit(root: &Path, raw_name: &str) -> Result<PathBuf, String> {
     }
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
 
-    let library = format!(
-        "(\n    version: 1,\n    note: Some(\"Empty on purpose — `{name}` is a new kit. Import \
-         meshes on the Meshes tab; they land here.\"),\n    descriptors: [],\n)\n"
-    );
+    let (library, policy) = new_kit_files(&name);
     bevy_grimoire_core::ron_surgery::save_atomic(&dir.join(LIBRARY_FILE), &library)?;
 
-    // **No lattice setting here, and that is the change of 2026-08-16.** `face_bands` and
-    // `snap_divisor` describe a lattice, and a kit does not have one — a map has exactly one, so
-    // they live on `Map` now. A new kit's policy is genuinely empty, and it says so rather than
-    // carrying a number it cannot own.
-    let policy = format!(
-        "(\n    version: 2,\n    note: Some(\"The policy layer for `{name}`. No patches yet: \
-         `Project::open` refuses a rule that matches nothing, so one cannot be added before the \
-         pieces it names exist.\"),\n)\n"
-    );
     bevy_grimoire_core::ron_surgery::save_atomic(&dir.join(bevy_grimoire_core::policy::POLICY_FILE), &policy)?;
 
     // **And bound, or it is a directory the project does not load.** Making a kit the editor cannot
@@ -707,7 +714,7 @@ fn bind_kit(root: &Path, name: &str) -> Result<(), String> {
 /// so a file that would refuse to load is refused here, where the author is standing, rather than
 /// at the next open. `name` must be bound; the refusal names the bound kits, because "not bound"
 /// without a list is a search.
-fn set_authoring(root: &Path, name: &str) -> Result<(), String> {
+pub(crate) fn set_authoring(root: &Path, name: &str) -> Result<(), String> {
     let path = root.join(GRIMOIRE_DIR).join(bevy_grimoire_core::kits::KITS_FILE);
     let text = std::fs::read_to_string(&path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
@@ -6073,6 +6080,12 @@ pub fn write_settings(chooser: &mut Chooser, draft: &Draft) -> Result<(), String
     Ok(())
 }
 
+/// The `+ new kit` row's Enter, reachable from `tests/`: the same `make_it` the row calls, without the
+/// keyboard, so a test can prove the menu's kit is the operation an agent calls.
+pub fn make_kit_for_test(chooser: &mut Chooser, name: &str) -> Result<(), String> {
+    make_it(chooser, &New::Kit(name.to_owned()))
+}
+
 /// Rescan and land on a named map, so the list is always a description of disk.
 /// **Make what is in hand**, whichever kind it is, and land the selection on it.
 ///
@@ -6081,7 +6094,10 @@ pub fn write_settings(chooser: &mut Chooser, draft: &Draft) -> Result<(), String
 fn make_it(chooser: &mut Chooser, new: &New) -> Result<(), String> {
     match new {
         New::Kit(name) => {
-            create_kit(&chooser.root.clone(), name)?;
+            // **`kit_create`, the operation, so the row is a front end and not a second writer**
+            // (E-002, #129 slice 20): the menu has a root and no loaded project, so the context
+            // carries the root, as `map_create`'s does below.
+            from_the_menu(&chooser.root, "kit_create", &serde_json::json!({"name": name}))?;
             chooser.creating = None;
             rescan_keeping_place(chooser, None);
             // Land on the kit that was just made, so the maps column beside it is already its own.
@@ -6173,6 +6189,24 @@ fn make_it(chooser: &mut Chooser, new: &New) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// **Dispatch one operation from the menu**, which is the screen you are on before a door: it has a root
+/// and no loaded project, so the context carries the root and the log line goes in its `oplog.jsonl`.
+/// A refusal is the sentence the menu shows.
+fn from_the_menu(root: &Path, operation: &str, params: &serde_json::Value) -> Result<(), String> {
+    let mut ctx = crate::ops::Ctx {
+        project: None,
+        root: Some(root.to_path_buf()),
+        open: None,
+        source: crate::ops::Source::Human,
+        session: "menu".to_owned(),
+        proposal: None,
+    };
+    match crate::ops::dispatch(&mut ctx, operation, params) {
+        Ok(crate::ops::Applied::Done { .. }) => Ok(()),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
 }
 
 fn rescan_keeping_place(chooser: &mut Chooser, want: Option<&str>) {
@@ -6434,7 +6468,14 @@ fn drive_chooser(input: ChooserInput<'_, '_>) {
             return;
         };
         let name = kit.label.clone();
-        chooser.problem = set_authoring(&chooser.root, &name).err();
+        // **Already the authoring kit is not a change**, and the operation says so by refusing; the
+        // row answers it as it always did, with nothing to report.
+        if chooser.catalog.authoring.as_deref() == Some(name.as_str()) {
+            chooser.problem = None;
+            return;
+        }
+        chooser.problem =
+            from_the_menu(&chooser.root, "kit_set_authoring", &serde_json::json!({"kit": name})).err();
         if chooser.problem.is_none() {
             rescan_keeping_place(&mut chooser, None);
         }
