@@ -1,0 +1,16 @@
+{
+  "name": "loading",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [{"seconds": 8.0}, {"seconds": 8.0}],
+  "steps": [
+    {"at": 0.2, "caption": "loading: a slow project shows what it is doing, a spinner first"},
+    {"at": 4.5, "caption": "past ten seconds the spinner gives way to a bar: N of M, and the stage"},
+    {"at": 8.8, "caption": "the project opened, and one file in it does not read: the card names the file and the field"},
+    {"at": 11.5, "cursor": [275, 390]},
+    {"at": 12.5, "click": [275, 390]},
+    {"at": 12.6, "caption": "person: Open anyway"}
+  ]
+}
