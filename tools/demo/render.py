@@ -26,6 +26,9 @@ from PIL import Image, ImageDraw, ImageFont
 FONT_PATHS = [
     "/System/Library/Fonts/Menlo.ttc",
     "/System/Library/Fonts/Supplemental/Courier New.ttf",
+    # Linux: the keycaps' modifier glyphs (⌃ ⌘ ⇧ ⌥) are in DejaVu; PIL's built-in font draws them as boxes.
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
 ]
 KEYCAP_SECONDS = 0.8
 SETTLE_S = 0.5

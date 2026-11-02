@@ -74,5 +74,18 @@ class ChangeWindow(unittest.TestCase):
             self.assertIn("FAIL", self.check(set(), (mod, "KeyZ")))
 
 
+class DragPress(unittest.TestCase):
+    def test_a_press_whose_first_move_carries_its_own_timestamp_is_a_drag_not_a_placement(self):
+        sys.path.insert(0, HERE)
+        import check
+        rec = {"chunks": [], "events": [
+            {"t": 1.0, "type": "click", "x": 600, "y": 300},
+            {"t": 1.0, "type": "cursor", "x": 614, "y": 322},
+            {"t": 1.2, "type": "cursor", "x": 644, "y": 345},
+            {"t": 3.0, "type": "click", "x": 600, "y": 300},
+        ]}
+        self.assertEqual([k for k, _ in check.change_moments(rec)], ["place"])
+
+
 if __name__ == "__main__":
     unittest.main()

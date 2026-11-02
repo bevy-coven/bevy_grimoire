@@ -62,8 +62,9 @@ def change_moments(rec):
     cursors = [e["t"] for e in rec["events"] if e["type"] == "cursor"]
     for e in rec["events"]:
         if e["type"] == "click" and VIEWPORT_X[0] <= e["x"] <= VIEWPORT_X[1]:
-            # a press that starts a drag (snip box) is followed at once by cursor moves: not a placement
-            if not any(0 < t - e["t"] <= 0.1 for t in cursors):
+            # a press that starts a drag (snip box) is followed at once by cursor moves (the first may carry the press's own
+            # timestamp): not a placement
+            if not any(0 <= t - e["t"] <= 0.1 for t in cursors):
                 moments.append(("place", e["t"]))
         elif e["type"] == "key":
             keys = e.get("keys", [])
