@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **252-pack-switch** `cf582ef` The project configuration screen leaves a pack out of the kit, or brings it back: a switch per folder under assets/ is the pack_set_excluded operation Shift+R and an agent dispatch, project.ron keeps its prose, and a refusal is shown (#252)<br><a href="docs/changelog/media/2026-11-02-252-pack-switch.mp4"><img src="docs/changelog/media/2026-11-02-252-pack-switch.png" width="320" alt="clip"></a>
 - **265-rebound** `b8fbd06` A rebound command answers to its new chord and no longer to the old one: the palette and the badges name it, and run_command presses it<br><a href="docs/changelog/media/2026-11-02-265-rebound.mp4"><img src="docs/changelog/media/2026-11-02-265-rebound.png" width="320" alt="clip"></a>
 - **252-family-toggle** `e54b9cd` The project configuration screen: a switch lists a family crate in family.ron, written atomically, and the screen shows the reload verdict<br><a href="docs/changelog/media/2026-11-02-252-family-toggle.mp4"><img src="docs/changelog/media/2026-11-02-252-family-toggle.png" width="320" alt="clip"></a>
 - **250-keymap** `75c9c74` The keymap screen: rebind a command's chord, and a chord another command has is refused with nothing saved<br><a href="docs/changelog/media/2026-11-02-250-keymap-clash.mp4"><img src="docs/changelog/media/2026-11-02-250-keymap-clash.png" width="320" alt="clip"></a>
