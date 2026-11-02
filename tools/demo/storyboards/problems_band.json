@@ -1,0 +1,23 @@
+{
+  "name": "problems_band",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [0, 600, 1180, 703],
+  "setup": [
+    {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-6, -4, 6, 4]}}}
+  ],
+  "chunks": [
+    {"seconds": 2.4},
+    {"seconds": 6.4}
+  ],
+  "steps": [
+    {"at": 0.3, "caption": "the status band, every file applied: the readout is silent"},
+    {"at": 1.4, "caption": "person: saves the skin file with a broken bracket"},
+    {"at": 1.6, "write": {"path": "family/bevy_gooey.ron", "text": "(background: Srgba((red: 0.1,"}},
+    {"at": 3.0, "caption": "the band says 1 refused, in the skin's danger ink"},
+    {"at": 4.2, "caption": "person: fixes the file"},
+    {"at": 4.4, "write": {"path": "family/bevy_gooey.ron", "text": "(\n    background: Srgba((red: 0.075, green: 0.07, blue: 0.061, alpha: 1.0)),\n    surface: Srgba((red: 0.115, green: 0.107, blue: 0.093, alpha: 1.0)),\n    surface_raised: Srgba((red: 0.165, green: 0.153, blue: 0.134, alpha: 1.0)),\n    text: Srgba((red: 0.88, green: 0.865, blue: 0.835, alpha: 1.0)),\n    text_muted: Srgba((red: 0.7, green: 0.685, blue: 0.655, alpha: 1.0)),\n    accent: Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0)),\n    accent_text: Srgba((red: 0.075, green: 0.07, blue: 0.061, alpha: 1.0)),\n    danger: Srgba((red: 0.98, green: 0.52, blue: 0.46, alpha: 1.0)),\n    focus_ring: Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0)),\n    outline: Srgba((red: 0.440, green: 0.409, blue: 0.356, alpha: 1.0)),\n    scrim: Srgba((red: 0.0, green: 0.0, blue: 0.0, alpha: 0.55)),\n    surfaces: [\n        Srgba((red: 0.075, green: 0.07, blue: 0.061, alpha: 1.0)),\n        Srgba((red: 0.115, green: 0.107, blue: 0.093, alpha: 1.0)),\n        Srgba((red: 0.14, green: 0.13, blue: 0.113, alpha: 1.0)),\n        Srgba((red: 0.165, green: 0.153, blue: 0.134, alpha: 1.0)),\n        Srgba((red: 0.185, green: 0.172, blue: 0.15, alpha: 1.0)),\n        Srgba((red: 0.212, green: 0.197, blue: 0.172, alpha: 1.0)),\n        Srgba((red: 0.248, green: 0.231, blue: 0.201, alpha: 1.0)),\n        Srgba((red: 0.325, green: 0.302, blue: 0.263, alpha: 1.0)),\n    ],\n    hover: Some(Srgba((red: 0.212, green: 0.197, blue: 0.172, alpha: 1.0))),\n    pressed: Some(Srgba((red: 0.110, green: 0.102, blue: 0.089, alpha: 1.0))),\n    held: Some(Srgba((red: 0.115, green: 0.107, blue: 0.093, alpha: 1.0))),\n    held_ground: Some(Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0))),\n    held_fade: 0.55,\n    unchecked: Some(Srgba((red: 0.7685, green: 1.0295, blue: 1.1745, alpha: 1.0))),\n    card: Some(Srgba((red: 0.195, green: 0.181, blue: 0.158, alpha: 1.0))),\n    preview_edge: Some(Srgba((red: 0.440, green: 0.409, blue: 0.356, alpha: 1.0))),\n    text_size: 11.0,\n    heading_size: 15.0,\n    gap: 5.0,\n    padding: 12.0,\n    radius: 4.0,\n    border: 1.0,\n    meter_height: 10.0,\n    min_target: 24.0,\n    density: Compact,\n    spacing: (3.0, 5.0, 12.0, 16.0, 20.0, 24.0),\n    radii: (3.0, 4.0, 8.0),\n    type_scale: (9.0, 10.0, 11.0, 13.0, 15.0),\n)\n"}},
+    {"at": 5.8, "caption": "every file applied: the band is silent again"}
+  ]
+}

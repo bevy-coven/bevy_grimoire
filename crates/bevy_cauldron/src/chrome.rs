@@ -2929,7 +2929,8 @@ impl Plugin for ChromePlugin {
             // spawned, and never again.
             .add_systems(
                 Update,
-                show_selection_count.run_if(in_state(crate::screen::Screen::Editor)),
+                (show_selection_count, show_problems_count)
+                    .run_if(in_state(crate::screen::Screen::Editor)),
             )
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
@@ -3502,6 +3503,17 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
         // the band answers the one question a person asks before a stamp — how many am I carrying —
         // without them counting from the ghost. Empty when nothing is held rather than `"0 selected"`:
         // a count of nothing is a row that says the same thing on every frame and teaches nobody.
+        // **What the reloads say** (UI-34, #228): a count of files refused or needing a restart, in the
+        // warning ink when there are any, empty when every file applied. A person driving over BRP asks
+        // this in `grimoire_state.reloads`; the band answers it where they are looking.
+        band.spawn((
+            ProblemsCount,
+            bevy_gooey::StatusKind::Info,
+            Text::new(String::new()),
+            TextColor(DIM),
+            font(text::LABEL),
+            bevy::picking::Pickable::IGNORE,
+        ));
         band.spawn((
             SelectionCount,
             Text::new(String::new()),
@@ -3531,6 +3543,95 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
 /// `labels::Labeler`'s, so this module does not learn what a model is.
 #[derive(Component)]
 pub struct LabelerLine;
+
+/// **How many files the last reload refused or could not take without a restart**, in the status band
+/// (UI-34, #228). Written by [`show_problems_count`].
+#[derive(Component)]
+pub struct ProblemsCount;
+
+/// **What the band says about the reloads, and the kind it says it as** (UI-34, #228).
+///
+/// The system and `tests/the_status_band_says_when_a_file_needs_attention.rs` both call this, so an
+/// assertion about the band is an assertion about what is painted, not about a resource that happens
+/// to hold the same value.
+///
+/// **Four rules, each with a reason:**
+///
+/// - An `applied` file is not counted. The status line already writes a receipt for every edit, and a
+///   band that said "3 reloaded" on every keystroke would be a row nobody reads.
+/// - **Both a refusal and a restart are the warning kind**, which is the issue's own wording ("a
+///   refused reload turns the problems item to the warning kind"). A refusal keeps the previous state
+///   and the editor keeps running; nothing is lost, but something a person wrote did not take, and
+///   that is what the mark is for.
+/// - **Both counts are named when both exist**, because a person who fixes the refusal still has a
+///   restart owed, and one number in place of the other would hide half the work.
+/// - **Nothing wrong says nothing**, rather than `"0 problems"` — the band is silent in the state it
+///   is in almost all the time.
+///
+/// The ink comes from the running skin, so a theme edit reaches the band in the same frame; with no
+/// skin (a hand-built harness, never the editor) it falls back to the panel colours.
+pub fn reload_readout(
+    kinds: &[bevy_grimoire_core::live::KindVerdict],
+    skin: Option<&bevy_gooey::GooeySkin>,
+) -> (String, bevy_gooey::StatusKind, Color) {
+    use bevy_grimoire_core::live::Outcome;
+    let refused = kinds.iter().filter(|k| k.outcome == Outcome::Refused).count();
+    let waiting = kinds.iter().filter(|k| k.outcome == Outcome::NeedsRestart).count();
+
+    let mut parts: Vec<String> = Vec::new();
+    if refused > 0 {
+        parts.push(if refused == 1 { "1 refused".to_owned() } else { format!("{refused} refused") });
+    }
+    if waiting > 0 {
+        parts.push(if waiting == 1 {
+            "1 needs a restart".to_owned()
+        } else {
+            format!("{waiting} need a restart")
+        });
+    }
+
+    let kind = if refused + waiting == 0 {
+        bevy_gooey::StatusKind::Info
+    } else {
+        bevy_gooey::StatusKind::Warning
+    };
+    let ink = match (kind, skin) {
+        (bevy_gooey::StatusKind::Info, Some(s)) => s.text_muted,
+        (bevy_gooey::StatusKind::Info, None) => DIM,
+        (_, Some(s)) => s.accent,
+        (_, None) => ACCENT,
+    };
+    (parts.join(" \u{b7} "), kind, ink)
+}
+
+/// **Say what became of the reloads, when the answer changes.**
+///
+/// Gated on `EditorReloads` (a file was decided) or `GooeySkin` (a theme edit), so a band with nothing
+/// wrong writes no text on any frame. Every write is compared in place as well, which is
+/// `tests/no_system_writes_every_frame.rs`'s rule: the text, the kind and the ink are change-detected,
+/// and everything downstream reads that detection.
+pub fn show_problems_count(
+    reloads: Option<Res<crate::live::EditorReloads>>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+    mut counts: Query<(&mut Text, &mut TextColor, &mut bevy_gooey::StatusKind), With<ProblemsCount>>,
+) {
+    let Some(reloads) = reloads else { return };
+    if !reloads.is_changed() && !skin.as_ref().is_some_and(|s| s.is_changed()) {
+        return;
+    }
+    let (said, kind, ink) = reload_readout(reloads.kinds(), skin.as_deref());
+    for (mut text, mut painted, mut told) in &mut counts {
+        if text.0 != said {
+            text.0 = said.clone();
+        }
+        if painted.0 != ink {
+            painted.0 = ink;
+        }
+        if *told != kind {
+            *told = kind;
+        }
+    }
+}
 
 /// **How many pieces are in hand**, in the status band (UI-34, #228). Written by
 /// [`show_selection_count`] from [`crate::editor::CloneDrag`], which owns the answer.
