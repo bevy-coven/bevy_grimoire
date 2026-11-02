@@ -85,6 +85,20 @@ def change_moments(rec):
                 moments.append(("home", e["t"]))
         elif e["type"] == "agent" and e.get("tool") == "grimoire_frame_view":
             moments.append(("view", e["t"]))
+        elif e["type"] == "settle":
+            # **A change the storyboard said would arrive, and has.** A fade is not a step: the picture
+            # at the operation's timestamp is still the old one, so the fifth-of-a-second window above
+            # measures the wrong pair of frames. The storyboard names the moment it has landed.
+            moments.append(("settle", e["t"]))
+    settled = [m for m in moments if m[0] == "settle"]
+    # **A settle stands in for the operation it answers.** An `agent` moment is the operation's own
+    # timestamp, and for a change the editor fades in that picture is still the old one — measuring it
+    # says "the operation changed nothing", which is false. A settle within a few seconds after an
+    # agent moment is that moment's picture arrived, so the agent moment is dropped in its favour;
+    # an agent moment with no settle after it is measured as before.
+    if settled:
+        moments = [m for m in moments
+                   if m[0] != "agent" or not any(0 < s[1] - m[1] <= 3.0 for s in settled)]
     return sorted(moments, key=lambda m: m[1])
 
 

@@ -108,3 +108,51 @@ class DragPress(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Settle(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, HERE)
+        import check
+        self.check = check
+
+    def test_a_settle_is_a_change_moment(self):
+        """#272: a faded change lands later than the operation's own timestamp, so the storyboard says when."""
+        rec = {"chunks": [], "events": [{"t": 4.1, "type": "settle", "what": "the sky"}]}
+        self.assertEqual(self.check.change_moments(rec), [("settle", 4.1)])
+
+    def test_a_moment_with_no_change_still_fails(self):
+        # The control: declaring a settle does not excuse the change from being measured. The clip
+        # below changes nothing at 4.1 s.
+        with tempfile.TemporaryDirectory() as directory:
+            base = np.random.default_rng(7).integers(60, 201, size=(H, W, 3), dtype=np.uint8)
+            frames = [Image.fromarray(base.copy()) for _ in range(FRAMES)]
+            for i, f in enumerate(frames):
+                a = np.array(f)
+                a[0:4, 0:4, :] = (i * 10) % 256  # keep frames distinct for PIL
+                frames[i] = Image.fromarray(a)
+            gif = os.path.join(directory, "static.gif")
+            frames[0].save(gif, save_all=True, append_images=frames[1:], duration=125, loop=0)
+            events = os.path.join(directory, "static.events.json")
+            with open(events, "w") as fh:
+                json.dump({"name": "static", "fps": FPS, "chunks": [],
+                           "events": [{"t": 1.0, "type": "settle", "what": "nothing"}]}, fh)
+            line = change_line(events, gif)
+            self.assertIn("change settle", line)
+            self.assertIn("FAIL", line)
+
+    def test_a_settle_stands_in_for_the_operation_it_answers(self):
+        """The operation's own timestamp is the *old* picture when the editor fades a change in.
+
+        Measuring it would say the operation changed nothing, which is false; the settle says when the
+        change arrived. An agent moment with no settle after it is still measured.
+        """
+        sys.path.insert(0, HERE)
+        import check
+        with_settle = {"chunks": [{"index": 1, "start": 3.0, "operation_applied_t_s": 0.06,
+                                   "operation_result": {"outcome": "applied"}}],
+                       "events": [{"t": 4.2, "type": "settle", "what": "the sky"}]}
+        self.assertEqual(check.change_moments(with_settle), [("settle", 4.2)])
+        without = {"chunks": [{"index": 1, "start": 3.0, "operation_applied_t_s": 0.06,
+                               "operation_result": {"outcome": "applied"}}], "events": []}
+        self.assertEqual([k for k, _ in check.change_moments(without)], ["agent"])
