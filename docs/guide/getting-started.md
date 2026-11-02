@@ -82,6 +82,10 @@ Press Home to frame the view. With a locked placement, Home frames that placemen
 
 **If it goes wrong:** if the map cannot be saved, the status band shows `NOT SAVED:` followed by the reason. The map stays open and nothing on disk changes. Fix the reason, then press Cmd+S again.
 
+## When the editor refuses something
+
+A refusal stands at the top of the viewport as a toast with the reason, and stays until you dismiss it: press its **Dismiss** button or `Esc`, or let the next refusal replace it. The same line is kept in the list behind `Cmd+E`. When the refusal is about one thing (for example ``not sent back: `bed_double` is placed by `bedroom` ``), the toast has a **Show** button that takes you to it: a placement on the Map is targeted, and a piece in the library is selected on the Kit door's Meshes panel.
+
 ## Return to the menu and reopen
 
 1. Press Cmd+O. The editor returns to the menu.

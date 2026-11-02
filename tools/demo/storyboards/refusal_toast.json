@@ -1,0 +1,81 @@
+{
+  "name": "refusal_toast",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "setup": [
+    {
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "door_open",
+        "parameters": {
+          "door": "kit",
+          "tab": "meshes"
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 7
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "piece_select",
+        "parameters": {
+          "id": "bed_double"
+        }
+      },
+      "caption": "agent: selects the double bed on the shelf"
+    },
+    {
+      "at": 1.0,
+      "key": "Delete",
+      "caption": "person: Delete on a piece the map still places"
+    },
+    {
+      "at": 2.0,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "piece_select",
+        "parameters": {
+          "id": "chair"
+        }
+      },
+      "caption": "agent: moves on to other pieces; the refusal stays up"
+    },
+    {
+      "at": 2.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "piece_select",
+        "parameters": {
+          "id": "sofa"
+        }
+      }
+    },
+    {
+      "at": 3.8,
+      "cursor": [
+        802,
+        142
+      ]
+    },
+    {
+      "at": 4.7,
+      "click": [
+        802,
+        142
+      ],
+      "caption": "person: Show takes the shelf back to the bed"
+    },
+    {
+      "at": 6.2,
+      "clear_cursor": true
+    }
+  ]
+}

@@ -4455,7 +4455,8 @@ pub fn remove_piece(
             outcome.after
         }
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
-            import.status.problem(format!("not sent back: {}", e.0));
+            // About the piece, so the toast's Show selects it on the shelf.
+            import.status.problem_about(format!("not sent back: {}", e.0), id);
             None
         }
     }
