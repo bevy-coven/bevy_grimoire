@@ -1,0 +1,63 @@
+{
+ "name": "family_set",
+ "fps": 8,
+ "scale": 1,
+ "width": 480,
+ "crop": [
+  470,
+  60,
+  950,
+  665
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 7.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the bedroom under bevy_elements' sky: the file says noon"
+  },
+  {
+   "at": 1.2,
+   "key": "KeyE"
+  },
+  {
+   "at": 2.2,
+   "write": {
+    "path": "family/bevy_elements.ron",
+    "text": "(\n    clock: (\n        date: (year: 2026, month: 6, day: 21),\n        hour: 20.0,\n        time_scale: 60.0,\n        paused: true,\n    ),\n    location: (latitude_deg: 45.0, longitude_deg: 0.0, utc_offset_hours: 0.0),\n    climate: (\n        mean_temperature_c: 11.0, annual_amplitude_c: 9.0, diurnal_amplitude_c: 5.0,\n        warmest_day: 200, mean_humidity: 0.75, wet_hour_probability: 0.35,\n        storm_share: 0.05, fog_share: 0.08, dust_share: 0.0,\n        prevailing_wind: (1.0, 0.0), mean_wind_ms: 4.0, reference_elevation_m: 0.0, seed: 0,\n    ),\n    forced_weather: None,\n)\n"
+   },
+   "caption": "agent: family_set clock.hour = 20.0"
+  },
+  {
+   "at": 3.9,
+   "settle": "the sky walks to 20.0",
+   "span": 1.4,
+   "caption": "the hour is walked, not jumped \u2014 the sky never blows white"
+  },
+  {
+   "at": 6.2,
+   "key": "KeyQ"
+  }
+ ]
+}

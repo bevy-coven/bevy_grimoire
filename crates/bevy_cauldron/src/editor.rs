@@ -1909,11 +1909,23 @@ fn drive_note(
     let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     if shift && mouse.just_pressed(MouseButton::Left) {
         // Shift-click: a piece joins (or leaves) the note's subject; the box opens at the selection.
-        if let Some(project) = project.as_deref()
-            && let Some(i) = pick_at(project, &open, at)
-        {
-            let id = open.map.placements[i].id.clone();
-            note_pick_piece(&open, &mut state, &mut note_box, id, true);
+        match project.as_deref().and_then(|project| pick_at(project, &open, at)) {
+            Some(i) => {
+                let id = open.map.placements[i].id.clone();
+                note_pick_piece(&open, &mut state, &mut note_box, id, true);
+            }
+            // **An empty pick is guidance, not silence.** It was a bare `return` inside the `if let`,
+            // so a Shift-click on ground between the pieces did nothing at all — no box, no line —
+            // and the words typed after it went to the status line while the next `Enter` took the
+            // no-box branch and sent drafts (#269, measured while recording the note clip: the
+            // receipt saying `Enter saves` had already gone). `build.rs` states the rule this
+            // follows: *"an arrow that answers nothing at all is the defect"*. A note rather than a
+            // problem, because nothing went wrong — a click beside a piece is a near miss, not a
+            // refusal — and it names the gesture that does work, which is the rectangle.
+            None => state.status.note(format!(
+                "no piece there — Shift-click a piece, or drag a rectangle for {}",
+                crate::keys::chord(Action::NoteTool)
+            )),
         }
         return;
     }
@@ -2279,10 +2291,17 @@ impl Plugin for EditorPlugin {
         #[cfg(feature = "bevy_elements")]
         app.add_systems(OnEnter(crate::screen::Screen::Editor), crate::environment::warm_weathered_pipeline);
         #[cfg(feature = "bevy_elements")]
-        app.init_resource::<crate::environment::ClockScrub>().add_systems(
+        app.init_resource::<crate::environment::ClockScrub>()
+            .init_resource::<crate::environment::ClockRamp>()
+            .add_systems(
             Update,
             (
                 crate::environment::apply_environment.after(crate::family_host::Reloaded),
+                // **After the settings, before the scrubber**: the walk moves the hour the file
+                // asked for, and a held scrubber then wins, as it always has (#271).
+                crate::environment::walk_the_clock
+                    .after(crate::environment::apply_environment)
+                    .before(crate::environment::scrub_clock),
                 crate::environment::scrub_clock.after(crate::environment::apply_environment),
                 crate::environment::dress_volume.after(crate::family_host::Reloaded).after(crate::terrain_view::sync_terrain_view),
             ),
@@ -3246,8 +3265,11 @@ fn back_button_clicked(
 
 /// **The Map's left panel scrolls, and this is the pane that does it.** See [`spawn_panel`] for why
 /// it exists at all: this was the one panel in the editor with no scroll area anywhere in it.
+///
+/// `pub` because a test has to name it: ten scroll areas exist in the editor, and "the leftmost one" is
+/// a guess that picks a different pane on another tab (#272).
 #[derive(Component)]
-struct MapControlsPane;
+pub struct MapControlsPane;
 
 /// Build the panel's fixed furniture. The palette itself is `rebuild_palette`'s, which is why neither
 /// the project nor the thumbnails are read here — they were parameters that had stopped being used.

@@ -1,0 +1,85 @@
+{
+ "name": "check_view",
+ "fps": 8,
+ "scale": 1,
+ "width": 592,
+ "crop": [
+  500,
+  118,
+  1092,
+  402
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  },
+  {
+   "mcp": "grimoire_run_command",
+   "args": {
+    "id": "view.show_errors"
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 2.5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the journal's Check view asks the project's checks about the picture on screen"
+  },
+  {
+   "at": 0.5,
+   "cursor": [
+    700,
+    205
+   ]
+  },
+  {
+   "at": 0.8,
+   "click": [
+    700,
+    205
+   ],
+   "caption": "person: click Check view"
+  },
+  {
+   "at": 1.7,
+   "wheel": {
+    "y": -2,
+    "n": 3,
+    "at": [
+     800,
+     300
+    ]
+   },
+   "caption": "the answer: the endpoint that did not answer, and the checks that could not be asked"
+  },
+  {
+   "at": 3.0,
+   "wheel": {
+    "y": 2,
+    "n": 2,
+    "at": [
+     800,
+     300
+    ]
+   }
+  }
+ ]
+}

@@ -78,14 +78,107 @@ class DragPress(unittest.TestCase):
     def test_a_press_whose_first_move_carries_its_own_timestamp_is_a_drag_not_a_placement(self):
         sys.path.insert(0, HERE)
         import check
+        # **`record.py`'s two shapes, measured** (#270). A `drag` step stamps the click first and the
+        # eight moves after it; a `click` step moves the cursor *then* presses, so its cursor carries
+        # an earlier timestamp by a few microseconds. The old rule accepted `0 <= t - e["t"]`, which
+        # the click's own cursor never satisfies, and this test pinned a shape (`cursor` and `click`
+        # at one identical `t`) that no storyboard produces.
         rec = {"chunks": [], "events": [
             {"t": 1.0, "type": "click", "x": 600, "y": 300},
-            {"t": 1.0, "type": "cursor", "x": 614, "y": 322},
+            {"t": 1.000002, "type": "cursor", "x": 614, "y": 322},
             {"t": 1.2, "type": "cursor", "x": 644, "y": 345},
             {"t": 3.0, "type": "click", "x": 600, "y": 300},
+        ]}
+        # The press at 1.0 begins a drag, so it is not a placement; the click at 3.0 has no move after
+        # it and is one.
+        self.assertEqual([k for k, _ in check.change_moments(rec)], ["place"])
+        self.assertEqual(check.change_moments(rec)[0][1], 3.0)
+
+    def test_a_widget_click_is_a_change_moment(self):
+        """#270: a click whose own cursor precedes it must count, or no widget demo can pass."""
+        sys.path.insert(0, HERE)
+        import check
+        rec = {"chunks": [], "events": [
+            {"t": 1.084, "type": "cursor", "x": 700, "y": 205},
+            {"t": 1.461, "type": "cursor", "x": 700, "y": 205},
+            {"t": 1.461004, "type": "click", "x": 700, "y": 205},
         ]}
         self.assertEqual([k for k, _ in check.change_moments(rec)], ["place"])
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Settle(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, HERE)
+        import check
+        self.check = check
+
+    def test_a_settle_is_a_change_moment(self):
+        """#272: a faded change lands later than the operation's own timestamp, so the storyboard says when."""
+        rec = {"chunks": [], "events": [{"t": 4.1, "type": "settle", "what": "the sky"}]}
+        self.assertEqual(self.check.change_moments(rec), [("settle", 4.1)])
+
+    def test_a_moment_with_no_change_still_fails(self):
+        # The control: declaring a settle does not excuse the change from being measured. The clip
+        # below changes nothing at 4.1 s.
+        with tempfile.TemporaryDirectory() as directory:
+            base = np.random.default_rng(7).integers(60, 201, size=(H, W, 3), dtype=np.uint8)
+            frames = [Image.fromarray(base.copy()) for _ in range(FRAMES)]
+            for i, f in enumerate(frames):
+                a = np.array(f)
+                a[0:4, 0:4, :] = (i * 10) % 256  # keep frames distinct for PIL
+                frames[i] = Image.fromarray(a)
+            gif = os.path.join(directory, "static.gif")
+            frames[0].save(gif, save_all=True, append_images=frames[1:], duration=125, loop=0)
+            events = os.path.join(directory, "static.events.json")
+            with open(events, "w") as fh:
+                json.dump({"name": "static", "fps": FPS, "chunks": [],
+                           "events": [{"t": 1.0, "type": "settle", "what": "nothing"}]}, fh)
+            line = change_line(events, gif)
+            self.assertIn("change settle", line)
+            self.assertIn("FAIL", line)
+
+    def test_a_settle_stands_in_for_the_operation_it_answers(self):
+        """The operation's own timestamp is the *old* picture when the editor fades a change in.
+
+        Measuring it would say the operation changed nothing, which is false; the settle says when the
+        change arrived. An agent moment with no settle after it is still measured.
+        """
+        sys.path.insert(0, HERE)
+        import check
+        with_settle = {"chunks": [{"index": 1, "start": 3.0, "operation_applied_t_s": 0.06,
+                                   "operation_result": {"outcome": "applied"}}],
+                       "events": [{"t": 4.2, "type": "settle", "what": "the sky"}]}
+        self.assertEqual(check.change_moments(with_settle), [("settle", 4.2)])
+        without = {"chunks": [{"index": 1, "start": 3.0, "operation_applied_t_s": 0.06,
+                               "operation_result": {"outcome": "applied"}}], "events": []}
+        self.assertEqual([k for k, _ in check.change_moments(without)], ["agent"])
+
+    def test_a_settle_with_a_span_measures_across_the_walk(self):
+        """A gradient change needs a span: no fifth of a second of it moves 5 % of the picture."""
+        sys.path.insert(0, HERE)
+        import check
+        # The moment the walk starts, and how long it takes.
+        rec = {"chunks": [], "events": [{"t": 3.1, "type": "settle", "what": "the sky", "span": 1.6}]}
+        # The moment is the change's **start**; the span widens the window `change_fraction` looks
+        # through, so the comparison is the frame before the walk with the frame at its end.
+        self.assertEqual(check.change_moments(rec), [("settle", 3.1, 1.6)])
+        # And a span on a still clip is still measured and still fails: the span moves the moment, it
+        # does not excuse the change.
+        with tempfile.TemporaryDirectory() as directory:
+            base = np.random.default_rng(7).integers(60, 201, size=(H, W, 3), dtype=np.uint8)
+            frames = []
+            for i in range(FRAMES):
+                a = base.copy()
+                a[0:4, 0:4, :] = (i * 10) % 256
+                frames.append(Image.fromarray(a))
+            gif = os.path.join(directory, "static.gif")
+            frames[0].save(gif, save_all=True, append_images=frames[1:], duration=125, loop=0)
+            events = os.path.join(directory, "static.events.json")
+            with open(events, "w") as fh:
+                json.dump({"name": "static", "fps": FPS, "chunks": [],
+                           "events": [{"t": 0.5, "type": "settle", "what": "nothing", "span": 1.5}]}, fh)
+            self.assertIn("FAIL", change_line(events, gif))

@@ -365,6 +365,13 @@ def do_step(step, timeline, inj, agent, named=None):
         with open(step["_path"], "w") as fh:
             fh.write(step["write"]["text"].replace("$now_ms", str(int(time.time() * 1000))))
         timeline.add(t=t, type="file", path=step["write"]["path"])
+    elif kind == "settle":
+        # **A blended change has landed.** Some editor changes are not a step: `bevy_elements` fades
+        # the sky to a new clock over about a third of a second, so the picture at the operation's own
+        # timestamp is still the old one. `check.py` scores a change against the frames a fifth of a
+        # second after its moment, which is right for a keypress and too early for a fade. A storyboard
+        # that knows a fade is coming says when it has arrived, and that is a change moment of its own.
+        timeline.add(t=timeline.now(), type="settle", what=step["settle"], span=step.get("span", 0.0))
     elif kind == "caption":
         timeline.add(t=timeline.now(), type="caption", text=step["caption"])
     else:
@@ -374,7 +381,7 @@ def do_step(step, timeline, inj, agent, named=None):
 
 
 def kind_of(step):
-    for k in ("cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "caption"):
+    for k in ("cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
         if k in step:
             return k
     raise ValueError(f"step has no action: {step}")

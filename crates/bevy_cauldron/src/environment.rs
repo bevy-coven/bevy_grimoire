@@ -91,7 +91,21 @@ pub fn apply(
     director: &mut WeatherDirector,
     applied_force: &mut Option<Option<WeatherPreset>>,
 ) {
-    *clock = settings.clock.clone();
+    // **The hour is walked, not jumped** (#271). `bevy_elements` adapts the camera's exposure to the
+    // sky with a 1.5 s time constant (`EXPOSURE_TAU_S`), so a step from noon to 20:00 shows the night
+    // scene at noon's exposure for about a second and a half — measured as 12 frames of a viewport
+    // more than 45% white on big, 2026-11-02, which is why the clock demos could not be recorded.
+    // The crate is right to smooth; the step is the editor's. When the settings differ in the hour
+    // and nothing else, [`ramp_clock`] takes it there over a second, and the exposure follows a slope
+    // instead of a cliff. Any other change is applied whole, as before: a date, a climate or a pause
+    // is not a transition, and walking one would be a lie about what the file says.
+    if same_except_hour(clock, &settings.clock) && clock.hour != settings.clock.hour {
+        // A ramp is already in flight for this text if one was started; the hour it walks to is the
+        // file's, so the walk simply continues and the text's own change is never re-applied.
+        *clock = WorldClock { hour: clock.hour, ..settings.clock.clone() };
+    } else {
+        *clock = settings.clock.clone();
+    }
     *location = settings.location.clone();
     *climate = settings.climate.clone();
     if *applied_force != Some(settings.forced_weather) {
@@ -138,6 +152,7 @@ pub fn apply_environment(
     settings: Res<FamilySettings>,
     mut state: ResMut<crate::editor::EditorState>,
     mut preview: Preview,
+    mut ramp: Option<ResMut<ClockRamp>>,
     mut applied_force: Local<Option<Option<WeatherPreset>>>,
     mut seen: Local<Option<String>>,
 ) {
@@ -159,6 +174,14 @@ pub fn apply_environment(
     if let (Some(clock), Some(location), Some(climate), Some(director)) =
         (preview.clock.as_mut(), preview.location.as_mut(), preview.climate.as_mut(), preview.director.as_mut())
     {
+        // **The ramp starts here**, where the file's hour and the clock's are both in hand. `apply`
+        // then leaves the hour to the walk and writes every other field whole.
+        if let Some(ramp) = ramp.as_mut()
+            && same_except_hour(clock, &parsed.clock)
+            && let Some(walk) = ClockRamp::between(clock.hour, parsed.clock.hour)
+        {
+            **ramp = walk;
+        }
         apply(&parsed, clock, location, climate, director, &mut applied_force);
     }
     apply_cover(&parsed, &mut preview);
@@ -259,6 +282,93 @@ impl ClockScrub {
     /// Give the clock back to the settings file.
     pub fn release(&mut self) {
         self.0 = None;
+    }
+}
+
+/// **A settings edit that changes only the hour, on its way there** (#271).
+///
+/// `bevy_elements` adapts the camera's exposure with a 1.5 s time constant (`EXPOSURE_TAU_S`), so a
+/// clock that jumps from noon to 20:00 shows the night scene at noon's exposure for about a second and
+/// a half: measured on big, 2026-11-02, as 12 frames with more than 45 % of the viewport white. The crate
+/// smooths the right thing; the step was the editor's. This walks the hour there instead.
+///
+/// **Only the hour.** A date, a climate or a pause is not a transition — walking one would be a lie about
+/// what the file says — and [`same_except_hour`] is the test that keeps this to the one edit it is for.
+#[derive(Resource, Default, Clone, Copy, Debug, PartialEq)]
+pub struct ClockRamp {
+    /// The hour the file asks for, in `[0, 24)`.
+    pub to: f64,
+    /// Hours still to walk, signed: positive forward through the day.
+    pub left: f64,
+}
+
+impl ClockRamp {
+    /// **Hours a settings edit walks over.** A quarter of the crate's exposure time constant would
+    /// overshoot; twice it is long enough that the adaptation never sees a step, and short enough that
+    /// a person does not wait for their own edit.
+    pub const WALK: f64 = 3.0;
+
+    /// The ramp an edit from `from` to `to` starts, or `None` when the two are the same hour.
+    ///
+    /// **Forward through the day, the short way.** Noon to 20:00 is eight hours forward; noon to 06:00 is
+    /// six hours *back*, because a person turning the clock down expects the sun to set, not to leap.
+    /// Choosing by the smaller arc would send noon to 06:00 forward through dusk and midnight, which is
+    /// the opposite of what the button says.
+    pub fn between(from: f64, to: f64) -> Option<ClockRamp> {
+        if from == to || !from.is_finite() || !to.is_finite() {
+            return None;
+        }
+        let mut d = (to - from).rem_euclid(24.0);
+        if d > 12.0 {
+            d -= 24.0;
+        }
+        Some(ClockRamp { to: to.rem_euclid(24.0), left: d })
+    }
+
+    /// The hour `clock` should be at after `dt` seconds, and whether the ramp is done.
+    pub fn step(&mut self, clock: f64, dt: f32) -> (f64, bool) {
+        if self.left == 0.0 {
+            return (clock, true);
+        }
+        let per_second = Self::WALK / 1.0; // the walk takes a second
+        let want = (per_second * f64::from(dt.max(0.0))).min(self.left.abs()) * self.left.signum();
+        self.left -= want;
+        let hour = (clock + want).rem_euclid(24.0);
+        // **Land exactly on the file's hour.** Floating-point accumulation over a second of frames
+        // would otherwise leave the clock a thousandth of an hour short, and the next reload would see
+        // that as a difference and start another ramp.
+        if self.left.abs() < 1e-9 || (hour - self.to).abs() < 1e-9 {
+            self.left = 0.0;
+            return (self.to, true);
+        }
+        (hour, false)
+    }
+}
+
+/// **Whether two clocks differ only in the hour**, the one edit a ramp may smooth.
+pub fn differs_only_in_hour(a: &WorldClock, b: &WorldClock) -> bool {
+    same_except_hour(a, b)
+}
+
+fn same_except_hour(a: &WorldClock, b: &WorldClock) -> bool {
+    a.date == b.date && a.time_scale == b.time_scale && a.paused == b.paused
+}
+
+/// **Walk a ramped hour to where the file says, every frame** (#271).
+///
+/// A ramp that is in flight owns the clock's hour; the file's own text is unchanged, so the settings
+/// reader sees the same text it already applied and does not restart the walk.
+pub fn walk_the_clock(ramp: Option<ResMut<ClockRamp>>, clock: Option<ResMut<WorldClock>>, time: Res<Time>) {
+    let (Some(mut ramp), Some(mut clock)) = (ramp, clock) else {
+        return;
+    };
+    if ramp.left == 0.0 {
+        return;
+    }
+    let (hour, done) = ramp.step(clock.hour, time.delta_secs());
+    clock.hour = hour;
+    if done {
+        ramp.left = 0.0;
     }
 }
 

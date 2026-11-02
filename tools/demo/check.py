@@ -36,7 +36,7 @@ def frame_diff(a, b):
     return float((np.abs(a - b).max(axis=2) > CHANGE_DIFF).mean())
 
 
-def change_fraction(scenes, fps, t):
+def change_fraction(scenes, fps, t, span=0.0):
     """Largest scene change between the last frame before t and any frame up to CHANGE_WINDOW_S after t.
 
     The editor acknowledges a discrete input within about 100 ms, and each frame is quantised to 1/fps, so the change
@@ -44,7 +44,8 @@ def change_fraction(scenes, fps, t):
     """
     n = len(scenes)
     before = min(n - 1, max(0, math.ceil(t * fps - 1e-9) - 1))
-    after = [i for i in range(before + 1, n) if i / fps <= t + CHANGE_WINDOW_S + 1e-9]
+    window = CHANGE_WINDOW_S + span
+    after = [i for i in range(before + 1, n) if i / fps <= t + window + 1e-9]
     if not after:
         after = [min(n - 1, before + 1)]
     return max(frame_diff(scenes[before], scenes[i]) for i in after)
@@ -62,9 +63,19 @@ def change_moments(rec):
     cursors = [e["t"] for e in rec["events"] if e["type"] == "cursor"]
     for e in rec["events"]:
         if e["type"] == "click" and VIEWPORT_X[0] <= e["x"] <= VIEWPORT_X[1]:
-            # a press that starts a drag (snip box) is followed at once by cursor moves (the first may carry the press's own
-            # timestamp): not a placement
-            if not any(0 <= t - e["t"] <= 0.1 for t in cursors):
+            # **A press that starts a drag is followed by cursor MOVES; a click is not** (#270).
+            #
+            # `record.py`'s click step moves the cursor to the point and *then* presses, so the click
+            # carries a cursor at its own timestamp — and the rule used to accept `0 <= t - e["t"]`,
+            # which that self-event always satisfies. No click could ever be a change moment, so a
+            # storyboard that demonstrates a widget (the journal's Check view, a palette row) could
+            # never pass this check; measured on `check_view.json`, `change_moments` returned `[]`
+            # for a click at 1.46 s with cursors [1.084, 1.461].
+            #
+            # A `drag` step is a different shape: the click is stamped first and the eight moves
+            # follow it (`do_step`). So the test is strictly AFTER the press, and a drag's own
+            # post-press moves still disqualify it — including one in the same frame's later tick.
+            if not any(1e-6 < t - e["t"] <= 0.1 for t in cursors):
                 moments.append(("place", e["t"]))
         elif e["type"] == "key":
             keys = e.get("keys", [])
@@ -75,6 +86,29 @@ def change_moments(rec):
                 moments.append(("home", e["t"]))
         elif e["type"] == "agent" and e.get("tool") == "grimoire_frame_view":
             moments.append(("view", e["t"]))
+        elif e["type"] == "settle":
+            # **A change the storyboard said would arrive, and has.** A fade is not a step: the picture
+            # at the operation's timestamp is still the old one, so the fifth-of-a-second window above
+            # measures the wrong pair of frames.
+            #
+            # **A gradual change needs a span, not a moment.** The editor now walks a clock edit over a
+            # second (#271), so the sky goes from noon to dusk as a *gradient*: any fifth of a second of
+            # it moves a tenth of the picture, which no 5 % threshold can see. A settle that names the
+            # moment the change *starts* carries the seconds it takes as `span`, and the comparison is
+            # against its end.
+            span = float(e.get("span", 0.0) or 0.0)
+            # The moment stays at the change's **start**: `change_fraction` compares the frame before it
+            # with the frames after, and `span` widens that second window.
+            moments.append(("settle", e["t"], span) if span > 0 else ("settle", e["t"]))
+    settled = [m for m in moments if m[0] == "settle"]
+    # **A settle stands in for the operation it answers.** An `agent` moment is the operation's own
+    # timestamp, and for a change the editor fades in that picture is still the old one — measuring it
+    # says "the operation changed nothing", which is false. A settle within a few seconds after an
+    # agent moment is that moment's picture arrived, so the agent moment is dropped in its favour;
+    # an agent moment with no settle after it is measured as before.
+    if settled:
+        moments = [m for m in moments
+                   if m[0] != "agent" or not any(0 < s[1] - m[1] <= 3.0 for s in settled)]
     return sorted(moments, key=lambda m: m[1])
 
 
@@ -104,8 +138,10 @@ def main():
           f"(need >= {SCENE_MIN * 100:.0f}%) {'PASS' if scene_ok else 'FAIL'}")
 
     # 2. Change moments: the last frame before the moment vs the largest change up to CHANGE_WINDOW_S after it.
-    for kind, t in change_moments(rec):
-        frac = change_fraction(scenes, fps, t)
+    for moment in change_moments(rec):
+        kind, t = moment[0], moment[1]
+        span = moment[2] if len(moment) > 2 else 0.0
+        frac = change_fraction(scenes, fps, t, span)
         passed = frac >= CHANGE_MIN
         ok &= passed
         print(f"change {kind:6s} at {t:6.2f}s: {frac * 100:5.2f}% of scene pixels changed "

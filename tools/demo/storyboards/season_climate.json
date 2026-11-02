@@ -1,0 +1,86 @@
+{
+ "name": "season_climate",
+ "fps": 8,
+ "scale": 1,
+ "width": 400,
+ "crop": [
+  470,
+  60,
+  950,
+  665
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.2,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "12"
+    }
+   }
+  },
+  {
+   "seconds": 2.0,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "6"
+    }
+   }
+  },
+  {
+   "seconds": 2.0,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "12"
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the bedroom in June, under bevy_elements' sky"
+  },
+  {
+   "at": 0.5,
+   "settle": "the snow has started",
+   "span": 1.6,
+   "caption": "agent: family_set clock.date.month = 12 \u2014 Winter"
+  },
+  {
+   "at": 2.6,
+   "settle": "back to summer",
+   "span": 0.9,
+   "caption": "agent: family_set clock.date.month = 6"
+  },
+  {
+   "at": 4.6,
+   "settle": "the snow has started again",
+   "span": 1.4,
+   "caption": "agent: family_set clock.date.month = 12 \u2014 one family_set, one undo step, each press"
+  }
+ ]
+}
