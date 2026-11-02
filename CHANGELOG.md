@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **231-toolbar** `ce51911` The toolbar: every tool mode, undo, redo and save as a gooey icon button, and a click dispatches the same chord its key does, so the armed mode lights on the button and nowhere else (UI-37, #231)<br><a href="docs/changelog/media/2026-11-02-toolbar.mp4"><img src="docs/changelog/media/2026-11-02-toolbar.png" width="320" alt="clip"></a>
 - **siren-audio-panel** `7029b20` The Cauldron hosts `bevy_siren` and draws its audio panel: a row per bus with its level, duck and live voices, the project's cue table, and an Audition that writes the crate's own `Play` (#274, S-01) *No clip: visible, not yet recorded: the panel is one text block in the controls panel and needs the editor on a display to record; proved by crates/bevy_cauldron/tests/audio_panel_reads_the_crates_file.rs*
 - **228-status-band** `5224836` The status bar says when a reload refused a file, in the skin's warning ink (UI-34, #228)<br><a href="docs/changelog/media/2026-11-02-status-band.mp4"><img src="docs/changelog/media/2026-11-02-status-band.png" width="320" alt="clip"></a>
 - **235-badges-reveal** `037c069` Holding K shows every key on the control it acts through, through gooey's own ShortcutBadges (UI-41, #235): Reveal::Key(KeyCode::KeyK) in EditorUiPlugin, so the overlay key is stated in the crate rather than polled<br><a href="docs/changelog/media/2026-11-02-badges-reveal.mp4"><img src="docs/changelog/media/2026-11-02-badges-reveal.png" width="320" alt="clip"></a>

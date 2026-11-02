@@ -26,10 +26,10 @@
   ],
   "chunks": [
     {
-      "seconds": 3.2
+      "seconds": 3.0
     },
     {
-      "seconds": 6.2,
+      "seconds": 5.4,
       "operation": {
         "name": "placement_remove",
         "parameters": {
@@ -41,10 +41,10 @@
   "steps": [
     {
       "at": 0.4,
-      "caption": "the toolbar over the map: undo \u00b7 redo \u00b7 save | the six tools | frame \u00b7 snip"
+      "caption": "the toolbar: undo \u00b7 redo \u00b7 save | fill \u00b7 remove \u00b7 move \u00b7 clone \u00b7 note \u00b7 run \u00b7 generate | frame \u00b7 snip"
     },
     {
-      "at": 1.0,
+      "at": 0.9,
       "click": [
         233,
         46
@@ -52,11 +52,11 @@
       "caption": "person: clicks the Move button"
     },
     {
-      "at": 1.9,
-      "caption": "Move armed from the click: the inspector says so, its icon lights"
+      "at": 1.7,
+      "caption": "Move armed from the click \u2014 the inspector says so and its icon lights"
     },
     {
-      "at": 2.7,
+      "at": 2.4,
       "click": [
         275,
         46
@@ -65,19 +65,19 @@
     },
     {
       "at": 0.5,
-      "caption": "agent: removes the bed \u2014 the toolbar holds its place over the map"
+      "caption": "agent: removes the bed; the toolbar holds its place over the map"
     },
     {
-      "at": 1.7,
-      "caption": "Clone armed \u2014 the click went through the key's own chord"
+      "at": 1.6,
+      "caption": "Clone armed: the click went down the key's own chord"
     },
     {
-      "at": 2.8,
+      "at": 2.4,
       "key": "Escape",
-      "caption": "person: Esc puts it down"
+      "caption": "person: Esc puts the tool down"
     },
     {
-      "at": 4.0,
+      "at": 3.2,
       "click": [
         233,
         46
@@ -85,47 +85,9 @@
       "caption": "person: Move again, the same button"
     },
     {
-      "at": 4.2,
-      "click": [
-        233,
-        46
-      ],
-      "caption": "person: Move from the button"
-    },
-    {
-      "at": 5.0,
-      "cursor": [
-        700,
-        400
-      ]
-    },
-    {
-      "at": 5.3,
-      "drag": [
-        620,
-        300,
-        700,
-        380
-      ],
-      "secs": 0.5
-    },
-    {
-      "at": 5.4,
-      "key": "Escape",
-      "caption": "one body arms a tool, whichever front end asked"
-    },
-    {
-      "at": 4.3,
-      "click": [
-        233,
-        46
-      ],
-      "caption": "person: Move from the button"
-    },
-    {
-      "at": 4.9,
+      "at": 3.9,
       "hold": "KeyD",
-      "secs": 1.0,
+      "secs": 1.2,
       "caption": "one body arms a tool, whichever front end asked"
     }
   ]
