@@ -1,0 +1,89 @@
+{
+  "name": "fill_from_the_toolbar",
+  "fps": 12,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    20,
+    1000,
+    700
+  ],
+  "setup": [
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -3.2,
+            -2.4,
+            1.0,
+            1.6
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.6
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "a room with a sofa, a chair and a coffee table"
+    },
+    {
+      "at": 0.8,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "brush_arm",
+        "parameters": {
+          "descriptor": "sofa"
+        }
+      },
+      "caption": "agent: arms the sofa \u2014 the same brush_arm a palette click dispatches"
+    },
+    {
+      "at": 1.6,
+      "caption": "the sofa is the brush"
+    },
+    {
+      "at": 2.2,
+      "click": [
+        305,
+        46
+      ],
+      "caption": "person: clicks Fill on the toolbar"
+    },
+    {
+      "at": 3.0,
+      "caption": "Fill answers: there is no ground under the button"
+    },
+    {
+      "at": 3.5,
+      "cursor": [
+        620,
+        470
+      ],
+      "caption": "person: the pointer is over open floor"
+    },
+    {
+      "at": 4.2,
+      "key": "KeyF",
+      "caption": "F floods the command the Fill button asks for"
+    },
+    {
+      "at": 5.2,
+      "hold": "KeyD",
+      "secs": 0.6,
+      "caption": "13 placed: the button asked, the key flooded"
+    },
+    {
+      "at": 6.0,
+      "key": "KeyA",
+      "caption": "and the room is full of sofas"
+    }
+  ]
+}
