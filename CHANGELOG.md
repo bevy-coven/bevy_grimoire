@@ -281,7 +281,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 - **D2** `2abe1eb` bevy_emerge_decide: typed yes/no, choice and score questions to a decision model, recorded-fixture replay, and threshold calibration *No clip: an engine-free API crate; proved by crates/bevy_emerge_decide/tests/decide.rs*
 - **D1** `0373600` clef-flash serves typed decisions (probability per option) on the LAN: recipe and first recorded fixture *No clip: serving recipe and a fixture; proved by a recorded /v1/systemone request and response (0.187 s warm)*
 - **notes-history-send** `67a0f31` Notes keep an append-only history and Send sends all drafts in one undo step (#90, part)<br><a href="docs/changelog/media/2026-10-30-notes-panel.mp4"><img src="docs/changelog/media/2026-10-30-notes-panel.png" width="320" alt="clip"></a>
-- **n89-pieces** `9b6dc87` Note tool: Shift-click pieces to leave a note on them *No clip: visible, not yet recorded: no display on this laptop pass; proved by tests/a_note_on_picked_pieces_is_saved.rs*
+- **n89-pieces** `9b6dc87` Note tool: Shift+N arms it, a rectangle dragged over the map opens a draft note on those cells, and Enter leaves it in the map's notes file with one undo step (#89)<br><a href="docs/changelog/media/2026-11-02-n89-note-box.mp4"><img src="docs/changelog/media/2026-11-02-n89-note-box.png" width="320" alt="clip"></a>
 
 ## 2026-10-28
 

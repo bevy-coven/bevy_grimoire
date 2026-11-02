@@ -1,0 +1,100 @@
+{
+ "name": "note_box",
+ "fps": 8,
+ "scale": 1,
+ "width": 560,
+ "crop": [
+  8,
+  58,
+  700,
+  700
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -3.2,
+      -2.5,
+      2.6,
+      2.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 3
+  },
+  {
+   "seconds": 3.5
+  },
+  {
+   "seconds": 3
+  },
+  {
+   "seconds": 2.5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "the bedroom on the Map tab: Shift+N arms the Note tool"
+  },
+  {
+   "at": 1.0,
+   "key": "KeyN",
+   "mods": [
+    "ShiftLeft"
+   ]
+  },
+  {
+   "at": 2.4,
+   "drag": [
+    560,
+    470,
+    700,
+    560
+   ],
+   "secs": 1.0,
+   "caption": "person: drag a rectangle over the bed \u2014 the note opens on those cells"
+  },
+  {
+   "at": 4.3,
+   "type": "a reading corner here"
+  },
+  {
+   "at": 6.2,
+   "key": "Enter",
+   "caption": "person: Enter saves it \u2014 one draft, one undo step"
+  },
+  {
+   "at": 7.2,
+   "wheel": {
+    "y": -3,
+    "n": 6,
+    "at": [
+     180,
+     400
+    ]
+   }
+  },
+  {
+   "at": 7.8,
+   "caption": "the draft in NOTES, drawn over the cells it covers"
+  },
+  {
+   "at": 8.8,
+   "wheel": {
+    "y": 2,
+    "n": 4,
+    "at": [
+     180,
+     400
+    ]
+   }
+  }
+ ]
+}
