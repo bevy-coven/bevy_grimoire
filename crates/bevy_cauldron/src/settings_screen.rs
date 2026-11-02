@@ -26,10 +26,12 @@
 
 use std::path::PathBuf;
 
+use bevy::ecs::spawn::{SpawnIter, SpawnWith};
+use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_gooey::{
-    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, menu, number_field, observe, panel, tab_page, tabs,
+    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, number_field, observe, panel, tab_page, tabs,
     text_input, toggle,
 };
 
@@ -39,6 +41,9 @@ use crate::settings::{PROJECT_FILE, SettingsLayer, UserSettingsFile};
 
 /// How often the open screen looks at the two files, in seconds.
 const LOOK_EVERY: f32 = 0.25;
+
+/// How many button-heights of settings the list shows before it scrolls.
+const LIST_ROWS: f32 = 9.5;
 
 /// Which file a change is written to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -335,11 +340,15 @@ fn refresh(
         commands.entity(page).despawn_children();
         let category = tab.checked_sub(1).and_then(|i| CATEGORIES.get(i)).copied();
         let found = setting_catalogue::search(&dialog.query, category);
-        commands.entity(page).with_children(|rows| {
-            if found.is_empty() {
+        if found.is_empty() {
+            commands.entity(page).with_children(|rows| {
                 rows.spawn(label(format!("No setting matches \"{}\".", dialog.query.trim())));
-            }
-            for setting in found {
+            });
+            continue;
+        }
+        let rows: Vec<_> = found
+            .into_iter()
+            .map(|setting| {
                 let own = edited.get(setting.key);
                 let below = match dialog.scope {
                     Scope::User => default_of(setting.key),
@@ -349,19 +358,24 @@ fn refresh(
                     Scope::User => snapshot.project.get(setting.key),
                     Scope::Project => None,
                 };
-                spawn_row(rows, setting, own, below.unwrap_or(Value::On(false)), overridden, default_of(setting.key));
-            }
+                setting_row(setting, own, below.unwrap_or(Value::On(false)), overridden, default_of(setting.key))
+            })
+            .collect();
+        // A list, so a tab with more settings than the window is tall scrolls instead of running off it.
+        commands.entity(page).with_children(|p| {
+            p.spawn(list(LIST_ROWS, Children::spawn(SpawnIter(rows.into_iter()))));
         });
     }
     built.0 = Some(snapshot);
 }
 
 /// One setting: its control, what it does, its default, whether it is modified and the Reset.
-fn spawn_row(rows: &mut ChildSpawnerCommands, setting: &'static Setting, own: Option<Value>, below: Value, overridden: Option<Value>, default_value: Option<Value>) {
+fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, overridden: Option<Value>, default_value: Option<Value>) -> impl Bundle {
     let shown = own.unwrap_or(below);
     let key = setting.key;
-    rows.spawn(Node { flex_direction: FlexDirection::Column, margin: UiRect::bottom(Val::Px(crate::chrome::GAP_GROUP)), ..default() })
-        .with_children(|row| {
+    (
+        Node { flex_direction: FlexDirection::Column, margin: UiRect::bottom(Val::Px(crate::chrome::GAP_GROUP)), ..default() },
+        Children::spawn(SpawnWith(move |row: &mut RelatedSpawner<ChildOf>| {
             match (setting.kind, shown) {
                 (Kind::Switch, Value::On(on)) => {
                     row.spawn((
@@ -405,5 +419,6 @@ fn spawn_row(rows: &mut ChildSpawnerCommands, setting: &'static Setting, own: Op
                         line.spawn(label(format!("This project sets it to {}", setting_catalogue::say(setting, over))));
                     }
                 });
-        });
+        })),
+    )
 }
