@@ -144,6 +144,7 @@ pub mod ops_runs;
 pub mod project;
 pub mod recent;
 pub mod screen;
+pub mod keymap_screen;
 pub mod project_config;
 pub mod setting_catalogue;
 pub mod settings;

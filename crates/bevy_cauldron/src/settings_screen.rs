@@ -85,7 +85,7 @@ struct Snapshot {
 
 /// One file as the screen read it: absent, a layer, or the reason it does not read.
 #[derive(Clone, Debug, PartialEq)]
-enum Layer {
+pub(crate) enum Layer {
     /// This build cannot name the file (no user settings folder, or no project open).
     Unavailable,
     Missing,
@@ -94,7 +94,7 @@ enum Layer {
 }
 
 impl Layer {
-    fn of(path: Option<&PathBuf>) -> Layer {
+    pub(crate) fn of(path: Option<&PathBuf>) -> Layer {
         let Some(path) = path else { return Layer::Unavailable };
         let file = path.to_string_lossy().replace('\\', "/");
         match std::fs::read_to_string(path) {
@@ -108,7 +108,7 @@ impl Layer {
     }
 
     /// The value this file sets for `key`.
-    fn get(&self, key: &str) -> Option<Value> {
+    pub(crate) fn get(&self, key: &str) -> Option<Value> {
         match self {
             Layer::Read(layer) => layer.get(key),
             _ => None,
@@ -126,21 +126,21 @@ struct ProblemLine;
 
 /// The dialog's two files, as this app names them.
 #[derive(SystemParam)]
-struct Files<'w> {
-    user: Option<Res<'w, UserSettingsFile>>,
-    project: Option<Res<'w, Project>>,
+pub(crate) struct Files<'w> {
+    pub(crate) user: Option<Res<'w, UserSettingsFile>>,
+    pub(crate) project: Option<Res<'w, Project>>,
 }
 
 impl Files<'_> {
-    fn user(&self) -> Option<PathBuf> {
+    pub(crate) fn user(&self) -> Option<PathBuf> {
         self.user.as_ref().map(|f| f.0.clone())
     }
 
-    fn project(&self) -> Option<PathBuf> {
+    pub(crate) fn project(&self) -> Option<PathBuf> {
         self.project.as_ref().map(|p| p.project_dir.join(PROJECT_FILE))
     }
 
-    fn path(&self, scope: Scope) -> Option<PathBuf> {
+    pub(crate) fn path(&self, scope: Scope) -> Option<PathBuf> {
         match scope {
             Scope::User => self.user(),
             Scope::Project => self.project(),
@@ -196,7 +196,7 @@ fn chord(
 }
 
 /// The scopes this app can write: the user's file when it has one, the project's when one is open.
-fn scopes(files: &Files) -> Vec<Scope> {
+pub(crate) fn scopes(files: &Files) -> Vec<Scope> {
     let mut out = Vec::new();
     if files.user().is_some() {
         out.push(Scope::User);
@@ -280,6 +280,20 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
                                 ),
                             ));
                         }
+                        actions.spawn((
+                            button("Keymap"),
+                            observe(
+                                |_: On<Activate>,
+                                 dialogs: Query<Entity, With<SettingsDialog>>,
+                                 mut asks: MessageWriter<crate::keymap_screen::OpenKeymap>,
+                                 mut commands: Commands| {
+                                    for dialog in &dialogs {
+                                        commands.entity(dialog).despawn();
+                                    }
+                                    asks.write(crate::keymap_screen::OpenKeymap);
+                                },
+                            ),
+                        ));
                         actions.spawn((
                             button("Close"),
                             observe(|_: On<Activate>, dialogs: Query<Entity, With<SettingsDialog>>, mut commands: Commands| {
