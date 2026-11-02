@@ -167,6 +167,7 @@ fn open(
 }
 
 fn refresh(
+    mut seen: Local<Option<Option<(std::time::SystemTime, u64)>>>,
     project: Option<Res<Project>>,
     reloads: Option<Res<EditorReloads>>,
     mut dialogs: Query<(Ref<ProjectConfigDialog>, &mut Built)>,
@@ -174,6 +175,13 @@ fn refresh(
     mut commands: Commands,
 ) {
     let (Ok((dialog, mut built)), Some(project)) = (dialogs.single_mut(), project) else { return };
+    // The file is read when its size or modification time moved, the screen changed, or it was never read:
+    // a `stat` a frame, not a parse a frame.
+    let stat = std::fs::metadata(family::path_for_project(&project.root)).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
+    if *seen == Some(stat) && !dialog.is_changed() && built.0.is_some() {
+        return;
+    }
+    *seen = Some(stat);
     let family = Family::load(&project.root).map(|f| f.crates);
     let verdict = reloads
         .as_deref()
