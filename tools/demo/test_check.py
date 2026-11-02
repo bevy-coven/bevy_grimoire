@@ -163,7 +163,9 @@ class Settle(unittest.TestCase):
         import check
         # The moment the walk starts, and how long it takes.
         rec = {"chunks": [], "events": [{"t": 3.1, "type": "settle", "what": "the sky", "span": 1.6}]}
-        self.assertEqual(check.change_moments(rec), [("settle", 3.1 + 1.6)])
+        # The moment is the change's **start**; the span widens the window `change_fraction` looks
+        # through, so the comparison is the frame before the walk with the frame at its end.
+        self.assertEqual(check.change_moments(rec), [("settle", 3.1, 1.6)])
         # And a span on a still clip is still measured and still fails: the span moves the moment, it
         # does not excuse the change.
         with tempfile.TemporaryDirectory() as directory:

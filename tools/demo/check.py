@@ -36,7 +36,7 @@ def frame_diff(a, b):
     return float((np.abs(a - b).max(axis=2) > CHANGE_DIFF).mean())
 
 
-def change_fraction(scenes, fps, t):
+def change_fraction(scenes, fps, t, span=0.0):
     """Largest scene change between the last frame before t and any frame up to CHANGE_WINDOW_S after t.
 
     The editor acknowledges a discrete input within about 100 ms, and each frame is quantised to 1/fps, so the change
@@ -44,7 +44,8 @@ def change_fraction(scenes, fps, t):
     """
     n = len(scenes)
     before = min(n - 1, max(0, math.ceil(t * fps - 1e-9) - 1))
-    after = [i for i in range(before + 1, n) if i / fps <= t + CHANGE_WINDOW_S + 1e-9]
+    window = CHANGE_WINDOW_S + span
+    after = [i for i in range(before + 1, n) if i / fps <= t + window + 1e-9]
     if not after:
         after = [min(n - 1, before + 1)]
     return max(frame_diff(scenes[before], scenes[i]) for i in after)
@@ -96,10 +97,9 @@ def change_moments(rec):
             # moment the change *starts* carries the seconds it takes as `span`, and the comparison is
             # against its end.
             span = float(e.get("span", 0.0) or 0.0)
-            if span > 0:
-                moments.append(("settle", e["t"] + span))
-            else:
-                moments.append(("settle", e["t"]))
+            # The moment stays at the change's **start**: `change_fraction` compares the frame before it
+            # with the frames after, and `span` widens that second window.
+            moments.append(("settle", e["t"], span) if span > 0 else ("settle", e["t"]))
     settled = [m for m in moments if m[0] == "settle"]
     # **A settle stands in for the operation it answers.** An `agent` moment is the operation's own
     # timestamp, and for a change the editor fades in that picture is still the old one — measuring it
@@ -138,8 +138,10 @@ def main():
           f"(need >= {SCENE_MIN * 100:.0f}%) {'PASS' if scene_ok else 'FAIL'}")
 
     # 2. Change moments: the last frame before the moment vs the largest change up to CHANGE_WINDOW_S after it.
-    for kind, t in change_moments(rec):
-        frac = change_fraction(scenes, fps, t)
+    for moment in change_moments(rec):
+        kind, t = moment[0], moment[1]
+        span = moment[2] if len(moment) > 2 else 0.0
+        frac = change_fraction(scenes, fps, t, span)
         passed = frac >= CHANGE_MIN
         ok &= passed
         print(f"change {kind:6s} at {t:6.2f}s: {frac * 100:5.2f}% of scene pixels changed "

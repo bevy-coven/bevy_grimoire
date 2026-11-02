@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **271-clock-walk** `67c1084` A family_set clock edit is walked to its new hour over a second instead of jumped, so the sky goes from noon to dusk without the viewport blowing white for 1.5 seconds (#271)<br><a href="docs/changelog/media/2026-11-02-271-clock-walk.mp4"><img src="docs/changelog/media/2026-11-02-271-clock-walk.png" width="320" alt="clip"></a>
 - **272-settle** `48b27d4` A demo storyboard can say when a faded change has landed: record.py's settle step, and check.py measuring that moment instead of the operation's own frame (#272) *No clip: demo tooling; nothing on screen; proved by tools/demo/test_check.py (9 tests)*
 - **build-strip** `074f248` The workspace's own test binaries are stripped of symbols, so a Bevy test binary links at 56 MB instead of 2 GB and an aborted link cannot leave 2 GB of debris on a full disk *No clip: a build profile setting; proved by the relinked binary size and tests/live_reload.rs passing on it*
 - **112-clip-check** `217b838` The clip check: a labelled set of every changelog clip plus a mismatched twin, and a check that asks the frames whether they show the line's claim (D4, #112) *No clip: the agreement needs a served model; the set and its shape are proved by tests/checks_that_earn_their_authority.rs::the_committed_clip_set_is_two_sided_and_well_formed*
@@ -292,7 +293,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 - **96-hot-reload** `0c63869` A family crate's settings file edited on disk is reloaded in the editor within a second; an invalid edit keeps the last good settings (#96) *No clip: an API and a status line; proved by core tests/family_watch.rs and mapper tests/family_settings_reload.rs*
 - **B-030** `b823a2f` Undoing a change made before a map rename now says which rename to undo first, not 'Open <old name>' *No clip: an error message; proved by tests/an_undo_across_a_rename_names_the_rename.rs*
-- **96-family-set** `8929fe4` family_set: change one field of a family crate's settings from a FAMILY SETTINGS field or an agent's apply, undoable (#96) *No clip: visible, not yet recorded: loop pass ran past budget compiling; proved by crates/bevy_emerge_mapper/tests/family_set_is_an_operation.rs*
+- **96-family-set** `8929fe4` family_set: an agent changes one field of a family crate's settings — here `bevy_elements`' `clock.hour`, which the preview follows from noon to dusk — undoable (#96)<br><a href="docs/changelog/media/2026-11-02-271-clock-walk.mp4"><img src="docs/changelog/media/2026-11-02-271-clock-walk.png" width="320" alt="clip"></a>
 - **f0-family-feature** `dc7cbbe` bevy_elements is an optional cargo feature pinned by git rev; a family.ron crate the build lacks is a status problem (#96) *No clip: an API and a cargo feature; proved by crates/bevy_emerge_mapper/tests/family_host.rs*
 - **family-set-field** `5158321` family::set_field: write one field of a crate's settings RON, comments kept, old value returned for undo (#96) *No clip: an API; proved by crates/bevy_emerge_core/tests/family.rs*
 - **F0-family-ron** `pending` family.ron: a project names the family crates it uses, and one it lists but the build lacks is a problem message (#96, data slice) *No clip: data and API; proved by crates/bevy_emerge_core/tests/family.rs*
