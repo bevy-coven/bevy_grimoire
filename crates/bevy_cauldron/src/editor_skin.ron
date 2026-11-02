@@ -24,6 +24,19 @@
         Srgba((red: 0.248, green: 0.231, blue: 0.201, alpha: 1.0)),  // ROW_SELECTED
         Srgba((red: 0.325, green: 0.302, blue: 0.263, alpha: 1.0)),  // PANEL_EDGE
     ],
+    // **The interaction-state roles** (bevy-coven/bevy_gooey#37, G-33): the colours `chrome.rs` draws a
+    // hovered, pressed, held, unchecked, card or preview-edged thing with. Each is set rather than left
+    // to gooey's "answer from the nearest field", because this editor has a *measured* colour for every
+    // one and a fallback would be a second, unmeasured palette. `tests/the_skin_carries_the_editors_state_colours.rs`
+    // says each is the constant of the same meaning, and that `problems()` stays empty.
+    hover: Some(Srgba((red: 0.212, green: 0.197, blue: 0.172, alpha: 1.0))),          // ROW_HOVER
+    pressed: Some(Srgba((red: 0.110, green: 0.102, blue: 0.089, alpha: 1.0))),        // ROW_PRESSED, recessed below ROW_BG
+    held: Some(Srgba((red: 0.115, green: 0.107, blue: 0.093, alpha: 1.0))),          // PANEL_BG, the fill a held ground fades
+    held_ground: Some(Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0))),        // ACCENT, the gizmo a held overlay fades
+    held_fade: 0.55,                                                                  // GROUND_HELD, down to WORLD_HELD's 0.25
+    unchecked: Some(Srgba((red: 0.7685, green: 1.0295, blue: 1.1745, alpha: 1.0))),   // UNCHECKED, SUGGEST x 1.45
+    card: Some(Srgba((red: 0.195, green: 0.181, blue: 0.158, alpha: 1.0))),           // OVERLAY_BG
+    preview_edge: Some(Srgba((red: 0.440, green: 0.409, blue: 0.356, alpha: 1.0))),   // EDGE_STRONG, an outline not a fill
     text_size: 11.0,
     heading_size: 15.0,
     gap: 5.0,
