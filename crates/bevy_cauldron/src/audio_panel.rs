@@ -118,8 +118,9 @@ pub fn read_the_files(
 
     let mut cues = Vec::new();
     let mut table = None;
-    match std::fs::read_to_string(project.root.join("family").join(CUES)) {
-        Ok(text) => match CueTable::from_ron(&text) {
+    // No cue table is not a fault: a project may have a mix and no sounds yet.
+    if let Ok(text) = std::fs::read_to_string(project.root.join("family").join(CUES)) {
+        match CueTable::from_ron(&text) {
             Ok(read) => {
                 cues.extend(read.names().map(str::to_owned));
                 table = Some(read);
@@ -129,9 +130,7 @@ pub fn read_the_files(
                     state.status.problem(format!("family/{CUES}: {e}"));
                 }
             }
-        },
-        // No cue table is not a fault: a project may have a mix and no sounds yet.
-        Err(_) => {}
+        }
     }
 
     let auditioning = cues.first().cloned().unwrap_or_default();
@@ -206,18 +205,21 @@ pub struct AudioSaid;
 /// `no_system_writes_every_frame` is the rule the editor's panels are held to.
 pub fn show_it(
     panel: Res<AudioPanel>,
-    mut q: Query<(&mut Text, Option<&AudioMix>, Option<&AudioCues>, Option<&AudioSaid>)>,
+    mut mix: MixLines,
+    mut cues: CueLines,
+    mut said: SaidLine,
     buttons: Query<&Children, With<AuditionRow>>,
+    mut labels: ButtonLabel,
 ) {
     if !panel.is_changed() {
         return;
     }
-    let mix = if panel.buses.is_empty() {
+    let mix_text = if panel.buses.is_empty() {
         "no family/bevy_siren.ron: the crate's own defaults apply".to_owned()
     } else {
         panel.buses.join("\n")
     };
-    let cues = if panel.cues.is_empty() {
+    let cues_text = if panel.cues.is_empty() {
         "no cues: family/bevy_siren_cues.ron names none".to_owned()
     } else {
         panel.cues.join("\n")
@@ -227,31 +229,38 @@ pub fn show_it(
     } else {
         format!("Audition {}", panel.auditioning)
     };
-    // **The button's own label is its child**, and it is written through the same query: a second
-    // `&mut Text` parameter would be B0001 against this one, which the first run of this test panic
-    // told us rather than a reviewer.
+
+    write(mix.iter_mut(), &mix_text);
+    write(cues.iter_mut(), &cues_text);
+    write(said.iter_mut(), &panel.said);
+    // **The button's own label is its child**: `bevy_gooey::button` spawns exactly one, and this is the
+    // only text on it.
     for children in &buttons {
         for child in children.iter() {
-            if let Ok((mut text, ..)) = q.get_mut(child)
+            if let Ok(mut text) = labels.get_mut(child)
                 && text.0 != audition
             {
                 text.0 = audition.clone();
             }
         }
     }
+}
 
-    for (mut text, is_mix, is_cues, is_said) in &mut q {
-        let want = if is_mix.is_some() {
-            &mix
-        } else if is_cues.is_some() {
-            &cues
-        } else if is_said.is_some() {
-            &panel.said
-        } else {
-            continue;
-        };
-        if &text.0 != want {
-            text.0 = want.clone();
+/// The three readouts, each its own narrow query. Written as aliases because four `&mut Text` queries
+/// in one system are `B0001` against each other unless their filters are disjoint, and the disjointness
+/// is the thing worth naming.
+type MixLines<'w, 's> = Query<'w, 's, &'static mut Text, (With<AudioMix>, Without<AudioCues>, Without<AudioSaid>)>;
+type CueLines<'w, 's> = Query<'w, 's, &'static mut Text, (With<AudioCues>, Without<AudioMix>, Without<AudioSaid>)>;
+type SaidLine<'w, 's> = Query<'w, 's, &'static mut Text, (With<AudioSaid>, Without<AudioMix>, Without<AudioCues>)>;
+type ButtonLabel<'w, 's> =
+    Query<'w, 's, &'static mut Text, (Without<AudioMix>, Without<AudioCues>, Without<AudioSaid>)>;
+
+/// Compare before writing, which is `no_system_writes_every_frame`'s rule: these are `Text` nodes and
+/// everything downstream reads their change detection.
+fn write<'a>(texts: impl Iterator<Item = Mut<'a, Text>>, want: &str) {
+    for mut text in texts {
+        if text.0 != want {
+            text.0 = want.to_owned();
         }
     }
 }
