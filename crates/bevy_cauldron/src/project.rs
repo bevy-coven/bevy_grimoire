@@ -790,15 +790,7 @@ impl Project {
         &mut self,
         comp: bevy_grimoire_core::composition::Composition,
     ) -> Result<(), String> {
-        let mut proposed = self.compositions.clone();
-        match proposed.compositions.iter().position(|c| c.id == comp.id) {
-            Some(i) => proposed.compositions[i] = comp,
-            None => proposed.compositions.push(comp),
-        }
-        // Canonical order, so one set has one encoding and a diff shows what changed rather than
-        // where it was inserted.
-        proposed.compositions.sort_by(|a, b| a.id.cmp(&b.id));
-        bevy_grimoire_core::composition::validate(&proposed.compositions, &self.library)?;
+        let proposed = self.proposed_compositions(comp)?;
 
         // **The project's collection, not the authoring kit's.** A tile may seat `site/wall` beside
         // `lab/bench`, so it belongs to neither kit — filing it under whichever one happened to be
@@ -811,6 +803,31 @@ impl Project {
             .map_err(|e| format!("NOT WRITTEN: {e}"))?;
         self.compositions = proposed;
         Ok(())
+    }
+
+    /// **What [`Project::commit_composition`] would refuse, without writing**: the collection with `comp`
+    /// in it, in canonical order, validated whole. A preview calls it so it refuses what the commit will.
+    pub fn check_composition(
+        &self,
+        comp: &bevy_grimoire_core::composition::Composition,
+    ) -> Result<(), String> {
+        self.proposed_compositions(comp.clone()).map(|_| ())
+    }
+
+    fn proposed_compositions(
+        &self,
+        comp: bevy_grimoire_core::composition::Composition,
+    ) -> Result<bevy_grimoire_core::composition::Compositions, String> {
+        let mut proposed = self.compositions.clone();
+        match proposed.compositions.iter().position(|c| c.id == comp.id) {
+            Some(i) => proposed.compositions[i] = comp,
+            None => proposed.compositions.push(comp),
+        }
+        // Canonical order, so one set has one encoding and a diff shows what changed rather than
+        // where it was inserted.
+        proposed.compositions.sort_by(|a, b| a.id.cmp(&b.id));
+        bevy_grimoire_core::composition::validate(&proposed.compositions, &self.library)?;
+        Ok(proposed)
     }
 
     /// **Take a composition out of the project's collection** — the inverse of

@@ -4312,6 +4312,60 @@ pub fn set_mount(
     }
 }
 
+/// **Describe one library piece through the operation** (E-002, #129 slice 17). Enter in the Meshes
+/// tab's description field calls this for a piece in the library, so a person's description is the
+/// change an agent's `piece_set_note` makes, with the person's source. Returns `true` when the write
+/// landed, so the caller records the change only then; a refusal goes to the status row.
+pub fn set_note(
+    import: &mut crate::tiles::ImportState,
+    project: &mut crate::project::Project,
+    id: &str,
+    note: &str,
+) -> bool {
+    dispatch_piece_field(import, project, "piece_set_note", serde_json::json!({"id": id, "note": note}))
+}
+
+/// **Resize one library piece through the operation** (E-002, #129 slice 18). Enter in the Meshes tab's
+/// SIZE field calls this for a piece in the library, so a person's resize is the change an agent's
+/// `piece_set_width` makes, with the person's source. Returns `true` when the write landed, so the
+/// caller records the change only then; a refusal goes to the status row.
+pub fn set_width(
+    import: &mut crate::tiles::ImportState,
+    project: &mut crate::project::Project,
+    id: &str,
+    width: f32,
+) -> bool {
+    dispatch_piece_field(import, project, "piece_set_width", serde_json::json!({"id": id, "width": width}))
+}
+
+fn dispatch_piece_field(
+    import: &mut crate::tiles::ImportState,
+    project: &mut crate::project::Project,
+    operation: &str,
+    params: serde_json::Value,
+) -> bool {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    match crate::ops::dispatch(&mut ctx, operation, &params) {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(fresh) = ctx.project {
+                adopt_library(project, &fresh);
+            }
+            true
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            import.status.problem(e.0);
+            false
+        }
+    }
+}
+
 /// **Leave a pack out of the kit, or bring it back, through the operation** (E-002, #129 slice 7).
 /// `Shift+R` on the Meshes tab calls this, so a person's exclusion is the change an agent's
 /// `pack_set_excluded` makes, with the person's source, and its log line is one Cmd+Z on the Meshes

@@ -84,6 +84,7 @@ pub mod ops;
 #[cfg(feature = "debugger")]
 pub mod ops_brp;
 pub mod ops_compose;
+pub mod ops_piece;
 pub mod ops_stamp;
 pub mod ops_plan;
 pub mod ops_relations;
