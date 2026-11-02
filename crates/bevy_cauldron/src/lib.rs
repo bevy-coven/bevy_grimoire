@@ -82,6 +82,7 @@ pub mod labels;
 pub mod new_project;
 pub mod notice;
 pub mod live;
+pub mod loading;
 pub mod present;
 pub mod ops;
 #[cfg(feature = "debugger")]

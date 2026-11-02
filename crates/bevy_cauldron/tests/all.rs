@@ -108,6 +108,7 @@ mod a_sequence_starts_before_the_action;
 mod a_sequence_takes_the_agents_checks;
 mod a_sequence_that_opens_a_door_crosses_to_it;
 mod a_sequence_turn_is_on_the_receipt;
+mod a_slow_load_shows_a_spinner_then_progress_then_the_editor;
 mod a_snip_lists_the_stamped_rows_it_covers;
 mod a_script_edited_on_disk_takes_effect;
 mod a_stale_entry_is_dropped_on_its_second_refusal;

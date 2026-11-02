@@ -209,9 +209,50 @@ pub struct Project {
     pub triangles: Shared<Vec<usize>>,
 }
 
+/// **The named steps of opening a project**, in the order they run (UI-20, #221): what the loading screen
+/// says it is doing. A stage is reported when it starts, so the one a slow open is stuck in is the last one told.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    /// `kits.ron`, `vocab.ron` and the rules.
+    ReadProject,
+    /// Every bound kit's library, policy and compositions, merged and checked.
+    Kits,
+    /// Every mesh's triangle count, read from its file.
+    MeasureMeshes,
+    /// The map the door opens on.
+    Maps,
+}
+
+impl Stage {
+    /// Every stage, in the order an open runs them.
+    pub const ALL: [Stage; 4] = [Stage::ReadProject, Stage::Kits, Stage::MeasureMeshes, Stage::Maps];
+
+    /// What the loading screen calls it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Stage::ReadProject => "Reading the project",
+            Stage::Kits => "Loading the kits",
+            Stage::MeasureMeshes => "Measuring the meshes",
+            Stage::Maps => "Opening the map",
+        }
+    }
+
+    /// Its place in [`Stage::ALL`].
+    pub fn index(self) -> usize {
+        Stage::ALL.iter().position(|s| *s == self).unwrap_or(0)
+    }
+}
+
 impl Project {
     /// Read a project, or say exactly what is wrong with it.
     pub fn open(root: &Path, kit: Option<&str>) -> Result<Project, String> {
+        Project::open_staged(root, kit, &mut |_| {})
+    }
+
+    /// [`Project::open`], telling `at` which [`Stage`] it is entering as it goes (`Maps` is told by
+    /// [`crate::args::open_staged`], which opens the map after).
+    pub fn open_staged(root: &Path, kit: Option<&str>, at: &mut dyn FnMut(Stage)) -> Result<Project, String> {
+        at(Stage::ReadProject);
         // **The binding is the project's, not a kit's.** `kits.ron` says which directory provides
         // which namespace — `site/` and `site_greybox/` both provide `site/*`, so this is a question
         // no directory can answer about itself. See `bevy_grimoire_core::kits`.
@@ -268,6 +309,7 @@ impl Project {
         // Every bound kit, each layered with its **own** policy, merged into the one library a map
         // resolves against — plus the project's compositions, validated against that merge because
         // it is the only library that can answer for a tile seating two kits' pieces.
+        at(Stage::Kits);
         let bound = bevy_grimoire_core::kits::bound_library(&project_dir, &kits)?;
         let bevy_grimoire_core::kits::Bound {
             kits: layers,
@@ -401,6 +443,7 @@ impl Project {
             );
         }
 
+        at(Stage::MeasureMeshes);
         let triangles = library
             .descriptors
             .iter()
