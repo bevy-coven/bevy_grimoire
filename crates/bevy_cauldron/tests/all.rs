@@ -16,6 +16,7 @@
 
 mod fixtures;
 
+mod a_palette_row_reports_a_clickable_position;
 mod a_broken_stack_still_opens_framed;
 mod audio_panel_reads_the_crates_file;
 mod a_capture_sequence_takes_one_frame_at_a_time;
