@@ -50,13 +50,23 @@ impl Plugin for ToolbarPlugin {
         )
         .add_systems(
             Update,
-            mark_the_armed_tool.run_if(in_state(crate::screen::Screen::Editor)),
+            (the_group_follows_the_armed_tool, mark_the_armed_tool)
+                .run_if(in_state(crate::screen::Screen::Editor)),
         )
         // **The one dispatch.** gooey's `Activate` is a click, `Enter`, `Space` or a pad's south
         // button, so every way a person meets a button ends in the same observer.
-        .add_observer(on_toolbar_activate);
+        .add_observer(on_toolbar_activate)
+        // **And one for a toggle group's choice.** `bevy_gooey` sends `ValueChange<usize>` from the
+        // group, which is the index of the option chosen — not the command's id, so this maps it back
+        // through [`tools`] rather than trusting the order in two places.
+        .add_observer(on_tool_mode_chosen);
     }
 }
+
+/// **The tool modes' gooey toggle group**, so one option of it is lit at a time and the light is the
+/// tool that is armed.
+#[derive(Component)]
+pub struct ToolModes;
 
 /// **The commands the toolbar shows, in order**, with the tool modes first because they are what a
 /// person reaches for while placing: the list is [`icons::TOOLBAR`]'s, so a command on the bar always
@@ -105,7 +115,31 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
         .spawn((
             Toolbar,
             bevy_gooey::toolbar(Children::spawn(SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
+                // **The tool modes are one gooey toggle group** (UI-37, #231): a group of options of
+                // which exactly one is on, which is a tool mode exactly. Its value is written from
+                // `EditorState` every frame by [`the_group_follows_the_armed_tool`], and a choice it
+                // reports is handed to the same chord queue every other button uses.
+                parent.spawn((
+                    ToolModes,
+                    bevy_gooey::toggle_group(
+                        tools().iter().filter_map(|(id, _)| {
+                            let command = commands::by_id(id)?;
+                            let index = icons::index(command.id)?;
+                            Some(bevy_gooey::GroupOption::icon(
+                                bevy_gooey::IconSource::Atlas { image: image.clone(), layout: layout.clone(), index },
+                                bevy_gooey::Tooltip::new(command.title).with_shortcut(command.shortcut),
+                            ))
+                        }),
+                        0,
+                    ),
+                ));
+                parent.spawn(bevy_gooey::toolbar_separator());
+                // **Everything else is a one-shot command**, so it is a button and never a member of a
+                // group: a lit "Undo" would be lying about what `Ctrl+Z` did.
                 for command in shown() {
+                    if tools().iter().any(|(id, _)| *id == command.id) {
+                        continue;
+                    }
                     let Some(index) = icons::index(command.id) else {
                         continue;
                     };
@@ -116,9 +150,7 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
                             bevy_gooey::Tooltip::new(command.title).with_shortcut(command.shortcut),
                         ),
                     ));
-                    // **A separator where the list's groups change**, so undo/redo, the tools and the
-                    // view helpers read as three runs rather than eleven buttons.
-                    if command.id == "file.save" || command.id == "map.generate" {
+                    if command.id == "file.save" {
                         parent.spawn(bevy_gooey::toolbar_separator());
                     }
                 }
@@ -192,4 +224,50 @@ pub fn tools() -> [(&'static str, Option<Tool>); 4] {
         ("map.clone_mode", Some(Tool::Clone)),
         ("map.run_mode", Some(Tool::Run)),
     ]
+}
+
+/// **The group's value is the armed tool**, written from `EditorState` every time the tool changes and
+/// never from a click. A group that held its own choice would drift the moment a key changed the mode:
+/// `B` would arm Move and leave Remove lit.
+pub fn the_group_follows_the_armed_tool(
+    state: Res<EditorState>,
+    mut groups: Query<&mut bevy_gooey::ToggleGroupValue, With<ToolModes>>,
+) {
+    if !state.is_changed() {
+        return;
+    }
+    let Some(at) = tools().iter().position(|(_, tool)| *tool == Some(state.tool)) else {
+        return;
+    };
+    for mut value in &mut groups {
+        if value.0 != at {
+            value.0 = at;
+        }
+    }
+}
+
+/// **A choice in the group arms that tool**, through the same chord the key sends: the group's index is
+/// mapped back to a command id, and the id goes into the queue. So a click on a group option, a click on
+/// a toolbar button and a key press are one path, and the tool changes where the key handler says so.
+pub fn on_tool_mode_chosen(
+    change: On<bevy_gooey::ValueChange<usize>>,
+    groups: Query<(), With<ToolModes>>,
+    mut chords: ResMut<crate::command_run::Chords>,
+    live: Res<crate::keys::Live>,
+    mut state: Option<ResMut<EditorState>>,
+) {
+    if groups.get(change.source).is_err() {
+        return;
+    }
+    let modes = tools();
+    let Some(&(id, _)) = modes.get(change.value) else {
+        return;
+    };
+    let Some(command) = commands::by_id(id) else {
+        return;
+    };
+    chords.queue(&command, *live);
+    if let Some(state) = state.as_deref_mut() {
+        state.status.note(format!("asked for {} from the toolbar", command.title));
+    }
 }
