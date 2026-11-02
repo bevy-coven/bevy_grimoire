@@ -627,9 +627,10 @@ fn editor_state(
         "selected": tiles.as_ref().map(|t| t.selected_library_id.clone()),
         "door": door.map(|d| d.label()),
         "mode": mode.map(|m| m.label()),
-        // **`"menu"` or `"editor"`.** A caller that needs "is the person looking at this map?" reads
+        // **`"launcher"`, `"menu"` or `"editor"`.** A caller that needs "is the person looking at this map?" reads
         // it here; nothing else in this answer can be told apart between the two screens.
         "screen": screen.map(|s| match *s.get() {
+            crate::screen::Screen::Launcher => "launcher",
             crate::screen::Screen::Menu => "menu",
             crate::screen::Screen::Editor => "editor",
         }),

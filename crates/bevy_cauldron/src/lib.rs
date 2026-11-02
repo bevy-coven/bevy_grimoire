@@ -76,6 +76,7 @@ pub mod guided;
 pub mod harness;
 pub mod icons;
 pub mod keys;
+pub mod launcher;
 pub mod label_booth;
 pub mod labels;
 pub mod notice;
