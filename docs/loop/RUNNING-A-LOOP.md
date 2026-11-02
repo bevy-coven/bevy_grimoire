@@ -233,6 +233,14 @@ Measured 2026-10-28 with both Ollama accounts at their weekly limit: omp tried t
   enough.
 - **`WIGGUM_MAX`, not a small cap.** The driver exits **0** at the cap, so `Restart=on-failure` /
   `KeepAlive.Crashed` will not restart it — a small number silently ends the loop.
+- **`Restart=on-failure`, never `Restart=always`.** `always` restarts a driver that *chose* to stop, so a
+  `drain` cannot end a loop and the supervisor's own timer can never win the race: the driver exits 0,
+  systemd brings it back after `RestartSec`, and it starts a pass with nothing to do. Measured 2026-11-02
+  on big: `zz-burn.conf` carried `Restart=always`, `wiggum@gooey`'s 80th pass drained at 11:23:04 with zero
+  open `grimoire-ui` requests and systemd restarted it at 11:25:07 for pass 81. `on-failure` keeps the one
+  behaviour the owner asked for in that file — a loop that **failed** five passes in a row comes back
+  after 120 s — while a drain stays down. `wiggum.sh` therefore exits **0** when it drains and **1** when
+  it gives up (`EXIT_GAVE_UP`); check both before changing one.
 - **`TimeoutStopSec`/`ExitTimeOut` > `WIGGUM_PASS_TIMEOUT`**, or a stop cuts a pass mid-edit.
 - **`CARGO_TARGET_DIR` outside the repo, one per loop.** Workspace crates at one version share an artifact
   hash across checkouts, so a shared dir makes cargo call one tree's units `Fresh` and silently run the
