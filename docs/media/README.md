@@ -13,3 +13,9 @@ The README's and the guide's GIFs, recorded from the running editor by a storybo
 | `place-and-undo.gif` | `python3 tools/demo/record.py tools/demo/storyboards/place_and_undo.json --port 15710 --project <project>`, then `python3 tools/demo/render.py <project>/target/loop/demo/place_and_undo/events.json --out docs/media/place-and-undo.gif --width 760` | 2026-11-01 02ace193 | the PLACE list filtered to the sofa and the sofa armed, a click places it on the floor, Ctrl+Z takes it back |
 | `review-labels.gif` | `python3 tools/demo/record.py tools/demo/storyboards/review_labels.json --port 15710 --project <project>`, then `python3 tools/demo/render.py <project>/target/loop/demo/review_labels/events.json --out docs/media/review-labels.gif --width 900` | 2026-11-01 02ace193 | an agent lists the pieces a model labelled, the editor crosses to the kit door's Meshes tab, the arrow keys walk the piece list, and the labels row reads confidence high, the model and the date |
 | `editor.png` | `import -window root -crop 1280x720+0+0 docs/media/editor.png` on the Xvfb display, with the editor on the bedroom map, the view framed `[-2.6, -2.1, 2.6, 2.1]` by `grimoire_frame_view`, then `placement_remove bed` and `placement_set_yaw sofa 90` through MCP | 2026-11-01 02ace193 | the whole editor window after those two agent changes: the inspector's LAST line, UNDO and history list name them as the agent's; a translucent ghost of the armed `lamp_tall` follows the pointer, and the PLACE palette lists the furniture kit |
+
+## Art
+
+| File | Made by | Shows |
+|---|---|---|
+| `crates/bevy_cauldron/assets/ui/icons.png` | `python3 tools/ui/make_icons.py` (hand-drawn from the primitives in the script; the names and order are `ICONS` in `crates/bevy_cauldron/src/icons.rs`) | the editor's icon atlas: 22 glyphs of 16 x 16 pixels, white on transparent, 8 to a row, one for each toolbar command and dock panel; bevy_gooey's `Icon` tints them from the skin |
