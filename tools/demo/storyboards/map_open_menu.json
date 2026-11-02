@@ -1,0 +1,52 @@
+{
+  "name": "map_open_menu",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "placements": [
+            "bed"
+          ]
+        }
+      }
+    }
+  ],
+  "calls": [
+    {
+      "mcp": "grimoire_list_operations",
+      "args": {}
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 4
+    },
+    {
+      "seconds": 5,
+      "operation": {
+        "name": "map_open",
+        "parameters": {
+          "name": "bedroom"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.4,
+      "caption": "the editor opens on `annex`; `bedroom` is the other map in the project"
+    },
+    {
+      "at": 5.6,
+      "caption": "agent: map_open bedroom \u2014 the door follows the map the operation opened"
+    },
+    {
+      "at": 8.4,
+      "caption": "the Map door is on `bedroom`, its own bounds and pieces"
+    }
+  ]
+}
