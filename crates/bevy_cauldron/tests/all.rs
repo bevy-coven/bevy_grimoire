@@ -302,6 +302,7 @@ mod the_journal_draws_the_agents_steps;
 mod the_launcher_and_the_command_line_agree;
 mod the_launcher_lists_what_the_changelog_added_since_you_last_opened;
 mod the_launcher_opens_a_project_by_its_name;
+mod the_shortcut_overlay_answers_to_k;
 mod the_layout_score_counts_crossings;
 mod the_library_seed_is_a_selection;
 mod the_map_opens_framed;
