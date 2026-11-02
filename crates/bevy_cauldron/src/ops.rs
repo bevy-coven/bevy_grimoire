@@ -3970,6 +3970,8 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(piece_select::PieceSelect),
         Box::new(label_set::LabelSet),
         Box::new(piece_set_mount::PieceSetMount),
+        Box::new(crate::ops_kit::KitCreate),
+        Box::new(crate::ops_kit::KitSetAuthoring),
         Box::new(crate::ops_piece::PieceSetNote),
         Box::new(crate::ops_piece::PieceSetWidth),
         Box::new(pack_set_excluded::PackSetExcluded),
@@ -4144,6 +4146,10 @@ pub const CHOOSER_ENTRY_POINTS: &[(&str, &str)] = &[
     // a front end: it collects the four fields and hands them to the operation, so the naming rule,
     // the refusal for a name in use and the write are one implementation (E-008).
     ("map_create", "\"map_create\""),
+    // **The `+ new kit` row and `A` on the kits column** (E-002, #129 slice 20) dispatch `kit_create` and
+    // `kit_set_authoring` from the menu, which has a root and no loaded project.
+    ("kit_create", "\"kit_create\""),
+    ("kit_set_authoring", "\"kit_set_authoring\""),
 ];
 
 /// **Each operation's UI entry point in the editor's screens**: the operation's name, and a piece
