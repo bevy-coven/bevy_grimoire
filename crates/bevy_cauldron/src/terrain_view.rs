@@ -121,9 +121,16 @@ fn modified(path: &std::path::Path) -> Option<std::time::SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-/// The ground's plain material, heightfield or carved; `environment::dress_volume` weathers the carved one.
+/// The heightfield ground's plain material (its vertex colours are the relief tint); the carved ground's is [`volume_base`].
 pub fn ground_base() -> StandardMaterial {
     StandardMaterial { perceptual_roughness: 1.0, ..default() }
+}
+
+/// The carved ground's plain material (#101). A carved chunk has no vertex colours, so what it wears is
+/// this base alone: the heightfield's own relief tint, held at the middle of its range. Left white, the
+/// carved ground looked unfinished and snow on it (`volume_cover`) could not be told from bare ground.
+pub fn volume_base() -> StandardMaterial {
+    StandardMaterial { base_color: Color::srgb(0.49, 0.53, 0.35), perceptual_roughness: 1.0, ..default() } // CHROME-OK: world ink — the relief tint's middle
 }
 
 /// **The last good value of each file the view draws from**, kept in memory (#200): a refused file
@@ -226,7 +233,7 @@ pub fn sync_terrain_view(
     if let Some(ground) = &good.ground {
         let at = Transform::from_xyz(open.map.origin.0, open.map.origin.1 - drop, open.map.origin.2);
         let carved = volume_chunks(good.volume.as_ref(), ground);
-        let material = materials.add(ground_base());
+        let material = materials.add(if carved.is_empty() { ground_base() } else { volume_base() });
         if carved.is_empty() {
             drawn.push(commands.spawn((TerrainView::Ground, Mesh3d(meshes.add(ground_mesh(ground))), MeshMaterial3d(material), at)).id());
         } else {

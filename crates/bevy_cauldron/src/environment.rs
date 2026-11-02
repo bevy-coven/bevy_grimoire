@@ -195,7 +195,7 @@ pub fn dress_volume(
         let mut back = None;
         for (e, view) in &dressed {
             if *view == TerrainView::Volume {
-                let back = back.get_or_insert_with(|| plain_materials.add(crate::terrain_view::ground_base())).clone();
+                let back = back.get_or_insert_with(|| plain_materials.add(crate::terrain_view::volume_base())).clone();
                 commands.entity(e).remove::<MeshMaterial3d<WeatheredMaterial>>().insert(MeshMaterial3d(back));
             }
         }
@@ -203,7 +203,7 @@ pub fn dress_volume(
         return;
     };
     let handle = handle
-        .get_or_insert_with(|| weathered.add(WeatheredMaterial { base: crate::terrain_view::ground_base(), extension: WeatheredExtension::default() }))
+        .get_or_insert_with(|| weathered.add(WeatheredMaterial { base: crate::terrain_view::volume_base(), extension: WeatheredExtension::default() }))
         .clone();
     if seen.as_ref() != Some(text) {
         *seen = Some(text.clone());
