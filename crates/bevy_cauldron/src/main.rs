@@ -85,6 +85,11 @@ fn main() -> AppExit {
             .add_systems(Update, (bevy_cauldron::environment::dress_camera, bevy_cauldron::environment::key_light_follows_dressing));
     }
 
+    // **A placed `bevy_lights` `Fire` draws its flame and its pooled light** (#103): the crate's own plugins, which need
+    // the render app a window brings, so the headless harness leaves them out.
+    #[cfg(feature = "bevy_lights")]
+    app.add_plugins(bevy_cauldron::light_view::FirePreviewPlugin);
+
     // **A bare `bevy_cauldron` opens the launcher** (`launcher.rs`, UI-10); a project named on the command
     // line skips it. `insert_state` before `ScreenPlugin`, whose `init_state` leaves a state that exists as it is.
     if args::opens_the_launcher(&argv) {
