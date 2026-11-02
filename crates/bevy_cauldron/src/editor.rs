@@ -3250,8 +3250,11 @@ fn back_button_clicked(
 
 /// **The Map's left panel scrolls, and this is the pane that does it.** See [`spawn_panel`] for why
 /// it exists at all: this was the one panel in the editor with no scroll area anywhere in it.
+///
+/// `pub` because a test has to name it: ten scroll areas exist in the editor, and "the leftmost one" is
+/// a guess that picks a different pane on another tab (#272).
 #[derive(Component)]
-struct MapControlsPane;
+pub struct MapControlsPane;
 
 /// Build the panel's fixed furniture. The palette itself is `rebuild_palette`'s, which is why neither
 /// the project nor the thumbnails are read here — they were parameters that had stopped being used.
