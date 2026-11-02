@@ -2350,22 +2350,68 @@ type RowState = (
 /// because a global `Activate` observer taking a door's resource panics on the menu. So a quiet row
 /// would have been the one shape in the editor that never acknowledged a click. Hover plus a held
 /// primary button is the same fact one layer down, and it is what the author actually did.
+/// **The colours a list row takes from the skin**, in one place, so a test can ask what the editor
+/// would paint without a pointer it cannot place (UI-02, #210).
+///
+/// `Hovered` is bevy's `Immutable` picking component: only the picker may write it, and a headless app
+/// has none, so a row's hover colour cannot be observed by hovering. What *can* be observed is the
+/// expression [`style_list_rows`] paints from, which is this — one function, called by the system and
+/// by the test alike, so an assertion here is an assertion about the row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RowFills {
+    pub rest_panel: Color,
+    pub hover: Color,
+    pub pressed: Color,
+}
+
+impl RowFills {
+    /// From the running skin when there is one, the constants when there is not (a headless harness
+    /// that never ran `EditorUiPlugin`).
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> RowFills {
+        match skin {
+            Some(s) => RowFills {
+                rest_panel: s.surface,
+                hover: s.hover.unwrap_or(ROW_HOVER),
+                pressed: s.pressed.unwrap_or(ROW_PRESSED),
+            },
+            None => RowFills { rest_panel: PANEL_BG, hover: ROW_HOVER, pressed: ROW_PRESSED },
+        }
+    }
+}
+
+/// [`RowFills`] for the world as it stands.
+pub fn row_fills(world: &World) -> RowFills {
+    RowFills::of(world.get_resource::<bevy_gooey::GooeySkin>())
+}
+
 fn style_list_rows(
     mouse: Res<ButtonInput<MouseButton>>,
+    // **The rows' states come from the skin** (UI-02, #210). This is the one chokepoint every list
+    // row's fill passes through — `style_list_rows` keys on `RowRest`, so a row spawned by any tab is
+    // painted here — which makes it the first place the editor's own chrome can read `GooeySkin`
+    // rather than the constants beside it. The constants stay for the callers that have not moved
+    // yet (131 sites outside this module); what changes is that a *theme edit* now reaches every row
+    // in the editor, which is the thing #210 exists for.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut rows: Query<(RowState, &mut BackgroundColor)>,
 ) {
+    let fills = RowFills::of(skin.as_deref());
+    let (panel, pressed_col, hover_col) = (fills.rest_panel, fills.pressed, fills.hover);
+    // gooey has no `selected` role, so a selected row keeps the editor's own colour — the honest
+    // half-measure until that constant group moves.
+    let selected_col = ROW_SELECTED;
     let held = mouse.pressed(MouseButton::Left);
     for ((rest, hovered, pressed, disabled), mut bg) in &mut rows {
         let want = if disabled {
             // Not a fill of its own: a disabled control drops back to the panel it sits on, so it
             // reads as part of the surface rather than as a thing that is merely quiet today.
-            PANEL_BG
+            panel
         } else if pressed || (hovered.0 && held) {
-            ROW_PRESSED
+            pressed_col
         } else if rest.0 == ROW_SELECTED {
-            ROW_SELECTED
+            selected_col
         } else if hovered.0 {
-            ROW_HOVER
+            hover_col
         } else {
             rest.0
         };
