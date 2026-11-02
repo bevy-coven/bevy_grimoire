@@ -100,11 +100,13 @@ fn the_toolbar_shows_registered_commands_that_have_icons() {
 ///    interface camera onto the viewport image. The guard now returns whenever there is no window at all
 ///    — a real fix, kept — and the case still fails, so the pointer is not what swallows the click.
 ///
-/// What is left to look at, for the next slice: whether `testing::click`'s surface (`surface_of` reads the
-/// option's `ComputedUiTargetCamera`) resolves to the same target picking uses in this app, which draws
-/// its interface through `surface.image` and a second camera onto the map. That is a question about the
-/// harness's mapping, not about the group or the observer.
-#[ignore = "no Activate reaches a toolbar group option; retarget_pointer ruled out, see the doc and #231"]
+/// 3. **The click is delivered where it belongs, and the toolbar is not in the picking tree.** The option's
+///    `ComputedUiTargetCamera` is the `surface.image` camera, the pointer's `Location` after the click is
+///    that same image at `(22.0, 47.5)`, and the `HoverMap` held **1** entry *before* the click — so the
+///    click reaches the right target and picking simply has nothing of the toolbar to hit. That is the
+///    next slice's question, and it is a different one from either hypothesis above: why the bar's options
+///    are absent from the hit map while the option is laid out (36 x 29, not `Overflowed`).
+#[ignore = "the toolbar's options are absent from the hit map; see the doc's three measurements and #231"]
 #[test]
 fn a_click_on_the_move_button_asks_for_the_chord_and_the_key_arms_it() {
     let (_root, mut app) = editor("toolbar-click");
@@ -136,9 +138,6 @@ fn a_click_on_the_move_button_asks_for_the_chord_and_the_key_arms_it() {
             .expect("the group holds Move's option, named by its tooltip")
     };
     bevy_gooey::testing::click(&mut app, button);
-    for _ in 0..2 {
-        app.update();
-    }
     assert_eq!(
         app.world().resource::<bevy_cauldron::editor::EditorState>().tool,
         bevy_cauldron::editor::Tool::Move,
