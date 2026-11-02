@@ -9724,7 +9724,21 @@ struct DetailInputs<'w, 's> {
     build: Res<'w, crate::build::Build>,
     // The tag block narrows by typing, so the pane that draws it has to know what was typed.
     filters: Res<'w, crate::filter::Filters>,
+    /// **The running skin** (UI-02, #210): this pane draws a model-written label in
+    /// `GooeySkin::unchecked`, so a theme edit reaches "a machine decided this" everywhere it is said.
+    /// `Option` for a headless harness that never ran `EditorUiPlugin`; the constant is the fallback.
+    skin: Option<Res<'w, bevy_gooey::GooeySkin>>,
     panes: Query<'w, 's, Entity, With<DetailPane>>,
+}
+
+/// **The ink a model-written label is drawn in** (UI-02, #210): the running skin's `unchecked`, or
+/// `chrome::UNCHECKED` when there is no skin (a headless harness that never ran `EditorUiPlugin`).
+///
+/// One function, read by the pane and by
+/// `tests/the_model_written_ink_comes_from_the_skin.rs`, so an assertion about it is an assertion about
+/// what is painted rather than about a resource that happens to hold the same value.
+pub fn unchecked_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
+    skin.and_then(|s| s.unchecked).unwrap_or(crate::chrome::UNCHECKED)
 }
 
 /// **What the Meshes pane says about `piece` and the project's standards** (#138 slice 4): one line
@@ -9782,7 +9796,12 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
         build,
         filters,
         panes,
+        skin,
     } = detail;
+    // **The colour a model-written label is drawn in** (UI-02, #210): the skin's `unchecked` when there
+    // is a skin, `chrome::UNCHECKED` otherwise. Both draw sites in this pane use it, so a theme edit
+    // reaches every "a machine decided this" in one place.
+    let unchecked_ink = unchecked_ink(skin.as_deref());
     for pane in &panes {
         commands.entity(pane).despawn_related::<Children>();
         commands.entity(pane).with_children(|p| {
@@ -10301,7 +10320,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         if !human_axes.is_empty() {
                             parts.push(Some(format!("by hand set {human_axes}")));
                         }
-                        (joined(&parts), crate::chrome::UNCHECKED)
+                        (joined(&parts), unchecked_ink)
                     }
                 }
             };
@@ -10549,7 +10568,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 // `LABEL`. Held and ghost are told apart by the fill, which is why
                                 // the two blues can be siblings rather than rivals.
                                 if on && unchecked {
-                                    crate::chrome::UNCHECKED
+                                    unchecked_ink
                                 } else if on {
                                     TEXT
                                 } else if ghost {
