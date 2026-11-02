@@ -8389,6 +8389,10 @@ fn rename_keys(
 /// the same reason: a culled mesh costs memory, not frame time, and mixing them is how you end up
 /// optimising the wrong thing. It is here because a flood fill can lay down 1,400 pieces in one
 /// keystroke, and the moment to notice that costs 40 million triangles is while it is happening.
+///
+/// **A mesh the render world took is not counted** (#193): `bevy_elements`' stars, moon and lightning are
+/// `RENDER_WORLD`-only, so after their first frame the main world holds no indices for them and
+/// `Mesh::indices()` panics. Asking with `try_indices_option` skips them instead of aborting the editor.
 fn refresh_triangle_total(
     drawn: Query<(&ViewVisibility, &Mesh3d)>,
     meshes: Res<Assets<Mesh>>,
@@ -8398,9 +8402,10 @@ fn refresh_triangle_total(
         .iter()
         .filter(|(v, _)| v.get())
         .filter_map(|(_, m)| meshes.get(&m.0))
-        .map(|m| match m.indices() {
-            Some(i) => i.len() / 3,
-            None => m.count_vertices() / 3,
+        .filter_map(|m| match m.try_indices_option() {
+            Ok(Some(i)) => Some(i.len() / 3),
+            Ok(None) => Some(m.count_vertices() / 3),
+            Err(_) => None,
         })
         .sum();
 
