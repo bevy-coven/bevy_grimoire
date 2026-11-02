@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **272-settle** `48b27d4` A demo storyboard can say when a faded change has landed: record.py's settle step, and check.py measuring that moment instead of the operation's own frame (#272) *No clip: demo tooling; nothing on screen; proved by tools/demo/test_check.py (9 tests)*
 - **build-strip** `074f248` The workspace's own test binaries are stripped of symbols, so a Bevy test binary links at 56 MB instead of 2 GB and an aborted link cannot leave 2 GB of debris on a full disk *No clip: a build profile setting; proved by the relinked binary size and tests/live_reload.rs passing on it*
 - **112-clip-check** `217b838` The clip check: a labelled set of every changelog clip plus a mismatched twin, and a check that asks the frames whether they show the line's claim (D4, #112) *No clip: the agreement needs a served model; the set and its shape are proved by tests/checks_that_earn_their_authority.rs::the_committed_clip_set_is_two_sided_and_well_formed*
 - **112-checker** `0af1193` tools/decide/check.py runs the editor's checks over a directory of captures; a calibrated check that finds something fails the run, and an uncalibrated one only prints (D4, #112) *No clip: the rule is a command's exit code and a test; nothing on screen; proved by crates/bevy_oracle/tests/checks_that_earn_their_authority.rs*
