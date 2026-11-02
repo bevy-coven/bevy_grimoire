@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **235-badges-reveal** `037c069` Holding K shows every key on the control it acts through, through gooey's own ShortcutBadges (UI-41, #235): Reveal::Key(KeyCode::KeyK) in EditorUiPlugin, so the overlay key is stated in the crate rather than polled<br><a href="docs/changelog/media/2026-11-02-badges-reveal.mp4"><img src="docs/changelog/media/2026-11-02-badges-reveal.png" width="320" alt="clip"></a>
 - **201-move-keeps-identity** `bd91af7` A moved or turned piece keeps its entity, so a game's people, animation phases and fire flicker on it are not restarted by an edit elsewhere (#201) *No clip: engine behaviour with no surface of its own; proved by live_reload::an_edit_respawns_only_what_changed and live_migrate::a_registered_component_follows_a_piece_that_is_drawn_again*
 - **271-clock-walk** `67c1084` A family_set clock edit is walked to its new hour over a second instead of jumped, so the sky goes from noon to dusk without the viewport blowing white for 1.5 seconds (#271)<br><a href="docs/changelog/media/2026-11-02-271-clock-walk.mp4"><img src="docs/changelog/media/2026-11-02-271-clock-walk.png" width="320" alt="clip"></a>
 - **272-settle** `48b27d4` A demo storyboard can say when a faded change has landed: record.py's settle step, and check.py measuring that moment instead of the operation's own frame (#272) *No clip: demo tooling; nothing on screen; proved by tools/demo/test_check.py (9 tests)*
