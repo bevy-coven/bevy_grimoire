@@ -1,0 +1,91 @@
+{
+  "name": "status_band",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    674,
+    560,
+    720
+  ],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 8.4
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "the status band's left end: every file applied, nothing in hand"
+    },
+    {
+      "at": 0.7,
+      "key": "KeyB",
+      "mods": [
+        "ShiftLeft"
+      ],
+      "caption": "person: Shift+B arms clone"
+    },
+    {
+      "at": 1.9,
+      "drag": [
+        462,
+        250,
+        928,
+        548
+      ],
+      "secs": 1.2
+    },
+    {
+      "at": 2.6,
+      "caption": "a box takes a set: the band counts what is in hand"
+    },
+    {
+      "at": 3.2,
+      "caption": "person: saves the skin file with a bracket missing"
+    },
+    {
+      "at": 3.4,
+      "write": {
+        "path": "family/bevy_gooey.ron",
+        "text": "(accent: Srgba((red: 0.95,"
+      }
+    },
+    {
+      "at": 4.0,
+      "caption": "1 refused, in the skin's warning ink"
+    },
+    {
+      "at": 4.5,
+      "caption": "person: fixes it"
+    },
+    {
+      "at": 4.7,
+      "write": {
+        "path": "family/bevy_gooey.ron",
+        "text": "(accent: Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 1.0)))\n"
+      }
+    },
+    {
+      "at": 5.4,
+      "caption": "silent again: every file applied"
+    },
+    {
+      "at": 5.9,
+      "caption": "person: a second bad save"
+    },
+    {
+      "at": 6.1,
+      "write": {
+        "path": "family/bevy_gooey.ron",
+        "text": "(accent: Srgba((red: 0.95, green:"
+      }
+    },
+    {
+      "at": 6.9,
+      "caption": "1 refused again, and the set is still in hand"
+    }
+  ]
+}
