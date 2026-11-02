@@ -133,3 +133,17 @@ class ClickLabelAsksTheEditor(unittest.TestCase):
             self.assertEqual(record.widget_centre(1, "floor"), (900.0, 200.0))
         finally:
             record.brp = original
+
+    def test_within_chooses_the_widget_of_that_name(self):
+        """**Two widgets can carry one word.** `sofa` is a palette row *and* a piece on the map; the
+        rectangle is the storyboard saying which one it means, rather than entity order deciding."""
+        rows = self.rows([("sofa", [1.0, 0.0, 0.0, 1.0, 700.0, 300.0], [40.0, 20.0]),
+                          ("sofa", [1.0, 0.0, 0.0, 1.0, 1150.0, 220.0], [40.0, 20.0])])
+        answer = {"result": rows}
+        original = record.brp
+        record.brp = lambda port, method, params: answer
+        try:
+            self.assertEqual(record.widget_centre(1, "sofa", [1080, 100, 1280, 400]), (1150.0, 220.0))
+            self.assertEqual(record.widget_centre(1, "sofa", [600, 100, 900, 500]), (700.0, 300.0))
+        finally:
+            record.brp = original

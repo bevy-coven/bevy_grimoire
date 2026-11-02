@@ -27,6 +27,9 @@ Storyboard format (JSON):
                                                 BRP's `world.query` where its `Text` is drawn and clicks
                                                 that centre. Use it instead of a guessed pixel — a
                                                 coordinate drifts the moment a bar above it is added.
+                                                "within": [x0, y0, x1, y1] keeps only widgets inside that
+                                                rectangle: a palette row and a map piece can share a word
+                                                (`sofa` is both), and the rectangle says which one.
       {"at": 1.0, "key": "KeyZ", "mods": ["SuperLeft"]},
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
@@ -285,7 +288,7 @@ def resolve(value, named):
     return value
 
 
-def widget_centre(port, label):
+def widget_centre(port, label, within=None):
     """Where the interface draws the visible `Text` node whose words are `label`, in logical pixels.
 
     **Asks the running editor, never a guess.** `world.query` returns every `Text` with its
@@ -332,6 +335,13 @@ def widget_centre(port, label):
         # widget the storyboard means, and saying so is better than aiming at nothing.
         if not (0.0 <= x <= 1280.0 and 0.0 <= y <= 720.0):
             continue
+        # **`within` says which widget of that name.** A palette row and a placed piece can carry the
+        # same word — `sofa` is both — and the rectangle is the storyboard's statement of which one it
+        # means, rather than an accident of entity order.
+        if within:
+            x0, y0, x1, y1 = within
+            if not (x0 <= x <= x1 and y0 <= y <= y1):
+                continue
         return (x, y)
     raise RuntimeError(f"click_label: no visible widget says {want!r}")
 
@@ -368,7 +378,7 @@ def do_step(step, timeline, inj, agent, named=None):
         # `Text` node's rect through BRP's `world.query`, so the click lands on the row a storyboard
         # means however far up or down the layout has moved: two passes lost takes to a bar inserted
         # above the palette, which shifted every guessed pixel by its height.
-        x, y = widget_centre(inj.port, step["click_label"])
+        x, y = widget_centre(inj.port, step["click_label"], step.get("within"))
         inj.cursor(x, y)
         timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
         timeline.add(t=timeline.now(), type="click", x=x, y=y)

@@ -42,5 +42,7 @@ An `--out` ending in `.mp4` writes a changelog clip instead: H.264 capped at 20 
 - **Aim at a widget by its words, not a pixel.** `{"click_label": "sofa"}` asks the running editor where
   the visible `Text` saying `sofa` is drawn (BRP's `world.query`, so nothing new is added to the editor's
   tool surface) and clicks its centre. Coordinates drift: two passes lost takes to a storyboard whose
-  pixel steps were aimed above a bar that later gained a toolbar.
+  pixel steps were aimed above a bar that later gained a toolbar. Add `"within": [x0, y0, x1, y1]` when
+  two widgets carry the same word — `sofa` is both a palette row and a piece on the map — so the
+  rectangle, not entity order, says which one is meant.
 - Storyboard format is in the header of `record.py`.
