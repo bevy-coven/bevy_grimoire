@@ -913,6 +913,7 @@ impl Action {
             }
             Action::NewToken => Some("vocab_add_token"),
             Action::AdoptMeasured => Some("rig_adopt_measured"),
+            Action::GroupFromSet => Some("composition_define"),
             Action::RenameMap => Some("map_rename"),
             Action::NoteTool => Some("note_add"),
             Action::SetRule => Some("rules_set"),

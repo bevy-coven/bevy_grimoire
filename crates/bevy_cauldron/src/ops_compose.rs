@@ -26,6 +26,9 @@ pub struct Params {
     /// Ids of the open map's placements that become its members.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub from: Vec<String>,
+    /// The members as a set in hand, instead of placements on the map: what a person's `M` sends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub set: Option<crate::editor::CloneSet>,
     /// Redefine a composition that already has this id. Every stamp of it then expands to the new body.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub replace: bool,
@@ -42,10 +45,22 @@ impl Params {
         json!({
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "from"],
+            "required": ["id"],
             "properties": {
                 "id": {"type": "string", "description": "The group's name, snake_case. It is the id stamps refer to."},
-                "from": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "Ids of placements on the open map that become the group's members. A piece resting on another in the list stays on it; one resting on something outside the list is refused."},
+                "from": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "Ids of placements on the open map that become the group's members. A piece resting on another in the list stays on it; one resting on something outside the list is refused. Name `from` or `set`, not both."},
+                "set": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["pieces"],
+                    "description": "The members themselves, for a group whose pieces are not (or are no longer) placements on the open map: the set a person holds after a box capture. Offsets are metres from the group's centre. Name `set` or `from`, not both.",
+                    "properties": {
+                        "pieces": {"type": "array", "minItems": 1, "description": "Each is {descriptor, offset: [x, z], yaw?, tip?: [u8, u8], lift?, note?, owned?, owned_because?, patch?, on?}. `on` is \"layer\" (default), \"outside\" (refused: a group cannot carry a piece whose support stayed behind) or {\"in_set\": index into this list}."},
+                        "stamps": {"type": "array", "description": "Stamps carried whole, nested by reference: {of: composition id, offset: [x, z], yaw?, overrides?, owned?, owned_because?, note?}."},
+                        "centre_off": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Where the set's footprint centre is, from the origin the offsets use. Default [0, 0]: the offsets are already from the centre."},
+                        "half": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Half the footprint's width and depth in metres, [x, z]. It becomes the group's bounded envelope, so it must enclose the pieces; a zero is refused (a bounded group has to enclose something)."}
+                    }
+                },
                 "replace": {"type": "boolean", "description": "Redefine a group that already has this id. Without it an existing id is refused and nothing is written."}
             }
         })
@@ -53,7 +68,7 @@ impl Params {
 
     pub fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
         serde_json::from_value(raw.clone()).map_err(|e| {
-            Refusal::new(format!("this is not a composition definition: {e}. The fields are `id`, `from` and `replace`."))
+            Refusal::new(format!("this is not a composition definition: {e}. The fields are `id`, `from` (or `set`) and `replace`."))
         })
     }
 
@@ -81,7 +96,7 @@ impl CompositionDefine {
         let prior = project.compositions.compositions.iter().find(|c| c.id == id).cloned();
 
         let (summary, members) = if p.undo_only() {
-            if !p.from.is_empty() || p.restore.is_some() && p.remove {
+            if !p.from.is_empty() || p.set.is_some() || p.restore.is_some() && p.remove {
                 return Err(Refusal::new("an undo either restores a definition or removes one, and names no placements."));
             }
             if let Some(c) = &p.restore {
@@ -99,7 +114,13 @@ impl CompositionDefine {
                 (format!("took group {id} back out"), 0)
             }
         } else {
-            let set = crate::editor::set_of_placements(project, &open.map, &p.from).map_err(Refusal::new)?;
+            let set = match (&p.set, p.from.is_empty()) {
+                (Some(_), false) => {
+                    return Err(Refusal::new("name the members as `from` (placement ids) or as `set`, not both."));
+                }
+                (Some(set), true) => set.clone(),
+                (None, _) => crate::editor::set_of_placements(project, &open.map, &p.from).map_err(Refusal::new)?,
+            };
             if prior.is_some() && !p.replace {
                 return Err(Refusal::new(format!(
                     "a group named `{id}` already exists. Pass `replace: true` to redefine it, or pick another name. Nothing was written."
@@ -110,6 +131,9 @@ impl CompositionDefine {
             } else {
                 let comp = crate::editor::composition_from_set(&set, &id, &project.library, &project.compositions)
                     .map_err(Refusal::new)?;
+                if prior.is_some() {
+                    crate::editor::strand_check(open, &comp).map_err(Refusal::new)?;
+                }
                 return Ok(Some(Outcome {
                     summary: format!("would define group {id} from {} piece(s)", comp.members.len()),
                     affected: comp.members.len(),
@@ -118,7 +142,7 @@ impl CompositionDefine {
                     after: None,
                 }));
             }
-            let n = set.pieces.len();
+            let n = set.pieces.len() + set.stamps.len();
             (format!("defined group {id} from {n} piece(s)"), n)
         };
 

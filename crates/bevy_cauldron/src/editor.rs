@@ -698,26 +698,37 @@ struct CloneTile;
 /// geometry — every flush edge, every offset a lamp keeps from its table's centre — survives the
 /// trip exactly. Everything authored rides along: yaw, tip, lift, note, even the pin, because a
 /// copied barricade is still a barricade.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClonePiece {
     pub descriptor: String,
     pub offset: (f32, f32),
+    #[serde(default)]
     pub yaw: f32,
+    #[serde(default)]
     pub tip: (u8, u8),
+    #[serde(default)]
     pub lift: f32,
+    #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
     pub owned: bool,
+    #[serde(default)]
     pub owned_because: Option<String>,
     /// The placement's own `patch`, carried so a copy of a road is as long as the road it was taken
     /// from, and measured at that length while it is held.
+    #[serde(default)]
     pub patch: Option<bevy_grimoire_core::descriptor::Descriptor>,
+    #[serde(default)]
     pub on: CloneHost,
 }
 
 /// What a cloned piece rests on — resolved at capture, applied at stamp.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CloneHost {
     /// Its own layer: floor, wall, ceiling — the map answers, nothing to carry.
+    #[default]
     Layer,
     /// Its host was caught in the same box, by index into the set — repointed to the host's fresh
     /// id at stamp, so the cloned lamp stands on the cloned table.
@@ -738,26 +749,40 @@ pub enum CloneHost {
 /// Its own list beside [`CloneSet::pieces`] rather than an enum sharing one, and that is forced
 /// rather than chosen: [`CloneHost::InSet`] is an **index into `pieces`**, so interleaving a second
 /// kind would silently repoint every host a captured set carries.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CloneStamp {
     /// The [`bevy_grimoire_core::composition::Composition`] id this instances.
     pub of: String,
     /// From the set's anchor, in map metres — the same frame [`ClonePiece::offset`] uses.
     pub offset: (f32, f32),
+    #[serde(default)]
     pub yaw: f32,
     /// Carried verbatim: an override is a statement about *this* instance, and a copy that dropped
     /// them would be a different nurse station wearing the same name.
+    #[serde(default)]
     pub overrides: Vec<bevy_grimoire_core::composition::Override>,
+    #[serde(default)]
     pub owned: bool,
+    #[serde(default)]
     pub owned_because: Option<String>,
+    #[serde(default)]
     pub note: Option<String>,
 }
 
+/// **Serialisable, so the registry can be handed the set itself** (`composition_define`'s `set`): the set
+/// in hand is not always the placements on the map, and an agent may build one with no map at all.
+/// Offsets are from the set's centre; every field but the pieces' `descriptor` and `offset` defaults.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CloneSet {
     pub pieces: Vec<ClonePiece>,
     /// Stamps the box caught. See [`CloneStamp`].
+    #[serde(default)]
     pub stamps: Vec<CloneStamp>,
+    #[serde(default)]
     pub centre_off: (f32, f32),
+    #[serde(default)]
     pub half: (f32, f32),
     /// **How far the whole set has been turned**, degrees about +Y, applied about the anchor the
     /// pieces are offset from.
@@ -766,6 +791,7 @@ pub struct CloneSet {
     /// rotated repeatedly accumulates float error, and a set turned four times by 90° has to come
     /// back to exactly where it started or "turn it round and put it back" quietly moves the group.
     /// Kept as one angle and applied once, at stamp and at preview.
+    #[serde(default)]
     pub yaw: f32,
 }
 
@@ -13294,7 +13320,7 @@ pub fn set_of_placements(
     ids: &[String],
 ) -> Result<CloneSet, String> {
     if ids.is_empty() {
-        return Err("name the placements to group: `from` is empty".to_owned());
+        return Err("name the placements to group: `from` is empty (or give a `set`)".to_owned());
     }
     let mut caught: Vec<usize> = Vec::with_capacity(ids.len());
     for id in ids {
@@ -15386,7 +15412,7 @@ fn group_name_keys(
                     return;
                 };
                 let confirmed = state.replacing.is_some();
-                match keep_as_group(&mut project, &open, set, &raw, confirmed) {
+                match keep_set_as_group(&mut project, &open, set, &raw, confirmed) {
                     Ok(Kept::WouldReplace { id, stamps }) => {
                         let held = match stamps {
                             0 => "nothing in this map stamps it".to_owned(),
@@ -15511,26 +15537,7 @@ pub fn keep_as_group(project: &mut Project,
 
     let stamps = open.map.stamps.iter().filter(|s| s.of == id).count();
     if let Some(_existing) = at {
-        // **An override names a member, so redefining can strand one.** `expand` refuses a stamp
-        // whose override names a member the composition does not have, which means the map stops
-        // loading — for the game as well as here. Checked before anything is written, on the same
-        // rule the send-back verb follows: do not perform half a destructive act.
-        let members: std::collections::BTreeSet<&str> =
-            comp.members.iter().map(|m| m.id.as_str()).collect();
-        let mut stranded: Vec<String> = Vec::new();
-        for s in open.map.stamps.iter().filter(|s| s.of == id) {
-            for o in &s.overrides {
-                if !members.contains(o.member.as_str()) {
-                    stranded.push(format!("`{}` overrides `{}`", s.id, o.member));
-                }
-            }
-        }
-        if !stranded.is_empty() {
-            return Err(format!(
-                "replacing `{id}` would strand {}: the new definition has no such member, and a map                  with a dangling override does not load. Remove the override first.",
-                stranded.join(", ")
-            ));
-        }
+        strand_check(open, &comp)?;
         if !confirmed {
             return Ok(Kept::WouldReplace { id, stamps });
         }
@@ -15541,6 +15548,73 @@ pub fn keep_as_group(project: &mut Project,
         Some(_) => Kept::Replaced { id, stamps },
         None => Kept::Made(id),
     })
+}
+
+/// **An override names a member, so redefining can strand one.** `expand` refuses a stamp whose override
+/// names a member the composition does not have, which means the map stops loading — for the game as
+/// well as here. Checked before anything is written, on the same rule the send-back verb follows: do not
+/// perform half a destructive act. One check for the key's first press, the operation's preview and its
+/// write.
+pub fn strand_check(
+    open: &OpenMap,
+    comp: &bevy_grimoire_core::composition::Composition,
+) -> Result<(), String> {
+    let members: std::collections::BTreeSet<&str> =
+        comp.members.iter().map(|m| m.id.as_str()).collect();
+    let mut stranded: Vec<String> = Vec::new();
+    for s in open.map.stamps.iter().filter(|s| s.of == comp.id) {
+        for o in &s.overrides {
+            if !members.contains(o.member.as_str()) {
+                stranded.push(format!("`{}` overrides `{}`", s.id, o.member));
+            }
+        }
+    }
+    if stranded.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "replacing `{}` would strand {}: the new definition has no such member, and a map                  with a dangling override does not load. Remove the override first.",
+        comp.id,
+        stranded.join(", ")
+    ))
+}
+
+/// **Keep the set in hand as a group through the registry** as `composition_define` (E-002, #129 slice
+/// 14): `M`, a name and Enter come here, so the naming rule, the replace rule, the refusals and the write
+/// are the operation's, and the person's group is one log line with one undo. The first call over a name
+/// that exists writes nothing and answers [`Kept::WouldReplace`]; the `confirmed` call redefines it.
+pub fn keep_set_as_group(
+    project: &mut Project,
+    open: &OpenMap,
+    set: &CloneSet,
+    raw: &str,
+    confirmed: bool,
+) -> Result<Kept, String> {
+    let comp = composition_from_set(set, raw, &project.library, &project.compositions)?;
+    let id = comp.id.clone();
+    let exists = project.compositions.compositions.iter().any(|c| c.id == id);
+    let stamps = open.map.stamps.iter().filter(|s| s.of == id).count();
+    if exists && !confirmed {
+        strand_check(open, &comp)?;
+        return Ok(Kept::WouldReplace { id, stamps });
+    }
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(open.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let params = serde_json::json!({"id": id, "set": set, "replace": exists});
+    match crate::ops::dispatch(&mut ctx, "composition_define", &params) {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(fresh) = ctx.project {
+                project.compositions = fresh.compositions;
+            }
+            Ok(if exists { Kept::Replaced { id, stamps } } else { Kept::Made(id) })
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
 }
 
 fn pin_reason_keys(
