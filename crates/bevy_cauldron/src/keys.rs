@@ -908,7 +908,11 @@ impl Action {
             Action::ExcludePack => Some("pack_set_excluded"),
             Action::RemoveTile => Some("piece_remove"),
             Action::RotateMeshX | Action::RotateMeshY | Action::RotateMeshZ => Some("piece_turn"),
-            Action::CellSolid | Action::CellEdge | Action::CellClear | Action::AcceptEdges => {
+            Action::CellSolid
+            | Action::CellEdge
+            | Action::CellClear
+            | Action::AcceptEdges
+            | Action::ScanMesh => {
                 Some("piece_set_cells")
             }
             Action::NewToken => Some("vocab_add_token"),

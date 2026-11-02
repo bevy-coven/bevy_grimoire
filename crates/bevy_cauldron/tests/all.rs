@@ -240,6 +240,7 @@ mod keeping_a_set_is_a_composition_operation;
 mod saving_a_tile_is_a_composition_operation;
 mod a_typed_wall_height_is_a_mount_operation;
 mod piece_note_and_width_are_operations;
+mod a_mesh_scan_is_a_cell_operation;
 mod piece_set_cells_is_an_operation;
 mod piece_set_mount_is_an_operation;
 mod play_starts_and_stops_the_game;

@@ -3171,6 +3171,11 @@ pub mod piece_set_cells {
         /// keeps the edges a mesh scan derived: one token per boundary cell, not one token for every cell.
         #[serde(default)]
         pub edges: Option<Vec<EdgeAt>>,
+        /// `true` reads the piece's mesh and marks every cell it occupies solid (what `B` on the Meshes
+        /// tab does). It names its own cells, so it is given without `cells`; edge tokens and cells
+        /// already marked are left as they are.
+        #[serde(default)]
+        pub scan: bool,
         /// **Undo only.** The lattice to put back.
         #[serde(default)]
         pub restore: Option<Restore>,
@@ -3188,6 +3193,7 @@ pub mod piece_set_cells {
         Solid(bool),
         Edge(String),
         Edges(Vec<((u32, u32, u32), String)>),
+        Scan,
         Clear,
     }
 
@@ -3211,7 +3217,7 @@ pub mod piece_set_cells {
             ))
         })?;
         if let Some(restore) = p.restore {
-            if p.cells.is_empty() && p.solid.is_none() && p.edge.is_none() && p.edges.is_none() && !p.clear {
+            if p.cells.is_empty() && p.solid.is_none() && p.edge.is_none() && p.edges.is_none() && !p.clear && !p.scan {
                 return Ok(Request::Restore { id: p.id, restore });
             }
             return Err(Refusal::new(
@@ -3222,13 +3228,23 @@ pub mod piece_set_cells {
         let verbs = usize::from(p.solid.is_some())
             + usize::from(p.edge.is_some())
             + usize::from(p.edges.is_some())
-            + usize::from(p.clear);
+            + usize::from(p.clear)
+            + usize::from(p.scan);
         if verbs != 1 {
             return Err(Refusal::new(
                 "an edit does one thing to its cells: give exactly one of `solid` (true or false), \
-                 `edge` (a token, empty to clear it), `edges` (a token for each cell) or `clear`. \
-                 Nothing was changed.",
+                 `edge` (a token, empty to clear it), `edges` (a token for each cell), `clear` or \
+                 `scan`. Nothing was changed.",
             ));
+        }
+        if p.scan {
+            if !p.cells.is_empty() {
+                return Err(Refusal::new(
+                    "`scan` names its own cells (the ones the mesh occupies), so give it without `cells`. \
+                     Nothing was changed.",
+                ));
+            }
+            return Ok(Request::Set { id: p.id, cells: Vec::new(), change: Change::Scan });
         }
         if let Some(edges) = p.edges {
             if !p.cells.is_empty() {
@@ -3289,6 +3305,30 @@ pub mod piece_set_cells {
         format!("{},{},{}", at.0, at.1, at.2)
     }
 
+    /// **The cells a piece's mesh occupies**, read the way the Meshes tab's scan reads it: in the
+    /// frame the piece's divisions were derived in (`align.rotate` already baked into its extent), so a
+    /// turned piece does not come back as a transposed lattice.
+    pub(crate) fn scan_cells(
+        project: &Project,
+        id: &str,
+        div: (u32, u32, u32),
+    ) -> Result<Vec<(u32, u32, u32)>, Refusal> {
+        let Some(d) = project.measured.descriptors.iter().find(|d| d.id == id) else {
+            return Err(Refusal::new(format!("no library piece is called `{id}`, so nothing was changed.")));
+        };
+        let Some(mesh) = d.mesh.clone() else {
+            return Err(Refusal::new(format!("`{id}` has no mesh to scan, so nothing was changed.")));
+        };
+        let rotate = match d.align.rotate {
+            Some(r) => bevy_grimoire_core::descriptor::quarter_turns_xyz(r, &d.id).map_err(Refusal::new)?,
+            None => (0, 0, 0),
+        };
+        let path = project.root.join("assets").join(&mesh);
+        bevy_grimoire_core::glb::Glb::open(&path)
+            .and_then(|glb| bevy_grimoire_core::import::occupancy(&glb, div, rotate))
+            .map_err(|why| Refusal::new(format!("{mesh}: {why}, so nothing was changed.")))
+    }
+
     /// **The edit, computed on a copy of the measured library.** Nothing is written here.
     fn edit(project: &Project, req: &Request) -> Result<Edit, Refusal> {
         let id = match req {
@@ -3327,7 +3367,18 @@ pub mod piece_set_cells {
                     .get(id)
                     .ok_or_else(|| Refusal::new(format!("`{id}` is not in the layered library, so it has no lattice.")))
                     .and_then(|placed| project.divisions_of(placed).map_err(Refusal::new))?;
-                let mut cells = cells.clone();
+                let mut cells = if matches!(change, Change::Scan) {
+                    let found = scan_cells(project, id, div)?;
+                    if found.is_empty() {
+                        return Err(Refusal::new(format!(
+                            "the mesh of `{id}` occupies no cell of its {}x{}x{} lattice, so nothing was changed.",
+                            div.0, div.1, div.2
+                        )));
+                    }
+                    found
+                } else {
+                    cells.clone()
+                };
                 cells.sort_unstable();
                 cells.dedup();
                 if let Some(&out) = cells
@@ -3372,6 +3423,13 @@ pub mod piece_set_cells {
                             d.lattice_mut().set_edge(*at, div, token);
                         }
                     }
+                    Change::Scan => {
+                        for &at in &cells {
+                            if !solid_now(d, at) {
+                                d.lattice_mut().set_solid(at, div);
+                            }
+                        }
+                    }
                     Change::Clear => {
                         if let Some(grid) = d.subgrid.as_mut() {
                             for &at in &cells {
@@ -3403,6 +3461,11 @@ pub mod piece_set_cells {
                     Change::Edge(t) => format!("{which} = `{t}`"),
                     Change::Edges(_) if many => format!("{which}' edge tokens written"),
                     Change::Edges(_) => format!("{which} edge token written"),
+                    Change::Scan => {
+                        let total = Subgrid::volume(div);
+                        let mesh = measured.descriptors[index].mesh.clone().unwrap_or_default();
+                        format!("scanned {mesh}: {} of {total} cells solid", cells.len())
+                    }
                     Change::Clear => format!("{which} cleared"),
                 }
             }
@@ -3465,7 +3528,7 @@ pub mod piece_set_cells {
                     },
                     "solid": {
                         "type": "boolean",
-                        "description": "true marks the cells solid, false opens them. Give exactly one of solid, edge, edges or clear."
+                        "description": "true marks the cells solid, false opens them. Give exactly one of solid, edge, edges, clear or scan."
                     },
                     "edge": {
                         "type": "string",
@@ -3474,6 +3537,10 @@ pub mod piece_set_cells {
                     "clear": {
                         "type": "boolean",
                         "description": "true forgets everything about the cells (solid and token)."
+                    },
+                    "scan": {
+                        "type": "boolean",
+                        "description": "true reads the piece's mesh and marks every cell it occupies solid (what B on the Meshes tab does); give it without cells. Edge tokens and cells already solid are kept, and a scan that would change nothing is refused."
                     },
                     "edges": {
                         "type": "array",

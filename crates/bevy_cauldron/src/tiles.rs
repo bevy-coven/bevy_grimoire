@@ -2019,6 +2019,33 @@ fn scan_mesh(project: &mut Project, state: &mut ImportState, kind: ScanKind) -> 
         }
     };
 
+    // **A library piece is written by `piece_set_cells`' `scan` verb (E-002, #129 slice 19)**, the
+    // operation an agent calls: the key, the chip and an agent are one change with one log line and
+    // one undo. The occupancy read above is the same read the operation makes, so a lattice that
+    // already holds every cell is not written (the operation would refuse a change of nothing) and
+    // the scan still says what it found and stages the edges it derives. A candidate is not in the
+    // library and keeps its cells in memory, below.
+    if let Some(id) = state.selected_library_id.clone() {
+        let total = bevy_grimoire_core::descriptor::Subgrid::volume(div);
+        let marked = state
+            .editing(&project.measured)
+            .and_then(|d| d.subgrid.as_ref())
+            .is_some_and(|g| cells.iter().all(|at| g.cells.iter().any(|c| c.at == *at && c.solid)));
+        if !marked
+            && !crate::editor::set_cells(state, project, &id, &[], serde_json::json!({"scan": true}))
+        {
+            return None;
+        }
+        state
+            .status
+            .note(format!("scanned {mesh}: {} of {total} cells solid", cells.len()));
+        let proposal = state
+            .editing(&project.measured)
+            .and_then(|d| d.subgrid.as_ref())
+            .map(|g| bevy_grimoire_core::adjacency::derive_edges(g, div))
+            .unwrap_or_default();
+        return Some(Derived { id, cells: proposal });
+    }
     // Taken before the write — the only moment the old value still exists — and only when this is
     // an edit: the snapshot is a whole library plus every candidate, which is not a thing to clone
     // per arrow press.
