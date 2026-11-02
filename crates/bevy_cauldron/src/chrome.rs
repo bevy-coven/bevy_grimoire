@@ -2862,6 +2862,14 @@ impl Plugin for ChromePlugin {
                 OnEnter(crate::screen::Screen::Menu),
                 spawn_frame.in_set(FrameSystems),
             )
+            // **The band's count watches the set in hand** (UI-34, #228): every frame, gated on the
+            // resource, because a set is picked up and put down long after the screen is entered.
+            // Registering it in the `OnEnter` tuple above would run it once, on the frame the band is
+            // spawned, and never again.
+            .add_systems(
+                Update,
+                show_selection_count.run_if(in_state(crate::screen::Screen::Editor)),
+            )
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
                 (
@@ -3429,6 +3437,17 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
         // proposal, which is the same fact restated per piece — see `labels::Labeler`, which owns
         // both the text and the rule about when the word `connected` may be used. Empty until the
         // config has been read, so an unconfigured project shows nothing rather than a placeholder.
+        // **What is in hand** (UI-34, #228): `"3 selected"` while a set is held, empty otherwise, so
+        // the band answers the one question a person asks before a stamp — how many am I carrying —
+        // without them counting from the ghost. Empty when nothing is held rather than `"0 selected"`:
+        // a count of nothing is a row that says the same thing on every frame and teaches nobody.
+        band.spawn((
+            SelectionCount,
+            Text::new(String::new()),
+            TextColor(DIM),
+            font(text::LABEL),
+            bevy::picking::Pickable::IGNORE,
+        ));
         band.spawn((
             LabelerLine,
             Text::new(String::new()),
@@ -3451,6 +3470,33 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
 /// `labels::Labeler`'s, so this module does not learn what a model is.
 #[derive(Component)]
 pub struct LabelerLine;
+
+/// **How many pieces are in hand**, in the status band (UI-34, #228). Written by
+/// [`show_selection_count`] from [`crate::editor::CloneDrag`], which owns the answer.
+#[derive(Component)]
+pub struct SelectionCount;
+
+/// **Say how many pieces are in hand, when the answer changes.**
+///
+/// Gated on the resource's change detection, so a band with nothing in hand writes no text on any
+/// frame: the count only moves when a set is picked up, added to or put down.
+pub fn show_selection_count(
+    drag: Res<crate::editor::CloneDrag>,
+    mut counts: Query<&mut Text, With<SelectionCount>>,
+) {
+    if !drag.is_changed() {
+        return;
+    }
+    let said = match drag.held_pieces() {
+        Some(n) => format!("{n} selected"),
+        None => String::new(),
+    };
+    for mut text in &mut counts {
+        if text.0 != said {
+            text.0 = said.clone();
+        }
+    }
+}
 
 /// The clickable way back. Marked so `editor` can hang one observer on it wherever a panel put it.
 #[derive(Component)]

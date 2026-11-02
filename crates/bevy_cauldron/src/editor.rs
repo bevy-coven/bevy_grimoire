@@ -914,6 +914,13 @@ impl CloneDrag {
     fn holding(&self) -> bool {
         self.held.is_some()
     }
+
+    /// **How many pieces are in hand**, for the status band (UI-34, #228): `Some(n)` while a set is
+    /// held, `None` when nothing is. A read, not a second copy of the state — `held` stays private so
+    /// the band cannot start deciding what a set is.
+    pub fn held_pieces(&self) -> Option<usize> {
+        self.held.as_ref().map(|set| set.pieces.len() + set.stamps.len())
+    }
 }
 
 /// One reversible edit.

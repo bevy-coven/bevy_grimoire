@@ -304,6 +304,7 @@ mod the_launcher_lists_what_the_changelog_added_since_you_last_opened;
 mod the_launcher_opens_a_project_by_its_name;
 mod the_shortcut_overlay_answers_to_k;
 mod the_shell_is_a_gooey_dock;
+mod the_status_band_counts_the_set_in_hand;
 mod the_layout_score_counts_crossings;
 mod the_library_seed_is_a_selection;
 mod the_map_opens_framed;
