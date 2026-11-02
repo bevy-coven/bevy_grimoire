@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **268-warm** `9f6383b` The ground no longer vanishes for up to half a second after the first carve: the carved ground's pipelines are compiled before it is needed (#268)<br><a href="docs/changelog/media/2026-11-02-268-warm.mp4"><img src="docs/changelog/media/2026-11-02-268-warm.png" width="320" alt="clip"></a>
 - **267-ground** `5a8d630` A flat ground is drawn clean: the bounds floor sits a centimetre under it, so the two are no longer one plane and the hatched pattern is gone (#267)<br><a href="docs/changelog/media/2026-11-02-267-ground.mp4"><img src="docs/changelog/media/2026-11-02-267-ground.png" width="320" alt="clip"></a>
 - **101-ground-base** `fb7088f` The carved ground is an earth tone, not white, so the snow and wetness of volume_cover read against bare ground (#101)<br><a href="docs/changelog/media/2026-11-02-101-cover.mp4"><img src="docs/changelog/media/2026-11-02-101-cover.png" width="320" alt="clip"></a>
 - **103-fire** `ae16a6b` A placement can carry a whole bevy_lights Fire: at 23:00 a torch and a brazier burn on two lamps, with their flames, sparks and pooled light, and the light map and light pool read their lumens (#103)<br><a href="docs/changelog/media/2026-11-02-103-fire.mp4"><img src="docs/changelog/media/2026-11-02-103-fire.png" width="320" alt="clip"></a>

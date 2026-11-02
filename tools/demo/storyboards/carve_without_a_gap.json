@@ -1,0 +1,97 @@
+{
+ "name": "carve_without_a_gap",
+ "fps": 15,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -16,
+      -16,
+      16,
+      16
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 1.5
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "terrain_stroke",
+    "parameters": {
+     "map": "valley",
+     "stroke": {
+      "brush": "Raise",
+      "radius_m": 9.0,
+      "strength": 6.0,
+      "points": [
+       [
+        -12.0,
+        -10.0
+       ],
+       [
+        -8.0,
+        -6.0
+       ]
+      ]
+     },
+     "create": {
+      "origin": [
+       -30.0,
+       -30.0
+      ],
+      "cell_m": 1.25,
+      "width": 49,
+      "depth": 49,
+      "height_m": 3.0
+     }
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "volume_edit",
+    "parameters": {
+     "map": "valley",
+     "edit": {
+      "shape": {
+       "Sphere": {
+        "center": [
+         0.0,
+         3.0,
+         0.0
+        ],
+        "radius_m": 7.0
+       }
+      },
+      "mode": "Carve",
+      "smooth_m": 0.5
+     }
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "a map with no ground yet"
+  },
+  {
+   "at": 1.6,
+   "caption": "agent: terrain_stroke, a hill on a flat ground"
+  },
+  {
+   "at": 4.1,
+   "caption": "agent: volume_edit Carve: the ground never leaves the screen"
+  }
+ ]
+}
