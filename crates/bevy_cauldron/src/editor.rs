@@ -72,6 +72,14 @@ pub(crate) const PROPOSAL_LINE: Color = Color::srgb(0.42, 0.55, 0.68); // CHROME
 /// lying at `y_offset: 0.0`. See [`ground_drop`], which is usually deeper.
 const BOUNDS_FILL_CLEARANCE: f32 = 0.005;
 
+/// **How far the slab sits under the drawn ground**, metres (#267). The ground is at
+/// `origin.y - ground_drop + height`, so a flat ground at height 0 was in the slab's own plane and
+/// the depth buffer drew the two in either order, hatched. Over the widest depth range the Map camera
+/// is given (a 1.1 km map: about 3 km) the buffer separates surfaces closer than 0.7 mm; a centimetre
+/// is well clear of that and too small to see from the camera. The grid and the gizmos stay at
+/// [`ground_drop`], on the ground.
+pub const BOUNDS_FLOOR_BELOW_GROUND: f32 = 0.01;
+
 /// **How far under the datum the backdrop sits** — deeper than anything the library can sink.
 ///
 /// This was a flat 5 mm, on the assumption that a floor piece rests *on* the datum. It does not:
@@ -6944,7 +6952,7 @@ fn cycle_grid(
 
 /// The slab that shows how far the map goes. See [`BOUNDS_FILL`].
 #[derive(Component)]
-struct BoundsFloor;
+pub struct BoundsFloor;
 
 /// Spawned once, at whatever size; [`fit_bounds_floor`] gives it the map's.
 fn spawn_bounds_floor(
@@ -6980,7 +6988,7 @@ fn fit_bounds_floor(project: Res<Project>,
     for mut tf in &mut slab {
         *tf = Transform::from_xyz(
             open.map.origin.0 + (min_x + max_x) * 0.5,
-            open.map.origin.1 - ground_drop(&project),
+            open.map.origin.1 - ground_drop(&project) - BOUNDS_FLOOR_BELOW_GROUND,
             open.map.origin.2 + (min_z + max_z) * 0.5,
         )
         .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))

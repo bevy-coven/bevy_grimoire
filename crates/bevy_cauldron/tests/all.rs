@@ -291,6 +291,7 @@ mod the_enclosure_wish_is_the_maps_to_set;
 mod the_games_per_file_verdicts_reach_grimoire_state;
 mod the_games_verdict_reaches_grimoire_state;
 mod the_ghost_is_the_contract;
+mod the_ground_clears_the_bounds_floor;
 mod the_interface_does_not_write_the_ground_back_over_the_world;
 mod the_journal_draws_the_agents_steps;
 mod the_launcher_and_the_command_line_agree;
