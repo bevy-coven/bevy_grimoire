@@ -58,7 +58,10 @@ not discriminate; (5) *what did I get wrong* — I first added `moved` to the de
 despawned the very entity the slice exists to keep, and the suite caught it.
 
 ## Release
-None yet: `bevy_grimoire` changed and is publishable — the release is this pass's next step.
+**`bevy_grimoire v0.4.1`** — https://crates.io/crates/bevy_grimoire/0.4.1
+`cargo semver-checks check-release -p bevy_grimoire` said *"no semver update required"* (the one API
+change is the addition of `placed_transform`), so this is a PATCH bump. `cargo publish --dry-run` built
+the packaged crate, then `cargo publish` uploaded and resolved; tagged `bevy_grimoire-v0.4.1` and pushed.
 
 ## Next focus
 Release `bevy_grimoire`, then #201 items 1, 2 and 4.
