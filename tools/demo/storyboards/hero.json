@@ -26,7 +26,7 @@
   ],
   "chunks": [
     {
-      "seconds": 5
+      "seconds": 4.4
     },
     {
       "seconds": 2.5,
@@ -88,15 +88,15 @@
       "caption": "agent: reads the snip"
     },
     {
-      "at": 5.0,
+      "at": 4.5,
       "caption": "agent: placement_remove bed"
     },
     {
-      "at": 6.2,
+      "at": 5.9,
       "caption": "person: Ctrl+Z takes the agent's change back"
     },
     {
-      "at": 6.4,
+      "at": 6.1,
       "key": "KeyZ",
       "mods": [
         "ControlLeft"
