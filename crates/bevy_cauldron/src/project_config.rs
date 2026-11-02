@@ -25,11 +25,15 @@ use bevy::prelude::*;
 use bevy_grimoire_core::family::{self, Family};
 use bevy_grimoire_core::live::KindVerdict;
 use bevy_grimoire_core::reload_check::{self, Check};
-use bevy_gooey::{Activate, Cancel, button, dialog, heading, label, menu, observe, panel, toggle, ValueChange};
+use bevy::ecs::spawn::SpawnIter;
+use bevy_gooey::{Activate, Cancel, ValueChange, button, dialog, heading, label, list, menu, observe, panel, toggle};
 
 use crate::family_host;
 use crate::live::EditorReloads;
 use crate::project::Project;
+
+/// How many switches the list shows before it scrolls.
+const FAMILY_ROWS: f32 = 7.5;
 
 /// The reload-contract kind `family.ron` is.
 pub const KIND: &str = "family_list";
@@ -194,18 +198,20 @@ fn refresh(
                 lines.spawn(label(format!("{why}. Fix the file by hand: nothing is written until it reads.")));
             }
             Ok(listed) => {
-                for krate in family_host::KNOWN {
-                    let on = listed.iter().any(|c| c == krate);
-                    let name = (*krate).to_owned();
-                    lines.spawn((
-                        toggle(*krate, on),
-                        observe(move |c: On<ValueChange<bool>>, mut w: Writer| w.set(&name, c.value)),
-                    ));
-                    if let Some(problem) = problems.iter().find(|p| p.contains(krate)) {
-                        lines.spawn(label(problem.clone()));
-                    } else if !built_in.contains(krate) {
-                        lines.spawn(label(format!("{krate} is not built into this editor; rebuild with --features {krate} to host it.")));
-                    }
+                // A list, so the nine switches scroll in a window of any height; a crate this build lacks says so on its own switch.
+                let rows: Vec<_> = family_host::KNOWN
+                    .iter()
+                    .map(|krate| {
+                        let on = listed.iter().any(|c| c == krate);
+                        let name = (*krate).to_owned();
+                        let words = if built_in.contains(krate) { (*krate).to_owned() } else { format!("{krate} (not built here)") };
+                        (toggle(words, on), observe(move |c: On<ValueChange<bool>>, mut w: Writer| w.set(&name, c.value)))
+                    })
+                    .collect();
+                lines.spawn(list(FAMILY_ROWS, Children::spawn(SpawnIter(rows.into_iter()))));
+                // What is wrong with what the file lists, in the status line's own words.
+                for problem in &problems {
+                    lines.spawn(label(problem.clone()));
                 }
             }
         }

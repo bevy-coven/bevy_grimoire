@@ -1,0 +1,17 @@
+{
+  "name": "project_config",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "setup": [],
+  "chunks": [{"seconds": 9}],
+  "steps": [
+    {"at": 0.2, "caption": "the bedroom project, open in the Cauldron"},
+    {"at": 1.0, "key": "Comma", "mods": ["ControlLeft"], "caption": "person: Ctrl+, opens the settings, over the map"},
+    {"at": 2.6, "cursor": [640, 571]},
+    {"at": 3.0, "click": [640, 571], "caption": "person: Project configuration"},
+    {"at": 4.6, "cursor": [826, 342]},
+    {"at": 5.0, "click": [826, 342], "caption": "person: switches bevy_gooey on"},
+    {"at": 6.6, "caption": "family.ron is written atomically, and its reload verdict reads applied"}
+  ]
+}

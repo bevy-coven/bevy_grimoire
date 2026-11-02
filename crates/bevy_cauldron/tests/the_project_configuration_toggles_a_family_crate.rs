@@ -69,7 +69,7 @@ fn a_crate_this_build_lacks_can_be_listed_and_the_line_says_how_to_host_it_and_t
     std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
     settle(&mut app);
     let missing = bevy_cauldron::family_host::KNOWN.iter().find(|k| !bevy_cauldron::family_host::built().contains(k)).expect("a default build lacks some family crate");
-    let toggle = find_by_label(&mut app, missing).unwrap();
+    let toggle = find_by_label(&mut app, &format!("{missing} (not built here)")).unwrap();
     click(&mut app, toggle);
     settle(&mut app);
     assert_eq!(Family::load(&root).unwrap().crates, ["bevy_gooey".to_owned(), (*missing).to_owned()], "new crates go on the end");
