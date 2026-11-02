@@ -1,0 +1,46 @@
+{
+  "name": "gooey_skin",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 8
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.4,
+      "key": "KeyK",
+      "mods": [
+        "ControlLeft"
+      ],
+      "caption": "person: Ctrl+K opens the command palette"
+    },
+    {
+      "at": 1.4,
+      "type": "un"
+    },
+    {
+      "at": 2.3,
+      "write": {
+        "path": "family/bevy_gooey.ron",
+        "text": "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.95, alpha: 1.0)))\n"
+      },
+      "caption": "person: saves family/bevy_gooey.ron with a blue accent"
+    },
+    {
+      "at": 4.3,
+      "write": {
+        "path": "family/bevy_gooey.ron",
+        "text": "(accent: Srgba((red: 0.35, green: 0.8, blue: 0.4, alpha: 1.0)))\n"
+      },
+      "caption": "person: saves it again with a green accent"
+    },
+    {
+      "at": 6.4,
+      "key": "Escape"
+    }
+  ]
+}
