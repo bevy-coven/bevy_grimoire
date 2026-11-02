@@ -679,6 +679,7 @@ fn rebuild_badges(
         .into_iter()
         .chain(keys::badges(keys::Context::Global, stance))
         .filter_map(|b| b.on_a_door_of(panels))
+        .map(|b| b.rebound(&live.3))
         .map(|mut b| {
             b.home = resolve(b.home, &on_screen);
             b

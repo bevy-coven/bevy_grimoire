@@ -22,6 +22,8 @@ use bevy::input::InputSystems;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::prelude::*;
 
+use bevy_gooey::{Modifiers, Shortcut};
+
 use crate::commands::Command;
 use crate::keys::{self, Binding};
 
@@ -35,9 +37,13 @@ pub struct Chords {
 }
 
 impl Chords {
-    /// Ask for a command's chord to be pressed.
-    pub fn queue(&mut self, command: &Command) {
-        self.waiting.push(keys_of(keys::binding(command.action)));
+    /// Ask for a command's chord to be pressed: the one the settings gave it ([`keys::Rebound`], in
+    /// `live`), or else the census's.
+    pub fn queue(&mut self, command: &Command, live: keys::Live) {
+        self.waiting.push(match live.3.chord(command.action) {
+            Some(chord) => keys_of_chord(chord),
+            None => keys_of(keys::binding(command.action)),
+        });
     }
 
     /// How many chords have not gone down yet.
@@ -57,6 +63,24 @@ fn keys_of(binding: &Binding) -> Vec<KeyCode> {
         chord.push(KeyCode::ShiftLeft);
     }
     chord.push(binding.key);
+    chord
+}
+
+/// **The keys a rebound chord asks of the keyboard**, exactly the modifiers it names.
+fn keys_of_chord(shortcut: Shortcut) -> Vec<KeyCode> {
+    let Modifiers { ctrl, shift, alt, meta } = shortcut.modifiers;
+    let mut chord = Vec::with_capacity(5);
+    for (held, key) in [
+        (ctrl, KeyCode::ControlLeft),
+        (shift, KeyCode::ShiftLeft),
+        (alt, KeyCode::AltLeft),
+        (meta, KeyCode::SuperLeft),
+    ] {
+        if held {
+            chord.push(key);
+        }
+    }
+    chord.push(shortcut.key);
     chord
 }
 

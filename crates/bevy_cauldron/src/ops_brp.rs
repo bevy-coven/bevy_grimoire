@@ -2022,11 +2022,11 @@ fn run_command(
     if let Err(why) = command.enabled(*live) {
         return Ok(refused(command.id, why));
     }
-    chords.queue(&command);
+    chords.queue(&command, *live);
     if let Some(mut state) = state {
         state.status.note(format!("an agent ran {}", command.title));
     }
-    Ok(json!({"outcome": "ran", "id": command.id, "title": command.title, "shortcut": command.shortcut_label()}))
+    Ok(json!({"outcome": "ran", "id": command.id, "title": command.title, "shortcut": command.shortcut_in(*live).label()}))
 }
 
 /// **`grimoire/frame_view` — frame the Map camera on a box.**

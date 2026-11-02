@@ -372,12 +372,12 @@ fn opening_a_piece_to_be_defined_is_the_modified_remove_key() {
     input.press(REMOVE_KEY);
     assert!(just_pressed(
         &input,
-        Live(Context::Meshes, Stance::Idle, Holder::Tab),
+        Live(Context::Meshes, Stance::Idle, Holder::Tab, bevy_cauldron::keys::Rebound::NONE),
         Action::RemoveTile
     ));
     assert!(!just_pressed(
         &input,
-        Live(Context::Meshes, Stance::Idle, Holder::Tab),
+        Live(Context::Meshes, Stance::Idle, Holder::Tab, bevy_cauldron::keys::Rebound::NONE),
         Action::EditTile
     ));
 
@@ -388,13 +388,13 @@ fn opening_a_piece_to_be_defined_is_the_modified_remove_key() {
     input.press(REMOVE_KEY);
     assert!(just_pressed(
         &input,
-        Live(Context::Map, Stance::Idle, Holder::Tab),
+        Live(Context::Map, Stance::Idle, Holder::Tab, bevy_cauldron::keys::Rebound::NONE),
         Action::EditTile
     ));
     assert!(
         !just_pressed(
             &input,
-            Live(Context::Meshes, Stance::Idle, Holder::Tab),
+            Live(Context::Meshes, Stance::Idle, Holder::Tab, bevy_cauldron::keys::Rebound::NONE),
             Action::RemoveTile
         ),
         "the modified chord must not also remove, or one press would do two things"

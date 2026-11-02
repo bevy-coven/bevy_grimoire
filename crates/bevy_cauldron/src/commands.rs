@@ -52,6 +52,12 @@ impl Command {
         self.shortcut.label()
     }
 
+    /// **The chord this command answers to in `live`**: the one the settings gave it, else its default
+    /// (UI-72b). The palette, a menu and the keys panel say this one.
+    pub fn shortcut_in(&self, live: Live) -> Shortcut {
+        live.3.chord(self.action).unwrap_or(self.shortcut)
+    }
+
     /// **Can it run now, and if not, why not** — a menu greys the item and a tooltip says the reason.
     ///
     /// Judged by the rules the dispatcher uses ([`keys::fires_in`], [`Stances::allows`]), so a menu

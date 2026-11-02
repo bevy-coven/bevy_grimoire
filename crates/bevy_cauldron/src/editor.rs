@@ -7957,6 +7957,27 @@ pub struct Fields<'w> {
     pub snip: Res<'w, crate::snip::SnipEdit>,
 }
 
+/// **The chords the settings gave to commands** (UI-72b, #265), as [`sense_context`] hands them to the
+/// dispatcher in [`keys::Live`]. The table is rebuilt only when the settings changed: a command's id
+/// names its action, and a chord the dispatcher then answers to instead of the census's.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Rebinding<'w, 's> {
+    /// What the user and the project rebound; absent in a test that builds no settings.
+    settings: Option<Res<'w, crate::settings::EditorSettings>>,
+    table: Local<'s, keys::Rebound>,
+}
+
+impl Rebinding<'_, '_> {
+    fn table(&mut self) -> keys::Rebound {
+        if self.settings.as_ref().is_some_and(|s| s.is_changed()) {
+            *self.table = keys::Rebound::of(self.settings.iter().flat_map(|s| {
+                s.keymap.iter().filter_map(|(id, chord)| Some((crate::commands::by_id(id)?.action, *chord)))
+            }));
+        }
+        *self.table
+    }
+}
+
 /// What the tabs can be holding or waiting on. Read as one param by [`sense_context`], which folds
 /// these into the `Stance` the keyboard census answers from.
 #[derive(bevy::ecs::system::SystemParam)]
@@ -8040,6 +8061,10 @@ pub fn note_takes_clicks(fields: Fields, filters: Res<crate::filter::Filters>) -
 /// This reads exactly the fields [`not_typing`] reads, and for the same reason: the buffers stay with
 /// their fields, so adding a field is adding a line *here* — the one list — rather than a new guard
 /// somebody else has to remember to consult.
+// Eight: one more than clippy's budget. The other seven are what the census reads, and the keymap is
+// one more fact about who owns which key; folding it into one of the bundles would hide it from the
+// ratchet tests that read system signatures.
+#[allow(clippy::too_many_arguments)]
 pub fn sense_context(
     mode: Res<crate::tiles::Mode>,
     fields: Fields,
@@ -8054,6 +8079,7 @@ pub fn sense_context(
     // of [`Fields`] knows about, so "a palette is open" is asked of the palette's marker: without
     // it, typing `undo` in the palette would also press U, N, D and O on the tab behind it.
     palette: Query<(), With<bevy_gooey::CommandPalette>>,
+    mut rebinding: Rebinding,
 ) {
     let InHand {
         move_drag,
@@ -8133,7 +8159,8 @@ pub fn sense_context(
     // the verbs. What `Holder::Filter` buys is the exemption for that pane's own list walk, and
     // `keys::allowed` consults the tab through the row's own context — so the walk that stays live is
     // the one belonging to the tab the box is on, and no other.
-    let want = keys::live(mode.context(), typing || filter_typing, stance, holder);
+    let mut want = keys::live(mode.context(), typing || filter_typing, stance, holder);
+    want.3 = rebinding.table();
     // Written through the change detector only when it actually moves, so `Live` staying put does not
     // wake every `resource_changed` reader in the editor on every frame.
     if *live != want {

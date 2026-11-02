@@ -45,7 +45,7 @@ pub fn chords() -> [Shortcut; 2] {
 pub fn row(command: &Command, live: Live) -> PaletteCommand {
     let row = PaletteCommand::new(command.id, command.title)
         .category(capitalised(command.category()))
-        .shortcut(command.shortcut);
+        .shortcut(command.shortcut_in(live));
     match command.enabled(live) {
         Ok(()) => row,
         Err(why) => row.disabled(why),
@@ -97,12 +97,13 @@ fn toggle(
 fn run(
     chosen: On<RunCommand>,
     mut chords: ResMut<Chords>,
+    live: Res<Live>,
     state: Option<ResMut<crate::editor::EditorState>>,
 ) {
     let Some(command) = commands::by_id(&chosen.id) else {
         return;
     };
-    chords.queue(&command);
+    chords.queue(&command, *live);
     if let Some(mut state) = state {
         // "Asked for", not "ran": the chord goes down a frame or two from now and the dispatcher
         // judges it then.

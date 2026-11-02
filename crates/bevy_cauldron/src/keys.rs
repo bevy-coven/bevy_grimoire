@@ -56,6 +56,7 @@
 //! recall in about thirty minutes.
 
 use bevy::prelude::*;
+use bevy_gooey::{Modifiers, Shortcut};
 
 /// When an action can fire. Two actions may share a key iff their contexts never overlap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3111,6 +3112,12 @@ pub fn chord_text(b: &Binding) -> String {
     }
 }
 
+/// **The chord for an action as `rebound` has it**: the settings' chord, spelled the way gooey spells
+/// every chord it shows, or else [`chord`]'s.
+pub fn chord_in(action: Action, rebound: &Rebound) -> String {
+    rebound.chord(action).map_or_else(|| chord(action), |chord| chord.label())
+}
+
 /// Is Shift down?
 pub fn alt_held(keys: &ButtonInput<KeyCode>) -> bool {
     ALT_KEYS.iter().any(|k| keys.pressed(*k))
@@ -3159,7 +3166,7 @@ impl Badge {
             return None;
         }
         if self.actions.len() != before {
-            self.chord = chord_column(&self.actions);
+            self.chord = chord_column(&self.actions, &Rebound::NONE);
         }
         Some(self)
     }
@@ -3196,7 +3203,7 @@ pub fn badges(context: Context, stance: Stance) -> Vec<Badge> {
     // had no way to say so but to re-render it somewhere else, and two renderers of one column is
     // how `Cmd+` goes missing from exactly one of them. See [`Badge::on_a_door_of`].
     for b in &mut out {
-        b.chord = chord_column(&b.actions);
+        b.chord = chord_column(&b.actions, &Rebound::NONE);
     }
     out
 }
@@ -3206,12 +3213,21 @@ pub fn badges(context: Context, stance: Stance) -> Vec<Badge> {
 /// Joined with a mid-dot rather than a comma, since 2026-09-04: the member walk is `,` and `.`,
 /// and a comma separator rendered that badge as `",, ."` (N15). The codepoint is one this UI
 /// already draws — the status line's bullets in `chrome.rs`.
-fn chord_column(actions: &[Action]) -> String {
+fn chord_column(actions: &[Action], rebound: &Rebound) -> String {
     actions
         .iter()
-        .map(|a| chord(*a))
+        .map(|a| chord_in(*a, rebound))
         .collect::<Vec<_>>()
         .join(" · ")
+}
+
+impl Badge {
+    /// **The same badge, naming the chords the settings gave its commands** (UI-72b). A chord nobody
+    /// rebound reads as it always did.
+    pub fn rebound(mut self, rebound: &Rebound) -> Badge {
+        self.chord = chord_column(&self.actions, rebound);
+        self
+    }
 }
 
 /// **Sense who owns the keyboard, let the fields have it, then dispatch** — in that order, once a
@@ -3277,13 +3293,58 @@ impl Plugin for KeysPlugin {
 /// the whole thing, because a binding that declares a [`Stance`] cannot be judged from the context
 /// alone, and because the [`Holder`] decides which gate the context goes through at all.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Live(pub Context, pub Stance, pub Holder);
+pub struct Live(pub Context, pub Stance, pub Holder, pub Rebound);
 
 impl Default for Live {
     fn default() -> Self {
         // The tab the editor opens on — `tiles::Mode::default()` is `Map`. Stated rather than
         // derived, because `Context`'s own first variant is `Global`, which is not a tab.
-        Live(Context::Map, Stance::Idle, Holder::Tab)
+        Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE)
+    }
+}
+
+/// **The chords the settings gave to commands, by action** (UI-72b, #265). It travels in [`Live`], so
+/// it belongs to the app that read the settings: tests share one process and build many apps, and a
+/// process-wide table would let one rebinding change every other test's keys.
+///
+/// A command with a chord here answers to that chord alone and no longer to the census's
+/// ([`binding`]); every other command is untouched. A slot per [`Action`], indexed by the variant, so
+/// the table is `Copy` — [`Live`] is passed by value to every dispatch call — and a lookup is one
+/// index, with nothing to own or free.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Rebound([Option<Shortcut>; Action::ALL.len()]);
+
+impl std::fmt::Debug for Rebound {
+    /// Only what is rebound: the table is two hundred slots and nearly all of them empty.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_map()
+            .entries(Action::ALL.into_iter().filter_map(|a| self.chord(a).map(|c| (a, c))))
+            .finish()
+    }
+}
+
+impl Default for Rebound {
+    fn default() -> Self {
+        Rebound::NONE
+    }
+}
+
+impl Rebound {
+    /// No command is rebound: every chord is the census's.
+    pub const NONE: Rebound = Rebound([None; Action::ALL.len()]);
+
+    /// The table for these rebindings.
+    pub fn of(chords: impl IntoIterator<Item = (Action, Shortcut)>) -> Rebound {
+        let mut table = Rebound::NONE;
+        for (action, chord) in chords {
+            table.0[action as usize] = Some(chord);
+        }
+        table
+    }
+
+    /// The chord `action` now answers to, or `None` when it keeps the census's.
+    pub fn chord(&self, action: Action) -> Option<Shortcut> {
+        self.0[action as usize]
     }
 }
 
@@ -3326,7 +3387,7 @@ pub enum Holder {
 /// sets both — `Context::Typing` at `.0` and [`Holder::Filter`] at `.2` — and the tab is preserved
 /// through `Holder::Filter`'s own `b.context.overlaps` clause rather than through `.0`.
 pub fn live(tab: Context, typing: bool, stance: Stance, holder: Holder) -> Live {
-    Live(if typing { Context::Typing } else { tab }, stance, holder)
+    Live(if typing { Context::Typing } else { tab }, stance, holder, Rebound::NONE)
 }
 
 /// May an action bound to `want` fire, given who owns the keyboard?
@@ -3350,9 +3411,9 @@ fn stance_ok(b: &Binding, live: Stance) -> bool {
     b.needs_stance.allows(live)
 }
 
-/// Every gate a binding must pass except the key itself, in one place so the three entry points below
-/// cannot drift from each other.
-fn allowed(b: &Binding, keys: &ButtonInput<KeyCode>, live: Live) -> bool {
+/// **Where and when a binding is live**, whatever chord it answers to: the holder, the tab and the
+/// stance.
+fn gate(b: &Binding, live: Live) -> bool {
     // **The two exemptions, named where the guard lives.** A holder over the tab suppresses the
     // keyboard the way [`Context::Typing`] does, with a per-row hole: the list walks keep firing
     // while the box that narrows them holds the keys, and the journal's own three keys keep firing
@@ -3369,8 +3430,14 @@ fn allowed(b: &Binding, keys: &ButtonInput<KeyCode>, live: Live) -> bool {
         // and its three keys are the panel's own, named in its own footer.
         Holder::Journal => b.while_journal,
     };
-    context_ok
-        && stance_ok(b, live.1)
+    context_ok && stance_ok(b, live.1)
+}
+
+/// Every gate a binding must pass except the key itself, in one place so the three entry points below
+/// cannot drift from each other. A command the settings gave another chord ([`Rebound`]) passes
+/// [`gate`] and then its own chord; every other command passes this one, the census's chord.
+fn allowed(b: &Binding, keys: &ButtonInput<KeyCode>, live: Live) -> bool {
+    gate(b, live)
         // A bare binding must not fire while the modifier is held, or `Cmd+S` would also pan the
         // camera back — and `Cmd+Z` would turn the brush as well as undo, now that `Z` aims.
         && b.needs_mod == mod_held(keys)
@@ -3407,13 +3474,19 @@ pub(crate) struct KeyInput<'w> {
 /// `if *mode != Mode::Meshes` early returns this replaced were that second census.
 pub fn just_pressed(keys: &ButtonInput<KeyCode>, live: Live, action: Action) -> bool {
     let b = binding(action);
-    allowed(b, keys, live) && keys.just_pressed(b.key)
+    match live.3.chord(action) {
+        Some(chord) => gate(b, live) && chord.just_pressed(keys),
+        None => allowed(b, keys, live) && keys.just_pressed(b.key),
+    }
 }
 
 /// Is this action's key held? For the continuous ones — panning.
 pub fn pressed(keys: &ButtonInput<KeyCode>, live: Live, action: Action) -> bool {
     let b = binding(action);
-    allowed(b, keys, live) && keys.pressed(b.key)
+    match live.3.chord(action) {
+        Some(chord) => gate(b, live) && keys.pressed(chord.key) && Modifiers::held(keys) == chord.modifiers,
+        None => allowed(b, keys, live) && keys.pressed(b.key),
+    }
 }
 
 /// **How long a held key waits before firing again**, and then between repeats.
@@ -3815,7 +3888,7 @@ mod tests {
         let mut input = ButtonInput::<KeyCode>::default();
         input.press(KeyCode::ArrowUp);
 
-        let idle = Live(Context::Tiles, Stance::Idle, Holder::Tab);
+        let idle = Live(Context::Tiles, Stance::Idle, Holder::Tab, Rebound::NONE);
         assert!(
             just_pressed(&input, idle, Action::TileListPrev),
             "with nothing in hand, up walks the library"
@@ -3825,7 +3898,7 @@ mod tests {
             "with nothing in hand, up must not move a piece there is none of"
         );
 
-        let holding = Live(Context::Tiles, Stance::Holding, Holder::Tab);
+        let holding = Live(Context::Tiles, Stance::Holding, Holder::Tab, Rebound::NONE);
         assert!(
             just_pressed(&input, holding, Action::BuildForward),
             "with a piece in hand, up moves it"
@@ -4549,7 +4622,7 @@ mod tests {
             assert!(
                 pressed(
                     &input,
-                    Live(tab, Stance::Idle, Holder::Tab),
+                    Live(tab, Stance::Idle, Holder::Tab, Rebound::NONE),
                     Action::Shortcuts
                 ),
                 "the shortcuts overlay must be reachable from {tab:?}"
@@ -4558,7 +4631,7 @@ mod tests {
         assert!(
             !pressed(
                 &input,
-                Live(Context::Typing, Stance::Idle, Holder::Tab),
+                Live(Context::Typing, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Shortcuts
             ),
             "and must not open while a field is taking keys"
@@ -4612,7 +4685,7 @@ mod tests {
         assert!(
             just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Shortcuts
             ),
             "K did not fire Shortcuts"
@@ -4620,7 +4693,7 @@ mod tests {
         assert!(
             !just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Cancel
             ),
             "K fired an unrelated action"
@@ -4631,7 +4704,7 @@ mod tests {
         assert!(
             just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Cancel
             ),
             "Escape did not fire Cancel"
@@ -4655,7 +4728,7 @@ mod tests {
             assert!(
                 !just_pressed(
                     &input,
-                    Live(Context::Typing, Stance::Idle, Holder::Tab),
+                    Live(Context::Typing, Stance::Idle, Holder::Tab, Rebound::NONE),
                     b.action
                 ),
                 "{:?} fired while a text field owned the keyboard",
@@ -4664,7 +4737,7 @@ mod tests {
             assert!(
                 !pressed(
                     &input,
-                    Live(Context::Typing, Stance::Idle, Holder::Tab),
+                    Live(Context::Typing, Stance::Idle, Holder::Tab, Rebound::NONE),
                     b.action
                 ),
                 "{:?} read as held while a text field owned the keyboard",
@@ -4706,7 +4779,7 @@ mod tests {
             Context::Compose,
         ] {
             for b in BINDINGS {
-                let live = Live(tab, Stance::Idle, Holder::Filter);
+                let live = Live(tab, Stance::Idle, Holder::Filter, Rebound::NONE);
                 let fires = just_pressed(&input, live, b.action);
                 // Three axes, all still live while filtering: the opt-in, the tab, and the stance. A
                 // walk bound at another stance (the Tiles page's pair is `Stance::Browsing`) is
@@ -4734,7 +4807,7 @@ mod tests {
         assert!(
             just_pressed(
                 &walked,
-                Live(Context::Tiles, Stance::Browsing, Holder::Filter),
+                Live(Context::Tiles, Stance::Browsing, Holder::Filter, Rebound::NONE),
                 Action::TilePrev
             ),
             "the Tiles page walk must fire while its filter box is open, at its own stance"
@@ -4742,7 +4815,7 @@ mod tests {
         assert!(
             !just_pressed(
                 &walked,
-                Live(Context::Tiles, Stance::Idle, Holder::Filter),
+                Live(Context::Tiles, Stance::Idle, Holder::Filter, Rebound::NONE),
                 Action::TilePrev
             ),
             "and the same key must not fire at Idle — the stance axis still applies while filtering"
@@ -4750,7 +4823,7 @@ mod tests {
         assert!(
             !just_pressed(
                 &walked,
-                Live(Context::Map, Stance::Browsing, Holder::Filter),
+                Live(Context::Map, Stance::Browsing, Holder::Filter, Rebound::NONE),
                 Action::TilePrev
             ),
             "and it must not fire from the MAP's filter box — a list walk is one pane's fact, and \
@@ -4780,7 +4853,7 @@ mod tests {
             input.press(k);
         }
         for b in BINDINGS {
-            let live = Live(Context::Map, Stance::Idle, Holder::Journal);
+            let live = Live(Context::Map, Stance::Idle, Holder::Journal, Rebound::NONE);
             let fires = just_pressed(&input, live, b.action);
             let want = b.while_journal && b.needs_mod && stance_ok(b, Stance::Idle);
             assert_eq!(
@@ -4796,7 +4869,7 @@ mod tests {
         assert!(
             just_pressed(
                 &esc,
-                Live(Context::Map, Stance::Idle, Holder::Journal),
+                Live(Context::Map, Stance::Idle, Holder::Journal, Rebound::NONE),
                 Action::Cancel
             ),
             "`Esc` is the key that closes the journal — it must reach `notice::dismiss`"
@@ -4852,13 +4925,13 @@ mod tests {
         input.press(KeyCode::KeyS);
         assert!(just_pressed(
             &input,
-            Live(Context::Map, Stance::Idle, Holder::Tab),
+            Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::PanBack
         ));
         assert!(
             !just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Save
             ),
             "bare S must not save"
@@ -4873,7 +4946,7 @@ mod tests {
         assert!(
             just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Save
             ),
             "{MOD_NAME}+S must save"
@@ -4881,7 +4954,7 @@ mod tests {
         assert!(
             !just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::PanBack
             ),
             "{MOD_NAME}+S must not also pan"
@@ -4904,7 +4977,7 @@ mod tests {
         assert!(
             just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Undo
             ),
             "{MOD_NAME}+Z must undo"
@@ -4912,7 +4985,7 @@ mod tests {
         assert!(
             !just_pressed(
                 &input,
-                Live(Context::Meshes, Stance::Idle, Holder::Tab),
+                Live(Context::Meshes, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::CellSolid
             ),
             "{MOD_NAME}+Z must not also mark a cell solid"
@@ -4923,7 +4996,7 @@ mod tests {
         assert!(
             just_pressed(
                 &input,
-                Live(Context::Meshes, Stance::Idle, Holder::Tab),
+                Live(Context::Meshes, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::CellSolid
             ),
             "bare Z must mark the lattice cell solid"
@@ -4931,7 +5004,7 @@ mod tests {
         assert!(
             !just_pressed(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::Undo
             ),
             "bare Z must not undo"
@@ -4966,7 +5039,7 @@ mod tests {
                 Action::GenerateComposed,
             ] {
                 let fired =
-                    just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), other);
+                    just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE), other);
                 assert_eq!(
                     fired,
                     other == wanted,
@@ -5046,7 +5119,7 @@ mod tests {
         assert!(
             repeating(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::TurnPieceRight,
                 &mut repeat,
                 0.0
@@ -5064,7 +5137,7 @@ mod tests {
         for _ in 0..9 {
             if repeating(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::TurnPieceRight,
                 &mut repeat,
                 step,
@@ -5080,14 +5153,14 @@ mod tests {
         // Crossing it fires exactly once.
         assert!(repeating(
             &input,
-            Live(Context::Map, Stance::Idle, Holder::Tab),
+            Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::TurnPieceRight,
             &mut repeat,
             step * 2.0
         ));
         assert!(!repeating(
             &input,
-            Live(Context::Map, Stance::Idle, Holder::Tab),
+            Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::TurnPieceRight,
             &mut repeat,
             0.0
@@ -5147,7 +5220,7 @@ mod tests {
     #[test]
     fn holding_accelerates_and_releasing_forgets() {
         let key = binding(Action::TurnPieceLeft).key;
-        let live = Live(Context::Map, Stance::Idle, Holder::Tab);
+        let live = Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE);
         let mut input = ButtonInput::<KeyCode>::default();
         let mut repeat = Repeat::default();
 
@@ -5224,7 +5297,7 @@ mod tests {
         input.press(key);
         assert!(repeating(
             &input,
-            Live(Context::Map, Stance::Idle, Holder::Tab),
+            Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::TurnPieceRight,
             &mut repeat,
             0.0
@@ -5233,7 +5306,7 @@ mod tests {
         // Part of the way to the next repeat, then let go.
         repeating(
             &input,
-            Live(Context::Map, Stance::Idle, Holder::Tab),
+            Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::TurnPieceRight,
             &mut repeat,
             REPEAT_SECS * 0.8,
@@ -5241,7 +5314,7 @@ mod tests {
         input.release(key);
         assert!(!repeating(
             &input,
-            Live(Context::Map, Stance::Idle, Holder::Tab),
+            Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::TurnPieceRight,
             &mut repeat,
             0.0
@@ -5252,7 +5325,7 @@ mod tests {
         assert!(
             repeating(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::TurnPieceRight,
                 &mut repeat,
                 0.0
@@ -5275,7 +5348,7 @@ mod tests {
         input.clear_just_pressed(key);
         assert!(!repeating(
             &input,
-            Live(Context::Meshes, Stance::Idle, Holder::Tab),
+            Live(Context::Meshes, Stance::Idle, Holder::Tab, Rebound::NONE),
             Action::TurnPieceRight,
             &mut repeat,
             5.0
@@ -5285,7 +5358,7 @@ mod tests {
         assert!(
             !repeating(
                 &input,
-                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),
                 Action::TurnPieceRight,
                 &mut repeat,
                 5.0
