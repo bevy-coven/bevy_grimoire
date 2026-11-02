@@ -182,14 +182,6 @@ pub fn stepped_back(color: Color, held: bool) -> Color {
 /// on, [`PANEL_BG`] and [`HEADER_BG`].
 pub const MUTED: Color = Color::srgb(0.575, 0.560, 0.540);
 
-/// **The problem banner's fill.** Deeper and more saturated than [`DANGER`], which is a text colour —
-/// red text at [`DANGER`] on [`PANEL_BG`] is legible and quiet, and quiet is the failure being fixed
-/// here. A filled block is read before it is parsed, which a line of coloured prose is not.
-pub const PROBLEM_BG: Color = Color::srgb(0.52, 0.13, 0.10);
-/// What is written on [`PROBLEM_BG`]. Warm rather than pure white, so it belongs to the same palette
-/// as everything else in the panel.
-pub const PROBLEM_TEXT: Color = Color::srgb(1.0, 0.94, 0.92);
-
 /// **Machine-proposed, human-unconfirmed** — the VLM labeler's third state. A cool slate,
 /// deliberately neither [`ACCENT`] (amber = a live edit, yours) nor [`DANGER`] (red = wrong):
 /// a proposal is a question, and it must not read as either an answer or an alarm.
@@ -1287,6 +1279,12 @@ impl Problem {
             self.text.clone()
         }
     }
+
+    /// **What this refusal is about**, when it names one thing: the entity id in its location, which
+    /// the toast's Show button selects.
+    pub fn cause(&self) -> Option<&str> {
+        self.problem.as_ref()?.where_.as_ref()?.entity.as_deref()
+    }
 }
 
 /// How many problems a tab keeps. Past this the oldest is dropped and counted — see
@@ -1347,6 +1345,15 @@ impl Status {
     /// read the same `what`, `where` and `fix` from it that the line was printed from.
     pub fn raise(&mut self, prefix: &str, problem: bevy_grimoire_core::problem::Problem) {
         let text = format!("{prefix}{}", problem.line());
+        self.push_problem(text, problem);
+    }
+
+    /// **A refusal about one named thing**: the line is exactly `text`, and the id (a library piece or
+    /// a placement) is kept as where it happened, so the toast offers Show for it ([`Problem::cause`]).
+    pub fn problem_about(&mut self, text: impl Into<String>, entity: &str) {
+        use bevy_grimoire_core::problem::{Detail, Location, Problem as Core};
+        let text = text.into();
+        let problem = Core::with(text.clone(), Detail::default().at(Location::entity(entity)));
         self.push_problem(text, problem);
     }
 
@@ -1538,19 +1545,12 @@ impl Journal {
     }
 }
 
-/// **The one card the toast's text is written into.**
+/// **The text of the toast that is up: the one `Text` a refusal is read from.**
 ///
-/// # It used to carry the tabs it spoke for, and that list decided nothing
-///
-/// It was `ProblemBanner(&'static [Mode])`, from when there was a banner per panel and a shared
-/// painter could otherwise write another tab's block. The toast replaced all of that: there is now
-/// exactly one card, over the viewport, and it says whatever the live tab's newest refusal is. The
-/// field survived the move with the value `ALL_TABS` — every tab — so `paint_notices`' `if
-/// !banner.0.contains(&tab) { continue; }` was a tautology guarding nothing, while reading as though
-/// a tab could be skipped.
-///
-/// A marker with no field cannot be asked a question it has no business answering. Which tab is live
-/// is `Mode`'s answer, asked once by [`crate::notice::paint_notices`].
+/// A marker, put by `notice.rs` on the text of the gooey toast it raised for the live tab's newest
+/// refusal, so that there is exactly one such text on screen and `Cmd+C` harvests the right sentence.
+/// It carries no field: which tab is live is `Mode`'s answer, asked once by
+/// [`crate::notice::paint_notices`].
 #[derive(Component, Clone, Copy)]
 pub struct ProblemBanner;
 
@@ -1565,17 +1565,12 @@ pub struct ProblemBanner;
 /// worse than either — a block that plainly floats reads as deliberate, and a block a few pixels out
 /// reads as broken.
 ///
-/// # Why a toast is not a loss of information
+/// # Sticky, because a refusal is a state and the journal is its record
 ///
-/// A problem in this editor is **sticky by design** — it is a state, not an event — and a toast that
-/// fades would normally throw that away. It does not here, because the sticky half already exists
-/// somewhere better: the session [`Journal`] behind `Cmd+E` keeps every refusal, across tabs, out
-/// of `Esc`'s reach. The two answer different questions — *the toast answers "what just happened",
-/// the journal answers "what has gone wrong at all"* — and fading is what makes the first of those
-/// honest: an event that never leaves is not an event.
-///
-/// So the toast shows the newest problem for a few seconds and stands down, and nothing is lost:
-/// `notice::record_problems` has already written the journal's copy before the toast ever fades.
+/// A problem in this editor is **sticky by design** — it is a state, not an event. The toast stands
+/// until it is dismissed (its own Dismiss, `Esc`, or the next refusal replacing it), and the session
+/// [`Journal`] behind `Cmd+E` keeps every refusal, across tabs, out of `Esc`'s reach:
+/// `notice::record_problems` has already written the journal's copy before the toast is up.
 ///
 /// # Where it goes
 ///
@@ -1583,30 +1578,23 @@ pub struct ProblemBanner;
 /// the docks own both sides, `compass` owns the bottom-left, and `badges` puts its legend in the
 /// bottom-right. Asked for as *"a place that isn't going to occlude much"*.
 ///
-/// The glyph is `▲` and not `⚠`: the shipped face is `FiraMono-Regular.ttf`, which **has no U+26A0**
-/// (measured), and a missing codepoint draws as a tofu box.
+/// # It is `bevy_gooey`'s toast now (UI-39, #233)
+///
+/// The card this spawned was hand-built: a `Text` on a coloured node, faded by a timer in `notice.rs`.
+/// What is spawned here now is the **host** for gooey's own toast: the strip below, and in it the one
+/// [`bevy_gooey::ToastStack`] every gooey toast stands in (gooey would create its own at the window's
+/// root on the first toast; made here, it hangs under the viewport and shows and hides with the strip).
+/// `notice.rs` spawns the toast itself, an alert that stands until it is dismissed, with a Show button
+/// when the refusal names what it is about.
 pub fn problem_toast(mut commands: Commands, frame: Res<Frame>) {
-    // The strip is full-width so the card can centre in it; the card is what is seen.
-    let card = commands
+    let stack = commands
         .spawn((
-            Node {
-                padding: UiRect::axes(Val::Px(GAP_GROUP), Val::Px(GAP_ROW + 1.0)),
-                // Wraps rather than spanning the viewport: a refusal here names descriptors and
-                // compositions, which is the longest text this editor renders.
-                max_width: Val::Percent(72.0),
-                // **A field of `Node` in 0.19, not a component** (`bevy_ui-0.19.0/src/ui_node.rs:738`)
-                // — as a sibling in the bundle it is simply not a `Bundle` and the error says so
-                // without naming which member is wrong.
-                border_radius: BorderRadius::all(Val::Px(3.0)),
-                ..default()
-            },
-            BackgroundColor(PROBLEM_BG),
-            Text::new(String::new()),
-            TextColor(PROBLEM_TEXT),
-            font(text::BODY),
-            TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
+            Name::new("ToastStack"),
+            Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+            bevy_gooey::Role::ToastStack,
+            bevy_gooey::ToastStack,
             bevy::picking::Pickable::IGNORE,
-            ProblemBanner,
+            GlobalZIndex(TOAST_Z),
         ))
         .id();
     commands
@@ -1626,12 +1614,16 @@ pub fn problem_toast(mut commands: Commands, frame: Res<Frame>) {
             ToastLayer,
             bevy::picking::Pickable::IGNORE,
         ))
-        .add_child(card)
+        .add_child(stack)
         .insert(ChildOf(frame.viewport));
 }
 
-/// **The strip the toast centres in.** Its `Display` is what shows and hides the toast; the card
-/// inside carries the words. See [`problem_toast`].
+/// Above a dialog's scrim (100), as `bevy_gooey` stands its own toast stack: a refusal about what a
+/// dialog's button did must be readable over it.
+const TOAST_Z: i32 = 150;
+
+/// **The strip the toast stands in.** Its `Display` is what shows and hides the toasts; gooey's stack
+/// inside carries them. See [`problem_toast`].
 #[derive(Component)]
 pub struct ToastLayer;
 

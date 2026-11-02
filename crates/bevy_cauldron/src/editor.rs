@@ -867,6 +867,24 @@ impl TargetLock {
     }
 }
 
+/// **Lock onto the placement `id` on the open map**, as a click on it would: the gold marker stands on
+/// it and the piece-verbs mean it. `false` when the map has no such placement. The cell is the tile
+/// cell its position snaps to, which is what a click's lock records.
+pub fn lock_on_placement(world: &mut World, id: &str) -> bool {
+    let Some(at) = world
+        .get_resource::<OpenMap>()
+        .and_then(|open| open.map.placements.iter().find(|p| p.id == id).map(|p| p.at))
+    else {
+        return false;
+    };
+    let Some(project) = world.get_resource::<Project>() else {
+        return false;
+    };
+    let cell = (snap_point(project, at.0, SnapLevel::Tile), snap_point(project, at.1, SnapLevel::Tile));
+    world.resource_mut::<TargetLock>().0 = Some((id.to_owned(), cell));
+    true
+}
+
 /// The locked target's highlight — a third marker quad beside removal's red and clone's blue,
 /// because three tools making three different promises must not share a colour.
 ///
