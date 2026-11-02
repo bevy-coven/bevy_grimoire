@@ -97,7 +97,7 @@ pub fn report(root: &Path) -> Vec<Problem> {
         let Ok(text) = std::fs::read_to_string(base.join(&file.file)) else { continue };
         if let Check::Refused(refusal) = reload_check::check(kind, &file.file, &text) {
             out.push(Problem::with(
-                format!("{} did not read", file.file),
+                format!("a {} file did not read", kind.id),
                 Detail::default()
                     .at(Location::file(&file.file).field(refusal.field.clone()))
                     .because(refusal.reason.clone())
@@ -339,7 +339,9 @@ fn show_the_report(
         (None, None) => return,
     };
     commands.entity(root).with_children(|root| {
-        root.spawn((panel(), ReportCard)).with_children(|card| {
+        root.spawn((panel(), ReportCard))
+            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+            .with_children(|card| {
             card.spawn(heading(head));
             for row in rows {
                 card.spawn((label(row), ReportRow));

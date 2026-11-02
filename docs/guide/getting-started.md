@@ -10,6 +10,8 @@ You need a Rust toolchain and a clone of this repo. Run every command from the r
 
 With no argument, `cargo run -p bevy_cauldron` opens the **launcher** before any project: your recent projects (a missing folder is listed as missing, not dropped), a field to type a project's folder, **Open example**, **New project…** (a name, a place and a template; a name that is already a folder is refused beside the field and Create stays off until it is free) and, when the changelog has grown since you last opened a project, what it added. Choosing a project starts the editor on it, at its kit and map menu, as step 1 below does by hand. **Copy command line** on a recent project puts that line on your clipboard.
 
+A project named on the command line with a door or a map (`cargo run -p bevy_cauldron -- . bedroom`) opens on a **loading screen**: nothing for the first second, then the stage it is in with a spinner, and from ten seconds a bar that says `N of M` and the stage. **Cancel** goes back to the launcher and writes nothing. When it has loaded, any file of the project that does not read is listed on a card, one row each with the file, the field and why; **Open anyway** goes on into the editor and **Back** returns to the launcher. `GRIMOIRE_LOAD_STAGE_DELAY_MS=3000` pauses after each stage if you want to see the screen on a project that opens too fast to.
+
 
 1. Run the editor on this project:
 

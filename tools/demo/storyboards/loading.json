@@ -1,0 +1,47 @@
+{
+  "name": "loading",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 8.0
+    },
+    {
+      "seconds": 8.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "caption": "loading: nothing for the first second, then what it is doing, with a spinner"
+    },
+    {
+      "at": 9.9,
+      "caption": "past ten seconds the spinner gives way to a bar: N of M, and the stage"
+    },
+    {
+      "at": 11.8,
+      "caption": "the project opened, and one file in it does not read: the card names the file and the field"
+    },
+    {
+      "at": 12.6,
+      "cursor": [
+        200,
+        391
+      ]
+    },
+    {
+      "at": 13.4,
+      "click": [
+        200,
+        391
+      ]
+    },
+    {
+      "at": 13.5,
+      "caption": "person: Open anyway"
+    }
+  ]
+}
