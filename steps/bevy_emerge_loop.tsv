@@ -23542,3 +23542,154 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 230	251	gate	tool	push gate	bash	2026-11-02T10:47:43Z	7.4	Appending cleanup line and pushing :: cd /home/ladvien/bevy_emerge_loop && cat >> docs/loop/log.md <<'E' - 2026-11-02 11:05 loop (bevy_emerge_loop, big, pass 214, cleanup): removed `/tmp/demo_p214` 
 230	252	gate	tool	learn	learn	2026-11-02T10:47:43Z	7.4	Recording lessons
 230	253	gate	model	model		2026-11-02T10:47:50Z	10.1	
+231	1	orient	model	model		2026-11-02T10:48:26Z	4.4	
+231	2	orient	tool	phase mark	bash	2026-11-02T10:48:31Z	0.8	Orienting: status, log, audit :: python3 tools/loop/steps.py mark orient; git status --short | head -20; git log --oneline -10; git branch --list 'wiggum/parked-*'; git fetch -q origin loop-sta
+231	3	orient	tool	shell	bash	2026-11-02T10:48:31Z	0.8	Reading log tail, focus, crates :: tail -n 3 docs/loop/log.md | cut -c1-1500; sed -n '/^---/,$p' docs/loop/focus.md | head -30; ls crates
+231	4	orient	model	model		2026-11-02T10:48:32Z	3.7	
+231	5	orient	tool	github	bash	2026-11-02T10:48:35Z	0.7	Audit header and open issues :: git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv | head -1; git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv | tail -3; git log origin/mai
+231	6	orient	model	model		2026-11-02T10:48:36Z	3.8	
+231	7	bugs	tool	phase mark	bash	2026-11-02T10:48:40Z	4.2	Checking blocker states :: python3 tools/loop/steps.py mark bugs; for n in 210 224 193 194 152 201; do echo "== $n"; gh issue view $n --repo bevy-coven/bevy_grimoire --json comments,updat
+231	8	bugs	model	model		2026-11-02T10:48:44Z	6.9	
+231	9	bugs	tool	github	bash	2026-11-02T10:48:51Z	0.5	Reading #224 :: gh issue view 224 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body, (.comments[] | "---\n\(.createdAt) \(.body)")' | cut -c1-1800
+231	10	bugs	tool	github	bash	2026-11-02T10:48:51Z	1.1	Open gooey requests and pin :: gh issue list --repo bevy-coven/bevy_gooey --state open --label grimoire-ui --limit 60 --json number,title --jq '.[] | "#\(.number) \(.title)"'; git ls-remote h
+231	11	bugs	model	model		2026-11-02T10:48:52Z	5.0	
+231	12	bugs	tool	github	bash	2026-11-02T10:48:57Z	0.5	Reading #210 in full :: gh issue view 210 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body, (.comments[] | "---\n\(.createdAt) \(.body)")'
+231	13	bugs	model	model		2026-11-02T10:48:57Z	11.5	
+231	14	bugs	tool	loop tools	bash	2026-11-02T10:49:09Z	3.8	Stale demos and open backlog items :: python3 tools/demo/stale.py 2>&1 | tail -15; python3 tools/loop/backlog.py check 2>&1 | tail -3; python3 - <<'E' import json d=json.load(open('docs/loop/backlog
+231	15	bugs	model	model		2026-11-02T10:49:13Z	7.6	
+231	16	bugs	tool	github	bash	2026-11-02T10:49:20Z	0.6	Reading #152 :: gh issue view 152 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body, (.comments[] | "---\n\(.createdAt) \(.body)")'
+231	17	bugs	model	model		2026-11-02T10:49:21Z	6.0	
+231	18	choose	tool	phase mark	bash	2026-11-02T10:49:27Z	0.1	Checking candidate work :: python3 tools/loop/steps.py mark choose; grep -ci "" CHANGELOG.md; grep -n -i "constrain\|admission\|stress\|repetition\|graybox\|three options\|options" CHANGE
+231	19	choose	model	model		2026-11-02T10:49:27Z	6.9	
+231	20	choose	tool	shell	bash	2026-11-02T10:49:34Z	0.0	Finding unrecorded changelog lines :: grep -n "not yet recorded" CHANGELOG.md | cut -c1-260 | head -20; grep -c "not yet recorded" CHANGELOG.md
+231	21	choose	model	model		2026-11-02T10:49:34Z	8.0	
+231	22	choose	tool	loop tools	bash	2026-11-02T10:49:42Z	0.1	Changelog tool and unrecorded lines :: python3 tools/changelog/changelog.py --help | head -30; sed -n 34p CHANGELOG.md; sed -n 58p CHANGELOG.md; sed -n 129p CHANGELOG.md; git log --oneline -6 -- CHAN
+231	23	choose	model	model		2026-11-02T10:49:42Z	5.3	
+231	24	choose	tool	shell	bash	2026-11-02T10:49:47Z	0.0	Reading previous recording recipe :: sed -n 162p CHANGELOG.md | cut -c1-700; cat docs/loop/iterations/2026-11-02-lights-fire-ae16a6b.md; ls tools/demo tools/demo/storyboards | head -60
+231	25	choose	model	model		2026-11-02T10:49:47Z	12.4	
+231	26	choose	tool	github	bash	2026-11-02T10:49:59Z	7.1	Checking ui issue dependencies :: for n in 223 211 227 229 231 235 236 247 254 255 257 258 259 260 253 251; do echo "#$n: $(gh issue view $n --repo bevy-coven/bevy_grimoire --json title,body --j
+231	27	choose	model	model		2026-11-02T10:50:07Z	7.5	
+231	28	choose	tool	shell	bash	2026-11-02T10:50:14Z	0.0	Checking which crates need release :: for c in bevy_grimoire bevy_grimoire_core bevy_grimoire_anim bevy_grimoire_rng bevy_grimoire_solver bevy_grimoire_snip bevy_devshot; do v=$(grep -m1 '^version' 
+231	29	choose	model	model		2026-11-02T10:50:14Z	4.8	
+231	30	choose	tool	shell	bash	2026-11-02T10:50:19Z	0.0	Locating storyboards for unrecorded lines :: cd tools/demo/storyboards; grep -il "flicker" *.json; echo --; grep -il "preset" *.json; echo --; grep -il "cover\|snow" *.json; echo; head -c 1500 fire_placed.
+231	31	choose	model	model		2026-11-02T10:50:19Z	21.8	
+231	32	choose	tool	subagents	task	2026-11-02T10:50:41Z	0.0	[launched ClipRecorder] Recording three owed changelog clips
+231	33	choose	model	model		2026-11-02T10:50:41Z	6.7	
+231	34	choose	tool	github	bash	2026-11-02T10:50:47Z	0.6	Reading #129 remainder :: gh issue view 129 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body[0:2500], (.comments[-2:][] | "---\n\(.createdAt) \(.body[0:2500])")'
+231	35	choose	model	model		2026-11-02T10:50:48Z	4.3	
+231	36	choose	tool	wait: clip	wait	2026-11-02T10:50:52Z	1353.2	Waiting for clip recorder
+231	37	choose	model	model		2026-11-02T11:13:26Z	4.3	
+231	38	choose	tool	shell	bash	2026-11-02T11:13:30Z	0.0	Verifying recorded stills :: cp docs/changelog/media/2026-11-02-103-flicker-preview.png /tmp/p215_flick.png; cp docs/changelog/media/2026-11-02-99-preset-field.png /tmp/p215_preset.png; git
+231	39	choose	tool	read files	read	2026-11-02T11:13:30Z	0.0	/tmp/p215_flick.png
+231	40	choose	tool	read files	read	2026-11-02T11:13:30Z	0.0	/tmp/p215_preset.png
+231	41	choose	model	model		2026-11-02T11:13:30Z	1.7	
+231	42	choose	tool	read files	read	2026-11-02T11:13:32Z	0.0	/tmp/p215_flick.png
+231	43	choose	tool	read files	read	2026-11-02T11:13:32Z	0.0	/tmp/p215_preset.png
+231	44	choose	model	model		2026-11-02T11:13:32Z	6.5	
+231	45	choose	tool	search	grep	2026-11-02T11:13:38Z	0.0	Finding cover wiring :: crates/bevy_cauldron/src
+231	46	choose	model	model		2026-11-02T11:13:38Z	1.4	
+231	47	choose	tool	read files	read	2026-11-02T11:13:40Z	0.0	crates/bevy_cauldron/src/environment.rs:160:260
+231	48	choose	model	model		2026-11-02T11:13:40Z	1.3	
+231	49	choose	tool	read files	read	2026-11-02T11:13:41Z	0.0	crates/bevy_cauldron/src/environment.rs:160-260
+231	50	choose	model	model		2026-11-02T11:13:41Z	9.4	
+231	51	choose	tool	shell	bash	2026-11-02T11:13:50Z	0.0	Inspecting ground base and set_cover :: date -u +%H:%M; grep -n "fn ground_base" -A12 crates/bevy_cauldron/src/terrain_view.rs; d=$(ls -d ~/.cargo/git/checkouts/bevy_elements-*/*/ | head -3); echo $d;
+231	52	choose	model	model		2026-11-02T11:13:50Z	3.4	
+231	53	choose	tool	shell	bash	2026-11-02T11:13:54Z	0.1	Locating set_cover in the pinned checkout :: cd ~/.cargo/git/checkouts; grep -n "bevy_elements" /home/ladvien/bevy_emerge_loop/Cargo.lock | head -3; grep -rn "bevy_elements" /home/ladvien/bevy_emerge_loop/
+231	54	choose	model	model		2026-11-02T11:13:54Z	2.6	
+231	55	choose	tool	shell	bash	2026-11-02T11:13:57Z	0.0	Reading the weathered shader and cover :: cd ~/.cargo/git/checkouts/bevy_elements-27fcd041f12b073e/2fee42a/src/weathered; ls; grep -n "fn set_cover" -B5 -A30 mod.rs | head -90; grep -n "cover\|snow" -i 
+231	56	choose	model	model		2026-11-02T11:13:57Z	2.0	
+231	57	choose	tool	shell	bash	2026-11-02T11:13:59Z	0.0	Reading shader cover handling :: cd ~/.cargo/git/checkouts/bevy_elements-27fcd041f12b073e/2fee42a/src/weathered; grep -n "cover\|snow\|wet" -i weathered.wesl | head -60; sed -n 1,80p cover.rs |
+231	58	choose	model	model		2026-11-02T11:13:59Z	12.0	
+231	59	choose	tool	shell	bash	2026-11-02T11:14:11Z	0.1	Checking how cover is wired and tested :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron; grep -rn "dress_volume\|WeatheredMaterial\|MaterialPlugin\|WeatheredPlugin\|ElementsPlugin" src --includ
+231	60	choose	model	model		2026-11-02T11:14:11Z	2.3	
+231	61	choose	tool	shell	bash	2026-11-02T11:14:13Z	0.0	Reading the cover test and wiring :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron; sed -n 1,80p tests/volume_wears_its_cover.rs; sed -n 2245,2275p src/editor.rs; sed -n 70,110p src/main.r
+231	62	choose	model	model		2026-11-02T11:14:13Z	13.8	
+231	63	choose	tool	edit files	write	2026-11-02T11:14:27Z	0.0	Asking recorder to diagnose cover visibility :: agent://ClipRecorder
+231	64	choose	model	model		2026-11-02T11:14:27Z	1.3	
+231	65	choose	tool	wait: other	wait	2026-11-02T11:14:28Z	232.4	Waiting for cover diagnostic
+231	66	choose	model	model		2026-11-02T11:18:20Z	6.8	
+231	67	choose	tool	shell	bash	2026-11-02T11:18:27Z	0.1	Checking ground_base users and pins :: cd /home/ladvien/bevy_emerge_loop; grep -rn "ground_base" crates | cut -c1-200; sed -n 100,128p crates/bevy_cauldron/src/terrain_view.rs; grep -rn "base_color" 
+231	68	choose	model	model		2026-11-02T11:18:27Z	5.8	
+231	69	choose	tool	read files	read	2026-11-02T11:18:33Z	0.0	crates/bevy_cauldron/src/terrain_view.rs:205-330
+231	70	choose	model	model		2026-11-02T11:18:33Z	11.8	
+231	71	build	tool	phase mark	bash	2026-11-02T11:18:45Z	0.1	Preparing volume base colour change :: python3 tools/loop/steps.py mark build; cd /home/ladvien/bevy_emerge_loop; sed -n 40,60p crates/bevy_cauldron/src/terrain_view.rs; sed -n 1,30p crates/bevy_caul
+231	72	build	model	model		2026-11-02T11:18:45Z	4.7	
+231	73	build	tool	edit files	edit	2026-11-02T11:18:50Z	0.0	Adding volume_base and using it for carved chunks :: [crates/bevy_cauldron/src/terrain_view.rs#8EE2] PUT >127: + +/// The carved ground's plain material (#101). A carved chunk has no vertex colours, so what it wea
+231	74	build	model	model		2026-11-02T11:18:50Z	2.2	
+231	75	build	tool	edit files	edit	2026-11-02T11:18:52Z	0.0	Adding volume_base and using it for carved chunks :: [crates/bevy_cauldron/src/terrain_view.rs#8EE2] PUT >127: + +/// The carved ground's plain material (#101). A carved chunk has no vertex colours, so what it wea
+231	76	build	model	model		2026-11-02T11:18:52Z	2.9	
+231	77	build	tool	edit files	edit	2026-11-02T11:18:55Z	0.0	Pointing dress_volume at volume_base :: [crates/bevy_cauldron/src/environment.rs#D9D8] PUT 198.=198: + let back = back.get_or_insert_with(|| plain_materials.add(crate::terrain_view::volume_base())).cl
+231	78	build	model	model		2026-11-02T11:18:55Z	1.9	
+231	79	build	tool	edit files	edit	2026-11-02T11:18:57Z	0.0	Pointing dress_volume at volume_base :: [crates/bevy_cauldron/src/environment.rs#D9D8] PUT 198.=198: + let back = back.get_or_insert_with(|| plain_materials.add(crate::terrain_view::volume_base())).cl
+231	80	build	model	model		2026-11-02T11:18:57Z	5.7	
+231	81	build	tool	read files	read	2026-11-02T11:19:02Z	0.0	crates/bevy_cauldron/tests/volume_wears_its_cover.rs:80-140
+231	82	build	model	model		2026-11-02T11:19:02Z	17.1	
+231	83	build	tool	edit files	write	2026-11-02T11:19:20Z	0.0	crates/bevy_cauldron/tests/the_carved_ground_is_not_white.rs
+231	84	build	tool	shell	bash	2026-11-02T11:19:20Z	0.0	Locating insertion point in all.rs :: cd /home/ladvien/bevy_emerge_loop; grep -n "^mod the_\|^mod the" crates/bevy_cauldron/tests/all.rs | tail -5; grep -n "volume_snow" crates/bevy_cauldron/Cargo.t
+231	85	build	model	model		2026-11-02T11:19:20Z	2.5	
+231	86	build	tool	shell	bash	2026-11-02T11:19:22Z	0.0	Finding alphabetical slot :: cd /home/ladvien/bevy_emerge_loop; grep -n "^mod the_[a-d]" crates/bevy_cauldron/tests/all.rs | tail -4
+231	87	build	model	model		2026-11-02T11:19:22Z	1.3	
+231	88	build	tool	shell	bash	2026-11-02T11:19:23Z	0.0	Checking order :: cd /home/ladvien/bevy_emerge_loop; grep -n "^mod the_[a-d]\|^mod the_door" crates/bevy_cauldron/tests/all.rs | head;
+231	89	build	model	model		2026-11-02T11:19:23Z	1.1	
+231	90	build	tool	edit files	edit	2026-11-02T11:19:25Z	0.0	Registering the new test module :: [crates/bevy_cauldron/tests/all.rs#0000] PUT >286: +mod the_carved_ground_is_not_white;
+231	91	build	model	model		2026-11-02T11:19:25Z	1.1	
+231	92	build	tool	edit files	edit	2026-11-02T11:19:26Z	0.0	Registering the new test module :: [crates/bevy_cauldron/tests/all.rs#D21E] PUT >286: +mod the_carved_ground_is_not_white;
+231	93	build	model	model		2026-11-02T11:19:26Z	2.9	
+231	94	prove	tool	phase mark	bash	2026-11-02T11:19:29Z	60.0	[launched bg_9] Failing-first run with white base (mutation) :: cd /home/ladvien/bevy_emerge_loop; python3 tools/loop/steps.py mark prove; sed -i 's/base_color: Color::srgb(0.49, 0.53, 0.35)/base_color: Color::WHITE/' crates
+231	95	prove	model	model		2026-11-02T11:20:29Z	3.8	
+231	96	prove	tool	wait: tests	wait	2026-11-02T11:20:32Z	23.9	Waiting for mutation test build
+231	97	prove	model	model		2026-11-02T11:20:56Z	1.7	
+231	98	prove	tool	edit files	edit	2026-11-02T11:20:58Z	0.0	Restoring the earth-tone base :: [crates/bevy_cauldron/src/terrain_view.rs#D478] PUT 133.=133: + StandardMaterial { base_color: Color::srgb(0.49, 0.53, 0.35), perceptual_roughness: 1.0, ..defau
+231	99	prove	model	model		2026-11-02T11:20:58Z	1.4	
+231	100	prove	tool	edit files	edit	2026-11-02T11:20:59Z	0.0	Restoring the earth-tone base :: [crates/bevy_cauldron/src/terrain_view.rs#4060] PUT 133.=133: + StandardMaterial { base_color: Color::srgb(0.49, 0.53, 0.35), perceptual_roughness: 1.0, ..defau
+231	101	prove	model	model		2026-11-02T11:20:59Z	1.8	
+231	102	prove	tool	cargo test	bash	2026-11-02T11:21:01Z	26.3	Passing run plus neighbouring tests :: cd /home/ladvien/bevy_emerge_loop; CARGO_BUILD_JOBS=10 timeout 1500 cargo test -p bevy_cauldron --features volume_snow --test editor -- the_carved_ground_is_not
+231	103	prove	model	model		2026-11-02T11:21:28Z	5.3	
+231	104	prove	tool	cargo clippy	bash	2026-11-02T11:21:33Z	40.9	Clippy default and volume_snow :: cd /home/ladvien/bevy_emerge_loop; CARGO_BUILD_JOBS=10 cargo clippy -p bevy_cauldron --all-targets --features volume_snow -- -D warnings 2>&1 | tail -5; CARGO_B
+231	105	prove	model	model		2026-11-02T11:22:14Z	2.3	
+231	106	prove	tool	edit files	edit	2026-11-02T11:22:16Z	0.0	Simplifying the drawn tuple type :: [crates/bevy_cauldron/tests/the_carved_ground_is_not_white.rs#FA63] PUT 61.=65: + let drawn: Vec<Wearing> = + q.iter(world).filter(|(v, ..)| **v == TerrainView:
+231	107	prove	model	model		2026-11-02T11:22:16Z	2.8	
+231	108	prove	tool	read files	read	2026-11-02T11:22:19Z	0.0	crates/bevy_cauldron/tests/the_carved_ground_is_not_white.rs:50-85
+231	109	prove	model	model		2026-11-02T11:22:19Z	2.0	
+231	110	prove	tool	edit files	edit	2026-11-02T11:22:21Z	0.0	Restoring the clobbered lines :: [crates/bevy_cauldron/tests/the_carved_ground_is_not_white.rs#48D1] PUT >62: + if !drawn.is_empty() || start.elapsed().as_secs_f64() > 5.0 { + let plain = world
+231	111	prove	model	model		2026-11-02T11:22:21Z	2.9	
+231	112	prove	tool	edit files	edit	2026-11-02T11:22:24Z	0.0	Moving the alias into the module :: [crates/bevy_cauldron/tests/the_carved_ground_is_not_white.rs#3AAC] CUT 24.=26 PUT >27: + /// What a carved chunk wears: its weathered material, or its plain on
+231	113	prove	model	model		2026-11-02T11:22:24Z	3.1	
+231	114	prove	tool	cargo test	bash	2026-11-02T11:22:27Z	23.0	Clippy and test again :: cd /home/ladvien/bevy_emerge_loop; CARGO_BUILD_JOBS=10 cargo clippy -p bevy_cauldron --all-targets --features volume_snow -- -D warnings 2>&1 | tail -5; CARGO_B
+231	115	prove	model	model		2026-11-02T11:22:50Z	6.6	
+231	116	prove	tool	shell	bash	2026-11-02T11:22:56Z	0.1	Committing the base colour fix :: cd /home/ladvien/bevy_emerge_loop; git add -A crates && git commit -q -m "fix(cauldron): the carved ground wears an earth tone, not white, so volume_cover's sno
+231	117	prove	tool	edit files	write	2026-11-02T11:22:57Z	0.0	Asking recorder to film 101-cover :: agent://ClipRecorder
+231	118	prove	model	model		2026-11-02T11:22:57Z	8.3	
+231	119	prove	tool	wait: clip	wait	2026-11-02T11:23:05Z	163.3	Waiting for 101-cover recording
+231	120	prove	model	model		2026-11-02T11:25:48Z	3.7	
+231	121	prove	tool	clip record/render	bash	2026-11-02T11:25:52Z	0.2	Extracting frames to inspect :: cd /home/ladvien/bevy_emerge_loop; cp docs/changelog/media/2026-11-02-101-cover.png /tmp/p215_cover_still.png; ffmpeg -loglevel error -y -ss 9 -i docs/changelog
+231	122	prove	tool	read files	read	2026-11-02T11:25:52Z	0.2	/tmp/p215_cover_mid.png
+231	123	prove	tool	read files	read	2026-11-02T11:25:52Z	0.2	/tmp/p215_cover_still.png
+231	124	prove	model	model		2026-11-02T11:25:52Z	1.3	
+231	125	prove	tool	read files	read	2026-11-02T11:25:53Z	0.0	/tmp/p215_cover_mid.png
+231	126	prove	tool	read files	read	2026-11-02T11:25:53Z	0.1	/tmp/p215_cover_still.png
+231	127	prove	model	model		2026-11-02T11:25:53Z	4.7	
+231	128	prove	tool	loop tools	bash	2026-11-02T11:25:58Z	6.3	Adding changelog line, checking staleness :: cd /home/ladvien/bevy_emerge_loop; python3 tools/changelog/changelog.py add --id 101-ground-base --sha fb7088f --date 2026-11-02 --title "The carved ground is a
+231	129	prove	model	model		2026-11-02T11:26:04Z	10.4	
+231	130	prove	tool	subagents	task	2026-11-02T11:26:15Z	0.0	[launched DemoRecorder] Re-recording the standing demos
+231	131	prove	model	model		2026-11-02T11:26:15Z	3.3	
+231	132	prove	tool	github	bash	2026-11-02T11:26:18Z	1.4	Checking for duplicate z-fight issues :: cd /home/ladvien/bevy_emerge_loop; gh issue list --repo bevy-coven/bevy_grimoire --state all --search "z-fight OR coplanar OR hatch" --json number,title,state |
+231	133	prove	model	model		2026-11-02T11:26:20Z	4.4	
+231	134	prove	tool	search	grep	2026-11-02T11:26:24Z	0.0	Finding ground_drop uses :: crates
+231	135	prove	model	model		2026-11-02T11:26:24Z	10.6	
+231	136	prove	tool	github	bash	2026-11-02T11:26:35Z	1.6	Filing the z-fight bug :: cd /home/ladvien/bevy_emerge_loop; cat > /tmp/p215_issue.md <<'E' Found while recording #101's clip (pass 215, big, Vulkan, Xvfb). Not fixed in this pass: the g
+231	137	prove	model	model		2026-11-02T11:26:36Z	5.7	
+231	138	prove	tool	shell	bash	2026-11-02T11:26:42Z	0.1	Checking tests that pin ground transforms :: cd /home/ladvien/bevy_emerge_loop; date -u +%H:%M; grep -rn "TerrainView::Ground\|TerrainView::Volume" crates/bevy_cauldron/tests | cut -c1-180 | head -20; grep
+231	139	prove	model	model		2026-11-02T11:26:42Z	16.7	
+231	140	prove	tool	edit files	write	2026-11-02T11:26:59Z	0.0	Writing the pass report :: docs/loop/iterations/2026-11-02-cover-fb7088f.md
+231	141	prove	model	model		2026-11-02T11:26:59Z	2.6	
+231	142	prove	tool	wait: clip	wait	2026-11-02T11:27:01Z	674.6	Waiting for demo re-recording
+231	143	prove	model	model		2026-11-02T11:38:16Z	6.9	
+231	144	log	tool	phase mark	bash	2026-11-02T11:38:23Z	2.6	Writing log line and staging :: cd /home/ladvien/bevy_emerge_loop; python3 tools/loop/steps.py mark log; rm -f /tmp/p215_*; ls -d /tmp/demo_p215* /tmp/diag_p215 2>&1 | head -3; cat >> docs/loo
+231	145	log	model	model		2026-11-02T11:38:25Z	2.9	
+231	146	gate	tool	phase mark	bash	2026-11-02T11:38:28Z	60.1	[launched bg_14] Pushing through the gate :: cd /home/ladvien/bevy_emerge_loop; git commit -q -m "docs(loop): pass 215 report and log line; the carved ground's changelog line (#101)" && python3 tools/loop/
+231	147	gate	model	model		2026-11-02T11:39:28Z	1.4	
+231	148	gate	tool	wait: gate	wait	2026-11-02T11:39:30Z	114.0	Waiting for the push gate
+231	149	gate	model	model		2026-11-02T11:41:24Z	6.6	
+231	150	gate	tool	push gate	bash	2026-11-02T11:41:30Z	7.7	Appending cleanup line and pushing :: cd /home/ladvien/bevy_emerge_loop; git worktree list | wc -l; ls -d /tmp/demo_p215* 2>/dev/null; cat >> docs/loop/log.md <<'E' - 2026-11-02 12:20 loop (bevy_eme
+231	151	gate	model	model		2026-11-02T11:41:38Z	6.0	
