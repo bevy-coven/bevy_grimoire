@@ -20262,3 +20262,562 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 223	606	ship	model	model		2026-11-02T02:41:43Z	2.3	
 223	607	ship	tool	github	bash	2026-11-02T02:41:46Z	1.2	Final verification :: cd /home/ladvien/bevy_emerge_loop && git status --short | wc -l; git log origin/main --oneline -1; for n in 202 232 263; do gh issue view $n --repo bevy-coven/b
 223	608	ship	model	model		2026-11-02T02:41:47Z	9.3	
+224	1	orient	model	model		2026-11-02T02:42:21Z	3.0	
+224	2	orient	tool	phase mark	bash	2026-11-02T02:42:24Z	3.2	Orienting repo state :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark orient; git status --short | head; git log --oneline -10; git branch --list 'wiggum/parked
+224	3	orient	tool	shell	bash	2026-11-02T02:42:24Z	3.2	Reading log and focus :: cd /home/ladvien/bevy_emerge_loop && tail -n 3 docs/loop/log.md | cut -c1-1500; sed -n '/^---/,$p' docs/loop/focus.md | head -30; ls crates
+224	4	orient	model	model		2026-11-02T02:42:27Z	3.7	
+224	5	orient	tool	git	bash	2026-11-02T02:42:31Z	0.0	Checking sync, parked branch, log tail :: cd /home/ladvien/bevy_emerge_loop && git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv | head -1; git log --oneline -8 origin/main; git status -sb | h
+224	6	orient	tool	github	bash	2026-11-02T02:42:31Z	1.5	Listing open issues :: cd /home/ladvien/bevy_emerge_loop && gh issue list --repo bevy-coven/bevy_grimoire --state open --limit 100 --json number,title,labels,createdAt --jq '.[] | "#\
+224	7	orient	model	model		2026-11-02T02:42:32Z	4.0	
+224	8	orient	tool	phase mark	bash	2026-11-02T02:42:36Z	4.6	Check LFS hook, demos, snip issue, gooey open issues :: cd /home/ladvien/bevy_emerge_loop && grep -n "lfs" tools/loop/hooks/pre-push | head -5; ls tools/loop | head -30; python3 tools/demo/stale.py | tail -15; gh iss
+224	9	orient	model	model		2026-11-02T02:42:41Z	6.6	
+224	10	orient	tool	github	bash	2026-11-02T02:42:47Z	60.0	[launched bg_2] Extracting UI issue dependencies :: cd /home/ladvien/bevy_emerge_loop && for n in 208 210 211 214 216 218 219 220 221 222 223 224 225 227 228 229 231 233 235 236 237 238 239 240 241 242 243 244 24
+224	11	orient	model	model		2026-11-02T02:43:47Z	1.1	
+224	12	orient	tool	wait: other	wait	2026-11-02T02:43:49Z	3.9	{}
+224	13	orient	model	model		2026-11-02T02:43:52Z	10.1	
+224	14	orient	tool	github	bash	2026-11-02T02:44:03Z	3.1	Reading UI-10 issue :: cd /home/ladvien/bevy_emerge_loop && for n in 209 212 213 217 234 248; do gh issue view $n --repo bevy-coven/bevy_grimoire --json state,title --jq '"#'$n' \(.st
+224	15	orient	model	model		2026-11-02T02:44:06Z	6.6	
+224	16	orient	tool	github	bash	2026-11-02T02:44:12Z	3.0	Reading cluster issue bodies :: cd /home/ladvien/bevy_emerge_loop && for n in 218 219 220 221 222 233; do echo "=== #$n"; gh issue view $n --repo bevy-coven/bevy_grimoire --json body,comments 
+224	17	orient	tool	shell	bash	2026-11-02T02:44:12Z	3.0	Sizing the code to change :: cd /home/ladvien/bevy_emerge_loop && wc -l crates/bevy_cauldron/src/chooser.rs crates/bevy_cauldron/src/screen.rs crates/bevy_cauldron/src/recent*.rs crates/bev
+224	18	orient	model	model		2026-11-02T02:44:15Z	3.4	
+224	19	orient	tool	shell	bash	2026-11-02T02:44:19Z	0.0	Reading recent.rs, screen.rs structure :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 36,52p ../../docs/ui/vision.md; cat src/recent.rs | head -120; grep -n "^pub \|^ pub fn\|^fn \|
+224	20	orient	model	model		2026-11-02T02:44:19Z	2.2	
+224	21	orient	tool	shell	bash	2026-11-02T02:44:21Z	0.0	Reading screen.rs top :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 1,165p src/screen.rs; sed -n 120,187p src/recent.rs
+224	22	orient	tool	shell	bash	2026-11-02T02:44:21Z	0.0	Mapping chooser.rs :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^pub fn\|^fn \|^pub struct\|^struct \|^pub enum\|^impl \|^pub const\|^const \|^//!" src/choos
+224	23	orient	model	model		2026-11-02T02:44:21Z	8.8	
+224	24	orient	tool	shell	bash	2026-11-02T02:44:30Z	0.0	Reading chooser core types and plugin :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 134,160p src/chooser.rs; sed -n 2746,2805p src/chooser.rs; sed -n 4925,5030p src/chooser.rs; se
+224	25	orient	tool	shell	bash	2026-11-02T02:44:30Z	0.0	Reading main.rs :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && cat src/main.rs | head -250; wc -l src/ui.rs src/ui_skin.rs src/icons.rs src/harness.rs
+224	26	orient	model	model		2026-11-02T02:44:30Z	10.0	
+224	27	orient	tool	shell	bash	2026-11-02T02:44:40Z	0.0	Finding gooey usage in the cauldron :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rn "bevy_gooey" src --include=*.rs | grep -v "^src/.*://" | cut -c1-170 | head -40; grep -n "rfd
+224	28	orient	tool	shell	bash	2026-11-02T02:44:40Z	0.0	Reading ui.rs and icons.rs :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && cat src/ui.rs src/ui_skin.rs; sed -n 1,86p src/icons.rs
+224	29	orient	model	model		2026-11-02T02:44:40Z	7.2	
+224	30	orient	tool	shell	bash	2026-11-02T02:44:47Z	1.6	Cloning gooey main to read APIs :: cd /tmp && rm -rf gooey_src_pass219 && git clone -q https://github.com/bevy-coven/bevy_gooey gooey_src_pass219 && cd gooey_src_pass219 && git log --oneline -3 &
+224	31	orient	model	model		2026-11-02T02:44:48Z	5.2	
+224	32	choose	tool	phase mark	bash	2026-11-02T02:44:54Z	1.3	Moving gooey pin and building in background :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark choose >/dev/null; sed -i 's/rev = "48566ea41e6877db79e69cf73278393c23d98ffd"/rev = "cce83
+224	33	choose	tool	shell	bash	2026-11-02T02:44:54Z	1.3	Reading gooey public API surface :: cd /tmp/gooey_src_pass219 && grep -n "^pub fn\|^pub struct\|^pub enum" src/list.rs src/table.rs src/field.rs src/progress.rs src/toolbar.rs src/icon.rs src/text
+224	34	choose	model	model		2026-11-02T02:44:55Z	3.0	
+224	35	choose	tool	shell	bash	2026-11-02T02:44:58Z	0.0	Reading list, text_input, button docs :: cd /tmp/gooey_src_pass219 && sed -n 1425,1475p src/widgets.rs; sed -n 925,975p src/widgets.rs; sed -n 270,320p src/widgets.rs; ls tests | head -50
+224	36	choose	model	model		2026-11-02T02:44:58Z	2.7	
+224	37	choose	tool	shell	bash	2026-11-02T02:45:01Z	0.0	Finding how tests drive gooey buttons :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rln "Activate\|ButtonText" tests | head; grep -n "Activate" src/confirm.rs | head -5; sed -n 1,8
+224	38	choose	model	model		2026-11-02T02:45:01Z	1.6	
+224	39	choose	tool	shell	bash	2026-11-02T02:45:02Z	0.0	Reading a gooey dialog test as a model :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 1,140p tests/a_question_is_asked_in_a_gooey_dialog.rs; grep -n "chooser\|Screen::Menu" tests/he
+224	40	choose	model	model		2026-11-02T02:45:02Z	1.6	
+224	41	choose	tool	shell	bash	2026-11-02T02:45:04Z	0.0	Reading the headless menu harness and recent test :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 1600,1650p tests/headless.rs; sed -n 1,60p tests/recent_projects.rs; grep -n "fn build_headless
+224	42	choose	model	model		2026-11-02T02:45:04Z	21.3	
+224	43	choose	tool	shell	bash	2026-11-02T02:45:25Z	0.0	Checking how projects switch and the asset root :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "asset_root\|AssetSource\|file_path\|assets_root\|switch_project\|fn open_project\|chooser.roo
+224	44	choose	model	model		2026-11-02T02:45:25Z	4.2	
+224	45	choose	tool	shell	bash	2026-11-02T02:45:29Z	0.0	Reading open path for projects :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "Focus::Projects" src/chooser.rs | head; sed -n 6499,6560p src/chooser.rs; grep -n "pub fn ope
+224	46	choose	model	model		2026-11-02T02:45:29Z	17.4	
+224	47	choose	tool	remote wait	bash	2026-11-02T02:45:47Z	45.1	Checking pin build and reading args.rs :: sleep 45; cat /tmp/build_pin_pass219.log | tail -5; cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 1,100p src/args.rs | cut -c1-200
+224	48	choose	model	model		2026-11-02T02:46:32Z	3.2	
+224	49	choose	tool	shell	bash	2026-11-02T02:46:35Z	0.0	Reading args.rs remainder :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 100,230p src/args.rs | cut -c1-180; tail -3 /tmp/build_pin_pass219.log
+224	50	choose	model	model		2026-11-02T02:46:35Z	2.4	
+224	51	choose	tool	shell	bash	2026-11-02T02:46:38Z	0.1	Checking cargo fetch progress :: ps aux | grep -E "cargo|rustc|git " | grep -v grep | head -5 | cut -c1-200; ls ~/.cargo/git/db | grep gooey
+224	52	choose	model	model		2026-11-02T02:46:38Z	2.7	
+224	53	choose	tool	cargo build	bash	2026-11-02T02:46:40Z	0.0	[launched bg_4] Building with moved gooey pin :: cd /home/ladvien/bevy_emerge_loop && cargo build -p bevy_cauldron --tests 2>&1 | tail -30
+224	54	choose	model	model		2026-11-02T02:46:40Z	4.8	
+224	55	choose	tool	shell	bash	2026-11-02T02:46:45Z	0.0	Finding camera and dialog spawn pattern :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "Camera2d\|Camera3d" src/*.rs | head -10; sed -n 60,140p src/confirm.rs
+224	56	choose	model	model		2026-11-02T02:46:45Z	1.2	
+224	57	choose	tool	shell	bash	2026-11-02T02:46:46Z	0.0	Reading dialog spawn code and camera :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 225,345p src/confirm.rs; sed -n 295,360p src/surface.rs
+224	58	choose	model	model		2026-11-02T02:46:46Z	5.7	
+224	59	choose	tool	shell	bash	2026-11-02T02:46:52Z	0.0	Reading screen/panel docs :: cd /tmp/gooey_src_pass219 && sed -n 150,262p src/widgets.rs; grep -n "pub struct Activate\|Activate" src/lib.rs | head -5; tail -3 /tmp/build_pin_pass219.log
+224	60	choose	model	model		2026-11-02T02:46:52Z	27.5	
+224	61	choose	model	model		2026-11-02T02:47:20Z	28.5	
+224	62	choose	tool	shell	bash	2026-11-02T02:47:48Z	0.1	Checking Screen::Menu usage and changelog format :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rn "Screen::Menu" src | grep -v "^src/chooser.rs.*//" | cut -c1-150 | head -30; ls ../../assets 
+224	63	choose	model	model		2026-11-02T02:47:48Z	18.9	
+224	64	choose	tool	shell	bash	2026-11-02T02:48:07Z	0.1	Checking clipboard support and ValueChange shape :: cd /home/ladvien/bevy_emerge_loop && grep -n 'name = "\(arboard\|copypasta\|clipboard\|rfd\|cli-clipboard\)' Cargo.lock; grep -rn "clipboard\|Clipboard" crates/
+224	65	choose	model	model		2026-11-02T02:48:07Z	1.7	
+224	66	choose	tool	shell	bash	2026-11-02T02:48:09Z	0.0	Reading existing clipboard copy :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 335,400p src/notice.rs; grep -n "arboard" Cargo.toml
+224	67	choose	model	model		2026-11-02T02:48:09Z	1.4	
+224	68	choose	tool	shell	bash	2026-11-02T02:48:10Z	0.0	Finding arboard use :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "arboard::" src/*.rs | head -5; tail -3 /tmp/build_pin_pass219.log
+224	69	choose	model	model		2026-11-02T02:48:10Z	10.8	
+224	70	choose	tool	shell	bash	2026-11-02T02:48:21Z	0.0	Reading lib.rs module list and harness plugin list :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && cat src/lib.rs | sed -n 40,156p | cut -c1-160; sed -n 45,75p src/harness.rs
+224	71	choose	model	model		2026-11-02T02:48:21Z	33.3	
+224	72	choose	tool	edit files	write	2026-11-02T02:48:55Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/src/launcher.rs
+224	73	choose	bg	cargo build	bash	2026-11-02T02:46:57Z	117.2	bg_4 completed: cargo build -p bevy_cauldron --tests 2>&1 | tail -30
+224	74	choose	model	model		2026-11-02T02:48:55Z	3.2	
+224	75	choose	tool	shell	bash	2026-11-02T02:48:58Z	0.0	Reading match sites for Screen :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 625,640p src/ops_brp.rs; sed -n 1430,1440p src/ops_brp.rs; grep -n "pub mod keys;" src/lib.rs
+224	76	choose	model	model		2026-11-02T02:48:58Z	7.4	
+224	77	choose	tool	shell	bash	2026-11-02T02:49:05Z	0.0	Wiring Screen::Launcher into the crate :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' import re p='src/ops_brp.rs'; s=open(p).read() s=s.replace(''' crate::screen::Screen
+224	78	choose	model	model		2026-11-02T02:49:05Z	6.5	
+224	79	choose	tool	shell	bash	2026-11-02T02:49:12Z	0.0	Checking all.rs tail and fixtures :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && tail -12 tests/all.rs; grep -n "pub fn build\b\|pub fn new\|pub fn descriptor" tests/fixtures.rs | hea
+224	80	choose	model	model		2026-11-02T02:49:12Z	1.4	
+224	81	choose	tool	shell	bash	2026-11-02T02:49:13Z	0.0	Locating fixtures and mod list end :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^mod " tests/all.rs | tail -4; ls tests/fixtures* | head; grep -n "pub fn " tests/fixtures/mo
+224	82	choose	model	model		2026-11-02T02:49:13Z	2.9	
+224	83	choose	tool	shell	bash	2026-11-02T02:49:16Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^mod the_" tests/all.rs | head -30
+224	84	choose	model	model		2026-11-02T02:49:16Z	17.2	
+224	85	choose	tool	edit files	write	2026-11-02T02:49:33Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/tests/the_launcher_opens_a_project_by_its_name.rs
+224	86	choose	model	model		2026-11-02T02:49:33Z	5.5	
+224	87	choose	tool	edit files	edit	2026-11-02T02:49:39Z	0.0	Register the test module :: [crates/bevy_cauldron/tests/all.rs#0000] PUT >282: +mod the_launcher_opens_a_project_by_its_name;
+224	88	choose	model	model		2026-11-02T02:49:39Z	1.1	
+224	89	choose	tool	edit files	edit	2026-11-02T02:49:40Z	0.0	Register the test module :: [crates/bevy_cauldron/tests/all.rs#BF08] PUT >282: +mod the_launcher_opens_a_project_by_its_name;
+224	90	choose	model	model		2026-11-02T02:49:40Z	1.5	
+224	91	build	tool	phase mark	bash	2026-11-02T02:49:41Z	0.0	[launched bg_5] Running launcher tests :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark build >/dev/null; cargo test -p bevy_cauldron --test editor the_launcher_opens 2>&1 | tail
+224	92	build	model	model		2026-11-02T02:49:41Z	6.7	
+224	93	build	tool	loop tools	bash	2026-11-02T02:49:48Z	0.2	Checking Recent literals and changelog tool :: cd /home/ladvien/bevy_emerge_loop && grep -rn "Recent {" crates/*/tests crates/*/src | head; grep -n "^## \|^- \*\*" CHANGELOG.md | head -3; python3 tools/chang
+224	94	build	model	model		2026-11-02T02:49:48Z	14.1	
+224	95	build	tool	shell	bash	2026-11-02T02:50:02Z	0.0	Reading create_project and FieldProblem :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 560,665p src/chooser.rs; sed -n 1,110p /tmp/gooey_src_pass219/src/field.rs
+224	96	build	model	model		2026-11-02T02:50:02Z	4.6	
+224	97	build	tool	shell	bash	2026-11-02T02:50:07Z	0.0	date; ls -la /home/ladvien/bevy_emerge_loop/assets/grimoire/ | head;
+224	98	build	model	model		2026-11-02T02:50:07Z	4.8	
+224	99	build	tool	shell	bash	2026-11-02T02:50:12Z	0.0	cd /home/ladvien/bevy_emerge_loop && find assets crates -name vocab.ron -not -path "*/target/*" | head; ls assets/grimoire/furniture; grep -rn "fn vocab_source\
+224	100	build	model	model		2026-11-02T02:50:12Z	5.2	
+224	101	build	tool	wait: other	wait	2026-11-02T02:50:17Z	46.3	{}
+224	102	build	model	model		2026-11-02T02:51:03Z	11.4	
+224	103	build	tool	cargo test	bash	2026-11-02T02:51:15Z	15.5	Fix the missing-folder test and rerun :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='tests/the_launcher_opens_a_project_by_its_name.rs'; s=open(p).read() s=s.replace(
+224	104	build	model	model		2026-11-02T02:51:30Z	13.9	
+224	105	build	tool	shell	bash	2026-11-02T02:51:44Z	0.1	Reading demo tooling :: cd /home/ladvien/bevy_emerge_loop && ls tools/demo/storyboards | head -20; sed -n 1,60p tools/demo/README.md | cut -c1-220; pgrep -a Xvfb | head -3; echo $DISPL
+224	106	build	model	model		2026-11-02T02:51:44Z	5.7	
+224	107	build	tool	cargo clippy	bash	2026-11-02T02:51:50Z	0.0	[launched bg_6] Clippy on the cauldron :: cd /home/ladvien/bevy_emerge_loop && cargo clippy -p bevy_cauldron --all-targets -- -D warnings 2>&1 | tail -30
+224	108	build	model	model		2026-11-02T02:51:50Z	6.5	
+224	109	build	tool	shell	bash	2026-11-02T02:51:56Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "pub struct Project" -A40 src/project.rs | grep -n "pub " | head -30; grep -n "pub fn open" sr
+224	110	build	model	model		2026-11-02T02:51:56Z	13.3	
+224	111	build	tool	edit files	write	2026-11-02T02:52:10Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/tests/the_launcher_and_the_command_line_agree.rs
+224	112	build	model	model		2026-11-02T02:52:10Z	10.7	
+224	113	build	tool	shell	bash	2026-11-02T02:52:20Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/launcher.rs'; s=open(p).read() s=s.replace('''/// The argv the next process i
+224	114	build	tool	shell	bash	2026-11-02T02:52:20Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='tests/all.rs'; s=open(p).read() s=s.replace("mod the_launcher_opens_a_project_by_
+224	115	build	bg	cargo clippy	bash	2026-11-02T02:51:53Z	27.2	bg_6 completed: cargo clippy -p bevy_cauldron --all-targets -- -D warnings 2>&1 | tail -30
+224	116	build	model	model		2026-11-02T02:52:20Z	5.3	
+224	117	build	tool	cargo test	bash	2026-11-02T02:52:26Z	60.0	[launched bg_8] Run launcher tests including #219 :: cd /home/ladvien/bevy_emerge_loop && cargo test -p bevy_cauldron --test editor the_launcher 2>&1 | tail -15; cargo test -p bevy_cauldron --lib args 2>&1 | tail 
+224	118	build	model	model		2026-11-02T02:53:26Z	18.4	
+224	119	build	tool	wait: other	wait	2026-11-02T02:53:44Z	21.9	{}
+224	120	build	model	model		2026-11-02T02:54:06Z	6.8	
+224	121	prove	tool	phase mark	bash	2026-11-02T02:54:13Z	0.0	[launched bg_9] Run whole editor binary before committing :: cd /home/ladvien/bevy_emerge_loop && git status --short && python3 tools/loop/steps.py mark prove >/dev/null; cargo test -p bevy_cauldron --test editor 2>&1 | t
+224	122	prove	model	model		2026-11-02T02:54:13Z	22.5	
+224	123	prove	tool	shell	bash	2026-11-02T02:54:35Z	0.1	Implement what's-new in recent and launcher :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/recent.rs'; s=open(p).read() s=s.replace(''' pub projects: Vec<RecentProject>
+224	124	prove	model	model		2026-11-02T02:54:36Z	16.5	
+224	125	prove	tool	edit files	write	2026-11-02T02:54:52Z	0.1	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/tests/the_launcher_lists_what_the_changelog_added_since_you_last_opened.rs
+224	126	prove	model	model		2026-11-02T02:54:52Z	4.2	
+224	127	prove	tool	shell	bash	2026-11-02T02:54:57Z	0.2	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='tests/the_launcher_lists_what_the_changelog_added_since_you_last_opened.rs'; s=op
+224	128	prove	model	model		2026-11-02T02:54:57Z	0.6	
+224	129	prove	tool	wait: other	wait	2026-11-02T02:54:57Z	54.4	{}
+224	130	prove	model	model		2026-11-02T02:55:52Z	3.0	
+224	131	prove	tool	shell	bash	2026-11-02T02:55:55Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rn "fn spacing_comes_from_the_scale" -B12 -A40 src/chrome.rs tests/*.rs | head -90
+224	132	prove	model	model		2026-11-02T02:55:55Z	2.5	
+224	133	prove	tool	shell	bash	2026-11-02T02:55:57Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "pub const GAP_ROW\|pub const GAP_GROUP\|pub const GAP_TIGHT" src/chrome.rs; grep -n "^use\|PA
+224	134	prove	model	model		2026-11-02T02:55:57Z	2.4	
+224	135	prove	tool	cargo test	bash	2026-11-02T02:56:00Z	0.0	[launched bg_10] Rerun launcher and census tests :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -i 's/column_gap: Val::Px(12.0)/column_gap: Val::Px(crate::chrome::GAP_GROUP)/' src/launcher.rs &&
+224	136	prove	model	model		2026-11-02T02:56:00Z	10.9	
+224	137	prove	tool	shell	bash	2026-11-02T02:56:10Z	0.0	cd /home/ladvien/bevy_emerge_loop/assets && cat grimoire/kits.ron; grep -o '"[^"]*\.glb"' grimoire/furniture/library.ron | sort -u | head -5; grep -c glb grimoi
+224	138	prove	model	model		2026-11-02T02:56:11Z	9.7	
+224	139	prove	tool	shell	bash	2026-11-02T02:56:20Z	0.0	cd /tmp/gooey_src_pass219 && grep -rn "InteractionDisabled" src | head -8; grep -n "ValueChange<String>" src/text.rs | head -5; grep -rn "fn .*is_final\|is_fina
+224	140	prove	model	model		2026-11-02T02:56:20Z	20.1	
+224	141	prove	model	model		2026-11-02T02:56:40Z	7.3	
+224	142	prove	tool	wait: other	wait	2026-11-02T02:56:48Z	32.9	{}
+224	143	prove	model	model		2026-11-02T02:57:21Z	9.1	
+224	144	prove	tool	git	bash	2026-11-02T02:57:30Z	0.2	Commit the launcher trio :: cd /home/ladvien/bevy_emerge_loop && git add Cargo.lock crates/bevy_cauldron && git commit -q -F - <<'EOF' feat(cauldron): the launcher, the first screen of a b
+224	145	prove	model	model		2026-11-02T02:57:30Z	22.9	
+224	146	prove	model	model		2026-11-02T02:57:53Z	38.9	
+224	147	prove	tool	shell	bash	2026-11-02T02:58:32Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^use\|naming" src/chooser.rs | head -20; sed -n 596,602p /tmp/gooey_src_pass219/src/widgets.r
+224	148	prove	model	model		2026-11-02T02:58:32Z	4.8	
+224	149	prove	tool	shell	bash	2026-11-02T02:58:37Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/chooser.rs'; s=open(p).read() old='''pub fn create_project(parent: &Path, raw
+224	150	prove	model	model		2026-11-02T02:58:37Z	26.5	
+224	151	prove	tool	edit files	write	2026-11-02T02:59:03Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/src/new_project.rs
+224	152	prove	model	model		2026-11-02T02:59:03Z	11.4	
+224	153	prove	tool	shell	bash	2026-11-02T02:59:15Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/launcher.rs'; s=open(p).read() s=s.replace(''' /// The command line last aske
+224	154	prove	model	model		2026-11-02T02:59:15Z	4.8	
+224	155	prove	tool	shell	bash	2026-11-02T02:59:19Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 225,255p src/harness.rs; ls ../../assets/fonts; grep -rn "—\|…\|·" src/chooser.rs | grep "spawn
+224	156	prove	model	model		2026-11-02T02:59:19Z	18.8	
+224	157	prove	tool	edit files	write	2026-11-02T02:59:38Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/tests/a_new_project_that_names_an_existing_folder_is_refused_beside_the_field.rs
+224	158	prove	model	model		2026-11-02T02:59:38Z	4.6	
+224	159	prove	tool	shell	bash	2026-11-02T02:59:43Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^mod a_n\|^mod a_p\|^mod a_m\|^mod a_o" tests/all.rs | head
+224	160	prove	model	model		2026-11-02T02:59:43Z	2.1	
+224	161	prove	tool	cargo test	bash	2026-11-02T02:59:45Z	0.0	[launched bg_11] Run wizard tests :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -i '61a mod a_new_project_that_names_an_existing_folder_is_refused_beside_the_field;' tests/all.rs
+224	162	prove	model	model		2026-11-02T02:59:45Z	15.4	
+224	163	prove	tool	wait: other	wait	2026-11-02T03:00:00Z	85.4	{}
+224	164	prove	model	model		2026-11-02T03:01:26Z	4.1	
+224	165	prove	tool	cargo test	bash	2026-11-02T03:01:30Z	0.0	[launched bg_12] Clippy and lib tests :: cd /home/ladvien/bevy_emerge_loop && (cargo clippy -p bevy_cauldron --all-targets -- -D warnings 2>&1 | tail -30; cargo test -p bevy_cauldron --lib 2>&1 | tail 
+224	166	prove	tool	shell	bash	2026-11-02T03:01:30Z	0.0	Reading Project::open for stages :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 200,420p src/project.rs
+224	167	prove	model	model		2026-11-02T03:01:30Z	11.8	
+224	168	prove	tool	wait: other	wait	2026-11-02T03:01:42Z	44.1	{}
+224	169	prove	model	model		2026-11-02T03:02:26Z	2.6	
+224	170	prove	tool	cargo clippy	bash	2026-11-02T03:02:28Z	10.4	Fix clippy ptr_arg :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -i 's/fn on_the_launcher(tag: &str, dir: &PathBuf) -> App {/fn on_the_launcher(tag: \&str, dir: \&
+224	171	prove	model	model		2026-11-02T03:02:39Z	5.4	
+224	172	prove	tool	git	bash	2026-11-02T03:02:44Z	0.1	Commit the wizard :: cd /home/ladvien/bevy_emerge_loop && git add crates/bevy_cauldron && git commit -q -F - <<'EOF' feat(cauldron): the launcher's New project wizard refuses an exi
+224	173	prove	model	model		2026-11-02T03:02:44Z	7.0	
+224	174	prove	tool	cargo build	bash	2026-11-02T03:02:51Z	0.9	Build the binary for a smoke run :: cd /home/ladvien/bevy_emerge_loop && cargo build -p bevy_cauldron 2>&1 | tail -2; which ffmpeg import xwd xdotool | head; grep -n "^default\|debugger" crates/be
+224	175	prove	model	model		2026-11-02T03:02:52Z	1.3	
+224	176	prove	tool	shell	bash	2026-11-02T03:02:53Z	0.0	cd /home/ladvien/bevy_emerge_loop && sed -n 15,50p crates/bevy_cauldron/Cargo.toml | cut -c1-200; grep -n "^\[features\]" -A12 crates/bevy_cauldron/Cargo.toml |
+224	177	prove	model	model		2026-11-02T03:02:53Z	5.8	
+224	178	prove	tool	shell	bash	2026-11-02T03:02:59Z	12.2	Launch the real launcher under Xvfb :: mkdir -p /tmp/launcher_smoke_pass219/data/Grimoire /tmp/launcher_smoke_pass219/projects/harbour/assets/grimoire /tmp/launcher_smoke_pass219/projects/meadow/asse
+224	179	prove	model	model		2026-11-02T03:03:11Z	1.4	
+224	180	prove	tool	read files	read	2026-11-02T03:03:13Z	0.0	/tmp/launcher_smoke_pass219/shot.png
+224	181	prove	model	model		2026-11-02T03:03:13Z	4.5	
+224	182	prove	tool	clip record/render	bash	2026-11-02T03:03:17Z	0.0	cd /tmp/launcher_smoke_pass219 && cat editor.log | head -20; kill -0 $(cat pid) && echo alive; grep -n "capture\|screenshot" /home/ladvien/bevy_emerge_loop/tool
+224	183	prove	model	model		2026-11-02T03:03:17Z	2.6	
+224	184	prove	tool	shell	bash	2026-11-02T03:03:20Z	15.2	Run the binary in the foreground :: cd /tmp/launcher_smoke_pass219 && DISPLAY=:99 XDG_DATA_HOME=/tmp/launcher_smoke_pass219/data BEVY_BRP_PORT=15733 timeout 15 /home/ladvien/target/emerge-loop/deb
+224	185	prove	model	model		2026-11-02T03:03:35Z	6.9	
+224	186	prove	tool	shell	bash	2026-11-02T03:03:42Z	0.0	cd /home/ladvien/bevy_emerge_loop/tools/demo && sed -n 1,70p record.py | cut -c1-240; cat storyboards/move_the_camera.json | head -40
+224	187	prove	model	model		2026-11-02T03:03:42Z	4.4	
+224	188	prove	tool	shell	bash	2026-11-02T03:03:47Z	0.7	Run the launcher as a service :: cd /tmp/launcher_smoke_pass219 && DISPLAY=:99 XDG_DATA_HOME=/tmp/launcher_smoke_pass219/data BEVY_BRP_PORT=15733 exec /home/ladvien/target/emerge-loop/debug/bev
+224	189	prove	model	model		2026-11-02T03:03:47Z	5.1	
+224	190	prove	tool	cargo build	bash	2026-11-02T03:03:52Z	37.7	Probe-capture the launcher through the MCP :: cd /home/ladvien/bevy_emerge_loop && cargo build -q -p bevy_cauldron_mcp 2>&1 | tail -3; cat > /tmp/launcher_smoke_pass219/probe.json <<'EOF' {"name":"launcher_
+224	191	prove	model	model		2026-11-02T03:04:30Z	1.9	
+224	192	prove	tool	shell	bash	2026-11-02T03:04:32Z	0.0	cd /tmp/launcher_smoke_pass219/projects/harbour/target/loop/demo/launcher_probe && python3 -c " import json;d=json.load(open('events.json'));print(list(d.keys()
+224	193	prove	model	model		2026-11-02T03:04:32Z	1.0	
+224	194	prove	tool	read files	read	2026-11-02T03:04:33Z	0.0	/tmp/launcher_smoke_pass219/projects/harbour/target/loop/captures/demo_launcher_probe_0/f000_t0.00s.png
+224	195	prove	model	model		2026-11-02T03:04:33Z	10.6	
+224	196	prove	tool	shell	bash	2026-11-02T03:04:44Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/launcher.rs'; s=open(p).read() s=s.replace(''' root.spawn(panel()).with_child
+224	197	prove	model	model		2026-11-02T03:04:44Z	4.7	
+224	198	prove	tool	cargo build	bash	2026-11-02T03:04:48Z	42.0	Rebuild after layout tweaks :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/launcher.rs'; s=open(p).read() s=s.replace("const CARD_WIDTH: f32 = 840.0;","
+224	199	prove	model	model		2026-11-02T03:05:30Z	14.5	
+224	200	prove	tool	cargo build	bash	2026-11-02T03:05:45Z	60.0	[launched bg_13] Swap cards while the form is open :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/launcher.rs'; s=open(p).read() s=s.replace('''/// The line that shows the ref
+224	201	prove	model	model		2026-11-02T03:06:45Z	27.7	
+224	202	prove	tool	wait: other	wait	2026-11-02T03:07:13Z	0.0	{}
+224	203	prove	model	model		2026-11-02T03:07:13Z	1.7	
+224	204	prove	tool	shell	bash	2026-11-02T03:07:14Z	0.0	cd /tmp/launcher_smoke_pass219 && echo kill-old; true
+224	205	prove	tool	edit files	write	2026-11-02T03:07:14Z	0.1	proc://launcher-smoke-pass219/kill
+224	206	prove	model	model		2026-11-02T03:07:15Z	2.2	
+224	207	prove	tool	shell	bash	2026-11-02T03:07:17Z	0.5	Restart the launcher with the new binary :: cd /tmp/launcher_smoke_pass219 && rm -rf projects/orchard; DISPLAY=:99 XDG_DATA_HOME=/tmp/launcher_smoke_pass219/data XDG_DOCUMENTS_DIR=/tmp/launcher_smoke_pass
+224	208	prove	model	model		2026-11-02T03:07:17Z	5.0	
+224	209	prove	tool	clip record/render	bash	2026-11-02T03:07:22Z	4.0	Probe the wizard form position :: cd /home/ladvien/bevy_emerge_loop && cat > /tmp/launcher_smoke_pass219/probe2.json <<'EOF' {"name":"launcher_probe2","fps":4,"setup":[],"chunks":[{"seconds":4.0
+224	210	prove	model	model		2026-11-02T03:07:26Z	1.1	
+224	211	prove	tool	read files	read	2026-11-02T03:07:27Z	0.0	/tmp/launcher_smoke_pass219/projects/harbour/target/loop/captures/demo_launcher_probe2_0/f012_t3.00s.png
+224	212	prove	model	model		2026-11-02T03:07:27Z	15.9	
+224	213	prove	tool	edit files	write	2026-11-02T03:07:43Z	0.2	proc://launcher-smoke-pass219b/kill
+224	214	prove	tool	cargo build	bash	2026-11-02T03:07:43Z	22.8	Write launcher storyboard and rebuild :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -i 's/TextHint("lowercase letters, digits and underscores".into())/TextHint("project name".into())
+224	215	prove	model	model		2026-11-02T03:08:06Z	4.4	
+224	216	prove	tool	shell	bash	2026-11-02T03:08:11Z	0.6	Start the launcher for the clip :: cd /tmp/launcher_smoke_pass219 && rm -rf projects/orchard; DISPLAY=:99 XDG_DATA_HOME=/tmp/launcher_smoke_pass219/data HOME=/tmp/launcher_smoke_pass219/projects 
+224	217	prove	tool	clip record/render	bash	2026-11-02T03:08:11Z	0.6	cd /home/ladvien/bevy_emerge_loop && BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-loop/debug/bevy_cauldron_mcp python3 tools/demo/record.py /tmp/launcher_smoke
+224	218	prove	model	model		2026-11-02T03:08:11Z	2.5	
+224	219	prove	tool	clip record/render	bash	2026-11-02T03:08:14Z	5.1	cd /home/ladvien/bevy_emerge_loop && sleep 3; BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-loop/debug/bevy_cauldron_mcp python3 tools/demo/record.py /tmp/launc
+224	220	prove	model	model		2026-11-02T03:08:19Z	1.0	
+224	221	prove	tool	read files	read	2026-11-02T03:08:20Z	0.1	/tmp/launcher_smoke_pass219/projects/harbour/target/loop/captures/demo_launcher_probe_0/f005_t1.00s.png
+224	222	prove	model	model		2026-11-02T03:08:20Z	3.1	
+224	223	prove	tool	clip record/render	bash	2026-11-02T03:08:23Z	12.5	Record and render the launcher storyboard :: cd /home/ladvien/bevy_emerge_loop && sed -i 's/\[640, 560\]/[640, 517]/g' tools/demo/storyboards/launcher.json && BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-
+224	224	prove	model	model		2026-11-02T03:08:35Z	5.4	
+224	225	prove	tool	clip record/render	bash	2026-11-02T03:08:41Z	19.1	Re-record launcher storyboard in two chunks :: cd /home/ladvien/bevy_emerge_loop && sed -i 's/"chunks": \[{"seconds": 15.0}\]/"chunks": [{"seconds": 7.5}, {"seconds": 7.5}]/' tools/demo/storyboards/launcher.
+224	226	prove	model	model		2026-11-02T03:09:00Z	1.3	
+224	227	prove	tool	read files	read	2026-11-02T03:09:01Z	0.1	/tmp/launcher_smoke_pass219/sheet.png
+224	228	prove	model	model		2026-11-02T03:09:01Z	5.6	
+224	229	prove	tool	edit files	write	2026-11-02T03:09:07Z	0.2	proc://launcher-smoke-pass219c/kill
+224	230	prove	tool	shell	bash	2026-11-02T03:09:07Z	0.5	Fresh launcher for the clip :: cd /tmp/launcher_smoke_pass219 && rm -rf projects/orchard; DISPLAY=:99 XDG_DATA_HOME=/tmp/launcher_smoke_pass219/data HOME=/tmp/launcher_smoke_pass219/projects 
+224	231	prove	tool	clip record/render	bash	2026-11-02T03:09:07Z	22.8	cd /home/ladvien/bevy_emerge_loop && sleep 4; BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-loop/debug/bevy_cauldron_mcp python3 tools/demo/record.py tools/demo
+224	232	prove	model	model		2026-11-02T03:09:30Z	1.3	
+224	233	prove	tool	read files	read	2026-11-02T03:09:31Z	0.1	/tmp/launcher_smoke_pass219/sheet.png
+224	234	prove	model	model		2026-11-02T03:09:31Z	10.1	
+224	235	prove	tool	edit files	write	2026-11-02T03:09:41Z	0.2	proc://launcher-smoke-pass219d/kill
+224	236	prove	tool	clip record/render	bash	2026-11-02T03:09:41Z	5.2	Render clip and add changelog lines :: cd /home/ladvien/bevy_emerge_loop && python3 tools/demo/render.py /tmp/launcher_smoke_pass219/projects/harbour/target/loop/demo/launcher/events.json --out docs/
+224	237	prove	model	model		2026-11-02T03:09:47Z	6.0	
+224	238	prove	tool	shell	bash	2026-11-02T03:09:53Z	3.1	cd /home/ladvien/bevy_emerge_loop && python3 tools/demo/stale.py | head -20; sed -n 1,60p tools/demo/stale.py | head -60
+224	239	prove	model	model		2026-11-02T03:09:56Z	5.4	
+224	240	prove	tool	shell	bash	2026-11-02T03:10:01Z	0.0	cd /home/ladvien/bevy_emerge_loop && cat docs/media/README.md | cut -c1-700
+224	241	prove	model	model		2026-11-02T03:10:01Z	5.8	
+224	242	prove	tool	shell	bash	2026-11-02T03:10:07Z	0.0	cd /home/ladvien/bevy_emerge_loop && grep -n "^#\|chooser\|bevy_cauldron \." README.md | head -50; ls docs/guide
+224	243	prove	model	model		2026-11-02T03:10:07Z	1.2	
+224	244	prove	tool	shell	bash	2026-11-02T03:10:08Z	0.0	cd /home/ladvien/bevy_emerge_loop && sed -n 15,48p README.md | cut -c1-400; grep -n "menu\|chooser\|launcher" docs/guide/getting-started.md | head -20
+224	245	prove	model	model		2026-11-02T03:10:08Z	2.8	
+224	246	prove	tool	shell	bash	2026-11-02T03:10:11Z	0.0	cd /home/ladvien/bevy_emerge_loop && sed -n 1,24p docs/guide/getting-started.md | cut -c1-300
+224	247	prove	model	model		2026-11-02T03:10:11Z	4.4	
+224	248	prove	tool	cargo build	bash	2026-11-02T03:10:15Z	0.1	Docs for the launcher, stage files :: cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' p='README.md'; s=open(p).read() old="On your own game, pass its root instead of `.`;" new="Run it with no
+224	249	prove	model	model		2026-11-02T03:10:15Z	4.5	
+224	250	prove	tool	shell	bash	2026-11-02T03:10:20Z	0.2	cd /home/ladvien/bevy_emerge_loop && sed -i 's/opening a project starts the editor on it, and \*\*Copy/opening a project starts the editor on it, at its kit and
+224	251	prove	model	model		2026-11-02T03:10:20Z	4.9	
+224	252	prove	tool	shell	bash	2026-11-02T03:10:25Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "ScreenPlugin\|Chosen\|NextState" tests/the_way_back_actually_goes_back.rs tests/an_agent_can_
+224	253	prove	model	model		2026-11-02T03:10:25Z	1.1	
+224	254	prove	tool	shell	bash	2026-11-02T03:10:26Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 30,130p tests/an_agent_can_enter_the_map_it_made.rs
+224	255	prove	model	model		2026-11-02T03:10:26Z	25.4	
+224	256	prove	tool	shell	bash	2026-11-02T03:10:52Z	0.0	cd /tmp/gooey_src_pass219 && sed -n 336,432p src/widgets.rs; sed -n 10,60p src/progress.rs
+224	257	prove	model	model		2026-11-02T03:10:52Z	8.9	
+224	258	prove	tool	shell	bash	2026-11-02T03:11:00Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/project.rs'; s=open(p).read() old='''impl Project { /// Read a project, or sa
+224	259	prove	model	model		2026-11-02T03:11:00Z	6.4	
+224	260	prove	tool	shell	bash	2026-11-02T03:11:07Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/screen.rs'; s=open(p).read() s=s.replace(''' /// The chooser: kits, maps, and
+224	261	prove	model	model		2026-11-02T03:11:07Z	7.5	
+224	262	prove	tool	shell	bash	2026-11-02T03:11:14Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/main.rs'; s=open(p).read() i=s.index(" // **A door named on the command line 
+224	263	prove	model	model		2026-11-02T03:11:14Z	26.9	
+224	264	prove	tool	edit files	write	2026-11-02T03:11:41Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/src/loading.rs
+224	265	prove	model	model		2026-11-02T03:11:41Z	9.8	
+224	266	prove	tool	cargo build	bash	2026-11-02T03:11:51Z	60.0	[launched bg_14] Build the loader :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/loading.rs'; s=open(p).read() i=s.index("fn build_the_screen") j=s.index("///
+224	267	prove	model	model		2026-11-02T03:12:51Z	24.9	
+224	268	prove	tool	edit files	write	2026-11-02T03:13:16Z	0.0	/home/ladvien/bevy_emerge_loop/crates/bevy_cauldron/tests/a_slow_load_shows_a_spinner_then_progress_then_the_editor.rs
+224	269	prove	bg	shell	bash	2026-11-02T03:12:08Z	67.6	bg_14 completed: python3 - <<'EOF' p='src/loading.rs'; s=open(p).read() i=s.index("fn build_the_screen") j=s.index("/// Takes the answ...
+224	270	prove	model	model		2026-11-02T03:13:16Z	2.8	
+224	271	prove	tool	shell	bash	2026-11-02T03:13:19Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^mod a_s\|^mod a_r\|^mod a_t" tests/all.rs | head -8
+224	272	prove	model	model		2026-11-02T03:13:19Z	1.3	
+224	273	prove	tool	shell	bash	2026-11-02T03:13:20Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "^mod a_s" tests/all.rs | head -3; grep -n "^mod a_sk\|^mod a_si\|^mod a_sl\|^mod a_sm\|^mod a
+224	274	prove	model	model		2026-11-02T03:13:20Z	2.0	
+224	275	prove	tool	cargo test	bash	2026-11-02T03:13:22Z	0.0	[launched bg_15] Register and run loader tests :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 108,112p tests/all.rs; sed -i '110a mod a_slow_load_shows_a_spinner_then_progress_then_the_edit
+224	276	prove	model	model		2026-11-02T03:13:22Z	8.2	
+224	277	prove	tool	shell	bash	2026-11-02T03:13:30Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rn "pub struct Problem\b" src ../bevy_grimoire_core/src | head; grep -n "^pub fn\|^pub struct\|^
+224	278	prove	model	model		2026-11-02T03:13:30Z	1.5	
+224	279	prove	tool	shell	bash	2026-11-02T03:13:32Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates && sed -n 95,160p bevy_grimoire_core/src/problem.rs; grep -n "pub fn\|pub struct\|pub enum" bevy_grimoire_core/src/relo
+224	280	prove	model	model		2026-11-02T03:13:32Z	1.6	
+224	281	prove	tool	shell	bash	2026-11-02T03:13:34Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates && sed -n 20,60p bevy_grimoire_core/src/reload_check.rs; sed -n 165,235p bevy_grimoire_core/src/reload_check.rs; sed -n
+224	282	prove	model	model		2026-11-02T03:13:34Z	4.1	
+224	283	prove	tool	shell	bash	2026-11-02T03:13:38Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 60,108p src/reload_files.rs; sed -n 108,225p src/reload_files.rs | grep -n "pub fn files" -B8 -
+224	284	prove	model	model		2026-11-02T03:13:38Z	6.7	
+224	285	prove	tool	shell	bash	2026-11-02T03:13:44Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates && grep -n "Refusal\|pub struct Location\|pub fn at\|impl Location" -A3 bevy_grimoire_core/src/problem.rs | head -50; g
+224	286	prove	model	model		2026-11-02T03:13:44Z	2.4	
+224	287	prove	tool	shell	bash	2026-11-02T03:13:47Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates && sed -n 1,95p bevy_grimoire_core/src/problem.rs
+224	288	prove	tool	wait: other	wait	2026-11-02T03:13:47Z	8.7	{}
+224	289	prove	model	model		2026-11-02T03:13:55Z	6.5	
+224	290	prove	tool	git	bash	2026-11-02T03:14:02Z	0.2	cd /home/ladvien/bevy_emerge_loop && git add -A crates && git commit -q -F - <<'EOF' feat(cauldron): a project opens on the loading screen as named stages (#221
+224	291	prove	model	model		2026-11-02T03:14:02Z	12.0	
+224	292	prove	tool	shell	bash	2026-11-02T03:14:14Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates && grep -n '"terrain"\|"water_plan"\|"standards"' bevy_grimoire_core/src/reload.rs | head; grep -rn "terrain" bevy_caul
+224	293	prove	model	model		2026-11-02T03:14:14Z	4.5	
+224	294	prove	tool	shell	bash	2026-11-02T03:14:19Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "terrain" tests/a_terrain_file_that_does_not_fill_its_shape_is_refused.rs | head -12
+224	295	prove	model	model		2026-11-02T03:14:19Z	4.5	
+224	296	prove	tool	shell	bash	2026-11-02T03:14:23Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 22,40p tests/a_terrain_file_that_does_not_fill_its_shape_is_refused.rs
+224	297	prove	model	model		2026-11-02T03:14:23Z	23.1	
+224	298	prove	tool	cargo build	bash	2026-11-02T03:14:46Z	60.0	[launched bg_16] Build the report card :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/loading.rs'; s=open(p).read() s=s.replace('''//! Cancel returns to the launch
+224	299	prove	model	model		2026-11-02T03:15:46Z	16.2	
+224	300	prove	tool	shell	bash	2026-11-02T03:16:03Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' import re p='src/loading.rs'; s=open(p).read() # remove failure line + back button f
+224	301	prove	model	model		2026-11-02T03:16:03Z	11.0	
+224	302	prove	tool	shell	bash	2026-11-02T03:16:14Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='tests/a_slow_load_shows_a_spinner_then_progress_then_the_editor.rs'; s=open(p).re
+224	303	prove	bg	shell	bash	2026-11-02T03:14:57Z	77.2	bg_16 completed: python3 - <<'EOF' p='src/loading.rs'; s=open(p).read() s=s.replace('''//! Cancel returns to the launcher.''','''//! ...
+224	304	prove	model	model		2026-11-02T03:16:14Z	2.7	
+224	305	prove	tool	cargo test	bash	2026-11-02T03:16:16Z	0.0	[launched bg_17] Run loader and report tests :: cd /home/ladvien/bevy_emerge_loop && cargo test -p bevy_cauldron --test editor a_slow_load 2>&1 | grep -E "^(error|warning)|test |panicked|assert|Finished" -A4 
+224	306	prove	model	model		2026-11-02T03:16:16Z	11.4	
+224	307	prove	tool	shell	bash	2026-11-02T03:16:28Z	0.1	cd /home/ladvien/bevy_emerge_loop && du -sh assets assets/grimoire; ls assets/grimoire/maps; ls assets/grimoire/furniture; git check-ignore assets/grimoire/voca
+224	308	prove	model	model		2026-11-02T03:16:28Z	5.0	
+224	309	prove	tool	wait: other	wait	2026-11-02T03:16:33Z	84.5	{}
+224	310	prove	model	model		2026-11-02T03:17:58Z	2.8	
+224	311	prove	tool	cargo clippy	bash	2026-11-02T03:18:00Z	17.4	Clippy then build binary :: cd /home/ladvien/bevy_emerge_loop && cargo clippy -p bevy_cauldron --all-targets -- -D warnings 2>&1 | grep -E "^(error|warning)" -A12 | head -40; cargo build -
+224	312	prove	model	model		2026-11-02T03:18:18Z	5.6	
+224	313	prove	tool	cargo clippy	bash	2026-11-02T03:18:23Z	50.1	Fix clippy and rebuild :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/loading.rs'; s=open(p).read() s=s.replace("Query<&mut Node, (With<LoadingPane
+224	314	prove	model	model		2026-11-02T03:19:13Z	4.2	
+224	315	prove	tool	git	bash	2026-11-02T03:19:18Z	0.2	cd /home/ladvien/bevy_emerge_loop && git add -A crates && git commit -q -F - <<'EOF' feat(cauldron): the load report card lists every file that does not read (#
+224	316	prove	model	model		2026-11-02T03:19:18Z	4.8	
+224	317	prove	tool	shell	bash	2026-11-02T03:19:23Z	0.6	Start the loading demo editor :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=4000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	318	prove	tool	clip record/render	bash	2026-11-02T03:19:23Z	0.6	cd /home/ladvien/bevy_emerge_loop && cat > /tmp/load_demo_pass219/probe.json <<'EOF' {"name":"loading_probe","fps":2,"setup":[],"chunks":[{"seconds":9.0},{"seco
+224	319	prove	model	model		2026-11-02T03:19:23Z	4.0	
+224	320	prove	tool	edit files	write	2026-11-02T03:19:27Z	0.1	proc://loading-demo-pass219/kill
+224	321	prove	tool	clip record/render	bash	2026-11-02T03:19:27Z	5.2	Start loading demo editor and probe-capture :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=4000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	322	prove	model	model		2026-11-02T03:19:33Z	4.0	
+224	323	prove	tool	shell	bash	2026-11-02T03:19:37Z	1.5	Start loading demo editor :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=4000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	324	prove	tool	clip record/render	bash	2026-11-02T03:19:37Z	1.5	cd /home/ladvien/bevy_emerge_loop && BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-loop/debug/bevy_cauldron_mcp python3 tools/demo/record.py /tmp/load_demo_pass
+224	325	prove	model	model		2026-11-02T03:19:38Z	5.2	
+224	326	prove	tool	shell	bash	2026-11-02T03:19:43Z	12.3	ss -ltnp 2>/dev/null | grep 1573; sleep 12; ss -ltnp 2>/dev/null | grep 1573; pgrep -af "bevy_cauldron /tmp/load" | head -3
+224	327	prove	model	model		2026-11-02T03:19:56Z	5.4	
+224	328	prove	tool	edit files	write	2026-11-02T03:20:01Z	0.2	proc://loading-demo-pass219b/kill
+224	329	prove	tool	shell	bash	2026-11-02T03:20:01Z	0.7	Restart loading demo editor :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=4000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	330	prove	tool	clip record/render	bash	2026-11-02T03:20:01Z	0.7	cd /home/ladvien/bevy_emerge_loop && BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-loop/debug/bevy_cauldron_mcp python3 tools/demo/record.py /tmp/load_demo_pass
+224	331	prove	model	model		2026-11-02T03:20:02Z	11.3	
+224	332	prove	tool	edit files	write	2026-11-02T03:20:13Z	0.2	proc://loading-demo-pass219c/kill
+224	333	prove	tool	shell	bash	2026-11-02T03:20:14Z	0.7	Restart loading demo editor, slower stages :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=6000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	334	prove	tool	clip record/render	bash	2026-11-02T03:20:14Z	18.9	cd /home/ladvien/bevy_emerge_loop && for i in $(seq 1 40); do curl -s -m 1 -X POST http://127.0.0.1:15734 -H 'content-type: application/json' -d '{"jsonrpc":"2.
+224	335	prove	model	model		2026-11-02T03:20:32Z	3.4	
+224	336	prove	tool	shell	bash	2026-11-02T03:20:36Z	0.2	cd /tmp/load_demo_pass219/p/target/loop/captures && ls demo_loading_probe_1 | head -3; python3 - <<'EOF' from PIL import Image import glob fs=sorted(glob.glob('
+224	337	prove	tool	read files	read	2026-11-02T03:20:36Z	0.2	/tmp/load_demo_pass219/sheet.png
+224	338	prove	model	model		2026-11-02T03:20:36Z	2.3	
+224	339	prove	tool	shell	bash	2026-11-02T03:20:38Z	0.2	cd /tmp/load_demo_pass219 && python3 - <<'EOF' from PIL import Image import glob fs=sorted(glob.glob('/tmp/load_demo_pass219/p/target/loop/captures/demo_loading
+224	340	prove	tool	read files	read	2026-11-02T03:20:38Z	0.2	/tmp/load_demo_pass219/sheet.png
+224	341	prove	model	model		2026-11-02T03:20:39Z	4.7	
+224	342	prove	tool	clip record/render	bash	2026-11-02T03:20:43Z	7.0	cd /home/ladvien/bevy_emerge_loop && sleep 6; cat > /tmp/load_demo_pass219/probe3.json <<'EOF' {"name":"loading_probe3","fps":2,"setup":[],"chunks":[{"seconds":
+224	343	prove	tool	read files	read	2026-11-02T03:20:43Z	7.0	/tmp/load_demo_pass219/p/target/loop/captures/demo_loading_probe3_0/f000_t0.00s.png
+224	344	prove	model	model		2026-11-02T03:20:50Z	1.2	
+224	345	prove	tool	shell	bash	2026-11-02T03:20:52Z	0.0	ls /tmp/load_demo_pass219/p/target/loop/captures/ | head; ls /tmp/load_demo_pass219/p/target/loop/captures/demo_loading_probe3_0* 2>/dev/null | head -4
+224	346	prove	model	model		2026-11-02T03:20:52Z	1.0	
+224	347	prove	tool	read files	read	2026-11-02T03:20:53Z	0.0	/tmp/load_demo_pass219/p/target/loop/captures/demo_loading_probe3_0/f001_t0.50s.png
+224	348	prove	model	model		2026-11-02T03:20:53Z	11.4	
+224	349	prove	tool	edit files	write	2026-11-02T03:21:04Z	0.2	proc://loading-demo-pass219d/kill
+224	350	prove	tool	cargo build	bash	2026-11-02T03:21:04Z	33.3	Tidy the report card and rebuild :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' p='src/loading.rs'; s=open(p).read() s=s.replace('format!("{} did not read", file.fi
+224	351	prove	model	model		2026-11-02T03:21:38Z	6.6	
+224	352	prove	tool	shell	bash	2026-11-02T03:21:44Z	0.1	cd /home/ladvien/bevy_emerge_loop && cat > tools/demo/storyboards/loading.json <<'EOF' { "name": "loading", "fps": 8, "scale": 1, "width": 960, "setup": [], "ch
+224	353	prove	tool	shell	bash	2026-11-02T03:21:44Z	0.5	Start loading demo editor, 3.5 s stages :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=3500 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	354	prove	tool	clip record/render	bash	2026-11-02T03:21:44Z	23.1	cd /home/ladvien/bevy_emerge_loop && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:15734 -H 'content-type: application/json' -d '{"jsonrpc":"2.
+224	355	prove	model	model		2026-11-02T03:22:07Z	1.1	
+224	356	prove	tool	read files	read	2026-11-02T03:22:08Z	0.1	/tmp/load_demo_pass219/sheet2.png
+224	357	prove	model	model		2026-11-02T03:22:09Z	10.3	
+224	358	prove	tool	clip record/render	bash	2026-11-02T03:22:19Z	0.9	cd /home/ladvien/bevy_emerge_loop && BEVY_GRIMOIRE_MCP=/home/ladvien/target/emerge-loop/debug/bevy_cauldron_mcp python3 tools/demo/record.py /tmp/load_demo_pass
+224	359	prove	tool	read files	read	2026-11-02T03:22:19Z	0.9	/tmp/load_demo_pass219/p/target/loop/captures/demo_loading_probe3_0/f001_t0.50s.png
+224	360	prove	model	model		2026-11-02T03:22:20Z	4.9	
+224	361	prove	tool	shell	bash	2026-11-02T03:22:25Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "did not read\|CARD_WIDTH" src/loading.rs; git status --short | head
+224	362	prove	model	model		2026-11-02T03:22:25Z	5.6	
+224	363	prove	tool	shell	bash	2026-11-02T03:22:30Z	0.1	ls -la --time-style=full-iso /tmp/load_demo_pass219/p/target/loop/captures/demo_loading_probe3_0/ /home/ladvien/target/emerge-loop/debug/bevy_cauldron | head; d
+224	364	prove	model	model		2026-11-02T03:22:31Z	7.6	
+224	365	prove	tool	shell	bash	2026-11-02T03:22:38Z	0.2	pgrep -af bevy_cauldron | cut -c1-200; ss -ltnp 2>/dev/null | grep 15734
+224	366	prove	model	model		2026-11-02T03:22:38Z	10.7	
+224	367	prove	tool	shell	bash	2026-11-02T03:22:49Z	2.3	strings -a /home/ladvien/target/emerge-loop/debug/bevy_cauldron | grep -c "file did not read"; strings -a /home/ladvien/target/emerge-loop/debug/bevy_cauldron |
+224	368	prove	model	model		2026-11-02T03:22:51Z	5.7	
+224	369	prove	tool	shell	bash	2026-11-02T03:22:57Z	0.0	cp /tmp/load_demo_pass219/p/target/loop/captures/demo_loading_probe3_0/f001_t0.50s.png /tmp/load_demo_pass219/card_new.png
+224	370	prove	tool	read files	read	2026-11-02T03:22:57Z	0.0	/tmp/load_demo_pass219/card_new.png
+224	371	prove	model	model		2026-11-02T03:22:57Z	1.1	
+224	372	prove	tool	shell	bash	2026-11-02T03:22:58Z	0.0	ls -la /tmp/load_demo_pass219/ | head; ls /tmp | grep -c .
+224	373	prove	model	model		2026-11-02T03:22:58Z	3.4	
+224	374	prove	tool	read files	read	2026-11-02T03:23:02Z	0.0	/tmp/load_demo_pass219/card_new.png
+224	375	prove	model	model		2026-11-02T03:23:02Z	8.0	
+224	376	prove	tool	edit files	write	2026-11-02T03:23:10Z	0.2	proc://loading-demo-pass219e/kill
+224	377	prove	tool	shell	bash	2026-11-02T03:23:10Z	0.0	cd /home/ladvien/bevy_emerge_loop && cat > tools/demo/storyboards/loading.json <<'EOF' { "name": "loading", "fps": 8, "scale": 1, "width": 960, "setup": [], "ch
+224	378	prove	tool	shell	bash	2026-11-02T03:23:10Z	0.8	Start loading demo editor, 3 s stages :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=3000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	379	prove	tool	clip record/render	bash	2026-11-02T03:23:10Z	25.7	cd /home/ladvien/bevy_emerge_loop && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:15734 -H 'content-type: application/json' -d '{"jsonrpc":"2.
+224	380	prove	model	model		2026-11-02T03:23:36Z	1.2	
+224	381	prove	tool	read files	read	2026-11-02T03:23:37Z	0.1	/tmp/load_demo_pass219/sheet3.png
+224	382	prove	model	model		2026-11-02T03:23:37Z	12.4	
+224	383	prove	tool	edit files	write	2026-11-02T03:23:50Z	0.3	proc://loading-demo-pass219f/kill
+224	384	prove	tool	shell	bash	2026-11-02T03:23:50Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' import json p='tools/demo/storyboards/loading.json'; d=json.load(open(p)) d['steps']=[ {"at":0.2,"caption
+224	385	prove	tool	shell	bash	2026-11-02T03:23:50Z	0.7	Start loading demo editor again :: cd /tmp/load_demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/load_demo_pass219/data GRIMOIRE_LOAD_STAGE_DELAY_MS=3000 BEVY_BRP_PORT=15734 exec /home/ladvien/ta
+224	386	prove	tool	clip record/render	bash	2026-11-02T03:23:50Z	23.5	cd /home/ladvien/bevy_emerge_loop && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:15734 -H 'content-type: application/json' -d '{"jsonrpc":"2.
+224	387	prove	model	model		2026-11-02T03:24:13Z	1.8	
+224	388	prove	tool	shell	bash	2026-11-02T03:24:15Z	0.0	cp /tmp/load_demo_pass219/sheet4.png /tmp/load_demo_pass219/sheet4_view.png
+224	389	prove	tool	read files	read	2026-11-02T03:24:15Z	0.0	/tmp/load_demo_pass219/sheet4_view.png
+224	390	prove	model	model		2026-11-02T03:24:15Z	1.0	
+224	391	prove	tool	read files	read	2026-11-02T03:24:16Z	0.1	/tmp/load_demo_pass219/sheet4_view.png
+224	392	prove	model	model		2026-11-02T03:24:16Z	7.1	
+224	393	prove	tool	edit files	write	2026-11-02T03:24:24Z	0.3	proc://loading-demo-pass219g/kill
+224	394	prove	tool	cargo build	bash	2026-11-02T03:24:24Z	3.9	cd /home/ladvien/bevy_emerge_loop && python3 tools/changelog/changelog.py add --id 222-load-report --sha 5e8e0b3 --title "After a project loads, a report card l
+224	395	prove	model	model		2026-11-02T03:24:28Z	5.9	
+224	396	prove	tool	github	bash	2026-11-02T03:24:34Z	0.5	cd /home/ladvien/bevy_emerge_loop && gh issue view 208 --repo bevy-coven/bevy_grimoire --json body --jq .body | grep -n "216\|218\|219\|220\|221\|222" | head
+224	397	prove	model	model		2026-11-02T03:24:34Z	12.2	
+224	398	ship	tool	phase mark	bash	2026-11-02T03:24:46Z	0.0	[launched bg_21] Push the cluster through the gate :: cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/steps.py mark ship >/dev/null; git fetch -q origin && git status -sb | head -3; cp /home/ladvien/target/
+224	399	ship	model	model		2026-11-02T03:24:46Z	8.1	
+224	400	ship	tool	shell	bash	2026-11-02T03:24:55Z	0.2	rm -rf /tmp/demo_pass219 && mkdir -p /tmp/demo_pass219/p && cp -r /home/ladvien/bevy_emerge_loop/assets /tmp/demo_pass219/p/assets && ls /tmp/demo_pass219/p/ass
+224	401	ship	tool	shell	bash	2026-11-02T03:24:55Z	0.2	Start the demo editor on the bedroom map :: cd /tmp/demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/demo_pass219/data BEVY_BRP_PORT=15710 exec /tmp/bevy_cauldron_demo_pass219 . bedroom
+224	402	ship	model	model		2026-11-02T03:24:55Z	3.7	
+224	403	ship	tool	shell	bash	2026-11-02T03:24:59Z	0.9	Start the demo editor on the bedroom map :: cd /tmp/demo_pass219/p && DISPLAY=:99 XDG_DATA_HOME=/tmp/demo_pass219/data BEVY_BRP_PORT=15710 exec /tmp/bevy_cauldron_demo_pass219 . bedroom
+224	404	ship	model	model		2026-11-02T03:24:59Z	5.8	
+224	405	ship	tool	clip record/render	bash	2026-11-02T03:25:05Z	20.2	Record and render the hero demo :: cd /home/ladvien/bevy_emerge_loop && export BEVY_GRIMOIRE_MCP=/tmp/bevy_cauldron_mcp_pass219 && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:1
+224	406	ship	model	model		2026-11-02T03:25:25Z	2.3	
+224	407	ship	tool	shell	bash	2026-11-02T03:25:28Z	4.2	cd /home/ladvien/bevy_emerge_loop && python3 tools/demo/check.py /tmp/demo_pass219/p/target/loop/demo/hero/events.json /tmp/demo_pass219/out/hero.gif 2>&1 | tai
+224	408	ship	tool	read files	read	2026-11-02T03:25:28Z	4.3	/tmp/demo_pass219/out/hero-sheet-v1.png
+224	409	ship	model	model		2026-11-02T03:25:32Z	4.1	
+224	410	ship	tool	read files	read	2026-11-02T03:25:36Z	0.3	/tmp/demo_pass219/out/hero-sheet-v1.png
+224	411	ship	model	model		2026-11-02T03:25:36Z	3.8	
+224	412	ship	tool	wait: other	wait	2026-11-02T03:25:40Z	399.0	{}
+224	413	ship	model	model		2026-11-02T03:32:19Z	6.1	
+224	414	ship	tool	clip record/render	bash	2026-11-02T03:32:25Z	0.0	[launched bg_22] Record all eight standing demos :: cd /home/ladvien/bevy_emerge_loop && export BEVY_GRIMOIRE_MCP=/tmp/bevy_cauldron_mcp_pass219 && cat > /tmp/demo_pass219/run_all.sh <<'EOF' #!/bin/bash cd /home/
+224	415	ship	model	model		2026-11-02T03:32:25Z	12.3	
+224	416	ship	tool	github	bash	2026-11-02T03:32:38Z	11.0	Comment on the cluster's issues :: cd /home/ladvien/bevy_emerge_loop && R=bevy-coven/bevy_grimoire && gh issue comment 216 --repo $R --body "Shipped in 8ce3b16 (pushed to main, gate green). Accep
+224	417	ship	model	model		2026-11-02T03:32:49Z	4.4	
+224	418	ship	tool	github	bash	2026-11-02T03:32:53Z	7.8	Tick UI-00 and check the issues closed :: cd /home/ladvien/bevy_emerge_loop && R=bevy-coven/bevy_grimoire && gh label create assumed-decision --color FBCA04 --repo $R 2>/dev/null; gh issue edit 218 --re
+224	419	ship	model	model		2026-11-02T03:33:01Z	8.1	
+224	420	ship	tool	shell	bash	2026-11-02T03:33:09Z	0.4	date; cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "toast" src/chrome.rs | head -30; grep -n "pub fn toast\|pub struct Toast\|pub struct No
+224	421	ship	model	model		2026-11-02T03:33:10Z	9.3	
+224	422	ship	tool	github	bash	2026-11-02T03:33:19Z	0.6	cd /home/ladvien/bevy_emerge_loop && gh issue view 96 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body, (.comments[-3:][]|"--- "+.body)' | cut -
+224	423	ship	model	model		2026-11-02T03:33:19Z	5.8	
+224	424	ship	tool	shell	bash	2026-11-02T03:33:25Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 1555,1700p src/chrome.rs
+224	425	ship	model	model		2026-11-02T03:33:25Z	5.0	
+224	426	ship	tool	shell	bash	2026-11-02T03:33:30Z	0.2	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rln "ProblemBanner\|ToastLayer" tests src | head; grep -rn "ProblemBanner" tests | head -8; sed 
+224	427	ship	model	model		2026-11-02T03:33:31Z	5.0	
+224	428	ship	tool	shell	bash	2026-11-02T03:33:35Z	0.2	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 4870,4930p tests/headless.rs; grep -n "ProblemBanner\|ToastLayer\|TOAST_SECS" src/notice.rs | h
+224	429	ship	model	model		2026-11-02T03:33:36Z	13.7	
+224	430	ship	tool	github	bash	2026-11-02T03:33:50Z	1.5	cd /home/ladvien/bevy_emerge_loop && gh issue view 55 --repo bevy-coven/bevy_elements --json state,stateReason,title,comments --jq '"\(.state) \(.stateReason) \
+224	431	ship	model	model		2026-11-02T03:33:51Z	5.8	
+224	432	ship	tool	shell	bash	2026-11-02T03:33:57Z	0.2	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -rln "toast\|Toast" tests | head; grep -rn "toast" tests/*.rs | grep -v "^tests/the_toast_is_on_s
+224	433	ship	model	model		2026-11-02T03:33:57Z	11.8	
+224	434	ship	tool	github	bash	2026-11-02T03:34:09Z	1.5	cd /home/ladvien/bevy_emerge_loop && gh issue view 129 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body[0:1800], (.comments[-2:][]|"--- "+.body[
+224	435	ship	model	model		2026-11-02T03:34:10Z	7.2	
+224	436	ship	tool	shell	bash	2026-11-02T03:34:18Z	0.0	cd /tmp/gooey_src_pass219 && sed -n 1,80p src/toast.rs; sed -n 256,360p src/toast.rs; grep -n "ToastAction" -B2 -A12 src/toast.rs | sed -n 1,50p
+224	437	ship	model	model		2026-11-02T03:34:18Z	12.7	
+224	438	ship	tool	github	bash	2026-11-02T03:34:30Z	0.8	cd /home/ladvien/bevy_emerge_loop && gh issue view 152 --repo bevy-coven/bevy_grimoire --json body,comments --jq '.body[0:2500], (.comments[]|"--- "+.body[0:180
+224	439	ship	model	model		2026-11-02T03:34:31Z	10.8	
+224	440	ship	tool	shell	bash	2026-11-02T03:34:42Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 1,60p tests/leaf.rs | cut -c1-220
+224	441	ship	model	model		2026-11-02T03:34:42Z	11.2	
+224	442	ship	tool	wait: other	wait	2026-11-02T03:34:53Z	46.4	{}
+224	443	ship	model	model		2026-11-02T03:35:40Z	6.4	
+224	444	ship	tool	shell	bash	2026-11-02T03:35:46Z	0.1	cd /tmp/demo_pass219/out && for f in *.check; do echo "== $f"; tail -5 $f; done 2>/dev/null | head -80
+224	445	ship	model	model		2026-11-02T03:35:46Z	8.0	
+224	446	ship	tool	clip record/render	bash	2026-11-02T03:35:54Z	60.1	[launched bg_23] Retry the two failing demos :: cd /home/ladvien/bevy_emerge_loop && export BEVY_GRIMOIRE_MCP=/tmp/bevy_cauldron_mcp_pass219 && for pair in hero:hero:600 place_and_undo:place-and-undo:760; do 
+224	447	ship	model	model		2026-11-02T03:36:55Z	6.2	
+224	448	ship	tool	wait: other	wait	2026-11-02T03:37:01Z	178.2	{}
+224	449	ship	model	model		2026-11-02T03:39:59Z	6.1	
+224	450	ship	tool	edit files	write	2026-11-02T03:40:05Z	0.4	proc://demo-editor-pass219b/kill
+224	451	ship	tool	shell	bash	2026-11-02T03:40:06Z	0.5	rm -rf /tmp/demo_pass219/p2 && mkdir -p /tmp/demo_pass219/p2 && cp -r /home/ladvien/bevy_emerge_loop/assets /tmp/demo_pass219/p2/assets && echo ok
+224	452	ship	model	model		2026-11-02T03:40:06Z	5.7	
+224	453	ship	tool	shell	bash	2026-11-02T03:40:12Z	1.2	Restart the demo editor on a fresh project copy :: cd /tmp/demo_pass219/p2 && DISPLAY=:99 XDG_DATA_HOME=/tmp/demo_pass219/data BEVY_BRP_PORT=15710 exec /tmp/bevy_cauldron_demo_pass219 . bedroom
+224	454	ship	tool	clip record/render	bash	2026-11-02T03:40:12Z	60.2	[launched bg_24] Re-record hero and place-and-undo on the fresh editor :: cd /home/ladvien/bevy_emerge_loop && export BEVY_GRIMOIRE_MCP=/tmp/bevy_cauldron_mcp_pass219 && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:1
+224	455	ship	model	model		2026-11-02T03:41:12Z	6.3	
+224	456	ship	tool	shell	bash	2026-11-02T03:41:18Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' import json d=json.load(open('tools/demo/storyboards/hero.json')) print(d['chunks'], d.get('fps')) for s 
+224	457	ship	model	model		2026-11-02T03:41:19Z	8.3	
+224	458	ship	tool	wait: other	wait	2026-11-02T03:41:27Z	22.2	{}
+224	459	ship	model	model		2026-11-02T03:41:49Z	6.4	
+224	460	ship	tool	git	bash	2026-11-02T03:41:56Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' import json p='tools/demo/storyboards/hero.json'; d=json.load(open(p)) d['chunks'][0]['seconds']=4.4 for 
+224	461	ship	model	model		2026-11-02T03:41:56Z	5.9	
+224	462	ship	tool	edit files	write	2026-11-02T03:42:02Z	0.3	proc://demo-editor-pass219c/kill
+224	463	ship	tool	shell	bash	2026-11-02T03:42:02Z	0.1	rm -rf /tmp/demo_pass219/p3 && mkdir -p /tmp/demo_pass219/p3 && cp -r /home/ladvien/bevy_emerge_loop/assets /tmp/demo_pass219/p3/assets && cp /tmp/demo_pass219/
+224	464	ship	model	model		2026-11-02T03:42:02Z	5.9	
+224	465	ship	tool	shell	bash	2026-11-02T03:42:08Z	0.8	Fresh demo editor for the hero re-record :: cd /tmp/demo_pass219/p3 && DISPLAY=:99 XDG_DATA_HOME=/tmp/demo_pass219/data BEVY_BRP_PORT=15710 exec /tmp/bevy_cauldron_demo_pass219 . bedroom
+224	466	ship	tool	clip record/render	bash	2026-11-02T03:42:08Z	60.0	[launched bg_25] Re-record hero with the retimed storyboard :: cd /home/ladvien/bevy_emerge_loop && export BEVY_GRIMOIRE_MCP=/tmp/bevy_cauldron_mcp_pass219 && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:1
+224	467	ship	model	model		2026-11-02T03:43:08Z	4.8	
+224	468	ship	tool	wait: other	wait	2026-11-02T03:43:13Z	1.3	{}
+224	469	ship	model	model		2026-11-02T03:43:14Z	1.9	
+224	470	ship	tool	shell	bash	2026-11-02T03:43:16Z	0.1	cat /tmp/demo_pass219/out/hero.check; cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' import json d=json.load(open('/tmp/demo_pass219/p3/target/loop/demo
+224	471	ship	model	model		2026-11-02T03:43:16Z	11.5	
+224	472	ship	tool	clip record/render	bash	2026-11-02T03:43:28Z	58.0	Retry hero with chunk 0 shortened :: cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' import json p='tools/demo/storyboards/hero.json'; d=json.load(open(p)) d['chunks'][0]['seconds']=4.0 for 
+224	473	ship	model	model		2026-11-02T03:44:26Z	8.4	
+224	474	ship	tool	clip record/render	bash	2026-11-02T03:44:34Z	51.6	Retry hero with an earlier start :: cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' import json p='tools/demo/storyboards/hero.json'; d=json.load(open(p)) d['chunks'][0]['seconds']=3.5 for 
+224	475	ship	model	model		2026-11-02T03:45:26Z	15.5	
+224	476	ship	tool	git	bash	2026-11-02T03:45:41Z	0.5	cd /home/ladvien/bevy_emerge_loop && git checkout tools/demo/storyboards/hero.json && git status --short | head; DISPLAY=:99 import -window root -crop 1280x720+
+224	477	ship	model	model		2026-11-02T03:45:42Z	5.3	
+224	478	ship	tool	edit files	write	2026-11-02T03:45:47Z	0.3	proc://demo-editor-pass219d/kill
+224	479	ship	tool	shell	bash	2026-11-02T03:45:47Z	0.1	rm -rf /tmp/demo_pass219/p4 && mkdir -p /tmp/demo_pass219/p4 && cp -r /home/ladvien/bevy_emerge_loop/assets /tmp/demo_pass219/p4/assets && echo ok
+224	480	ship	model	model		2026-11-02T03:45:47Z	4.8	
+224	481	ship	tool	shell	bash	2026-11-02T03:45:52Z	0.8	Start the editor for the still :: cd /tmp/demo_pass219/p4 && DISPLAY=:99 XDG_DATA_HOME=/tmp/demo_pass219/data BEVY_BRP_PORT=15710 exec /tmp/bevy_cauldron_demo_pass219 . bedroom
+224	482	ship	tool	shell	bash	2026-11-02T03:45:52Z	8.4	cd /home/ladvien/bevy_emerge_loop && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:15710 -H 'content-type: application/json' -d '{"jsonrpc":"2.
+224	483	ship	model	model		2026-11-02T03:46:01Z	0.9	
+224	484	ship	tool	read files	read	2026-11-02T03:46:02Z	0.1	/tmp/demo_pass219/out/editor_new_view.png
+224	485	ship	model	model		2026-11-02T03:46:02Z	8.2	
+224	486	ship	tool	edit files	write	2026-11-02T03:46:10Z	0.2	proc://demo-editor-pass219e/kill
+224	487	ship	tool	git	bash	2026-11-02T03:46:10Z	3.7	cd /home/ladvien/bevy_emerge_loop && SHA=$(git rev-parse --short=8 39573f2) && echo $SHA && for n in agent-drives agent-removes-then-undo build-a-map frame-the-
+224	488	ship	model	model		2026-11-02T03:46:14Z	3.4	
+224	489	ship	tool	shell	bash	2026-11-02T03:46:17Z	0.0	cp /tmp/demo_pass219/out/build-a-map-sheet-t1.png /tmp/demo_pass219/out/ba_view.png; ls /tmp/demo_pass219/out | grep -c sheet
+224	490	ship	tool	read files	read	2026-11-02T03:46:17Z	0.0	/tmp/demo_pass219/out/ba_view.png
+224	491	ship	model	model		2026-11-02T03:46:17Z	1.1	
+224	492	ship	tool	read files	read	2026-11-02T03:46:18Z	0.1	/tmp/demo_pass219/out/ba_view.png
+224	493	ship	model	model		2026-11-02T03:46:18Z	3.5	
+224	494	ship	tool	git	bash	2026-11-02T03:46:22Z	0.3	cd /home/ladvien/bevy_emerge_loop && git add docs/media && git commit -q -m "docs(media): seven of the eight standing demos and editor.png re-recorded at 39573f
+224	495	ship	model	model		2026-11-02T03:46:22Z	8.2	
+224	496	ship	tool	shell	bash	2026-11-02T03:46:31Z	0.7	Launch the launcher for the hand-off smoke :: mkdir -p /tmp/handoff_pass219/data/Grimoire && cat > /tmp/handoff_pass219/data/Grimoire/recent.ron <<'EOF' (version: 1, projects: [(path: "/tmp/demo_pass219/p4"
+224	497	ship	tool	clip record/render	bash	2026-11-02T03:46:31Z	3.9	cd /home/ladvien/bevy_emerge_loop && for i in $(seq 1 60); do curl -s -m 1 -X POST http://127.0.0.1:15736 -H 'content-type: application/json' -d '{"jsonrpc":"2.
+224	498	ship	tool	read files	read	2026-11-02T03:46:31Z	3.9	/tmp/handoff_pass219/launch_view.png
+224	499	ship	model	model		2026-11-02T03:46:35Z	0.9	
+224	500	ship	tool	read files	read	2026-11-02T03:46:35Z	0.0	/tmp/handoff_pass219/launch_view.png
+224	501	ship	model	model		2026-11-02T03:46:35Z	3.4	
+224	502	ship	tool	clip record/render	bash	2026-11-02T03:46:39Z	7.3	cd /home/ladvien/bevy_emerge_loop && cat > /tmp/handoff_pass219/click.json <<'EOF' {"name":"handoff_click","fps":2,"setup":[],"chunks":[{"seconds":2.0}],"steps"
+224	503	ship	model	model		2026-11-02T03:46:46Z	4.9	
+224	504	ship	tool	shell	bash	2026-11-02T03:46:51Z	1.1	kill 1662680; sleep 1; pgrep -af "bevy_cauldron_demo" | cut -c1-100; echo checked
+224	505	ship	model	model		2026-11-02T03:46:52Z	4.4	
+224	506	ship	tool	loop tools	bash	2026-11-02T03:46:57Z	0.1	cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/accept.py --help 2>&1 | head -20; grep -n "accept.py" docs/loop/log.md | tail -2 | cut -c1-300
+224	507	ship	model	model		2026-11-02T03:46:57Z	6.0	
+224	508	ship	tool	loop tools	bash	2026-11-02T03:47:03Z	0.0	[launched bg_26] Run accept.py on big :: cd /home/ladvien/bevy_emerge_loop && mkdir -p /tmp/accept_pass219_out && python3 tools/loop/accept.py --source /home/ladvien/bevy_emerge_loop/assets --out /tmp/
+224	509	ship	model	model		2026-11-02T03:47:03Z	21.8	
+224	510	ship	tool	shell	bash	2026-11-02T03:47:25Z	0.1	cd /home/ladvien/bevy_emerge_loop && grep -c . docs/loop/backlog.json; grep -n "UI-10\|launcher\|\"#216\|#221" docs/loop/backlog.json | head; ls docs/loop/itera
+224	511	ship	bg	loop tools	bash	2026-11-02T03:47:22Z	2.3	bg_26 completed: mkdir -p /tmp/accept_pass219_out && python3 tools/loop/accept.py --source /home/ladvien/bevy_emerge_loop/assets --out...
+224	512	ship	model	model		2026-11-02T03:47:25Z	3.0	
+224	513	ship	tool	loop tools	bash	2026-11-02T03:47:28Z	2.3	cd /home/ladvien/bevy_emerge_loop && python3 tools/loop/accept.py --source /home/ladvien/bevy_emerge_loop/assets --out /tmp/accept_pass219_out.json 2>&1 | tail 
+224	514	ship	model	model		2026-11-02T03:47:30Z	10.4	
+224	515	ship	tool	shell	bash	2026-11-02T03:47:40Z	0.0	cd /home/ladvien/bevy_emerge_loop && sed -n 1,45p docs/loop/iterations/2026-11-02-hot-reload-844011a.md | cut -c1-260; git log --oneline 9b4eab0..HEAD | cat
+224	516	ship	model	model		2026-11-02T03:47:40Z	9.6	
+224	517	ship	tool	subagents	task	2026-11-02T03:47:50Z	0.0	[launched LauncherReview] Independent review of the launcher slice
+224	518	ship	model	model		2026-11-02T03:47:50Z	25.8	
+224	519	ship	tool	edit files	write	2026-11-02T03:48:16Z	0.0	/home/ladvien/bevy_emerge_loop/docs/loop/iterations/2026-11-02-ui-launcher-6c225e1.md
+224	520	ship	model	model		2026-11-02T03:48:16Z	1.3	
+224	521	ship	tool	wait: other	wait	2026-11-02T03:48:17Z	840.1	{}
+224	522	ship	model	model		2026-11-02T04:02:17Z	13.2	
+224	523	ship	tool	read files	read	2026-11-02T04:02:30Z	0.0	agent://LauncherReview
+224	524	ship	model	model		2026-11-02T04:02:30Z	11.9	
+224	525	ship	tool	shell	bash	2026-11-02T04:02:42Z	0.0	date; cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "straight to the chooser\|skips this screen" src/launcher.rs src/args.rs src/screen.rs |
+224	526	ship	model	model		2026-11-02T04:02:42Z	12.6	
+224	527	ship	tool	shell	bash	2026-11-02T04:02:55Z	0.1	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' import re def edit(p, pairs): s=open(p).read() for old,new in pairs: assert old in s
+224	528	ship	model	model		2026-11-02T04:02:55Z	4.1	
+224	529	ship	tool	shell	bash	2026-11-02T04:02:59Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && grep -n "names what to open" -B3 -A2 src/args.rs
+224	530	ship	model	model		2026-11-02T04:02:59Z	4.4	
+224	531	ship	tool	shell	bash	2026-11-02T04:03:04Z	0.0	cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' def edit(p, pairs): s=open(p).read() for old,new in pairs: assert old in s, (p, old[
+224	532	ship	model	model		2026-11-02T04:03:04Z	11.7	
+224	533	ship	tool	remote wait	bash	2026-11-02T04:03:15Z	0.0	[launched bg_27] Apply review fixes and run the three test groups :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && python3 - <<'EOF' def edit(p, pairs): s=open(p).read() for old,new in pairs: assert old in s, (p, old[
+224	534	ship	model	model		2026-11-02T04:03:15Z	5.4	
+224	535	ship	tool	wait: other	wait	2026-11-02T04:03:21Z	80.7	{}
+224	536	ship	model	model		2026-11-02T04:04:41Z	3.4	
+224	537	ship	tool	cargo build	bash	2026-11-02T04:04:45Z	21.8	cd /home/ladvien/bevy_emerge_loop && cargo build -p bevy_cauldron 2>&1 | grep -E "E0585" -A8 | head -20
+224	538	ship	model	model		2026-11-02T04:05:07Z	3.3	
+224	539	ship	tool	cargo test	bash	2026-11-02T04:05:10Z	0.0	[launched bg_28] Fix the dropped variant and rerun the tests :: cd /home/ladvien/bevy_emerge_loop/crates/bevy_cauldron && sed -n 220,225p src/project.rs && python3 - <<'EOF' p='src/project.rs'; s=open(p).read() old=" /// The
+224	540	ship	model	model		2026-11-02T04:05:10Z	5.5	
+224	541	ship	tool	shell	bash	2026-11-02T04:05:15Z	0.0	cd /home/ladvien/bevy_emerge_loop && python3 - <<'EOF' p='docs/loop/iterations/2026-11-02-ui-launcher-6c225e1.md'; s=open(p).read() old=s[s.index("## Review"):s
+224	542	ship	model	model		2026-11-02T04:05:15Z	0.8	
+224	543	ship	tool	wait: other	wait	2026-11-02T04:05:16Z	53.9	{}
+224	544	ship	model	model		2026-11-02T04:06:10Z	4.2	
+224	545	ship	tool	cargo test	bash	2026-11-02T04:06:14Z	35.5	Clippy, lib tests, backlog and changelog checks :: cd /home/ladvien/bevy_emerge_loop && cargo clippy -p bevy_cauldron --all-targets -- -D warnings 2>&1 | grep -E "^(error|warning)" -A8 | head -30; cargo test -p 
+224	546	ship	model	model		2026-11-02T04:06:50Z	4.8	
+224	547	ship	tool	shell	bash	2026-11-02T04:06:55Z	0.1	pgrep -af "pass219" | head; df -h /tmp | tail -1; du -sh /tmp/launcher_smoke_pass219 /tmp/load_demo_pass219 /tmp/demo_pass219 /tmp/handoff_pass219 /tmp/gooey_sr
+224	548	ship	model	model		2026-11-02T04:06:55Z	2.5	
+224	549	ship	tool	shell	bash	2026-11-02T04:06:57Z	0.2	cd /tmp && rm -rf launcher_smoke_pass219 load_demo_pass219 demo_pass219 handoff_pass219 gooey_src_pass219 bevy_cauldron_demo_pass219 bevy_cauldron_mcp_pass219 a
+224	550	ship	model	model		2026-11-02T04:06:57Z	11.2	
+224	551	ship	tool	git	bash	2026-11-02T04:07:09Z	0.1	cd /home/ladvien/bevy_emerge_loop && cat >> docs/loop/log.md <<'EOF' - 2026-11-02 03:55 loop (bevy_emerge_loop, big, pass 209): a cluster of six UI issues, beca
+224	552	ship	model	model		2026-11-02T04:07:09Z	3.0	
+224	553	ship	tool	push gate	bash	2026-11-02T04:07:12Z	0.0	[launched bg_29] Push the review fixes through the gate :: cd /home/ladvien/bevy_emerge_loop && git status --short | head -3; git push origin HEAD:main 2>&1 | tail -6
+224	554	ship	model	model		2026-11-02T04:07:12Z	0.8	
+224	555	ship	tool	wait: other	wait	2026-11-02T04:07:12Z	191.7	{}
+224	556	ship	model	model		2026-11-02T04:10:24Z	7.2	
+224	557	ship	tool	git	bash	2026-11-02T04:10:31Z	0.0	cd /home/ladvien/bevy_emerge_loop && git status --short | head -3; git log origin/main --oneline -1
+224	558	ship	tool	learn	learn	2026-11-02T04:10:31Z	0.0	Capture demo-recording lessons
+224	559	ship	model	model		2026-11-02T04:10:31Z	10.7	
