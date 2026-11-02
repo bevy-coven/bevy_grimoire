@@ -860,6 +860,37 @@ pub struct CloneDrag {
     held: Option<CloneSet>,
 }
 
+/// **Arm a tool, or put it down** (UI-37, #231): the one body every front end of a tool runs.
+///
+/// A mode key and a toolbar button both mean "make this the tool", and before this they would have
+/// been two bodies that could drift — the keys each had their own copy of "toggle against *my* variant,
+/// note it, drop what the others held". Returns the sentence to show, so no caller invents its own
+/// wording: `Esc` and a second press say the same thing.
+///
+/// **The toggle is against its own variant**, not against "any tool": pressing `X` while the move tool
+/// is armed reaches removal rather than returning to placing, which is what an author means by pressing
+/// a second tool's key.
+pub fn arm_tool(state: &mut EditorState, tool: Tool, chord: &str) -> String {
+    let was = state.tool;
+    state.tool = if was == tool { Tool::Place } else { tool };
+    let on = state.tool == tool;
+    match (tool, on) {
+        (Tool::Remove, true) => format!("removal mode: click a piece, or drag a box. {chord} or Esc to stop."),
+        (Tool::Remove, false) => "removal mode off".to_owned(),
+        (Tool::Move, true) => format!(
+            "move mode: click a piece to pick it up, click again to put it down. {chord} or Esc to stop."
+        ),
+        (Tool::Move, false) => "move mode off".to_owned(),
+        (Tool::Clone, true) => {
+            "clone mode: drag a box to take a copy of what is inside, click to stamp it. Esc to stop.".to_owned()
+        }
+        (Tool::Clone, false) => "clone mode off".to_owned(),
+        (Tool::Place, _) => "back to placing".to_owned(),
+        (other, true) => other.label().to_owned(),
+        (other, false) => format!("{} off", other.label()),
+    }
+}
+
 /// **Which piece of a stack the piece-verbs mean** — `H`'s answer, held as `(placement id, the
 /// snapped cell it was taken on)`.
 ///
@@ -11568,19 +11599,7 @@ fn keys(
     if keys::just_pressed(&keyboard, *live, Action::Remove) {
         // Toggles against `Remove` specifically, not against "any tool": pressing X while the move
         // tool is armed should reach removal, not return to placing.
-        state.tool = if state.tool == Tool::Remove {
-            Tool::Place
-        } else {
-            Tool::Remove
-        };
-        let said = if state.tool == Tool::Remove {
-            format!(
-                "removal mode: click a piece, or drag a box. {} or Esc to stop.",
-                keys::binding(Action::Remove).chord
-            )
-        } else {
-            "removal mode off".to_owned()
-        };
+        let said = arm_tool(&mut state, Tool::Remove, keys::binding(Action::Remove).chord);
         state.status.note(said);
         // Arming one tool puts down whatever the other was holding, rather than leaving a piece in
         // hand that no click can now drop.
@@ -11608,19 +11627,7 @@ fn keys(
     // clears what was armed to place — an author who means to move something is not also asking to
     // drop a copy of the brush on their first click, and `drive_place` refuses while this is live.
     if keys::just_pressed(&keyboard, *live, Action::MoveMode) {
-        state.tool = if state.tool == Tool::Move {
-            Tool::Place
-        } else {
-            Tool::Move
-        };
-        let said = if state.tool == Tool::Move {
-            format!(
-                "move mode: click a piece to pick it up, click again to put it down. {} or Esc to stop.",
-                keys::binding(Action::MoveMode).chord
-            )
-        } else {
-            "move mode off".to_owned()
-        };
+        let said = arm_tool(&mut state, Tool::Move, keys::binding(Action::MoveMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -11630,16 +11637,7 @@ fn keys(
     // **The clone tool.** The move key's shifted sibling: drag a box to take a copy of everything
     // inside, click to stamp the set — as many times as it is held.
     if keys::just_pressed(&keyboard, *live, Action::CloneMode) {
-        state.tool = if state.tool == Tool::Clone {
-            Tool::Place
-        } else {
-            Tool::Clone
-        };
-        let said = if state.tool == Tool::Clone {
-            "clone mode: drag a box to take a copy of what is inside, click to stamp it. Esc to stop."
-        } else {
-            "clone mode off"
-        };
+        let said = arm_tool(&mut state, Tool::Clone, keys::binding(Action::CloneMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
