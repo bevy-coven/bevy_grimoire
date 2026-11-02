@@ -9,6 +9,10 @@
 //! * **from [`LoadTiming::progress_after`] (10 s), a percent-done bar** with "N of M: stage", the stages being
 //!   known from the start ([`Stage::ALL`]).
 //!
+//! **When it ends, a report card** (UI-21, #222) lists every file of the project that does not read, one row each
+//! with the file, the field and why ([`report`]: [`bevy_grimoire_core::reload_check`] over the files the reload
+//! contract names), with **Open anyway** and **Back**. A project whose files all read goes straight to the editor.
+//!
 //! Cancel returns to the launcher. An open only reads, so there is nothing to undo: the thread is left to finish
 //! and its answer is dropped, and a test pins that the project's files are byte-identical afterwards. A project that
 //! will not open stays on this screen with the reason and a Back button, and the reason is on the terminal too.
@@ -22,6 +26,7 @@
 //! built after the editor's screen is up, by systems that do not run in the loader, so naming them here would be a
 //! stage with nothing in it.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
@@ -29,6 +34,10 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy_gooey::{Progress, ProgressText, button, heading, label, observe, panel, progress, screen, spinner};
+
+use bevy_grimoire_core::problem::{Detail, Location, Problem};
+use bevy_grimoire_core::reload::{self, Base};
+use bevy_grimoire_core::reload_check::{self, Check};
 
 use crate::args::Opened;
 use crate::project::Stage;
@@ -66,10 +75,43 @@ pub enum LoadPhase {
     Progress,
 }
 
+/// What the thread hands back: the door, and every file of the project that did not read.
+struct Loaded {
+    opened: Opened,
+    problems: Vec<Problem>,
+}
+
+/// **The files of an opened project that do not read**, while the report card is up. Each is one [`Problem`]
+/// whose location is the file and the field.
+#[derive(Resource, Clone, Debug, PartialEq)]
+pub struct LoadReport(pub Vec<Problem>);
+
+/// Every file of the project at `root` that its kind's parser refuses, in file order: the ones the open itself
+/// does not need (a terrain, a water plan, a map not opened, the notes) and so cannot have failed it.
+pub fn report(root: &Path) -> Vec<Problem> {
+    let project_dir = root.join(crate::chooser::GRIMOIRE_DIR);
+    let mut out = Vec::new();
+    for file in crate::reload_files::files(&project_dir, root, None, &[]) {
+        let Some(kind) = reload::kind_by_id(&file.kind) else { continue };
+        let base = if kind.base == Base::Root { root } else { project_dir.as_path() };
+        let Ok(text) = std::fs::read_to_string(base.join(&file.file)) else { continue };
+        if let Check::Refused(refusal) = reload_check::check(kind, &file.file, &text) {
+            out.push(Problem::with(
+                format!("{} did not read", file.file),
+                Detail::default()
+                    .at(Location::file(&file.file).field(refusal.field.clone()))
+                    .because(refusal.reason.clone())
+                    .fix(format!("save a {} that reads", kind.id)),
+            ));
+        }
+    }
+    out
+}
+
 /// The open in flight.
 #[derive(Resource)]
 pub struct LoadJob {
-    result: Mutex<Receiver<Result<Opened, String>>>,
+    result: Mutex<Receiver<Result<Loaded, String>>>,
     stage: Arc<Mutex<Option<Stage>>>,
     cancel: Arc<AtomicBool>,
     started: Duration,
@@ -82,6 +124,10 @@ pub struct LoadJob {
 pub struct LoadFailed(pub String);
 
 #[derive(Component)]
+struct LoadingRoot;
+#[derive(Component)]
+struct ReportCard;
+#[derive(Component)]
 struct LoadingPanel;
 #[derive(Component)]
 struct SpinnerRow;
@@ -89,10 +135,6 @@ struct SpinnerRow;
 struct StageLine;
 #[derive(Component)]
 struct ProgressRow;
-#[derive(Component)]
-struct FailureLine;
-#[derive(Component)]
-struct BackButton;
 
 pub struct LoadingPlugin;
 
@@ -104,9 +146,10 @@ impl Plugin for LoadingPlugin {
             .add_systems(OnExit(Screen::Loading), |mut commands: Commands| {
                 commands.remove_resource::<LoadJob>();
                 commands.remove_resource::<LoadFailed>();
+                commands.remove_resource::<LoadReport>();
                 commands.insert_resource(LoadPhase::Quiet);
             })
-            .add_systems(Update, (poll_the_load, show_the_phase).chain().run_if(in_state(Screen::Loading)));
+            .add_systems(Update, (poll_the_load, show_the_report, show_the_phase).chain().run_if(in_state(Screen::Loading)));
     }
 }
 
@@ -132,22 +175,25 @@ fn start_the_load(mut commands: Commands, request: Option<Res<LoadRequest>>, del
                 std::thread::sleep(pause);
             }
         });
+        let loaded = opened.map(|opened| {
+            let problems = report(&opened.project.root);
+            Loaded { opened, problems }
+        });
         // The screen may be gone (cancelled); an answer nobody reads is dropped with the channel.
-        let _ = send.send(opened);
+        let _ = send.send(loaded);
     });
     commands.insert_resource(LoadJob { result: Mutex::new(receive), stage, cancel, started: time.elapsed(), name });
 }
 
 fn build_the_screen(mut commands: Commands) {
     let hidden = |flex_direction| Node { display: Display::None, flex_direction, ..default() };
-    commands.spawn((screen(), DespawnOnExit(Screen::Loading), Name::new("loading"))).with_children(|root| {
+    commands.spawn((screen(), DespawnOnExit(Screen::Loading), LoadingRoot, Name::new("loading"))).with_children(|root| {
         // `insert` after the widget's own `Node`: a bundle cannot carry two.
         root.spawn((panel(), LoadingPanel)).insert(hidden(FlexDirection::Column)).with_children(|card| {
             card.spawn(heading("Opening the project"));
             card.spawn((label(""), StageLine));
             card.spawn((spinner(), SpinnerRow)).insert(hidden(FlexDirection::Row));
             card.spawn((progress(0.0), ProgressRow)).insert(hidden(FlexDirection::Column));
-            card.spawn((label(""), FailureLine));
             card.spawn((
                 button("Cancel"),
                 observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, job: Option<Res<LoadJob>>, mut next: ResMut<NextState<Screen>>| {
@@ -158,12 +204,6 @@ fn build_the_screen(mut commands: Commands) {
                     next.set(Screen::Launcher);
                 }),
             ));
-            card.spawn((
-                button("Back"),
-                BackButton,
-                observe(|_: On<bevy_gooey::Activate>, mut next: ResMut<NextState<Screen>>| next.set(Screen::Launcher)),
-            ))
-            .insert(Node { display: Display::None, justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() });
         });
     });
 }
@@ -176,10 +216,14 @@ fn poll_the_load(mut commands: Commands, job: Option<Res<LoadJob>>, mut next: Re
         Err(_) => Err(TryRecvError::Disconnected),
     };
     match answer {
-        Ok(Ok(opened)) => {
+        Ok(Ok(Loaded { opened, problems })) => {
             commands.insert_resource(crate::chooser::Chosen(opened));
             commands.remove_resource::<LoadJob>();
-            next.set(Screen::Editor);
+            if problems.is_empty() {
+                next.set(Screen::Editor);
+            } else {
+                commands.insert_resource(LoadReport(problems));
+            }
         }
         Ok(Err(reason)) => fail(&mut commands, reason),
         Err(TryRecvError::Disconnected) => fail(&mut commands, "the project's opening stopped without an answer".to_owned()),
@@ -193,21 +237,25 @@ fn fail(commands: &mut Commands, reason: String) {
     commands.insert_resource(LoadFailed(reason));
 }
 
+/// The three nodes `show_the_phase` changes the display of, told apart so their queries cannot overlap.
+type PanelNode = (With<LoadingPanel>, Without<SpinnerRow>, Without<ProgressRow>);
+type SpinnerNode = (With<SpinnerRow>, Without<LoadingPanel>, Without<ProgressRow>);
+type BarNode = (With<ProgressRow>, Without<LoadingPanel>, Without<SpinnerRow>);
+
 /// What the screen shows now: nothing under the spinner's threshold, then the stage with a spinner, then a bar; or
 /// the reason a project did not open.
 #[allow(clippy::too_many_arguments)]
 fn show_the_phase(
     job: Option<Res<LoadJob>>,
     failed: Option<Res<LoadFailed>>,
+    report: Option<Res<LoadReport>>,
     timing: Res<LoadTiming>,
     time: Res<Time<Real>>,
     mut phase: ResMut<LoadPhase>,
-    mut panels: Query<&mut Node, (With<LoadingPanel>, Without<SpinnerRow>, Without<ProgressRow>, Without<BackButton>)>,
-    mut spinners: Query<&mut Node, (With<SpinnerRow>, Without<LoadingPanel>, Without<ProgressRow>, Without<BackButton>)>,
-    mut bars: Query<(&mut Node, &mut Progress, &mut ProgressText), (With<ProgressRow>, Without<LoadingPanel>, Without<SpinnerRow>, Without<BackButton>)>,
-    mut back: Query<&mut Node, (With<BackButton>, Without<LoadingPanel>, Without<SpinnerRow>, Without<ProgressRow>)>,
-    mut lines: Query<&mut Text, (With<StageLine>, Without<FailureLine>)>,
-    mut failures: Query<&mut Text, (With<FailureLine>, Without<StageLine>)>,
+    mut panels: Query<&mut Node, PanelNode>,
+    mut spinners: Query<&mut Node, SpinnerNode>,
+    mut bars: Query<(&mut Node, &mut Progress, &mut ProgressText), BarNode>,
+    mut lines: Query<&mut Text, With<StageLine>>,
 ) {
     let (want, stage) = match (&job, &failed) {
         (_, Some(_)) => (LoadPhase::Quiet, None),
@@ -227,7 +275,7 @@ fn show_the_phase(
     if *phase != want {
         *phase = want;
     }
-    let showing = failed.is_some() || want != LoadPhase::Quiet;
+    let showing = report.is_none() && failed.is_none() && want != LoadPhase::Quiet;
     let set = |node: &mut Node, on: bool| {
         let display = if on { Display::Flex } else { Display::None };
         if node.display != display {
@@ -239,9 +287,6 @@ fn show_the_phase(
     }
     for mut node in &mut spinners {
         set(&mut node, failed.is_none() && want == LoadPhase::Spinner);
-    }
-    for mut node in &mut back {
-        set(&mut node, failed.is_some());
     }
     let name = job.as_ref().map(|j| j.name.clone()).unwrap_or_default();
     for mut text in &mut lines {
@@ -268,10 +313,56 @@ fn show_the_phase(
             }
         }
     }
-    for mut text in &mut failures {
-        let said = failed.as_ref().map(|f| f.0.clone()).unwrap_or_default();
-        if text.0 != said {
-            text.0 = said;
-        }
-    }
 }
+
+/// The report card, built once when [`LoadReport`] appears: one row per file that did not read, then Open anyway
+/// and Back.
+fn show_the_report(
+    mut commands: Commands,
+    report: Option<Res<LoadReport>>,
+    failed: Option<Res<LoadFailed>>,
+    cards: Query<(), With<ReportCard>>,
+    root: Query<Entity, With<LoadingRoot>>,
+) {
+    if !cards.is_empty() {
+        return;
+    }
+    let Ok(root) = root.single() else { return };
+    // A project that did not open is a card too: its reason, and the way back. One that opened with files that
+    // do not read adds Open anyway.
+    let (head, rows, open_anyway) = match (&report, &failed) {
+        (Some(report), _) => {
+            let n = report.0.len();
+            (format!("{n} file{} did not read", if n == 1 { "" } else { "s" }), report.0.iter().map(Problem::line).collect::<Vec<_>>(), true)
+        }
+        (None, Some(failed)) => ("The project did not open".to_owned(), vec![failed.0.clone()], false),
+        (None, None) => return,
+    };
+    commands.entity(root).with_children(|root| {
+        root.spawn((panel(), ReportCard)).with_children(|card| {
+            card.spawn(heading(head));
+            for row in rows {
+                card.spawn((label(row), ReportRow));
+            }
+            card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                if open_anyway {
+                    row.spawn((
+                        button("Open anyway"),
+                        observe(|_: On<bevy_gooey::Activate>, mut next: ResMut<NextState<Screen>>| next.set(Screen::Editor)),
+                    ));
+                }
+                row.spawn((
+                    button("Back"),
+                    observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, mut next: ResMut<NextState<Screen>>| {
+                        commands.remove_resource::<crate::chooser::Chosen>();
+                        next.set(Screen::Launcher);
+                    }),
+                ));
+            });
+        });
+    });
+}
+
+/// One file of the report.
+#[derive(Component)]
+pub struct ReportRow;

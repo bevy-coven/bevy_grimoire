@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use bevy_cauldron::chooser::Chosen;
 use bevy_cauldron::launcher::LauncherPlugin;
-use bevy_cauldron::loading::{LoadFailed, LoadPhase, LoadRequest, LoadTiming, LoadingPlugin, StageDelay};
+use bevy_cauldron::loading::{LoadFailed, LoadPhase, LoadReport, LoadRequest, LoadTiming, LoadingPlugin, ReportRow, StageDelay};
 use bevy_cauldron::project::{Project, Stage};
 use bevy_cauldron::screen::Screen;
 use bevy_gooey::{ProgressText, Role};
@@ -148,4 +148,53 @@ fn a_project_that_will_not_open_says_why_on_the_screen_and_back_returns_to_the_l
 
     press(&mut app, "Back");
     assert_eq!(screen_of(&app), Screen::Launcher);
+}
+
+/// A project with one terrain file that does not read, at the path a kit keeps its terrain.
+fn project_with_a_broken_terrain_file(tag: &str) -> (PathBuf, String) {
+    let root = project(tag);
+    let kit = Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
+    std::fs::create_dir_all(kit.join("terrain")).unwrap();
+    std::fs::write(kit.join("terrain/m.ron"), "(version: \"one\")").unwrap();
+    let file = format!("{}/terrain/m.ron", kit.file_name().unwrap().to_string_lossy());
+    (root, file)
+}
+
+fn rows(app: &mut App) -> Vec<String> {
+    app.world_mut().query_filtered::<&Text, With<ReportRow>>().iter(app.world()).map(|t| t.0.clone()).collect()
+}
+
+#[test]
+fn a_project_with_one_broken_terrain_file_shows_one_report_row_naming_the_file_and_field_and_open_anyway_enters_it() {
+    let (root, file) = project_with_a_broken_terrain_file("report");
+    let mut app = loading_app("report", vec![root.to_string_lossy().into_owned(), "m".to_owned()], 0);
+    until(&mut app, |app| app.world().get_resource::<LoadReport>().is_some());
+    app.update();
+    app.update();
+
+    assert_eq!(app.world().resource::<LoadReport>().0.len(), 1, "one file does not read");
+    let rows = rows(&mut app);
+    assert_eq!(rows.len(), 1, "one card row: {rows:?}");
+    assert!(rows[0].contains(&file), "the row names the file: {}", rows[0]);
+    assert!(rows[0].contains("(version)"), "and the field it is wrong at: {}", rows[0]);
+    assert_eq!(screen_of(&app), Screen::Loading, "the card holds the project until the person says");
+    assert!(app.world().get_resource::<Chosen>().is_some(), "the project is open and waiting");
+
+    press(&mut app, "Open anyway");
+    app.update();
+    assert_eq!(screen_of(&app), Screen::Editor, "Open anyway enters the editor");
+    assert_eq!(app.world().resource::<Project>().root, root);
+    assert!(std::fs::read_to_string(root.join(format!("assets/grimoire/{file}"))).unwrap().contains("one"), "and the file is as it was");
+}
+
+#[test]
+fn back_from_the_report_returns_to_the_launcher_with_no_door_left_open() {
+    let (root, _) = project_with_a_broken_terrain_file("report_back");
+    let mut app = loading_app("report_back", vec![root.to_string_lossy().into_owned(), "m".to_owned()], 0);
+    until(&mut app, |app| app.world().get_resource::<LoadReport>().is_some());
+    app.update();
+    app.update();
+    press(&mut app, "Back");
+    assert_eq!(screen_of(&app), Screen::Launcher);
+    assert!(app.world().get_resource::<Chosen>().is_none(), "the project that was held is let go");
 }
