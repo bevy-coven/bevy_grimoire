@@ -32,5 +32,17 @@ class TheGifEndsAfterTheLastEvent(unittest.TestCase):
         self.assertAlmostEqual(render.timeline_end(r, settle=0.5), 4.0)
 
 
+class ACaptionIsFittedToTheFrame(unittest.TestCase):
+    def test_a_long_caption_takes_a_smaller_face_and_a_short_one_keeps_the_full_size(self):
+        from PIL import Image, ImageDraw
+        r = render.Renderer({"fps": 15, "frames": [{"t": 0.0, "path": "f.png"}], "events": [], "scale": 1, "crop": [0, 0, 600, 400]}, 600)
+        draw = ImageDraw.Draw(Image.new("RGB", (600, 100)))
+        long = "person: filters the PLACE list to the sofa, arms it"
+        self.assertEqual(r.caption_font(draw, "person: Ctrl+Z"), r.font_caption)
+        fitted = r.caption_font(draw, long)
+        self.assertLessEqual(draw.textlength(long, font=fitted), 600 - 40)
+        self.assertNotEqual(fitted, r.font_caption)
+
+
 if __name__ == "__main__":
     unittest.main()

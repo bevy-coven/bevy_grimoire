@@ -160,9 +160,18 @@ class Renderer:
         caption = last_before(self.events, ("caption",), t)
         if caption:
             d2 = ImageDraw.Draw(out)
-            d2.text((20, self.height + (CAPTION_BAR - 26) // 2), caption["text"],
-                    font=self.font_caption, fill=INK)
+            font = self.caption_font(d2, caption["text"])
+            d2.text((20, self.height + (CAPTION_BAR - 26) // 2), caption["text"], font=font, fill=INK)
         return out
+
+    def caption_font(self, draw, text):
+        """The caption face at the largest size (22 down to 12) at which the text fits the frame's width, so a
+        long caption is smaller rather than cut off at the right edge."""
+        for size in range(22, 11, -1):
+            font = self.font_caption if size == 22 else load_font(size)
+            if draw.textlength(text, font=font) <= self.width - 40:
+                return font
+        return load_font(12)
 
     def title(self, text):
         out = Image.new("RGB", (self.width, self.height + CAPTION_BAR), BAR)
