@@ -77,6 +77,7 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
             crate::compass::CompassPlugin,
             // The one prompt, shared by every feature that asks a question -- see `confirm`.
             crate::confirm::ConfirmPlugin,
+            crate::trusted::TrustPlugin,
             // The key badges. In the shared list because a headless test drives `K` the same way a
             // person does, and because it binds nothing -- unlike `add_debugger_plugins`.
             crate::badges::BadgePlugin,

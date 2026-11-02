@@ -94,7 +94,22 @@ impl Play {
             return Err(Refusal::new(format!("the game is already running (pid {pid}). Stop it with `play_stop` first.")));
         }
         let config = PlayConfig::load(&root).map_err(Refusal::new)?;
+        // **No person has to have pressed anything for a project's `play.ron` to be here**: a cloned
+        // project brings its own. Nothing starts until a person has allowed this command or this project.
+        if let Some(request) = crate::trusted::needs_answer(ctx.trust_file.as_deref(), &root, &config.spec()).map_err(Refusal::new)? {
+            return Err(Refusal::new(bevy_grimoire_core::trust::TrustStore::untrusted_sentence(&request.root, &request.spec)));
+        }
         Ok((root, config, map, p))
+    }
+}
+
+/// **Would `play` have to ask a person first?** The Play button asks before it dispatches, so the
+/// question is raised instead of only a refusal. `Ok(None)` when the game is allowed, or when there is no
+/// `play.ron` to be allowed (the operation says so itself).
+pub fn untrusted_request(ctx: &Ctx, root: &std::path::Path) -> Result<Option<crate::trusted::TrustRequest>, String> {
+    match PlayConfig::load(root) {
+        Ok(config) => crate::trusted::needs_answer(ctx.trust_file.as_deref(), root, &config.spec()),
+        Err(_) => Ok(None),
     }
 }
 

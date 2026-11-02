@@ -72,6 +72,17 @@ impl PlayConfig {
             .collect()
     }
 
+    /// The command as a person reads and trusts it: the template, with `{map}`, `{root}` and `{camera}`
+    /// unfilled, and the working directory as the file writes it.
+    pub fn spec(&self) -> crate::trust::CommandSpec {
+        crate::trust::CommandSpec {
+            kind: crate::trust::CommandKind::Play,
+            program: self.command.first().cloned().unwrap_or_default(),
+            args: self.command.iter().skip(1).cloned().collect(),
+            cwd: self.cwd.clone(),
+        }
+    }
+
     pub fn dir(&self, root: &Path) -> PathBuf {
         match &self.cwd {
             Some(c) => root.join(c),

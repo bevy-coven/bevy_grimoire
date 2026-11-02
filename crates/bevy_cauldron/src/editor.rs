@@ -264,6 +264,9 @@ pub struct EditorState {
     /// **A door an operation asked for, waiting to be crossed to.** `door_open` sets it, from the keys
     /// and from an agent alike. It is taken by the crossing, or held while the leaving question is up.
     pub door_request: Option<DoorRequest>,
+    /// **A command of the project's waiting for the person to allow it** (Send, Play), and where their
+    /// trust store is. See [`crate::trusted`].
+    pub trust: crate::trusted::TrustState,
 }
 
 impl EditorState {
@@ -1271,6 +1274,7 @@ impl Default for EditorState {
             tool: Tool::default(),
             leaving: false,
             door_request: None,
+            trust: crate::trusted::TrustState::default(),
         }
     }
 }
@@ -2137,10 +2141,21 @@ pub fn send_notes(project: Option<&mut Project>, open: &mut OpenMap, state: &mut
     let root = project.as_deref().map(|p| p.root.clone());
     let sent = dispatch_note(project, open, state, "note_send", serde_json::json!({}), "send the drafts");
     let Some(root) = root.filter(|_| sent) else { return };
-    match bevy_grimoire_core::note_agent::AgentSettings::load(&root).and_then(|s| s.launch(&root)) {
+    use bevy_grimoire_core::note_agent::{AgentSettings, LaunchError};
+    let trust = match crate::trusted::load(state.trust.file.as_deref()) {
+        Ok(t) => t,
+        Err(e) => return state.status.problem(e),
+    };
+    let launched = AgentSettings::load(&root).map_err(LaunchError::Failed).and_then(|s| s.launch(&root, &trust));
+    match launched {
         Ok(Some(pid)) => state.status.note(format!("started the notes agent (pid {pid})")),
         Ok(None) => {}
-        Err(e) => state.status.problem(e),
+        Err(LaunchError::Untrusted(spec)) => {
+            // Nothing was started. The refusal is where a person looks, and the question is raised.
+            state.status.problem(bevy_grimoire_core::trust::TrustStore::untrusted_sentence(&root, &spec));
+            state.trust.pending = Some(crate::trusted::TrustRequest { root, spec });
+        }
+        Err(LaunchError::Failed(e)) => state.status.problem(e),
     }
 }
 
@@ -2187,7 +2202,7 @@ fn dispatch_note(
     params: serde_json::Value,
     phrase: &str,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: project.as_ref().map(|p| (**p).clone()),
         open: Some(std::mem::replace(
             open,
@@ -3108,7 +3123,7 @@ pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate:
     // putting them back marked both changed, so every watcher of the map saw an edit on each tab press.
     let project = world.get_resource::<Project>().cloned();
     let open = world.get_resource::<OpenMap>().cloned();
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project,
         open,
         source: crate::ops::Source::Human,
@@ -4176,7 +4191,7 @@ pub fn arm_piece(
     descriptor: &str,
 ) {
     let was = std::mem::take(&mut state.tool);
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: open.cloned(),
         source: crate::ops::Source::Human,
@@ -4230,7 +4245,7 @@ pub fn arm_composition(
     armed: &mut crate::compose::Armed,
     id: &str,
 ) -> Result<(), String> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4279,7 +4294,7 @@ pub fn apply_selected(import: &mut crate::tiles::ImportState, after: Option<&ser
 /// so a click and an agent cannot disagree about what selecting a piece does. The note names the
 /// removal chord, because the row is where a person goes to remove a piece.
 pub fn select_piece(import: &mut crate::tiles::ImportState, project: &Project, id: &str) {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4311,7 +4326,7 @@ pub fn set_label(
     axis: &str,
     tokens: &[String],
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4344,7 +4359,7 @@ pub fn set_mount(
     id: &str,
     mount: &bevy_grimoire_core::descriptor::Mount,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4399,7 +4414,7 @@ fn dispatch_piece_field(
     operation: &str,
     params: serde_json::Value,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4431,7 +4446,7 @@ pub fn set_pack_excluded(
     pack: &str,
     excluded: bool,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4470,7 +4485,7 @@ pub fn remove_piece(
     project: &mut crate::project::Project,
     id: &str,
 ) -> Option<serde_json::Value> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4512,7 +4527,7 @@ pub fn turn_piece(
     quarters: u8,
     force: bool,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4558,7 +4573,7 @@ pub fn set_cells(
     cells: &[(u32, u32, u32)],
     change: serde_json::Value,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4600,7 +4615,7 @@ pub fn add_vocab_token(
     name: &str,
     note: &str,
 ) -> Result<String, String> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4630,7 +4645,7 @@ pub fn adopt_rig_measured(
     rig: &str,
     skip_slots: &[usize],
 ) -> Result<String, String> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4757,7 +4772,7 @@ fn size_edit_keys(
                     &mut *open,
                     OpenMap::new(bevy_grimoire_core::map::Map::default(), std::path::PathBuf::new()),
                 ));
-                let mut ctx = crate::ops::Ctx {
+                let mut ctx = crate::ops::Ctx { trust_file: None,
                     project: project.as_deref().cloned(),
                     open: taken_open.take(),
                     source: crate::ops::Source::Human,
@@ -4900,10 +4915,24 @@ fn on_play_click(
         project: project.as_deref().cloned(),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
+        trust_file: state.trust.file.clone(),
         ..crate::ops::Ctx::default()
     };
     let result = match button {
         crate::ops_play::PlayButton::Play => {
+            // A game no person has allowed is not started: ask first. The operation refuses the same way
+            // for an agent, which has no one to ask but the person looking at the journal.
+            if let Some(root) = ctx.root_or_project() {
+                match crate::ops_play::untrusted_request(&ctx, &root) {
+                    Ok(Some(request)) => {
+                        state.status.problem(bevy_grimoire_core::trust::TrustStore::untrusted_sentence(&request.root, &request.spec));
+                        state.trust.pending = Some(request);
+                        return;
+                    }
+                    Ok(None) => {}
+                    Err(e) => return state.status.problem(e),
+                }
+            }
             let params = serde_json::json!({
                 "map": open.as_deref().map(|o| o.map.name.clone()),
                 "camera": camera.iter().next().map(|t| t.translation.to_array()),
@@ -8113,6 +8142,11 @@ pub fn sense_context(
     // it, typing `undo` in the palette would also press U, N, D and O on the tab behind it.
     palette: Query<(), With<bevy_gooey::CommandPalette>>,
     mut rebinding: Rebinding,
+    // **A question that owns the keyboard** (today the trust question only, see [`crate::confirm::Asked::owns_keyboard`]):
+    // the key that answers it (`Y`, `P`, `N`) is not also a verb on the tab behind it. Measured 2026-11-02:
+    // `N` to decline opened the map-rename field and `Y` tipped the brush, because nothing here knew a
+    // question was up. `Option`, because the menu screen has no editor state of its own.
+    confirm: Option<Res<crate::confirm::Confirm>>,
 ) {
     let InHand {
         move_drag,
@@ -8127,7 +8161,7 @@ pub fn sense_context(
     // below. It used to be a `Context`, which threw the tab away and fired every tab's walk on one
     // arrow — see [`keys::Holder`].
     let filter_typing = filters.typing();
-    let typing = fields.typing() || !palette.is_empty();
+    let typing = fields.typing() || !palette.is_empty() || confirm.as_deref().is_some_and(|c| c.owns_keyboard());
     // **What is in hand, asked of the tab that can be holding something.** Two tabs can, and they hold
     // different things: the assembler has a piece taken with `Space`, the map has one picked up in
     // Move or a set captured in Clone. Both answer the same question — *do the arrows move a thing, or
@@ -8308,7 +8342,7 @@ fn set_rule_seed(
             .problem(format!("`{raw}` is not a whole number, so the seed is unchanged"));
         return;
     };
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: project.as_ref().map(|p| (**p).clone()),
         open: Some(std::mem::replace(
             open,
@@ -11929,7 +11963,7 @@ fn remove_through(
     operation: &str,
     params: serde_json::Value,
 ) -> Option<(String, String, Vec<String>)> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12466,7 +12500,7 @@ fn apply(
                 .is_some_and(|p| p.owned);
             // **Through the registry**, as the settings arm does: the map is taken into the
             // operation's context and comes back either way.
-            let mut ctx = crate::ops::Ctx {
+            let mut ctx = crate::ops::Ctx { trust_file: None,
                 project: Some(project.clone()),
                 open: Some(std::mem::replace(
                     &mut *open,
@@ -12517,7 +12551,7 @@ fn apply(
             let was_bounds = open.map.bounds;
             // **Through the registry**: the map is taken into the operation's context and comes back
             // either way, as the size field does it.
-            let mut ctx = crate::ops::Ctx {
+            let mut ctx = crate::ops::Ctx { trust_file: None,
                 project: Some(project.clone()),
                 open: Some(std::mem::replace(
                     &mut *open,
@@ -12572,7 +12606,7 @@ fn apply(
             phrase,
             agent,
         } => {
-            let mut ctx = crate::ops::Ctx {
+            let mut ctx = crate::ops::Ctx { trust_file: None,
                 project: Some(project.clone()),
                 open: Some(std::mem::replace(
                     &mut *open,
@@ -12690,7 +12724,7 @@ fn set_pin(
         .iter()
         .find(|p| p.id == id)
         .is_some_and(|p| p.owned);
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12764,7 +12798,7 @@ fn rename_map(
         state.status.note("name unchanged".to_owned());
         return;
     }
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: project.as_ref().map(|p| (**p).clone()),
         open: Some(std::mem::replace(
             open,
@@ -12819,7 +12853,7 @@ fn set_yaw(
     id: &str,
     yaw: f32,
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12864,7 +12898,7 @@ fn set_tip(
     id: &str,
     tip: (u8, u8),
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12909,7 +12943,7 @@ fn set_lift(
     id: &str,
     lift: f32,
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12955,7 +12989,7 @@ fn set_pose(
     yaw: f32,
     tip: (u8, u8),
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx {
+    let mut ctx = crate::ops::Ctx { trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,

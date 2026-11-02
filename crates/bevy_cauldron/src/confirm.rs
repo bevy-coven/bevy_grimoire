@@ -87,9 +87,28 @@ pub enum Asked {
     /// rule the leave question follows, because a turn's worth of changes must not be discarded by
     /// reflex.
     Presentation,
+    /// **A project's `agent.ron` or `play.ron` wants to start a program no person has allowed.**
+    ///
+    /// The one question with three answers: **allow this command** (the exact program, arguments and
+    /// directory; an edit to any of them asks again), **trust the whole project**, or **not now**. The
+    /// answer is a person's alone: nothing an agent can call reaches [`Confirm::settle_choice`].
+    TrustCommand,
 }
 
 impl Asked {
+    /// **Does this question own the keyboard while it is up?** When it does, the census is quiet, like an
+    /// open text field, so the key that answers it is not also a verb on the tab behind it.
+    ///
+    /// **Only the trust question, because it is the only one whose answer keys are all census keys that
+    /// do something else and whose answer must not have a side effect.** The others are left as they
+    /// were: the agent's presentation lets Cmd+Z through by design (a person may take the turn back
+    /// while the card is up), and the leave-map flow's keys are read by the editor's own handlers. They
+    /// still share the leak this fixes for the trust question (`N` is a verb on the Map door): a
+    /// separate piece of work, not widened here because it changes behaviour the suite pins.
+    pub fn owns_keyboard(self) -> bool {
+        matches!(self, Asked::TrustCommand)
+    }
+
     /// **Does saying yes throw work away?** The only thing the affirmative button's severity
     /// depends on, and the only place this application decides what red means (`chrome::DANGER`:
     /// *"destructive, and only destructive"*).
@@ -110,9 +129,17 @@ impl Asked {
             //
             // **And crossing saves the map on the way out too** — the same rule, the same reason:
             // nothing is thrown away, so the affirmative is not destructive and must not look it.
-            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor => false,
+            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor | Asked::TrustCommand => false,
         }
     }
+}
+
+/// **Which button answered.** `Alt` exists only for a question asked with [`Confirm::ask_three`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Choice {
+    Yes,
+    Alt,
+    No,
 }
 
 /// The question on screen, if there is one.
@@ -123,6 +150,8 @@ struct Question {
     title: String,
     body: String,
     yes: String,
+    /// The middle button of a three-way question, answered by `P`.
+    alt: Option<String>,
     no: String,
 }
 
@@ -134,9 +163,13 @@ struct Question {
 #[derive(Resource, Default)]
 pub struct Confirm {
     question: Option<Question>,
-    answer: Option<(Asked, bool)>,
+    answer: Option<(Asked, Choice)>,
     /// Questions asked so far; the next one's `Question::serial`.
     serial: u64,
+    /// **A question that owns the keyboard was answered in this frame.** It still owns it until the
+    /// frame ends, so the key that answered it is not also a verb whichever of the answer and the census
+    /// runs first. Cleared in `Last`.
+    owner_answered: bool,
 }
 
 impl Confirm {
@@ -151,23 +184,38 @@ impl Confirm {
         yes: impl Into<String>,
         no: impl Into<String>,
     ) {
+        self.raise(of, title.into(), body.into(), yes.into(), None, no.into());
+    }
+
+    /// **Raise a question with a middle answer**, `P` or its button: yes, alt or no.
+    pub fn ask_three(
+        &mut self,
+        of: Asked,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        yes: impl Into<String>,
+        alt: impl Into<String>,
+        no: impl Into<String>,
+    ) {
+        self.raise(of, title.into(), body.into(), yes.into(), Some(alt.into()), no.into());
+    }
+
+    fn raise(&mut self, of: Asked, title: String, body: String, yes: String, alt: Option<String>, no: String) {
         if self.question.is_some() {
             return;
         }
         self.serial += 1;
-        self.question = Some(Question {
-            of,
-            serial: self.serial,
-            title: title.into(),
-            body: body.into(),
-            yes: yes.into(),
-            no: no.into(),
-        });
+        self.question = Some(Question { of, serial: self.serial, title, body, yes, alt, no });
     }
 
     /// Is this question the one on screen?
     pub fn asking(&self, of: Asked) -> bool {
         self.question.as_ref().is_some_and(|q| q.of == of)
+    }
+
+    /// Is the question on screen one that owns the keyboard ([`Asked::owns_keyboard`])?
+    pub fn owns_keyboard(&self) -> bool {
+        self.owner_answered || self.question.as_ref().is_some_and(|q| q.of.owns_keyboard())
     }
 
     /// Is any question on screen? Callers gate their own keyboard on this, the way they used to
@@ -179,9 +227,21 @@ impl Confirm {
     /// **Take this question's answer, once.** `Some(true)` agreed, `Some(false)` refused.
     pub fn answer(&mut self, of: Asked) -> Option<bool> {
         match self.answer {
-            Some((asked, yes)) if asked == of => {
+            Some((asked, choice)) if asked == of => {
                 self.answer = None;
-                Some(yes)
+                Some(choice == Choice::Yes)
+            }
+            _ => None,
+        }
+    }
+
+    /// **Take this question's answer, once, with the middle button told apart.** For a question asked
+    /// with [`Confirm::ask_three`].
+    pub fn answer_choice(&mut self, of: Asked) -> Option<Choice> {
+        match self.answer {
+            Some((asked, choice)) if asked == of => {
+                self.answer = None;
+                Some(choice)
             }
             _ => None,
         }
@@ -189,15 +249,25 @@ impl Confirm {
 
     /// Answer whatever is up. Used by the keys and the buttons, and by nothing else.
     fn settle(&mut self, yes: bool) {
+        self.settle_choice(if yes { Choice::Yes } else { Choice::No });
+    }
+
+    /// The same, for any of the three. An `Alt` answer to a question with no middle button is dropped:
+    /// it cannot happen from the keys or the buttons, which only offer what the question has.
+    fn settle_choice(&mut self, choice: Choice) {
+        if choice == Choice::Alt && self.question.as_ref().is_some_and(|q| q.alt.is_none()) {
+            return;
+        }
         if let Some(q) = self.question.take() {
-            self.answer = Some((q.of, yes));
+            self.owner_answered |= q.of.owns_keyboard();
+            self.answer = Some((q.of, choice));
         }
     }
 }
 
 /// The two answers, as gooey buttons in the dialog. `true` is the affirmative.
 #[derive(Component, Clone, Copy)]
-struct ConfirmButton(bool);
+struct ConfirmButton(Choice);
 
 /// **The dialog on screen, and the question it was built for.** The serial is `Question::serial`:
 /// a question asked in the frame after another was answered can carry the same [`Asked`] and other
@@ -220,6 +290,7 @@ impl Plugin for ConfirmPlugin {
                     .chain()
                     .before(crate::keys::Phase::Act),
             )
+            .add_systems(Last, |mut confirm: ResMut<Confirm>| confirm.owner_answered = false)
             .add_observer(answer_by_activate);
     }
 }
@@ -236,6 +307,8 @@ fn answer_by_key(keyboard: Res<ButtonInput<KeyCode>>, mut confirm: ResMut<Confir
     }
     if keyboard.just_pressed(KeyCode::KeyY) {
         confirm.settle(true);
+    } else if keyboard.just_pressed(KeyCode::KeyP) && confirm.question.as_ref().is_some_and(|q| q.alt.is_some()) {
+        confirm.settle_choice(Choice::Alt);
     } else if keyboard.just_pressed(KeyCode::KeyN) || keyboard.just_pressed(KeyCode::Escape) {
         confirm.settle(false);
     }
@@ -251,7 +324,7 @@ fn answer_by_activate(
     let Ok(button) = buttons.get(activate.entity) else {
         return;
     };
-    confirm.settle(button.0);
+    confirm.settle_choice(button.0);
 }
 
 /// **One dialog while a question is up, and none otherwise.** It is built when the question is
@@ -308,16 +381,19 @@ fn sync_dialog(
                         card.spawn(label(q.body.clone()));
                     }
                     card.spawn(menu()).with_children(|answers| {
-                        let mut yes = answers.spawn((button(q.yes.clone()), ConfirmButton(true)));
+                        let mut yes = answers.spawn((button(q.yes.clone()), ConfirmButton(Choice::Yes)));
                         if !destructive {
                             yes.insert(AutoFocus);
                         }
-                        let mut no = answers.spawn((button(q.no.clone()), ConfirmButton(false)));
+                        if let Some(alt) = &q.alt {
+                            answers.spawn((button(alt.clone()), ConfirmButton(Choice::Alt)));
+                        }
+                        let mut no = answers.spawn((button(q.no.clone()), ConfirmButton(Choice::No)));
                         if destructive {
                             no.insert(AutoFocus);
                         }
                     });
-                    card.spawn(label("Y proceeds  ·  N stops"));
+                    card.spawn(label(if q.alt.is_some() { "Y this one  ·  P the whole project  ·  N not now" } else { "Y proceeds  ·  N stops" }));
                 });
         });
 }

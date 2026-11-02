@@ -1038,3 +1038,15 @@ impl Fixture {
         self.dir
     }
 }
+
+/// **A person's trust store of the test's own, trusting `root` as a whole project.** The editor starts
+/// a program a project names only once a person has allowed it; a test that is about *starting* the
+/// program says so with this, and points `Ctx::trust_file` or `EditorState::trust.file` at it. It sits
+/// beside the project so no test reads or writes the real one in the user's data directory.
+pub fn trusted_store(root: &Path) -> PathBuf {
+    let file = root.join("trusted-by-the-test.ron");
+    let mut store = bevy_grimoire_core::trust::TrustStore::default();
+    store.trust_project(root).unwrap_or_else(|e| panic!("{e}"));
+    store.save(&file).unwrap_or_else(|e| panic!("{e}"));
+    file
+}

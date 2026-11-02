@@ -505,6 +505,10 @@ pub struct Ctx {
     /// is why it defaults to `None` and why the front ends carry it across as a value rather than
     /// reaching into a resource.
     pub proposal: Option<crate::editor::Proposed>,
+    /// **Where this person's trust store is**, when it is not the user's data directory. An operation
+    /// that starts a program a project names (`play`) asks the store before it starts anything; a test
+    /// points this at a file of its own, so none reads or writes the real one.
+    pub trust_file: Option<PathBuf>,
 }
 
 impl Ctx {

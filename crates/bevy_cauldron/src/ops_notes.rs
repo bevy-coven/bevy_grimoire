@@ -1200,7 +1200,7 @@ pub fn fence_refusal(ctx: &Ctx, agent: &str, op: &str, params: &serde_json::Valu
     trial_project.maps_dir = scratch_dir.clone();
     let mut trial_open = open.clone();
     trial_open.map_path = scratch_dir.join(bevy_grimoire_core::naming::map_file_name(&trial_open.map.name));
-    let mut trial = Ctx {
+    let mut trial = Ctx { trust_file: None,
         project: Some(trial_project),
         root: None,
         open: Some(trial_open),
