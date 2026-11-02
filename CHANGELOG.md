@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **101-ground-base** `fb7088f` The carved ground is an earth tone, not white, so the snow and wetness of volume_cover read against bare ground (#101)<br><a href="docs/changelog/media/2026-11-02-101-cover.mp4"><img src="docs/changelog/media/2026-11-02-101-cover.png" width="320" alt="clip"></a>
 - **103-fire** `ae16a6b` A placement can carry a whole bevy_lights Fire: at 23:00 a torch and a brazier burn on two lamps, with their flames, sparks and pooled light, and the light map and light pool read their lumens (#103)<br><a href="docs/changelog/media/2026-11-02-103-fire.mp4"><img src="docs/changelog/media/2026-11-02-103-fire.png" width="320" alt="clip"></a>
 - **266-triangle-count** `c4b103b` The editor no longer aborts when bevy_elements dresses the viewport: the triangle readout skips a mesh the render world took (#266) *No clip: a crash fix with no visible result of its own; proved by tests/a_mesh_the_render_world_took_does_not_crash_the_triangle_count.rs and a live run on big*
 - **103-night-lights** `c4b103b` A night preview: with bevy_elements' sky the editor's own key light steps aside, so 23:00 on the Environment clock shows a dark room instead of a white sheet; two lit lamps and the light map show on it (#103)<br><a href="docs/changelog/media/2026-11-02-103-night-lights.mp4"><img src="docs/changelog/media/2026-11-02-103-night-lights.png" width="320" alt="clip"></a>
