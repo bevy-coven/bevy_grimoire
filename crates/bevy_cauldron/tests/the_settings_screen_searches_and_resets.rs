@@ -54,6 +54,16 @@ fn open(app: &mut App) {
     }
 }
 
+/// Types `words` into the search field: the row's own change, as gooey's `text_on_edit` sends it for each
+/// key typed (this app has no window, and Bevy's text editing takes its keys from one).
+fn search_for(app: &mut App, words: &str) {
+    let search = find_by_label(app, "Search settings").expect("the screen has a search field");
+    click(app, search);
+    let row = app.world_mut().query::<(Entity, &bevy_gooey::TextInputValue)>().iter(app.world()).filter(|(_, v)| v.0.is_empty()).map(|(e, _)| e).next().expect("the search row holds no text; the number fields hold numbers");
+    app.world_mut().commands().trigger(bevy::ui_widgets::ValueChange { source: row, value: words.to_owned(), is_final: false });
+    updates(app, 3);
+}
+
 fn shows(app: &mut App, text: &str) -> bool {
     find_by_label(app, text).is_ok()
 }
@@ -108,6 +118,8 @@ fn a_switch_writes_one_key_and_the_running_editor_follows_the_file() {
     let mut r = rig("settings_screen_switch");
     assert!(r.app.world().resource::<EditorSettings>().show_grid);
     open(&mut r.app);
+    // The settings are a list that scrolls; searching narrows it to the row the click aims at.
+    search_for(&mut r.app, "grid");
 
     let grid = find_by_label(&mut r.app, "Grid lines").unwrap();
     click(&mut r.app, grid);
@@ -136,6 +148,7 @@ fn the_project_scope_writes_the_projects_file_and_shows_what_it_inherits() {
         dialog.scope = Scope::Project;
     }
     updates(&mut r.app, 3);
+    search_for(&mut r.app, "grid");
     assert!(!shows(&mut r.app, "Reset Grid lines"), "the project's file sets nothing, so nothing is modified there");
 
     let grid = find_by_label(&mut r.app, "Grid lines").unwrap();
@@ -152,7 +165,7 @@ fn a_file_that_does_not_read_is_said_and_never_written_over() {
     let broken = "(version: 1, show_grid: Some(maybe";
     write(&r.user, broken);
     open(&mut r.app);
-    updates(&mut r.app, 3);
+    search_for(&mut r.app, "grid");
 
     let grid = find_by_label(&mut r.app, "Grid lines").unwrap();
     click(&mut r.app, grid);

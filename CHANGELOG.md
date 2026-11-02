@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **249-settings-screen** `dd0c703` The settings screen: Cmd+, opens every setting with its default, a search, tabs and a Reset that takes the key out of the file<br><a href="docs/changelog/media/2026-11-02-249-settings-screen.mp4"><img src="docs/changelog/media/2026-11-02-249-settings-screen.png" width="320" alt="clip"></a>
 - **233-refusal-toast** `5d85713` A refusal is a sticky bevy_gooey toast at the top of the viewport with Dismiss, and Show when it names a piece or a placement: Show selects it on the Meshes shelf (or targets it on the Map); the journal keeps the line (#233 slice 1)<br><a href="docs/changelog/media/2026-11-02-233-refusal-toast.mp4"><img src="docs/changelog/media/2026-11-02-233-refusal-toast.png" width="320" alt="clip"></a>
 
 ## 2026-11-01

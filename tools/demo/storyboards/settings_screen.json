@@ -1,0 +1,17 @@
+{
+  "name": "settings_screen",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "setup": [],
+  "chunks": [{"seconds": 9.5}],
+  "steps": [
+    {"at": 0.2, "caption": "launcher: the Settings button"},
+    {"at": 0.8, "cursor": [640, 423]},
+    {"at": 1.2, "click": [640, 423], "caption": "person: Settings (Ctrl+, opens it from anywhere)"},
+    {"at": 2.6, "type": "grid", "caption": "person: searches grid, and only the grid settings stay"},
+    {"at": 4.6, "cursor": [680, 365]},
+    {"at": 5.0, "click": [680, 365], "caption": "person: Reset Grid lines takes the key out of settings.ron"},
+    {"at": 7.0, "caption": "back to its default (On); Text size, also set in the file, is untouched"}
+  ]
+}
