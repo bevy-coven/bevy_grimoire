@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire"
-version = "0.3.3"
+version = "0.4.0"
 edition = "2024"
 description = "The runtime half of grimoire: load a library and a map, and put it in a Bevy world."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
