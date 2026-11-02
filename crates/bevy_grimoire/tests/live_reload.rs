@@ -254,3 +254,54 @@ fn a_rider_follows_its_host_and_is_mounted_again() {
     assert_eq!(after["lamp"], before["lamp"], "and its rider keeps its own");
     assert_eq!(app.world().get::<MountedOn>(after["lamp"]).map(|m| m.0), Some(after["table_a"]));
 }
+
+/// **Reload twice with no change between them: nothing is spawned the second time** (#201, acceptance
+/// item 3).
+///
+/// The first reload is allowed to spawn — the map has just been written, and a piece the old world
+/// never drew has no entity to keep. The second reload has nothing to do at all: every placement is in
+/// both maps with the same descriptor, the same host and the same pose, so `plan`'s `spawn` set is
+/// empty and `spawn_placements` draws nothing. Counting the entities before and after is what makes
+/// "nothing respawns" a measurement rather than a hope; a plan that mis-classified one row would show
+/// up as a new `Entity` here even though the map on disk never changed.
+///
+/// **Measured, and it does not discriminate this change**: with the move split reverted this test
+/// passes too, because two identical files differ in no row at all and the old `same_but_id` already
+/// said so. It is kept as the guard acceptance item 3 asks for — it would catch a future plan that
+/// spawned on a timer, a re-read, or a comparison that had grown an always-false arm — and the proof
+/// that *this* slice works is `an_edit_respawns_only_what_changed` and
+/// `a_rider_follows_its_host_and_is_mounted_again`, both of which fail on the base with
+/// `assertion left != right failed: a moved placement is respawned`.
+#[test]
+fn reloading_twice_with_no_change_spawns_nothing_the_second_time() {
+    let project = Project::new("steady");
+    project.write_map(&map(vec![
+        row("crate_a", "kit/crate", (1.0, 1.0)),
+        row("crate_b", "kit/crate", (4.0, 1.0)),
+    ]));
+    let mut app = app(&project);
+    // The first write is the edit that makes the editor's world match the file.
+    project.write_map(&map(vec![
+        row("crate_a", "kit/crate", (1.0, 1.0)),
+        row("crate_b", "kit/crate", (5.0, 1.0)),
+    ]));
+    settle(&mut app);
+    let before = entities(&mut app);
+    assert_eq!(before.len(), 2);
+
+    // **The same bytes again.** A save that changed nothing must not draw anything again.
+    project.write_map(&map(vec![
+        row("crate_a", "kit/crate", (1.0, 1.0)),
+        row("crate_b", "kit/crate", (5.0, 1.0)),
+    ]));
+    settle(&mut app);
+
+    let after = entities(&mut app);
+    assert_eq!(after, before, "a reload with nothing changed must keep every Entity, id for id");
+    for (id, entity) in &before {
+        assert!(
+            app.world().get_entity(*entity).is_ok(),
+            "`{id}`'s entity was despawned by a reload that had nothing to do"
+        );
+    }
+}
