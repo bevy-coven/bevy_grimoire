@@ -1,0 +1,132 @@
+{
+  "name": "toolbar",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    20,
+    860,
+    620
+  ],
+  "setup": [
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -2.6,
+            -1.8,
+            0.2,
+            1.0
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 3.2
+    },
+    {
+      "seconds": 6.2,
+      "operation": {
+        "name": "placement_remove",
+        "parameters": {
+          "id": "bed"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.4,
+      "caption": "the toolbar over the map: undo \u00b7 redo \u00b7 save | the six tools | frame \u00b7 snip"
+    },
+    {
+      "at": 1.0,
+      "click": [
+        233,
+        46
+      ],
+      "caption": "person: clicks the Move button"
+    },
+    {
+      "at": 1.9,
+      "caption": "Move armed from the click: the inspector says so, its icon lights"
+    },
+    {
+      "at": 2.7,
+      "click": [
+        275,
+        46
+      ],
+      "caption": "person: the Clone button"
+    },
+    {
+      "at": 0.5,
+      "caption": "agent: removes the bed \u2014 the toolbar holds its place over the map"
+    },
+    {
+      "at": 1.7,
+      "caption": "Clone armed \u2014 the click went through the key's own chord"
+    },
+    {
+      "at": 2.8,
+      "key": "Escape",
+      "caption": "person: Esc puts it down"
+    },
+    {
+      "at": 4.0,
+      "click": [
+        233,
+        46
+      ],
+      "caption": "person: Move again, the same button"
+    },
+    {
+      "at": 4.2,
+      "click": [
+        233,
+        46
+      ],
+      "caption": "person: Move from the button"
+    },
+    {
+      "at": 5.0,
+      "cursor": [
+        700,
+        400
+      ]
+    },
+    {
+      "at": 5.3,
+      "drag": [
+        620,
+        300,
+        700,
+        380
+      ],
+      "secs": 0.5
+    },
+    {
+      "at": 5.4,
+      "key": "Escape",
+      "caption": "one body arms a tool, whichever front end asked"
+    },
+    {
+      "at": 4.3,
+      "click": [
+        233,
+        46
+      ],
+      "caption": "person: Move from the button"
+    },
+    {
+      "at": 4.9,
+      "hold": "KeyD",
+      "secs": 1.0,
+      "caption": "one body arms a tool, whichever front end asked"
+    }
+  ]
+}

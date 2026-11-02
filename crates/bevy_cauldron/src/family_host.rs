@@ -16,7 +16,7 @@ use crate::project::Project;
 
 /// Every crate this editor can host, whether or not this build has it. Add a name here in the
 /// commit that adds the cargo feature.
-pub const KNOWN: &[&str] = &["bevy_carnage", "bevy_elements", "bevy_flora", "bevy_gooey", "bevy_lights", "bevy_orca", "bevy_society", "bevy_speech_bubbles", "bevy_stigmergy"];
+pub const KNOWN: &[&str] = &["bevy_carnage", "bevy_elements", "bevy_flora", "bevy_gooey", "bevy_lights", "bevy_orca", "bevy_siren", "bevy_society", "bevy_speech_bubbles", "bevy_stigmergy"];
 
 /// The family crates this build was compiled with: `bevy_gooey` always (the editor's UI is gooey), and one entry per enabled cargo feature for the rest.
 pub fn built() -> Vec<&'static str> {
@@ -36,6 +36,9 @@ pub fn built() -> Vec<&'static str> {
     }
     if cfg!(feature = "bevy_orca") {
         on.push("bevy_orca");
+    }
+    if cfg!(feature = "bevy_siren") {
+        on.push("bevy_siren");
     }
     if cfg!(feature = "bevy_society") {
         on.push("bevy_society");
@@ -111,6 +114,15 @@ fn read_as(krate: &str, text: &str) -> Result<(), (Refusal, &'static str)> {
     if krate == crate::ui_skin::CRATE {
         let file = settings_file(krate);
         return reload_check::read::<bevy_gooey::GooeySkin>("family", &file, text).map(drop).map_err(|r| (r, "the previous skin stays"));
+    }
+    // **The mix, read as the crate's own type** (#274): a file the crate does not take is refused with
+    // the field it is wrong at, and the previous mix stays — never a silently defaulted one.
+    #[cfg(feature = "bevy_siren")]
+    if krate == crate::audio_panel::CRATE {
+        let file = settings_file(krate);
+        return reload_check::read::<bevy_siren::SirenSettings>("family", &file, text)
+            .map(drop)
+            .map_err(|r| (r, "the previous mix stays"));
     }
     let _ = (krate, text);
     Ok(())

@@ -73,6 +73,12 @@ const ALLOWED: &[(&str, &str)] = &[
          build and a game that lists no family crate pay nothing",
     ),
     (
+        "bevy_siren",
+        "the owner's cue table, buses, ducks and voice budget crate, hosted by the family layer (#274) — \
+         OPTIONAL, reached only by `--features bevy_siren` and pinned by git rev, so an ordinary build \
+         and a game that lists no family crate pay nothing",
+    ),
+    (
         "bevy_flora",
         "the owner's procedural trees and forests crate, hosted by the family layer (#96, #102) — \
          OPTIONAL, reached only by `--features bevy_flora` and pinned by git rev, so an ordinary \

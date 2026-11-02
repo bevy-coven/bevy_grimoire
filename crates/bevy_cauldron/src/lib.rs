@@ -102,6 +102,8 @@ pub mod ops_data;
 pub mod ops_label_vlm;
 #[cfg(feature = "bevy_speech_bubbles")]
 pub mod ops_dialogue;
+#[cfg(feature = "bevy_siren")]
+pub mod audio_panel;
 pub mod balloon;
 pub mod ops_family;
 #[cfg(feature = "bevy_light_grid")]
