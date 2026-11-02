@@ -50,35 +50,28 @@ pub(crate) struct Showing {
     tab: Option<Mode>,
 }
 
-/// **How long the toast stays up, and how long it takes to go.**
-///
-/// Seven seconds is a reading budget rather than a round number: a refusal here is a sentence naming
-/// a descriptor or a composition — *"cannot remove: `lab/bench` still places it"* — and the messages
-/// run to about twenty words, which is four or five seconds of reading before the eye has to find it
-/// on screen at all.
-///
-/// Nothing is lost when it goes: the session [`crate::chrome::Journal`] keeps every refusal behind
-/// `Cmd+E`, out of `Esc`'s reach. See [`crate::chrome::problem_toast`] for why fading is what makes
-/// the toast honest rather than what makes it lossy.
-const TOAST_SECS: f32 = 7.0;
-/// The last stretch, spent going out. Long enough to read as leaving rather than as a glitch.
-const TOAST_FADE: f32 = 0.6;
-
-/// **What the toast is showing and how much of its life is left.**
+/// **What the toast is about, and whether a new one is owed.**
 ///
 /// `shown` is the line, so the same problem does not re-toast every frame — and a *repeated* one
 /// does, because `chrome::Problem::line` folds consecutive repeats into `(x2)` and that is a
 /// different string. Pressing a refused key again therefore says so again, which is the whole point
-/// of feedback on a gesture.
+/// of feedback on a gesture. `cause` is what the refusal names ([`crate::chrome::Problem::cause`]).
 #[derive(Resource, Default)]
 pub(crate) struct Toast {
     shown: Option<String>,
-    /// Seconds of life left. **Not `left`**: `tests/no_system_writes_every_frame.rs` matches
-    /// `.left =` by name to catch `Node::left`, and a resource field sharing the name is charged as
-    /// a layout write — which is half of why this module carried the crate's first (and only)
-    /// `WRITES-EVERY-FRAME-OK:` marker.
-    secs_left: f32,
+    cause: Option<String>,
+    /// The line or the tab changed since the toast was last raised: [`raise_toast`] answers it once.
+    fresh: bool,
 }
+
+/// A toast this module raised for the live tab's newest refusal, and what that refusal names.
+#[derive(Component)]
+struct RefusalToast {
+    cause: Option<String>,
+}
+
+/// The id of the Show button's action.
+const SHOW: &str = "show";
 
 pub struct NoticePlugin;
 
@@ -87,6 +80,7 @@ impl Plugin for NoticePlugin {
         app.init_resource::<Showing>()
             .init_resource::<Toast>()
             .init_resource::<crate::chrome::Journal>()
+            .add_observer(show_the_cause)
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
                 crate::chrome::journal_panel.after(crate::chrome::FrameSystems),
@@ -103,9 +97,9 @@ impl Plugin for NoticePlugin {
                     paint_journal.after(record_problems).after(record_steps),
                     // After the verbs, so a problem raised this frame is on screen this frame.
                     paint_notices.after(keys::Phase::Act),
-                    // And after the paint, so a toast raised this frame is up for its whole life
-                    // rather than one frame short of it.
-                    (tick_toast, paint_toast).chain().after(paint_notices),
+                    // And after the paint, so a toast is raised in the frame its refusal is.
+                    (raise_toast, mark_the_words).chain().after(paint_notices),
+                    finish_show,
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor)),
             );
@@ -146,24 +140,14 @@ struct UiRoots<'w, 's> {
     other_roots: Query<'w, 's, Entity, (With<Node>, Without<ChildOf>)>,
 }
 
-/// **Both views of the live tab's problems: the banner and the log.**
+/// **What the live tab's newest problem is, and whether the toast owes a new one.**
 ///
-/// One system rather than four, and one for both views rather than two, because they are one list —
-/// the banner is its newest entry and the log is the run. Four tabs each painting their own was how
-/// the severity rule drifted four ways in the first place.
+/// One system rather than four, because the four tabs' statuses are one list read one way — four
+/// tabs each painting their own was how the severity rule drifted four ways in the first place.
 ///
-/// Only the live tab is painted, and that is enough: `chrome::panel_root` hides an inactive tab with
+/// Only the live tab is read, and that is enough: `chrome::panel_root` hides an inactive tab with
 /// `Display::None`, so the other three panels are not on screen to be wrong.
-fn paint_notices(
-    mode: Res<Mode>,
-    tabs: TabStatuses,
-    mut showing: ResMut<Showing>,
-    mut toast: ResMut<Toast>,
-    // **No `Node` here any more.** Whether the toast is on screen is its clock's answer, not this
-    // system's — see [`fade_toast`]. This writes what it says.
-    mut banners: Query<&mut Text, With<crate::chrome::ProblemBanner>>,
-    journals: Query<&Node, With<crate::chrome::JournalPanel>>,
-) {
+fn paint_notices(mode: Res<Mode>, tabs: TabStatuses, mut showing: ResMut<Showing>, mut toast: ResMut<Toast>) {
     let TabStatuses { editor, import, bench, compose } = tabs;
     let tab = *mode;
     let status = match tab {
@@ -175,48 +159,20 @@ fn paint_notices(
         Mode::Compose => &compose.status,
     };
 
-    // **The newest problem is what the toast says**, and a change to it is what starts its clock.
-    // A tab change starts it too: arriving on a tab that already has a refusal should say so, and
+    // **The newest problem is what the toast says**, and a change to it is what raises a new toast.
+    // A tab change raises one too: arriving on a tab that already has a refusal should say so, and
     // `showing.tab` is still the tab we are leaving at this point in the frame.
     let newest = status.problems().last().map(|p| p.line());
     if toast.shown != newest || showing.tab != Some(tab) {
-        toast.secs_left = if newest.is_some() { TOAST_SECS } else { 0.0 };
-        toast.shown = newest.clone();
+        toast.cause = status.problems().last().and_then(|p| p.cause()).map(str::to_owned);
+        toast.shown = newest;
+        toast.fresh = true;
     }
-    // **The toast stands down for as long as the journal is up.** `toggle_journal` zeroes it at
-    // the moment of opening; without this, a refusal raised while the panel was open re-armed it —
-    // seven seconds of the same sentence drawn over the journal's own title, the exact overlap the
-    // stand-down exists to prevent. `shown` still tracks above, so closing the panel does not
-    // resurrect a toast that was already read as the journal's first line.
-    if toast.secs_left > 0.0 && journals.iter().any(|n| n.display != Display::None) {
-        toast.secs_left = 0.0;
-    }
-    // **Remembered here, and this is load-bearing.** The re-arm above compares against it, so a
+    // **Remembered here, and this is load-bearing.** The check above compares against it, so a
     // `Showing` nothing ever wrote would make every frame look like a tab change and the toast would
-    // never go down. It was the log's dedupe key before the log moved behind `Cmd+E`; it is the
-    // toast's now, which is why the resource survives with one field.
+    // be raised again every frame.
     if showing.tab != Some(tab) {
         showing.tab = Some(tab);
-    }
-    // The card is a `Text` write guarded on its own content, so it is cheap every frame. There is
-    // one card and it speaks for whatever tab is live — the per-tab filter that used to stand here
-    // was reading `ProblemBanner(ALL_TABS)`, which is every tab, so it decided nothing.
-    for mut text in &mut banners {
-        // The glyph is `▲` and not `⚠`: `FiraMono-Regular.ttf` has no U+26A0 (measured), and a
-        // missing codepoint draws as a tofu box.
-        //
-        // **Cleared when there is nothing to say**, and that is not cosmetic: the card is hidden by
-        // its layer's `Display` (see [`paint_toast`]) rather than by being emptied, so a stale line
-        // sat in it for the whole life of the process — and `copy_out` harvests the text of every
-        // node the walk reaches, so the moment the toast came back up for an unrelated refusal the
-        // author's `Cmd+C` carried the wrong sentence.
-        let want = match newest.as_deref() {
-            Some(newest) => format!("▲  {newest}"),
-            None => String::new(),
-        };
-        if text.0 != want {
-            text.0 = want;
-        }
     }
 }
 
@@ -407,51 +363,137 @@ fn copy_out(
     }
 }
 
-/// **The toast's clock.** One line, and nothing that lays out.
+/// **The toast a refusal raises, and the layer it stands in** (UI-39, #233).
 ///
-/// Separate from [`paint_toast`] on purpose: a system that both ticks a timer and writes `Node` is
-/// one whose layout writes cannot be read as guarded — `a_drawing_system_writes_only_when_something_changed`
-/// counts writes against comparisons and cannot tell a resource field from a UI one. Adding a
-/// no-op compare to satisfy it would be the Goodhart move that test's own siblings warn about; two
-/// systems, each with one job, is the true shape.
-fn tick_toast(time: Res<Time>, mut toast: ResMut<Toast>) {
-    if toast.secs_left > 0.0 {
-        toast.secs_left = (toast.secs_left - time.delta_secs()).max(0.0);
-    }
-}
-
-/// **What the toast looks like**: up for [`TOAST_SECS`], out over [`TOAST_FADE`], then gone.
+/// The newest refusal of the live tab, when it is new, becomes one `bevy_gooey` alert toast that
+/// **stands until it is dismissed** (its Dismiss button, `Esc`, or the next refusal replacing it), with
+/// a **Show** button when the refusal names what it is about ([`crate::chrome::Problem::cause`]). The
+/// journal behind `Cmd+E` keeps the line either way. The toast stands down for as long as the journal
+/// is up: the journal's first line IS the toast's sentence, and both are at the top of the viewport.
 ///
-/// The `Display` lives on the strip rather than the card, so hiding costs one compare and the card's
-/// own colours are only touched while it is actually going out.
-fn paint_toast(
-    toast: Res<Toast>,
-    mut layers: Query<&mut Node, With<crate::chrome::ToastLayer>>,
-    mut cards: Query<
-        (&mut BackgroundColor, &mut TextColor),
-        With<crate::chrome::ProblemBanner>,
-    >,
+/// The strip ([`crate::chrome::ToastLayer`]) is shown in the frame the toast is raised, and hidden when
+/// none stands, so a quiet editor is quiet. Its `Display` is compared before it is written.
+fn raise_toast(
+    mut commands: Commands,
+    mut raised: ResMut<Toast>,
+    journals: Query<&Node, With<crate::chrome::JournalPanel>>,
+    standing: Query<Entity, With<RefusalToast>>,
+    mut layers: Query<&mut Node, (With<crate::chrome::ToastLayer>, Without<crate::chrome::JournalPanel>)>,
 ) {
-    let up = toast.secs_left > 0.0;
+    let journal_open = journals.iter().any(|n| n.display != Display::None);
+    let mut up = !standing.is_empty();
+    if raised.fresh {
+        raised.fresh = false;
+        for toast in &standing {
+            commands.entity(toast).despawn();
+        }
+        up = false;
+        if let (Some(line), false) = (raised.shown.as_deref(), journal_open) {
+            let mut bundle = bevy_gooey::toast_alert(line).sticky();
+            if raised.cause.is_some() {
+                bundle = bundle.action("Show", SHOW);
+            }
+            commands.spawn((bundle, RefusalToast { cause: raised.cause.clone() }));
+            up = true;
+        }
+    } else if journal_open && up {
+        for toast in &standing {
+            commands.entity(toast).despawn();
+        }
+        up = false;
+    }
     for mut node in &mut layers {
         let want = if up { Display::Flex } else { Display::None };
         if node.display != want {
             node.display = want;
         }
     }
-    if !up {
+}
+
+/// A text no refusal has claimed yet.
+type Unmarked = (With<Text>, Without<crate::chrome::ProblemBanner>);
+
+/// **Mark the one text that is on screen as the refusal's**, so `Cmd+C` and the tests that ask "what
+/// does the card say" find exactly one. gooey builds a toast's body in the frame it is spawned, so the
+/// text exists by the time this runs (it is chained after [`raise_toast`]).
+fn mark_the_words(
+    mut commands: Commands,
+    words: Query<(Entity, &bevy_gooey::Role, &ChildOf), Unmarked>,
+    parents: Query<&ChildOf>,
+    toasts: Query<(), With<RefusalToast>>,
+) {
+    for (words, role, body) in &words {
+        if *role != bevy_gooey::Role::ToastText {
+            continue;
+        }
+        if parents.get(body.parent()).is_ok_and(|toast| toasts.contains(toast.parent())) {
+            commands.entity(words).insert(crate::chrome::ProblemBanner);
+        }
+    }
+}
+
+/// **Show: take the person to what the refusal is about.** A placement on the open map is targeted
+/// (the gold marker the Map's `H` verb draws); a library piece is selected on the Kit door's Meshes
+/// shelf, through the `piece_select` operation a click on its row dispatches. What is neither says so
+/// on the status line, because the thing may have been removed since the refusal was raised.
+fn show_the_cause(action: On<bevy_gooey::ToastAction>, toasts: Query<&RefusalToast>, mut commands: Commands) {
+    if action.id != SHOW {
         return;
     }
-    // Full opacity until the last stretch, then out.
-    let alpha = (toast.secs_left / TOAST_FADE).clamp(0.0, 1.0);
-    for (mut bg, mut ink) in &mut cards {
-        let want_bg = crate::chrome::PROBLEM_BG.with_alpha(alpha);
-        if bg.0 != want_bg {
-            bg.0 = want_bg;
-        }
-        let want_ink = crate::chrome::PROBLEM_TEXT.with_alpha(alpha);
-        if ink.0 != want_ink {
-            ink.0 = want_ink;
+    let Some(id) = toasts.get(action.toast).ok().and_then(|t| t.cause.clone()) else {
+        return;
+    };
+    commands.queue(move |world: &mut World| show(world, &id));
+}
+
+fn show(world: &mut World, id: &str) {
+    let on_map = world.get_resource::<crate::project::OpenMap>().is_some_and(|o| o.map.placements.iter().any(|p| p.id == id));
+    let in_library = world.get_resource::<crate::project::Project>().is_some_and(|p| p.library.get(id).is_some());
+    let (door, tab) = if on_map {
+        (crate::tiles::Door::Map, None)
+    } else if in_library {
+        (crate::tiles::Door::Kit, Some(Mode::Meshes))
+    } else {
+        world.resource_mut::<crate::editor::EditorState>().status.note(format!("`{id}` is not on this map or in the library any more"));
+        return;
+    };
+    let here = world.get_resource::<crate::tiles::Door>() == Some(&door) && tab.is_none_or(|t| world.get_resource::<Mode>() == Some(&t));
+    if !here {
+        crate::editor::open_door(world, door, tab);
+    }
+    world.spawn(ShowAfterDoor(id.to_owned()));
+}
+
+/// **What Show is waiting to do once the door it asked for is crossed.** A door crossing resets the
+/// state a selection lives in (`ImportState`, `TargetLock` and the status line are the door's own), so
+/// the selection is made on the far side. A component and not a resource: a resource would need a
+/// classification of what a door does to it, and this is gone in a frame or two.
+#[derive(Component)]
+struct ShowAfterDoor(String);
+
+/// **Select what Show named, once no door is waiting.** A crossing that was asked for and did not
+/// happen (the person answered "stay" to the leaving question) leaves nothing selected and says nothing:
+/// they chose to stay.
+fn finish_show(world: &mut World) {
+    let waiting: Vec<(Entity, String)> = world.query::<(Entity, &ShowAfterDoor)>().iter(world).map(|(e, s)| (e, s.0.clone())).collect();
+    if waiting.is_empty() {
+        return;
+    }
+    let busy = world.get_resource::<crate::editor::EditorState>().is_some_and(|s| s.door_request.is_some() || s.leaving);
+    if busy {
+        return;
+    }
+    for (entity, id) in waiting {
+        world.entity_mut(entity).despawn();
+        let door = world.get_resource::<crate::tiles::Door>().copied();
+        if door == Some(crate::tiles::Door::Map) && crate::editor::lock_on_placement(world, &id) {
+            world.resource_mut::<crate::editor::EditorState>().status.note(format!("targeting `{id}`, which the refusal was about"));
+        } else if door == Some(crate::tiles::Door::Kit) && world.get_resource::<Mode>() == Some(&Mode::Meshes) {
+            world.resource_scope(|world, mut import: Mut<crate::tiles::ImportState>| {
+                if let Some(project) = world.get_resource::<crate::project::Project>() {
+                    crate::editor::select_piece(&mut import, project, &id);
+                }
+            });
         }
     }
 }
@@ -574,31 +616,19 @@ fn record_problems(
 fn toggle_journal(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<keys::Live>,
-    mut toast: ResMut<Toast>,
     mut panels: Query<&mut Node, With<crate::chrome::JournalPanel>>,
 ) {
     // **Behind a key EDGE, and the lint can see that now.** `just_pressed` is false on every frame
     // but the one where `Cmd+E` went down, so the one write below happens once per press and the
-    // change flag it raises is exactly the news the layout wants. This carried the crate's only
-    // `WRITES-EVERY-FRAME-OK:` marker, for two false positives rather than a real exemption:
-    // `count_writes` matched `.display =` inside `node.display ==` and charged the comparison as a
-    // write, and it matched `.left =` on `Toast::left`, an `f32` on a resource that is not
-    // `Node::left`. Both are fixed at the source — the lint skips comparison lines, and the field is
-    // `secs_left`.
+    // change flag it raises is exactly the news the layout wants.
     if !keys::just_pressed(&keyboard, *live, Action::ShowErrors) {
         return;
     }
+    // **The toast stands down when the journal comes up** ([`raise_toast`] sees the open panel): both
+    // are at the top of the viewport, and the journal's first line IS the toast's sentence.
     for mut node in &mut panels {
         let opening = node.display == Display::None;
         node.display = if opening { Display::Flex } else { Display::None };
-        // **The toast stands down when the journal comes up.** Measured in a frame: both are
-        // centred at the top of the viewport, so the toast sat squarely over the panel's own title.
-        // It is also the same sentence twice — the journal's first line IS what the toast is
-        // showing — which is the duplication this whole area was rebuilt to end. `shown` is left
-        // alone, so putting the journal away does not raise it again.
-        if opening {
-            toast.secs_left = 0.0;
-        }
     }
 }
 

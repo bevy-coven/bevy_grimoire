@@ -1450,9 +1450,12 @@ fn tile_history_keys(
         let named = missing.join("`, `");
         // Back where it came from — refusing must not also cost the entry.
         state.push_step(back, Step::Snapshot(want));
-        state.status.problem(format!(
-            "cannot {verb}: `{named}` still places it — remove or undo those placements first"
-        ));
+        // About the first of them, so the toast's Show selects it on the shelf.
+        let first = missing.first().and_then(|m| m.split('`').next()).unwrap_or_default().to_owned();
+        state.status.problem_about(
+            format!("cannot {verb}: `{named}` still places it — remove or undo those placements first"),
+            &first,
+        );
         return;
     }
 
@@ -6425,7 +6428,8 @@ pub(crate) fn send_back_out_of_library(
     let mesh = match remove_blockers(id, project) {
         Ok(mesh) => mesh,
         Err(e) => {
-            state.status.problem(e);
+            // About the piece, so the toast's Show selects it on the shelf.
+            state.status.problem_about(e, id);
             return false;
         }
     };

@@ -32,6 +32,8 @@ impl Plugin for EditorUiPlugin {
             app.add_plugins(GooeyNavPlugin);
         }
         app.insert_resource(editor_skin());
+        // **Refusals stand at the top of the viewport** (UI-39, #233), where the card they replace stood.
+        app.insert_resource(bevy_gooey::ToastSettings { anchor: bevy_gooey::ToastAnchor::TopCenter, ..default() });
         app.add_systems(
             Update,
             crate::ui_skin::apply_ui_skin
