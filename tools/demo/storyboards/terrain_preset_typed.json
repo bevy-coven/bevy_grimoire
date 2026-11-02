@@ -1,0 +1,77 @@
+{
+ "name": "terrain_preset_typed",
+ "fps": 10,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": "map"
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 6
+  },
+  {
+   "seconds": 5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    640,
+    420
+   ]
+  },
+  {
+   "at": 0.2,
+   "caption": "a map with no ground; the Terrain line takes preset <name> <seed> <cell_m> <cells_x> <cells_z>"
+  },
+  {
+   "at": 0.6,
+   "wheel": {
+    "y": -1,
+    "n": 14,
+    "at": [
+     220,
+     400
+    ]
+   }
+  },
+  {
+   "at": 1.6,
+   "cursor": [
+    220,
+    205
+   ]
+  },
+  {
+   "at": 1.9,
+   "click": [
+    220,
+    205
+   ]
+  },
+  {
+   "at": 2.2,
+   "caption": "person: the Terrain field"
+  },
+  {
+   "at": 2.4,
+   "type": "preset hills 7 3 48 40"
+  },
+  {
+   "at": 5.0,
+   "key": "Enter",
+   "caption": "Enter: terrain_preset bakes bevy_elements' hills, 48 by 40 cells of 3 m"
+  },
+  {
+   "at": 8.5,
+   "caption": "the same terrain_preset an agent calls: one log line stamped a person's, one undo"
+  }
+ ]
+}
