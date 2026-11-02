@@ -7002,8 +7002,15 @@ fn draw_map_grid(
     open: Res<OpenMap>,
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
+    settings: Option<Res<crate::settings::EditorSettings>>,
     mut gizmos: Gizmos,
 ) {
+    // **The settings screen's two grid keys** (UI-71): `show_grid` turns the lines off and
+    // `grid_strength` makes them fainter. Without the resource (a test that adds no settings) the grid is as it was.
+    let (show, strength) = settings.map_or((true, 1.0), |s| (s.show_grid, s.grid_strength));
+    if !show {
+        return;
+    }
     let (min_x, min_z, max_x, max_z) = open.map.floor_rect();
     let (w, _h, d) = open.map.bounds;
     // **The grid IS the lattice you will land on. There is no longer a second answer.**
@@ -7055,7 +7062,7 @@ fn draw_map_grid(
             ((d / step).round() as u32).max(1),
         ),
         Vec2::splat(step),
-        GRID_LINE,
+        GRID_LINE.with_alpha(GRID_LINE.alpha() * strength),
     );
 }
 

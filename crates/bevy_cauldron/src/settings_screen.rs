@@ -1,0 +1,409 @@
+//! **The settings screen: every setting, searchable, with its default and a Reset** (UI-71, #249).
+//!
+//! Cmd/Ctrl+, opens it over whatever is on screen (the launcher, the loader, a door) and the launcher's
+//! Settings button opens it too; Escape or Close takes it down. It is a modal like the command palette
+//! (`command_palette.rs`), so its chord is outside the key census for the same reason: it is not a thing
+//! a tab does.
+//!
+//! # What it shows
+//!
+//! - **A search field and the categories as tabs** ([`setting_catalogue::CATEGORIES`], with *All* first).
+//!   A query is the words a setting is found by (its label, key, category and description); the tab the
+//!   person is on keeps only its own category's matches, so *All* is where a query looks everywhere.
+//! - **One row per setting**: its control (a switch, a number, a choice), what it does, its default, a
+//!   *Modified* marker while the file being edited sets it, and a *Reset* that takes the key out of that
+//!   file, so the layer below decides it again.
+//! - **A User and Project switch** when both can be edited: the layer a change is written to. A row's
+//!   control shows the value the layer being edited gives, or the one it inherits when it sets none.
+//!
+//! # Settings are files, and the screen only writes them
+//!
+//! A change is one key written into `settings.ron` or `editor.ron` ([`setting_catalogue::write_key`],
+//! atomic, and a file that does not read is refused and left as it is). The editor's watcher
+//! ([`crate::settings::sync_settings`]) reads the file back as it reads an edit made by hand, so the screen
+//! has no second path to the running settings. The screen reads the two files itself, a few times a
+//! second while it is open, so an edit made elsewhere shows here too.
+
+use std::path::PathBuf;
+
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
+use bevy_gooey::{
+    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, menu, number_field, observe, panel, tab_page, tabs,
+    text_input, toggle,
+};
+
+use crate::project::Project;
+use crate::setting_catalogue::{self, CATEGORIES, Kind, Setting, Value};
+use crate::settings::{PROJECT_FILE, SettingsLayer, UserSettingsFile};
+
+/// How often the open screen looks at the two files, in seconds.
+const LOOK_EVERY: f32 = 0.25;
+
+/// Which file a change is written to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Scope {
+    /// `<config_dir>/Grimoire/settings.ron`: the person's, for every project.
+    #[default]
+    User,
+    /// `<project>/assets/grimoire/editor.ron`: this project's, for everyone who opens it.
+    Project,
+}
+
+/// Ask for the settings screen. Written by the chord and by the launcher's Settings button.
+#[derive(Message, Clone, Copy, Debug, Default)]
+pub struct OpenSettings;
+
+/// The open screen's choices: which file, which tab, what was searched, and the last refusal.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct SettingsDialog {
+    pub scope: Scope,
+    /// The tab: `0` is *All*, `n` is `CATEGORIES[n - 1]`.
+    pub tab: usize,
+    pub query: String,
+    /// A write the screen could not make, said at the top until the next one works.
+    pub problem: Option<String>,
+    /// How many writes the screen has made, so the rows are built again at once and not at the next look at the files.
+    pub writes: u32,
+}
+
+/// What the rows were last built from, so they are built again only when it changes.
+#[derive(Component, Default)]
+struct Built(Option<Snapshot>);
+
+#[derive(Clone, Debug, PartialEq)]
+struct Snapshot {
+    dialog: SettingsDialog,
+    user: Layer,
+    project: Layer,
+}
+
+/// One file as the screen read it: absent, a layer, or the reason it does not read.
+#[derive(Clone, Debug, PartialEq)]
+enum Layer {
+    /// This build cannot name the file (no user settings folder, or no project open).
+    Unavailable,
+    Missing,
+    Read(SettingsLayer),
+    Unreadable(String),
+}
+
+impl Layer {
+    fn of(path: Option<&PathBuf>) -> Layer {
+        let Some(path) = path else { return Layer::Unavailable };
+        let file = path.to_string_lossy().replace('\\', "/");
+        match std::fs::read_to_string(path) {
+            Ok(text) => match SettingsLayer::read(&file, &text) {
+                Ok(layer) => Layer::Read(layer),
+                Err(r) => Layer::Unreadable(format!("{file} does not read ({}): {}", r.field.as_deref().unwrap_or("file"), r.reason)),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Layer::Missing,
+            Err(e) => Layer::Unreadable(format!("{file}: {e}")),
+        }
+    }
+
+    /// The value this file sets for `key`.
+    fn get(&self, key: &str) -> Option<Value> {
+        match self {
+            Layer::Read(layer) => layer.get(key),
+            _ => None,
+        }
+    }
+}
+
+/// The page of the tabs a [`Rows`] column lists: `0` is *All*.
+#[derive(Component)]
+struct Rows(usize);
+
+/// The line that says why the screen cannot write, or what is wrong with a file.
+#[derive(Component)]
+struct ProblemLine;
+
+/// The dialog's two files, as this app names them.
+#[derive(SystemParam)]
+struct Files<'w> {
+    user: Option<Res<'w, UserSettingsFile>>,
+    project: Option<Res<'w, Project>>,
+}
+
+impl Files<'_> {
+    fn user(&self) -> Option<PathBuf> {
+        self.user.as_ref().map(|f| f.0.clone())
+    }
+
+    fn project(&self) -> Option<PathBuf> {
+        self.project.as_ref().map(|p| p.project_dir.join(PROJECT_FILE))
+    }
+
+    fn path(&self, scope: Scope) -> Option<PathBuf> {
+        match scope {
+            Scope::User => self.user(),
+            Scope::Project => self.project(),
+        }
+    }
+}
+
+/// **The one way a control writes**: the key into the file of the scope being edited.
+#[derive(SystemParam)]
+struct Writer<'w, 's> {
+    dialog: Query<'w, 's, &'static mut SettingsDialog>,
+    files: Files<'w>,
+}
+
+impl Writer<'_, '_> {
+    /// Sets `key` in the edited file, or takes it out with `None`; a refusal is kept for the screen to say.
+    fn set(&mut self, key: &'static str, value: Option<Value>) {
+        let Ok(mut dialog) = self.dialog.single_mut() else { return };
+        let outcome = match self.files.path(dialog.scope) {
+            Some(path) => setting_catalogue::write_key(&path, key, value),
+            None => Err("there is no file to write this to".to_owned()),
+        };
+        dialog.problem = outcome.err();
+        dialog.writes += 1;
+    }
+}
+
+pub struct SettingsScreenPlugin;
+
+impl Plugin for SettingsScreenPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh).chain());
+    }
+}
+
+/// Cmd/Ctrl+, : open the screen, or take it down when it is open. Not from a text field, where the
+/// comma is a comma.
+fn chord(
+    keys: Res<ButtonInput<KeyCode>>,
+    open_now: Query<Entity, With<SettingsDialog>>,
+    editing: Query<(), With<bevy_gooey::TextEditing>>,
+    mut asks: MessageWriter<OpenSettings>,
+    mut commands: Commands,
+) {
+    if !bevy_gooey::Shortcut::primary(KeyCode::Comma).just_pressed(&keys) {
+        return;
+    }
+    if let Some(dialog) = open_now.iter().next() {
+        commands.entity(dialog).despawn();
+    } else if editing.is_empty() {
+        asks.write(OpenSettings);
+    }
+}
+
+/// The scopes this app can write: the user's file when it has one, the project's when one is open.
+fn scopes(files: &Files) -> Vec<Scope> {
+    let mut out = Vec::new();
+    if files.user().is_some() {
+        out.push(Scope::User);
+    }
+    if files.project().is_some() {
+        out.push(Scope::Project);
+    }
+    out
+}
+
+fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<SettingsDialog>>, files: Files, mut commands: Commands) {
+    if asks.read().count() == 0 || !existing.is_empty() {
+        return;
+    }
+    let available = scopes(&files);
+    let has_project = files.project().is_some();
+    let state = SettingsDialog { scope: available.first().copied().unwrap_or_default(), ..default() };
+    let tab_names: Vec<String> = std::iter::once("All".to_owned()).chain(CATEGORIES.iter().map(|c| (*c).to_owned())).collect();
+    let pages: Vec<usize> = (0..tab_names.len()).collect();
+
+    commands
+        .spawn((dialog(), Name::new("settings"), state, Built::default()))
+        .observe(|cancel: On<Cancel>, mut commands: Commands| {
+            commands.entity(cancel.entity).despawn();
+        })
+        .with_children(|dialog| {
+            dialog
+                .spawn(panel())
+                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+                .with_children(|card| {
+                    card.spawn(heading("Settings"));
+                    if available.len() > 1 {
+                        card.spawn((
+                            choice("Edit", ["Your settings", "This project"], 0),
+                            observe(|c: On<ValueChange<usize>>, mut dialogs: Query<&mut SettingsDialog>| {
+                                if let Ok(mut d) = dialogs.single_mut() {
+                                    d.scope = if c.value == 0 { Scope::User } else { Scope::Project };
+                                    d.problem = None;
+                                }
+                            }),
+                        ));
+                    }
+                    card.spawn((
+                        text_input("Search settings", ""),
+                        TextHint("a word, like grid".into()),
+                        observe(|c: On<ValueChange<String>>, mut dialogs: Query<&mut SettingsDialog>| {
+                            if let Ok(mut d) = dialogs.single_mut()
+                                && d.query != c.value
+                            {
+                                d.query = c.value.clone();
+                            }
+                        }),
+                    ));
+                    card.spawn((label(""), ProblemLine));
+                    card.spawn((
+                        tabs(
+                            tab_names,
+                            0,
+                            Children::spawn(SpawnIter(pages.into_iter().map(|page| (tab_page(()), Rows(page))))),
+                        ),
+                        observe(|c: On<ValueChange<usize>>, mut dialogs: Query<&mut SettingsDialog>| {
+                            if let Ok(mut d) = dialogs.single_mut() {
+                                d.tab = c.value;
+                            }
+                        }),
+                    ));
+                    card.spawn(menu()).with_children(|actions| {
+                        if has_project {
+                            actions.spawn((
+                                button("Project configuration"),
+                                observe(
+                                    |_: On<Activate>,
+                                     dialogs: Query<Entity, With<SettingsDialog>>,
+                                     mut asks: MessageWriter<crate::project_config::OpenProjectConfig>,
+                                     mut commands: Commands| {
+                                        for dialog in &dialogs {
+                                            commands.entity(dialog).despawn();
+                                        }
+                                        asks.write(crate::project_config::OpenProjectConfig);
+                                    },
+                                ),
+                            ));
+                        }
+                        actions.spawn((
+                            button("Close"),
+                            observe(|_: On<Activate>, dialogs: Query<Entity, With<SettingsDialog>>, mut commands: Commands| {
+                                for dialog in &dialogs {
+                                    commands.entity(dialog).despawn();
+                                }
+                            }),
+                        ));
+                    });
+                });
+        });
+}
+
+/// Build the rows again when what they are built from changed: a choice, a search, or either file.
+fn refresh(
+    time: Res<Time>,
+    files: Files,
+    mut dialogs: Query<(Ref<SettingsDialog>, &mut Built)>,
+    pages: Query<(Entity, &Rows)>,
+    mut problem_line: Query<&mut Text, With<ProblemLine>>,
+    mut since: Local<f32>,
+    mut commands: Commands,
+) {
+    let Ok((dialog, mut built)) = dialogs.single_mut() else { return };
+    *since += time.delta_secs();
+    if *since < LOOK_EVERY && !dialog.is_changed() && built.0.is_some() {
+        return;
+    }
+    *since = 0.0;
+    let snapshot = Snapshot { dialog: (*dialog).clone(), user: Layer::of(files.user().as_ref()), project: Layer::of(files.project().as_ref()) };
+    if built.0.as_ref() == Some(&snapshot) {
+        return;
+    }
+
+    // What is wrong, said once at the top: a refused write, or the file being edited not reading.
+    let edited = match dialog.scope {
+        Scope::User => &snapshot.user,
+        Scope::Project => &snapshot.project,
+    };
+    let said = dialog
+        .problem
+        .clone()
+        .or_else(|| match edited {
+            Layer::Unreadable(why) => Some(format!("{why}; nothing is written until it reads")),
+            Layer::Unavailable => Some("there is no file to edit here: no project is open".to_owned()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    for mut text in &mut problem_line {
+        if text.0 != said {
+            text.0 = said.clone();
+        }
+    }
+
+    // What each row shows: the value the edited layer sets, else the one it inherits.
+    let default_of = |key: &str| setting_catalogue::default_value(key);
+    for (page, Rows(tab)) in &pages {
+        commands.entity(page).despawn_children();
+        let category = tab.checked_sub(1).and_then(|i| CATEGORIES.get(i)).copied();
+        let found = setting_catalogue::search(&dialog.query, category);
+        commands.entity(page).with_children(|rows| {
+            if found.is_empty() {
+                rows.spawn(label(format!("No setting matches \"{}\".", dialog.query.trim())));
+            }
+            for setting in found {
+                let own = edited.get(setting.key);
+                let below = match dialog.scope {
+                    Scope::User => default_of(setting.key),
+                    Scope::Project => snapshot.user.get(setting.key).or_else(|| default_of(setting.key)),
+                };
+                let overridden = match dialog.scope {
+                    Scope::User => snapshot.project.get(setting.key),
+                    Scope::Project => None,
+                };
+                spawn_row(rows, setting, own, below.unwrap_or(Value::On(false)), overridden, default_of(setting.key));
+            }
+        });
+    }
+    built.0 = Some(snapshot);
+}
+
+/// One setting: its control, what it does, its default, whether it is modified and the Reset.
+fn spawn_row(rows: &mut ChildSpawnerCommands, setting: &'static Setting, own: Option<Value>, below: Value, overridden: Option<Value>, default_value: Option<Value>) {
+    let shown = own.unwrap_or(below);
+    let key = setting.key;
+    rows.spawn(Node { flex_direction: FlexDirection::Column, margin: UiRect::bottom(Val::Px(crate::chrome::GAP_GROUP)), ..default() })
+        .with_children(|row| {
+            match (setting.kind, shown) {
+                (Kind::Switch, Value::On(on)) => {
+                    row.spawn((
+                        toggle(setting.label, on),
+                        observe(move |c: On<ValueChange<bool>>, mut w: Writer| w.set(key, Some(Value::On(c.value)))),
+                    ));
+                }
+                (Kind::Scale { min, max }, Value::Number(n)) => {
+                    row.spawn((
+                        number_field(setting.label, n, 0.05, min..=max),
+                        observe(move |c: On<ValueChange<f32>>, mut w: Writer| {
+                            if c.is_final {
+                                w.set(key, Some(Value::Number(c.value)));
+                            }
+                        }),
+                    ));
+                }
+                (Kind::Options(names), Value::Option(i)) => {
+                    row.spawn((
+                        choice(setting.label, names.iter().copied(), i),
+                        observe(move |c: On<ValueChange<usize>>, mut w: Writer| w.set(key, Some(Value::Option(c.value)))),
+                    ));
+                }
+                _ => {
+                    row.spawn(label(format!("{}: unreadable value", setting.label)));
+                }
+            }
+            row.spawn(label(setting.description));
+            let default_text = default_value.map_or_else(String::new, |d| format!("Default: {}", setting_catalogue::say(setting, d)));
+            row.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() })
+                .with_children(|line| {
+                    line.spawn(label(default_text));
+                    if own.is_some() {
+                        line.spawn(label("Modified"));
+                        line.spawn((
+                            button(format!("Reset {}", setting.label)),
+                            observe(move |_: On<Activate>, mut w: Writer| w.set(key, None)),
+                        ));
+                    }
+                    if let Some(over) = overridden {
+                        line.spawn(label(format!("This project sets it to {}", setting_catalogue::say(setting, over))));
+                    }
+                });
+        });
+}
