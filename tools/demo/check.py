@@ -88,8 +88,18 @@ def change_moments(rec):
         elif e["type"] == "settle":
             # **A change the storyboard said would arrive, and has.** A fade is not a step: the picture
             # at the operation's timestamp is still the old one, so the fifth-of-a-second window above
-            # measures the wrong pair of frames. The storyboard names the moment it has landed.
-            moments.append(("settle", e["t"]))
+            # measures the wrong pair of frames.
+            #
+            # **A gradual change needs a span, not a moment.** The editor now walks a clock edit over a
+            # second (#271), so the sky goes from noon to dusk as a *gradient*: any fifth of a second of
+            # it moves a tenth of the picture, which no 5 % threshold can see. A settle that names the
+            # moment the change *starts* carries the seconds it takes as `span`, and the comparison is
+            # against its end.
+            span = float(e.get("span", 0.0) or 0.0)
+            if span > 0:
+                moments.append(("settle", e["t"] + span))
+            else:
+                moments.append(("settle", e["t"]))
     settled = [m for m in moments if m[0] == "settle"]
     # **A settle stands in for the operation it answers.** An `agent` moment is the operation's own
     # timestamp, and for a change the editor fades in that picture is still the old one — measuring it

@@ -371,7 +371,7 @@ def do_step(step, timeline, inj, agent, named=None):
         # timestamp is still the old one. `check.py` scores a change against the frames a fifth of a
         # second after its moment, which is right for a keypress and too early for a fade. A storyboard
         # that knows a fade is coming says when it has arrived, and that is a change moment of its own.
-        timeline.add(t=timeline.now(), type="settle", what=step["settle"])
+        timeline.add(t=timeline.now(), type="settle", what=step["settle"], span=step.get("span", 0.0))
     elif kind == "caption":
         timeline.add(t=timeline.now(), type="caption", text=step["caption"])
     else:

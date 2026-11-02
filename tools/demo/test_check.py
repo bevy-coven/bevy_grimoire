@@ -156,3 +156,27 @@ class Settle(unittest.TestCase):
         without = {"chunks": [{"index": 1, "start": 3.0, "operation_applied_t_s": 0.06,
                                "operation_result": {"outcome": "applied"}}], "events": []}
         self.assertEqual([k for k, _ in check.change_moments(without)], ["agent"])
+
+    def test_a_settle_with_a_span_measures_across_the_walk(self):
+        """A gradient change needs a span: no fifth of a second of it moves 5 % of the picture."""
+        sys.path.insert(0, HERE)
+        import check
+        # The moment the walk starts, and how long it takes.
+        rec = {"chunks": [], "events": [{"t": 3.1, "type": "settle", "what": "the sky", "span": 1.6}]}
+        self.assertEqual(check.change_moments(rec), [("settle", 3.1 + 1.6)])
+        # And a span on a still clip is still measured and still fails: the span moves the moment, it
+        # does not excuse the change.
+        with tempfile.TemporaryDirectory() as directory:
+            base = np.random.default_rng(7).integers(60, 201, size=(H, W, 3), dtype=np.uint8)
+            frames = []
+            for i in range(FRAMES):
+                a = base.copy()
+                a[0:4, 0:4, :] = (i * 10) % 256
+                frames.append(Image.fromarray(a))
+            gif = os.path.join(directory, "static.gif")
+            frames[0].save(gif, save_all=True, append_images=frames[1:], duration=125, loop=0)
+            events = os.path.join(directory, "static.events.json")
+            with open(events, "w") as fh:
+                json.dump({"name": "static", "fps": FPS, "chunks": [],
+                           "events": [{"t": 0.5, "type": "settle", "what": "nothing", "span": 1.5}]}, fh)
+            self.assertIn("FAIL", change_line(events, gif))
