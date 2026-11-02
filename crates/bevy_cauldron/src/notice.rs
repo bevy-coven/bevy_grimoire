@@ -47,7 +47,20 @@ pub struct CopyPane(pub &'static [Mode]);
 /// the log while the cursor moves.
 #[derive(Resource, Default, PartialEq, Eq)]
 pub(crate) struct Showing {
-    tab: Option<Mode>,
+    /// Which tab's status is live, as [`source_of`] says it: the Meshes and Tiles tabs share one.
+    source: Option<u8>,
+}
+
+/// **Which status a tab reads and writes.** The Meshes and Tiles tabs report through one
+/// `ImportState`, so switching between them is not arriving on a different list of refusals: a toast
+/// the person dismissed must not come back because they changed tab.
+fn source_of(tab: Mode) -> u8 {
+    match tab {
+        Mode::Map => 0,
+        Mode::Meshes | Mode::Tiles => 1,
+        Mode::Anim => 2,
+        Mode::Compose => 3,
+    }
 }
 
 /// **What the toast is about, and whether a new one is owed.**
@@ -161,9 +174,9 @@ fn paint_notices(mode: Res<Mode>, tabs: TabStatuses, mut showing: ResMut<Showing
 
     // **The newest problem is what the toast says**, and a change to it is what raises a new toast.
     // A tab change raises one too: arriving on a tab that already has a refusal should say so, and
-    // `showing.tab` is still the tab we are leaving at this point in the frame.
+    // `showing.source` is still the tab's we are leaving at this point in the frame.
     let newest = status.problems().last().map(|p| p.line());
-    if toast.shown != newest || showing.tab != Some(tab) {
+    if toast.shown != newest || showing.source != Some(source_of(tab)) {
         toast.cause = status.problems().last().and_then(|p| p.cause()).map(str::to_owned);
         toast.shown = newest;
         toast.fresh = true;
@@ -171,8 +184,8 @@ fn paint_notices(mode: Res<Mode>, tabs: TabStatuses, mut showing: ResMut<Showing
     // **Remembered here, and this is load-bearing.** The check above compares against it, so a
     // `Showing` nothing ever wrote would make every frame look like a tab change and the toast would
     // be raised again every frame.
-    if showing.tab != Some(tab) {
-        showing.tab = Some(tab);
+    if showing.source != Some(source_of(tab)) {
+        showing.source = Some(source_of(tab));
     }
 }
 
@@ -376,6 +389,8 @@ fn copy_out(
 fn raise_toast(
     mut commands: Commands,
     mut raised: ResMut<Toast>,
+    project: Option<Res<crate::project::Project>>,
+    open: Option<Res<crate::project::OpenMap>>,
     journals: Query<&Node, With<crate::chrome::JournalPanel>>,
     standing: Query<Entity, With<RefusalToast>>,
     mut layers: Query<&mut Node, (With<crate::chrome::ToastLayer>, Without<crate::chrome::JournalPanel>)>,
@@ -390,7 +405,12 @@ fn raise_toast(
         up = false;
         if let (Some(line), false) = (raised.shown.as_deref(), journal_open) {
             let mut bundle = bevy_gooey::toast_alert(line).sticky();
-            if raised.cause.is_some() {
+            // Show only for a thing that is there: a refusal about one that is already gone has nowhere to go.
+            let is_there = |id: &str| {
+                project.as_ref().is_some_and(|p| p.library.get(id).is_some())
+                    || open.as_ref().is_some_and(|o| o.map.placements.iter().any(|p| p.id == id))
+            };
+            if raised.cause.as_deref().is_some_and(is_there) {
                 bundle = bundle.action("Show", SHOW);
             }
             commands.spawn((bundle, RefusalToast { cause: raised.cause.clone() }));
@@ -479,7 +499,8 @@ fn finish_show(world: &mut World) {
     if waiting.is_empty() {
         return;
     }
-    let busy = world.get_resource::<crate::editor::EditorState>().is_some_and(|s| s.door_request.is_some() || s.leaving);
+    let busy = world.contains_resource::<crate::screen::Crossing>()
+        || world.get_resource::<crate::editor::EditorState>().is_some_and(|s| s.door_request.is_some() || s.leaving);
     if busy {
         return;
     }

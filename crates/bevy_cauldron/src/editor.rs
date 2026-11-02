@@ -857,7 +857,7 @@ pub struct CloneDrag {
 /// header moved the wall. The id, never an index, for `MoveDrag`'s reason; the cell, so the lock
 /// lapses the moment the cursor walks away rather than following it around the map.
 #[derive(Resource, Default)]
-pub struct TargetLock(Option<(String, (f32, f32))>);
+pub struct TargetLock(Option<(String, (f32, f32))>, bool);
 
 impl TargetLock {
     /// The id of the placement the lock holds, if it holds one. The agent's `"selection"` frame
@@ -869,7 +869,9 @@ impl TargetLock {
 
 /// **Lock onto the placement `id` on the open map**, as a click on it would: the gold marker stands on
 /// it and the piece-verbs mean it. `false` when the map has no such placement. The cell is the tile
-/// cell its position snaps to, which is what a click's lock records.
+/// cell its position snaps to, which is what a click's lock records. **A lock taken this way is held**
+/// (the `bool` of [`TargetLock`]): a click's lock lapses when the cursor leaves its cell, and the
+/// cursor is on the toast's Show button, not on the piece, so it would lapse on the next frame.
 pub fn lock_on_placement(world: &mut World, id: &str) -> bool {
     let Some(at) = world
         .get_resource::<OpenMap>()
@@ -881,7 +883,9 @@ pub fn lock_on_placement(world: &mut World, id: &str) -> bool {
         return false;
     };
     let cell = (snap_point(project, at.0, SnapLevel::Tile), snap_point(project, at.1, SnapLevel::Tile));
-    world.resource_mut::<TargetLock>().0 = Some((id.to_owned(), cell));
+    let mut lock = world.resource_mut::<TargetLock>();
+    lock.0 = Some((id.to_owned(), cell));
+    lock.1 = true;
     true
 }
 
@@ -15246,15 +15250,17 @@ pub(crate) fn under_cursor_target(
     let hit = cursor_ground(pointer.0, cam, cam_tf)?;
     let at = open.map.to_map_space((hit.x, hit.z));
     if let Some((id, cell)) = &lock.0 {
-        if (
-            snap_point(project, at.0, SnapLevel::Tile),
-            snap_point(project, at.1, SnapLevel::Tile),
-        ) == *cell
+        if (lock.1
+            || (
+                snap_point(project, at.0, SnapLevel::Tile),
+                snap_point(project, at.1, SnapLevel::Tile),
+            ) == *cell)
             && let Some(i) = open.map.placements.iter().position(|p| &p.id == id)
         {
             return Some(i);
         }
         lock.0 = None;
+        lock.1 = false;
     }
     // **The piece the ray runs into, by its own volume** — see [`ray_pick`] for why this question
     // is not the ground one. The heights come from the finished map, the same call the ghost and
@@ -15340,6 +15346,7 @@ fn cycle_target(
         keys::binding(Action::CycleTarget).chord,
     ));
     lock.0 = Some((id, cell));
+    lock.1 = false;
 }
 
 /// The gold quad under the locked target — and the lock's undertaker: a target that stopped
