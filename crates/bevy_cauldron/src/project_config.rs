@@ -37,7 +37,7 @@ use crate::project::Project;
 use crate::tiles::ImportState;
 
 /// How many switches the list shows before it scrolls.
-const FAMILY_ROWS: f32 = 7.5;
+const FAMILY_ROWS: f32 = 4.5;
 
 /// The reload-contract kind `family.ron` is.
 pub const KIND: &str = "family_list";
@@ -263,7 +263,7 @@ fn refresh(
             .into_iter()
             .flatten()
             .flatten()
-            .filter(|e| e.path().is_dir() && !project.kits.iter().any(|k| k.dir == e.path()))
+            .filter(|e| e.path().is_dir() && !project.kits.iter().any(|k| k.dir.starts_with(e.path())))
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .collect();
         folders.extend(left_out.iter().cloned());
