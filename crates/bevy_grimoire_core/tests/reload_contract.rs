@@ -12,15 +12,14 @@ use bevy_grimoire_core::reload::{self, Base, Lifetime, ReloadClass, KINDS};
 /// reload path (`Live` or `Respawn`); never add one without writing down in the commit why it cannot
 /// be hot.
 const RESTART_KINDS: &[&str] = &[
-    // The animation tab reads `rigs.ron` when the project opens and nothing watches it.
-    "rigs",
+    // (`rigs` left this list in #202: the animation tab takes an edit of `rigs.ron` at once.)
     // The game's own tuning files, written by `data_set`: this repository ships no reader for them.
     "game_data",
 ];
 
 /// **A literal, and not `RESTART_KINDS.len()`**: a number that is its own measure can never fail. Lower it
 /// with the list; raising it is a decision a reviewer must see.
-const RESTART_KINDS_MAX: usize = 2;
+const RESTART_KINDS_MAX: usize = 1;
 
 #[test]
 fn the_restart_list_only_shrinks() {

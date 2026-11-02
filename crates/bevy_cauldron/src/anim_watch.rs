@@ -12,8 +12,8 @@
 //! - [`BenchReports`] holds the results keyed by rig NAME, and [`BenchGeneration`] bumps only when
 //!   a stored report actually changed — the `ThumbGeneration` idiom, because `resource_changed` on
 //!   a resource a system takes as `ResMut` fires every frame.
-//! - [`sync_rigs_reload`] says what became of an edit to `rigs.ron` itself: the tab reads the manifest
-//!   once, so a valid edit is `needs_restart` and a broken one is `refused`, in `grimoire_state.reloads`.
+//! - [`sync_rigs_reload`] takes an edit to `rigs.ron` itself the moment it is made: a valid edit is
+//!   `applied` and measured again, a broken one is `refused`, in `grimoire_state.reloads`.
 //!
 //! The stale count is painted onto the tab strip's `ANIM` label in place, so it survives tab
 //! switches: a fact about the project does not stop being true because a different tab is open.
@@ -381,24 +381,41 @@ const RIGS_RECHECK_SECS: f32 = 1.0;
 pub(crate) struct RigsSeen {
     stat: Option<(SystemTime, u64)>,
     since: f32,
-    /// `(what the disk held, what the tab held)` as last decided, so one edit is one verdict however
-    /// many frames pass and the same bytes are never decided twice. `None` while the two agree.
+    /// `(what the disk held, what the tab held)` as last decided to refuse or to wait on, so one bad
+    /// edit is one verdict however many frames pass and the same bytes are never decided twice. `None`
+    /// while the two agree.
     decided: Option<(Option<String>, Option<String>)>,
 }
 
-/// **Say what became of an edit to `rigs.ron`** (#200, H3), a kind the registry classes as `Restart`.
+/// The resources an edit of the manifest touches besides the tab: what is measured and what is queued
+/// to be, and the adopt exclusions that described the text the edit replaces. Bundled to keep
+/// [`sync_rigs_reload`] under the parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct Measuring<'w> {
+    exclude: ResMut<'w, crate::anim_tab::AdoptExclude>,
+    reports: ResMut<'w, BenchReports>,
+    generation: ResMut<'w, BenchGeneration>,
+    queue: ResMut<'w, MeasureQueue>,
+}
+
+/// **Take an edit of `rigs.ron` the moment it is made, and say what became of it** (#200, H3; #202 made the
+/// kind `Live`).
 ///
 /// The tab reads the manifest when it loads (the first entry to the tab, and again after a door change
-/// resets the bench) and holds the text it read (`BenchState`), so an edit to the file on disk is not in
-/// use until then. Without a word the author sees an edit that did nothing. Each distinct edit is decided
-/// once into [`crate::live::EditorReloads`] as kind `rigs`: `needs_restart` when the file reads and the
-/// tab keeps what it holds, `refused` with the file and the field when it does not read. The tab's own
-/// writes (`commit_text`) update the held text with the file, so they agree and say nothing; an edit put
-/// back as it was clears the verdict, and so does a door change, which drops what was held.
+/// resets the bench) and holds the text it read (`BenchState`). A file that reads is taken at once: the tab
+/// holds it (the text it replaces is one step of the tab's undo), every report is dropped and every rig
+/// queued to be measured again, the rig the author was on stays selected by name, and the kind's verdict in
+/// [`crate::live::EditorReloads`] is `applied`. A file that does not read is `refused` with the file and the
+/// field and the tab keeps what it holds; a file that is gone is `needs_restart`, because there is no
+/// manifest to take in its place. Each distinct edit is decided once. The tab's own writes (`commit_text`)
+/// update the held text with the file, so they agree and say nothing; a refused or missing file put back
+/// as the tab holds it clears that verdict, and so does a door change, which drops what was held. An
+/// `applied` verdict stays until the next edit replaces it: it is still true of the file.
 pub(crate) fn sync_rigs_reload(
     time: Res<Time>,
     project: Option<Res<crate::project::Project>>,
-    bench: Res<BenchState>,
+    mut bench: ResMut<BenchState>,
+    mut measuring: Measuring,
     mut seen: Local<RigsSeen>,
     mut reloads: Option<ResMut<crate::live::EditorReloads>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
@@ -445,24 +462,33 @@ pub(crate) fn sync_rigs_reload(
     // What the tab holds decides what is true and what to say: rigs, or nothing because the file did
     // not read when the tab loaded.
     let held = pair.1.is_some();
-    let again = "does not read the file again until it loads afresh: change door and come back, or restart the editor";
+    let mut taken = false;
     let verdict = match &pair.0 {
         None => KindVerdict::needs_restart(
             "rigs",
             FILE,
-            format!("the file is gone, and the animation tab still holds the rigs it read and {again}, to drop them"),
+            "the file is gone, and the animation tab still holds the rigs it read: it has no manifest to take in their place, so restore the file or restart the editor to drop them",
         ),
         Some(text) => match Rigs::parse(text) {
-            Ok(_) if held => KindVerdict::needs_restart(
-                "rigs",
-                FILE,
-                format!("the animation tab holds the rigs it read and {again}, to use this edit"),
-            ),
-            Ok(_) => KindVerdict::needs_restart(
-                "rigs",
-                FILE,
-                format!("the animation tab loaded no rigs, because the file did not read then, and {again}, to load it"),
-            ),
+            Ok(rigs) => {
+                let count = rigs.rigs.len();
+                bench.take_edit(rigs, text.clone());
+                measuring.exclude.clear();
+                invalidate(&mut measuring.reports, &mut measuring.generation);
+                let names: Vec<String> = bench.names().iter().map(|n| (*n).to_owned()).collect();
+                for name in &names {
+                    measuring.queue.push_back_unique(name);
+                }
+                if let Some(state) = state.as_deref_mut() {
+                    state.status.note(if held {
+                        format!("{FILE}: the animation tab took the edit ({count} rig(s)) and is measuring them again")
+                    } else {
+                        format!("{FILE}: the animation tab loaded no rigs, because the file did not read then, and holds the {count} rig(s) of this edit")
+                    });
+                }
+                taken = true;
+                KindVerdict::applied("rigs", FILE)
+            }
             Err(reason) => {
                 let field = bevy_grimoire_core::reload::kind_by_id("rigs").and_then(|k| match reload_check::check(k, FILE, text) {
                     Check::Refused(r) => r.field,
@@ -473,18 +499,22 @@ pub(crate) fn sync_rigs_reload(
         },
     };
     if let Some(state) = state.as_deref_mut() {
-        if verdict.outcome == Outcome::Refused {
-            let kept = if held { "the rigs already loaded stay" } else { "no rigs are loaded from it" };
-            state.status.raise("", verdict.problem(kept));
-        } else {
-            state.status.note(format!("{}: {}", verdict.file, verdict.reason));
+        match verdict.outcome {
+            Outcome::Refused => {
+                let kept = if held { "the rigs already loaded stay" } else { "no rigs are loaded from it" };
+                state.status.raise("", verdict.problem(kept));
+            }
+            Outcome::NeedsRestart => state.status.note(format!("{}: {}", verdict.file, verdict.reason)),
+            Outcome::Applied => {}
         }
     }
     if let Some(reloads) = reloads.as_deref_mut() {
         reloads.forget(&["rigs"]);
         reloads.decide(vec![verdict]);
     }
-    seen.decided = Some(pair);
+    // A taken edit leaves disk and tab agreeing, so nothing is waiting to be decided again, and its
+    // `applied` verdict stays true until the next edit replaces it.
+    seen.decided = (!taken).then_some(pair);
 }
 
 #[cfg(test)]
