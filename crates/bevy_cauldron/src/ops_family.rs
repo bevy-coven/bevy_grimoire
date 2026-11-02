@@ -142,7 +142,7 @@ impl PieceParams {
             "properties": {
                 "id": {"type": "string", "description": "The placement's id, as the map file names it."},
                 "crate": {"type": "string", "description": "The family crate whose settings the piece carries, as listed in family.ron, e.g. bevy_lights."},
-                "value": {"type": "string", "description": "The crate's own settings type as one RON value, e.g. (base: 900.0, phase: 1.3, depth: 0.15) for a bevy_lights Flicker. Leave it out to take the settings off the piece."}
+                "value": {"type": "string", "description": "The crate's own settings type as one RON value, e.g. (base: 900.0, phase: 1.3, depth: 0.15) for a bevy_lights Flicker, or (kind: Campfire, lumens: Some(40.0)) for a Fire. Leave it out to take the settings off the piece."}
             }
         })
     }
@@ -160,7 +160,7 @@ impl PieceParams {
 fn reads_as(krate: &str, text: &str) -> Result<(), String> {
     #[cfg(feature = "bevy_lights")]
     if krate == "bevy_lights" {
-        return ron::from_str::<bevy_lights::Flicker>(text).map(|_| ()).map_err(|e| format!("`{text}` is not a bevy_lights Flicker: {e}"));
+        return crate::fixture::Fixture::read(text).map(|_| ());
     }
     let _ = krate;
     ron::from_str::<ron::Value>(text).map(|_| ()).map_err(|e| format!("`{text}` is not RON: {e}"))

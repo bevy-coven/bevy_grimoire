@@ -3,16 +3,17 @@
 //! A game keeps a few real lights and hands them to the props nearest its focus (`bevy_lights`'
 //! `LightPoolPlugin`). This operation answers "which of my torches are real from here?" by running
 //! that plugin itself over the open map's fixtures (every placement carrying a `bevy_lights`
-//! `Flicker`, its `base` as the candidate's intensity) and reading its own `PoolBudget`, so the
+//! `Flicker` or `Fire`, its lumens as the candidate's intensity) and reading its own `PoolBudget`, so the
 //! answer is the game's, not a second ranking rule. Read-only; positions are on the ground plane.
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_lights::{Flicker, FlickerPlugin, LightPool, LightPoolPlugin, PoolBudget, PoolCandidate};
+use bevy_lights::{FlickerPlugin, LightPool, LightPoolPlugin, PoolBudget, PoolCandidate};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::editor::EditorState;
+use crate::fixture::Fixture;
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
 use crate::project::{OpenMap, Project};
 use crate::view::Rig;
@@ -52,8 +53,8 @@ pub fn budget(map: &bevy_grimoire_core::map::Map, p: &Params) -> Result<serde_js
     let mut ids = std::collections::HashMap::new();
     for pl in &map.placements {
         let Some(text) = pl.family.get("bevy_lights") else { continue };
-        let f: Flicker = ron::from_str(text).map_err(|e| Refusal::new(format!("{}'s bevy_lights settings do not read: {e}", pl.id)))?;
-        let e = app.world_mut().spawn((PoolCandidate { intensity: f.base, ..default() }, Transform::from_xyz(pl.at.0, 0.0, pl.at.1))).id();
+        let f = Fixture::read(text).map_err(|e| Refusal::new(format!("{}'s bevy_lights settings do not read: {e}", pl.id)))?;
+        let e = app.world_mut().spawn((PoolCandidate { intensity: f.lumens(), ..default() }, Transform::from_xyz(pl.at.0, 0.0, pl.at.1))).id();
         ids.insert(e, pl.id.clone());
     }
     // One frame propagates transforms, the next lets the pool read them.
