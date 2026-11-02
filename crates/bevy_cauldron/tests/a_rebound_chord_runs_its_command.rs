@@ -164,3 +164,22 @@ fn run_command_presses_the_rebound_chord() {
     updates(&mut app, 6);
     assert_eq!(saves(&root), 1, "an agent's run_command goes down as the chord the dispatcher now answers to");
 }
+
+#[test]
+fn a_rebound_chord_is_not_also_a_census_chord_on_the_same_key() {
+    // Save moves to Alt+W; `W` alone pans the view forward, and the census's bare rows do not look at Alt.
+    let alt_w = Shortcut::new(Modifiers::ALT, KeyCode::KeyW);
+    let (app, _root, _user) = rig("rebound_shadow", &[("file.save", alt_w)]);
+    let live = *app.world().resource::<Live>();
+    let mut input = ButtonInput::<KeyCode>::default();
+    input.press(KeyCode::AltLeft);
+    input.press(KeyCode::KeyW);
+    assert!(keys::just_pressed(&input, live, Action::Save), "Alt+W saves");
+    assert!(!keys::just_pressed(&input, live, Action::PanForward), "and does not also pan");
+    assert!(!keys::pressed(&input, live, Action::PanForward), "or hold a pan");
+
+    let mut bare = ButtonInput::<KeyCode>::default();
+    bare.press(KeyCode::KeyW);
+    assert!(keys::just_pressed(&bare, live, Action::PanForward), "W alone still pans");
+    assert!(!keys::just_pressed(&bare, live, Action::Save), "and does not save");
+}

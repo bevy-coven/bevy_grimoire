@@ -3346,6 +3346,17 @@ impl Rebound {
     pub fn chord(&self, action: Action) -> Option<Shortcut> {
         self.0[action as usize]
     }
+
+    /// **Is a rebound chord down on `key` right now?** A census row on that key yields to it: the
+    /// census's bare rows do not look at Alt or Meta, and a row indifferent to Shift fires with it held,
+    /// so a person who moved Save to `Alt+W` would otherwise save *and* pan on one press. Asked after
+    /// the census row's own key test, so it costs nothing on a frame the key is up.
+    fn shadows(&self, key: KeyCode, keys: &ButtonInput<KeyCode>) -> bool {
+        self.0
+            .iter()
+            .flatten()
+            .any(|chord| chord.key == key && Modifiers::held(keys) == chord.modifiers)
+    }
 }
 
 /// **What is holding the keyboard on top of the tab.**
@@ -3476,7 +3487,7 @@ pub fn just_pressed(keys: &ButtonInput<KeyCode>, live: Live, action: Action) -> 
     let b = binding(action);
     match live.3.chord(action) {
         Some(chord) => gate(b, live) && chord.just_pressed(keys),
-        None => allowed(b, keys, live) && keys.just_pressed(b.key),
+        None => allowed(b, keys, live) && keys.just_pressed(b.key) && !live.3.shadows(b.key, keys),
     }
 }
 
@@ -3485,7 +3496,7 @@ pub fn pressed(keys: &ButtonInput<KeyCode>, live: Live, action: Action) -> bool 
     let b = binding(action);
     match live.3.chord(action) {
         Some(chord) => gate(b, live) && keys.pressed(chord.key) && Modifiers::held(keys) == chord.modifiers,
-        None => allowed(b, keys, live) && keys.pressed(b.key),
+        None => allowed(b, keys, live) && keys.pressed(b.key) && !live.3.shadows(b.key, keys),
     }
 }
 
