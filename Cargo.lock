@@ -1916,7 +1916,7 @@ dependencies = [
 [[package]]
 name = "bevy_siren"
 version = "0.1.0"
-source = "git+https://github.com/bevy-coven/bevy_siren?rev=3bef54788444faa9996076aebef4b8ed076bef47#3bef54788444faa9996076aebef4b8ed076bef47"
+source = "git+https://github.com/bevy-coven/bevy_siren?rev=7029b20#7029b20c6250d5ec05db3b50282bacfcaf2089a9"
 dependencies = [
  "bevy",
  "ron",

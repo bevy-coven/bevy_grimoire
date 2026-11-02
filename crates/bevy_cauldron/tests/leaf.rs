@@ -122,6 +122,12 @@ const ALLOWED: &[(&str, &str)] = &[
         "the owner's speech balloon, conversation graph and dialog box crate, hosted by the family layer (#106, #96) — OPTIONAL, reached only by `--features bevy_speech_bubbles` and pinned by git rev, so an ordinary build pays nothing",
     ),
     (
+        "bevy_siren",
+        "the audio mix table and cue audition, hosted by the audio panel (S-01) — OPTIONAL, reached only by \
+         `--features bevy_siren` and pinned by git rev, so an ordinary build and a game that lists no family \
+         crate pay nothing; the editor writes the crate's own types, never a second schema",
+    ),
+    (
         "bevy_stigmergy",
         "the owner's decaying trail fields, hosted by the family layer (#107) — OPTIONAL, reached only by `--features bevy_stigmergy` and pinned by git rev, so an ordinary build pays nothing",
     ),

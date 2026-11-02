@@ -17,6 +17,7 @@
 mod fixtures;
 
 mod a_broken_stack_still_opens_framed;
+mod audio_panel_reads_the_crates_file;
 mod a_capture_sequence_takes_one_frame_at_a_time;
 mod a_clock_edit_walks_the_hour;
 mod a_change_says_what_it_broke;
@@ -129,7 +130,6 @@ mod a_two_way_mount_is_seated_by_every_door;
 mod a_two_way_mount_seats_on_either;
 mod a_weight_names_the_pieces_it_tunes;
 mod a_widget_is_clicked_by_its_label;
-mod the_audio_panel_reads_the_crates_mix;
 mod the_settings_screen_searches_and_resets;
 mod the_environment_panel_is_reachable;
 mod the_keymap_refuses_a_clash_and_saves_nothing;

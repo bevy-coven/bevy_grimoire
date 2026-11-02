@@ -49,6 +49,8 @@ pub mod anim_watch;
 pub mod args;
 #[cfg(feature = "asset_spike")]
 pub mod asset_spike;
+#[cfg(feature = "bevy_siren")]
+pub mod audio_panel;
 pub mod badges;
 pub mod build;
 pub mod chooser;

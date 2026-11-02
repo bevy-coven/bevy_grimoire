@@ -69,6 +69,8 @@ bevy_orca = ["dep:bevy_orca"]
 bevy_society = ["dep:bevy_society"]
 bevy_speech_bubbles = ["dep:bevy_speech_bubbles"]
 bevy_stigmergy = ["dep:bevy_stigmergy"]
+# **The audio mix table and cue audition (S-01).** `bevy_siren`'s own types, written by the audio panel:
+# the editor never keeps a second schema of a project's sound. Pinned by git rev like every family crate.
 bevy_siren = ["dep:bevy_siren"]
 # **A spike, not a migration (#204, hot-reload H7)**: `standards.ron` through Bevy's `AssetLoader` and its
 # file watcher, beside the editor's own `FileWatch`. Off by default and in no build the gate makes; it turns
@@ -83,9 +85,11 @@ bevy_lights = { git = "https://github.com/bevy-coven/bevy_lights", rev = "ae3b81
 bevy_light_grid = { git = "https://github.com/bevy-coven/bevy_light_grid", rev = "8b4a3c760ccc05f39e81bb22e366b330080fcc95", optional = true }
 bevy_orca = { git = "https://github.com/bevy-coven/bevy_orca", rev = "e7160df097dc75652633f801f6c0ab1c73356bc4", optional = true }
 bevy_society = { git = "https://github.com/bevy-coven/bevy_society", rev = "d2e39703e06ebf40b5e787a2da4b6882a9beee3e", default-features = false, optional = true }
-bevy_siren = { git = "https://github.com/bevy-coven/bevy_siren", rev = "3bef54788444faa9996076aebef4b8ed076bef47", features = ["serde"], optional = true }
 bevy_speech_bubbles = { git = "https://github.com/bevy-coven/bevy_speech_bubbles", rev = "b2d67f0d8a8a984a78f9bc9291cc63be867c6822", optional = true }
 bevy_stigmergy = { git = "https://github.com/bevy-coven/bevy_stigmergy", rev = "6ecee6a3c2ff0bf7f18dab10f376c49b49914c44", optional = true }
+# The audio crate (S-01): the editor writes the crate's own `SirenSettings` and `CueTable`, never a schema of its
+# own. `serde` on, because the panel reads and writes `family/bevy_siren.ron`.
+bevy_siren = { git = "https://github.com/bevy-coven/bevy_siren", rev = "7029b20", features = ["serde"], optional = true }
 bevy_grimoire_core = { path = "../bevy_grimoire_core" }
 bevy_flora = { git = "https://github.com/bevy-coven/bevy_flora", rev = "25e956b3f88ba32a1b6d75957360c6840da6afd9", features = ["ron"], optional = true }
 # The editor's UI library (UI-01, #209): required, not a family-crate feature. `EditorUiPlugin` owns it.

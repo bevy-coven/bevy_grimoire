@@ -35,6 +35,24 @@ A game asks for what it needs here through GitHub issues, and that is the only c
 - **This repo's loop** (`.omp/commands/build-loop.md`) takes an open `consumer` issue right after bug issues and ahead of the owner's focus. It builds the general form (the game is the example, never a name in the API), proves it with a test here, and closes the issue only through a verified fix (`Fixes #N`). One it cannot work gets a comment saying what it needs.
 - **The game waits** with `Needs: bevy_grimoire#N` on its own item and takes it up again when the issue is closed as completed and its checkout of this repo has the fix. Closed as not planned means declined: that is a question for the owner, not a retry.
 
+### The two-way street, both ways
+
+**A consumer that needs something files it here, and this loop builds it here.** A game or a family crate opens an
+issue on `bevy-coven/bevy_grimoire` labelled `enhancement` (or `bug`), `consumer` and `consumer:<project>`, whose body
+says why, the proposed API, the edge cases, and an acceptance this repo can prove with its own test. An open
+`consumer` issue is taken right after bug issues and ahead of the owner's focus; the fix is made here, in its own
+commit with its own test, as the general form (a project is the example, never a name in the API), and the issue is
+closed only by that commit's `Fixes #N`.
+
+**This editor's own needs go the other way.** When a panel cannot do what a family crate now needs — a sound bus the
+audio panel cannot show, an editor field a crate's settings type does not have — the request is filed on that
+crate's repository labelled `enhancement`, `consumer` and `consumer:bevy_grimoire`, and the editor item waits with
+`Needs: <crate>#N` until a commit there closes it, then moves its `rev` pin. Never patch, wrap or vendor a family
+crate here.
+
+Both directions carry the "recommend, record, proceed" rule and the `assumed-decision` label, so an unanswered design
+question never idles a loop.
+
 ### Iterating from a consumer
 
 A game links only `bevy_grimoire_core` (with `bevy_grimoire_rng` and `bevy_grimoire_solver`); the editor crates are a separate binary run from this repo on the game's project: `cargo run -p bevy_cauldron -- <game-root> <map> --kit <kit>`, and with `--live` it writes every change through to disk for a game that watches its project (series S-003). So an editor-only change never touches the game's build, while a change to core is picked up by the game's next `cargo` run through its path dependency, with nothing to copy or bump. `cargo run -q -p bevy_cauldron --example boot_headless -- <game-root>` proves a game's project still opens without a window. The per-game loop (what to run, what to commit where) is in the game's `AGENTS.md`; Sanctuary's is under "bevy_grimoire: live editing, evolving with Sanctuary".
@@ -64,6 +82,7 @@ The owner's Bevy crates are meant to be the heart of this editor (issues #96–#
 | Menus, HUD meters, dialogs, tooltips, a UI skin, keyboard and gamepad navigation | `bevy_gooey` |
 | Stigmergic fields, crowd avoidance | `bevy_stigmergy`, `bevy_orca` |
 | Fracture, wounds, blood | `bevy_carnage` |
+| Cues, buses, ducking, music layers, an audio log | `bevy_siren` |
 | An agent driving a running game over BRP | `bevy_fairy` (successor of `bevy_debugger_mcp`) |
 | A frame on demand | `bevy_devshot` |
 
