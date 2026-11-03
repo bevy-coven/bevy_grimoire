@@ -83,7 +83,11 @@ class PrePushUploadsLfsObjects(unittest.TestCase):
         # Take the object away from the clone, so git-lfs has nothing to upload: the upload fails and the push must too.
         pointer = git(self.work, "show", "HEAD:docs/changelog/media/clip.png").stdout
         oid = pointer.split("oid sha256:")[1].split()[0]
-        shutil.rmtree(self.work / ".git" / "lfs" / "objects")
+        # **Make the upload fail for real.** Deleting `.git/lfs/objects` does not: git-lfs re-hashes the
+        # working-tree file and uploads that (measured 2026-11-02), so the push succeeds and the object
+        # reaches the remote - which is the hook working, not failing. An LFS endpoint that cannot
+        # answer is a failure git-lfs reports and the hook must turn into a refused push.
+        git(self.work, "config", "lfs.url", str(self.tmp / "no-such-endpoint.git" / "info" / "lfs"))
 
         pushed = git(self.work, "push", "origin", "main", check=False)
 
