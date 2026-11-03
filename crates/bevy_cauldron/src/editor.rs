@@ -1957,7 +1957,10 @@ pub(crate) fn note_pick_piece(
 #[allow(clippy::too_many_arguments)]
 fn drive_note(
     mouse: Res<ButtonInput<MouseButton>>,
-    hovered_ui: Query<&Hovered>,
+    // **The rects, not the flag.** `Query<&Hovered>` answered *does anything in the world carry
+    // `Hovered`* — true for the whole window once the two docks are in the tree — which is why a
+    // Shift-click on empty ground never reached its own branch. See [`panel_under_pointer`].
+    hovered_ui: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<Hovered>>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     open: Res<OpenMap>,
@@ -1978,7 +1981,14 @@ fn drive_note(
         return;
     };
     let (cam, cam_tf) = *camera;
-    let blocked = ui_blocks_gesture(hovered_ui.iter().any(|h| h.0), note_box.from.is_some());
+    let blocked = ui_blocks_gesture(
+        panel_under_pointer(
+            pointer.0,
+            Some((cam, cam.target_scaling_factor().unwrap_or(1.0))),
+            hovered_ui.iter(),
+        ),
+        note_box.from.is_some(),
+    );
     let hit = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !blocked);
     let Some(hit) = hit else {
         if mouse.just_released(MouseButton::Left) {
@@ -14710,6 +14720,31 @@ pub(crate) fn removal_box(from: (f32, f32), at: (f32, f32), pitch: f32) -> (f32,
 /// Reported at the keyboard, 2026-08-15.
 pub(crate) fn ui_blocks_gesture(over_ui: bool, dragging: bool) -> bool {
     over_ui && !dragging
+}
+
+/// **Is a panel under the pointer?** — the position-aware form every gesture driver should ask.
+///
+/// `ui_blocks_gesture(hovered_ui.iter().any(..), ..)` asked only *does any node in the world carry
+/// `Hovered`*, and `Hovered` is true for a node **or any descendant**. Measured on 2026-11-02: the two
+/// docks are hovered and **697 px tall**, so the answer was `true` everywhere — a click on empty ground
+/// in the middle of the map was refused as "on the interface", and `drive_note` never reached its own
+/// Shift-click branch. That is the failure passes 251, 258, 265 and 266 each chased as a property of the
+/// shell split; it is a property of this question.
+///
+/// `view::over_ui` already does it correctly — it projects the pointer and asks
+/// `ComputedNode::contains_point` — so this is only the plumbing that lets a driver that has a pointer
+/// and a camera use it.
+pub(crate) fn panel_under_pointer<'a>(
+    pointer: Option<Vec2>,
+    camera: Option<(&Camera, f32)>,
+    nodes: impl IntoIterator<Item = (&'a bevy::ui::ComputedNode, &'a bevy::ui::UiGlobalTransform)>,
+) -> bool {
+    let Some((_, scale)) = camera else {
+        // No camera is not "over the world": the driver cannot place anything either way, and
+        // `cursor_ground` will refuse for the same reason.
+        return false;
+    };
+    crate::view::over_ui(pointer, scale, nodes)
 }
 
 /// **Is there a ghost on screen — the thing the rotate cluster steers?**
