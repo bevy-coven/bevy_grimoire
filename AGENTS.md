@@ -22,7 +22,7 @@ Games depend on these crates by path and the editor runs on a game as its projec
 
 - Changes a game needs are made here, in their own commits, with tests here. Never copy a crate into a game or patch it there.
 - Every API change lists the consumer callsites it breaks.
-- Before pushing, run `cargo test --workspace` here and `cargo test` in each consumer.
+- Before pushing, run `cargo nextest run --workspace` here and `cargo test` in each consumer.
 - If a consumer change depends on an unpushed commit here, the consumer's agents are told which commit (Sanctuary: `AGENTS_CHAT.md`).
 
 Consumers: Sanctuary (`/Users/ladvien/sanctuary`, decision 0087).
@@ -132,6 +132,7 @@ A loop is one dumb driver (`tools/loop/wiggum.sh`) running one fresh `omp -p` pe
 - Licence is MIT OR Apache-2.0 for every crate. Do not copy GPL code in from foundation_vs_slop's untouched crates.
 - One plugin per domain; split by domain, not by kind.
 - Do not hard-wrap markdown.
+- Tests run under `cargo nextest`, not `cargo test`: `cargo nextest run -p bevy_cauldron --test editor -E 'test(<module>::)'` for one module, `cargo nextest run --workspace` for all of them, and `cargo test --workspace --doc` for doctests, which nextest does not run.
 - Close any Bevy app you launch for a test.
 
 README and docs follow https://github.com/bevy-coven/.github/blob/main/DOCUMENTATION.md; a feature is not done until its README line and, if visible, its GIF exist.
