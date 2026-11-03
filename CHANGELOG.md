@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **257-verb-classification** `85d6b22` the unmigrated allowlist says which verbs can never be operations: 57 project, 30 view, 4 held or modal *No clip: no visible surface changed — a classification and its pinned test; proved by the_unmigrated_list_says_which_verbs_can_never_be_operations*
 - **256-journal-operation** `6214122` the journal opens through an operation: Cmd+E and an agent toggle the same panel *No clip: no visible surface changed — the panel toggles as before, now through an operation; proved by operations_have_two_front_ends 8/8*
 - **255-view-cycle-grid** `778d102` a view verb is an operation: the grid key and an agent dispatch the same change *No clip: no visible surface changed — the grid rung cycles exactly as before, now through an operation; proved by operations_have_two_front_ends 8/8*
 - **254-blank-frame-calibrated** `ef8a26f` the blank_frame check is measured at 100% on 60 samples, and its calibration is the owner's to turn on *No clip: a measurement and a doc; proved by the recorded set and figures in docs/decide/checking-captures.md*
