@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **210-list-words-skin** `35d6696` The shared list's words come from the editor skin, so a project's theme reaches every row (#210) *No clip: invisible by design, as the issue asks: the skin's four values are the four constants today, asserted by the_lists_ink_is_the_skins_and_the_skin_is_the_palette*
 - **195-host-picker-memory** `a70c4e8` The host picker's memory rule is a test, and its ranking key is one function, so a pass cannot quietly drop it (#195) *No clip: a loop tool's test; proved by tools/loop/test_otel_host_pick.py (6 tests, two verified load-bearing by breaking the picker)*
 - **137-relations-add** `748d063` A map's relations can be added and removed by a person or an agent, not only hand-written into the file (#137) *No clip: an operation with no panel yet; proved by crates/bevy_cauldron/tests/relations_add_is_an_operation.rs (4 tests, a relation written and read back by the solver)*
 - **278-palette-first-click** `e0b6455` A click on a palette row arms it the first time: a filter blur no longer rebuilds the list (#278) *No clip: an input fix with no new surface; proved by crates/bevy_cauldron/tests/a_row_click_while_filtering_arms_it.rs::blurring_the_filter_leaves_the_palette_rows_standing, which fails on the old gate*
