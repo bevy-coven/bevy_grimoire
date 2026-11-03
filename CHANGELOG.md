@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **265-split-hypotheses** `7462631` the shell split's click failure is neither picking nor width nor hover, and the search is now three hypotheses shorter *No clip: an investigation that shipped no code; the finding is on #224*
 - **264-agent-can-undo** `ffe2bb5` an agent can already undo: pass 263's claim was wrong, and a test now checks the doors are registered *No clip: a doc correction and a test; proved by a probe that breaks the registration and fails*
 - **263-world-kind** `464b334` a fifth verb kind: thirteen actions need ECS state, and an agent still cannot undo *No clip: a classification with no visible surface; proved by the five-kind test in operations_have_two_front_ends*
 - **262-camera-by-measurement** `1b6a0c6` the verb classification is derived from a scan of pressed vs just_pressed: the project backlog is 28, not 57 *No clip: a classification correction with no visible surface; proved by the two pinned sets in operations_have_two_front_ends*
