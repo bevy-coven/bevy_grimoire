@@ -30,6 +30,12 @@ struct Args {
     /// Which check to calibrate. The clip check unless named.
     check: String,
     model: String,
+    /// **Where the calibration's record is written** (#112). Without it the run only prints, and a
+    /// number printed to a terminal is a claim nobody can check: `tools/decide/check.py` reads this
+    /// file to decide whether a check may block the gate, and
+    /// `crates/bevy_oracle/tests/the_clips_calibration_is_recorded.rs` keeps the record's arithmetic
+    /// honest. Written as RON, beside the labelled set it measured.
+    out: Option<PathBuf>,
 }
 
 fn parse(argv: Vec<String>) -> Result<Args, String> {
@@ -41,6 +47,7 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
         no_builtin: false,
         json: false,
         calibrate: None,
+        out: None,
         check: "clip_shows_its_title".to_owned(),
         model: "clef-flash".to_owned(),
     };
@@ -56,6 +63,7 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
             "--calibrate" => a.calibrate = Some(PathBuf::from(it.next().ok_or_else(usage)?)),
             "--check" => a.check = it.next().ok_or_else(usage)?,
             "--model" => a.model = it.next().ok_or_else(usage)?,
+            "--out" => a.out = Some(PathBuf::from(it.next().ok_or_else(usage)?)),
             "-h" | "--help" => return Err(usage()),
             other => return Err(format!("unknown argument `{other}`\n{}", usage())),
         }
@@ -146,11 +154,28 @@ fn main() {
                 std::process::exit(2);
             }
         };
-        let today = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() / 86_400)
-            .unwrap_or(0);
-        let date = format!("+{today} days");
+        // **A calendar date, not a day count.** This wrote `format!("+{today} days")` from the days
+        // since the epoch, which RON parses as a *duration* and which reads in the record as
+        // `date: "+20760 days"` — caught by
+        // `tests/the_clips_calibration_is_recorded.rs`, the test this record exists for.
+        let date = {
+            let days = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() / 86_400)
+                .unwrap_or(0) as i64;
+            // A civil date from days since the epoch (Howard Hinnant's `civil_from_days`), so the
+            // record carries no dependency for one line of arithmetic.
+            let z = days + 719_468;
+            let era = z.div_euclid(146_097);
+            let doe = z.rem_euclid(146_097);
+            let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+            let y = yoe + era * 400;
+            let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+            let mp = (5 * doy + 2) / 153;
+            let d = doy - (153 * mp + 2) / 5 + 1;
+            let m = if mp < 10 { mp + 3 } else { mp - 9 };
+            format!("{:04}-{:02}-{:02}", if m <= 2 { y + 1 } else { y }, m, d)
+        };
         let calibration = match bevy_oracle::calibrate(&args.check, &args.model, &date, &scored) {
             Ok(c) => c,
             Err(e) => {
@@ -166,6 +191,30 @@ fn main() {
             calibration.threshold,
             calibration.model
         );
+        // **The record, when one was asked for.** See `Args::out`: the printed line is for the person
+        // running the calibration, and the file is what a test and a gate can read afterwards.
+        if let Some(out) = args.out.as_deref() {
+            let write = || -> Result<(), String> {
+                let text = ron::ser::to_string_pretty(
+                    &calibration,
+                    ron::ser::PrettyConfig::default(),
+                )
+                .map_err(|e| e.to_string())?;
+                if let Some(parent) = out.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("{}: {e}", parent.display()))?;
+                }
+                std::fs::write(out, format!("{text}\n"))
+                    .map_err(|e| format!("{}: {e}", out.display()))
+            };
+            match write() {
+                Ok(()) => println!("recorded to {}", out.display()),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(2);
+                }
+            }
+        }
         if args.json {
             match serde_json::to_string_pretty(&calibration) {
                 Ok(text) => println!("{text}"),

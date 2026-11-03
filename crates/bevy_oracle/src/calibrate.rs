@@ -19,6 +19,15 @@ pub struct Calibration {
     /// P(yes) at or above this is a yes.
     pub threshold: f64,
     pub date: String,
+    /// **The counts the agreement is made of** (#112). `agreement` alone is a number beside nothing:
+    /// the record is what a test and a gate read, and two typed numbers that disagree are
+    /// indistinguishable from a measurement. Defaulted so a hand-written `checks.ron` that predates
+    /// this field still loads; a calibration run always fills both.
+    #[serde(default)]
+    pub correct: usize,
+    /// Samples the threshold got wrong.
+    #[serde(default)]
+    pub wrong: usize,
 }
 
 impl Calibration {
@@ -72,5 +81,7 @@ pub fn calibrate(
         agreement: best.0 as f64 / samples.len() as f64,
         threshold: best.1.min(1.0),
         date: date.into(),
+        correct: best.0,
+        wrong: samples.len() - best.0,
     })
 }

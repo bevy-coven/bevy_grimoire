@@ -3,3 +3,9 @@ target/
 .DS_Store
 __pycache__/
 *.pyc
+
+# **The clip check's images are derived, never committed** (#112). `tools/decide/clip_set.py` makes them
+# from the clips the changelog already names — 73 clips x 4 PNGs is 24 MB that `extract` remakes in
+# seconds. What is committed is the manifest (`clip_samples.ron`) and the measurement
+# (`clip_calibration.ron`).
+crates/bevy_oracle/fixtures/clips/

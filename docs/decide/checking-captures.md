@@ -89,8 +89,23 @@ GRIMOIRE_DECIDE_ENDPOINT=http://127.0.0.1:8093/v1/systemone \
 run and can never fail one. That is the issue's own rule, not a shortcut — a check that has earned nothing
 must not be able to block, and this one has now shown what it is worth rather than leaving the question open.
 
-Two things follow. First, the figure is recorded here and nowhere in the check: a `calibration` is written by
-the owner's evaluator pass once a check clears the bar, and this one does not. Second, the honest reading is
+**The measurement is a file, not this paragraph.** `--out` writes it, and a test reads it:
+
+```sh
+  --out crates/bevy_oracle/fixtures/clip_calibration.ron
+# clip_shows_its_title   agreement 61.5% on 122 samples, threshold 0.241, model clef-flash
+# recorded to crates/bevy_oracle/fixtures/clip_calibration.ron
+```
+
+`crates/bevy_oracle/fixtures/clip_calibration.ron` is that record: the check, the model, the set size, the
+threshold, the counts the agreement is made of, and the date. `tests/the_clips_calibration_is_recorded.rs`
+reads it and refuses a record whose `agreement` is not its own `correct / set_size`, whose `set_size` is not
+the labelled set's, or whose set has lost one of its two halves. That is the issue's first acceptance item
+("measured and recorded (test reads the record)"), and the record is written by a run rather than typed:
+the two numbers in it can no longer drift apart.
+
+Two things follow. First, the figure is recorded in that file and nowhere in the check: a `calibration` is
+written by the owner's evaluator pass once a check clears the bar, and this one does not. Second, the honest reading is
 about the **samples as much as the model**: a 9B model on four 480 px frames is asked to match a whole
 changelog title ("at 23:00 a torch and a brazier burn on two lamps, with their flames, sparks and pooled
 light") against a still that shows a room — the mismatch pairs are often about *one clause* of a long line.

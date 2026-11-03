@@ -100,6 +100,9 @@ fn only_a_calibrated_check_at_the_bar_may_block() {
         agreement: 0.95,
         threshold: 0.7,
         date: "2026-10-29".into(),
+        // owner exception, schema field: the two counts `agreement` is made of (#112).
+        correct: 19,
+        wrong: 1,
     });
     assert!(c.may_block(0.9) && !c.may_block(0.96));
     let round = Checks { checks: vec![c.clone()], ..Checks::default() };
