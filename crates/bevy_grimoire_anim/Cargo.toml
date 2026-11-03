@@ -25,4 +25,4 @@ repository = "https://github.com/bevy-coven/bevy_grimoire"
 # is inherited — so writing `{ workspace = true, default-features = false }` would silently keep the
 # defaults on. The version is the workspace's; keep them in step by hand when bumping.
 bevy = { version = "0.20.0", default-features = false, features = ["bevy_animation", "bevy_scene", "bevy_gltf", "bevy_log"] }
-bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.7.1" }
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.8.0" }
