@@ -4,7 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
-- **shell-regions-share-the-row** `405790c` The Cauldron's frame shares the row: the viewport is what the docks leave *No clip: visible, not yet recorded: no display on this host (headless); proved by crates/bevy_cauldron/tests/the_frames_regions_fit_the_window.rs*
+- **shell-regions** `cc2ec9e` The Cauldron's shell: every region answers to its name, and the world sits inside the hole the docks leave<br><a href="docs/changelog/media/2026-11-03-shell-regions.mp4"><img src="docs/changelog/media/2026-11-03-shell-regions.png" width="320" alt="clip"></a>
+- **shell-regions-share-the-row** `405790c` The Cauldron's frame shares the row: the viewport is what the docks leave<br><a href="docs/changelog/media/2026-11-03-shell-regions.mp4"><img src="docs/changelog/media/2026-11-03-shell-regions.png" width="320" alt="clip"></a>
 
 ## 2026-11-02
 
