@@ -746,3 +746,64 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
         );
     }
 }
+
+/// **A `World` verb is still reachable by an agent, and that is what the kind must not be read to deny.**
+///
+/// Pass 263 wrote that *"an agent … cannot undo"*. It was false: two doors already exist and neither is
+/// the registry. `grimoire/operation_undo` takes one change back by its id, and `grimoire/run_command`
+/// runs **any** registered command by its id exactly as the key would. Every `Change::World` verb is
+/// therefore already reachable over MCP.
+///
+/// **The first version of this test searched the source for the door's name, and a probe proved it
+/// worthless**: the string appears in six places — two doc comments, `command_palette.rs`, `command_run.rs`,
+/// this crate's `keys.rs` and four sites in `ops_brp.rs` — so renaming the one that registers it changed
+/// nothing the test could see. What it checks now is the door's **argument**, which only the registration
+/// can supply: `run_command` is called with `RunCommandParams`, and `by_id` resolves the id.
+///
+/// It also asserts every `World` verb has a row in `commands.rs`, because that row is the id an agent
+/// passes. A verb added to `World` without one fails here, at the moment somebody should notice:
+/// `World` means "no `Ctx` operation", never "no agent path".
+#[test]
+fn a_world_verb_is_reachable_by_an_agent_through_a_door_that_is_not_the_registry() {
+    let brp = std::fs::read_to_string("src/ops_brp.rs").expect("ops_brp.rs is there");
+    // **The registration, not the name.** `DebugCommandInfo::new("grimoire/…", …)` followed by the
+    // handler is how a method exists; a doc comment mentioning the name registers nothing.
+    for (door, handler) in [
+        ("grimoire/operation_undo", "operation_undo,"),
+        ("grimoire/run_command", "run_command,"),
+    ] {
+        let registered = brp
+            .split("DebugCommandInfo::new(")
+            .any(|block| block.contains(&format!("\"{door}\"")) && block.contains(handler));
+        assert!(
+            registered,
+            "`{door}` is not registered with its handler `{handler}` in ops_brp.rs. Without it, \
+             `Change::World` would mean 'no agent can do this' — which is false, and was asserted \
+             once in this file's own history."
+        );
+    }
+    // **And the id an agent would pass resolves.** `by_id` is the same lookup `run_command` makes.
+    for id in ["edit.undo", "edit.redo"] {
+        assert!(
+            bevy_cauldron::commands::by_id(id).is_some(),
+            "`{id}` is not a registered command, so `grimoire/run_command {{\"id\": \"{id}\"}}` \
+             would be refused and the undo capability would really be missing."
+        );
+    }
+    let commands = std::fs::read_to_string("src/commands.rs").expect("commands.rs is there");
+    let mut missing = Vec::new();
+    for action in Action::ALL {
+        if action.change() != bevy_cauldron::keys::Change::World {
+            continue;
+        }
+        let name = format!("{action:?}");
+        if !commands.contains(&name) {
+            missing.push(name);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "these `World` verbs have no row in `commands.rs`, so an agent has no id to pass to \
+         `grimoire/run_command` and the capability really would be missing: {missing:?}"
+    );
+}

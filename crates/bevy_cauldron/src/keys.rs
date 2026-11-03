@@ -883,10 +883,17 @@ pub enum Change {
     /// verb whose handler takes `&mut Commands` or a `Query<(Entity, &Placement)>` cannot become an
     /// operation without changing that trait for every operation there is.
     ///
-    /// **This is a real gap and the largest one left.** An agent can place, remove, turn, pin and save
-    /// through the registry — but it cannot `undo`, which takes `Commands`, `AssetServer` and two queries.
-    /// A `World` operation that carries a *deferred action* in `Ctx` (the shape `layout_propose` /
-    /// `layout_accept` already uses for a proposal) is the way to close it; that is a pass of its own.
+    /// **It is not a gap in what an agent can do.** Pass 263 claimed an agent could not `undo`; that was
+    /// wrong. `grimoire/operation_undo` takes a change back by id, and `grimoire/run_command` runs every
+    /// registered command by id exactly as its key would — so all thirteen of these are already reachable
+    /// over MCP, through the door that fits them rather than through the registry.
+    ///
+    /// **What is missing is narrower and worth stating**: none of them has a `Ctx` operation, so none is
+    /// *logged* the way `placement_add` is, and an undo of an undo (`Redo`) or a per-panel history
+    /// (`UndoTile`, `UndoBuild`, `UndoBench`) has no id an agent can cite. Closing that means a
+    /// `Ctx::deferred` action — the shape `layout_propose`/`layout_accept` uses for a proposal — and it is
+    /// an improvement in *symmetry*, not in *reach*. Nobody should build it expecting to unlock a
+    /// capability; the capability is there.
     World,
     /// **Camera state only** — already reachable by an agent through a BRP method that says so.
     ///
