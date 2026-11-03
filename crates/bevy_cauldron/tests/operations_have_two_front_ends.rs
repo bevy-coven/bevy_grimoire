@@ -313,10 +313,6 @@ const UNMIGRATED: &[Action] = &[
     Action::CheckAllRigs,
     Action::ToggleGhost,
     Action::CycleCamPreset,
-    // **Snip is a capture, not a registry operation** (`keys::Action::Snip`): it writes a crop and
-    // a file of what was under it, and changes no map. It has no operation name to dispatch, so it
-    // is accounted for here rather than migrated.
-    Action::Snip,
 ];
 
 /// **The ratchet.** It is lowered in the same commit that migrates an action, and it is the only
@@ -345,7 +341,7 @@ const UNMIGRATED: &[Action] = &[
 // 94 -> 93: `AdoptMeasured` -> `rig_adopt_measured` (E-002, #129 slice 13): `Enter` on the Anim tab adopts the selected rig's measured gait values into `rigs.ron` through the operation an agent calls.
 // 93 -> 92: `GroupFromSet` -> `composition_define` (E-002, #129 slice 14): `M`, a name and Enter keep the set in hand as a group through the operation an agent calls (its `set` verb).
 // 92 -> 91: `ScanMesh` -> `piece_set_cells` (E-002, #129 slice 19): `B` and the SCAN chip read a library piece's mesh and mark the cells it occupies through the operation an agent calls (its `scan` verb).
-const UNMIGRATED_MAX: usize = 87;
+const UNMIGRATED_MAX: usize = 86;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -415,7 +411,7 @@ fn every_migrated_action_has_a_ui_path_that_dispatches_its_operation() {
     // editor.rs and chooser.rs (`piece_import`'s `admit_candidate(`). `notice.rs` owns the journal
     // panel, so `Cmd+E`'s dispatch lives there and not in editor.rs — the same false failure, one
     // file later.
-    let editor: String = ["src/editor.rs", "src/chooser.rs", "src/tiles.rs", "src/screen.rs", "src/notice.rs"]
+    let editor: String = ["src/editor.rs", "src/chooser.rs", "src/tiles.rs", "src/screen.rs", "src/notice.rs", "src/snip.rs"]
         .iter()
         .filter_map(|f| std::fs::read_to_string(f).ok())
         .collect();
@@ -435,7 +431,7 @@ fn every_migrated_action_has_a_ui_path_that_dispatches_its_operation() {
         };
         assert!(
             editor.contains(place),
-            "{action:?}'s UI path `{place}` is in none of the five UI source files"
+            "{action:?}'s UI path `{place}` is in none of the six UI source files"
         );
         assert!(
             editor.contains(&format!("\"{name}\"")),
@@ -494,14 +490,14 @@ fn every_operation_has_a_ui_entry_point_and_the_other_way_round() {
     // the door crossing, and a scan that read editor.rs and chooser.rs reported a real entry point as
     // missing — measured on `piece_import`'s `admit_candidate(`.
     let ui_source: String =
-        ["src/editor.rs", "src/chooser.rs", "src/tiles.rs", "src/screen.rs", "src/notice.rs"]
+        ["src/editor.rs", "src/chooser.rs", "src/tiles.rs", "src/screen.rs", "src/notice.rs", "src/snip.rs"]
         .iter()
         .filter_map(|f| std::fs::read_to_string(f).ok())
         .collect();
     for (name, place) in &ui {
         assert!(
             ui_source.contains(place),
-            "`{name}`'s UI path `{place}` is in none of the five UI source files"
+            "`{name}`'s UI path `{place}` is in none of the six UI source files"
         );
     }
     let mut orphaned = Vec::new();
@@ -572,7 +568,7 @@ fn every_ui_entry_point_is_in_the_source_and_dispatches_the_operation() {
     // it is checking for. The bounds count below stays on `editor.rs` alone: it asks where the map's
     // size is written in the editor, and that is one file's question.
     let ui: String =
-        ["src/editor.rs", "src/screen.rs", "src/chooser.rs", "src/tiles.rs", "src/notice.rs"]
+        ["src/editor.rs", "src/screen.rs", "src/chooser.rs", "src/tiles.rs", "src/notice.rs", "src/snip.rs"]
         .iter()
         .filter_map(|f| std::fs::read_to_string(f).ok())
         .collect();

@@ -48,6 +48,10 @@ pub struct View {
     /// every other tool returns to, so this is the same value `EditorState.tool` holds.
     #[serde(default, serialize_with = "tool_out", deserialize_with = "tool_in")]
     pub tool: Tool,
+    /// **Whether the snip is armed** — `Cmd+\` arms it, the same key disarms it, and a completed
+    /// rectangle disarms it too. A capture mode, not a map change.
+    #[serde(default)]
+    pub snip_armed: bool,
     /// **Which filter box the keyboard is in**, when the key that moves it is the only way there.
     /// Cleared by the front end when the box loses focus; `None` means "no box is being typed in".
     #[serde(default)]
@@ -118,6 +122,13 @@ impl View {
         crate::editor::arm_tool_in(&mut self.tool, tool, chord)
     }
 
+    /// **Arm the snip, or cancel it** — the answer is whether it is armed now. The same toggle
+    /// `snip::snip_key` makes: one key in, one key out.
+    pub fn toggle_snip(&mut self) -> bool {
+        self.snip_armed = !self.snip_armed;
+        self.snip_armed
+    }
+
     /// **Send the keyboard to the filter box.** `tags` picks the tag block over the list's box; the
     /// answer is which one, or `None` when there is no box on this page to move to.
     pub fn focus_filter(&mut self, tags: bool) -> bool {
@@ -150,7 +161,13 @@ mod tests {
     /// **A rung survives a round trip**, which is what lets the front ends carry it as a value.
     #[test]
     fn a_view_round_trips_through_json() {
-        let view = View { rung: SnapLevel::Finer, journal_open: true, filter_focus: Some(true), tool: Tool::Clone };
+        let view = View {
+            rung: SnapLevel::Finer,
+            journal_open: true,
+            filter_focus: Some(true),
+            tool: Tool::Clone,
+            snip_armed: true,
+        };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
     }

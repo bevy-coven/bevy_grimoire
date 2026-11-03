@@ -1867,6 +1867,70 @@ pub mod fill {
 /// **A view operation, not an edit.** `writes()` is empty and `Undo::None`: arming the clone tool changes
 /// what the next click does, and `Cmd+Z` after arming must take back the last change to the map, not
 /// disarm a tool someone chose on purpose.
+/// **Arm or cancel the snip** (E-002, #129): `Cmd+\` takes a rectangle, and the same key puts it away.
+///
+/// `snip::snip_key` is the key; this is the same toggle on the value, so an agent can arm a capture the
+/// way a person does. **A view operation**: it writes no map, and a completed rectangle disarms it
+/// through the drag's own path rather than through this one.
+pub mod snip_arm {
+    use super::*;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {}
+
+    pub struct SnipArm;
+
+    impl Operation for SnipArm {
+        fn name(&self) -> &'static str {
+            "snip_arm"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            // A capture mode is not the grimoire; the *file* a completed snip writes is `snip_commit`'s,
+            // and that is the operation a project needs, not this one.
+            &[]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+
+        fn plan(&self, ctx: &Ctx, _params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let Some(view) = ctx.view.as_ref() else {
+                return Err(Refusal::new(
+                    "no view is in hand, so there is no snip to arm. An editor front end carries one \
+                     in `Ctx::view`.",
+                ));
+            };
+            Ok(json!({ "now": if view.snip_armed { "disarm" } else { "arm" } }))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            self.plan(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no snip to arm."));
+            };
+            let armed = view.toggle_snip();
+            Ok(Outcome {
+                summary: if armed {
+                    "snip armed: drag a rectangle over the editor".to_owned()
+                } else {
+                    "snip cancelled, nothing was saved".to_owned()
+                },
+                affected: 0,
+                saved: false,
+                inverse: None,
+                after: Some(json!({ "armed": armed })),
+            })
+        }
+    }
+}
+
 pub mod tool_arm {
     use super::*;
     use crate::ops_view::View;
@@ -4194,6 +4258,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(view_cycle_grid::ViewCycleGrid),
         Box::new(view_toggle_journal::ViewToggleJournal),
         Box::new(tool_arm::ToolArm),
+        Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
         Box::new(map_set_settings::MapSetSettings),
         Box::new(layout_propose::LayoutPropose),
@@ -4445,6 +4510,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),
+    // **The snip key**, `Cmd+\\`, which dispatches `snip_arm` (E-002, #129). Arm and cancel are one
+    // toggle on `View::snip_armed`; the rectangle and its file are the drag's own path.
+    ("snip_arm", "\"snip_arm\""),
     // **The map's name field**, which the N key opens. Enter dispatches `map_rename` through
     // `rename_map`, so the name rule and the file's move are the operation's.
     ("map_rename", "rename_map("),

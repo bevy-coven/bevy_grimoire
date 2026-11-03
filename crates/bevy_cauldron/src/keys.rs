@@ -1000,6 +1000,9 @@ impl Action {
             Action::ShowErrors => Some("view_toggle_journal"),
             // **The clone and run tools** (E-002, #129): two keys onto `tool_arm`.
             Action::CloneMode | Action::RunMode => Some("tool_arm"),
+            // **The snip is view state too** (E-002, #129): `Cmd+\` arms a capture, and the same key
+            // puts it away. The file a *completed* rectangle writes is the drag's own path.
+            Action::Snip => Some("snip_arm"),
             Action::Straighten => Some("placement_set_pose"),
             Action::PalettePrev | Action::PaletteNext => Some("brush_arm"),
             Action::ArmComposition | Action::ComposeArm => Some("composition_arm"),

@@ -115,16 +115,26 @@ pub fn snip_key(
     mut state: ResMut<EditorState>,
 ) {
     if keys::just_pressed(&keyboard, *live, Action::Snip) {
-        if snip.armed || snip.from.is_some() {
+        // **The key dispatches the operation an agent calls** (E-002, #129). `snip_arm` owns the toggle;
+        // this carries the view in and applies the answer. A drag in progress is cancelled first, which
+        // is the key's own business and not a value an agent can hold.
+        if snip.from.is_some() {
             snip.disarm();
-            state
-                .status
-                .note("snip cancelled, nothing was saved".to_owned());
-        } else {
-            snip.armed = true;
-            state
-                .status
-                .note("snip armed: drag a rectangle over the editor".to_owned());
+        }
+        let open = snip.armed;
+        let mut ctx = crate::ops::Ctx {
+            source: crate::ops::Source::Human,
+            session: crate::ops::session_id(),
+            view: Some(crate::ops_view::View { snip_armed: open, ..Default::default() }),
+            ..crate::ops::Ctx::default()
+        };
+        let outcome = crate::ops::dispatch(&mut ctx, "snip_arm", &serde_json::json!({}));
+        if let Some(view) = ctx.view {
+            snip.armed = view.snip_armed;
+        }
+        match outcome {
+            Ok(crate::ops::Applied::Done { outcome, .. }) => state.status.note(outcome.summary),
+            Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
         }
         return;
     }
