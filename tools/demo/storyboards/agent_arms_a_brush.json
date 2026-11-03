@@ -1,0 +1,15 @@
+{
+  "name": "agent_arms_a_brush",
+  "fps": 12,
+  "scale": 1,
+  "width": 900,
+  "crop": [600, 320, 880, 500],
+  "chunks": [
+    { "seconds": 1.2 },
+    { "seconds": 3.0, "operation": { "name": "brush_arm", "parameters": { "descriptor": "pipe" } } }
+  ],
+  "steps": [
+    { "at": 0.3, "caption": "no brush is armed: the ghost is the lamp the map was left on" },
+    { "at": 1.5, "caption": "agent: brush_arm pipe — the ghost becomes the pipe" }
+  ]
+}

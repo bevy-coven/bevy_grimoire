@@ -423,7 +423,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 - **E-044** `dbfc9c3` `piece_select`: an agent selects a shelf piece through the operation *No clip: visible, not yet recorded (backfill)*
 - **E-042** `46b88f8` `label_set`: an agent sets a piece's label axis through the operation *No clip: visible, not yet recorded (backfill)*
 - **E-040** The frame-the-map demo is cropped so the Home view fills the frame *No clip: not visible: demo tooling; proved by the tests in its commit*
-- **E-037** `bc2c98b` An operation arms a brush piece, so an agent can arm one and its hint shows *No clip: visible, not yet recorded (backfill)*
+- **E-037** `bc2c98b` An operation arms a brush piece, so an agent can arm one and its ghost preview follows it, drawn by the map and the library<br><a href="docs/changelog/media/2026-11-03-e037.mp4"><img src="docs/changelog/media/2026-11-03-e037.png" width="320" alt="clip"></a>
 - **E-036** `47f1099` record.py stamps MCP events when the call starts, so captions stay in time *No clip: not visible: demo tooling; proved by the tests in its commit*
 - **E-035** `83bdf63` The demo checker counts a frozen tail and MCP view changes correctly *No clip: not visible: demo tooling; proved by the tests in its commit*
 - **E-018** `52d7f84` The undo history is a list, and a click jumps to any point in it<br><a href="docs/loop/iterations/assets/2026-10-23-cycle3-52d7f84/cycle3_history_click.gif"><img src="docs/loop/iterations/assets/2026-10-23-cycle3-52d7f84/cycle3_history_click.gif" width="320" alt="clip"></a>
