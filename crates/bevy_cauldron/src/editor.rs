@@ -7829,10 +7829,48 @@ fn refresh_history(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// **The status line's ink, from the editor's skin** (UI-02, #210).
+///
+/// The status band is the line an author reads without looking for it, and it was drawn from six
+/// `chrome.rs` constants, so a project's skin file could not reach it.
+///
+/// **Each falls back to its constant**, the seam `chrome::RowFills` established: a harness with no
+/// skin draws the shipped palette, which is what every protected test already reads.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StatusInk {
+    /// A field's ordinary value.
+    pub read: Color,
+    /// A value that is present but quiet.
+    pub quiet: Color,
+    /// A live answer, and an unsaved map — the two things that are happening *now*.
+    pub accent: Color,
+    /// A fault.
+    pub danger: Color,
+}
+
+impl StatusInk {
+    /// The skin's ink where it has one, the shipped constants where it does not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> StatusInk {
+        let Some(skin) = skin else {
+            return StatusInk { read: TEXT, quiet: DIM, accent: ACCENT, danger: DANGER };
+        };
+        StatusInk { read: skin.text, quiet: skin.text_muted, accent: skin.accent, danger: skin.danger }
+    }
+}
+
+/// The three resources the status band reads, bundled so adding the skin did not push
+/// `refresh_status` past clippy's argument limit (UI-02, #210).
+#[derive(bevy::ecs::system::SystemParam)]
+struct StatusReads<'w> {
+    project: Res<'w, Project>,
+    faults: Res<'w, EdgeFaults>,
+    /// **The status line's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<'w, bevy_gooey::GooeySkin>>,
+}
+
 fn refresh_status(
-    project: Res<Project>,
+    StatusReads { project, faults, skin }: StatusReads<'_>,
     open: Res<OpenMap>,
-    faults: Res<EdgeFaults>,
     state: Res<EditorState>,
     under: Res<UnderCursor>,
     // **When the relations file was last read**, on the wall clock: a file on disk changes on it, and
@@ -7841,6 +7879,7 @@ fn refresh_status(
     mut fields: Query<(&Field, &mut Text, &mut TextColor), Without<ReceiptLabel>>,
     mut labels: Query<&mut Text, With<ReceiptLabel>>,
 ) {
+    let StatusInk { read, quiet, accent, danger } = StatusInk::of(skin.as_deref());
     // `none` covers both "nothing armed" and "the armed index no longer exists", which read the same
     // to an author and want the same word.
     let brush = state
@@ -7890,9 +7929,9 @@ fn refresh_status(
             // Silent when the map agrees with itself, which is the common case and the one a standing
             // line must not shout about. `docs/ui.md` §1.2: more information helps, noise does not.
             Field::Edges => match faults.0.len() {
-                0 => ("ok".to_owned(), DIM),
-                1 => (faults.0[0].message.clone(), DANGER),
-                n => (format!("{n} — {}", faults.0[0].message), DANGER),
+                0 => ("ok".to_owned(), quiet),
+                1 => (faults.0[0].message.clone(), danger),
+                n => (format!("{n} — {}", faults.0[0].message), danger),
             },
             // While renaming, the field shows what the name WILL be, not what was typed — that is
             // what "forced" means, and seeing `site_67` appear as you type "Site 67" teaches the rule
@@ -7902,26 +7941,26 @@ fn refresh_status(
                 // having been wiped.
                 Some(raw) => (
                     format!("{}_", bevy_grimoire_core::naming::to_snake_case(raw)),
-                    ACCENT,
+                    accent,
                 ),
-                None => (open.map.name.clone(), TEXT),
+                None => (open.map.name.clone(), read),
             },
             Field::Rule => match &state.rule_seed {
                 // A caret, so an empty field reads as "waiting for you".
-                Some(raw) => (format!("{raw}_"), ACCENT),
+                Some(raw) => (format!("{raw}_"), accent),
                 None => (
                     rule_seed_of(Some(&project), &open.map.name),
-                    TEXT,
+                    read,
                 ),
             },
-            Field::Brush => (brush.to_owned(), TEXT),
+            Field::Brush => (brush.to_owned(), read),
             // ACCENT while something is under the cursor, because it is a live answer that changes
             // as the mouse moves — the same colour the name field uses while it is being typed.
-            Field::Under => (under.0.clone(), ACCENT),
+            Field::Under => (under.0.clone(), accent),
             // A caret while typing, so an empty field reads as "waiting for you" rather than as
             // nothing happening — the rename field's rule. Forced to snake_case as it is typed, so
             // the naming rule teaches itself.
-            Field::Yaw => (format!("{} deg", state.brush_yaw), TEXT),
+            Field::Yaw => (format!("{} deg", state.brush_yaw), read),
             Field::Map => (
                 // Counted by `bevy_grimoire_core::census`, never here — see
                 // `tests/census_is_the_one_counter.rs` for why a rendered count is the one that
@@ -7973,7 +8012,7 @@ fn refresh_status(
                         Err(e) => format!("cannot count this map: {e}"),
                     }
                 },
-                if open.dirty() { ACCENT } else { TEXT },
+                if open.dirty() { accent } else { read },
             ),
             // **What the next Cmd+Z and Cmd+Shift+Z will do**, named from the two stacks. See
             // [`stack_row`].
@@ -7982,13 +8021,13 @@ fn refresh_status(
             // **The hint takes the receipt's slot while it speaks** (B-013), in the refusal colour: a
             // refusal has to read differently from a success, or "NOT SAVED" scrolls past as if it were a
             // receipt. The receipt comes back when the hint clears.
-            Field::Last if !state.hint.is_empty() => (state.hint.clone(), ACCENT),
+            Field::Last if !state.hint.is_empty() => (state.hint.clone(), accent),
             // **The receipt only, and never coloured by guessing.** This read
             // `status.starts_with("NOT SAVED")`, which made exactly one refusal red and left every
             // other one — `stamp refused:`, `is not a number of metres`, every `cannot draw it:` —
             // in the same grey as `stamped 4 piece(s)`. Refusals go to the block above now, and the
             // write site is what decides, so there is nothing left here to be wrong about.
-            Field::Last => (state.status.note_text().to_owned(), DIM),
+            Field::Last => (state.status.note_text().to_owned(), quiet),
             // **The worst repeat first, then how many other looks repeat**, short enough for one line.
             // Dim when nothing repeats, the EDGES rule: a standing line that is fine stays quiet.
             // Under the project's `repetition.ron` (#139), the rules `grimoire_state` reports under; a
@@ -7996,17 +8035,17 @@ fn refresh_status(
             Field::Repeats => {
                 use bevy_grimoire_core::repetition::{repeats, FILE};
                 match crate::ops_brp::load_repetition(&project.project_dir) {
-                    Err(_) => (format!("{FILE} unreadable"), ACCENT),
+                    Err(_) => (format!("{FILE} unreadable"), accent),
                     Ok(rules) => {
                         let all = repeats(&open.map.placements, &project.library, &rules);
                         match all.split_first() {
-                            None => ("none".to_owned(), DIM),
+                            None => ("none".to_owned(), quiet),
                             Some((worst, rest)) => {
                                 let more = match rest.len() {
                                     0 => String::new(),
                                     n => format!(", {n} more"),
                                 };
-                                (format!("{} \u{d7}{}{more}", worst.descriptor, worst.pieces), TEXT)
+                                (format!("{} \u{d7}{}{more}", worst.descriptor, worst.pieces), read)
                             }
                         }
                     }
