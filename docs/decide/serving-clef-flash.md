@@ -11,3 +11,43 @@
 |Latency, fixture (image + 3 questions, 619 input tokens)|first call 0.70 s; five warm calls 0.185–0.195 s (median 0.187 s); load takes about 5 s|
 
 Notes: image tokens are capped at 1024 by `n_ubatch` (server log warns); a clef request reads all questions jointly in one prompt. `/v1/models` reports `output_modalities` containing `decisions`.
+
+## The request shape, measured 2026-11-02
+
+Four 400s to get here, so it is worth writing down. `POST /v1/systemone`:
+
+```json
+{"model":"clef-flash","state":"The cat sat on the mat.",
+ "questions":{"q1":{"type":"noul","instructions":"Answer whether the state is about an animal."}}}
+```
+
+answers
+
+```json
+{"model":"clef-flash","answers":{"q1":{"type":"noul":0.9703}},
+ "usage":{"input_tokens":153,"output_tokens":0}}
+```
+
+- **`state` is required** (`"state" must be provided`).
+- **`questions` is an object keyed by id**, not an array (`"questions" must be a non-empty object`).
+- **each question takes `instructions`**, not `prompt` (`questions.q1: "instructions" must be provided`).
+  `choice` and `score` add `criteria` (a map, and a list, respectively) — `crates/bevy_oracle/src/types.rs`.
+- `images` is a list of data URLs, at most 4.
+- `output_tokens: 0` every time: the whole point of a decision model is that there is nothing to parse.
+
+`bevy_oracle`'s `Request` already emits exactly this, and `Config::default()` points at
+`http://127.0.0.1:8093/v1/systemone`, so a pass does not build the body by hand.
+
+## What was actually missing on 2026-11-02
+
+Nothing, which is the finding. Issue comments on #112 and #113 said the model "cannot be served from
+this clone" because `~/clef_serve` is an empty venv with no server module, no `clef-flash` on `PATH`,
+and `:8093` refusing. All true, and all beside the point: `~/clef_serve` was never the mechanism. The
+pieces this document names were already on the machine — `~/.local/llama.cpp/w3-b11982`
+(`llama-server --version` → `0.8.0-dev (build 11982, commit 8a199ad31)`) and the GGUF pair in the
+HuggingFace cache. `bash tools/decide/serve-clef-flash.sh` came up in about 45 s and answered on the
+first correct request.
+
+One trap for whoever checks this next: `strings llama-server | grep systemone` returns **0** even on
+the build that has it, because the binary is a thin 17 KB ELF and the endpoint strings live in
+`libllama-server.so` beside it. Verify with `--version`, not with `strings`.
