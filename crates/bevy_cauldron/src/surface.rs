@@ -635,6 +635,8 @@ fn inject_clicks(
     pointer: Option<Res<crate::view::Pointer>>,
     mut presses: MessageReader<bevy::input::mouse::MouseButtonInput>,
     mut out: MessageWriter<bevy::picking::pointer::PointerInput>,
+    // The position this system last saw, so a moved cursor writes a `Move` and a still one does not.
+    mut last: Local<Option<Vec2>>,
 ) {
     use bevy::input::ButtonState;
     use bevy::picking::pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput};
@@ -659,6 +661,30 @@ fn inject_clicks(
         }),
         position: at,
     };
+    // **The move, which Press and Release alone cannot make** (UI-30, #224).
+    //
+    // Measured on the fixture project this pass: after an injected press on the split's divider,
+    // `PointerState` held `pressing = 1, dragging = 0` — the press reached the picker and a drag never
+    // began. `bevy_picking` builds `PointerDragStart`/`PointerDrag`/`PointerDragEnd` out of
+    // `PointerAction::Move` **with a non-zero delta** (`bevy_picking-0.20.0/src/events.rs:1167`), and
+    // `Move` is emitted only by `mouse_pick_events` from `WindowEvent::CursorMoved` — which an
+    // injected cursor never produces. So an agent could click a row and never drag a divider.
+    //
+    // **Only on a real move.** The delta is the difference from the position last seen, so a still
+    // cursor writes nothing, and `bevy_picking` ignores a zero delta anyway. Comparing before writing
+    // is the standing rule `retarget_pointer` follows for the same reason: `PointerLocation` is
+    // change-detected.
+    if let Some(previous) = *last {
+        let delta = at - previous;
+        if delta != Vec2::ZERO {
+            out.write(PointerInput::new(
+                PointerId::Mouse,
+                location.clone(),
+                PointerAction::Move { delta },
+            ));
+        }
+    }
+    *last = Some(at);
     for press in presses.read() {
         let button = match press.button {
             bevy::input::mouse::MouseButton::Left => PointerButton::Primary,
