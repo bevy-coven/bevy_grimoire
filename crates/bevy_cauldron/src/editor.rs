@@ -2245,7 +2245,8 @@ fn dispatch_note(
     params: serde_json::Value,
     phrase: &str,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: project.as_ref().map(|p| (**p).clone()),
         open: Some(std::mem::replace(
             open,
@@ -3176,7 +3177,8 @@ pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate:
     // putting them back marked both changed, so every watcher of the map saw an edit on each tab press.
     let project = world.get_resource::<Project>().cloned();
     let open = world.get_resource::<OpenMap>().cloned();
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project,
         open,
         source: crate::ops::Source::Human,
@@ -4257,7 +4259,8 @@ pub fn arm_piece(
     descriptor: &str,
 ) {
     let was = std::mem::take(&mut state.tool);
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: open.cloned(),
         source: crate::ops::Source::Human,
@@ -4311,7 +4314,8 @@ pub fn arm_composition(
     armed: &mut crate::compose::Armed,
     id: &str,
 ) -> Result<(), String> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4360,7 +4364,8 @@ pub fn apply_selected(import: &mut crate::tiles::ImportState, after: Option<&ser
 /// so a click and an agent cannot disagree about what selecting a piece does. The note names the
 /// removal chord, because the row is where a person goes to remove a piece.
 pub fn select_piece(import: &mut crate::tiles::ImportState, project: &Project, id: &str) {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4392,7 +4397,8 @@ pub fn set_label(
     axis: &str,
     tokens: &[String],
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4425,7 +4431,8 @@ pub fn set_mount(
     id: &str,
     mount: &bevy_grimoire_core::descriptor::Mount,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4480,7 +4487,8 @@ fn dispatch_piece_field(
     operation: &str,
     params: serde_json::Value,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4512,7 +4520,8 @@ pub fn set_pack_excluded(
     pack: &str,
     excluded: bool,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4551,7 +4560,8 @@ pub fn remove_piece(
     project: &mut crate::project::Project,
     id: &str,
 ) -> Option<serde_json::Value> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4593,7 +4603,8 @@ pub fn turn_piece(
     quarters: u8,
     force: bool,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4639,7 +4650,8 @@ pub fn set_cells(
     cells: &[(u32, u32, u32)],
     change: serde_json::Value,
 ) -> bool {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4681,7 +4693,8 @@ pub fn add_vocab_token(
     name: &str,
     note: &str,
 ) -> Result<String, String> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4711,7 +4724,8 @@ pub fn adopt_rig_measured(
     rig: &str,
     skip_slots: &[usize],
 ) -> Result<String, String> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: None,
         source: crate::ops::Source::Human,
@@ -4838,7 +4852,8 @@ fn size_edit_keys(
                     &mut *open,
                     OpenMap::new(bevy_grimoire_core::map::Map::default(), std::path::PathBuf::new()),
                 ));
-                let mut ctx = crate::ops::Ctx { trust_file: None,
+                let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
                     project: project.as_deref().cloned(),
                     open: taken_open.take(),
                     source: crate::ops::Source::Human,
@@ -7061,13 +7076,31 @@ fn cycle_grid(
     if !keys::just_pressed(&keyboard, *live, Action::CycleGrid) {
         return;
     }
-    rung.0 = rung.0.next();
+    // **The key dispatches the operation an agent calls** (E-002, #129). The rung is view state, so it
+    // travels in `Ctx::view` rather than being written here: one place decides what a cycle means, and
+    // `the_same_view_change_by_key_and_by_mcp_is_one_operation` holds the two front ends together.
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { rung: rung.0 }),
+        ..crate::ops::Ctx::default()
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, "view_cycle_grid", &serde_json::json!({}));
+    if let Some(view) = ctx.view {
+        rung.0 = view.rung;
+    }
     let divisor = project.lattice.snap_divisor;
-    state.status.note(format!(
-        "grid {:.3} m — Shift nudges at {:.3} m",
-        rung.0.pitch(divisor),
-        rung.0.finer().pitch(divisor),
-    ));
+    match outcome {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            state.status.note(format!(
+                "{} — Shift nudges at {:.3} m",
+                outcome.summary,
+                rung.0.finer().pitch(divisor),
+            ));
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    }
 }
 
 /// The slab that shows how far the map goes. See [`BOUNDS_FILL`].
@@ -8408,7 +8441,8 @@ fn set_rule_seed(
             .problem(format!("`{raw}` is not a whole number, so the seed is unchanged"));
         return;
     };
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: project.as_ref().map(|p| (**p).clone()),
         open: Some(std::mem::replace(
             open,
@@ -11996,7 +12030,8 @@ fn remove_through(
     operation: &str,
     params: serde_json::Value,
 ) -> Option<(String, String, Vec<String>)> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12533,7 +12568,8 @@ fn apply(
                 .is_some_and(|p| p.owned);
             // **Through the registry**, as the settings arm does: the map is taken into the
             // operation's context and comes back either way.
-            let mut ctx = crate::ops::Ctx { trust_file: None,
+            let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
                 project: Some(project.clone()),
                 open: Some(std::mem::replace(
                     &mut *open,
@@ -12584,7 +12620,8 @@ fn apply(
             let was_bounds = open.map.bounds;
             // **Through the registry**: the map is taken into the operation's context and comes back
             // either way, as the size field does it.
-            let mut ctx = crate::ops::Ctx { trust_file: None,
+            let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
                 project: Some(project.clone()),
                 open: Some(std::mem::replace(
                     &mut *open,
@@ -12639,7 +12676,8 @@ fn apply(
             phrase,
             agent,
         } => {
-            let mut ctx = crate::ops::Ctx { trust_file: None,
+            let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
                 project: Some(project.clone()),
                 open: Some(std::mem::replace(
                     &mut *open,
@@ -12757,7 +12795,8 @@ fn set_pin(
         .iter()
         .find(|p| p.id == id)
         .is_some_and(|p| p.owned);
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12831,7 +12870,8 @@ fn rename_map(
         state.status.note("name unchanged".to_owned());
         return;
     }
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: project.as_ref().map(|p| (**p).clone()),
         open: Some(std::mem::replace(
             open,
@@ -12886,7 +12926,8 @@ fn set_yaw(
     id: &str,
     yaw: f32,
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12931,7 +12972,8 @@ fn set_tip(
     id: &str,
     tip: (u8, u8),
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -12976,7 +13018,8 @@ fn set_lift(
     id: &str,
     lift: f32,
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,
@@ -13022,7 +13065,8 @@ fn set_pose(
     yaw: f32,
     tip: (u8, u8),
 ) -> Option<(String, String)> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: Some(project.clone()),
         open: Some(std::mem::replace(
             &mut *open,

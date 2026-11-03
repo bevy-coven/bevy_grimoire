@@ -45,7 +45,8 @@ fn agent_places(app: &mut App, at: [f32; 2]) {
 }
 
 fn person_places(app: &mut App, at: [f32; 2]) {
-    let mut ctx = ops::Ctx { trust_file: None,
+    let mut ctx = ops::Ctx {
+        view: None, trust_file: None,
         root: None,
         project: Some(app.world().resource::<Project>().clone()),
         open: Some(app.world().resource::<OpenMap>().clone()),

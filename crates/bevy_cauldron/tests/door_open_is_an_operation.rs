@@ -16,7 +16,8 @@ use bevy::ecs::change_detection::DetectChanges;
 use crate::fixtures;
 
 fn empty_ctx() -> Ctx {
-    Ctx { trust_file: None,
+    Ctx {
+        view: None, trust_file: None,
         root: None,
         project: None,
         open: None,
@@ -83,7 +84,8 @@ fn an_accepted_request_names_its_exact_target() {
     // project, so a dispatch with no project is refused before any door is named.
     let root = fixtures::Fixture::new("door_open_accepted").build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let mut ctx = Ctx { trust_file: None,
+    let mut ctx = Ctx {
+        view: None, trust_file: None,
         root: None,
         project: app.world_mut().remove_resource::<Project>(),
         open: app.world_mut().remove_resource::<OpenMap>(),
@@ -147,7 +149,8 @@ fn a_map_that_does_not_parse_is_refused_not_answered_as_applied() {
     let map_path = open.map_path.clone();
     std::fs::write(&map_path, "this is not a map").expect("the map file can be written");
     project.open_map_name = Some("m".to_owned());
-    let mut ctx = Ctx { trust_file: None,
+    let mut ctx = Ctx {
+        view: None, trust_file: None,
         root: None,
         project: Some(project),
         open: None,
@@ -176,7 +179,8 @@ fn a_dirty_map_asked_to_leave_says_it_waits_for_the_person() {
     let mut open = app.world_mut().remove_resource::<OpenMap>().expect("a map is open");
     open.map.note = Some("an edit that is not saved".to_owned());
     assert!(open.dirty(), "the test makes the map unsaved");
-    let mut ctx = Ctx { trust_file: None,
+    let mut ctx = Ctx {
+        view: None, trust_file: None,
         root: None,
         project: Some(project),
         open: Some(open),
@@ -205,7 +209,8 @@ fn a_dirty_map_asked_for_the_map_door_waits_for_nobody() {
     let project = app.world_mut().remove_resource::<Project>().expect("a project is open");
     let mut open = app.world_mut().remove_resource::<OpenMap>().expect("a map is open");
     open.map.note = Some("an edit that is not saved".to_owned());
-    let mut ctx = Ctx { trust_file: None,
+    let mut ctx = Ctx {
+        view: None, trust_file: None,
         root: None,
         project: Some(project),
         open: Some(open),

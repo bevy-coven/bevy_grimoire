@@ -901,6 +901,9 @@ impl Action {
             Action::TurnPieceLeft | Action::TurnPieceRight => Some("placement_set_yaw"),
             Action::TipX | Action::TipZ => Some("placement_set_tip"),
             Action::LiftUp | Action::LiftDown => Some("placement_set_lift"),
+            // **The grid rung is view state, and `Ctx::view` is how an operation reaches one**
+            // (E-002, #129). The key dispatches the same operation an agent calls.
+            Action::CycleGrid => Some("view_cycle_grid"),
             Action::Straighten => Some("placement_set_pose"),
             Action::PalettePrev | Action::PaletteNext => Some("brush_arm"),
             Action::ArmComposition | Action::ComposeArm => Some("composition_arm"),

@@ -246,7 +246,6 @@ const UNMIGRATED: &[Action] = &[
     Action::MoveMode,
     Action::FrameView,
     Action::Cancel,
-    Action::CycleGrid,
     Action::PageEnter,
     Action::PageLeave,
     Action::TileOpen,
@@ -349,7 +348,7 @@ const UNMIGRATED: &[Action] = &[
 // 94 -> 93: `AdoptMeasured` -> `rig_adopt_measured` (E-002, #129 slice 13): `Enter` on the Anim tab adopts the selected rig's measured gait values into `rigs.ron` through the operation an agent calls.
 // 93 -> 92: `GroupFromSet` -> `composition_define` (E-002, #129 slice 14): `M`, a name and Enter keep the set in hand as a group through the operation an agent calls (its `set` verb).
 // 92 -> 91: `ScanMesh` -> `piece_set_cells` (E-002, #129 slice 19): `B` and the SCAN chip read a library piece's mesh and mark the cells it occupies through the operation an agent calls (its `scan` verb).
-const UNMIGRATED_MAX: usize = 91;
+const UNMIGRATED_MAX: usize = 90;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///

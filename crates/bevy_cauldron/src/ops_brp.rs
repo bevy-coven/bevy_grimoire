@@ -140,7 +140,8 @@ fn context(
     open: Option<ResMut<crate::project::OpenMap>>,
     menu: Option<Res<crate::chooser::MenuOpening>>,
 ) -> Ctx {
-    Ctx { trust_file: None,
+    Ctx {
+        view: None, trust_file: None,
         // **Cloned out, because the context owns what it carries.** The reason is the registry:
         // a trait with a lifetime on its methods cannot be a `dyn`, and the registry has to be a
         // `dyn` because a list of operations is looked up by name. One copy of a map's settings
@@ -177,7 +178,8 @@ pub(crate) fn take(
     project: &Option<ResMut<crate::project::Project>>,
     open: &Option<ResMut<crate::project::OpenMap>>,
 ) -> Ctx {
-    Ctx { trust_file: None,
+    Ctx {
+        view: None, trust_file: None,
         project: project.as_deref().cloned(),
         root: None,
         open: open.as_deref().cloned(),
@@ -1329,7 +1331,8 @@ fn operation_apply(
     // **The fence of a held note (#92)**, found before anything is written, for a preview and an
     // apply alike: a preview never says "would change" for a change the apply would refuse.
     if let Some(agent) = p.agent.as_deref() {
-        let read = Ctx { trust_file: None,
+        let read = Ctx {
+        view: None, trust_file: None,
             root: None,
             project: project.as_deref().cloned(),
             open: open.as_deref().cloned(),
@@ -1353,7 +1356,8 @@ fn operation_apply(
     if p.dry_run {
         let read_project = project.as_deref();
         let read_open = open.as_deref();
-        let ctx = Ctx { trust_file: None,
+        let ctx = Ctx {
+        view: None, trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -1736,7 +1740,8 @@ fn operation_undo(
     }
     if p.dry_run {
         // **A preview reads the log and plans the inverse, and writes nothing.**
-        let ctx = Ctx { trust_file: None,
+        let ctx = Ctx {
+        view: None, trust_file: None,
             root: None,
             project: project.as_deref().cloned(),
             open: open.as_deref().cloned(),

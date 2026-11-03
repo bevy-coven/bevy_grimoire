@@ -87,6 +87,7 @@ pub mod live;
 pub mod loading;
 pub mod present;
 pub mod ops;
+pub mod ops_view;
 #[cfg(feature = "debugger")]
 pub mod ops_brp;
 pub mod ops_compose;

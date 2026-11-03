@@ -509,6 +509,23 @@ pub struct Ctx {
     /// that starts a program a project names (`play`) asks the store before it starts anything; a test
     /// points this at a file of its own, so none reads or writes the real one.
     pub trust_file: Option<PathBuf>,
+    /// **The view the person is looking through, when an operation changes it** (E-002, #129).
+    ///
+    /// A *view* verb — the grid rung, the problems panel, the shortcut overlay — writes nothing the
+    /// project keeps: no map, no file, no undo step. Before this field an operation had no way to reach
+    /// one at all, so those verbs could only ever be dispatched by a key, which made "both front ends
+    /// dispatch it" untrue for them. `None` means "no view is in hand" and an operation that needs one
+    /// says so, exactly as [`Ctx::open`] does for a map.
+    pub view: Option<crate::ops_view::View>,
+}
+
+/// **A rung's name on the wire**, so an operation's answer and its parameter speak one vocabulary.
+pub(crate) fn view_name(rung: bevy_grimoire_core::grid::SnapLevel) -> &'static str {
+    match rung {
+        bevy_grimoire_core::grid::SnapLevel::Tile => "tile",
+        bevy_grimoire_core::grid::SnapLevel::Fine => "fine",
+        bevy_grimoire_core::grid::SnapLevel::Finer => "finer",
+    }
 }
 
 impl Ctx {
@@ -1830,6 +1847,78 @@ pub mod fill {
 ///
 /// `Undo::None`: a save changes no document. There is nothing to take back, and taking it back would
 /// mean restoring a file the author had already replaced.
+/// **The grid rung, cycled** (E-002, #129): the first verb whose whole effect is view state.
+///
+/// A key has always done this through `editor::cycle_grid`; an agent had no way to, because an operation
+/// could not reach a view. `Ctx::view` is that way, and this operation is what proves it: the key and the
+/// MCP call dispatch the same operation, and `the_same_view_change_by_key_and_by_mcp_is_one_operation`
+/// holds them to it.
+pub mod view_cycle_grid {
+    use super::*;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {}
+
+    pub struct ViewCycleGrid;
+
+    impl Operation for ViewCycleGrid {
+        fn name(&self) -> &'static str {
+            "view_cycle_grid"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            // **Nothing the project keeps.** No map, no file: a rung is about this session's hand.
+            &[]
+        }
+
+        fn undo(&self) -> Undo {
+            // A view change is not an edit. Taking it back with Cmd+Z would undo the *piece* the
+            // person just placed while leaving the grid where they left it, which is worse than
+            // leaving both.
+            Undo::None
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+
+        fn plan(&self, ctx: &Ctx, _params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let Some(view) = ctx.view.as_ref() else {
+                return Err(Refusal::new(
+                    "no view is in hand, so there is no grid to cycle. An editor front end carries one in \
+                     `Ctx::view`; a headless caller that only wants the answer passes one.",
+                ));
+            };
+            let next = view.rung.next();
+            let divisor = ctx.project.as_ref().map(|p| p.lattice.snap_divisor);
+            Ok(json!({
+                "from": super::view_name(view.rung),
+                "to": super::view_name(next),
+                "pitch_m": divisor.map(|d| next.pitch(d)),
+            }))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            let plan = self.plan(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no grid to cycle."));
+            };
+            let rung = view.cycle_grid();
+            Ok(Outcome {
+                summary: match plan["pitch_m"].as_f64() {
+                    Some(pitch) => format!("grid {pitch:.3} m — rung {}", super::view_name(rung)),
+                    None => format!("grid rung {}", super::view_name(rung)),
+                },
+                affected: 0,
+                saved: false,
+                inverse: None,
+                after: Some(json!({ "rung": super::view_name(rung) })),
+            })
+        }
+    }
+}
+
 pub mod map_save {
     use super::*;
     use serde_json::json;
@@ -3940,6 +4029,7 @@ pub mod rig_adopt_measured {
 /// from it, so they cannot disagree about what exists.
 pub fn registry() -> Vec<Box<dyn Operation>> {
     vec![
+        Box::new(view_cycle_grid::ViewCycleGrid),
         Box::new(map_create::MapCreate),
         Box::new(map_set_settings::MapSetSettings),
         Box::new(layout_propose::LayoutPropose),
@@ -4181,6 +4271,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The straighten key**, `V`, which dispatches `placement_set_pose` through `set_pose` with yaw 0 and
     // an upright tip (E-002, #129 slice 5).
     ("placement_set_pose", "set_pose("),
+    // **The grid key**, `J`, which dispatches `view_cycle_grid` through `cycle_grid` (E-002, #129). The
+    // rung is view state, so the key carries `Ctx::view` in and reads it back out; the operation is the
+    // one place that decides what a cycle means.
+    ("view_cycle_grid", "\"view_cycle_grid\""),
     // **The map's name field**, which the N key opens. Enter dispatches `map_rename` through
     // `rename_map`, so the name rule and the file's move are the operation's.
     ("map_rename", "rename_map("),

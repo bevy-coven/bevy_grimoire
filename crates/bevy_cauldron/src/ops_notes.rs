@@ -1207,6 +1207,7 @@ pub fn fence_refusal(ctx: &Ctx, agent: &str, op: &str, params: &serde_json::Valu
         source: ctx.source,
         session: ctx.session.clone(),
         proposal: ctx.proposal.clone(),
+        view: ctx.view,
     };
     let ran = operation.commit(&mut trial, params);
     let _ = std::fs::remove_dir_all(&scratch_dir);

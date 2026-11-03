@@ -6127,7 +6127,8 @@ fn make_it(chooser: &mut Chooser, new: &New) -> Result<(), String> {
             // parses the whole library and requires `vocab.ron`. Making a map needs a directory to
             // write in and a name, so that is what the context carries; an operation that needs
             // more says so, and only `map_create` is dispatched from here.
-            let mut ctx = crate::ops::Ctx { trust_file: None,
+            let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
                 project: None,
                 root: Some(chooser.root.clone()),
                 open: None,
@@ -6201,7 +6202,8 @@ fn make_it(chooser: &mut Chooser, new: &New) -> Result<(), String> {
 /// and no loaded project, so the context carries the root and the log line goes in its `oplog.jsonl`.
 /// A refusal is the sentence the menu shows.
 fn from_the_menu(root: &Path, operation: &str, params: &serde_json::Value) -> Result<(), String> {
-    let mut ctx = crate::ops::Ctx { trust_file: None,
+    let mut ctx = crate::ops::Ctx {
+        view: None, trust_file: None,
         project: None,
         root: Some(root.to_path_buf()),
         open: None,
