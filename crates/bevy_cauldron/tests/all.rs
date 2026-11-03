@@ -379,5 +379,3 @@ mod the_frames_regions_fit_the_window;
 mod the_shell_s_regions_are_labelled_and_the_divider_moves;
 mod a_dock_resize_never_covers_the_viewport;
 mod an_operation_that_writes_nothing_needs_no_log;
-mod the_decision_labeller_cannot_suggest_a_token_the_project_lacks;
-mod the_two_labelling_paths_are_compared;

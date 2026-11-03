@@ -301,27 +301,6 @@ impl Masks {
 
 impl Vocabularies {
     /// Parse a vocabulary file.
-    /// **One axis by its field name** (`"kind"`, `"effects"`, `"look"`, `"surfaces"`, `"actions"`).
-    ///
-    /// A labeller asks its questions per axis and a caller names the axis the way the file does, so
-    /// something has to turn a string into the [`Vocabulary`] it names. An unknown name answers an
-    /// empty one rather than panicking: a caller that spells an axis wrong then asks nothing about it,
-    /// which is visible, instead of bringing the editor down.
-    pub fn axis(&self, field: &str) -> &Vocabulary {
-        match field {
-            "kind" => &self.kind,
-            "effects" => &self.effects,
-            "look" => &self.look,
-            "surfaces" => &self.surfaces,
-            "capabilities" => &self.capabilities,
-            "edge" => &self.edge,
-            // A name nothing matches answers `kind`, which is never the token set a caller meant —
-            // an unknown axis is a caller's bug, and saying so at `contains` is clearer than a
-            // silently empty table that makes every token look absent.
-            other => panic!("`{other}` is not a vocabulary axis"),
-        }
-    }
-
     pub fn parse(text: &str) -> Result<Vocabularies, String> {
         let v: Vocabularies =
             ron::from_str(text).map_err(|e| format!("vocab: does not parse: {e}"))?;
