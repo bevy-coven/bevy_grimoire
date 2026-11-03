@@ -276,7 +276,10 @@ fn paint_labeler(
     mut labeler: ResMut<Labeler>,
     project: Option<Res<Project>>,
     mut lines: Query<(&mut Text, &mut TextColor), With<crate::chrome::LabelerLine>>,
+    // **The labeler's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
+    let ink = crate::compose::PanelInk::of(skin.as_deref());
     if let Some(project) = project.as_ref()
         && labeler.read_for.as_deref() != Some(project.root.as_path())
     {
@@ -288,8 +291,8 @@ fn paint_labeler(
         labeler.link = Link::Untried;
     }
     let tint = match labeler.link {
-        Link::Down => crate::chrome::DANGER,
-        _ => crate::chrome::DIM,
+        Link::Down => ink.danger,
+        _ => ink.quiet,
     };
     for (mut text, mut colour) in &mut lines {
         // **Built only when it is about to be written.** `labeler.line()` was hoisted above this

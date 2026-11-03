@@ -1862,11 +1862,21 @@ fn rebuild_labels(
     armed: Res<Armed>,
     project: Res<Project>,
     existing: Query<Entity, With<SlotLabel>>,
+    // **The labels' ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
-    if !(carousel.is_changed() || state.is_changed() || armed.is_changed() || project.is_changed())
+    // A skin edit is a reason to rebuild: the strip's ink is the skin's, so a project that
+    // restyles itself while the stage is up must see the labels follow.
+    let reskinned = skin.as_ref().is_some_and(|s| s.is_changed());
+    if !(carousel.is_changed()
+        || state.is_changed()
+        || armed.is_changed()
+        || project.is_changed()
+        || reskinned)
     {
         return;
     }
+    let ink = PanelInk::of(skin.as_deref());
     for e in &existing {
         commands.entity(e).despawn();
     }
@@ -1881,7 +1891,7 @@ fn rebuild_labels(
             // The miniatures name themselves in smaller type, so the strip reads as one focal group
             // among neighbours rather than as five equal things.
             crate::chrome::font(if slot.offset == 0 { LABEL_PX.0 } else { LABEL_PX.1 }),
-            TextColor(if slot.offset == 0 { ACCENT } else { DIM }),
+            TextColor(if slot.offset == 0 { ink.accent } else { ink.quiet }),
             Node {
                 // PLACES-ITSELF-OK: a world-space slot label, put where `place_labels` projects it. Flow
                 // has no opinion about where a point in the scene lands on screen.
@@ -2343,7 +2353,7 @@ struct ComposeInput<'w, 's> {
     budget: Res<'w, Budget>,
     body: Query<'w, 's, Entity, With<ComposeBody>>,
     lines: Query<'w, 's, Entity, With<ComposeLine>>,
-    receipt: Query<'w, 's, &'static mut Text, With<ComposeReceipt>>,
+    receipt: Query<'w, 's, (&'static mut Text, &'static mut TextColor), With<ComposeReceipt>>,
     /// **The panel's ink, from the editor's skin** (UI-02, #210).
     skin: Option<Res<'w, bevy_gooey::GooeySkin>>,
 }
@@ -2400,9 +2410,15 @@ fn rebuild(input: ComposeInput<'_, '_>) {
     // **The receipt, into its fixed slot at the foot of the panel** — see [`ComposeReceipt`] for why
     // it is no longer the last line of the scrolling body. Compared before writing: `Text` is
     // change-detected and `Mut::deref_mut` marks it whether or not the value moved.
-    for mut text in &mut receipt {
+    for (mut text, mut colour) in &mut receipt {
         if text.0 != state.status.note_text() {
             text.0 = state.status.note_text().to_owned();
+        }
+        // **The receipt's ink is the panel's accent**, read here rather than written once at
+        // spawn: the panel is spawned before any skin can be known (`panel_root` takes no
+        // `Res<GooeySkin>`), so a colour set there is a colour a theme edit can never reach.
+        if colour.0 != ink.accent {
+            colour.0 = ink.accent;
         }
     }
     let Ok(root) = body.single() else {
@@ -2488,8 +2504,8 @@ fn rebuild(input: ComposeInput<'_, '_>) {
             // except the scroll follower, which searched for the unclamped row and gave up.
             lines.push(Line::Member { ix: i, text: describe_member(m), at: i == state.member });
         }
-        affordances(&mut lines, c);
-        detail(&mut lines, c, comps, &project);
+        affordances(&mut lines, c, ink);
+        detail(&mut lines, c, comps, &project, ink);
     }
 
     commands.entity(root).with_children(|p| {
@@ -3172,13 +3188,13 @@ fn describe_member(m: &composition::Member) -> String {
 /// exactly the distinction `map::Location`'s own note is about: *a table plus four chairs is one
 /// affordance with four seats, not four affordances*. Without this block an author reading a composition
 /// sees three meshes and no reason they belong together.
-fn affordances(lines: &mut Vec<Line>, c: &Composition) {
+fn affordances(lines: &mut Vec<Line>, c: &Composition, ink: PanelInk) {
     if c.locations.is_empty() {
         return;
     }
     lines.push(Line::Section("OFFERS".to_owned()));
     for l in &c.locations {
-        lines.push(Line::Prose(format!("    {} over {}", l.id, l.props.join(", ")), TEXT));
+        lines.push(Line::Prose(format!("    {} over {}", l.id, l.props.join(", ")), ink.read));
         for i in &l.interactions {
             let roles: Vec<String> = i
                 .roles
@@ -3196,20 +3212,20 @@ fn affordances(lines: &mut Vec<Line>, c: &Composition) {
                     format!("{} {:?} {}-{}{seat} needs {needs}", r.name, r.kind, r.min, r.max)
                 })
                 .collect();
-            lines.push(Line::Prose(format!("        {}: {}", i.verb, roles.join("; ")), DIM));
+            lines.push(Line::Prose(format!("        {}: {}", i.verb, roles.join("; ")), ink.quiet));
         }
     }
 }
 
 /// The three blocks that exist so the tool can explain itself: stale, interface, faults.
-fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project: &Project) {
+fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project: &Project, ink: PanelInk) {
     // **STALE, with the numbers.** Naming the member and both fingerprints is the difference between
     // a badge that sends someone to the right file and one that only says something is wrong.
     match composition::stale_members(c, comps, &project.library) {
         Ok(report) if report.is_empty() => {
             lines.push(Line::Prose(
                 "UP TO DATE — every member matches what it was built against".to_owned(),
-                DIM,
+                ink.quiet,
             ));
         }
         Ok(report) => {
@@ -3229,7 +3245,7 @@ fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project
                 // replaces the old hand-indented hex rows.
                 let mut rail = vec![(
                     format!("STALE — {} member(s) changed underneath this composition", drifted.len()),
-                    DANGER,
+                    ink.danger,
                 )];
                 for s in drifted {
                     rail.push((
@@ -3239,10 +3255,10 @@ fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project
                             s.recorded.unwrap_or_default(),
                             s.measured
                         ),
-                        DANGER,
+                        ink.danger,
                     ));
                 }
-                lines.push(Line::Rail { tint: DANGER, lines: rail });
+                lines.push(Line::Rail { tint: ink.danger, lines: rail });
             }
             if !unrecorded.is_empty() {
                 lines.push(Line::Prose(
@@ -3251,11 +3267,11 @@ fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project
                          about drift yet",
                         unrecorded.len()
                     ),
-                    DIM,
+                    ink.quiet,
                 ));
             }
         }
-        Err(e) => lines.push(Line::Prose(format!("cannot check staleness: {e}"), DANGER)),
+        Err(e) => lines.push(Line::Prose(format!("cannot check staleness: {e}"), ink.danger)),
     }
 
     // The blank `Text` row that used to stand here is gone. Five of them stood in for `GAP_GROUP`
@@ -3266,13 +3282,13 @@ fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project
     match composition::interface(c, comps, &project.library, project.lattice.face_bands) {
         Ok(None) => lines.push(Line::Prose(
             "ANCHORED — claims no tile, so it has no boundary for anything to abut".to_owned(),
-            DIM,
+            ink.quiet,
         )),
         Ok(Some(iface)) => {
             lines.push(Line::Section("DERIVED INTERFACE".to_owned()));
             lines.push(Line::Prose(
                 "read off the members, never authored".to_owned(),
-                DIM,
+                ink.quiet,
             ));
             for (dir, name) in [
                 (bevy_grimoire_core::wfc::N, "north"),
@@ -3304,20 +3320,20 @@ fn detail(lines: &mut Vec<Line>, c: &Composition, comps: &[Composition], project
                 // the verdict belongs to the block above it, and `spawn_line`'s own gap says so.
                 lines.push(Line::Prose(
                     "clean — this composition can constrain a neighbour".to_owned(),
-                    DIM,
+                    ink.quiet,
                 ));
             } else {
                 let mut rail = vec![(
                     format!("{} FAULT(S) — members disagree about a face", iface.faults.len()),
-                    DANGER,
+                    ink.danger,
                 )];
                 for f in &iface.faults {
-                    rail.push((f.message.clone(), DANGER));
+                    rail.push((f.message.clone(), ink.danger));
                 }
-                lines.push(Line::Rail { tint: DANGER, lines: rail });
+                lines.push(Line::Rail { tint: ink.danger, lines: rail });
             }
         }
-        Err(e) => lines.push(Line::Prose(format!("cannot derive an interface: {e}"), DANGER)),
+        Err(e) => lines.push(Line::Prose(format!("cannot derive an interface: {e}"), ink.danger)),
     }
 }
 

@@ -676,8 +676,11 @@ fn paint_journal(
     panels: Query<&Node, With<crate::chrome::JournalPanel>>,
     lists: Query<Entity, With<crate::chrome::JournalList>>,
     lines: Query<Entity, With<crate::chrome::ProblemLogLine>>,
+    // **The journal's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut was_open: Local<bool>,
 ) {
+    let ink = crate::compose::PanelInk::of(skin.as_deref());
     let open = panels.iter().any(|n| n.display != Display::None);
     if !open {
         // Nothing to draw and nothing to keep: the next open rebuilds from the journal, which is the
@@ -692,7 +695,10 @@ fn paint_journal(
     // froze for the rest of the session. `Journal` is only dereferenced mutably when a refusal was
     // recorded, so its change flag is the honest clock — and cheaper than rendering 200 lines a
     // frame to compare them.
-    let rebuild = journal.is_changed() || !*was_open;
+    // A project that restyles itself while the journal is up repaints it, so the refusals a reader is
+    // looking at do not keep the old skin's ink until the next refusal arrives.
+    let reskinned = skin.as_ref().is_some_and(|s| s.is_changed());
+    let rebuild = journal.is_changed() || !*was_open || reskinned;
     *was_open = true;
     if !rebuild {
         return;
@@ -749,7 +755,7 @@ fn paint_journal(
             if want.is_empty() {
                 p.spawn((
                     bevy::prelude::Text::new("no steps and nothing has gone wrong yet".to_owned()),
-                    bevy::prelude::TextColor(crate::chrome::DIM),
+                    bevy::prelude::TextColor(ink.quiet),
                     crate::chrome::font(crate::chrome::text::LABEL),
                     crate::chrome::ProblemLogLine,
                 ));
@@ -758,7 +764,7 @@ fn paint_journal(
             for (i, line) in want.iter().enumerate() {
                 // Newest first, and the newest is the one the toast just showed — so the top of this
                 // list and the thing that interrupted you agree.
-                let colour = if i == 0 { crate::chrome::DANGER } else { crate::chrome::DIM };
+                let colour = if i == 0 { ink.danger } else { ink.quiet };
                 crate::chrome::problem_log_line(p, line, colour);
             }
         });

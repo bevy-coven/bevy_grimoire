@@ -872,10 +872,10 @@ fn check_all_keys(
 
 /// **The rig bench's ink, from the editor's skin** (UI-02, #210).
 ///
-/// Five inks carry the whole bench: a slot's name, a staleness verdict, a stale slot's warning, the
-/// chosen rig, and the ground a slot row stands on. **Each falls back to its `chrome.rs` constant**,
-/// the seam `chrome::RowFills` established, so a harness with no skin draws the shipped palette and
-/// no protected test re-pins.
+/// Seven inks carry the whole bench: a slot's name, a staleness verdict, a stale slot's warning, the
+/// chosen rig, the ground a slot row stands on, a column label, and the ground of a chip that is on.
+/// **Each falls back to its `chrome.rs` constant**, the seam `chrome::RowFills` established, so a
+/// harness with no skin draws the shipped palette and no protected test re-pins.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BenchInk {
     /// A slot's name, and a rig's.
@@ -888,15 +888,45 @@ pub struct BenchInk {
     pub accent: Color,
     /// A slot row's ground.
     pub rest: Color,
+    /// A column's label — the quietest ink on the bench, one step under [`BenchInk::quiet`].
+    pub label: Color,
+    /// The ground of a chip that is on, so the one chip a reader can see is one they can find.
+    pub on: Color,
 }
 
 impl BenchInk {
+    /// The shipped palette, for a build with no skin — the one place the seven constants the bench
+    /// used to read at its call sites are still named, so the fallback is written once.
+    pub const SHIPPED: BenchInk = BenchInk {
+        read: TEXT,
+        quiet: DIM,
+        danger: DANGER,
+        accent: ACCENT,
+        rest: ROW_BG,
+        label: LABEL,
+        on: ROW_SELECTED,
+    };
+
     /// The skin's ink where it has one, the shipped constants where it does not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> BenchInk {
         let Some(skin) = skin else {
-            return BenchInk { read: TEXT, quiet: DIM, danger: DANGER, accent: ACCENT, rest: ROW_BG };
+            return BenchInk::SHIPPED;
         };
-        BenchInk { read: skin.text, quiet: skin.text_muted, danger: skin.danger, accent: skin.accent, rest: skin.surface_raised }
+        BenchInk {
+            read: skin.text,
+            quiet: skin.text_muted,
+            danger: skin.danger,
+            accent: skin.accent,
+            rest: skin.surface_raised,
+            // A named tone, like `key` elsewhere: gooey has no field for a column's quiet label. The
+            // editor's own skin does not carry one (its tone set is pinned exactly by
+            // `the_skin_carries_the_editors_other_colours`), so this falls back to [`LABEL`] — the
+            // colour the bench has always drawn — and a **project's** skin that names `label` gets the
+            // column quieted in its own palette rather than the editor's.
+            label: skin.tone("label").unwrap_or(LABEL),
+            // A rung of the elevation ladder, not a tone: `ROW_SELECTED` is the seventh step.
+            on: skin.surface_at(6),
+        }
     }
 }
 
@@ -970,7 +1000,8 @@ fn rebuild_slots(
     // **The bench's ink, from the editor's skin** (UI-02, #210).
     skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
-    let BenchInk { read, quiet, danger, accent, rest } = BenchInk::of(skin.as_deref());
+    let BenchInk { read, quiet, danger, accent, rest, label, on: row_selected } =
+        BenchInk::of(skin.as_deref());
     let names = bench.names();
     let rig = names
         .get(bench.selected)
@@ -1120,9 +1151,9 @@ fn rebuild_slots(
                         let date = report.date.as_deref().unwrap_or("an unknown date");
                         let (line, colour) = match st {
                             Staleness::NeverMeasured => ("never measured".to_owned(), quiet),
-                            Staleness::Current => (format!("measured {date}, current"), DIM),
+                            Staleness::Current => (format!("measured {date}, current"), quiet),
                             Staleness::Stale => {
-                                (format!("STALE: asset changed since {date}"), DANGER)
+                                (format!("STALE: asset changed since {date}"), danger)
                             }
                         };
                         p.spawn((
@@ -1133,7 +1164,7 @@ fn rebuild_slots(
                         for d in &report.diff {
                             p.spawn((
                                 Text::new(d.clone()),
-                                TextColor(DANGER),
+                                TextColor(danger),
                                 crate::chrome::font(crate::chrome::text::HINT),
                                 Node {
                                     // One panel inset of indent — `PAD`, not a bare 12, so the
@@ -1184,7 +1215,7 @@ fn rebuild_slots(
                             ..default()
                         },
                         Text::new(format!("{i} - clip {}", slot.clip)),
-                        TextColor(LABEL),
+                        TextColor(label),
                         crate::chrome::font(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                     ));
@@ -1197,7 +1228,7 @@ fn rebuild_slots(
                         Text::new(kind.to_owned()),
                         // A gait is the only kind carrying measured numbers, so it is the only one
                         // worth picking out of the column.
-                        TextColor(if kind == "gait" { ACCENT } else { DIM }),
+                        TextColor(if kind == "gait" { accent } else { quiet }),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
@@ -1218,8 +1249,8 @@ fn rebuild_slots(
                             SkipChip(i),
                             "skip",
                             crate::chrome::text::HINT,
-                            if excluded.contains(&i) { TEXT } else { DIM },
-                            if excluded.contains(&i) { ROW_SELECTED } else { ROW_BG },
+                            if excluded.contains(&i) { read } else { quiet },
+                            if excluded.contains(&i) { row_selected } else { rest },
                             Color::NONE,
                         );
                     }
@@ -1297,8 +1328,8 @@ fn rebuild_slots(
                     p.spawn((
                         Text::new(f.text.clone()),
                         TextColor(match f.level {
-                            Level::Note => LABEL,
-                            _ => DANGER,
+                            Level::Note => label,
+                            _ => danger,
                         }),
                         crate::chrome::font(crate::chrome::text::HINT),
                     ));
@@ -1353,7 +1384,7 @@ fn rebuild_slots(
                 for (caption, handle) in charts {
                     p.spawn((
                         Text::new(caption),
-                        TextColor(LABEL),
+                        TextColor(label),
                         crate::chrome::font(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
@@ -1409,7 +1440,7 @@ fn rebuild_slots(
                 ));
                 p.spawn((
                     Text::new("top-down trace (fwd = up; arrow = declared cycle along measured travel; dim arrow = measured, G)"),
-                    TextColor(LABEL),
+                    TextColor(label),
                     crate::chrome::font(crate::chrome::text::HINT),
                     Node {
                         margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
@@ -1441,16 +1472,19 @@ fn rebuild_slots(
 fn refresh_line(
     bench: Res<BenchState>,
     mut lines: Query<(&mut Text, &mut TextColor), With<BenchLine>>,
+    // **The line's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
     if !bench.is_changed() {
         return;
     }
+    let quiet = BenchInk::of(skin.as_deref()).quiet;
     for (mut text, mut colour) in &mut lines {
         if text.0 != bench.status.note_text() {
             text.0 = bench.status.note_text().to_owned();
         }
-        if colour.0 != DIM {
-            colour.0 = DIM;
+        if colour.0 != quiet {
+            colour.0 = quiet;
         }
     }
 }
