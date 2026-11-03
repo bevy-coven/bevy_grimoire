@@ -372,13 +372,25 @@ pub fn refresh(
 /// none of those is "the author is done here" — `on_filter_click` already owns the first case.
 pub fn blur_on_world_click(
     mouse: Res<ButtonInput<MouseButton>>,
-    hovered: Query<&bevy::picking::hover::Hovered>,
+    pointer: Res<crate::view::Pointer>,
+    // **The boxes, not the world.** This asked *does anything carry `Hovered`* — true for the whole
+    // window once the docks are hovered — so a click anywhere kept the keyboard, and the author had to
+    // find the box to get out of it. The question this system actually has is narrower: did the click
+    // land **outside every filter box**? A box's own rect answers it, and a panel elsewhere does not.
+    boxes: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<FilterBox>>,
     mut filters: ResMut<Filters>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) || !filters.typing() {
         return;
     }
-    if hovered.iter().any(|h| h.0) {
+    let Some(at) = pointer.0 else {
+        // No pointer is no click: leave the keyboard where it is.
+        return;
+    };
+    let over_a_box = boxes
+        .iter()
+        .any(|(node, tf)| node.size() != Vec2::ZERO && node.contains_point(*tf, at));
+    if over_a_box {
         return;
     }
     filters.blur();

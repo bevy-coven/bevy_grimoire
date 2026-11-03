@@ -16712,3 +16712,40 @@ fn a_held_tag_chip_carries_an_accent_edge_and_an_unheld_one_does_not() {
         "an unheld chip must carry no edge, or every chip looks chosen"
     );
 }
+
+/// **Every gesture driver asks the position-aware question, and none of them asks the old one.**
+///
+/// `OverUi` is correct only if the drivers read it. The failure it fixes was silent and generic — nine
+/// systems asked *does anything in the world carry `Hovered`*, which is true for the whole window while the
+/// two docks are hovered — and a later edit could put one of them back without any behavioural test
+/// noticing, because every test that clicks the map would then fail for a reason nobody would attribute to
+/// that line.
+///
+/// **A source check, and the honest limit of one.** It cannot prove a driver behaves correctly; it can prove
+/// that no driver went back to the idiom that was wrong for five passes. The behavioural half is
+/// `a_shift_click_that_picks_no_piece_says_what_to_do_instead`, which walks the Note tool's path end to end.
+#[test]
+fn no_gesture_driver_reads_hovered_instead_of_over_ui() {
+    let mut offenders = Vec::new();
+    for entry in std::fs::read_dir("src").expect("src/ is readable").filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.extension().is_none_or(|x| x != "rs") {
+            continue;
+        }
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_owned();
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        for (n, line) in text.lines().enumerate() {
+            // The idiom, in either spelling. `sense_over_ui` is the one place allowed to iterate the
+            // query, and it does it by passing `nodes.iter()` to `over_ui` rather than by asking `any`.
+            if line.contains(".iter().any(|h| h.0)") {
+                offenders.push(format!("{name}:{}: {}", n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "these lines ask 'does anything in the world carry `Hovered`', which is true for the whole \
+         window once the docks are hovered — read `view::OverUi` instead:\n  {}",
+        offenders.join("\n  ")
+    );
+}
