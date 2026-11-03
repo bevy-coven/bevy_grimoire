@@ -398,6 +398,28 @@ fn the_allowlist_of_unmigrated_actions_only_shrinks() {
     }
 }
 
+/// **Every source file under `src/`, concatenated** — what "the UI" means for a scan.
+///
+/// This was a hand-maintained array of four file names, and it was wrong **four times**: `screen.rs`
+/// and `chooser.rs` once, `notice.rs` for the journal, `snip.rs` for the snip. Each time a migration
+/// landed in a file nobody had added, and the test reported a live entry point as missing — a check
+/// that cannot see the thing it is checking for. A glob cannot fall behind: add a module and it is
+/// already in the scan.
+fn ui_source() -> String {
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir("src")
+        .expect("the crate's src/ is readable")
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+        .collect();
+    // Sorted, so a failure's message is the same on every run.
+    files.sort();
+    files
+        .iter()
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// **Every migrated action names a registered operation, and its UI path dispatches that operation.**
 ///
 /// **E-025's mechanical check.** An action counts as migrated because `Action::operation` names an
@@ -406,15 +428,8 @@ fn the_allowlist_of_unmigrated_actions_only_shrinks() {
 /// make.
 #[test]
 fn every_migrated_action_has_a_ui_path_that_dispatches_its_operation() {
-    // **The UI is more than editor.rs**, and this test already learned that once: the other test in
-    // this file records a real entry point being reported missing because its scan read only
-    // editor.rs and chooser.rs (`piece_import`'s `admit_candidate(`). `notice.rs` owns the journal
-    // panel, so `Cmd+E`'s dispatch lives there and not in editor.rs — the same false failure, one
-    // file later.
-    let editor: String = ["src/editor.rs", "src/chooser.rs", "src/tiles.rs", "src/screen.rs", "src/notice.rs", "src/snip.rs"]
-        .iter()
-        .filter_map(|f| std::fs::read_to_string(f).ok())
-        .collect();
+    // **The whole of `src/`, not a list of names.** This array was wrong four times — see [`ui_source`].
+    let editor = ui_source();
     let registry = bevy_cauldron::ops::registry();
     let mut checked = 0;
     for action in Action::ALL {
@@ -431,7 +446,7 @@ fn every_migrated_action_has_a_ui_path_that_dispatches_its_operation() {
         };
         assert!(
             editor.contains(place),
-            "{action:?}'s UI path `{place}` is in none of the six UI source files"
+            "{action:?}'s UI path `{place}` is not anywhere under src/"
         );
         assert!(
             editor.contains(&format!("\"{name}\"")),
@@ -485,19 +500,14 @@ fn every_operation_has_a_ui_entry_point_and_the_other_way_round() {
         without
     );
     // **And each entry point's place is in the UI source**, so an entry naming a function that no
-    // longer exists fails here rather than passing on a stale string. **All four files**, because the
-    // UI is four files: `tiles.rs` owns the Meshes tab (where an import lands) and `screen.rs` owns
-    // the door crossing, and a scan that read editor.rs and chooser.rs reported a real entry point as
-    // missing — measured on `piece_import`'s `admit_candidate(`.
-    let ui_source: String =
-        ["src/editor.rs", "src/chooser.rs", "src/tiles.rs", "src/screen.rs", "src/notice.rs", "src/snip.rs"]
-        .iter()
-        .filter_map(|f| std::fs::read_to_string(f).ok())
-        .collect();
+    // longer exists fails here rather than passing on a stale string. The whole of `src/`: a
+    // hand-maintained list of files was wrong four times, each time reporting a real entry point as
+    // missing (`piece_import`'s `admit_candidate(`, then `notice.rs`, then `snip.rs`).
+    let ui_source = ui_source();
     for (name, place) in &ui {
         assert!(
             ui_source.contains(place),
-            "`{name}`'s UI path `{place}` is in none of the six UI source files"
+            "`{name}`'s UI path `{place}` is not anywhere under src/"
         );
     }
     let mut orphaned = Vec::new();
@@ -561,17 +571,11 @@ fn every_brp_method_the_server_calls_is_registered_in_the_bridge() {
 /// drift the parity test exists to catch.
 #[test]
 fn every_ui_entry_point_is_in_the_source_and_dispatches_the_operation() {
-    let editor = std::fs::read_to_string("src/editor.rs").expect("editor.rs is there");
-    // **The UI is three files, and the scan read one.** `screen.rs` crosses doors and re-reads the
-    // map, `chooser.rs` makes projects and maps, `tiles.rs` owns the kit's shelf — so an entry point
-    // that lives in any of them was reported as missing, which is a scan that cannot see the thing
-    // it is checking for. The bounds count below stays on `editor.rs` alone: it asks where the map's
-    // size is written in the editor, and that is one file's question.
-    let ui: String =
-        ["src/editor.rs", "src/screen.rs", "src/chooser.rs", "src/tiles.rs", "src/notice.rs", "src/snip.rs"]
-        .iter()
-        .filter_map(|f| std::fs::read_to_string(f).ok())
-        .collect();
+    // **The whole of `src/`, not a list of names.** The comment here used to say "the UI is three
+    // files" and then four, then five, then six — each count true until the next migration landed
+    // somewhere new. The bounds count below stays on `editor.rs` alone: it asks where the map's size
+    // is written, and that is one file's question.
+    let ui = ui_source();
     let mut missing = Vec::new();
     for (op, place) in UI_ENTRY_POINTS {
         if !ui.contains(place) {
@@ -587,6 +591,12 @@ fn every_ui_entry_point_is_in_the_source_and_dispatches_the_operation() {
         missing.join("\n  ")
     );
     // **And the editor dispatches the operation**, rather than writing the state itself.
+    //
+    // **`editor.rs` alone, on purpose.** The two assertions below are about *that file*: does the editor
+    // dispatch anything, and does it write the map's bounds in one place. A glob over `src/` would answer
+    // a different question — `ops.rs` contains `dispatch(` and `open.map.bounds = ` by construction, so
+    // widening this would make both assertions vacuous.
+    let editor = std::fs::read_to_string("src/editor.rs").expect("editor.rs is there");
     assert!(
         editor.contains("crate::ops::dispatch("),
         "the editor does not dispatch any operation, so every UI path is a second way to do a \
