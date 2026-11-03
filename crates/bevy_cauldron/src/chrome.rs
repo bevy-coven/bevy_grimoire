@@ -796,6 +796,11 @@ pub fn panel_root<'a>(
         Side::Left => frame.left,
         Side::Right => frame.right,
     };
+    // **The panel's fill is the skin's, repainted by `dim_the_ground`** (UI-02, #210 slice 4b).
+    // `panel_root` is called from six spawn systems that hold no `Res<GooeySkin>`, so reading the skin
+    // here would mean threading it through all six and would still leave every panel built *before* a
+    // theme edit on the old colour. The marker says "this ground is a panel's"; the system that already
+    // walks every ground is what makes it the skin's, once per frame, comparing before it writes.
     let panel = commands
         .spawn((
             node,
@@ -807,6 +812,7 @@ pub fn panel_root<'a>(
             bevy::prelude::AccessibleLabel::new(label),
             BackgroundColor(PANEL_BG),
             Ground(PANEL_BG),
+            PanelGround,
             // The edge and the corner are what make this read as a surface rather than as a
             // rectangle of slightly different paint — see the elevation-ladder header.
             BorderColor::all(PANEL_EDGE),
@@ -928,6 +934,56 @@ pub struct Control(pub keys::ControlId);
 /// coloured, and a panel that changes its fill cannot drift out of sync with the system that dims it.
 #[derive(Component)]
 pub struct Ground(pub Color);
+
+/// **This ground is a panel's, so its colour is the running skin's `surface`** (UI-02, #210 slice 4b).
+///
+/// `panel_root` is called from six spawn systems that hold no `Res<GooeySkin>`, so the spawn cannot
+/// read the skin without threading a parameter through all of them. [`dim_the_ground`] can: it already
+/// runs every frame over every [`Ground`], already compares before writing, and is therefore the one
+/// place where "what a panel is coloured" can be one expression rather than six.
+///
+/// The marker is what tells a *panel's* ground (the skin's `surface`) from a *band's* ([`BAR_BG`],
+/// which gooey has no role for). Without it the repaint would repaint the status bar as a panel.
+#[derive(Component)]
+pub struct PanelGround;
+
+/// **The fills a panel and a band take from the running skin** (UI-02, #210, slice 4b).
+///
+/// `panel_root` used to spawn `PANEL_BG` and `BAR_BG` — constants — so every panel in the editor was
+/// painted once, at spawn, and never asked the skin again. A project's `editor_skin.ron`, or a
+/// `family/bevy_gooey.ron` edit at run time, therefore reached the list rows and the migrated ink but
+/// **not the largest surface on screen**.
+///
+/// One function, called by the spawn and by [`dim_the_ground`] alike, the way [`RowFills::of`] is
+/// called by [`style_list_rows`] and its test. An assertion here is an assertion about what a panel
+/// paints, and it needs no window and no pointer.
+///
+/// **The fallback is the shipped table**, never a second palette: a headless harness that never ran
+/// `EditorUiPlugin` has no `GooeySkin`, and it must get exactly the colours the editor has always had.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelFills {
+    /// A panel's ground — [`GooeySkin::surface`](bevy_gooey::GooeySkin::surface).
+    pub panel: Color,
+    /// A band's ground — the status bar and the chrome bar. gooey has no `band` role, so this stays
+    /// the editor's own constant until the skin grows one; the field exists so the panel can stop
+    /// carrying two separate answers.
+    pub band: Color,
+}
+
+impl PanelFills {
+    /// From the running skin when there is one, the constants when there is not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> PanelFills {
+        match skin {
+            Some(s) => PanelFills { panel: s.surface, band: BAR_BG },
+            None => PanelFills { panel: PANEL_BG, band: BAR_BG },
+        }
+    }
+}
+
+/// [`PanelFills`] for the world as it stands.
+pub fn panel_fills(world: &World) -> PanelFills {
+    PanelFills::of(world.get_resource::<bevy_gooey::GooeySkin>())
+}
 
 /// **A surface whose border says whether the keyboard is in it.** Carried by every [`panel_root`].
 #[derive(Component)]
@@ -3825,18 +3881,24 @@ fn stand_down_the_back_chord(
 /// Compares before writing: `BackgroundColor` is change-detected, and touching every panel every
 /// frame would mark the whole interface dirty sixty times a second for one held key
 /// (`tests/no_system_writes_every_frame.rs`).
-fn dim_the_ground(
+pub fn dim_the_ground(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<keys::Live>,
-    mut grounds: Query<(&Ground, &mut BackgroundColor)>,
+    // **The panel's colour is the running skin's** (UI-02, #210 slice 4b). This system already walks
+    // every ground, already compares before writing, and is the only place with the skin in reach —
+    // `panel_root`'s six callers have no `Res<GooeySkin>`. A `None` skin (a headless harness that
+    // never ran `EditorUiPlugin`) keeps the constant, which is the shipped table.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+    mut grounds: Query<(&Ground, Option<&PanelGround>, &mut BackgroundColor)>,
 ) {
     let held = keys::pressed(&keyboard, *live, keys::Action::Shortcuts);
-    for (ground, mut bg) in &mut grounds {
-        let want = if held {
-            ground.0.with_alpha(ground.0.alpha() * GROUND_HELD)
-        } else {
-            ground.0
-        };
+    let fills = PanelFills::of(skin.as_deref());
+    for (ground, is_panel, mut bg) in &mut grounds {
+        // A panel's rest colour follows the skin; a band's is its own carried constant. Reading the
+        // skin *here* rather than at spawn is what makes a theme edit reach panels that were built
+        // before it — the whole point of a skin being data.
+        let rest = if is_panel.is_some() { fills.panel } else { ground.0 };
+        let want = if held { rest.with_alpha(rest.alpha() * GROUND_HELD) } else { rest };
         if bg.0 != want {
             bg.0 = want;
         }
