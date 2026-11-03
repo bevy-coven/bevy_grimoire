@@ -134,6 +134,31 @@ class ClickLabelAsksTheEditor(unittest.TestCase):
         finally:
             record.brp = original
 
+    def test_a_click_label_step_is_a_click_and_not_a_caption(self):
+        """**`kind_of` did not carry `click_label`**, so the step matched nothing and fell through to
+        `caption`: the words were printed on the take and no click was ever sent. From `events.json`
+        it read as a storyboard that only had captions, which is why it stayed unnoticed until the
+        first storyboard aimed at a widget whose words move."""
+        self.assertEqual(record.kind_of({"at": 1.0, "click_label": "Stop: Baking"}), "click_label")
+        self.assertEqual(record.kind_of({"at": 1.0, "click": [10, 20]}), "click")
+        self.assertEqual(record.kind_of({"at": 1.0, "caption": "words"}), "caption")
+
+    def test_a_prefix_finds_a_widget_whose_words_move(self):
+        """**The status band's job item counts up**, so a storyboard cannot write its words down. A
+        prefix names the widget; the number after it is whatever the work has reached."""
+        rows = self.rows([("Baking previews 3 of 40", [1.0, 0.0, 0.0, 1.0, 480.0, 700.0], [80.0, 12.0])])
+        answer = {"result": rows}
+        original = record.brp
+        record.brp = lambda port, method, params: answer
+        try:
+            self.assertEqual(record.widget_centre(1, "Baking previews", None, True), (480.0, 700.0))
+            # **Without the prefix the same words find nothing**, which is what keeps an exact match
+            # exact: `floor` still must not match `floor_light`.
+            with self.assertRaises(RuntimeError):
+                record.widget_centre(1, "Baking previews")
+        finally:
+            record.brp = original
+
     def test_within_chooses_the_widget_of_that_name(self):
         """**Two widgets can carry one word.** `sofa` is a palette row *and* a piece on the map; the
         rectangle is the storyboard saying which one it means, rather than entity order deciding."""

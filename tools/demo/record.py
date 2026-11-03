@@ -30,6 +30,9 @@ Storyboard format (JSON):
                                                 "within": [x0, y0, x1, y1] keeps only widgets inside that
                                                 rectangle: a palette row and a map piece can share a word
                                                 (`sofa` is both), and the rectangle says which one.
+                                                "prefix": true matches a widget whose words MOVE — the
+                                                status band's job item counts up (`Baking previews 3 of
+                                                40`), so no storyboard can write the exact words.
       {"at": 1.0, "key": "KeyZ", "mods": ["SuperLeft"]},
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
@@ -288,7 +291,7 @@ def resolve(value, named):
     return value
 
 
-def widget_centre(port, label, within=None):
+def widget_centre(port, label, within=None, prefix=False):
     """Where the interface draws the visible `Text` node whose words are `label`, in logical pixels.
 
     **Asks the running editor, never a guess.** `world.query` returns every `Text` with its
@@ -312,7 +315,16 @@ def widget_centre(port, label, within=None):
         if not text or not node or not at:
             continue
         # **`Text` reflects as its bare string** (`'Turn left'`), not as an object with a field.
-        if not isinstance(text, str) or text.strip() != want:
+        #
+        # **`prefix` is for a widget whose words move as its work does.** The status band's job item
+        # reads `Baking previews 3 of 40` and the number climbs every second, so no storyboard can
+        # write the exact words down; a prefix names the widget and lets the number be whatever it is.
+        # It is opt-in, because exact matching is what stops a storyboard aiming at `floor` when it
+        # said `floor_light` — the `test_the_exact_words_are_matched` case.
+        if not isinstance(text, str):
+            continue
+        words = text.strip()
+        if not (words.startswith(want) if prefix else words == want):
             continue
         # **`UiGlobalTransform` reflects as an affine array** `[a, b, c, d, tx, ty]`, not as an object
         # with a `translation`: reading it as an object skipped every row and the step reported "no
@@ -378,7 +390,7 @@ def do_step(step, timeline, inj, agent, named=None):
         # `Text` node's rect through BRP's `world.query`, so the click lands on the row a storyboard
         # means however far up or down the layout has moved: two passes lost takes to a bar inserted
         # above the palette, which shifted every guessed pixel by its height.
-        x, y = widget_centre(inj.port, step["click_label"], step.get("within"))
+        x, y = widget_centre(inj.port, step["click_label"], step.get("within"), step.get("prefix", False))
         inj.cursor(x, y)
         timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
         timeline.add(t=timeline.now(), type="click", x=x, y=y)
@@ -456,7 +468,13 @@ def do_step(step, timeline, inj, agent, named=None):
 
 
 def kind_of(step):
-    for k in ("cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
+    # **`click_label` first, and it is a separate key rather than a spelling of `click`.** The list
+    # did not carry it, so a storyboard's `click_label` step matched nothing and fell through to
+    # `caption`: the words were printed on the take and no click was ever sent, which reads from
+    # `events.json` as a storyboard that only had captions. It went unnoticed because no storyboard
+    # used it until the status band's job item — a widget whose words move, so a guessed pixel cannot
+    # reach it.
+    for k in ("click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
         if k in step:
             return k
     raise ValueError(f"step has no action: {step}")

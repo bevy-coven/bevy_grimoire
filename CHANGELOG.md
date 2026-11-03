@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **223-jobs-in-the-band** `ffcce5b` A background job says what it is doing in the status band and can be stopped, from the band or by an agent (#223)<br><a href="docs/changelog/media/2026-11-03-jobs.mp4"><img src="docs/changelog/media/2026-11-03-jobs.png" width="320" alt="clip"></a>
 - **legend-skin-ink** `b12417d` The keyboard legend draws in the editor skin's ink, so a project's skin file reaches it (#210) *No clip: invisible by design (the issue asks for 'unchanged to the eye'); proved by crates/bevy_cauldron/tests/a_badge_draws_in_the_skins_ink.rs, whose first test fails on the constants and passes on the skin*
 - **pointer-buttons** `35a5921` grimoire/pointer reports the picker's pressing and dragging counts, which proved the whole input chain works live — the remaining fault is in gooey's divider handler *No clip: a read-only BRP field; proved by crates/bevy_cauldron/tests/the_pointer_payload_says_where_the_cursor_got_to.rs and a live measurement (pressing 1, dragging 1)*
 - **inject-clicks-schedule** `ccb3bb3` inject_clicks runs in PreUpdate where it can see the press bevy_fairy writes — measured live with a probe before and after *No clip: a scheduling fix; proved live ([probe] SAW PRESS Pressed) and by the editor suite (1169 passed)*

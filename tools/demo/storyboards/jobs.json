@@ -3,21 +3,38 @@
   "fps": 12,
   "scale": 1,
   "width": 960,
-  "crop": [0, 940, 960, 1060],
+  "crop": [
+    0,
+    688,
+    470,
+    728
+  ],
   "setup": [],
-  "chunks": [
+  "steps": [
     {
-      "seconds": 4.0,
+      "at": 0.3,
       "caption": "the band says what the editor is doing"
     },
     {
-      "click": {"label": "Baking previews"},
-      "seconds": 3.0,
-      "caption": "a click lists the job"
+      "at": 1.8,
+      "mcp": "grimoire_jobs_stop",
+      "args": {
+        "key": "thumbs"
+      },
+      "caption": "the same request the Stop row makes"
     },
     {
-      "seconds": 2.0,
-      "caption": "Stop ends it, and the band goes quiet"
+      "at": 3.4,
+      "caption": "the band goes quiet, and stays quiet"
+    },
+    {
+      "at": 5.6,
+      "caption": "no job, no row: a quiet band means quiet"
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 7.0
     }
   ]
 }
