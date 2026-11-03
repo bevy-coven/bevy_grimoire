@@ -138,8 +138,11 @@ const SETTLE_REFUSED_SECS: f64 = 0.5;
 pub struct Held {
     root: PathBuf,
     watch: FamilyWatch,
-    started: std::time::Instant,
-    /// When refused files were last compared with the disk, in seconds since `started`.
+    /// The clock reading when this watch was made, in seconds on [`Time<Real>`](bevy::time::Real).
+    /// Every poll subtracts it, so `settled_at` and the watch's own intervals are measured from the
+    /// same origin — and a test that drives `TimeUpdateStrategy::ManualDuration` drives both (#279).
+    made_at: f64,
+    /// When refused files were last compared with the disk, in seconds since `made_at`.
     settled_at: f64,
     /// The text of each refused file as last decided, so the same bytes are decided once: the watch
     /// says a file is invalid again whenever another settings file changes.
@@ -232,6 +235,20 @@ fn settle_refused(
 /// listed, and one that was already broken when the project opened is named from the start.
 pub fn reload_settings(
     project: Option<Res<Project>>,
+    // **The clock is Bevy's, not a `std::time::Instant` this system owns** (#279).
+    //
+    // `FamilyWatch::poll` has always taken `now_secs` and never asked where it came from, but the
+    // caller passed `held.started.elapsed()` — an `Instant` created here — so the one knob that
+    // decides when a reload lands was pinned to the wall clock and could not be injected. A test
+    // therefore had to *wait* the poll and the settle interval out in real time, and on a loaded
+    // machine `app.update()` cost more than the 3 s it was given, which failed the push gate three
+    // times (#121, #279).
+    //
+    // `Time<Real>` is the same wall clock by default — `TimePlugin` advances it from `Instant` — and
+    // `TimeUpdateStrategy::ManualDuration` replaces it with a step a test chooses, which is how
+    // `bevy_time`'s own tests drive time. So this changes no behaviour for a running editor, and it
+    // makes the reload path testable without a sleep.
+    real: Res<Time<Real>>,
     mut settings: ResMut<FamilySettings>,
     mut state: ResMut<EditorState>,
     mut reloads: Option<ResMut<crate::live::EditorReloads>>,
@@ -269,10 +286,17 @@ pub fn reload_settings(
                 reloads.decide(verdicts);
             }
         }
-        *held = Some(Held { root: project.root.clone(), watch: fresh, started: std::time::Instant::now(), settled_at: 0.0, bad });
+        // **When the watch was made**, on the same clock every poll reads, so `settled_at` and the
+        // watch's own `last_poll` are two readings of one clock rather than of two.
+        *held = Some(Held { root: project.root.clone(), watch: fresh, made_at: real.elapsed_secs_f64(), settled_at: 0.0, bad });
     }
     let Some(held) = held.as_mut() else { return };
-    let now = held.started.elapsed().as_secs_f64();
+    // **Seconds since the watch was made**, from the injected clock: `Time<Real>` is monotonic and
+    // starts near zero, and subtracting the reading taken at the watch's creation keeps this the
+    // "seconds since we started" the watch's own intervals are written in — while letting a test
+    // step it. A plain `elapsed()` would be seconds since the *app* started, which would make the
+    // first poll and settle land early relative to the watch.
+    let now = real.elapsed_secs_f64() - held.made_at;
     let (mut decided, mut gone) = (Vec::new(), Vec::new());
     for change in held.watch.poll(now) {
         match change {
