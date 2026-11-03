@@ -147,7 +147,10 @@ impl Finding {
     }
 }
 
-const QUESTION_ID: &str = "check";
+/// **The id every check's question goes on the wire under.** `Check::request` writes it and a reader of the
+/// answer must use the same one; `clip::score_set` learned that the hard way (#112), so it is public now
+/// and there is one copy of it.
+pub const QUESTION_ID: &str = "check";
 
 impl Check {
     /// The request for this check. A check that needs an image or the facts and was not given them is an

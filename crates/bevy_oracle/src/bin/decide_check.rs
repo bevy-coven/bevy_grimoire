@@ -14,7 +14,8 @@ use std::path::{Path, PathBuf};
 use bevy_oracle::{Checks, Config, Evidence, Http, Transport, Verdict, evidence_from, run_checks};
 
 fn usage() -> String {
-    "usage: decide_check --captures DIR [--project DIR] [--bar F] [--ask] [--no-builtin] [--json]".to_owned()
+    "usage: decide_check --captures DIR [--project DIR] [--bar F] [--ask] [--no-builtin] [--json]\n\
+     \x20      decide_check --calibrate SET.ron [--check NAME] [--project DIR] [--model NAME]".to_owned()
 }
 
 struct Args {
@@ -24,6 +25,11 @@ struct Args {
     ask: bool,
     no_builtin: bool,
     json: bool,
+    /// The labelled set to measure against, when this run is a calibration.
+    calibrate: Option<PathBuf>,
+    /// Which check to calibrate. The clip check unless named.
+    check: String,
+    model: String,
 }
 
 fn parse(argv: Vec<String>) -> Result<Args, String> {
@@ -34,6 +40,9 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
         ask: false,
         no_builtin: false,
         json: false,
+        calibrate: None,
+        check: "clip_shows_its_title".to_owned(),
+        model: "clef-flash".to_owned(),
     };
     let mut it = argv.into_iter();
     while let Some(arg) = it.next() {
@@ -44,11 +53,15 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
             "--ask" => a.ask = true,
             "--no-builtin" => a.no_builtin = true,
             "--json" => a.json = true,
+            "--calibrate" => a.calibrate = Some(PathBuf::from(it.next().ok_or_else(usage)?)),
+            "--check" => a.check = it.next().ok_or_else(usage)?,
+            "--model" => a.model = it.next().ok_or_else(usage)?,
             "-h" | "--help" => return Err(usage()),
             other => return Err(format!("unknown argument `{other}`\n{}", usage())),
         }
     }
-    if a.captures.as_os_str().is_empty() {
+    // A calibration names the set instead of a capture directory: the set is what it measures.
+    if a.captures.as_os_str().is_empty() && a.calibrate.is_none() {
         return Err(usage());
     }
     Ok(a)
@@ -113,6 +126,54 @@ fn main() {
         }
         Ok(evidence_from(&images, None))
     };
+
+    // **A calibration run** (#112): measure the check against a labelled set and print the figure the
+    // check's `calibration` field takes. This is the one path that needs a served model, and the reason
+    // the agreement was "not measured yet" for so long: `score_set` had no caller.
+    if let Some(set) = &args.calibrate {
+        let samples = match bevy_oracle::load_labelled(set) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        };
+        let check = bevy_oracle::clip_check(&args.check);
+        let scored = match bevy_oracle::score_set(&check, &samples, &transport) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        };
+        let today = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() / 86_400)
+            .unwrap_or(0);
+        let date = format!("+{today} days");
+        let calibration = match bevy_oracle::calibrate(&args.check, &args.model, &date, &scored) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        };
+        println!(
+            "{:22} agreement {:.1}% on {} samples, threshold {:.3}, model {}",
+            calibration.check,
+            calibration.agreement * 100.0,
+            calibration.set_size,
+            calibration.threshold,
+            calibration.model
+        );
+        if args.json {
+            match serde_json::to_string_pretty(&calibration) {
+                Ok(text) => println!("{text}"),
+                Err(e) => eprintln!("{e}"),
+            }
+        }
+        std::process::exit(0);
+    }
 
     if args.ask {
         let verdict = run_checks(&project, &transport, &evidence_for, args.bar);

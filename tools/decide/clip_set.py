@@ -35,20 +35,27 @@ def samples(changelog):
     return out
 
 
+# **The width a sample is sent at** (#112). Four frames at 960 px are about 2 100 tokens, and a served
+# clef-flash has a 2 048-token physical batch: the request is refused before the model sees it. 480 px
+# keeps the four-image request inside one batch and still shows the layout a clip's title is about —
+# what is being asked is "does this show a bench for stallkeepers", not a pixel comparison.
+SAMPLE_W = 480
+
+
 def extract(clip, dest):
     os.makedirs(dest, exist_ok=True)
     still = clip[:-4] + ".png"
     target = os.path.join(dest, "still.png")
     if os.path.exists(still):
-        with open(still, "rb") as src, open(target, "wb") as dst:
-            dst.write(src.read())
+        run(["ffmpeg", "-v", "error", "-y", "-i", still, "-vf", f"scale={SAMPLE_W}:-2", target])
     else:
-        run(["ffmpeg", "-v", "error", "-y", "-i", clip, "-vframes", "1", target])
+        run(["ffmpeg", "-v", "error", "-y", "-i", clip, "-vframes", "1",
+             "-vf", f"scale={SAMPLE_W}:-2", target])
     probe = run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", clip])
     duration = float(probe.stdout.strip() or 0)
     for i, frac in enumerate((0.25, 0.55, 0.85)):
         run(["ffmpeg", "-v", "error", "-y", "-ss", f"{max(0.0, duration * frac):.2f}", "-i", clip,
-             "-vframes", "1", os.path.join(dest, f"frame{i}.png")])
+             "-vframes", "1", "-vf", f"scale={SAMPLE_W}:-2", os.path.join(dest, f"frame{i}.png")])
 
 
 def run(cmd):

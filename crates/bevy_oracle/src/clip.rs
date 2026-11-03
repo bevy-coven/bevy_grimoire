@@ -161,11 +161,25 @@ pub fn score_set(
         let ev = evidence(&s.dir);
         let req = request(check, &s.title, &ev)?;
         let response = crate::ask(transport, &req)?;
-        let p_yes = response.answers[QUESTION_ID]
-            .p_yes()
+        // **A missing answer is an error, not a panic** (#112). The model occasionally returns an
+        // `answers` map without this question — a truncated generation, or a server that decided the
+        // state was empty. Indexing panicked on the 30th sample of a calibration run and lost every
+        // score already measured; naming it lets the caller say which sample and carry on.
+        // **The id the request actually sent.** `Check::request` names its question with `check.rs`'s
+        // `QUESTION_ID` (`"check"`); this module's `QUESTION_ID` (`"shows"`) is the *clip* question's name
+        // in prose and was never what went on the wire. Reading `"shows"` out of an answer keyed
+        // `"check"` failed on the first sample of a real calibration run.
+        let p_yes = response
+            .answers
+            .get(crate::check::QUESTION_ID)
+            .and_then(|a| a.p_yes())
             .ok_or_else(|| crate::Error::BadResponse {
                 endpoint: transport.endpoint(),
-                detail: format!("`{}` did not answer with a noul", s.id),
+                detail: format!(
+                    "sample `{}` did not answer `{QUESTION_ID}` with a noul; it answered: {:?}",
+                    s.id,
+                    response.answers.keys().collect::<Vec<_>>()
+                ),
             })?;
         out.push(crate::Sample { p_yes, truth: s.truth });
     }
@@ -202,6 +216,41 @@ mod tests {
         let asked = format!("{:?}", req.questions);
         assert!(asked.contains("a bench for the stallkeepers"), "questions: {asked}");
         assert_eq!(req.images.len(), 4);
+    }
+
+    /// **`score_set` reads the answer under the id the request sent** (#112).
+    ///
+    /// `Check::request` names its question with `check::QUESTION_ID`; this module's own `QUESTION_ID`
+    /// is `"shows"` and was what `score_set` looked for. On the first real calibration run — 122 samples
+    /// against a served clef-flash — every answer came back keyed `"check"`, so the lookup missed and the
+    /// run panicked on sample one. A recording makes the mismatch visible without a model.
+    #[test]
+    fn a_scored_sample_reads_the_answer_the_request_asked_for() {
+        use crate::Response;
+        use std::collections::BTreeMap;
+
+        let dir = std::env::temp_dir().join(format!("clip_score_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in std::iter::once(still()).chain((0..FRAMES).map(frame)) {
+            std::fs::write(dir.join(format!("{name}.png")), b"\x89PNG not really").unwrap();
+        }
+        let samples = vec![Labelled { id: "s".into(), title: "a bench".into(), dir, truth: true }];
+
+        // A response under the id the check actually sends, as the served model answers it.
+        let mut answers = BTreeMap::new();
+        answers.insert(
+            crate::check::QUESTION_ID.to_owned(),
+            crate::Answer::Noul { noul: 0.9 },
+        );
+        let response = Response { model: Some("test".into()), answers, usage: None };
+        let asked = request(&clip_check("clip"), "a bench", &evidence(&samples[0].dir)).unwrap();
+        let transport = crate::Replay::new(asked, response);
+
+        let scored = score_set(&clip_check("clip"), &samples, &transport)
+            .expect("an answer under `check` is the answer this check asked for");
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].truth, true);
+        assert!((scored[0].p_yes - 0.9).abs() < 1e-9, "p_yes was {}", scored[0].p_yes);
     }
 
     #[test]

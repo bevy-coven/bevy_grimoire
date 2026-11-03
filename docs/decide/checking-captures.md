@@ -74,10 +74,30 @@ python3 tools/decide/clip_set.py --out target/clip_set
 then point the manifest's `dir` fields at `target/clip_set/<id>`. A relative `dir` is resolved against the
 manifest, so a committed set works from any clone.
 
-**Not measured yet.** The agreement figure needs a served model (`score_set` → `calibrate`), and big has none
-(`127.0.0.1:8093` refuses). Until it does, the check carries no `calibration` and is **advisory**: it prints
-every run and can never fail one. That is the issue's own rule, not a shortcut — a check that has earned
-nothing must not be able to block.
+**Measured on 2026-11-02, and it did not earn its authority.** With clef-flash served on
+`127.0.0.1:8093`, the clip check scored **61.5 % on 122 samples** (61 clips, each as its own line and as
+another line's mismatch), at a chosen threshold of 0.241:
+
+```sh
+GRIMOIRE_DECIDE_ENDPOINT=http://127.0.0.1:8093/v1/systemone \
+  cargo run -q -p bevy_oracle --bin decide_check -- \
+  --calibrate crates/bevy_oracle/fixtures/clip_samples.ron
+# clip_shows_its_title   agreement 61.5% on 122 samples, threshold 0.241, model clef-flash
+```
+
+**61.5 % is barely better than guessing on a two-sided set**, so the check stays **advisory**: it prints every
+run and can never fail one. That is the issue's own rule, not a shortcut — a check that has earned nothing
+must not be able to block, and this one has now shown what it is worth rather than leaving the question open.
+
+Two things follow. First, the figure is recorded here and nowhere in the check: a `calibration` is written by
+the owner's evaluator pass once a check clears the bar, and this one does not. Second, the honest reading is
+about the **samples as much as the model**: a 9B model on four 480 px frames is asked to match a whole
+changelog title ("at 23:00 a torch and a brazier burn on two lamps, with their flames, sparks and pooled
+light") against a still that shows a room — the mismatch pairs are often about *one clause* of a long line.
+A clip check that asks about a short, concrete claim is a different measurement, and it is the next step
+before any threshold is trusted.
+
+Until then the check carries no `calibration` and is **advisory**.
 
 What the set *can* be proved for without a model is that it is well formed, and a test does
 (`checks_that_earn_their_authority.rs::the_committed_clip_set_is_two_sided_and_well_formed`): it must hold at
