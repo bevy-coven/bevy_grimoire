@@ -195,12 +195,73 @@ unpushed half-diff**. This is the single most common way a headless pass goes wr
 A pass that leaves a clean, pushed, green tree having closed *fewer* issues than planned is a success. A pass that leaves a
 broken tree having done a lot is a failure the next pass must clean up first.
 
+## The command improves itself — and its core cannot be edited
+
+A pass is 45 minutes and the median is 34, so **where the time goes is the thing worth fixing**.
+`python3 tools/loop/steps.py report --state ~/.local/state/wiggum/bevy_emerge_loop --last 12` says.
+Read it once a pass, and let it change this file. That is the point: a prompt that never learns spends
+every pass the same 45 minutes the same way.
+
+### What you may change, and where
+
+**The tunable half is `docs/loop/command-tuning.md`**, and this section is the only part of the command
+that reads it. Append a section headed `## Tuning N` when a measurement shows a cheaper way to work.
+Say the measured number, the change, and what to look for to know it worked:
+
+```
+## Tuning 4 — the gate was run twice a pass (pass 288, steps.tsv)
+Measured: `wait: gate` 21% of pass time, two `cargo test` runs a pass, the second after the first
+was green. Change: Phase 4 runs one gate, at the push; a green push is never redone.
+Watch: `wait: gate` under 10%, and no pass whose push is refused for a test the gate already ran.
+```
+
+**The core is frozen.** These are the owner's, and no pass may relax them whatever the report says:
+the 45-minute budget and its checkpoints; the protected evaluator (never edit a test, golden file,
+fixture or scoring harness to pass); one gate per push and never `--no-verify`; `Fixes #N` only on the
+commit that meets the last acceptance item; never leave the tree uncommitted; never force-push, reset
+or clean another pass's work; the two-way street (a crate's fix goes in that crate); and every rule in
+the owner's override sections above. **A tuning that weakens one of these is refused, and the pass says
+so in its log line.** Everything else — the order work is done in, which tools are used, what is read,
+how a test is run, when a push happens inside the budget — is fair game.
+
+### How a tuning is judged, and undone
+
+- **A tuning is a hypothesis with a number, not a preference.** It names the metric it expects to move
+  and the measurement that suggested it. One tuning a pass at most: you cannot tell which change worked
+  if four landed together.
+- **The next pass re-measures.** If the metric did not move in two passes, the tuning is wrong: revert
+  it (git revert of its commit, with the measurement in the message) rather than leaving a rule nobody
+  can justify. A tuning that made the pass slower is reverted on the spot.
+- **A tuning that would spend the savings on more work is not a tuning.** Cutting the gate from two runs
+  to one buys time for the cluster, not for a seventh issue.
+
+## Timing is recorded whether a driver is watching or not
+
+`steps.py` reads a pass's own omp session, so it needs no cooperation from the pass — but it needs to
+be **told which pass**, and the driver used to be the only thing that said so. It no longer is:
+
+```sh
+python3 tools/loop/steps.py begin --state STATE          # number the pass, open its ledger row
+# ... the pass ...
+python3 tools/loop/steps.py end --repo DIR --state STATE  # wall time, steps, and the audit
+```
+
+`begin` continues the same numbering a Wiggum driver uses and writes `passes.tsv`, `pass-count` and
+`start-<n>`; `end` fills in the wall time, records the steps and audits what shipped. **A hand-run pass
+that skips these leaves no timing data at all** — measured 2026-11-02: seventeen passes of real work
+left nothing, so "where did last night go?" had no answer that was not a guess. The driver calls the
+same two, so both paths write one file. `steps.py report --last 12` is the answer; read it in Orient.
+
 ## Phase 0: Orient (5 minutes, no more)
 
 - `git status --short` and `git log --oneline -10`. **If the tree is dirty, that is the first bug** — a
   previous pass died mid-edit. Finish it, revert only your own pass's edits, or commit what is safe.
 - Read `docs/loop/backlog.json` (open items), `AGENTS.md`, and the **last 3** entries of
   `docs/loop/log.md`. Not more: the log is long and a pass has a budget.
+- Read `docs/loop/command-tuning.md` — **how earlier passes learned to spend this 45 minutes better** —
+  and work the way its newest tunings say. Then run
+  `python3 tools/loop/steps.py report --state ~/.local/state/wiggum/bevy_emerge_loop --last 12` and
+  say in the log line which sink is biggest this pass. That report is what a tuning is judged against.
 - Read `docs/loop/focus.md`: what is below its `---` line is the owner's focus; nothing there, or no file, means no focus. It governs Phase 2.
 - `python3 tools/loop/backlog.py check`.
 - Record `uptime`, `df -h /`, `free -g`. On a machine with fewer than 20 GB free or under 4 GB available

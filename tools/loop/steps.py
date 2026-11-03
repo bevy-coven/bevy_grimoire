@@ -25,6 +25,11 @@ and a `phase`. Phases are marked by the pass itself with `python3 tools/loop/ste
     steps.py record --repo DIR --since EPOCH --pass N --state STATEDIR
                                                 # the driver, after a pass: append rows to STATEDIR/steps.tsv,
                                                 # and its host, wall time and settings to STATEDIR/config.tsv
+    steps.py begin --state STATEDIR [--via manual|wiggum]
+                                                # number a pass WITHOUT a driver, and open its ledger row:
+                                                # a hand-run pass records the same as a driven one
+    steps.py end --repo DIR --state STATEDIR [--from SHA]
+                                                # after the pass: wall time, steps, and the audit
     steps.py backfill --repo DIR --state STATEDIR [--last K]
                                                 # every past session of that clone, numbered by start time
     steps.py report --state STATEDIR [--last K] # where the time goes, across the last K passes
@@ -51,6 +56,45 @@ from pathlib import Path
 SESSIONS = Path(os.path.expanduser("~/.omp/agent/sessions"))
 COLUMNS = ["pass", "seq", "phase", "kind", "category", "tool", "start", "seconds", "detail"]
 MARK = re.compile(r"steps\.py\s+mark\s+([A-Za-z0-9_.:-]+)")
+# **Where a pass actually begins.** A pass is one invocation of the loop command, and omp writes that
+# invocation into the session as a user message whose text is the command's own header
+# (`# bevy_grimoire: one build-loop pass`). Re-running the command inside one session therefore
+# leaves a marker per pass, which is the only boundary available when no driver is watching:
+# measured 2026-11-03, one hand-driven session held 98 of them.
+PASS_MARK = re.compile(r"^#\s+\S+:\s+one\s+\S+\s+pass\b", re.M)
+
+
+def is_pass_mark(o):
+    """Is this session entry the start of a pass?"""
+    if o.get("type") != "message":
+        return False
+    m = o.get("message") or {}
+    if m.get("role") != "user":
+        return False
+    c = m.get("content")
+    text = c if isinstance(c, str) else " ".join(
+        str(x.get("text", "")) for x in c if isinstance(x, dict))
+    return bool(PASS_MARK.match(" ".join(text.split())))
+
+
+def pass_slices(entries):
+    """**One session, cut into its passes**: [(start datetime or None, entries)].
+
+    A session with no marker is one pass (the driver's own shape, and every session before the marker
+    was written). A session with markers is as many passes as it ran, which is what a hand-driven
+    night leaves: one 26-hour session held 57 passes, and crediting all of them to the one number a
+    backfill could find would have been a bigger lie than the missing rows.
+    """
+    cuts = [i for i, o in enumerate(entries) if is_pass_mark(o)]
+    if not cuts:
+        return [(None, entries)]
+    out = []
+    for k, i in enumerate(cuts):
+        end = cuts[k + 1] if k + 1 < len(cuts) else len(entries)
+        ts = entries[i].get("timestamp")
+        start = parse_ts(ts) if ts else None
+        out.append((start, entries[i:end]))
+    return out
 
 # First match wins: the command text of a bash call (or a background job's label) to a category.
 CATEGORIES = [
@@ -211,6 +255,137 @@ def steps(entries):
     for seq, r in enumerate(rows, start=1):
         r["seq"] = seq
     return rows
+
+
+PASSES_COLUMNS = ["pass", "at", "via", "host", "seconds", "model", "think", "build_jobs", "test_threads"]
+
+
+def read_passes(state):
+    """The pass ledger: one row per pass, whoever drove it. A missing file is an empty ledger."""
+    path = Path(state) / "passes.tsv"
+    if not path.exists():
+        return []
+    out = []
+    with open(path, encoding="utf-8") as f:
+        head = f.readline().rstrip("\n").split("\t")
+        for line in f:
+            cells = line.rstrip("\n").split("\t")
+            if len(cells) == len(head):
+                out.append(dict(zip(head, cells)))
+    return out
+
+
+def last_pass(state, driver_log=None):
+    """The highest pass number the ledger knows, or the driver log's, or 0.
+
+    **Two sources, because a pass can be driven two ways.** The driver numbers its own passes and
+    writes `pass N START` to `driver.log`; `begin`/`end` number the ones it does not drive. Taking
+    the larger of the two means a clone that has done both continues from the truth rather than
+    re-using a number the other source already spent.
+    """
+    n = 0
+    for r in read_passes(state):
+        try:
+            n = max(n, int(r["pass"]))
+        except (KeyError, ValueError):
+            continue
+    # **The step log is the other witness**, and the only one that sees a pass `backfill` recovered
+    # from a session rather than a driver. The ledger holds one row per pass we opened; the log holds
+    # every pass ever recorded, so taking the larger never re-uses a number.
+    try:
+        for row in load_tsv(Path(state) / "steps.tsv"):
+            n = max(n, int(row["pass"]))
+    except (OSError, ValueError):
+        pass
+    # The driver's own counter, which it writes even for a pass whose session was never recorded.
+    try:
+        n = max(n, int((Path(state) / "pass-count").read_text().strip() or 0))
+    except (OSError, ValueError):
+        pass
+    log = Path(driver_log) if driver_log else Path(state) / "driver.log"
+    for start, num in pass_starts(log):
+        n = max(n, num)
+    return n
+
+
+def begin(state, via="manual", pass_no=0):
+    """**Number a pass and open a row for it, before it runs** — the one thing a hand-driven pass never did.
+
+    Passes 252-291 of `bevy_emerge_loop` were driven by re-running `/build-loop` inside one omp
+    session, which calls none of the driver's hooks: no `driver.log` START, no `pass-count` bump, no
+    `record`, no `audit`, no `config.tsv` row. Seventeen passes of measured work left no trace, so
+    "where did last night go?" had no answer that was not a guess.
+
+    So the boundary is the pass's own, not the driver's. This writes the number into `pass-count`,
+    appends the ledger row with the settings and the start time, and prints the number. `end` closes
+    the row with the wall time and records the steps. `via` says who drove it (`manual`, `wiggum`),
+    so the two can be compared later.
+    """
+    import socket
+    import time
+    state = Path(state)
+    state.mkdir(parents=True, exist_ok=True)
+    # **A caller that already numbered the pass keeps its number.** The driver computes `n`, writes
+    # `pass-count` and stamps `driver.log` before this runs; numbering again here would skip a number
+    # on every driven pass. A hand-run pass passes nothing and is numbered from the ledger.
+    n = pass_no or (last_pass(state) + 1)
+    if not pass_no or n > last_pass(state, None):
+        (state / "pass-count").write_text(f"{n}\n", encoding="utf-8")
+    env = [os.environ.get(k) or "-" for k in CONFIG_ENV]
+    new = not (state / "passes.tsv").exists()
+    with open(state / "passes.tsv", "a", encoding="utf-8") as f:
+        if new:
+            f.write("\t".join(PASSES_COLUMNS) + "\n")
+        f.write("\t".join([str(n), dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"), via,
+                            socket.gethostname().split(".")[0], "0", *env]) + "\n")
+    (state / f"start-{n}").write_text(f"{time.time()}\n", encoding="utf-8")
+    return n
+
+
+def end(state, pass_no, repo):
+    """**Close a pass: its wall time, its steps, and — if the caller asks — its audit.**
+
+    `record` needs only the pass's start, which `begin` kept in `start-<n>`, so a hand-run pass
+    records exactly what a driver-run one does. A pass whose `start-<n>` is gone still records if
+    `--since` is given.
+    """
+    import time
+    state = Path(state)
+    mark = state / f"start-{pass_no}"
+    since = float(mark.read_text().strip()) if mark.exists() else time.time()
+    write_config(state, pass_no, since)
+    # **Read first, then close the row.** Dropping the pass before looking for it was a real bug:
+    # `end` deleted the row it was about to fill in, so the ledger closed every pass to nothing and a
+    # smoke test read `ledger_rows=0` after a clean begin/end.
+    rows = read_passes(state)
+    closed = False
+    for r in rows:
+        if int(r["pass"]) == int(pass_no):
+            r["seconds"] = str(round(time.time() - since))
+            r["via"] = os.environ.get("WIGGUM_VIA") or r.get("via") or "manual"
+            closed = True
+    if not closed:
+        rows.append(dict(zip(PASSES_COLUMNS, [str(pass_no), dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
+                                             os.environ.get("WIGGUM_VIA") or "manual", "-", str(round(time.time() - since)),
+                                             *[os.environ.get(k) or "-" for k in CONFIG_ENV]])))
+    # **The header is written back whether or not there are rows.** Rewriting the file from
+    # `read_passes` (which skips a bad row) once left a ledger with no header, so every later read saw
+    # zero passes and `begin` restarted the numbering at 1.
+    with open(state / "passes.tsv", "w", encoding="utf-8") as f:
+        f.write("\t".join(PASSES_COLUMNS) + "\n")
+        for r in sorted(rows, key=lambda r: int(r["pass"])):
+            f.write("\t".join(r.get(k, "-") for k in PASSES_COLUMNS) + "\n")
+    if mark.exists():
+        mark.unlink()
+    # The steps are read from the session the same way `record` does it.
+    since_dt = dt.datetime.fromtimestamp(since - 60, dt.timezone.utc)
+    found = [p for start, p in sessions_for(repo) if start >= since_dt]
+    if found:
+        rows = steps(read_session(found[0]))
+        drop_passes(state / "steps.tsv", {pass_no})
+        write_rows(state / "steps.tsv", pass_no, rows)
+        return f"pass {pass_no} closed in {round(time.time() - since)}s; steps: {summary(rows)}"
+    return f"pass {pass_no} closed in {round(time.time() - since)}s; no session found to record"
 
 
 def pass_starts(driver_log):
@@ -502,6 +677,16 @@ def main(argv=None):
     b.add_argument("--repo", required=True)
     b.add_argument("--state", required=True)
     b.add_argument("--last", type=int, default=0)
+    be = sub.add_parser("begin", help="number a pass and open its ledger row, before it runs")
+    be.add_argument("--state", required=True)
+    be.add_argument("--via", default="manual", help="who drives it: manual, wiggum")
+    be.add_argument("--pass", dest="pass_no", type=int, default=0,
+                    help="the number, when the caller already chose one (the driver does)")
+    en = sub.add_parser("end", help="close a pass: its wall time, its steps, whether it shipped")
+    en.add_argument("--repo", required=True)
+    en.add_argument("--state", required=True)
+    en.add_argument("--pass", dest="pass_no", type=int, default=0)
+    en.add_argument("--from", dest="start", default="", help="origin/main when the pass started, for the audit")
     p = sub.add_parser("report", help="where the time goes")
     p.add_argument("--state", required=True)
     p.add_argument("--last", type=int, default=0)
@@ -519,6 +704,16 @@ def main(argv=None):
     if a.cmd == "mark":
         print(f"phase: {a.phase} at {dt.datetime.now(dt.timezone.utc):%H:%M:%SZ}")
         return 0
+    if a.cmd == "begin":
+        n = begin(a.state, a.via, a.pass_no)
+        print(f"pass {n} begins ({a.via})")
+        return 0
+    if a.cmd == "end":
+        n = a.pass_no or int((Path(a.state) / "pass-count").read_text().strip() or 0)
+        print(end(a.state, n, a.repo))
+        if a.start:
+            print(audit(a.repo, a.start, n, a.state))
+        return 0
     if a.cmd == "record":
         write_config(a.state, a.pass_no, a.since)
         since = dt.datetime.fromtimestamp(a.since - 60, dt.timezone.utc)
@@ -535,15 +730,50 @@ def main(argv=None):
         found = sessions_for(a.repo)
         if a.last:
             found = found[-a.last:]
-        starts = pass_starts(Path(a.state) / "driver.log")
+        start_log = Path(a.state) / "driver.log"
+        starts = pass_starts(start_log)
         out = Path(a.state) / "steps.tsv"
-        found = [(pass_for(start, starts, -i), path) for i, (start, path) in enumerate(found, start=1)]
-        # A backfill rebuilds the passes it read and keeps every other pass's rows, so running it twice
-        # does not double them and `--last K` does not erase older passes.
-        drop_passes(out, {n for n, _ in found})
-        for n, path in found:
-            write_rows(out, n, steps(read_session(path)))
-        print(f"steps: backfilled {len(found)} session(s) into {out}")
+        # **A session the driver started is the driver's pass; one it did not is a pass of its own.**
+        # Those sessions used to fall through to a NEGATIVE number, which is why passes 252-291 of
+        # `bevy_emerge_loop` were missing entirely: `pass_for` found no matching START, returned the
+        # negative fallback, and the rows landed under a pass no report ever asked for.
+        #
+        # **And one session is not always one pass.** Re-running `/build-loop` inside a single omp
+        # session leaves a marker per pass in its transcript; measured 2026-11-03, one hand-driven
+        # session held 57 pass markers across 26 hours. Crediting all of it to one number would have
+        # been a bigger lie than the missing rows, so a session is cut at each marker.
+        known = last_pass(a.state, start_log)
+        numbered, spent, cut = [], set(), 0
+        for start, path in found:
+            entries = read_session(path)
+            slices = pass_slices(entries)
+            n = pass_for(start, starts, None)
+            if n is not None:
+                numbered.append((n, slices[0][1]))
+                spent.add(n)
+                for _, part in slices[1:]:
+                    known += 1
+                    while known in spent:
+                        known += 1
+                    numbered.append((known, part))
+                    spent.add(known)
+                    cut += 1
+                continue
+            for _, part in slices:
+                if sum(r["seconds"] for r in steps(part) if r["kind"] in ("model", "tool", "wait")) < 60:
+                    continue
+                known += 1
+                while known in spent:
+                    known += 1
+                numbered.append((known, part))
+                spent.add(known)
+                cut += 1
+        numbered.sort(key=lambda pair: pair[0])
+        drop_passes(out, {n for n, _ in numbered})
+        for n, entries in numbered:
+            write_rows(out, n, steps(entries))
+        print(f"steps: backfilled {len(numbered)} pass(es) into {out} "
+              f"({cut} numbered where no driver START named them)")
         return 0
     if a.cmd == "report":
         report(a.state, a.last)

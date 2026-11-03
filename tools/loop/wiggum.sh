@@ -635,6 +635,11 @@ one_pass() {
   local steps_tool
   steps_tool="$(cd "$(dirname "$0")" && pwd)/steps.py"
   if [ -f "$steps_tool" ]; then
+    # **The ledger row for a driven pass** (owner, 2026-11-03). `begin` also numbers the pass, so a
+    # clone that has been driven by hand and by the driver keeps ONE sequence: `last_pass` reads
+    # `passes.tsv`, `pass-count` and `driver.log` and takes the largest, so neither source can reuse
+    # a number the other spent.
+    WIGGUM_VIA=wiggum python3 "$steps_tool" begin --state "$STATE" --via wiggum --pass "$n" >/dev/null 2>&1 || true
     log "pass $n $(WIGGUM_MODEL="$MODEL" WIGGUM_THINK="$THINKING" python3 "$steps_tool" record --repo "$REPO" --since "$pass_started_at" --pass "$n" --state "$STATE" 2>&1 | tail -1)"
     # **Did the pass ship?** Commits on origin/main, anything left unpushed, a release tag when the package
     # changed, docs and demo files. What the commands require and the pass skipped is named as `missing`,

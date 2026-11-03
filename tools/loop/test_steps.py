@@ -227,3 +227,111 @@ class Steps(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAPassWithNoDriver(unittest.TestCase):
+    """**A hand-run pass records the same as a driven one** (owner, 2026-11-03).
+
+    Measured on `bevy_emerge_loop`: passes 252-291 were driven by re-running `/build-loop` inside one
+    omp session. Nothing bumped `pass-count`, nothing stamped `driver.log`, and `backfill` — which
+    maps a session to a pass by a `pass N START` line — fell through to a **negative** number, so 17
+    passes of recorded work were written under a pass no report ever asked for. "Where did last night
+    go?" had no answer that was not a guess.
+    """
+
+    def test_begin_numbers_a_pass_and_end_closes_it_without_a_driver(self):
+        import time
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            # The driver stopped at 233 and this clone has no driver.log at all.
+            (state / "pass-count").write_text("233\n")
+            n1 = steps.begin(d, "manual")
+            n2 = steps.begin(d, "manual")
+            ledger = steps.read_passes(state)
+            count = (state / "pass-count").read_text().strip()
+        self.assertEqual((n1, n2), (234, 235), "a hand pass continues the driver's numbering")
+        self.assertEqual(count, "235", "and writes the number the driver's counter would have")
+        self.assertEqual([r["via"] for r in ledger], ["manual", "manual"])
+
+    def test_a_number_the_other_source_spent_is_never_reused(self):
+        """The ledger and the driver log both count passes; the larger of the two wins."""
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            local = T0.astimezone()
+            (state / "driver.log").write_text(
+                f"{(local - dt.timedelta(minutes=1)):%Y-%m-%dT%H:%M:%S} pass 500 START command=/x\n")
+            steps.begin(d, "manual")
+            self.assertEqual((state / "pass-count").read_text().strip(), "501",
+                             "a ledger of nothing must not restart at 1 beside a log that reached 500")
+
+    def test_backfill_gives_a_driverless_session_its_own_number_instead_of_a_negative_one(self):
+        """`backfill` used to fall through to `-i` for a session no driver started: the rows landed
+        under a negative pass number and every report ignored them."""
+        from unittest import mock
+        sessions = [(T0, "a.jsonl"), (T0 + dt.timedelta(hours=2), "b.jsonl")]
+        rows = [dict(seq=1, phase="build", kind="model", category="model", tool="", start=T0,
+                     seconds=120.0, detail="")]
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            (state / "pass-count").write_text("40\n")
+            with mock.patch.object(steps, "sessions_for", return_value=sessions), \
+                 mock.patch.object(steps, "read_session", return_value=[]), \
+                 mock.patch.object(steps, "steps", return_value=rows):
+                steps.main(["backfill", "--repo", d, "--state", d])
+            passes = sorted({int(r["pass"]) for r in steps.load_tsv(state / "steps.tsv")})
+        self.assertEqual(passes, [41, 42], "both sessions are real passes and both are numbered")
+        self.assertTrue(all(p > 0 for p in passes), "never a negative pass number")
+
+    def test_one_session_that_ran_the_command_many_times_is_cut_into_its_passes(self):
+        """**A hand-driven night is one session and many passes.**
+
+        Measured 2026-11-03: one session held 57 `one build-loop pass` markers across 26 hours.
+        `backfill` read it as a single pass, so every report saw one 26-hour "pass" and no per-pass
+        timing at all. The marker is the pass's own boundary and the only one available with no
+        driver watching.
+        """
+        mark = {"type": "message", "timestamp": at(0), "message": {"role": "user",
+                "content": "# bevy_grimoire: one build-loop pass\n\nYou are one pass of a Wiggum loop"}}
+        mark2 = {"type": "message", "timestamp": at(600), "message": {"role": "user",
+                 "content": "# bevy_grimoire: one build-loop pass\n\nYou are one pass of a Wiggum loop"}}
+        other = {"type": "message", "timestamp": at(300), "message": {"role": "user",
+                 "content": "Can you label the blocked issues?"}}
+        self.assertTrue(steps.is_pass_mark(mark))
+        self.assertFalse(steps.is_pass_mark(other), "a person's message is not a pass boundary")
+        slices = steps.pass_slices([mark, other, mark2])
+        self.assertEqual([len(s[1]) for s in slices], [2, 1], "two passes, cut at the markers")
+        self.assertEqual(len(steps.pass_slices([other, other])), 1, "no marker means one pass")
+
+    def test_the_ledger_keeps_its_header_and_never_restarts_the_numbering(self):
+        """Two bugs from one smoke test, both caught here.
+
+        Rewriting the ledger from the rows it could parse once dropped the header, so every later read
+        saw zero passes and `begin` restarted at 1. And the ledger is *sparse* — one row per pass it
+        opened — while `steps.tsv` holds every pass ever recorded, so numbering from the ledger alone
+        collided with a pass `backfill` had recovered from a session.
+        """
+        import csv
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            steps.begin(d, "manual")
+            steps.begin(d, "manual")
+            steps.end(d, 2, d)          # close one: this rewrote the file
+            lines = (state / "passes.tsv").read_text().splitlines()
+            self.assertEqual(lines[0].split("\t"), steps.PASSES_COLUMNS, "the header survives `end`")
+            # A pass only the step log knows about must still not be re-used.
+            rows = [dict(seq=1, phase="build", kind="model", category="model", tool="", start=T0,
+                         seconds=90.0, detail="")]
+            steps.write_rows(state / "steps.tsv", 900, rows)
+            self.assertEqual(steps.begin(d, "manual"), 901)
+
+    def test_end_fills_the_row_it_opened_instead_of_deleting_it(self):
+        """A smoke test on `bevy_emerge_loop` read `ledger_rows=0` after a clean begin/end: `end`
+        dropped the row *before* looking for it, so every pass closed to nothing."""
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d)
+            n = steps.begin(d, "manual")
+            steps.end(d, n, d)
+            rows = steps.read_passes(state)
+            self.assertEqual(len(rows), 1, "the pass it opened is still there")
+            self.assertEqual(int(rows[0]["pass"]), n)
+            self.assertGreaterEqual(int(rows[0]["seconds"]), 0, "and it has a wall time")
