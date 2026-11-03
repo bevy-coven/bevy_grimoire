@@ -20,11 +20,34 @@ pub fn editor_skin() -> GooeySkin {
 /// Adds gooey's style plugin and its navigation plugin, puts the editor's skin in as the running one and adds the system that applies the project's skin file ([`crate::ui_skin::apply_ui_skin`]).
 pub struct EditorUiPlugin;
 
+/// **The wheel scrolls a panel** (#283): `bevy_ui_widgets::ScrollAreaPlugin`, which is the machinery
+/// that turns a wheel event over a `ScrollArea` into a `ScrollPosition`.
+///
+/// `chrome::scroll_list` has put a `ScrollArea` and `overflow: scroll_y()` on every scrollable box in
+/// this editor since it was written, and drew a scrollbar beside it — but `DefaultPlugins` does not
+/// include `UiWidgetsPlugins`, and nothing here added this one, so **no panel answered the wheel at
+/// all**. Measured on big 2026-11-03 at 1280x720: the INSPECTOR's `ENVIRONMENT` heading sits at
+/// y = 898 in a 720 px window, and ten wheel notches over the panel left it at 898.5. Every section
+/// below `EDGES` was unreachable, to a person as much as to a storyboard.
+///
+/// Its own plugin rather than a line inside [`EditorUiPlugin`] so a test can add exactly this and ask
+/// whether it arrived, which is what `tests/the_wheel_scrolls_a_panel.rs` does.
+pub struct ScrollWheelPlugin;
+
+impl Plugin for ScrollWheelPlugin {
+    fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<bevy::ui_widgets::ScrollAreaPlugin>() {
+            app.add_plugins(bevy::ui_widgets::ScrollAreaPlugin);
+        }
+    }
+}
+
 impl Plugin for EditorUiPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<GooeyStylePlugin>() {
             app.add_plugins(GooeyStylePlugin);
         }
+        app.add_plugins(ScrollWheelPlugin);
         // **Menus need it** (UI-36, #230): gooey registers the context-menu click, the popovers' anchoring
         // and their closing in the navigation plugin. The editor's arrow keys stay its own because gooey's
         // only act on widgets that opt in (`AutoDirectionalNavigation`), and the viewport is not one.

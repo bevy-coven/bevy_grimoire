@@ -333,6 +333,7 @@ mod the_compose_panel_draws_in_the_skins_ink;
 mod the_model_written_ink_comes_from_the_skin;
 mod the_rig_bench_draws_in_the_skins_ink;
 mod the_benchs_labels_and_the_journal_take_the_skins_ink;
+mod the_wheel_scrolls_a_panel;
 mod the_status_line_draws_in_the_skins_ink;
 mod the_panes_inks_come_from_the_skin;
 mod the_next_undo_is_named;
