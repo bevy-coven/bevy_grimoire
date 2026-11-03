@@ -20,6 +20,7 @@ mod a_badge_draws_in_the_skins_ink;
 mod a_chooser_row_draws_in_the_skins_ink;
 mod a_filter_box_draws_in_the_skins_ink;
 mod a_palette_row_reports_a_clickable_position;
+mod the_shells_divider_moves_under_a_drag;
 mod a_broken_stack_still_opens_framed;
 mod audio_panel_reads_the_crates_file;
 mod a_capture_sequence_takes_one_frame_at_a_time;
