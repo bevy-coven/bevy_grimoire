@@ -1,0 +1,11 @@
+(
+    set: "crates/bevy_cauldron/fixtures/label_kit.ron",
+    pieces: 12,
+    decide_right: 11,
+    decide_asked: 12,
+    vlm_right: 11,
+    vlm_asked: 12,
+    decide_model: "clef-flash",
+    vlm_model: "clef-flash",
+    date: "2026-11-03",
+)

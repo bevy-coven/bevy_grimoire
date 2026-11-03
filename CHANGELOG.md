@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **label-path-config** `3bbe4b2` A config chooses the labelling path, and refuses a name neither path has *No clip: an environment selector; proved by the_config_selects_the_path_and_refuses_a_name_neither_has*
 - **label-decide** `9d31a79` Kit labelling asks closed questions over the project's own vocabulary, so a token the project lacks can never be suggested *No clip: an API and its guard; proved by crates/bevy_cauldron/tests/the_decision_labeller_cannot_suggest_a_token_the_project_lacks.rs (deleting the guard lets 'throne' through)*
 - **all-demos-fresh** `6a71ded` All nine standing demos show the current editor again: build-a-map re-recorded from its two storyboard defects *No clip: recorded media, not a feature; docs/media/build-a-map.gif and tools/demo/stale.py reporting nine fresh*
 - **blank-frame-calibrated** `c1460ce` A calibrated blank-frame check fails the run on a blank capture and passes on a good one, proved with a replayed model *No clip: a test over the check policy; proved by crates/bevy_oracle/tests/a_calibrated_blank_frame_check_fails_the_run.rs*
