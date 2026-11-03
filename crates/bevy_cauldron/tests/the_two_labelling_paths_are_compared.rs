@@ -26,10 +26,14 @@ fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(name)
 }
 
+/// A piece in the committed kit. Only `labels` is read here — the count and the axes both come from
+/// it — but the whole entry must parse, so a kit that has drifted from `LabelledPiece`'s shape fails
+/// here rather than silently in a run.
 #[derive(Debug, serde::Deserialize)]
 struct Labelled {
-    state: String,
-    labels: BTreeMap<String, String>,
+    #[allow(dead_code)]
+    pub state: String,
+    pub labels: BTreeMap<String, String>,
 }
 
 #[test]
@@ -55,6 +59,23 @@ fn the_decision_path_s_agreement_is_recorded_against_the_old_path_s() {
         record.pieces,
         set.len()
     );
+    // **Every piece labels at least one axis**, and no label names an axis the labeller does not ask
+    // about — otherwise a piece contributes nothing and the agreement is measured over less than the
+    // record claims.
+    for piece in &set {
+        assert!(
+            !piece.labels.is_empty(),
+            "`{}` has no labels, so it measures neither path",
+            piece.state
+        );
+        for axis in piece.labels.keys() {
+            assert!(
+                bevy_cauldron::label_decide::axes().iter().any(|(f, _)| f == axis),
+                "`{}` labels `{axis}`, which is not an axis the labeller asks about",
+                piece.state
+            );
+        }
+    }
 
     // Both paths must have answered, and the counts must be consistent with their own totals.
     for (name, right, asked) in [
