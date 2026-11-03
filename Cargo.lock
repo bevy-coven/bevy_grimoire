@@ -956,7 +956,7 @@ dependencies = [
 [[package]]
 name = "bevy_elements"
 version = "0.7.8"
-source = "git+https://github.com/bevy-coven/bevy_elements?rev=5d71dbd180ae31fd1a24b562549bebf71ffcdb3e#5d71dbd180ae31fd1a24b562549bebf71ffcdb3e"
+source = "git+https://github.com/bevy-coven/bevy_elements?rev=0778a620452368662771825ea568b7d79966b87c#0778a620452368662771825ea568b7d79966b87c"
 dependencies = [
  "bevy",
  "bevy_isomesh",
