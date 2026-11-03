@@ -26,7 +26,7 @@
   ],
   "chunks": [
     {
-      "seconds": 6.2
+      "seconds": 7.0
     }
   ],
   "steps": [
@@ -53,17 +53,13 @@
       "type": "sofa"
     },
     {
-      "at": 1.2,
-      "click": [
-        1100,
-        233
-      ]
-    },
-    {
-      "at": 1.5,
-      "cursor": [
-        690,
-        360
+      "at": 1.6,
+      "click_label": "sofa",
+      "within": [
+        1080,
+        215,
+        1280,
+        265
       ]
     },
     {
@@ -117,6 +113,10 @@
       "mods": [
         "ControlLeft"
       ]
+    },
+    {
+      "at": 5.35,
+      "key": "KeyX"
     },
     {
       "at": 5.9,

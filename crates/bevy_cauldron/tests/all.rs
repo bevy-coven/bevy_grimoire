@@ -392,3 +392,4 @@ mod an_injected_pointer_over_a_dock_is_pickable;
 mod an_injected_drag_moves_the_dock_divider;
 mod the_pointer_payload_says_where_the_cursor_got_to;
 mod background_jobs_show_and_can_be_stopped;
+mod a_row_click_while_filtering_arms_it;
