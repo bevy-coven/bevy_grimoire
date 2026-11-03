@@ -607,3 +607,98 @@ fn every_ui_entry_point_is_in_the_source_and_dispatches_the_operation() {
          operation, and a second write is a second way to do it."
     );
 }
+
+/// **The allowlist says which entries will never be operations, and why** (E-002, #129).
+///
+/// The ratchet's rule is that `UNMIGRATED` may only shrink, and it has shrunk one action per commit.
+/// That made 89 entries read as 89 unfinished migrations. They are not: a verb that moves the view, one
+/// whose effect is a key *held*, and one that is half of a dialog cannot be an operation in the shape
+/// `Ctx` describes — and wrapping them would put a name in the registry for something no agent can call.
+///
+/// **The classification is pinned here, not merely counted.** The first version of this test summed the
+/// four kinds and compared the total to `UNMIGRATED.len()`, which holds whatever bucket an action lands
+/// in — measured: `RedoBuild`, an unmigrated verb that writes the grimoire, was moved to `View` and the
+/// test still passed. So the sets are named. Moving one action between kinds fails this test until the
+/// lists below are changed deliberately, which is the ratchet the classification needs.
+///
+/// **`Project` verbs are the debt.** Every one is migrated or on the allowlist; a `View` verb on the list
+/// is a *candidate* view operation (`view_cycle_grid` and `view_toggle_journal` are two that were).
+#[test]
+fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
+    use bevy_cauldron::keys::Change;
+
+    let mut view = Vec::new();
+    let mut held = Vec::new();
+    let mut modal = Vec::new();
+    let mut project = 0usize;
+    for action in Action::ALL {
+        if action.operation().is_some() {
+            continue;
+        }
+        match action.change() {
+            Change::Project => project += 1,
+            Change::View => view.push(format!("{action:?}")),
+            Change::Held => held.push(format!("{action:?}")),
+            Change::Modal => modal.push(format!("{action:?}")),
+        }
+    }
+
+    // **Held is the smallest set and the least arguable.** The effect is the hold.
+    assert_eq!(
+        held,
+        ["Shortcuts"],
+        "`Shortcuts` is the only held verb: four systems read `pressed` to fade the world while `K` \
+         is down, so its effect reverses on release and no single `Outcome` describes it. A verb added \
+         here needs that same property — a *state an agent sets once* is not one."
+    );
+
+    // **Modal verbs are halves of a conversation with a person**, so they have no answer to "what does
+    // this change" independent of what is on screen.
+    assert_eq!(
+        modal,
+        ["Cancel", "TypeId", "Accept"],
+        "these are the halves of a dialog: `Accept` keeps what is proposed, `Cancel` backs out of \
+         whatever is innermost, `TypeId` types into a box someone opened. Any of them as an operation \
+         would need to say which proposal, which box — the answer is not in the verb."
+    );
+
+    // **`View` is the candidate list**, and it is named so a pass can see what it may migrate next and a
+    // reader can see what will never need to be. Order follows `Action::ALL`, so it is stable.
+    assert_eq!(
+        view,
+        [
+            "MainMenu", "CycleTarget", "FrameView", "MoveMode", "PageEnter", "PageLeave", "TileOpen",
+            "TilePrev", "TileNext", "CloseTile", "FocusFilter", "FocusTagFilter", "PanForward",
+            "PanBack", "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "PrevCandidate",
+            "NextCandidate", "FocusCandidates", "CopyInfo", "FocusLibrary", "ScrubBack", "ScrubFwd",
+            "PlayPause", "ToggleGhost", "CycleCamPreset",
+        ],
+        "the `View` set changed. That is allowed — but it is a deliberate act: a verb moves here only \
+         when its whole effect is what a person is looking through, and it is then a candidate for a \
+         view operation like `view_cycle_grid`. A verb that writes the grimoire belongs in `Project`."
+    );
+
+    // **And `Project` is what is left, which is the debt.** It must be non-zero: a classification whose
+    // project bucket was empty would be hiding every migration still owed.
+    assert_eq!(
+        project + view.len() + held.len() + modal.len(),
+        UNMIGRATED.len(),
+        "the classification must cover the allowlist exactly: {project} project + {} view + {} held + \
+         {} modal against {} listed",
+        view.len(),
+        held.len(),
+        modal.len(),
+        UNMIGRATED.len()
+    );
+    assert!(
+        project > 0,
+        "not one unmigrated verb writes the grimoire, so this classification proves nothing"
+    );
+    for action in UNMIGRATED {
+        assert!(
+            action.operation().is_none(),
+            "{action:?} is on `UNMIGRATED` and names an operation; a migrated action comes off the \
+             list in the commit that names it"
+        );
+    }
+}

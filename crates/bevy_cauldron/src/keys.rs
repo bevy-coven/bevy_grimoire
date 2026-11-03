@@ -855,6 +855,29 @@ enumerated! {
     ALL;
 }
 
+/// **What a verb changes** (E-002, #129), the answer that decides whether it can be an operation.
+///
+/// The editor's rule is that a user action is a registered operation with both front ends dispatching
+/// it. That rule has an edge the allowlist never named: an operation in `ops` takes a `Ctx` and returns
+/// an `Outcome`, which is something that **happened** — a map saved, a piece turned. A verb that only
+/// moves what you are looking through, or that lasts exactly as long as you hold a key, is not that, and
+/// wrapping it would be a lie told in the registry.
+///
+/// So the classification is written down, and the parity test uses it: every `Project` verb owes an
+/// operation, and a `View`/`Held`/`Modal` verb may stay a key with its reason in one word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Change {
+    /// Writes the grimoire: a map, a kit, a rig, a composition. **Owes an operation.**
+    Project,
+    /// Changes what a person is looking through — the grid rung, the journal, a camera, a page.
+    /// A candidate view operation, the shape `view_cycle_grid` proved.
+    View,
+    /// Its effect *is* the hold: the shortcut overlay, a live pick, a world faded back.
+    Held,
+    /// One half of a conversation with a person: a cancel, an accept, a typed id.
+    Modal,
+}
+
 impl Action {
     /// **The number key for the nth panel of a door**, or `None` past the third.
     ///
@@ -886,6 +909,66 @@ impl Action {
                 (0..panels).filter_map(Action::tab_slot).any(|a| a == self)
             }
             _ => true,
+        }
+    }
+
+    /// **What kind of thing this verb changes**, so `UNMIGRATED` is a to-do list rather than a count.
+    ///
+    /// The allowlist's rule is that it may only shrink, and it has shrunk one action at a time — which
+    /// made 89 entries look like 89 unfinished migrations. They are not. A verb that only *moves the
+    /// view* has no project state to write, and one that is a key **held** for its whole effect
+    /// reverses when released, so neither can be an operation in the shape `Ctx` describes. Naming
+    /// that here is what turns "89 to go" into "this many, and this many that will never be".
+    ///
+    /// **`Project` is the only kind that owes an operation.** The parity test requires every `Project`
+    /// verb to be either migrated or on `UNMIGRATED`, so the classification cannot be used to hide one.
+    pub fn change(self) -> Change {
+        match self {
+            // **No project state: what a person is looking through.** These are candidate view
+            // operations, the shape `view_cycle_grid` and `view_toggle_journal` proved.
+            Action::CycleGrid
+            | Action::ShowErrors
+            | Action::FrameView
+            | Action::CycleCamPreset
+            | Action::ToggleGhost
+            | Action::PanForward
+            | Action::PanBack
+            | Action::PanLeft
+            | Action::PanRight
+            | Action::TurnViewLeft
+            | Action::TurnViewRight
+            | Action::MoveMode
+            | Action::CycleTarget
+            | Action::MainMenu
+            | Action::TileOpen
+            | Action::TilePrev
+            | Action::TileNext
+            | Action::CloseTile
+            | Action::PageEnter
+            | Action::PageLeave
+            | Action::FocusFilter
+            | Action::FocusTagFilter
+            | Action::FocusLibrary
+            | Action::FocusCandidates
+            | Action::PrevCandidate
+            | Action::NextCandidate
+            | Action::CopyInfo
+            | Action::ScrubBack
+            | Action::ScrubFwd
+            | Action::PlayPause => Change::View,
+
+            // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
+            // up. An operation whose effect reverses when a key is released is not a value an agent can
+            // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
+            Action::Shortcuts => Change::Held,
+
+            // **A modal or a peel.** `Cancel` backs out of whatever is innermost — a proposal, a note box,
+            // the journal — so it has no single answer to "what does this change"; `Accept` and `TypeId`
+            // are the other half of a dialog's conversation with a person.
+            Action::Cancel | Action::Accept | Action::TypeId => Change::Modal,
+
+            // Everything else writes the grimoire and owes an operation.
+            _ => Change::Project,
         }
     }
 
