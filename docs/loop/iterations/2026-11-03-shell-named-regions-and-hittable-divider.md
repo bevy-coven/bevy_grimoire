@@ -53,7 +53,26 @@ Reviewer not spawned; self-review, mine:
 - **What is still missing?** The recorder-driven drag, named above.
 
 ## Release
-`bevy_cauldron` is `publish = false`; no crate shipped.
+Two crates had real changes since their tags and are published from a green local gate:
+
+- **bevy_grimoire_core v0.7.0** — https://crates.io/crates/bevy_grimoire_core/0.7.0
+  `AgentSettings::launch` gained a parameter (semver-checks: `method_parameter_count_changed`), so
+  pre-1.0 it is a MINOR bump: 0.6.5 -> 0.7.0.
+- **bevy_grimoire v0.4.2** — https://crates.io/crates/bevy_grimoire/0.4.2
+  Its API is unchanged (202 checks pass, no semver update required) but its published `Cargo.toml`
+  now requires core 0.7.0, so the crate that ships is different: PATCH.
+
+`bevy_grimoire_rng`, `_solver`, `_anim` and `_snip` have no changed files of their own. `bevy_cauldron`
+and `bevy_cauldron_mcp` are `publish = false`.
+
+## Second slice: the split's floor
+`a_dock_resize_never_covers_the_viewport`: at `SplitFraction` 0.95 the viewport measured **47 px of a
+1280-px body**, because `SplitMin` was its default `(0, 0)`. `SplitMin::new(96.0, DOCK_PANE_MIN_PX)`
+— gooey's own dock minimum — takes it to **115 px**. The test sweeps 0.0, 0.05, 0.22, 0.5, 0.95 and
+1.0; it fails without the floor and passes with it. Its header says plainly what it does not
+promise: the floor is a fixed pixel count, so a narrow window with a wide dock can still leave the
+world under a quarter — a guarantee needs a `SplitMin` computed from the body's width, which is a
+system this slice does not add.
 
 ## Next focus
 Make an injected drag reach window-space UI (`retarget_pointer` decides the pointer's space), then
