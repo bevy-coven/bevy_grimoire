@@ -240,12 +240,19 @@ fn spawn_band_item(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             Node { display: Display::None, ..default() },
             Role::StatusItem,
             StatusItem,
+            // **A job in progress is plain state, so the mark is not drawn** — `Role::StatusMark`
+            // hides itself unless the parent's kind is a warning or an error, which is gooey's own
+            // rule for what a status item's mark means.
+            bevy_gooey::StatusKind::Info,
             Hovered::default(),
             bevy::picking::Pickable::default(),
             JobsItem,
             children![
                 (Node::default(), Role::StatusMark, bevy::picking::Pickable::IGNORE),
-                (Text::new(String::new()), Role::ButtonText, bevy::picking::Pickable::IGNORE),
+                // **`ControlText`, not `ButtonText`.** The item is deliberately not on the `Activate`
+                // bus (see the comment above), so its words must not claim to be a button's: a test
+                // that counts the interface's buttons by their role would see a job row as one.
+                (Text::new(String::new()), Role::ControlText, bevy::picking::Pickable::IGNORE),
             ],
         ))
         .observe(open_on_click)
