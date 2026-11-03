@@ -249,7 +249,7 @@ mod tests {
         let scored = score_set(&clip_check("clip"), &samples, &transport)
             .expect("an answer under `check` is the answer this check asked for");
         assert_eq!(scored.len(), 1);
-        assert_eq!(scored[0].truth, true);
+        assert!(scored[0].truth, "the sample is a match and must score as one");
         assert!((scored[0].p_yes - 0.9).abs() < 1e-9, "p_yes was {}", scored[0].p_yes);
     }
 
