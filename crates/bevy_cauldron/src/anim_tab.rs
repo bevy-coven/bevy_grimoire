@@ -870,12 +870,45 @@ fn check_all_keys(
     });
 }
 
+/// **The rig bench's ink, from the editor's skin** (UI-02, #210).
+///
+/// Five inks carry the whole bench: a slot's name, a staleness verdict, a stale slot's warning, the
+/// chosen rig, and the ground a slot row stands on. **Each falls back to its `chrome.rs` constant**,
+/// the seam `chrome::RowFills` established, so a harness with no skin draws the shipped palette and
+/// no protected test re-pins.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BenchInk {
+    /// A slot's name, and a rig's.
+    pub read: Color,
+    /// A verdict that says nothing is wrong — looked at, not read.
+    pub quiet: Color,
+    /// A stale slot: the one verdict that is a warning.
+    pub danger: Color,
+    /// The rig the bench is on.
+    pub accent: Color,
+    /// A slot row's ground.
+    pub rest: Color,
+}
+
+impl BenchInk {
+    /// The skin's ink where it has one, the shipped constants where it does not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> BenchInk {
+        let Some(skin) = skin else {
+            return BenchInk { read: TEXT, quiet: DIM, danger: DANGER, accent: ACCENT, rest: ROW_BG };
+        };
+        BenchInk { read: skin.text, quiet: skin.text_muted, danger: skin.danger, accent: skin.accent, rest: skin.surface_raised }
+    }
+}
+
 fn rebuild_list(
     mut commands: Commands,
     bench: Res<BenchState>,
     filters: Res<crate::filter::Filters>,
     lists: Query<Entity, With<RigList>>,
+    // **The list's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
+    let read = BenchInk::of(skin.as_deref()).read;
     let pane = crate::filter::Pane::Rigs;
     let names = bench.names();
     for list in &lists {
@@ -888,7 +921,7 @@ fn rebuild_list(
                 crate::chrome::list_row(p, ix == bench.selected, RigRow(ix)).with_children(|row| {
                     row.spawn((
                         Text::new((*name).to_owned()),
-                        TextColor(TEXT),
+                        TextColor(read),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                 });
@@ -934,7 +967,10 @@ fn rebuild_slots(
     plots: Option<Res<crate::anim_plots::BenchPlots>>,
     exclude: Option<Res<AdoptExclude>>,
     panes: Query<Entity, With<SlotPane>>,
+    // **The bench's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
+    let BenchInk { read, quiet, danger, accent, rest } = BenchInk::of(skin.as_deref());
     let names = bench.names();
     let rig = names
         .get(bench.selected)
@@ -976,7 +1012,7 @@ fn rebuild_slots(
                             String::new()
                         }
                     )),
-                    TextColor(if bad > 0 { DANGER } else { TEXT }),
+                    TextColor(if bad > 0 { danger } else { read }),
                     crate::chrome::font(crate::chrome::text::BODY),
                 ));
                 for (ix, n) in names.iter().enumerate() {
@@ -1015,8 +1051,8 @@ fn rebuild_slots(
                             // The rest fill, carried so `chrome::style_list_rows` gives this rail
                             // the same five states every row and chip has. It sensed `Hovered` and
                             // nothing repainted it.
-                            crate::chrome::RowRest(ROW_BG),
-                            BackgroundColor(ROW_BG),
+                            crate::chrome::RowRest(rest),
+                            BackgroundColor(rest),
                         ),
                     )
                     .with_children(|row| {
@@ -1028,7 +1064,7 @@ fn rebuild_slots(
                         .with_children(|head| {
                             head.spawn((
                                 Text::new((*n).to_owned()),
-                                TextColor(TEXT),
+                                TextColor(read),
                                 crate::chrome::font(crate::chrome::text::BODY),
                             ));
                             head.spawn((
@@ -1039,7 +1075,7 @@ fn rebuild_slots(
                         });
                         row.spawn((
                             Text::new(first),
-                            TextColor(LABEL),
+                            TextColor(quiet),
                             crate::chrome::font(crate::chrome::text::HINT),
                         ));
                     });
@@ -1050,14 +1086,14 @@ fn rebuild_slots(
             let Some(rig) = rig else {
                 p.spawn((
                     Text::new("no rig selected"),
-                    TextColor(DIM),
+                    TextColor(quiet),
                     crate::chrome::font(crate::chrome::text::BODY),
                 ));
                 return;
             };
             p.spawn((
                 Text::new(rig.mesh.clone()),
-                TextColor(ACCENT),
+                TextColor(accent),
                 crate::chrome::font(crate::chrome::text::BODY),
             ));
             // **The staged figure's controls, directly under the rig they belong to.**
@@ -1075,7 +1111,7 @@ fn rebuild_slots(
                 None => {
                     p.spawn((
                         Text::new("measuring..."),
-                        TextColor(DIM),
+                        TextColor(quiet),
                         crate::chrome::font(crate::chrome::text::HINT),
                     ));
                 }
@@ -1083,7 +1119,7 @@ fn rebuild_slots(
                     if let Some(st) = report.staleness {
                         let date = report.date.as_deref().unwrap_or("an unknown date");
                         let (line, colour) = match st {
-                            Staleness::NeverMeasured => ("never measured".to_owned(), DIM),
+                            Staleness::NeverMeasured => ("never measured".to_owned(), quiet),
                             Staleness::Current => (format!("measured {date}, current"), DIM),
                             Staleness::Stale => {
                                 (format!("STALE: asset changed since {date}"), DANGER)
@@ -1166,7 +1202,7 @@ fn rebuild_slots(
                     ));
                     row.spawn((
                         Text::new(detail),
-                        TextColor(TEXT),
+                        TextColor(read),
                         // **The value, not the label** — this is the measured number the author came
                         // to the bench to check. The audit found this pairing rendered inverted,
                         // the declared half larger than the measured one.
@@ -1209,7 +1245,7 @@ fn rebuild_slots(
                 if !sub.is_empty() {
                     p.spawn((
                         Text::new(sub.join(" | ")),
-                        TextColor(DIM),
+                        TextColor(quiet),
                         crate::chrome::font(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::left(Val::Px(SLOT_COL)),
@@ -1230,7 +1266,7 @@ fn rebuild_slots(
                     }
                     p.spawn((
                         Text::new(line),
-                        TextColor(DIM),
+                        TextColor(quiet),
                         crate::chrome::font(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::left(Val::Px(SLOT_COL)),
@@ -1253,7 +1289,7 @@ fn rebuild_slots(
                 if ok > 0 {
                     p.spawn((
                         Text::new(format!("{ok} measurement(s) agree with the manifest")),
-                        TextColor(DIM),
+                        TextColor(quiet),
                         crate::chrome::font(crate::chrome::text::HINT),
                     ));
                 }
@@ -1367,7 +1403,7 @@ fn rebuild_slots(
                 // `drive_plot_hover`.
                 p.spawn((
                     Text::new(String::new()),
-                    TextColor(DIM),
+                    TextColor(quiet),
                     crate::chrome::font(crate::chrome::text::HINT),
                     crate::anim_plots::PlotReadout,
                 ));

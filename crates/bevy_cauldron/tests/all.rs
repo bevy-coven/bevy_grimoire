@@ -325,6 +325,7 @@ mod the_meshes_pane_names_the_standards_a_piece_breaks;
 mod the_meshes_pane_says_how_sure_the_labels_are;
 mod the_compose_panel_draws_in_the_skins_ink;
 mod the_model_written_ink_comes_from_the_skin;
+mod the_rig_bench_draws_in_the_skins_ink;
 mod the_panes_inks_come_from_the_skin;
 mod the_next_undo_is_named;
 mod the_note_box_is_on_screen_while_typed;
