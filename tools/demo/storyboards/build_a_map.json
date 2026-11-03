@@ -39,7 +39,7 @@
     },
     {
       "at": 0.3,
-      "caption": "person: furnish the bedroom: filter the PLACE list and arm the sofa"
+      "caption": "person: filter the PLACE list and arm a piece"
     },
     {
       "at": 0.5,
@@ -68,7 +68,7 @@
     },
     {
       "at": 1.8,
-      "caption": "R turns the armed sofa a quarter turn"
+      "caption": "R turns the armed piece a quarter turn"
     },
     {
       "at": 1.9,

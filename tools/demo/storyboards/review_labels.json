@@ -12,7 +12,7 @@
   "setup": [],
   "chunks": [
     {
-      "seconds": 4.4
+      "seconds": 5.0
     }
   ],
   "steps": [
@@ -84,7 +84,14 @@
       ]
     },
     {
-      "at": 4.0,
+      "at": 4.2,
+      "key": "ArrowDown",
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 4.5,
       "caption": "The labels row leads with the confidence, then names the model and the date."
     }
   ]
