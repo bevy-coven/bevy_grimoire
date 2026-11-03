@@ -998,6 +998,8 @@ impl Action {
             Action::CycleGrid => Some("view_cycle_grid"),
             // **The journal is a panel, and which panel is up is view state** (E-002, #129).
             Action::ShowErrors => Some("view_toggle_journal"),
+            // **The clone and run tools** (E-002, #129): two keys onto `tool_arm`.
+            Action::CloneMode | Action::RunMode => Some("tool_arm"),
             Action::Straighten => Some("placement_set_pose"),
             Action::PalettePrev | Action::PaletteNext => Some("brush_arm"),
             Action::ArmComposition | Action::ComposeArm => Some("composition_arm"),

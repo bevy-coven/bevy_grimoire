@@ -1858,6 +1858,107 @@ pub mod fill {
 /// `Cmd+E` has always toggled it by writing `Display` on the panel's node. That is view state, so the
 /// operation carries it in `Ctx::view` and the front end applies what comes back — the same shape
 /// `view_cycle_grid` proved.
+/// **Arm a tool, or put it back** (E-002, #129): what a click on the map does next.
+///
+/// `CloneMode` and `RunMode` are two keys onto one rule — press the tool's key to arm it, press it again
+/// to return to `Tool::Place`. That rule is `editor::arm_tool_in`, and this operation calls it rather
+/// than restating it, so a third tool key costs a line in `tools` and nothing else.
+///
+/// **A view operation, not an edit.** `writes()` is empty and `Undo::None`: arming the clone tool changes
+/// what the next click does, and `Cmd+Z` after arming must take back the last change to the map, not
+/// disarm a tool someone chose on purpose.
+pub mod tool_arm {
+    use super::*;
+    use crate::ops_view::View;
+    use serde_json::json;
+
+    /// The tools a key can arm, as an agent names them. Kept beside the operation so the schema and the
+    /// parse cannot disagree.
+    pub const TOOLS: &[&str] = &["clone", "run", "move", "remove", "note"];
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// One of [`TOOLS`].
+        pub tool: String,
+    }
+
+    pub struct ToolArm;
+
+    impl Operation for ToolArm {
+        fn name(&self) -> &'static str {
+            "tool_arm"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            // A tool is what the next click does, not something the grimoire keeps.
+            &[]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["tool"],
+                "properties": {
+                    "tool": {"type": "string", "enum": TOOLS},
+                },
+            })
+        }
+
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let Some(view) = ctx.view.as_ref() else {
+                return Err(Refusal::new(
+                    "no view is in hand, so there is no tool to arm. An editor front end carries one \
+                     in `Ctx::view`.",
+                ));
+            };
+            let tool = tool_from_view(view, params)?;
+            Ok(json!({
+                "from": crate::ops_view::tool_name(view.tool),
+                "to": crate::ops_view::tool_name(tool),
+            }))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            self.plan(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no tool to arm."));
+            };
+            let tool = tool_from_view(view, params)?;
+            // The chord is the caller's, not the operation's: an agent has none, and the summary is the
+            // only place it is said out loud.
+            let said = view.arm(tool, "");
+            Ok(Outcome {
+                summary: said,
+                affected: 0,
+                saved: false,
+                inverse: None,
+                after: Some(json!({ "tool": crate::ops_view::tool_name(view.tool) })),
+            })
+        }
+    }
+
+    fn tool_from_view(
+        _view: &View,
+        params: &serde_json::Value,
+    ) -> Result<crate::editor::Tool, Refusal> {
+        let name = params
+            .get("tool")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Refusal::new("`tool` is missing; say one of ".to_owned() + &TOOLS.join(", ")))?;
+        crate::ops_view::tool_from_name(name).ok_or_else(|| {
+            Refusal::new(format!(
+                "`{name}` is not a tool; say one of {}",
+                TOOLS.join(", ")
+            ))
+        })
+    }
+}
+
 pub mod view_toggle_journal {
     use super::*;
     use serde_json::json;
@@ -4092,6 +4193,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
     vec![
         Box::new(view_cycle_grid::ViewCycleGrid),
         Box::new(view_toggle_journal::ViewToggleJournal),
+        Box::new(tool_arm::ToolArm),
         Box::new(map_create::MapCreate),
         Box::new(map_set_settings::MapSetSettings),
         Box::new(layout_propose::LayoutPropose),
@@ -4340,6 +4442,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The journal key**, `Cmd+E`, which dispatches `view_toggle_journal` (E-002, #129). The panel's
     // `Display` is what changes; the operation decides up or down and the front end applies it.
     ("view_toggle_journal", "\"view_toggle_journal\", &serde_json"),
+    // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
+    // one rule: press to arm, press again to return to `Tool::Place`.
+    ("tool_arm", "\"tool_arm\""),
     // **The map's name field**, which the N key opens. Enter dispatches `map_rename` through
     // `rename_map`, so the name rule and the file's move are the operation's.
     ("map_rename", "rename_map("),

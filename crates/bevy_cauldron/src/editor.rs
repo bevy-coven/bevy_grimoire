@@ -871,9 +871,47 @@ pub struct CloneDrag {
 /// is armed reaches removal rather than returning to placing, which is what an author means by pressing
 /// a second tool's key.
 pub fn arm_tool(state: &mut EditorState, tool: Tool, chord: &str) -> String {
-    let was = state.tool;
-    state.tool = if was == tool { Tool::Place } else { tool };
-    let on = state.tool == tool;
+    arm_tool_in(&mut state.tool, tool, chord)
+}
+
+/// **Arm a tool through the operation**, so the key and an agent change one thing (E-002, #129).
+///
+/// The view travels in `Ctx::view` and the operation's answer is written back; a refusal is said where a
+/// refused key already is. Nothing here restates the arming rule — `tool_arm` calls the same
+/// [`arm_tool_in`] this file does.
+fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> String {
+    let mut ctx = crate::ops::Ctx {
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { tool: state.tool, ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let params = serde_json::json!({ "tool": crate::ops_view::tool_name(tool) });
+    let outcome = crate::ops::dispatch(&mut ctx, "tool_arm", &params);
+    if let Some(view) = ctx.view {
+        state.tool = view.tool;
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            if outcome.summary.is_empty() {
+                crate::editor::arm_tool_in(&mut state.tool, tool, chord)
+            } else {
+                outcome.summary
+            }
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            state.status.problem(e.0);
+            String::new()
+        }
+    }
+}
+
+/// **The arming rule itself**, on the value rather than on `EditorState`, so a view operation can arm a
+/// tool without owning the editor's resources (E-002, #129). One copy of "press it again to put it back".
+pub fn arm_tool_in(slot: &mut Tool, tool: Tool, chord: &str) -> String {
+    let was = *slot;
+    *slot = if was == tool { Tool::Place } else { tool };
+    let on = *slot == tool;
     match (tool, on) {
         (Tool::Remove, true) => format!("removal mode: click a piece, or drag a box. {chord} or Esc to stop."),
         (Tool::Remove, false) => "removal mode off".to_owned(),
@@ -11699,7 +11737,9 @@ fn keys(
     // **The clone tool.** The move key's shifted sibling: drag a box to take a copy of everything
     // inside, click to stamp the set — as many times as it is held.
     if keys::just_pressed(&keyboard, *live, Action::CloneMode) {
-        let said = arm_tool(&mut state, Tool::Clone, keys::binding(Action::CloneMode).chord);
+        // **The key dispatches the operation an agent calls** (E-002, #129). `tool_arm` is the one place
+        // that decides what arming means; this carries the view in and applies the answer.
+        let said = arm_through_operation(&mut state, Tool::Clone, keys::binding(Action::CloneMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -11717,18 +11757,7 @@ fn keys(
     // repeats along it, at **its own pitch** — not the project's lattice, which is the whole
     // reason the tool exists.
     if keys::just_pressed(&keyboard, *live, Action::RunMode) {
-        state.tool = if state.tool == Tool::Run {
-            Tool::Place
-        } else {
-            Tool::Run
-        };
-        let said = if state.tool == Tool::Run {
-            "run mode: drag a line and the armed piece repeats along it, at its own pitch. \
-             Esc to stop."
-                .to_owned()
-        } else {
-            "run mode off".to_owned()
-        };
+        let said = arm_through_operation(&mut state, Tool::Run, &crate::keys::chord(Action::RunMode));
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
