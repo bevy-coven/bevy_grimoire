@@ -9851,6 +9851,11 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
     let danger_ink = skin.as_deref().map_or(DANGER, |s| s.danger);
     let accent_ink = skin.as_deref().map_or(ACCENT, |s| s.accent);
     let unchecked_ink = unchecked_ink(skin.as_deref());
+    // **A quiet note's ink** (UI-02, #210, slice 5): the "m up the wall", the size note, a remedy under
+    // a warning, a layer's label. All five used `chrome::LABEL` beside `chrome::font(text::LABEL)` — a
+    // colour and a *font size* that share a name, which is what made the colour table's ratchet count
+    // them twice. `quiet` is the skin's `text_muted`, falling back to the constant.
+    let quiet_ink = skin.as_deref().map_or(LABEL, |s| s.text_muted);
     // Borrowed for the tag box's placeholder; `skin` itself is not needed past here.
     let skin_ref = skin.as_deref();
     for pane in &panes {
@@ -10125,7 +10130,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 );
                 row.spawn((
                     Text::new(size_note),
-                    TextColor(LABEL),
+                    TextColor(quiet_ink),
                     crate::chrome::font(crate::chrome::text::LABEL),
                 ));
             });
@@ -10416,7 +10421,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     );
                     row.spawn((
                         Text::new("  m up the wall, from the map floor"),
-                        TextColor(LABEL),
+                        TextColor(quiet_ink),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                 });
@@ -10597,7 +10602,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         if kept.is_empty() {
                             chips.spawn((
                                 Text::new("-"),
-                                TextColor(LABEL),
+                                TextColor(quiet_ink),
                                 crate::chrome::font(crate::chrome::text::LABEL),
                             ));
                         }
@@ -10767,7 +10772,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         if let Some(fix) = &f.fix {
                             block.spawn((
                                 Text::new(fix.clone()),
-                                TextColor(LABEL),
+                                TextColor(quiet_ink),
                                 crate::chrome::font(crate::chrome::text::LABEL),
                                 bevy::text::LineHeight::RelativeToFont(1.35),
                                 Node {
@@ -10877,7 +10882,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         .with_children(|col| {
                             col.spawn((
                                 Text::new(layer_label(y, dy)),
-                                TextColor(LABEL),
+                                TextColor(quiet_ink),
                                 crate::chrome::font(crate::chrome::text::HINT),
                             ));
 

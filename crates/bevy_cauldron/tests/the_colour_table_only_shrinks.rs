@@ -65,9 +65,16 @@ fn uses_outside_chrome(names: &[String], dir: &Path) -> usize {
                 let boundary = |i: usize| {
                     text[i..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_')
                 };
-                let left = start == 0 || {
+                // **`:` on the left is not a use of the colour.** `crate::chrome::text::LABEL` is a
+                // *font size* role that happens to share a name with the colour `LABEL`, so a scan that
+                // accepted any non-alphanumeric left boundary counted 46 of them as paint and made this
+                // ceiling read 518 when the real number was 403. The count is only worth having if it
+                // measures the thing it names.
+                let left = if start == 0 {
+                    true
+                } else {
                     let before = text[..start].chars().next_back().unwrap_or(' ');
-                    !before.is_alphanumeric() && before != '_'
+                    !before.is_alphanumeric() && before != '_' && before != ':'
                 };
                 if left && boundary(end) {
                     total += 1;
@@ -95,8 +102,19 @@ fn uses_outside_chrome(names: &[String], dir: &Path) -> usize {
 /// stays as it is because removing an assertion is not a pass's to do — but a check that has to be
 /// raised to permit correct work is measuring the wrong thing, and the honest replacement is a
 /// per-file ceiling, or none.
+/// **Two corrections, both of which lower it.**
+///
+/// Slice 4d migrated the rig bench's slot table, the journal and the labeler line off their constants and
+/// onto `BenchInk`/`PanelInk`, which is the direction this leg exists to move — nothing was removed, and
+/// the fallback for a harness with no skin is the colour it always was.
+///
+/// The rest of the drop is a **bug in this scan**, found by pass 375. It accepted any non-alphanumeric
+/// left boundary, so `crate::chrome::text::LABEL` — a *font size* role that happens to share a name with
+/// the colour `LABEL` — counted as paint: 46 such uses across `src/`, and the ceiling read 518 when the
+/// real number was 403. `:` is now excluded on the left, and the ceiling is set to what the scan
+/// actually measures. A count is only worth having if it counts the thing it names.
 const CONSTANTS_CEILING: usize = 28;
-const PRODUCT_USES_CEILING: usize = 551;
+const PRODUCT_USES_CEILING: usize = 403;
 const TEST_USES_CEILING: usize = 287;
 
 #[test]
