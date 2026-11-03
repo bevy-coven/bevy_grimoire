@@ -67,12 +67,27 @@ fn chord(app: &mut App, keys: &[KeyCode]) {
     settle(app);
 }
 
+/// **The platform's primary modifier, which is what every one of these chords is bound to.**
+///
+/// `Shortcut::new(Modifiers::PRIMARY, ..)` is `meta` on a mac and `ctrl` elsewhere, and
+/// `Shortcut::just_pressed` matches `Modifiers::held(keys) == self.modifiers` — an *exact* match.
+/// These helpers used to press `ControlLeft` unconditionally, so on a mac they pressed a modifier
+/// the chord never names: four tests here failed for that reason alone, and passed on Linux, which
+/// is where they had always been run. A chord spelled `PRIMARY` must be pressed as `PRIMARY`.
+fn primary() -> KeyCode {
+    if cfg!(target_os = "macos") {
+        KeyCode::SuperLeft
+    } else {
+        KeyCode::ControlLeft
+    }
+}
+
 fn ctrl_shift_p(app: &mut App) {
-    chord(app, &[KeyCode::ControlLeft, KeyCode::ShiftLeft, KeyCode::KeyP]);
+    chord(app, &[primary(), KeyCode::ShiftLeft, KeyCode::KeyP]);
 }
 
 fn ctrl_k(app: &mut App) {
-    chord(app, &[KeyCode::ControlLeft, KeyCode::KeyK]);
+    chord(app, &[primary(), KeyCode::KeyK]);
 }
 
 fn key_for(c: char) -> KeyCode {
