@@ -57,8 +57,16 @@ Reviewer not spawned; self-review, mine:
 Two new test files and their two `mod` lines in `all.rs`. One new fixture set. No existing assertion changed.
 
 ## Release
-None: no packaged crate changed (`bevy_cauldron` is `publish = false`; `bevy_grimoire_core` gained
-`Vocabularies::axis`, so it is owed a release — see the log line and the next pass).
+`bevy_grimoire_core` gained `Vocabularies::axis`, which the labeller uses, so three crates went out in
+dependency order from a green local gate:
+
+- **bevy_grimoire_core v0.7.1** — https://crates.io/crates/bevy_grimoire_core/0.7.1 (an addition;
+  semver-checks: 202 checks pass, no semver update required, so PATCH)
+- **bevy_grimoire v0.4.3** — https://crates.io/crates/bevy_grimoire/0.4.3 (API unchanged; its published
+  `Cargo.toml` now requires core 0.7.1)
+- **bevy_grimoire_anim v0.1.8** — https://crates.io/crates/bevy_grimoire_anim/0.1.8 (same)
+
+`bevy_cauldron` is `publish = false`.
 
 ## Next focus
 Remove `vlm.rs`: 2483 lines, 39 call sites in five modules, now permitted by the measurement.
