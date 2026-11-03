@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **270-split-collapses-viewport** `9e70b8e` the split's positional blocker is measured: its panes are 0x0 until a region is parented in, and the viewport then projects off-window *No clip: an investigation that shipped no code; the three-state measurement is on #224*
 - **269-tenth-site-guard** `bf28292` the tenth driver that asked the wrong hover question, and a guard so an eleventh cannot come back *No clip: no visible surface changed; proved by no_gesture_driver_reads_hovered_instead_of_over_ui (failed before, passes after)*
 - **268-over-ui** `4d75be7` one answer per frame to whether a panel is under the pointer, for every gesture driver *No clip: no visible surface changed; proved by the full editor suite (1155 passed) including a_shift_click_that_picks_no_piece*
 - **267-panel-under-pointer** `5931662` a gesture is blocked only by a panel under the pointer, not by any hovered node in the world *No clip: no visible surface changed; proved by a_shift_click_that_picks_no_piece (failed before, passes after)*
