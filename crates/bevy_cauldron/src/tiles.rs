@@ -2559,7 +2559,7 @@ fn pick_lattice(
     mode: Res<Mode>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<crate::view::MainCamera>>>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     state: Res<ImportState>,
     project: Res<Project>,
     mut pick: ResMut<LatticePick>,
@@ -2569,7 +2569,7 @@ fn pick_lattice(
             pick.0 = None;
         }
     };
-    if *mode != Mode::Meshes || hovered_ui.iter().any(|h| h.0) {
+    if *mode != Mode::Meshes || over_ui.0 {
         clear(&mut pick);
         return;
     }

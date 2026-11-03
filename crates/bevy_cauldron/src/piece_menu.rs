@@ -149,7 +149,7 @@ fn spawn_menu(mut commands: Commands) {
 #[allow(clippy::too_many_arguments)]
 fn open_on_right_click(
     mouse: Res<ButtonInput<MouseButton>>,
-    hovered_ui: Query<&bevy::picking::hover::Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     window: Option<Single<(Entity, &Window), With<PrimaryWindow>>>,
@@ -168,7 +168,7 @@ fn open_on_right_click(
     else {
         return;
     };
-    if ui_blocks_gesture(hovered_ui.iter().any(|h| h.0), false) {
+    if ui_blocks_gesture(over_ui.0, false) {
         return;
     }
     let Some(index) = crate::editor::under_cursor_target(lock, *pointer, camera, &project, &open)

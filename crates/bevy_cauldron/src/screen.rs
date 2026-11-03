@@ -607,6 +607,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // Chords an agent or the command palette has asked to press: a key one frame from going down belongs to
     // whoever is at the keyboard, not to the map the door is leaving.
     ("bevy_cauldron::command_run::Chords", Ownership::Session),
+    // **`Session`: it is recomputed from the pointer every frame.** `OverUi` answers "is a panel under
+    // the cursor" for the gesture drivers, and the cursor belongs to whoever is at the machine rather
+    // than to the map a door is leaving. Deriving it again costs one `contains_point` per hovered node.
+    ("bevy_cauldron::view::OverUi", Ownership::Session),
     // The agent operations whose checks are owed: a fact about this project's log.
     (
         "bevy_cauldron::after_edit::AfterEditQueue",

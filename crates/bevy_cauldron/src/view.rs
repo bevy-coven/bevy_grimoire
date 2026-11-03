@@ -180,6 +180,9 @@ impl Plugin for ViewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Rig>()
             .init_resource::<Pointer>()
+            // **One answer per frame for "is a panel under the pointer"** — `OverUi`'s own doc says why a
+            // resource rather than nine query edits.
+            .init_resource::<OverUi>()
             .add_systems(OnEnter(crate::screen::Screen::Editor), setup)
             // **Before anything acts on it, which means before `Update` starts.** It ran in
             // `Phase::Sense`, and that ordered it only before the systems in a `Phase` set: the Note
@@ -200,7 +203,10 @@ impl Plugin for ViewPlugin {
                 sense_pointer.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
             )
             .add_systems(Update,
-                (drive.in_set(keys::Phase::Act))
+                // **After the pointer is known and before any driver acts**, so a click this frame sees
+                // this frame's answer rather than the previous one's.
+                (sense_over_ui, drive.in_set(keys::Phase::Act))
+                    .chain()
                     .run_if(in_state(crate::screen::Screen::Editor)),
             );
     }
@@ -391,14 +397,14 @@ pub(crate) fn drive(
     // The wheel belongs to whatever is under the cursor: a scrolling palette and a zooming camera
     // both want it, and reading the raw wheel means scrolling the list also zooms the world out from
     // under it. Every pickable widget carries `Hovered`; readouts are `Pickable::IGNORE` and have none.
-    hovered_ui: Query<&bevy::picking::hover::Hovered>,
+    over_ui: Res<OverUi>,
     mut rig: ResMut<Rig>,
     camera: Option<Single<(&mut Transform, &mut Projection), With<MainCamera>>>,
     // The Maps door has one; the other doors have none and keep the plain ceiling.
     open: Option<Res<crate::project::OpenMap>>,
 ) {
     let Some(camera) = camera else { return };
-    let over_ui = hovered_ui.iter().any(|h| h.0);
+    let over_ui = over_ui.0;
     let dt = time.delta_secs();
 
     // The viewport's shape, from the projection this system wrote last frame, so the wheel's
@@ -467,6 +473,34 @@ pub(crate) fn drive(
 /// system that asks this one behaves identically for a person at the machine.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq)]
 pub struct Pointer(pub Option<Vec2>);
+
+/// **Is a panel under the pointer?** — asked once a frame, for every driver that acts on a click.
+///
+/// `Hovered` is true for a node **or any descendant**, and the two docks are hovered and full height, so
+/// `hovered_ui.iter().any(..)` answered *true* for the whole window. Nine systems asked that question and
+/// every map gesture was refused — measured on 2026-11-02, and the reason #224's shell split was blamed
+/// for five passes. `view::over_ui` was already correct; nothing was calling it.
+///
+/// **One resource rather than nine fixes.** A driver reads `OverUi.0` instead of iterating a query, so the
+/// question has one answer per frame and a tenth driver cannot get it wrong by copying the old idiom.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct OverUi(pub bool);
+
+/// Fill [`OverUi`] from the pointer and the rects under it.
+///
+fn sense_over_ui(
+    pointer: Res<Pointer>,
+    camera: Option<Single<&Camera, With<MainCamera>>>,
+    nodes: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<bevy::picking::hover::Hovered>>,
+    mut over: ResMut<OverUi>,
+) {
+    let scale = camera.as_ref().and_then(|c| c.target_scaling_factor()).unwrap_or(1.0);
+    let want = over_ui(pointer.0, scale, nodes.iter());
+    if over.0 != want {
+        over.0 = want;
+    }
+}
+
 
 /// Read the pointer once, before anything acts on it.
 ///

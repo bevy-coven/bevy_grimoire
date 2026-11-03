@@ -26,7 +26,6 @@
 //! only "something is wrong" would be the version of this tool that gets ignored.
 
 use bevy::input::keyboard::Key;
-use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
 use bevy_grimoire_core::composition::{self, Band, Composition, Envelope};
@@ -2288,7 +2287,7 @@ fn pick_slot(
     buttons: Res<ButtonInput<MouseButton>>,
     pointer: Res<crate::view::Pointer>,
     carousel: Res<StagedCarousel>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<crate::view::MainCamera>>>,
     mut state: ResMut<ComposeState>,
 ) {
@@ -2296,7 +2295,7 @@ fn pick_slot(
         return;
     }
     // A click that lands on a panel belongs to the panel, the same test `view::drive` uses for scroll.
-    if hovered_ui.iter().any(|h| h.0) {
+    if over_ui.0 {
         return;
     }
     let Some(camera) = camera else { return };

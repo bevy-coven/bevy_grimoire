@@ -1957,10 +1957,8 @@ pub(crate) fn note_pick_piece(
 #[allow(clippy::too_many_arguments)]
 fn drive_note(
     mouse: Res<ButtonInput<MouseButton>>,
-    // **The rects, not the flag.** `Query<&Hovered>` answered *does anything in the world carry
-    // `Hovered`* — true for the whole window once the two docks are in the tree — which is why a
-    // Shift-click on empty ground never reached its own branch. See [`panel_under_pointer`].
-    hovered_ui: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<Hovered>>,
+    // **The shared answer**, from `sense_over_ui` — see [`crate::view::OverUi`].
+    over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     open: Res<OpenMap>,
@@ -1981,14 +1979,7 @@ fn drive_note(
         return;
     };
     let (cam, cam_tf) = *camera;
-    let blocked = ui_blocks_gesture(
-        panel_under_pointer(
-            pointer.0,
-            Some((cam, cam.target_scaling_factor().unwrap_or(1.0))),
-            hovered_ui.iter(),
-        ),
-        note_box.from.is_some(),
-    );
+    let blocked = ui_blocks_gesture(over_ui.0, note_box.from.is_some());
     let hit = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !blocked);
     let Some(hit) = hit else {
         if mouse.just_released(MouseButton::Left) {
@@ -9201,7 +9192,7 @@ fn drive_run(
     // Held, the platform modifier drops the grid snap — see `map_at`.
     keyboard: Res<ButtonInput<KeyCode>>,
     assets: Res<AssetServer>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     snip: Res<crate::snip::SnipEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
@@ -9227,7 +9218,7 @@ fn drive_run(
         return;
     };
     let (cam, cam_tf) = *camera;
-    let over_ui = hovered_ui.iter().any(|h| h.0);
+    let over_ui = over_ui.0;
     // A snip owns the pointer while it is armed or being drawn: a press it takes starts no run.
     let snipping = snip.claims_pointer();
     let Some(hit) = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !snipping) else {
@@ -9560,7 +9551,7 @@ fn drive_clone(
     mouse: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     snip: Res<crate::snip::SnipEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
@@ -9591,7 +9582,7 @@ fn drive_clone(
     let (cam, cam_tf) = *camera;
     let snipping = snip.claims_pointer();
     let hit = cursor_ground(pointer.0, cam, cam_tf)
-        .filter(|_| !snipping && !hovered_ui.iter().any(|h| h.0));
+        .filter(|_| !snipping && !over_ui.0);
     let Some(hit) = hit else {
         // A release off the world ends the drag — the defect `drive_removal` records.
         if mouse.just_released(MouseButton::Left) {
@@ -9976,7 +9967,7 @@ fn sense_fine_anchor(
     open: Res<OpenMap>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     mut anchor: ResMut<FineAnchor>,
 ) {
     // Alt, not the platform modifier: free placement moved so that Shift means exactly one thing.
@@ -9998,7 +9989,7 @@ fn sense_fine_anchor(
     // captured there would clamp a later free placement to whatever cell happened to lie under the
     // palette. No anchor at all is the honest answer: `map_at`'s `(true, None)` arm places free and
     // unclamped, exactly as it does when the modifier goes down off the ground plane.
-    if hovered_ui.iter().any(|h| h.0) {
+    if over_ui.0 {
         return;
     }
     let Some(camera) = camera else {
@@ -10135,7 +10126,7 @@ fn spawn_removal_tile(
 fn drive_removal(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     snip: Res<crate::snip::SnipEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
@@ -10176,7 +10167,7 @@ fn drive_removal(
     // swept across the palette used to vanish and then discard itself on release.
     // A snip being drawn or typed owns the pointer, and blocks the box the way a panel does.
     let blocked = snip.claims_pointer()
-        || ui_blocks_gesture(hovered_ui.iter().any(|h| h.0), drag.from.is_some());
+        || ui_blocks_gesture(over_ui.0, drag.from.is_some());
     let hit = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !blocked);
     let Some(hit) = hit else {
         // **A release ends the drag wherever it happens.** This used to return before the
@@ -10511,15 +10502,11 @@ fn drive_place(
     let Some(camera) = camera else {
         return;
     };
-    let PointerClaim {
-        hovered_ui,
-        pointer,
-        snip,
-    } = claim;
+    let PointerClaim { over_ui, pointer, snip } = claim;
     let (cam, cam_tf) = *camera;
     // A click on a control is not a click on the world. Without this, arming a piece from the palette
     // also dropped one wherever the panel happened to be over.
-    let over_ui = hovered_ui.iter().any(|h| h.0);
+    let over_ui = over_ui.0;
     // A snip owns the pointer while it is armed or being drawn: a press it takes places nothing.
     let snipping = snip.claims_pointer();
     let Some(hit) = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !snipping) else {
@@ -14722,31 +14709,6 @@ pub(crate) fn ui_blocks_gesture(over_ui: bool, dragging: bool) -> bool {
     over_ui && !dragging
 }
 
-/// **Is a panel under the pointer?** — the position-aware form every gesture driver should ask.
-///
-/// `ui_blocks_gesture(hovered_ui.iter().any(..), ..)` asked only *does any node in the world carry
-/// `Hovered`*, and `Hovered` is true for a node **or any descendant**. Measured on 2026-11-02: the two
-/// docks are hovered and **697 px tall**, so the answer was `true` everywhere — a click on empty ground
-/// in the middle of the map was refused as "on the interface", and `drive_note` never reached its own
-/// Shift-click branch. That is the failure passes 251, 258, 265 and 266 each chased as a property of the
-/// shell split; it is a property of this question.
-///
-/// `view::over_ui` already does it correctly — it projects the pointer and asks
-/// `ComputedNode::contains_point` — so this is only the plumbing that lets a driver that has a pointer
-/// and a camera use it.
-pub(crate) fn panel_under_pointer<'a>(
-    pointer: Option<Vec2>,
-    camera: Option<(&Camera, f32)>,
-    nodes: impl IntoIterator<Item = (&'a bevy::ui::ComputedNode, &'a bevy::ui::UiGlobalTransform)>,
-) -> bool {
-    let Some((_, scale)) = camera else {
-        // No camera is not "over the world": the driver cannot place anything either way, and
-        // `cursor_ground` will refuse for the same reason.
-        return false;
-    };
-    crate::view::over_ui(pointer, scale, nodes)
-}
-
 /// **Is there a ghost on screen — the thing the rotate cluster steers?**
 ///
 /// The complement of [`cursor_is_clear`] *within the Place tool*: both are false under Move and
@@ -14825,8 +14787,8 @@ struct MoveInput<'w> {
 
 /// Where the cursor is, and which UI node it is over.
 #[derive(bevy::ecs::system::SystemParam)]
-struct Aim<'w, 's> {
-    hovered_ui: Query<'w, 's, &'static Hovered>,
+struct Aim<'w> {
+    over_ui: Res<'w, crate::view::OverUi>,
     pointer: Res<'w, crate::view::Pointer>,
     snip: Res<'w, crate::snip::SnipEdit>,
 }
@@ -14834,8 +14796,8 @@ struct Aim<'w, 's> {
 /// The pointer as the placing and removing drivers read it: where it is, what UI it is over, and
 /// whether a snip has claimed it. One bundle, because `drive_place` is at Bevy's parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
-struct PointerClaim<'w, 's> {
-    hovered_ui: Query<'w, 's, &'static Hovered>,
+struct PointerClaim<'w> {
+    over_ui: Res<'w, crate::view::OverUi>,
     pointer: Res<'w, crate::view::Pointer>,
     snip: Res<'w, crate::snip::SnipEdit>,
 }
@@ -14868,11 +14830,7 @@ fn drive_move(
         picture,
         compose,
     } = input;
-    let Aim {
-        hovered_ui,
-        pointer,
-        snip,
-    } = aim;
+    let Aim { over_ui, pointer, snip } = aim;
     let MapWrite {
         mut project,
         mut open,
@@ -14903,7 +14861,7 @@ fn drive_move(
     }
     // A click on a control is not a click on the world.
     // A snip that owns the pointer takes the click too.
-    if hovered_ui.iter().any(|h| h.0) || snip.claims_pointer() {
+    if over_ui.0 || snip.claims_pointer() {
         return;
     }
     let Some(camera) = camera else {
@@ -17078,7 +17036,7 @@ fn drive_ghost(
     // Mutable for one reason: the status line is where "there is no worktop here" belongs, and the
     // moment the author needs it is while the cursor is over the spot, not after the click.
     mut state: ResMut<EditorState>,
-    hovered_ui: Query<&Hovered>,
+    over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     // **The paint it already carries, read here rather than asked for separately** — a system at
@@ -17110,7 +17068,7 @@ fn drive_ghost(
     // hovering under the palette is a promise about a click that will never reach the world. Nor
     // while removing — two previews for two different outcomes under one cursor is a question, not
     // an answer.
-    if hovered_ui.iter().any(|h| h.0) || state.tool == Tool::Remove {
+    if over_ui.0 || state.tool == Tool::Remove {
         clear(&mut commands);
         return;
     }
