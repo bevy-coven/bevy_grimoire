@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **252-panel-labels** `38e0575` every panel says what it is to a screen reader *No clip: accessible-name only, nothing on screen changes; proved by the_shell_is_a_gooey_dock::every_panel_answers_a_screen_reader_by_its_name (failed before: Named panels ["MAP"])*
 - **251-lfs-hook-test** `7ab3527` the push gate's LFS test proves what it claims: a clip that cannot upload refuses the push *No clip: a test fixture; proved by python3 tools/loop/test_pre_push_lfs.py (failed before, 2 tests OK after)*
 - **275-palette-positions** `87c09ff` A palette row reports a position inside the palette or clearly outside it, so a caller can tell which rows it can click (#275) *No clip: a test over components a caller reads; nobody can see it, proved by a_palette_row_reports_a_clickable_position*
 - **231-fill-answers** `957f8fe` A fill asked for with the pointer off the map says where a fill starts, instead of doing nothing (UI-37, #231)<br><a href="docs/changelog/media/2026-11-02-231-fill-button.mp4"><img src="docs/changelog/media/2026-11-02-231-fill-button.png" width="320" alt="clip"></a>
