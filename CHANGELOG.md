@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **260-snip-arm** `505dea7` the snip arms through an operation: Cmd+backslash and an agent arm the same capture *No clip: no visible surface changed; proved by operations_have_two_front_ends 9/9 (87 -> 86 on the ratchet)*
 - **259-tool-arm** `460708b` the clone and run keys arm their tool through an operation an agent can call too *No clip: no visible surface changed; proved by operations_have_two_front_ends 9/9 (89 -> 87 on the ratchet)*
 - **258-camera-verbs** `84a730e` twelve verbs are camera, not candidates for an operation: the queue is 57 project, 16 view, 12 camera, 4 held or modal *No clip: a classification correction with no visible surface; proved by the_unmigrated_list_says_which_verbs_can_never_be_operations*
 - **257-verb-classification** `85d6b22` the unmigrated allowlist says which verbs can never be operations: 57 project, 30 view, 4 held or modal *No clip: no visible surface changed — a classification and its pinned test; proved by the_unmigrated_list_says_which_verbs_can_never_be_operations*
