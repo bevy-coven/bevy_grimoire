@@ -160,9 +160,11 @@ An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z
 ![The status band counts "Baking previews 9 of 90", then 12: the palette's portraits. The same request the Stop row sends ends it, and the band goes quiet and stays quiet.](../changelog/media/2026-11-03-jobs.png)
 
 1. Open a project with a library. The editor bakes a portrait of every piece for the PLACE list, and the status band says so while it works.
-2. Click the words in the band. A list opens with one row per job.
-3. Click a row to stop that job. An agent can stop it too: `grimoire_state.jobs` reads the same words the band draws, and `grimoire_jobs_stop { "key": "thumbs" }` makes the same request the row makes.
+2. Read it, or ask an agent: `grimoire_state.jobs` answers the same words the band draws, with each job's key and fraction.
+3. Stop it with `grimoire_jobs_stop { "key": "thumbs" }` — the same request the band's own list makes.
 
 **What you see:** The band reads `Baking previews 3 of 40` and the number climbs. A piece whose bake was stopped keeps an empty tile rather than holding the whole library behind it. The band says nothing at all when no job is running, so a quiet band means quiet. Two jobs at once read as `Baking previews 3 of 40 +1`, and the list names every one.
 
 **If it goes wrong:** Stopping the bake is not undoable, but it costs nothing either: importing a piece, or editing the library at all, asks the bake for the new pieces' portraits again.
+
+**Known gap:** a *click* at the band in the running editor does not open the list yet (bevy-coven/bevy_grimoire#277). The band's words, the stop and the agent door all work; only that one gesture is unproven live.
