@@ -379,3 +379,4 @@ mod the_frames_regions_fit_the_window;
 mod the_shell_s_regions_are_labelled_and_the_divider_moves;
 mod a_dock_resize_never_covers_the_viewport;
 mod an_operation_that_writes_nothing_needs_no_log;
+mod the_wired_labelling_paths_agree_on_the_same_pieces;
