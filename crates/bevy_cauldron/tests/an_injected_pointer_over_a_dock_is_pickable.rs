@@ -1,21 +1,20 @@
-//! **A pointer over the frame's own furniture is left where the UI picker can see it** (UI-30, #224's
-//! second acceptance item).
+//! **A pointer over the frame's furniture points at the same render target its UI camera does**
+//! (UI-30, #224's second acceptance item).
 //!
-//! `retarget_pointer` puts **every** pointer on the surface *image*, because the interface renders
-//! into an image and `bevy_ui`'s backend only keeps a pointer whose `target` equals its camera's
-//! `RenderTarget`. That is right for a pointer over the viewport — it is how a row lights and a chart
-//! answers — and wrong for one over a dock: the UI picker never considers an image-targeted pointer
-//! for window-space nodes, so the **divider cannot be pressed anywhere**, and with it no dock can ever
-//! be resized by a person or by `tools/demo/record.py`.
+//! `retarget_pointer` puts every pointer on the surface **image**, and that is correct: the editor's
+//! interface camera (`surface.rs`, `IsDefaultUiCamera`) renders to that image too, and `bevy_ui`'s
+//! picking backend keeps a pointer only where **`render_target == pointer_location.target`**
+//! (`bevy_ui-0.20.0/src/picking_backend.rs:129`).
 //!
-//! Measured 2026-11-03 on the fixture project: the pointer sat at the divider's own centre
-//! (218.5, 398.0) and its target was `Image(..)`, so the press reached nothing. Pass 273 spent three
-//! attempts on the drag believing the fault was in `inject_clicks`; this is the actual cause.
+//! **This test exists because pass 280 changed that to the window and was wrong.** Its reasoning was
+//! plausible — a UI picker sounding like a window-space thing — and it broke the very case it meant to
+//! fix: with the pointer on `Window(NormalizedWindowRef(..))` and the divider's UI camera on
+//! `Image(..)`, `Hovered` stayed false (measured, `divider Hovered? false`), so the drag still did
+//! nothing. Reverted here; the invariant it should have asserted is the one below.
 //!
-//! **What this pins:** with the pointer over a dock, `PointerLocation.target` is the **window**, which
-//! is what the UI picker keeps. Over the viewport it stays the image, which is what the map's own
-//! picking needs. The frame's regions are named (`Viewport`, `Left dock`, `Right dock`, `Status bar`),
-//! so the two are told apart by the one thing that already knows: the rect under the pointer.
+//! What the divider still needs is a different question, recorded on the issue: its
+//! `ComputedUiTargetCamera` **does** resolve (`camera: Some(..)`), so the picker has a camera to
+//! consider and something else is stopping the hit.
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowResolution};
@@ -25,8 +24,8 @@ use bevy_cauldron::harness;
 use crate::fixtures;
 
 #[test]
-fn a_pointer_over_a_dock_targets_the_window_and_over_the_viewport_targets_the_image() {
-    let root = fixtures::Fixture::new("pointer_over_a_dock")
+fn a_pointer_over_a_dock_points_at_the_render_target_its_ui_camera_uses() {
+    let root = fixtures::Fixture::new("pointer_target_matches_ui_camera")
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
         .build("m");
@@ -63,46 +62,66 @@ fn a_pointer_over_a_dock_targets_the_window_and_over_the_viewport_targets_the_im
         .copied()
         .expect("the divider is laid out")
         .translation;
-    let viewport_at = {
-        let f = app.world().resource::<bevy_cauldron::chrome::Frame>();
-        app.world()
-            .get::<bevy::ui::UiGlobalTransform>(f.viewport)
-            .copied()
-            .expect("the viewport is laid out")
-            .translation
-    };
 
-    let target_at = |app: &mut App, at: Vec2| {
-        app.world_mut().resource_mut::<bevy_debugger_bevy::DebugCursor>().0 = Some(at);
-        for _ in 0..3 {
-            app.update();
-        }
+    // **The camera the UI picker will consider for this node**, and the target it renders to.
+    let (ui_camera, ui_target) = {
+        let camera_entity = app
+            .world()
+            .get::<bevy::ui::ComputedUiTargetCamera>(divider)
+            .and_then(|c| c.get())
+            .expect("the divider resolves a UI target camera, or the picker has nothing to consider");
+        let target = app
+            .world()
+            .get::<bevy::camera::RenderTarget>(camera_entity)
+            .cloned()
+            .expect("a UI camera renders somewhere");
+        (camera_entity, target)
+    };
+    let _ = ui_camera;
+
+    app.world_mut().resource_mut::<bevy_debugger_bevy::DebugCursor>().0 = Some(divider_at);
+    for _ in 0..4 {
+        app.update();
+    }
+
+    let pointer_target = app
+        .world_mut()
+        .query::<&bevy::picking::pointer::PointerLocation>()
+        .iter(app.world())
+        .find_map(|l| l.location().map(|l| l.target.clone()))
+        .expect("the pointer has a location");
+
+    // **The one thing `bevy_ui`'s backend requires.** Comparing the *normalized* forms, because that is
+    // what the backend compares: the pointer carries `NormalizedRenderTarget` and the camera carries
+    // `RenderTarget`.
+    let normalized_camera = bevy::window::WindowRef::Entity(
         app.world_mut()
-            .query::<&bevy::picking::pointer::PointerLocation>()
+            .query_filtered::<Entity, With<PrimaryWindow>>()
             .iter(app.world())
-            .find_map(|l| l.location().map(|l| l.target.clone()))
-    };
+            .next()
+            .expect("a primary window"),
+    )
+    .normalize(None);
+    let normalized_camera = app
+        .world()
+        .get::<bevy::camera::RenderTarget>(ui_camera)
+        .and_then(|t| match t {
+            bevy::camera::RenderTarget::Window(_) => {
+                Some(bevy::camera::NormalizedRenderTarget::Window(normalized_camera.unwrap()))
+            }
+            bevy::camera::RenderTarget::Image(i) => {
+                Some(bevy::camera::NormalizedRenderTarget::Image(i.clone()))
+            }
+            _ => None,
+        })
+        .expect("the UI camera's target normalizes");
 
-    // **Over the divider**: the window, so the UI picker keeps it and the press lands.
-    let on_divider = target_at(&mut app, divider_at);
-    assert!(
-        matches!(
-            on_divider,
-            Some(bevy::camera::NormalizedRenderTarget::Window(_))
-        ),
-        "a pointer over the split's divider targets {on_divider:?}. The UI picker only keeps a \
-         pointer whose target equals its camera's, so an image-targeted one never reaches the \
-         divider and **no dock can be resized** — by a person or by `tools/demo/record.py`"
-    );
-
-    // **Over the viewport**: still the image, which is where the map's own picking reads it.
-    let on_viewport = target_at(&mut app, viewport_at);
-    assert!(
-        matches!(
-            on_viewport,
-            Some(bevy::camera::NormalizedRenderTarget::Image(_))
-        ),
-        "a pointer over the viewport must stay on the surface image, or the map stops taking \
-         clicks and the wheel stops zooming: it targeted {on_viewport:?}"
+    assert_eq!(
+        pointer_target,
+        normalized_camera,
+        "the pointer points at {pointer_target:?} and the divider's UI camera renders to \
+         {ui_target:?} (normalized {normalized_camera:?}). `bevy_ui`'s backend keeps a pointer only \
+         where `render_target == pointer_location.target`, so these must be equal for the divider to \
+         ever be hovered or pressed — pass 280 made them differ and broke the drag it meant to fix"
     );
 }
