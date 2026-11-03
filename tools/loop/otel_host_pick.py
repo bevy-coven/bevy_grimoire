@@ -168,6 +168,18 @@ def collect(prom: str) -> list[dict]:
     return hosts
 
 
+def ranking_key(h: dict) -> tuple:
+    """**The order candidates are tried in**, one expression so a test can hold it.
+
+    Most idle cores first, then least loaded per core, then most RAM. **Cores lead** because that is
+    the mistake this script exists to stop — the 2026-10-26 measurement had a 10-core laptop at 0.6
+    free cores beating a 14-core Mac at 12.9 — and **RAM breaks the tie**, because two equally idle
+    hosts are not equally able to link a Bevy test binary (#195: every loop host was short of
+    memory, not CPU).
+    """
+    return (-h["free_cores"], h["load_per_core"] or 9e9, -(h["mem_avail_gb"] or 0))
+
+
 def verdict(h: dict, args) -> tuple[bool, str]:
     """The first failure names itself; a silent exclusion is how a good host gets skipped."""
     if not h["up"]:
@@ -218,7 +230,7 @@ def main(argv: list[str]) -> int:
         scored.append(h)
     eligible = [h for h in scored if h["eligible"]]
     # Most idle cores first, then least loaded per core, then most RAM.
-    eligible.sort(key=lambda h: (-h["free_cores"], h["load_per_core"] or 9e9, -(h["mem_avail_gb"] or 0)))
+    eligible.sort(key=ranking_key)
 
     if args.json:
         print(json.dumps({"eligible": eligible, "all": scored}, indent=2))
