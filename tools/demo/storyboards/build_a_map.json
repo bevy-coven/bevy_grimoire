@@ -53,7 +53,14 @@
       "type": "sofa"
     },
     {
-      "at": 1.6,
+      "at": 1.15,
+      "cursor": [
+        900,
+        420
+      ]
+    },
+    {
+      "at": 1.55,
       "click_label": "sofa",
       "within": [
         1080,
@@ -63,11 +70,21 @@
       ]
     },
     {
-      "at": 1.8,
+      "at": 1.75,
+      "click_label": "sofa",
+      "within": [
+        1080,
+        215,
+        1280,
+        265
+      ]
+    },
+    {
+      "at": 2.05,
       "caption": "R turns the armed piece a quarter turn"
     },
     {
-      "at": 1.9,
+      "at": 2.15,
       "key": "KeyR"
     },
     {
@@ -78,7 +95,7 @@
       ]
     },
     {
-      "at": 2.5,
+      "at": 2.6,
       "caption": "person: click to place it"
     },
     {
