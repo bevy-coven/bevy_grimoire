@@ -1063,7 +1063,10 @@ impl Action {
             // **The journal is a panel, and which panel is up is view state** (E-002, #129).
             Action::ShowErrors => Some("view_toggle_journal"),
             // **The clone and run tools** (E-002, #129): two keys onto `tool_arm`.
-            Action::CloneMode | Action::RunMode => Some("tool_arm"),
+            // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
+            // #129). They named `placement_remove` and `note_add`: a write neither key makes — its
+            // handler calls `arm_tool`, and `Action::Remove`'s own command is titled "Remove mode".
+            Action::CloneMode | Action::RunMode | Action::Remove | Action::NoteTool => Some("tool_arm"),
             // **The snip is view state too** (E-002, #129): `Cmd+\` arms a capture, and the same key
             // puts it away. The file a *completed* rectangle writes is the drag's own path.
             Action::Snip => Some("snip_arm"),
@@ -1086,9 +1089,7 @@ impl Action {
             Action::AdoptMeasured => Some("rig_adopt_measured"),
             Action::GroupFromSet => Some("composition_define"),
             Action::RenameMap => Some("map_rename"),
-            Action::NoteTool => Some("note_add"),
             Action::SetRule => Some("rules_set"),
-            Action::Remove => Some("placement_remove"),
             Action::SwitchDoor | Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
                 Some("door_open")
             }

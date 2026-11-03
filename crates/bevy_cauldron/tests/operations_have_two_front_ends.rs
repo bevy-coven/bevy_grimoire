@@ -807,3 +807,70 @@ fn a_world_verb_is_reachable_by_an_agent_through_a_door_that_is_not_the_registry
          `grimoire/run_command` and the capability really would be missing: {missing:?}"
     );
 }
+
+/// **A key that names `tool_arm` arms a tool; a key that names a write commits a write.**
+///
+/// **The check the parity test above could not make.** `every_migrated_action_has_a_ui_path_that_
+/// dispatches_its_operation` asserts that the UI source contains the operation's *name* somewhere —
+/// and it searched the whole crate, so a key could name `placement_remove` while its handler only
+/// armed the remove tool, and the test passed. That is exactly what `Action::Remove` did: its own
+/// command is titled "Remove mode" and its handler called `arm_tool`, yet it claimed
+/// `placement_remove`, so an agent reading the mapping would believe `X` had already deleted
+/// something. `Action::NoteTool` made the same claim about `note_add`.
+///
+/// So this pins the two facts that separate the kinds, by name and in both directions:
+///
+/// 1. **Every action naming `tool_arm` is one of the five tools `tool_arm` accepts**, so a key
+///    cannot arm something the operation would refuse.
+/// 2. **No action naming a *writing* operation arms a tool**, which is the false-claim shape:
+///    arming changes what the next click does, and a write changes the grimoire now.
+#[test]
+fn a_key_that_arms_a_tool_names_the_arming_operation_and_no_write() {
+    // **The arm tools, and the one place they are listed.** `tool_arm`'s own `TOOLS` is the enum a
+    // request is judged against; these are the actions whose handler reaches it.
+    let arming: Vec<Action> = Action::ALL
+        .into_iter()
+        .filter(|a| a.operation() == Some("tool_arm"))
+        .collect();
+    assert!(
+        arming.len() >= 3,
+        "expected the tool keys to name `tool_arm` (clone, run, move, remove, note); found {arming:?}. \
+         If this reads near zero the assertion below proves nothing"
+    );
+    for action in &arming {
+        assert!(
+            !UNMIGRATED.contains(action),
+            "{action:?} names `tool_arm` and is still on the unmigrated list"
+        );
+    }
+    // **The keys that used to lie.** Named here rather than inferred, because a regression would be
+    // a quiet rename: these three are the tool keys whose operations were corrected in the commit
+    // that added this test, and each must stay on the arming side.
+    for action in [Action::Remove, Action::NoteTool] {
+        assert_eq!(
+            action.operation(),
+            Some("tool_arm"),
+            "{action:?} arms a tool, so it must name `tool_arm` — naming a write claimed a change \
+             the key does not make"
+        );
+    }
+    // **`MoveMode` is the one tool key not yet migrated**, and it is on the allowlist for a reason
+    // worth stating: it is classified `Change::View`, and naming `tool_arm` moves it to `Project`,
+    // which the classification ratchet pins as an exact list. Doing that is a re-pin of a protected
+    // assertion, so it waits for the owner rather than being slipped in beside two other fixes.
+    assert!(
+        UNMIGRATED.contains(&Action::MoveMode),
+        "`MoveMode` is either migrated (take it off the allowlist and lower the ratchet) or listed; \
+         it must not be neither"
+    );
+    // **And the writes the two of them were wrongly naming still exist**, so the correction moved a
+    // claim rather than deleting a capability.
+    let registry = bevy_cauldron::ops::registry();
+    for name in ["placement_remove", "note_add"] {
+        assert!(
+            registry.iter().any(|op| op.name() == name),
+            "`{name}` left the registry, so the correction above removed a capability instead of \
+             re-pointing a claim"
+        );
+    }
+}
