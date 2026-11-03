@@ -4284,6 +4284,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_stamp::StampAdd),
         Box::new(crate::ops_plan::PlanSet),
         Box::new(crate::ops_relations::RelationsSolve),
+        Box::new(crate::ops_relations::relations_add::RelationsAdd),
         Box::new(crate::ops_repetition::RepetitionVary),
         Box::new(rules_set::RulesSet),
         Box::new(map_rename::MapRename),
@@ -4708,6 +4709,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The Terrain field's `relations solve` line (#137)** dispatches `relations_solve` through
     // `solve_relations`, the same mend an agent's `apply` makes, with one undo.
     ("relations_solve", "solve_relations("),
+    // **The relations file**, which a person edits by hand today: adding one through this operation
+    // is how the constraint layer stops being authorable only in a text editor (#137).
+    ("relations_add", "relations_add("),
     // **The Terrain field's `repeats vary` line (#143)** dispatches `repetition_vary` through
     // `vary_repeats`, the same turns an agent's `apply` makes, with one undo.
     ("repetition_vary", "vary_repeats("),

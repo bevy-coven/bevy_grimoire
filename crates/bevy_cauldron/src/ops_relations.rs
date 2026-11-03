@@ -256,3 +256,215 @@ impl Operation for RelationsSolve {
         })
     }
 }
+
+/// **Add one relation to the map's `.relations.ron`, or take one out again** (#137, the constraint
+/// layer's missing authoring door).
+///
+/// The relation vocabulary has been complete for weeks — `Faces`, `Near`, `Apart`, `InFrontOf`,
+/// `Behind`, `LeftOf`, `RightOf`, `ClearInFront`, `VisibleFrom`, `Along`, `ReachableFrom` — and
+/// `relations_solve` mends the map against them. **What was missing is the step before**: a person
+/// could only *add* one by hand-writing RON, so the layer was readable by a person editing a text
+/// file and by nobody else, and no log line named an authored relation.
+///
+/// **The relation is data, so the operation takes the file's own shape.** `of` and `kind` are the
+/// `Relation` fields verbatim, serialised through the crate's own serde types, so a rename of a `Kind`
+/// variant is a compile error here rather than a second vocabulary that drifts. `hard` is the same
+/// flag `relations_solve` already honours.
+///
+/// **A refusal changes nothing.** A relation naming a placement the map does not hold is refused
+/// (with the near misses), a file that does not read is refused rather than overwritten, and the write
+/// is atomic — the same three rules `data_set` and `map_save` keep.
+///
+/// **The undo is a removal by value**, not by index: an undo that removed "the third relation" would
+/// take out the wrong one the moment somebody added another in between.
+pub mod relations_add {
+    use super::*;
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {
+        /// Which placement the relation is about.
+        pub of: String,
+        /// The relation itself, in `relations::Kind`'s own shape, as JSON.
+        pub kind: serde_json::Value,
+        /// Must hold, rather than "prefer this". See `relations::Relation::hard`.
+        #[serde(default)]
+        pub hard: bool,
+        /// **The undo's own form**: the relation to take out again. Only an undo sets this.
+        #[serde(default)]
+        pub remove: Option<serde_json::Value>,
+    }
+
+    impl Params {
+        pub fn schema() -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "of": {"type": "string", "description": "The placement id the relation is about."},
+                    "kind": {"type": "object", "description": "The relation, in relations::Kind's shape: {\"Faces\": \"id\"}, {\"Near\": {\"to\": \"id\", \"within\": 2.0}}, {\"ReachableFrom\": {\"from\": \"id\", \"clearance\": 0.6}}, ..."},
+                    "hard": {"type": "boolean", "default": false, "description": "Must hold, not merely preferred."},
+                    "remove": {"type": "object", "description": "The undo's own form: the relation to take out again."}
+                },
+                "required": ["of", "kind"]
+            })
+        }
+
+        /// **Read the parameters**, with the crate's own error style: a caller with the wrong shape is
+        /// told what the shape is rather than getting a serde message it cannot act on.
+        pub fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
+            serde_json::from_value(raw.clone()).map_err(|e| {
+                Refusal::new(format!(
+                    "these are not the parameters for adding a relation: {e}. Pass `of` and `kind`, and \
+                     `hard` if it must hold."
+                ))
+            })
+        }
+
+        /// **The relation as the crate's own type**, so the shape cannot drift from the file's.
+        pub fn relation(&self) -> Result<relations::Relation, Refusal> {
+            let kind: relations::Kind = serde_json::from_value(self.kind.clone()).map_err(|e| {
+                Refusal::new(format!(
+                    "`kind` is not a relation this build understands: {e}. Every kind takes an object or \
+                     a string in its own shape — see `grimoire_list_operations` for the list."
+                ))
+            })?;
+            Ok(relations::Relation { of: self.of.clone(), kind, hard: self.hard })
+        }
+    }
+
+    /// The file's text with `relation` appended, or with the first equal relation removed.
+    fn changed(text: Option<&str>, relation: &relations::Relation, remove: bool) -> Result<(String, bool), Refusal> {
+        let mut doc = match text {
+            Some(t) => relations::Relations::parse(t)
+                .map_err(|e| Refusal::new(format!("the relations file does not read, so nothing was written: {e}")))?,
+            // **A map with no relations file yet is not an error**: adding the first relation is
+            // exactly how one comes to exist. `Relations::default()` carries the current version.
+            None => relations::Relations::default(),
+        };
+        let found = doc.relations.iter().position(|r| r == relation);
+        if remove {
+            let Some(at) = found else {
+                return Err(Refusal::new(format!(
+                    "`{}` no longer holds that relation, so there is nothing to take back — the file was \
+                     changed by hand since.",
+                    relation.of
+                )));
+            };
+            doc.relations.remove(at);
+        } else {
+            if found.is_some() {
+                return Err(Refusal::new(format!(
+                    "`{}` already holds that relation; adding it twice would mend the map against the same \
+                     rule and count it twice.",
+                    relation.of
+                )));
+            }
+            doc.relations.push(relation.clone());
+        }
+        let text = doc
+            .to_ron()
+            .map_err(|e| Refusal::new(format!("the relations could not be written: {e}")))?;
+        Ok((text, found.is_some()))
+    }
+
+    /// **Write the file and say what the map now keeps.** A relation that still reads unmet is said
+    /// so, because a person who adds one wants to know whether the map already honours it.
+    fn apply(ctx: &Ctx, params: &serde_json::Value, write: bool) -> Result<Outcome, Refusal> {
+        let p = Params::parse(params)?;
+        let Some(open) = ctx.open.as_ref() else {
+            return Err(Refusal::new("no map is open, so there are no relations to add."));
+        };
+        // **A relation about a piece the map does not hold is refused here**, before the file is
+        // touched: the solver would skip it silently and the author would believe it held.
+        let remove = p.remove.is_some();
+        let relation = match &p.remove {
+            Some(raw) => serde_json::from_value::<relations::Relation>(raw.clone())
+                .map_err(|e| Refusal::new(format!("`remove` is not a relation this build understands: {e}")))?,
+            None => {
+                let relation = p.relation()?;
+                if !open.map.placements.iter().any(|pl| pl.id == relation.of) {
+                    let near: Vec<&str> = open
+                        .map
+                        .placements
+                        .iter()
+                        .map(|pl| pl.id.as_str())
+                        .filter(|id| id.contains(&relation.of) || relation.of.contains(*id))
+                        .take(3)
+                        .collect();
+                    let hint = if near.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" Did you mean {}?", near.join(", "))
+                    };
+                    return Err(Refusal::new(format!(
+                        "`{}` is not a placement on `{}`, so the relation would hold of nothing.{hint}",
+                        relation.of, open.map.name
+                    )));
+                }
+                relation
+            }
+        };
+        let path = relations::path_for_map(&open.map_path);
+        let text = std::fs::read_to_string(&path).ok();
+        let (new, existed) = changed(text.as_deref(), &relation, remove)?;
+        if write {
+            bevy_grimoire_core::atomic_file::write(&path, &new).map_err(|e| {
+                Refusal::new(format!("{} refused the change, so nothing was written: {e}", path.display()))
+            })?;
+        }
+        Ok(Outcome {
+            summary: if remove {
+                format!("took back the relation on `{}`", relation.of)
+            } else if existed {
+                format!("`{}` keeps that relation", relation.of)
+            } else {
+                format!("`{}` now keeps it", relation.of)
+            },
+            affected: 1,
+            saved: write,
+            // **By value**, so an undo cannot take out somebody else's relation.
+            inverse: Some(serde_json::to_value(&relation).unwrap_or(serde_json::Value::Null)),
+            after: Some(json!({"file": path.display().to_string(), "text": new})),
+        })
+    }
+
+    /// **Add one relation to the open map's relations file.**
+    pub struct RelationsAdd;
+
+    impl Operation for RelationsAdd {
+        fn name(&self) -> &'static str {
+            "relations_add"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            // The relations file is a data file beside the map, not the map itself.
+            &["relations"]
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::Inverse
+        }
+
+        // **`remove` is not "undo only".** Taking a relation out is a change a person or an agent may
+        // ask for by hand — the same as deleting a piece — so the operation answers it directly and
+        // the executor's undo is one more caller. `relations_solve`'s `delta` is the other shape: a row
+        // delta is only ever produced by a solve, so that one is undo-only.
+
+        fn schema(&self) -> serde_json::Value {
+            Params::schema()
+        }
+
+        fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let outcome = apply(ctx, params, false)?;
+            Ok(json!({
+                "would": outcome.summary,
+                "saved": false,
+                "text": outcome.after.as_ref().and_then(|a| a.get("text")).cloned(),
+            }))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            apply(ctx, params, true)
+        }
+    }
+}
