@@ -103,3 +103,16 @@ What the set *can* be proved for without a model is that it is well formed, and 
 (`checks_that_earn_their_authority.rs::the_committed_clip_set_is_two_sided_and_well_formed`): it must hold at
 least 20 samples, be about half matches and half mismatches, carry whole titles rather than ids, and each
 mismatch must genuinely differ from the line its frames belong to.
+
+**The `blank_frame` check measured 100 % on 60 samples, and cannot ship its calibration yet.** Measured
+2026-11-02 with clef-flash on `127.0.0.1:8093`: 30 stills from the changelog's own clips labelled *not blank*,
+and 30 blanks in the shapes the check exists for (all black, magenta, flat grey, flat white, flat slate).
+The two classes separated cleanly — **blanks scored at least 0.923, every real still at most 0.027** — so a
+threshold of 0.475 agrees with all 60.
+
+Writing that into `fixtures/checks.ron` is **blocked by a protected assertion**:
+`checks::builtin_checks_parse_and_name_the_five` ends `assert!(c.checks.iter().all(|c| c.calibration.is_none()),
+"none has earned a calibration yet")`. That assertion is the right one for the day it was written and it is
+now false in fact. Changing it is a re-pin of an existing assertion, which a pass may not do; the owner makes
+it in an evaluator pass, together with the decision to add `blank_frame` to the gate. Until then the check is
+**advisory**: it prints, and can never fail a run.
