@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **268-over-ui** `4d75be7` one answer per frame to whether a panel is under the pointer, for every gesture driver *No clip: no visible surface changed; proved by the full editor suite (1155 passed) including a_shift_click_that_picks_no_piece*
 - **267-panel-under-pointer** `5931662` a gesture is blocked only by a panel under the pointer, not by any hovered node in the world *No clip: no visible surface changed; proved by a_shift_click_that_picks_no_piece (failed before, passes after)*
 - **266-hovered-measured** `c7ed758` the hovered nodes are measured: the docks are 697 px tall, and four split hypotheses are eliminated *No clip: an investigation that shipped no code; the finding and the probe are on #224*
 - **265-split-hypotheses** `7462631` the shell split's click failure is neither picking nor width nor hover, and the search is now three hypotheses shorter *No clip: an investigation that shipped no code; the finding is on #224*
