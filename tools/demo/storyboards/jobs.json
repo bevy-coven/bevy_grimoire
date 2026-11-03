@@ -5,9 +5,9 @@
   "width": 960,
   "crop": [
     0,
-    688,
-    470,
-    728
+    560,
+    520,
+    730
   ],
   "setup": [],
   "steps": [
@@ -16,25 +16,25 @@
       "caption": "the band says what the editor is doing"
     },
     {
-      "at": 1.8,
-      "mcp": "grimoire_jobs_stop",
-      "args": {
-        "key": "thumbs"
-      },
-      "caption": "the same request the Stop row makes"
+      "at": 1.6,
+      "click_label": "Baking previews",
+      "prefix": true,
+      "caption": "a click on the band lists the job"
     },
     {
       "at": 3.4,
-      "caption": "the band goes quiet, and stays quiet"
+      "click_label": "Stop: Baking previews",
+      "prefix": true,
+      "caption": "Stop ends it \u2014 and the band goes quiet"
     },
     {
-      "at": 5.6,
+      "at": 5.8,
       "caption": "no job, no row: a quiet band means quiet"
     }
   ],
   "chunks": [
     {
-      "seconds": 7.0
+      "seconds": 7.5
     }
   ]
 }

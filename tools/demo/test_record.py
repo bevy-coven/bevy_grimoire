@@ -143,6 +143,28 @@ class ClickLabelAsksTheEditor(unittest.TestCase):
         self.assertEqual(record.kind_of({"at": 1.0, "click": [10, 20]}), "click")
         self.assertEqual(record.kind_of({"at": 1.0, "caption": "words"}), "caption")
 
+    def test_the_scale_factor_does_not_move_the_click(self):
+        """**`UiGlobalTransform`'s translation is already in the input space.**
+
+        The editor's interface is built at 1.2 scale, so a node reports `inverse_scale_factor` 0.833.
+        This multiplied the translation by it, which moved every `click_label` 17% up and left — off
+        the window for the palette's rows at x ~ 1122 — while the fixture below, written with 1.0,
+        could never notice. Measured on a running editor: clicking the raw centre of five palette rows
+        armed exactly those five pieces.
+        """
+        row = {"entity": 1, "components": {
+            "bevy_ui::widget::text::Text": "pipe",
+            "bevy_ui::ui_node::ComputedNode": {"size": [60.0, 16.0], "inverse_scale_factor": 0.8333333},
+            "bevy_ui::ui_transform::UiGlobalTransform": [1.0, 0.0, 0.0, 1.0, 1122.0, 293.0],
+        }}
+        answer = {"result": [row]}
+        original = record.brp
+        record.brp = lambda port, method, params: answer
+        try:
+            self.assertEqual(record.widget_centre(1, "pipe"), (1122.0, 293.0))
+        finally:
+            record.brp = original
+
     def test_a_prefix_finds_a_widget_whose_words_move(self):
         """**The status band's job item counts up**, so a storyboard cannot write its words down. A
         prefix names the widget; the number after it is whatever the work has reached."""

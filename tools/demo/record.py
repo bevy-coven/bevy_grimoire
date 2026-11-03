@@ -334,13 +334,20 @@ def widget_centre(port, label, within=None, prefix=False):
         if not isinstance(node, dict):
             continue
         size = node.get("size")
-        inverse = node.get("inverse_scale_factor", 1.0) or 1.0
         if not isinstance(size, list) or len(size) < 2 or size[0] <= 0 or size[1] <= 0:
             continue
-        # **Logical pixels**, the space `bevy_fairy/input` reads. The node's centre and its size are in
-        # physical ones, and `inverse_scale_factor` is what turns them back: 0.833 for the editor's
-        # 1.2 UI scale, which a hard-coded 1.0 would have got wrong on every click.
-        x, y = at[4] * inverse, at[5] * inverse
+        # **The translation is ALREADY in the space `bevy_fairy/input` reads — do not scale it.**
+        #
+        # This multiplied by `inverse_scale_factor` (0.833 at the editor's 1.2 UI scale) on the theory
+        # that `UiGlobalTransform` reports physical pixels. It does not: measured on a live 1280 x 720
+        # window, the status band's `labeler: not configured` text reports raw y = 705.5, which is
+        # inside that window and would be y = 587.5 if it were physical. So the multiplication moved
+        # every click 17% up and left — off the window for the palette, whose rows sit at x ~ 1122 —
+        # and it is why `click_label` never landed a click anywhere.
+        #
+        # Proved on the running editor: clicking the raw centre of five palette rows armed exactly
+        # those five pieces (`pipe`, `pipe_corner`, `toilet_roll_holder`, `towel_holder`, `bath`).
+        x, y = at[4], at[5]
         # **A node dragged out of its panel is not a target.** The palette scrolls, so most of its rows
         # sit at y = 1900 in a 720 px window; clicking there lands off the window and the take fails
         # with a click that changed nothing. A word whose centre is outside the window is not the
