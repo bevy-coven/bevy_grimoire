@@ -630,6 +630,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     let mut view = Vec::new();
     let mut held = Vec::new();
     let mut modal = Vec::new();
+    let mut camera = Vec::new();
     let mut project = 0usize;
     for action in Action::ALL {
         if action.operation().is_some() {
@@ -640,6 +641,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
             Change::View => view.push(format!("{action:?}")),
             Change::Held => held.push(format!("{action:?}")),
             Change::Modal => modal.push(format!("{action:?}")),
+            Change::Camera => camera.push(format!("{action:?}")),
         }
     }
 
@@ -662,16 +664,30 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
          would need to say which proposal, which box — the answer is not in the verb."
     );
 
+    // **`Camera` verbs are already reachable by an agent.** `grimoire/frame_view` says in its own doc
+    // that it is "not an operation, it is not in the registry or the operation log, and it is not
+    // undoable" — the key and the method already dispatch one thing, so a `Ctx` operation would be a
+    // second name for it. The continuous arrows (pan, orbit) are read every frame and cannot be a
+    // one-shot `Outcome` at all.
+    assert_eq!(
+        camera,
+        [
+            "FrameView", "PanForward", "PanBack", "PanLeft", "PanRight", "TurnViewLeft",
+            "TurnViewRight", "ScrubBack", "ScrubFwd", "PlayPause", "ToggleGhost", "CycleCamPreset",
+        ],
+        "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
+         (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \
+         operation, and both are already reachable by an agent."
+    );
+
     // **`View` is the candidate list**, and it is named so a pass can see what it may migrate next and a
     // reader can see what will never need to be. Order follows `Action::ALL`, so it is stable.
     assert_eq!(
         view,
         [
-            "MainMenu", "CycleTarget", "FrameView", "MoveMode", "PageEnter", "PageLeave", "TileOpen",
-            "TilePrev", "TileNext", "CloseTile", "FocusFilter", "FocusTagFilter", "PanForward",
-            "PanBack", "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "PrevCandidate",
-            "NextCandidate", "FocusCandidates", "CopyInfo", "FocusLibrary", "ScrubBack", "ScrubFwd",
-            "PlayPause", "ToggleGhost", "CycleCamPreset",
+            "MainMenu", "CycleTarget", "MoveMode", "PageEnter", "PageLeave", "TileOpen",
+            "TilePrev", "TileNext", "CloseTile", "FocusFilter", "FocusTagFilter", "PrevCandidate",
+            "NextCandidate", "FocusCandidates", "CopyInfo", "FocusLibrary",
         ],
         "the `View` set changed. That is allowed — but it is a deliberate act: a verb moves here only \
          when its whole effect is what a person is looking through, and it is then a candidate for a \
@@ -681,13 +697,14 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     // **And `Project` is what is left, which is the debt.** It must be non-zero: a classification whose
     // project bucket was empty would be hiding every migration still owed.
     assert_eq!(
-        project + view.len() + held.len() + modal.len(),
+        project + view.len() + held.len() + modal.len() + camera.len(),
         UNMIGRATED.len(),
         "the classification must cover the allowlist exactly: {project} project + {} view + {} held + \
-         {} modal against {} listed",
+         {} modal + {} camera against {} listed",
         view.len(),
         held.len(),
         modal.len(),
+        camera.len(),
         UNMIGRATED.len()
     );
     assert!(

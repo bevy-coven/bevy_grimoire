@@ -43,6 +43,10 @@ pub struct View {
     /// The snap ladder's rung: what a piece is nudged to, and what the grid is drawn at.
     #[serde(default, serialize_with = "rung_out", deserialize_with = "rung_in")]
     pub rung: SnapLevel,
+    /// **Which filter box the keyboard is in**, when the key that moves it is the only way there.
+    /// Cleared by the front end when the box loses focus; `None` means "no box is being typed in".
+    #[serde(default)]
+    pub filter_focus: Option<bool>,
     /// **Whether the journal is up** (`Cmd+E`). Not persisted: a panel a person opened to read one
     /// refusal should not meet them again next launch, so this is session state like the rung.
     #[serde(default)]
@@ -65,6 +69,13 @@ impl View {
     pub fn cycle_grid(&mut self) -> SnapLevel {
         self.rung = self.rung.next();
         self.rung
+    }
+
+    /// **Send the keyboard to the filter box.** `tags` picks the tag block over the list's box; the
+    /// answer is which one, or `None` when there is no box on this page to move to.
+    pub fn focus_filter(&mut self, tags: bool) -> bool {
+        self.filter_focus = Some(tags);
+        tags
     }
 
     /// **The journal, up or down**, and the answer is what it is now. A toggle rather than a set,
@@ -92,7 +103,7 @@ mod tests {
     /// **A rung survives a round trip**, which is what lets the front ends carry it as a value.
     #[test]
     fn a_view_round_trips_through_json() {
-        let view = View { rung: SnapLevel::Finer, journal_open: true };
+        let view = View { rung: SnapLevel::Finer, journal_open: true, filter_focus: Some(true) };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
     }

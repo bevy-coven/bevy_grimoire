@@ -876,6 +876,14 @@ pub enum Change {
     Held,
     /// One half of a conversation with a person: a cancel, an accept, a typed id.
     Modal,
+    /// **Camera state only** — already reachable by an agent through a BRP method that says so.
+    ///
+    /// `grimoire/frame_view` moves the Map camera and is **not an operation**: its own doc says *"it
+    /// moves the view, not the map: it is not an operation, it is not in the registry or the operation
+    /// log, and it is not undoable."* The key and the method therefore already dispatch one thing — a
+    /// `Ctx` operation would be a second name for it, which is the wrapper this issue exists to refuse.
+    /// The same holds of the continuous pan and orbit arrows, which a front end reads every frame.
+    Camera,
 }
 
 impl Action {
@@ -928,15 +936,6 @@ impl Action {
             // operations, the shape `view_cycle_grid` and `view_toggle_journal` proved.
             Action::CycleGrid
             | Action::ShowErrors
-            | Action::FrameView
-            | Action::CycleCamPreset
-            | Action::ToggleGhost
-            | Action::PanForward
-            | Action::PanBack
-            | Action::PanLeft
-            | Action::PanRight
-            | Action::TurnViewLeft
-            | Action::TurnViewRight
             | Action::MoveMode
             | Action::CycleTarget
             | Action::MainMenu
@@ -952,14 +951,24 @@ impl Action {
             | Action::FocusCandidates
             | Action::PrevCandidate
             | Action::NextCandidate
-            | Action::CopyInfo
-            | Action::ScrubBack
-            | Action::ScrubFwd
-            | Action::PlayPause => Change::View,
+            | Action::CopyInfo => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
             // set once, so these stay keys. `Shortcuts` is the clearest: four systems read `pressed`.
+            Action::PanForward
+            | Action::PanBack
+            | Action::PanLeft
+            | Action::PanRight
+            | Action::TurnViewLeft
+            | Action::TurnViewRight
+            | Action::FrameView
+            | Action::CycleCamPreset
+            | Action::ToggleGhost
+            | Action::ScrubBack
+            | Action::ScrubFwd
+            | Action::PlayPause => Change::Camera,
+
             Action::Shortcuts => Change::Held,
 
             // **A modal or a peel.** `Cancel` backs out of whatever is innermost — a proposal, a note box,
