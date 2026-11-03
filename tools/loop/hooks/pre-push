@@ -86,9 +86,25 @@ if clean_merge_of_main; then
   echo "pre-push gate: ${target:0:9} is a clean merge of main into a commit that passed the gate; clippy over every target only" >&2
   timed clippy-merge $cargo clippy --workspace --all-targets -q -- -D warnings || refuse "cargo clippy --workspace --all-targets -- -D warnings failed on the merge"
 else
-  echo "pre-push gate: clippy and cargo test --workspace on ${target:0:9}; this takes minutes, so give git push a timeout of 1800 s or more" >&2
+  echo "pre-push gate: clippy and the test suite on ${target:0:9}; this takes minutes, so give git push a timeout of 1800 s or more" >&2
   timed clippy $cargo clippy --workspace --all-targets -q -- -D warnings || refuse "cargo clippy --workspace --all-targets -- -D warnings failed"
-  timed test $cargo test --workspace -q --no-fail-fast || refuse "cargo test --workspace failed (the failing tests are named above)"
+  # **nextest runs test binaries in parallel; cargo test runs them serially.** Measured on big
+  # 2026-11-03 at one commit, 2,810 tests: `cargo test --workspace` 451 s, `cargo nextest run
+  # --workspace` 43 s. nextest does NOT run doctests, so `--doc` stays its own step.
+  test_runner="${LOOP_GATE_TEST:-}"
+  if [ -z "$test_runner" ]; then
+    if command -v cargo-nextest >/dev/null 2>&1 || cargo nextest --version >/dev/null 2>&1; then
+      test_runner=nextest
+    else
+      test_runner=cargo
+    fi
+  fi
+  if [ "$test_runner" = nextest ]; then
+    timed test $cargo nextest run --workspace --no-fail-fast || refuse "cargo nextest run --workspace failed (the failing tests are named above)"
+    timed doc $cargo test --workspace --doc -q || refuse "cargo test --workspace --doc failed (doctests are not run by nextest)"
+  else
+    timed test $cargo test --workspace -q --no-fail-fast || refuse "cargo test --workspace failed (the failing tests are named above)"
+  fi
 fi
 echo "$target" >> "$passed"
 note "passed $(( $(date +%s) - start ))s"
