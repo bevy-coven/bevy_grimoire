@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **210-colour-ceiling** `0ee551a` The editor's colour table only shrinks: a ceiling on constants and their uses while #210's migration runs *No clip: a test ratchet, no visible surface; proved by crates/bevy_cauldron/tests/the_colour_table_only_shrinks.rs (fails when a 29th colour constant is added)*
 - **280-lens-ratchet** `491fe09` The loop's own research lenses are checked against the tree: six of ten said 'not built' about work that is in it (#280) *No clip: a test and a filed issue, no visible surface; proved by crates/bevy_cauldron/tests/the_commands_lenses_match_the_tree.rs (fails when the stale set changes)*
 - **210-list-words-skin** `35d6696` The shared list's words come from the editor skin, so a project's theme reaches every row (#210) *No clip: invisible by design, as the issue asks: the skin's four values are the four constants today, asserted by the_lists_ink_is_the_skins_and_the_skin_is_the_palette*
 - **195-host-picker-memory** `a70c4e8` The host picker's memory rule is a test, and its ranking key is one function, so a pass cannot quietly drop it (#195) *No clip: a loop tool's test; proved by tools/loop/test_otel_host_pick.py (6 tests, two verified load-bearing by breaking the picker)*
