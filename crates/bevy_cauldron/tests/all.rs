@@ -375,3 +375,4 @@ fn every_test_file_is_a_module_here() {
         "add `mod <name>;` to crates/bevy_cauldron/tests/all.rs (and `use crate::fixtures;` in the file) for: {missing:?}"
     );
 }
+mod the_frames_regions_fit_the_window;

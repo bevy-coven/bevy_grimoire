@@ -893,6 +893,9 @@ pub struct Frame {
 #[derive(Component)]
 pub struct ViewportSlot;
 
+#[derive(Component)]
+pub struct ShellSplit;
+
 /// Everything that spawns into a dock runs after this.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FrameSystems;
@@ -1143,9 +1146,31 @@ pub fn spawn_frame(mut commands: Commands) {
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
-    commands
-        .entity(body)
-        .add_children(&[left, viewport, right]);
+    // **A gooey split between the left dock and the viewport** (UI-30, #224).
+    let split = commands
+        .spawn((
+            bevy_gooey::split(bevy_gooey::SplitAxis::Horizontal, (), ()),
+            bevy_gooey::SplitFraction(0.22),
+            bevy::picking::Pickable::IGNORE,
+            ShellSplit,
+        ))
+        .id();
+    // **What makes the split's panes fit is the regions being parented into them**
+    // (`adopt_the_shell_split`): at HEAD, with no panes occupied, the viewport measured 504 px of a
+    // 1280-px body; with the adoption it measures 724. The zero basis below is the same shape every
+    // other centre in this frame uses — a flex item's basis is its content when it is `Auto`, so the
+    // split would otherwise take a width of its own rather than the room the docks leave.
+    commands.entity(split).insert(Node {
+        flex_direction: FlexDirection::Row,
+        flex_grow: 1.0,
+        width: Val::Auto,
+        height: Val::Percent(100.0),
+        min_width: Val::Px(0.0),
+        min_height: Val::Px(0.0),
+        ..default()
+    });
+    commands.entity(body).add_children(&[split, right]);
+    let _ = (left, viewport);
 
     let status = commands
         .spawn((
@@ -2909,6 +2934,56 @@ fn paint_name_box(
 /// its own — and ExposeHK names its own weakness as exactly this, that an overlay behind a modifier
 /// *"has no visual representation to aid discovery until the user … presses its trigger."* See
 /// [`shortcut_hint`].
+/// **Adopt the left dock and the viewport into the shell split's panes** (UI-30, #224).
+///
+/// **Both panes must hold a region before the split has a size at all.** Measured: with the split spawned and
+/// nothing parented into it, the panes are 0×0 and the viewport gets no room. `split` spawns
+/// `[pane, divider, pane]`; the panes carry a `Node` and a `Role` and no `Pickable::IGNORE`, and the divider
+/// carries `Hovered` — all three forbidden under the frame, so both are corrected here.
+///
+/// **Idempotent**, because the frame is spawned on each door.
+fn adopt_the_shell_split(
+    mut commands: Commands,
+    frame: Option<Res<Frame>>,
+    splits: Query<Entity, With<ShellSplit>>,
+    roles: Query<&bevy_gooey::Role>,
+    has_hover: Query<(), With<Hovered>>,
+    pickable: Query<&bevy::picking::Pickable>,
+    children: Query<&Children>,
+    parents: Query<&ChildOf>,
+) {
+    let Some(frame) = frame else { return };
+    for split in &splits {
+        let Some(kids) = children.get(split).ok() else { continue };
+        for child in kids.iter() {
+            match roles.get(child) {
+                Ok(bevy_gooey::Role::SplitDivider) => {
+                    if has_hover.get(child).is_ok() {
+                        commands.entity(child).remove::<Hovered>();
+                    }
+                }
+                Ok(bevy_gooey::Role::SplitPane) => {
+                    if !pickable.get(child).is_ok_and(|p| *p == bevy::picking::Pickable::IGNORE) {
+                        commands.entity(child).insert(bevy::picking::Pickable::IGNORE);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let panes: Vec<Entity> = kids
+            .iter()
+            .filter(|e| matches!(roles.get(*e), Ok(bevy_gooey::Role::SplitPane)))
+            .collect();
+        let [first, second] = panes[..] else { continue };
+        for (pane, region) in [(first, frame.left), (second, frame.viewport)] {
+            if parents.get(region).map(|p| p.parent()) == Ok(pane) {
+                continue;
+            }
+            commands.entity(region).insert(ChildOf(pane));
+        }
+    }
+}
+
 pub struct ChromePlugin;
 
 impl Plugin for ChromePlugin {
@@ -2923,6 +2998,7 @@ impl Plugin for ChromePlugin {
                 OnEnter(crate::screen::Screen::Editor),
                 spawn_frame.in_set(FrameSystems),
             )
+            .add_systems(Update, adopt_the_shell_split.after(FrameSystems))
             // **The menu gets the same frame**, and that is the point of it being the window's shape
             // rather than the editor's: one answer to "how is this application laid out" instead of
             // the two that let the menu drift into a fixed-pixel grid sitting in a window it did not

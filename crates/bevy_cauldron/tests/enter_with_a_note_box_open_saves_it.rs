@@ -224,7 +224,12 @@ fn a_shift_click_that_picks_no_piece_says_what_to_do_instead() {
     app.update();
 
     // Where the ground is empty: the fixture has one piece at (0, 0) and the map runs to 32 m.
-    let empty = pixel_over(&mut app, (12.0, 12.0));
+    //
+    // **Six metres out, not twelve** (UI-30, #224). The spot has to be inside the camera's viewport
+    // as well as empty, and (12, 12) falls at y = 719 px against a hole that ends at 689 — it was on
+    // screen only while the viewport was the whole window and nothing was docked beside it. The
+    // claim this line makes is unchanged: an empty patch of ground, on screen, that no piece stands on.
+    let empty = pixel_over(&mut app, (0.0, 6.0));
     for mouse in [true, false] {
         step(&mut app, Frame { keys: vec![KeyCode::ShiftLeft], pointer: Some(empty), mouse: Some(mouse) });
     }
