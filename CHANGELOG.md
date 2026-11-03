@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **262-camera-by-measurement** `1b6a0c6` the verb classification is derived from a scan of pressed vs just_pressed: the project backlog is 28, not 57 *No clip: a classification correction with no visible surface; proved by the two pinned sets in operations_have_two_front_ends*
 - **261-ui-scan-glob** `307801b` the UI scan reads every file under src/, so a migration can never land outside it *No clip: a test-only change with no visible surface; proved by the marker measurement in the commit and 1154 passing tests*
 - **260-snip-arm** `505dea7` the snip arms through an operation: Cmd+backslash and an agent arm the same capture *No clip: no visible surface changed; proved by operations_have_two_front_ends 9/9 (87 -> 86 on the ratchet)*
 - **259-tool-arm** `460708b` the clone and run keys arm their tool through an operation an agent can call too *No clip: no visible surface changed; proved by operations_have_two_front_ends 9/9 (89 -> 87 on the ratchet)*
