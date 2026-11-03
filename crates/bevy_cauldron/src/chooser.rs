@@ -5204,12 +5204,21 @@ fn spawn_screen(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 
 /// **The menu's own chrome and status.** The editor fills these two bars with a door's furniture;
 /// the menu has a name and a hint line, and they belong in the same places for the same reason.
-fn spawn_menu_bars(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
+fn spawn_menu_bars(
+    mut commands: Commands,
+    frame: Res<crate::chrome::Frame>,
+    // **The menu's own inks, from the editor's skin** (UI-02, #210). Set here and nowhere else:
+    // nothing repaints them, so this is the one place they can come from.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+) {
+    // Each falls back to its constant, as every other seam does: these two bars are spawned once.
+    let quiet = skin.as_deref().map_or(crate::chrome::LABEL, |s| s.tone("label").unwrap_or(crate::chrome::LABEL));
+    let danger = skin.as_deref().map_or(crate::chrome::DANGER, |s| s.danger);
     commands.entity(frame.chrome_bar).with_children(|bar| {
         bar.spawn((
             Text::new("Cauldron"),
             crate::chrome::font(crate::chrome::text::BODY),
-            TextColor(crate::chrome::LABEL),
+            TextColor(quiet),
         ));
     });
     commands.entity(frame.status).with_children(|band| {
@@ -5219,7 +5228,7 @@ fn spawn_menu_bars(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         band.spawn((
             Text::new(String::new()),
             crate::chrome::font(crate::chrome::text::BODY),
-            TextColor(crate::chrome::DANGER),
+            TextColor(danger),
             ProblemLine,
         ));
         band.spawn(Node {
@@ -5229,7 +5238,7 @@ fn spawn_menu_bars(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         band.spawn((
             Text::new(String::new()),
             crate::chrome::font(crate::chrome::text::BODY),
-            TextColor(crate::chrome::LABEL),
+            TextColor(quiet),
             HintLine,
         ));
     });
@@ -5363,7 +5372,23 @@ fn mark_the_focused_panel(
     }
 }
 
-fn colour(tone: Tone) -> Color {
+/// **A row's ink, from the editor's skin** (UI-02, #210).
+///
+/// Six inks carry a row: the chosen row's words, the value under the caret, a stocked row, an empty
+/// one, an ordinary row and a problem. **Each falls back to its `chrome.rs` constant**, the seam
+/// `chrome::RowFills` established, so a harness with no skin draws the shipped palette and no
+/// protected test re-pins.
+pub fn colour(tone: Tone, skin: Option<&bevy_gooey::GooeySkin>) -> Color {
+    if let Some(skin) = skin {
+        return match tone {
+            Tone::Selected => skin.text,
+            Tone::Editing => skin.accent,
+            Tone::Stocked => skin.tone("labeled").unwrap_or(crate::chrome::LABELED),
+            Tone::Empty => skin.tone("label").unwrap_or(crate::chrome::LABEL),
+            Tone::Row => skin.text_muted,
+            Tone::Problem => skin.danger,
+        };
+    }
     match tone {
         // **`TEXT`, not `ACCENT`** — the 2026-09-03 decision D6/D7. Amber used to mark the selected
         // row's words here, which was one of the five jobs that hue was doing; it keeps exactly one,
@@ -5499,7 +5524,8 @@ fn info_row() -> Node {
 /// **The chevron stays.** `docs/ui.md` §1.3 requires a second, non-colour channel on every status,
 /// and with the fill doing the shouting the mark is what still reads in a capture, in a screenshot
 /// somebody pastes into a message, and to anyone who cannot tell two dark warm greys apart.
-fn fill(commands: &mut Commands, at: Entity, rows: &[Row], kind: PanelKind, pane: Option<RowPane>) {
+fn fill(commands: &mut Commands, at: Entity, rows: &[Row], kind: PanelKind, pane: Option<RowPane>, skin: Option<&bevy_gooey::GooeySkin>) {
+    let ink = |tone: Tone| colour(tone, skin);
     commands.entity(at).despawn_related::<Children>();
     // **A list's node is `chrome::scroll_list`'s; an inspector's is written here.**
     //
@@ -5524,7 +5550,7 @@ fn fill(commands: &mut Commands, at: Entity, rows: &[Row], kind: PanelKind, pane
     // because a column decided row by row is not a column.
     let col = label_col(rows);
     for (i, r) in rows.iter().enumerate() {
-        let c = colour(r.tone);
+        let c = ink(r.tone);
         // **A row being typed into is the selected row**, and carries the fill, the rail and the
         // mark — only its ink differs (see [`Tone::Editing`]).
         let selected = matches!(r.tone, Tone::Selected | Tone::Editing);
@@ -5752,6 +5778,8 @@ fn on_row_click(
 fn paint_chooser(
     mut commands: Commands,
     chooser: Res<Chooser>,
+    // **A row's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     lists: Query<(
         Entity,
         Option<&KitList>,
@@ -5778,17 +5806,17 @@ fn paint_chooser(
     let s = chooser.screen();
     for (e, kit, map, set, info, policy, project) in &lists {
         if kit.is_some() {
-            fill(&mut commands, e, &s.kits, PanelKind::List, Some(RowPane::Kits));
+            fill(&mut commands, e, &s.kits, PanelKind::List, Some(RowPane::Kits), skin.as_deref());
         } else if map.is_some() {
-            fill(&mut commands, e, &s.maps, PanelKind::List, Some(RowPane::Maps));
+            fill(&mut commands, e, &s.maps, PanelKind::List, Some(RowPane::Maps), skin.as_deref());
         } else if project.is_some() {
-            fill(&mut commands, e, &s.projects, PanelKind::List, Some(RowPane::Projects));
+            fill(&mut commands, e, &s.projects, PanelKind::List, Some(RowPane::Projects), skin.as_deref());
         } else if set.is_some() {
-            fill(&mut commands, e, &s.settings, PanelKind::Inspector, Some(RowPane::Settings));
+            fill(&mut commands, e, &s.settings, PanelKind::Inspector, Some(RowPane::Settings), skin.as_deref());
         } else if policy.is_some() {
-            fill(&mut commands, e, &s.policy, PanelKind::Inspector, Some(RowPane::Policy));
+            fill(&mut commands, e, &s.policy, PanelKind::Inspector, Some(RowPane::Policy), skin.as_deref());
         } else if info.is_some() {
-            fill(&mut commands, e, &s.kit_info, PanelKind::Inspector, None);
+            fill(&mut commands, e, &s.kit_info, PanelKind::Inspector, None, skin.as_deref());
         }
     }
     for (mut text, maps, settings, problem, hint, kit_info, policy, project) in &mut texts {
