@@ -198,10 +198,19 @@ impl Plugin for SurfacePlugin {
         // **Guarded at the registration as well as the definition.** `debugger` is default-on for
         // this editor, but a build without it must still compile — and a `cfg`'d system named in an
         // unguarded `add_systems` is the shape that only fails on the configuration nobody runs.
+        // **`PreUpdate`, after the fairy applies its queue and before picking consumes it**
+        // (UI-30, #224). `inject_clicks` turns an injected press into a `PointerInput`, and the press
+        // it reads arrives as a `MouseButtonInput` **written by `bevy_fairy` in `PreUpdate`**. It used
+        // to run in `First`, the schedule *before* `PreUpdate`, so it read the message stream a frame
+        // too early, found nothing, and cleared it — which is why a live drag did nothing while a
+        // headless one worked: a test writes `MouseButtonInput` itself, before `First` runs, and never
+        // sees the gap. Measured live: `[inject] at=Vec2(300.0, 400.0) presses=0` across 86 frames.
         #[cfg(feature = "debugger")]
         app.add_systems(
-            First,
-            inject_clicks.after(bevy::picking::PickingSystems::Input),
+            PreUpdate,
+            inject_clicks
+                .after(bevy::input::InputSystems)
+                .before(bevy::picking::PickingSystems::ProcessInput),
         );
     }
 }
