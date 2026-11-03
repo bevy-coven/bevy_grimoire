@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **pointer-buttons** `35a5921` grimoire/pointer reports the picker's pressing and dragging counts, which proved the whole input chain works live — the remaining fault is in gooey's divider handler *No clip: a read-only BRP field; proved by crates/bevy_cauldron/tests/the_pointer_payload_says_where_the_cursor_got_to.rs and a live measurement (pressing 1, dragging 1)*
 - **inject-clicks-schedule** `ccb3bb3` inject_clicks runs in PreUpdate where it can see the press bevy_fairy writes — measured live with a probe before and after *No clip: a scheduling fix; proved live ([probe] SAW PRESS Pressed) and by the editor suite (1169 passed)*
 - **grimoire-pointer** `960f2af` grimoire/pointer reports the input chain, and found the live drag's real fault: the press never reaches MouseButtonInput *No clip: a read-only BRP method; proved by crates/bevy_cauldron/tests/the_pointer_payload_says_where_the_cursor_got_to.rs*
 - **injected-drag-moves-a-dock** `b8fb941` An injected cursor emits its move, so a drag resizes a dock — the second half of what four passes failed to find *No clip: an input fix proved headlessly: fixtures put the split 0.22 then 0.349; the live clip is still owed because the live pointer never receives a location*
