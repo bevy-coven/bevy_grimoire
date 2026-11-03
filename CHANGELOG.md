@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-03
+
+- **shell-regions-share-the-row** `405790c` The Cauldron's frame shares the row: the viewport is what the docks leave *No clip: visible, not yet recorded: no display on this host (headless); proved by crates/bevy_cauldron/tests/the_frames_regions_fit_the_window.rs*
+
 ## 2026-11-02
 
 - **270-split-collapses-viewport** `9e70b8e` the split's positional blocker is measured: its panes are 0x0 until a region is parented in, and the viewport then projects off-window *No clip: an investigation that shipped no code; the three-state measurement is on #224*
