@@ -4799,6 +4799,7 @@ fn dispatch_as(
     // that happened and cannot be told about or undone, so a failed append takes the change back
     // through its recorded inverse and says so. The take-back itself is not logged: nothing the
     // log should describe happened. See [`take_back`].
+    //
     append(ctx, &mut entry).map_err(|e| take_back(ctx, &*op, &outcome, e))?;
     Ok(Applied::Done {
         outcome,

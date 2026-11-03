@@ -113,6 +113,15 @@ pub fn snip_key(
     live: Res<Live>,
     mut snip: ResMut<SnipEdit>,
     mut state: ResMut<EditorState>,
+    // **The project, because the key dispatches an operation and the operation is logged**
+    // (2026-11-03, #224). Without it the context had no root, `ops::dispatch` could not append its
+    // line, `take_back` reported a refusal — and the status painted a red
+    // *"the operation could not be logged, so nothing was changed: no project is open, so there is
+    // nowhere to write the log."* over the editor on every `Cmd+\`. Measured on the 2026-11-03
+    // hero recording: the banner is on every frame after the key, and the tool **was** armed, so
+    // the sentence was false in both halves. Every other key path that dispatches an operation
+    // carries the project the same way (`editor::environment_key`, `set_yaw`, `set_tip`).
+    project: Option<Res<crate::project::Project>>,
 ) {
     if keys::just_pressed(&keyboard, *live, Action::Snip) {
         // **The key dispatches the operation an agent calls** (E-002, #129). `snip_arm` owns the toggle;
@@ -123,6 +132,7 @@ pub fn snip_key(
         }
         let open = snip.armed;
         let mut ctx = crate::ops::Ctx {
+            project: project.as_deref().cloned(),
             source: crate::ops::Source::Human,
             session: crate::ops::session_id(),
             view: Some(crate::ops_view::View { snip_armed: open, ..Default::default() }),
