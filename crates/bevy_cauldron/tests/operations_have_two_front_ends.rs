@@ -635,6 +635,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     let mut held = Vec::new();
     let mut modal = Vec::new();
     let mut camera = Vec::new();
+    let mut world = Vec::new();
     let mut project = 0usize;
     for action in Action::ALL {
         if action.operation().is_some() {
@@ -646,6 +647,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
             Change::Held => held.push(format!("{action:?}")),
             Change::Modal => modal.push(format!("{action:?}")),
             Change::Camera => camera.push(format!("{action:?}")),
+            Change::World => world.push(format!("{action:?}")),
         }
     }
 
@@ -666,6 +668,21 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
         "these are the halves of a dialog: `Accept` keeps what is proposed, `Cancel` backs out of \
          whatever is innermost, `TypeId` types into a box someone opened. Any of them as an operation \
          would need to say which proposal, which box — the answer is not in the verb."
+    );
+
+    // **`World` verbs need ECS state, and `Ctx` carries values.** This is the largest gap left and the
+    // most consequential single one: an agent can place, remove, turn and save through the registry, but
+    // it cannot `undo`, because `editor::undo` takes `Commands`, `AssetServer` and two entity queries.
+    // The comment on `Change::World` in `keys.rs` names both ways to close it and recommends the first.
+    assert_eq!(
+        world,
+        [
+            "Undo", "Redo", "Rescan", "UndoTile", "RedoTile", "UndoBuild", "RedoBuild", "SuggestLabels",
+            "SuggestAll", "DiscardAllSuggestions", "UndoBench", "RedoBench", "CheckAllRigs",
+        ],
+        "the `World` set changed. A verb belongs here when its handler takes `Commands`, an \
+         `AssetServer` or a `Query` — `Ctx` cannot carry those, so the operation would need a different \
+         trait for every operation in the registry."
     );
 
     // **`Camera` verbs are already reachable by an agent.** `grimoire/frame_view` says in its own doc
@@ -706,14 +723,15 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     // **And `Project` is what is left, which is the debt.** It must be non-zero: a classification whose
     // project bucket was empty would be hiding every migration still owed.
     assert_eq!(
-        project + view.len() + held.len() + modal.len() + camera.len(),
+        project + view.len() + held.len() + modal.len() + camera.len() + world.len(),
         UNMIGRATED.len(),
         "the classification must cover the allowlist exactly: {project} project + {} view + {} held + \
-         {} modal + {} camera against {} listed",
+         {} modal + {} camera + {} world against {} listed",
         view.len(),
         held.len(),
         modal.len(),
         camera.len(),
+        world.len(),
         UNMIGRATED.len()
     );
     assert!(

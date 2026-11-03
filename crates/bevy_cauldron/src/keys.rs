@@ -876,6 +876,18 @@ pub enum Change {
     Held,
     /// One half of a conversation with a person: a cancel, an accept, a typed id.
     Modal,
+    /// **Needs the World** — `Commands`, an `AssetServer`, or a `Query` over entities.
+    ///
+    /// `Ctx` carries *values* by clone, and its own doc says why: a trait with a lifetime on its methods
+    /// cannot be a `dyn`, and the registry must be a `dyn` because operations are looked up by name. So a
+    /// verb whose handler takes `&mut Commands` or a `Query<(Entity, &Placement)>` cannot become an
+    /// operation without changing that trait for every operation there is.
+    ///
+    /// **This is a real gap and the largest one left.** An agent can place, remove, turn, pin and save
+    /// through the registry — but it cannot `undo`, which takes `Commands`, `AssetServer` and two queries.
+    /// A `World` operation that carries a *deferred action* in `Ctx` (the shape `layout_propose` /
+    /// `layout_accept` already uses for a proposal) is the way to close it; that is a pass of its own.
+    World,
     /// **Camera state only** — already reachable by an agent through a BRP method that says so.
     ///
     /// `grimoire/frame_view` moves the Map camera and is **not an operation**: its own doc says *"it
@@ -1006,6 +1018,20 @@ impl Action {
             // the journal — so it has no single answer to "what does this change"; `Accept` and `TypeId`
             // are the other half of a dialog's conversation with a person.
             Action::Cancel | Action::Accept | Action::TypeId => Change::Modal,
+
+            Action::Undo
+            | Action::Redo
+            | Action::UndoTile
+            | Action::RedoTile
+            | Action::UndoBuild
+            | Action::RedoBuild
+            | Action::UndoBench
+            | Action::RedoBench
+            | Action::Rescan
+            | Action::SuggestLabels
+            | Action::SuggestAll
+            | Action::DiscardAllSuggestions
+            | Action::CheckAllRigs => Change::World,
 
             // Everything else writes the grimoire and owes an operation.
             _ => Change::Project,
