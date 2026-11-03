@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **clip-calibration-record** `43f348e` The clip check's calibration is a file a test reads: 61.5% on 122 labelled samples, so the check stays advisory *No clip: a calibration record and its test; proved by crates/bevy_oracle/tests/the_clips_calibration_is_recorded.rs*
 - **snip-receipt** `19598ac` Ctrl+\ arms the snip and shows a receipt, instead of a red 'nothing was changed' over the editor on every press *No clip: a false refusal message removed; proved by crates/bevy_cauldron/tests/an_operation_that_writes_nothing_needs_no_log.rs (reports the banner without the fix, no problem with it)*
 - **dock-resize-floor** `5258721` A dock resize stops at 96 px, so the viewport is never squashed to nothing *No clip: a floor on a split's panes; proved by crates/bevy_cauldron/tests/a_dock_resize_never_covers_the_viewport.rs (47 px without it, 115 px with it, at SplitFraction 0.95)*
 - **shell-regions** `cc2ec9e` The Cauldron's shell: every region answers to its name, and the world sits inside the hole the docks leave<br><a href="docs/changelog/media/2026-11-03-shell-regions.mp4"><img src="docs/changelog/media/2026-11-03-shell-regions.png" width="320" alt="clip"></a>
