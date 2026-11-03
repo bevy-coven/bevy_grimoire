@@ -402,7 +402,7 @@ fn spawn_panels(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
     .insert(AnimRoot)
     .with_children(|p| {
         crate::chrome::list_heading(p, "RIGS");
-        crate::filter::spawn(p, crate::filter::Pane::Rigs);
+        crate::filter::spawn(p, crate::filter::Pane::Rigs, None);
         crate::chrome::scroll_list(p, (RigList, crate::chrome::Control(crate::keys::ControlId::Rigs)));
     });
 }

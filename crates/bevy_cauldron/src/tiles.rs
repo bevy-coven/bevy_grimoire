@@ -4687,7 +4687,7 @@ fn spawn_tiles_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 LabelProgressNow,
             ));
         });
-        crate::filter::spawn(p, crate::filter::Pane::Candidates);
+        crate::filter::spawn(p, crate::filter::Pane::Candidates, None);
         // The strip sits OUTSIDE the scroll container, so it cannot scroll away — see [`ListHeader`].
         p.spawn((
             Node {
@@ -9816,6 +9816,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
     let danger_ink = skin.as_deref().map_or(DANGER, |s| s.danger);
     let accent_ink = skin.as_deref().map_or(ACCENT, |s| s.accent);
     let unchecked_ink = unchecked_ink(skin.as_deref());
+    // Borrowed for the tag box's placeholder; `skin` itself is not needed past here.
+    let skin_ref = skin.as_deref();
     for pane in &panes {
         commands.entity(pane).despawn_related::<Children>();
         commands.entity(pane).with_children(|p| {
@@ -10465,7 +10467,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // `on_tag_chip` was their only writer, on an editor whose whole argument is that
                 // keystrokes are faster. `/` puts the cursor here, typing narrows, `Enter` takes the
                 // one match, `Esc` gives everything back.
-                crate::filter::spawn(p, crate::filter::Pane::Tags);
+                crate::filter::spawn(p, crate::filter::Pane::Tags, skin_ref);
                 // **What `Enter` will do, said before it is pressed** — and nothing at all while the
                 // box is empty, where `55 of 55` would be a line that never changes and never helps.
                 if !needle.is_empty() {

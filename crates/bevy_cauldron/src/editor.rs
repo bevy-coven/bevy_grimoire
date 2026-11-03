@@ -3833,7 +3833,7 @@ fn spawn_palette_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
     .insert(crate::tiles::MapRoot)
     .with_children(|p| {
         crate::chrome::list_heading(p, "PLACE");
-        crate::filter::spawn(p, crate::filter::Pane::Palette);
+        crate::filter::spawn(p, crate::filter::Pane::Palette, None);
         crate::chrome::scroll_list(p, (PaletteList, crate::chrome::Control(crate::keys::ControlId::Palette)));
     });
 }

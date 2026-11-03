@@ -178,6 +178,48 @@ pub struct FilterBox(pub Pane);
 #[derive(Component, Clone, Copy)]
 pub struct FilterText(pub Pane);
 
+/// **A filter box's ink, from the editor's skin** (UI-02, #210).
+///
+/// The box has four inks and one of them is a *state*: the ground it sits on
+/// ([`ROW_BG`]), the ground it turns under the pointer ([`ROW_HOVER`]) and the ground it
+/// holds while it owns the keyboard ([`FOCUS_BG`]), which is the one field gooey calls
+/// `pressed` — a recessed well, not a raised card. The caret's ink is the accent, and the
+/// two text inks are `text` and `text_muted`.
+///
+/// **Each falls back to its `chrome.rs` constant**, as [`crate::chrome::RowFills`] does, so a
+/// harness with no skin draws the shipped palette and no existing test re-pins.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FieldInk {
+    /// A box at rest.
+    rest: Color,
+    /// A box under the pointer.
+    hover: Color,
+    /// A box that owns the keyboard — gooey's `pressed`, which this editor draws recessed.
+    focus: Color,
+    /// What is typed.
+    typed: Color,
+    /// A placeholder, and the `_` that stands in for a caret.
+    quiet: Color,
+    /// The caret itself.
+    accent: Color,
+}
+
+impl FieldInk {
+    fn of(skin: Option<&bevy_gooey::GooeySkin>) -> FieldInk {
+        let Some(skin) = skin else {
+            return FieldInk { rest: ROW_BG, hover: ROW_HOVER, focus: FOCUS_BG, typed: TEXT, quiet: DIM, accent: ACCENT };
+        };
+        FieldInk {
+            rest: skin.surface_raised,
+            hover: skin.tone("hover").unwrap_or(ROW_HOVER),
+            focus: skin.tone("pressed").unwrap_or(FOCUS_BG),
+            typed: skin.text,
+            quiet: skin.text_muted,
+            accent: skin.accent,
+        }
+    }
+}
+
 /// Spawn a filter box above a list.
 ///
 /// **`chrome::text_field`, where this hand-rolled the same box.** It was one of the five modules
@@ -186,13 +228,14 @@ pub struct FilterText(pub Pane);
 /// costs the `CHIP_PAD` inset and buys `FIELD_PAD`, a [`crate::chrome::MIN_FIELD_H`] floor (an
 /// unstated field height lays out at 7 px while empty) and the same shape as the four other fields
 /// in the editor — which is the whole of D4.
-pub fn spawn(parent: &mut ChildSpawnerCommands, pane: Pane) {
+pub fn spawn(parent: &mut ChildSpawnerCommands, pane: Pane, skin: Option<&bevy_gooey::GooeySkin>) {
+    let ink = FieldInk::of(skin);
     let mut b = crate::chrome::text_field(
         parent,
         Val::Percent(100.0),
         FilterBox(pane),
         crate::chrome::text::BODY,
-        (placeholder(pane).to_owned(), DIM),
+        (placeholder(pane).to_owned(), ink.quiet),
         FilterText(pane),
     );
     // **Which census control this box *is*, and the one pane that is not one.**
@@ -301,17 +344,20 @@ pub fn refresh(
     filters: Res<Filters>,
     mut texts: Query<(&FilterText, &mut Text, &mut TextColor)>,
     mut boxes: Query<(&FilterBox, &Hovered, &mut BackgroundColor)>,
+    // **The box's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
+    let ink = FieldInk::of(skin.as_deref());
     // The fill answers to the pointer as well as to focus, so it repaints every frame — hover
     // cannot wait for `Filters` to change. The `!=` guard keeps the steady state a comparison.
     // Focus beats hover; hover is `chrome::ROW_HOVER`'s signifier that the box takes a click.
     for (which, hovered, mut bg) in &mut boxes {
         let want = if filters.focus == Some(which.0) {
-            FOCUS_BG
+            ink.focus
         } else if hovered.0 {
-            ROW_HOVER
+            ink.hover
         } else {
-            ROW_BG
+            ink.rest
         };
         if bg.0 != want {
             bg.0 = want;
@@ -337,9 +383,9 @@ pub fn refresh(
         // borrowed halves and the comparison is `strip_suffix`; `strip_suffix("")` returns the whole
         // string, so the two caretless arms reduce to a plain `!=`.
         let (head, tail, want_colour) = match (focused, raw.is_empty()) {
-            (true, _) => (raw, "_", ACCENT),
-            (false, true) => (placeholder(which.0), "", DIM),
-            (false, false) => (raw, "", TEXT),
+            (true, _) => (raw, "_", ink.accent),
+            (false, true) => (placeholder(which.0), "", ink.quiet),
+            (false, false) => (raw, "", ink.typed),
         };
         if text.0.strip_suffix(tail).is_none_or(|rest| rest != head) {
             text.0.clear();
