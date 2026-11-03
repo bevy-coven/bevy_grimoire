@@ -1164,6 +1164,11 @@ pub fn spawn_frame(mut commands: Commands) {
         .spawn((
             bevy_gooey::split(bevy_gooey::SplitAxis::Horizontal, (), ()),
             bevy_gooey::SplitFraction(0.22),
+            // **Both panes keep a floor, so a drag cannot squash the world** (UI-30, #224).
+            // Without it `SplitMin` is `(0, 0)` and `SplitFraction` 0.95 left the viewport 47 px of
+            // a 1280-px body — a dock covering the world in the only way that matters. gooey's own
+            // dock uses the same 96 px for both panes.
+            bevy_gooey::SplitMin::new(96.0, bevy_gooey::DOCK_PANE_MIN_PX),
             // **`Pickable::default()`, not `IGNORE`** (UI-30, #224). `bevy_picking` skips an
             // entity *and everything below it* when the entity is `IGNORE`, so an ignoring split
             // root made its divider — the one grabbable node in the frame — unhittable: the
