@@ -1102,16 +1102,29 @@ pub fn spawn_frame(mut commands: Commands) {
     // a keyboard trap: F6 would cycle to itself and Tab would be the only way out. The docks navigate
     // normally — `ArrowPolicy::Navigate` — so F6 walks viewport → left dock → right dock and back, and
     // the arrows in a dock move between its fields, which is what a person expects there.
+    // **Each region says its name** (UI-30, #224). The frame was reachable only as an entity id in
+    // the `Frame` resource: nothing a reader or a test could search for, so `record.py` guessed
+    // pixels and a screen reader met three unnamed boxes. These four names are the shell's own
+    // vocabulary — the same words `docs/ui/vision.md` uses for the regions.
     let left = commands
-        .spawn((dock(), bevy_gooey::FocusRegion::navigate()))
+        .spawn((
+            dock(),
+            bevy_gooey::FocusRegion::navigate(),
+            AccessibleLabel::new("Left dock"),
+        ))
         .id();
     let right = commands
-        .spawn((dock(), bevy_gooey::FocusRegion::navigate()))
+        .spawn((
+            dock(),
+            bevy_gooey::FocusRegion::navigate(),
+            AccessibleLabel::new("Right dock"),
+        ))
         .id();
 
     let viewport = commands
         .spawn((
             ViewportSlot,
+            AccessibleLabel::new("Viewport"),
             // **A focus region that keeps the arrows for the map** (UI-35, #229). The viewport pans and
             // orbits on the arrow keys, so it asks gooey for `ArrowPolicy::Host` — with focus on or
             // inside it, the arrows move no focus and stay readable, while Tab and F6 still leave
@@ -1178,6 +1191,7 @@ pub fn spawn_frame(mut commands: Commands) {
                 border: UiRect::top(Val::Px(1.0)),
                 ..default()
             }),
+            AccessibleLabel::new("Status bar"),
             BackgroundColor(BAR_BG),
             Ground(BAR_BG),
             BorderColor::all(PANEL_EDGE),

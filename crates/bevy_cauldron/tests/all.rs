@@ -376,3 +376,4 @@ fn every_test_file_is_a_module_here() {
     );
 }
 mod the_frames_regions_fit_the_window;
+mod the_shell_s_regions_are_labelled_and_the_divider_moves;
