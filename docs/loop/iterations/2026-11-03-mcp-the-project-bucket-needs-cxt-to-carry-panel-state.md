@@ -29,15 +29,25 @@ E-037's line ("an operation arms a brush piece, so an agent can arm one and its 
 The operation **works and is visible**: `brush_arm lamp_tall` returns *"armed lamp_tall"*, and the sheet
 shows the `lamp_tall` row going from grey to highlighted teal.
 
-Two attempts at a clip, both failing `check.py`:
+**Three** attempts at a clip, all failing `check.py`:
 1. On a fresh editor, `lamp_tall` is **already armed** at startup, so the operation changes 0.00% of the
    scene — the highlight was already there.
 2. Arming `pipe` first and then `lamp_tall` changes **0.42%**, under the 5% floor: a single row's tint is
    a small share of any crop that also shows the viewport, and the pre-operation run is 3.33 s static
    against a 1.5 s limit.
 
-Stopped after two, per the rule. The clip needs a storyboard whose crop is the palette alone (the row is
-then a large share of the frame) and a shorter opening — a note for the pass that records it.
+3. Arming `pipe`, then a palette-only crop at `[580,80,900,620]` with a shorter opening: **1.27%**, and a
+   1.67 s static run against 1.5 s.
+
+**The operation is confirmed working, and the third attempt proved it beyond doubt:** a live screenshot
+after `brush_arm lamp_tall` shows the `lamp_tall` row with its amber border and green tint while `pipe`
+is plain, with `grimoire/state` reporting `"armed_piece":"lamp_tall"`.
+
+**What the clip actually needs, learned from three tries:** a single row's tint is a small share of any
+frame that also holds the palette's icons and counts, so the 5% floor cannot be met by a 30-px amber
+border. It needs either a storyboard that arms **several** rows in sequence (each a separate change
+moment, and `check.py` measures the largest change near each) or a crop of one row alone. Stopped after
+three, per the rule; the clip stays owed and the next pass starts from that measurement.
 
 ## Review
 Self-review, mine:
