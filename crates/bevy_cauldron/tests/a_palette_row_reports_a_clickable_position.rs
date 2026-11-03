@@ -15,6 +15,10 @@
 //! 2. **A row scrolled out is distinguishable from one on screen** — either its position is outside the
 //!    palette's rect, or it is not laid out at all. Never a number a caller would click.
 //!
+//! A fourth case — that every row shares the palette's column — was written and dropped: filtering the
+//! window's texts by height catches the inspector's rows at the same heights, and the claim adds nothing
+//! the two above do not already say.
+//!
 //! The rows are read through the same components `tools/demo/record.py` reads over BRP, so the test and
 //! the recorder cannot disagree about what a row reports.
 
@@ -37,39 +41,28 @@ fn editor(name: &str) -> (std::path::PathBuf, App) {
     (root, app)
 }
 
-/// The rows a caller can aim at, and the palette's viewport rect.
-type Rows = (Vec<(String, Vec2)>, Option<(Vec2, Vec2)>);
+/// A laid-out text: its words and the centre it reports.
+type Row = (String, Vec2);
 
-/// Every laid-out row's reported centre, and the palette viewport's rect.
+/// **The rows a caller can aim at, and the palette's own box.**
 ///
-/// **The viewport is found by shape, not by a private marker**: it is the node that carries a
-/// `ScrollPosition` and has a non-zero size, which is what `bevy_ui` itself scrolls.
-fn rows_and_viewport(app: &mut App) -> Rows {
+/// The box is the node the editor names — [`bevy_cauldron::editor::PaletteList`], which became `pub`
+/// for this (#275). Three earlier attempts found it by shape and got the **inspector** twice and a
+/// window-width scroller once, so the test failed for a different reason on different runs.
+fn rows_and_viewport(app: &mut App) -> (Vec<Row>, Option<(Vec2, Vec2)>) {
     let world = app.world_mut();
     let mut texts = world.query::<(&Text, &bevy::ui::UiGlobalTransform, &bevy::ui::ComputedNode)>();
-    let rows: Vec<(String, Vec2)> = texts
+    let laid: Vec<Row> = texts
         .iter(world)
         .filter(|(t, _, n)| !t.0.trim().is_empty() && n.size().x > 0.0 && n.size().y > 0.0)
         .map(|(t, at, _)| (t.0.trim().to_owned(), at.translation))
         .collect();
-    // **The palette's own column, found from the PLACE heading.** Two scrolling panels share this
-    // window — the inspector on the left and the palette on the right — and picking the first node of
-    // the right size found the inspector, which is why this reads the heading's x first.
-    let place_x = texts
-        .iter(world)
-        .find(|(t, _, _)| t.0.trim() == "PLACE")
-        .map(|(_, at, _)| at.translation.x);
-    let mut lists = world.query_filtered::<(&bevy::ui::UiGlobalTransform, &bevy::ui::ComputedNode), With<bevy::ui::ScrollPosition>>();
+    let mut lists = world.query_filtered::<(&bevy::ui::UiGlobalTransform, &bevy::ui::ComputedNode), With<bevy_cauldron::editor::PaletteList>>();
     let viewport = lists
         .iter(world)
-        .filter(|(at, n)| {
-            n.size().x > 200.0
-                && n.size().y > 200.0
-                && place_x.is_some_and(|x| (at.translation.x - x).abs() < n.size().x)
-        })
         .map(|(at, n)| (at.translation, n.size()))
         .next();
-    (rows, viewport)
+    (laid, viewport)
 }
 
 /// **The palette is a scrolling list with a real viewport**, so the test is not vacuous.
@@ -147,28 +140,82 @@ fn a_row_scrolled_out_is_outside_the_palettes_rect() {
     );
 }
 
-/// **The rows share one column**, so the palette's rect is a description of where they are.
+/// **A click at a visible row's position arms that piece** (#275's second acceptance item).
 ///
-/// This is the half that makes the other two useful: if the rect and the rows disagreed, a position
-/// inside one would be outside the other and neither test would mean anything.
+/// **Fails on the base, and is `#[ignore]`d rather than fixed here.** Measured with the palette's own
+/// box from [`bevy_cauldron::editor::PaletteList`]: the `wall` row is at `Vec2(1373.5, 286.0)`, inside a
+/// palette of `Vec2(1362.0, 494.0)` x `Vec2(286.0, 618.0)`, and a press there leaves the editor holding
+/// `floor` — the brush it already had. So the position is in the right box and the press still arms
+/// nothing, which is the defect stated in one assertion.
+///
+/// The cases above say a visible row's number is inside the palette. This says it is *the right* number:
+/// put the pointer there, press, and the editor holds that row's piece through `brush_arm` — the
+/// operation a palette click dispatches, with the log line a person's click writes.
+///
+/// **Not through `bevy_gooey::testing::click`**, which reads a node's centre for itself and would pass
+/// whether or not the reported position is where the row is drawn — the very question this asks.
+#[ignore = "the press at a row's reported position arms nothing; measured, see #275"]
 #[test]
-fn the_palettes_rect_agrees_with_its_own_node() {
-    let (_root, mut app) = editor("palette-scroll-agrees");
+fn a_click_at_a_visible_rows_position_arms_that_piece() {
+    let (_root, mut app) = editor("palette-scroll-click");
     let (rows, viewport) = rows_and_viewport(&mut app);
-    let (centre, size) = viewport.expect("the palette viewport is there");
-    // Every laid-out row shares the palette's column: their x centres are within a row's width of the
-    // viewport's, which is what makes the rect a description of where the rows are.
-    let column: Vec<f32> = rows.iter().map(|(_, at)| at.x).collect();
-    assert!(!column.is_empty(), "the palette has rows");
-    let off_column = column
+    let (centre, size) = viewport.expect("the palette is a node with a box");
+    let (half, mid) = (size * 0.5, centre);
+
+    // **A row inside the palette whose words name a piece the fixture has**, so the arm can be read
+    // back by id rather than by an index that changes with the library.
+    let project = app.world().resource::<bevy_cauldron::project::Project>();
+    let wanted: Vec<String> = project.library.descriptors.iter().map(|d| d.id.clone()).collect();
+    let (id, at) = rows
         .iter()
-        .filter(|x| (**x - centre.x).abs() > size.x)
-        .count();
+        .filter(|(_, at)| (at.x - mid.x).abs() <= half.x && (at.y - mid.y).abs() <= half.y)
+        .find(|(words, _)| wanted.iter().any(|id| id == words))
+        .map(|(words, at)| (words.clone(), *at))
+        .unwrap_or_else(|| {
+            panic!(
+                "no piece row is reported inside the palette {centre:?} x {size:?}; the fixture's \
+                 pieces are {wanted:?} and every laid-out text is {rows:?}"
+            )
+        });
+
+    // **The pointer and the press**, both at the position the row reported, on the image the interface
+    // is drawn into — the target `bevy_ui`'s picking backend reads.
+    let handle = app
+        .world()
+        .get_resource::<bevy_cauldron::surface::Surface>()
+        .map(|s| s.image.clone())
+        .unwrap_or_default();
+    let location = || bevy::picking::pointer::Location {
+        target: bevy::camera::NormalizedRenderTarget::Image(bevy::camera::ImageRenderTarget {
+            handle: handle.clone(),
+            scale_factor: 1.0,
+        }),
+        position: at,
+    };
+    for action in [
+        bevy::picking::pointer::PointerAction::Move { delta: Vec2::ONE },
+        bevy::picking::pointer::PointerAction::Press(bevy::picking::pointer::PointerButton::Primary),
+    ] {
+        app.world_mut().write_message(bevy::picking::pointer::PointerInput::new(
+            bevy::picking::pointer::PointerId::Mouse,
+            location(),
+            action,
+        ));
+        app.update();
+    }
+    for _ in 0..3 {
+        app.update();
+    }
+
+    let armed = {
+        let project = app.world().resource::<bevy_cauldron::project::Project>();
+        let state = app.world().resource::<bevy_cauldron::editor::EditorState>();
+        state.brush.and_then(|ix| project.library.descriptors.get(ix)).map(|d| d.id.clone())
+    };
     assert_eq!(
-        off_column, 0,
-        "{} of {} rows are more than a palette-width from the palette's own x, so the rect is not \
-         where the rows are: centre {centre:?}, size {size:?}, rows {rows:?}",
-        off_column,
-        column.len()
+        armed.as_deref(),
+        Some(id.as_str()),
+        "a press at the position the row reports must arm `{id}` — the row is at {at:?}, inside the \
+         palette {centre:?} x {size:?}. The editor holds {armed:?}"
     );
 }

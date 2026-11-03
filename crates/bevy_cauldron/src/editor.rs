@@ -1563,8 +1563,13 @@ impl CrowdHeat {
 }
 
 /// The node the palette is rebuilt into, so collapsing a category can redraw it.
+///
+/// **`pub` for the boxes that had none** (#275): a test, an agent and `tools/demo/record.py` all need
+/// to ask "which box are these rows in", and there is no other answer — the palette and the inspector
+/// are the same shape, so finding it by size found the wrong one three times. Naming the node costs a
+/// keyword and settles it.
 #[derive(Component)]
-struct PaletteList;
+pub struct PaletteList;
 
 /// A category header. Clicking it folds the group away.
 #[derive(Component, Clone)]
