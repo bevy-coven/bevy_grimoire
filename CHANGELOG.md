@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **label-paths-agree** `9eb995a` The two labelling paths the editor selects between read one recorded judgement the same way, proved over replays *No clip: a test over both readers; proved by crates/bevy_cauldron/tests/the_two_paths_read_one_judgement_the_same_way.rs (a one-token difference fails it)*
 - **label-decide-withdrawn** `0cb61dc` Pass 277's decision labeller is withdrawn: a second labelling path duplicated the one already wired in, and disagreed with it on the meaning of GRIMOIRE_LABEL_PATH *No clip: a revert of unreleased work; proved by the editor suite (1161 passed, four fewer and all four its own) and by crates/bevy_cauldron/src/decide_labels.rs, which already carries the path selector and the vocabulary guard*
 - **label-paths-measured** `3c555c8` The two labelling paths are measured on the same kit: the decision path agrees on 92%, equal to the old path's ceiling *No clip: a measurement and its record; proved by crates/bevy_cauldron/tests/the_two_labelling_paths_are_compared.rs reading fixtures/label_comparison.ron*
 - **label-path-config** `3bbe4b2` A config chooses the labelling path, and refuses a name neither path has *No clip: an environment selector; proved by the_config_selects_the_path_and_refuses_a_name_neither_has*
