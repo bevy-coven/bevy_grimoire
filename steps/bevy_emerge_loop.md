@@ -1,6 +1,6 @@
 # Where bevy_emerge_loop's time goes
 
-Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-03 04:53Z.
+Written by `tools/loop/steps.py publish` after every pass; the rows are in [`bevy_emerge_loop.tsv`](bevy_emerge_loop.tsv). Updated 2026-11-03 05:11Z.
 
 ## What the last passes shipped
 
@@ -8,7 +8,6 @@ From [`bevy_emerge_loop-audit.tsv`](bevy_emerge_loop-audit.tsv): commits on main
 
 | pass | at | commits | unpushed | package_files | released | docs_files | demo_files | missing |
 |---|---|---|---|---|---|---|---|---|
-| 255 | 2026-11-03T01:54Z | 2 | 0 | 9 | - | 1 | 0 | demo? |
 | 256 | 2026-11-03T02:08Z | 2 | 0 | 5 | - | 1 | 0 | demo? |
 | 257 | 2026-11-03T02:31Z | 2 | 0 | 1 | - | 1 | 0 | demo? |
 | 258 | 2026-11-03T02:47Z | 2 | 0 | 2 | - | 1 | 0 | demo? |
@@ -20,6 +19,7 @@ From [`bevy_emerge_loop-audit.tsv`](bevy_emerge_loop-audit.tsv): commits on main
 | 264 | 2026-11-03T04:30Z | 2 | 0 | 1 | - | 1 | 0 | demo? |
 | 265 | 2026-11-03T04:45Z | 1 | 0 | 0 | - | 1 | 0 | - |
 | 266 | 2026-11-03T04:53Z | 1 | 0 | 0 | - | 1 | 0 | - |
+| 267 | 2026-11-03T05:11Z | 2 | 0 | 1 | - | 1 | 0 | demo? |
 
 ## How each configuration did
 
@@ -30,7 +30,7 @@ host       model                        think    jobs  threads  passes  mean min
 Cs-MacBook-Pro anthropic/claude-sonnet-5-5  xhigh    4     -             1      75.8        75.8
 big        anthropic/claude-sonnet-5-5  high     10    8            18      22.1        17.1
 big        anthropic/claude-sonnet-5-5  high     6     4            12      72.3        78.8
-big        -                            -        -     -            16     142.5       105.0
+big        -                            -        -     -            17     140.9       105.0
 ```
 
 ## The last 12 passes
