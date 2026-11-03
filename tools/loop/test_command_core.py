@@ -55,11 +55,15 @@ class TestTheCommandKeepsItsCore(unittest.TestCase):
                           "a prompt that only adds rules grows without bound; the revert rule is what "
                           "keeps it from bloating")
 
-    def test_the_pass_is_told_how_to_time_itself_with_no_driver(self):
-        for phrase in ("steps.py begin", "steps.py end"):
-            self.assertIn(phrase, self.flat,
-                          "a hand-run pass that is not told this records nothing, which is exactly how "
-                          "seventeen passes of work were lost on 2026-11-02")
+    def test_the_pass_times_itself_and_not_its_launcher(self):
+        """**The command owns this, so every launcher gets it.** A driver, a shell, Herdr and Oh My Pie
+        all start the pass the same way; if timing lived in a wrapper, the third launcher to arrive
+        would be the one that silently recorded nothing — which is what happened on 2026-11-02."""
+        self.assertIn("First command of this pass", self.flat)
+        self.assertIn("steps.py begin", self.flat)
+        self.assertIn("steps.py end", self.flat)
+        self.assertIn("no arguments", self.flat,
+                      "a step that needs an environment variable is a step a new launcher forgets")
 
 
 if __name__ == "__main__":

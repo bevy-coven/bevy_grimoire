@@ -7,7 +7,11 @@ disable-model-invocation: true
 # bevy_grimoire: one build-loop pass
 
 You are one pass of a **Wiggum loop**: a dumb outer shell reruns this same prompt forever, in the
-background, with no memory carried between passes. **Everything you know about previous passes is in the
+background, with no memory carried between passes.
+
+**First command of this pass: `python3 tools/loop/steps.py begin`.** It numbers the pass so its time is
+recorded, and it works the same whether a driver, a person or Oh My Pie launched you. **Last command:
+`python3 tools/loop/steps.py end`**, after the push is green ("Timing: the pass times itself" below). **Everything you know about previous passes is in the
 repository** — the backlog, the log, the reports and git history. Read it, do one pass, leave the tree
 better and pushed, stop. The loop will start again in a minute whether or not you finished, so a pass
 that leaves rubbish behind compounds; a pass that stops early and cleanly costs one cycle.
@@ -235,22 +239,33 @@ how a test is run, when a push happens inside the budget — is fair game.
 - **A tuning that would spend the savings on more work is not a tuning.** Cutting the gate from two runs
   to one buys time for the cluster, not for a seventh issue.
 
-## Timing is recorded whether a driver is watching or not
+## Timing: the pass times itself, whoever launched it
 
-`steps.py` reads a pass's own omp session, so it needs no cooperation from the pass — but it needs to
-be **told which pass**, and the driver used to be the only thing that said so. It no longer is:
+**The pass does this, not its launcher.** It may be started by a Wiggum driver, by hand in a shell, by
+Herdr, or by Oh My Pie — and every one of those must leave the same record. So the first thing a pass
+does and the last thing it does are fixed:
 
 ```sh
-python3 tools/loop/steps.py begin --state STATE          # number the pass, open its ledger row
-# ... the pass ...
-python3 tools/loop/steps.py end --repo DIR --state STATE  # wall time, steps, and the audit
+# STEP 1 of the pass, before anything else — it prints the pass number to put in your log and commits
+python3 tools/loop/steps.py begin
+
+# ... the whole pass ...
+# STEP 2, the last command of the pass, after the push is green and the log line is written
+python3 tools/loop/steps.py end
 ```
 
-`begin` continues the same numbering a Wiggum driver uses and writes `passes.tsv`, `pass-count` and
-`start-<n>`; `end` fills in the wall time, records the steps and audits what shipped. **A hand-run pass
-that skips these leaves no timing data at all** — measured 2026-11-02: seventeen passes of real work
-left nothing, so "where did last night go?" had no answer that was not a guess. The driver calls the
-same two, so both paths write one file. `steps.py report --last 12` is the answer; read it in Orient.
+Both derive their state directory themselves (`$WIGGUM_STATE`, else the one this clone's driver uses),
+so **they take no arguments and need no environment**. `begin` numbers the pass continuing the driver's
+sequence and writes `passes.tsv`, `pass-count` and `start-<n>`; `end` fills in the wall time, records
+every step from the pass's own omp session, audits what shipped and publishes the `loop-stats` row.
+
+**A pass that skips them leaves no timing data at all** — measured 2026-11-02: seventeen passes of real
+work left nothing, so "where did last night go?" had no answer that was not a guess. A driver that
+already numbered the pass is fine: `end` closes whatever `pass-count` holds, and `begin` is idempotent
+for a number the driver already spent.
+
+`python3 tools/loop/steps.py report --last 12` is the answer to "where does the time go". Read it in
+Orient, and let it drive a tuning.
 
 ## Phase 0: Orient (5 minutes, no more)
 

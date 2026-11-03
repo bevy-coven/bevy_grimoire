@@ -260,6 +260,21 @@ def steps(entries):
 PASSES_COLUMNS = ["pass", "at", "via", "host", "seconds", "model", "think", "build_jobs", "test_threads"]
 
 
+def state_for(repo="."):
+    """**The state dir for `repo`, with no arguments** — so a pass can time itself from anywhere.
+
+    `$WIGGUM_STATE` when the driver set it; otherwise the same path the driver derives, so a command
+    run by hand (from a shell, from Herdr, from Oh My Pie) writes the file the reports already read
+    instead of inventing a second one. Anything else would be a state dir nobody looks at.
+    """
+    explicit = os.environ.get("WIGGUM_STATE")
+    if explicit:
+        return explicit
+    real = os.path.realpath(repo or ".")
+    return str(Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+               / "wiggum" / os.path.basename(real))
+
+
 def read_passes(state):
     """The pass ledger: one row per pass, whoever drove it. A missing file is an empty ledger."""
     path = Path(state) / "passes.tsv"
@@ -678,13 +693,14 @@ def main(argv=None):
     b.add_argument("--state", required=True)
     b.add_argument("--last", type=int, default=0)
     be = sub.add_parser("begin", help="number a pass and open its ledger row, before it runs")
-    be.add_argument("--state", required=True)
+    be.add_argument("--state", default="", help="default: the state dir this clone's driver uses")
+    be.add_argument("--repo", default=".")
     be.add_argument("--via", default="manual", help="who drives it: manual, wiggum")
     be.add_argument("--pass", dest="pass_no", type=int, default=0,
                     help="the number, when the caller already chose one (the driver does)")
     en = sub.add_parser("end", help="close a pass: its wall time, its steps, whether it shipped")
-    en.add_argument("--repo", required=True)
-    en.add_argument("--state", required=True)
+    en.add_argument("--repo", default=".")
+    en.add_argument("--state", default="")
     en.add_argument("--pass", dest="pass_no", type=int, default=0)
     en.add_argument("--from", dest="start", default="", help="origin/main when the pass started, for the audit")
     p = sub.add_parser("report", help="where the time goes")
@@ -705,10 +721,12 @@ def main(argv=None):
         print(f"phase: {a.phase} at {dt.datetime.now(dt.timezone.utc):%H:%M:%SZ}")
         return 0
     if a.cmd == "begin":
+        a.state = a.state or state_for(a.repo)
         n = begin(a.state, a.via, a.pass_no)
         print(f"pass {n} begins ({a.via})")
         return 0
     if a.cmd == "end":
+        a.state = a.state or state_for(a.repo)
         n = a.pass_no or int((Path(a.state) / "pass-count").read_text().strip() or 0)
         print(end(a.state, n, a.repo))
         if a.start:
