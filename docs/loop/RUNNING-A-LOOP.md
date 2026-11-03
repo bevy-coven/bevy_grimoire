@@ -471,3 +471,37 @@ It never resets, cleans, rebases, force-pushes or kills a pass, exactly like the
 (gooey is started by `gooey-grimoire-watch.timer` while a `grimoire-ui` issue is open, and the editor's
 is hand-driven), so that test would have been a dead branch — it was written, caught by testing the
 branch with a planted file, and replaced.
+
+## Driving the editor loop by hand without losing the loop's memory (measured 2026-11-02)
+
+Herdr is the right place to drive a pass: the `pass` tab runs `manual-emerge-omp.sh`, which numbers the
+pass, stamps `manual pass N START`, and gives it the retired unit's exact environment (same clone,
+`CARGO_TARGET_DIR=~/target/emerge-loop`, `RENDER=:99` display, 6 build jobs, 4 test threads).
+
+**The trap is re-running the command instead of restarting the helper.** Measured 2026-11-02: one omp
+process had been open 6 h 58 m and its commits reached **pass 250**, while `pass-count` still read
+**233** — the number `manual-emerge-omp.sh` had given pass 233. Re-running `/build-loop` in the same
+session is convenient and it is what actually happened, but it skips everything the helper does at each
+pass boundary, so there are **17 passes with no `steps record`, no `steps audit`, no `loop-stats` row
+and no `END` line**. Nothing about the code was wrong — #231 and #275 shipped — but the loop's own
+memory of those passes is gone, and `loops-watchdog.sh` spent that time judging a pass from 06:25.
+
+**Use `wiggum.sh one` instead.** It is one pass, foreground, its output on screen — the same on-screen
+feedback as re-running by hand — but it is also a pass *in this checkout*: it takes the next number from
+`pass-count`, stamps `START` and `END`, records the steps, audits what shipped and publishes the row.
+Same `/build-loop`, same `--model`, same env. There is no gap to close.
+
+```sh
+WIGGUM_REPO=~/bevy_emerge_loop ~/.local/share/wiggum/wiggum.sh one
+```
+
+Two things to know before running it:
+
+- **It has no lock against a hand pass.** `other_driver_running` looks only for the `wiggum-<user>-<repo>`
+  marker, which a Herdr omp does not carry, so `one` will happily start beside a pass you already have
+  open. Run it when the `pass` tab is idle, and check `wiggum.sh status` first.
+- **`wiggum.sh guard` exits 1 while any pass is in flight** *or* the clone is dirty, so it is not a
+  "is it safe to run one" test — the dirty case is the normal state mid-pass.
+
+The hourly check now reports this drift (`pass-count` vs the highest pass named in commits, and the
+newest audit row), so it cannot quietly go 17 passes again.
