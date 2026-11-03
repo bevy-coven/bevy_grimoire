@@ -43,6 +43,10 @@ pub struct View {
     /// The snap ladder's rung: what a piece is nudged to, and what the grid is drawn at.
     #[serde(default, serialize_with = "rung_out", deserialize_with = "rung_in")]
     pub rung: SnapLevel,
+    /// **Whether the journal is up** (`Cmd+E`). Not persisted: a panel a person opened to read one
+    /// refusal should not meet them again next launch, so this is session state like the rung.
+    #[serde(default)]
+    pub journal_open: bool,
 }
 
 fn rung_out<S: Serializer>(rung: &SnapLevel, s: S) -> Result<S::Ok, S::Error> {
@@ -61,6 +65,13 @@ impl View {
     pub fn cycle_grid(&mut self) -> SnapLevel {
         self.rung = self.rung.next();
         self.rung
+    }
+
+    /// **The journal, up or down**, and the answer is what it is now. A toggle rather than a set,
+    /// because `Cmd+E` is the only way in and the only way out.
+    pub fn toggle_journal(&mut self) -> bool {
+        self.journal_open = !self.journal_open;
+        self.journal_open
     }
 }
 
@@ -81,8 +92,17 @@ mod tests {
     /// **A rung survives a round trip**, which is what lets the front ends carry it as a value.
     #[test]
     fn a_view_round_trips_through_json() {
-        let view = View { rung: SnapLevel::Finer };
+        let view = View { rung: SnapLevel::Finer, journal_open: true };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);
+    }
+
+    /// **The journal toggles, and says which way it went.**
+    #[test]
+    fn the_journal_toggles_both_ways() {
+        let mut view = View::default();
+        assert!(!view.journal_open, "a session opens with the journal down");
+        assert!(view.toggle_journal(), "the first press opens it");
+        assert!(!view.toggle_journal(), "and the second closes it");
     }
 }

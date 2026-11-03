@@ -1853,6 +1853,67 @@ pub mod fill {
 /// could not reach a view. `Ctx::view` is that way, and this operation is what proves it: the key and the
 /// MCP call dispatch the same operation, and `the_same_view_change_by_key_and_by_mcp_is_one_operation`
 /// holds them to it.
+/// **The journal panel, up or down** (E-002, #129): a view verb with a panel for its effect.
+///
+/// `Cmd+E` has always toggled it by writing `Display` on the panel's node. That is view state, so the
+/// operation carries it in `Ctx::view` and the front end applies what comes back — the same shape
+/// `view_cycle_grid` proved.
+pub mod view_toggle_journal {
+    use super::*;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {}
+
+    pub struct ViewToggleJournal;
+
+    impl Operation for ViewToggleJournal {
+        fn name(&self) -> &'static str {
+            "view_toggle_journal"
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            // A panel being up is not project data: no map, no file, no undo step.
+            &[]
+        }
+
+        fn undo(&self) -> Undo {
+            // **Not an edit.** `Cmd+Z` after `Cmd+E` must take back the last change to the grimoire,
+            // not reopen a panel the person closed on purpose.
+            Undo::None
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+
+        fn plan(&self, ctx: &Ctx, _params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let Some(view) = ctx.view.as_ref() else {
+                return Err(Refusal::new(
+                    "no view is in hand, so there is no journal to toggle. An editor front end carries one \
+                     in `Ctx::view`.",
+                ));
+            };
+            Ok(json!({ "now": if view.journal_open { "down" } else { "up" } }))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            self.plan(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no journal to toggle."));
+            };
+            let open = view.toggle_journal();
+            Ok(Outcome {
+                summary: if open { "journal up".to_owned() } else { "journal down".to_owned() },
+                affected: 0,
+                saved: false,
+                inverse: None,
+                after: Some(json!({ "journal": if open { "up" } else { "down" } })),
+            })
+        }
+    }
+}
+
 pub mod view_cycle_grid {
     use super::*;
     use serde_json::json;
@@ -4030,6 +4091,7 @@ pub mod rig_adopt_measured {
 pub fn registry() -> Vec<Box<dyn Operation>> {
     vec![
         Box::new(view_cycle_grid::ViewCycleGrid),
+        Box::new(view_toggle_journal::ViewToggleJournal),
         Box::new(map_create::MapCreate),
         Box::new(map_set_settings::MapSetSettings),
         Box::new(layout_propose::LayoutPropose),
@@ -4275,6 +4337,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // rung is view state, so the key carries `Ctx::view` in and reads it back out; the operation is the
     // one place that decides what a cycle means.
     ("view_cycle_grid", "\"view_cycle_grid\""),
+    // **The journal key**, `Cmd+E`, which dispatches `view_toggle_journal` (E-002, #129). The panel's
+    // `Display` is what changes; the operation decides up or down and the front end applies it.
+    ("view_toggle_journal", "\"view_toggle_journal\", &serde_json"),
     // **The map's name field**, which the N key opens. Enter dispatches `map_rename` through
     // `rename_map`, so the name rule and the file's move are the operation's.
     ("map_rename", "rename_map("),

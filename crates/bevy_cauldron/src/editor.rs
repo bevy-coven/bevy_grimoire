@@ -7083,7 +7083,7 @@ fn cycle_grid(
         project: Some(project.clone()),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
-        view: Some(crate::ops_view::View { rung: rung.0 }),
+        view: Some(crate::ops_view::View { rung: rung.0, ..Default::default() }),
         ..crate::ops::Ctx::default()
     };
     let outcome = crate::ops::dispatch(&mut ctx, "view_cycle_grid", &serde_json::json!({}));

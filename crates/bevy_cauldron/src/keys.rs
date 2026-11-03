@@ -904,6 +904,8 @@ impl Action {
             // **The grid rung is view state, and `Ctx::view` is how an operation reaches one**
             // (E-002, #129). The key dispatches the same operation an agent calls.
             Action::CycleGrid => Some("view_cycle_grid"),
+            // **The journal is a panel, and which panel is up is view state** (E-002, #129).
+            Action::ShowErrors => Some("view_toggle_journal"),
             Action::Straighten => Some("placement_set_pose"),
             Action::PalettePrev | Action::PaletteNext => Some("brush_arm"),
             Action::ArmComposition | Action::ComposeArm => Some("composition_arm"),

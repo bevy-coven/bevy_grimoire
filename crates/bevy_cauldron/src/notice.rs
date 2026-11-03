@@ -645,11 +645,24 @@ fn toggle_journal(
     if !keys::just_pressed(&keyboard, *live, Action::ShowErrors) {
         return;
     }
+    // **The key dispatches the operation an agent calls** (E-002, #129). Up or down is the operation's
+    // answer, read from the panel's own `Display` and written back after it — so the key and an MCP
+    // call change the same thing, and `view_toggle_journal` is the one place that decides what a toggle
+    // means.
+    let open = panels.iter().any(|n| n.display != Display::None);
+    let mut ctx = crate::ops::Ctx {
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { journal_open: open, ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, "view_toggle_journal", &serde_json::json!({}));
+    let open = ctx.view.map(|v| v.journal_open).unwrap_or(open);
     // **The toast stands down when the journal comes up** ([`raise_toast`] sees the open panel): both
     // are at the top of the viewport, and the journal's first line IS the toast's sentence.
+    let _ = outcome;
     for mut node in &mut panels {
-        let opening = node.display == Display::None;
-        node.display = if opening { Display::Flex } else { Display::None };
+        node.display = if open { Display::Flex } else { Display::None };
     }
 }
 
