@@ -79,10 +79,19 @@ fn a_theme_edit_reaches_a_panel_that_was_already_built() {
             BackgroundColor(chrome::PANEL_BG),
         ))
         .id();
-    // A band carries the marker *not*: it must keep its own colour through the same system.
+    // A band is marked as a band, and follows the skin's `"bar_bg"` tone through the same system.
     let band = app
         .world_mut()
-        .spawn((chrome::Ground(chrome::BAR_BG), BackgroundColor(chrome::BAR_BG)))
+        .spawn((
+            chrome::Ground(chrome::BAR_BG),
+            chrome::BandGround,
+            BackgroundColor(chrome::BAR_BG),
+        ))
+        .id();
+    // A ground with neither marker — a row's, a field's — keeps its own colour.
+    let plain = app
+        .world_mut()
+        .spawn((chrome::Ground(chrome::SLOT_BG), BackgroundColor(chrome::SLOT_BG)))
         .id();
     app.update();
     assert_eq!(app.world().get::<BackgroundColor>(panel).unwrap().0, chrome::PANEL_BG);
@@ -101,6 +110,48 @@ fn a_theme_edit_reaches_a_panel_that_was_already_built() {
     assert_eq!(
         app.world().get::<BackgroundColor>(band).unwrap().0,
         chrome::BAR_BG,
-        "a band has no gooey role, so it keeps its own constant through the same system"
+        "the shipped skin carries the band's colour as its `bar_bg` tone, so a band is unchanged today"
+    );
+    assert_eq!(
+        app.world().get::<BackgroundColor>(plain).unwrap().0,
+        chrome::SLOT_BG,
+        "a ground with no marker keeps its own colour through the same system"
+    );
+}
+
+/// **A project's skin can restyle the bands, and the editor's own cannot move** — which is the whole
+/// reason the band reads a `tone` and falls back rather than shipping one.
+///
+/// `the_skin_carries_the_editors_other_colours.rs` pins the editor skin's tone set *exactly*, so a tone
+/// added to `editor_skin.ron` re-pins a protected assertion and is not this pass's to make. A tone a
+/// **project** writes is a different thing: it is in the project's own `family/bevy_gooey.ron`, no
+/// protected set describes it, and it must reach the status bar and the chrome bar.
+#[test]
+fn a_projects_bar_tone_repaints_the_bands() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.init_resource::<ButtonInput<KeyCode>>();
+    app.insert_resource(bevy_cauldron::keys::Live::default());
+    app.add_systems(Update, chrome::dim_the_ground);
+
+    let band = app
+        .world_mut()
+        .spawn((
+            chrome::Ground(chrome::BAR_BG),
+            chrome::BandGround,
+            BackgroundColor(chrome::BAR_BG),
+        ))
+        .id();
+
+    // A project's skin: the editor's own, plus one tone it wrote for its bands.
+    let mut project = bevy_cauldron::ui::editor_skin();
+    project.tones.insert("bar_bg".to_owned(), Color::srgb(0.5, 0.1, 0.6));
+    app.insert_resource(project);
+    app.update();
+
+    assert_eq!(
+        app.world().get::<BackgroundColor>(band).unwrap().0,
+        Color::srgb(0.5, 0.1, 0.6),
+        "a project's `bar_bg` tone must reach the band"
     );
 }

@@ -947,6 +947,12 @@ pub struct Ground(pub Color);
 #[derive(Component)]
 pub struct PanelGround;
 
+/// **This ground is a band's** — the chrome bar and the status bar. Painted from
+/// [`PanelFills::band`], which is the skin's `"bar_bg"` tone, through the same system that paints a
+/// panel's, so a project's skin restyles both and the editor keeps one place that decides a ground.
+#[derive(Component)]
+pub struct BandGround;
+
 /// **The fills a panel and a band take from the running skin** (UI-02, #210, slice 4b).
 ///
 /// `panel_root` used to spawn `PANEL_BG` and `BAR_BG` — constants — so every panel in the editor was
@@ -964,9 +970,11 @@ pub struct PanelGround;
 pub struct PanelFills {
     /// A panel's ground — [`GooeySkin::surface`](bevy_gooey::GooeySkin::surface).
     pub panel: Color,
-    /// A band's ground — the status bar and the chrome bar. gooey has no `band` role, so this stays
-    /// the editor's own constant until the skin grows one; the field exists so the panel can stop
-    /// carrying two separate answers.
+    /// A band's ground — the status bar and the chrome bar. A skin that carries a `"bar_bg"` tone paints
+    /// the bands with it; one that does not (including the editor's own, whose exact tone set is pinned
+    /// by `the_skin_carries_the_editors_other_colours.rs`) falls back to [`BAR_BG`], which is what the
+    /// editor has always painted. So a *project's* skin can restyle the bands today without a protected
+    /// assertion moving, and the editor's own look is unchanged by construction.
     pub band: Color,
 }
 
@@ -974,7 +982,10 @@ impl PanelFills {
     /// From the running skin when there is one, the constants when there is not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> PanelFills {
         match skin {
-            Some(s) => PanelFills { panel: s.surface, band: BAR_BG },
+            Some(s) => PanelFills {
+                panel: s.surface,
+                band: s.tone("bar_bg").unwrap_or(BAR_BG),
+            },
             None => PanelFills { panel: PANEL_BG, band: BAR_BG },
         }
     }
@@ -1118,6 +1129,7 @@ pub fn spawn_frame(mut commands: Commands) {
             }),
             BackgroundColor(BAR_BG),
             Ground(BAR_BG),
+            BandGround,
             BorderColor::all(PANEL_EDGE),
             bevy::picking::Pickable::IGNORE,
         ))
@@ -1264,6 +1276,7 @@ pub fn spawn_frame(mut commands: Commands) {
             AccessibleLabel::new("Status bar"),
             BackgroundColor(BAR_BG),
             Ground(BAR_BG),
+            BandGround,
             BorderColor::all(PANEL_EDGE),
             bevy::picking::Pickable::IGNORE,
         ))
@@ -3889,15 +3902,21 @@ pub fn dim_the_ground(
     // `panel_root`'s six callers have no `Res<GooeySkin>`. A `None` skin (a headless harness that
     // never ran `EditorUiPlugin`) keeps the constant, which is the shipped table.
     skin: Option<Res<bevy_gooey::GooeySkin>>,
-    mut grounds: Query<(&Ground, Option<&PanelGround>, &mut BackgroundColor)>,
+    mut grounds: Query<(&Ground, Option<&PanelGround>, Option<&BandGround>, &mut BackgroundColor)>,
 ) {
     let held = keys::pressed(&keyboard, *live, keys::Action::Shortcuts);
     let fills = PanelFills::of(skin.as_deref());
-    for (ground, is_panel, mut bg) in &mut grounds {
-        // A panel's rest colour follows the skin; a band's is its own carried constant. Reading the
-        // skin *here* rather than at spawn is what makes a theme edit reach panels that were built
+    for (ground, is_panel, is_band, mut bg) in &mut grounds {
+        // A panel's and a band's rest colour follow the skin; anything else carries its own. Reading
+        // the skin *here* rather than at spawn is what makes a theme edit reach a panel that was built
         // before it — the whole point of a skin being data.
-        let rest = if is_panel.is_some() { fills.panel } else { ground.0 };
+        let rest = if is_panel.is_some() {
+            fills.panel
+        } else if is_band.is_some() {
+            fills.band
+        } else {
+            ground.0
+        };
         let want = if held { rest.with_alpha(rest.alpha() * GROUND_HELD) } else { rest };
         if bg.0 != want {
             bg.0 = want;
