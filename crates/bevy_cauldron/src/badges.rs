@@ -460,7 +460,13 @@ impl Plugin for BadgePlugin {
 }
 
 /// The layer, spawned once and hidden until the key is down.
-fn spawn_layer(mut commands: Commands, frame: Res<chrome::Frame>) {
+fn spawn_layer(
+    mut commands: Commands,
+    frame: Res<chrome::Frame>,
+    // **The veil the layer paints, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+) {
+    let ink = BadgeInk::of(skin.as_deref());
     let layer = commands
         .spawn((
             BadgeLayer,
@@ -489,7 +495,7 @@ fn spawn_layer(mut commands: Commands, frame: Res<chrome::Frame>) {
             // Below `confirm`'s 900, deliberately: a question you have to answer outranks a hint
             // about keys.
             GlobalZIndex(chrome::BADGE_Z),
-            BackgroundColor(VEIL),
+            BackgroundColor(ink.veil),
         ))
         .id();
     commands.entity(frame.root).add_child(layer);
@@ -596,6 +602,10 @@ pub fn resolve(home: Home, on_screen: &[keys::ControlId]) -> Home {
 struct Shortcut<'w> {
     keyboard: Res<'w, ButtonInput<KeyCode>>,
     live: Res<'w, keys::Live>,
+    /// **The badge layer's ink, from the editor's skin** (UI-02, #210): a project's skin file
+    /// reaches the keyboard legend like every other surface. Read here rather than as a system
+    /// parameter because it is one more thing a rebuild reads, not its own question.
+    skin: Option<Res<'w, bevy_gooey::GooeySkin>>,
 }
 
 /// The clusters and leader segments a rebuild sweeps.
@@ -622,7 +632,8 @@ fn rebuild_badges(
     // where its badge may go is a fact about the pane, and that is `place_badges`'s question.
     controls: Query<(Entity, &chrome::Control, &ComputedNode, &UiGlobalTransform)>,
 ) {
-    let Shortcut { keyboard, live } = shortcut;
+    let Shortcut { keyboard, live, skin } = shortcut;
+    let ink = BadgeInk::of(skin.as_deref());
     let Stale { clusters, segs } = stale;
     let want = keys::pressed(&keyboard, *live, keys::Action::Shortcuts);
     for (_, mut node) in &mut layers {
@@ -825,8 +836,8 @@ fn rebuild_badges(
                         row_gap: Val::Px(GAP_TIGHT),
                         ..default()
                     },
-                    BackgroundColor(if labelled { PANEL_BG } else { Color::NONE }),
-                    BorderColor::all(if labelled { KEY } else { Color::NONE }),
+                    BackgroundColor(if labelled { ink.panel } else { Color::NONE }),
+                    BorderColor::all(if labelled { ink.key } else { Color::NONE }),
                     // Hidden, not `Display::None`: a node that is not displayed is never laid out,
                     // so it could never acquire the size `place_badges` needs to position it. A
                     // visibility-hidden UI node does occupy layout, which is the difference.
@@ -844,6 +855,7 @@ fn rebuild_badges(
                             labelled,
                             chord_col(*home),
                             if legend { DOES_COL } else { CONTROL_DOES_COL },
+                            ink,
                         );
                     }
                 });
@@ -2298,6 +2310,50 @@ fn flash_live_badges(
     }
 }
 
+/// **The badge layer's ink, from the editor's skin** (UI-02, #210).
+///
+/// A badge is drawn in four colours: the panel ground it stands on, the chord's ink,
+/// the description's quieter ink, and the veil behind the whole layer. Each is a `GooeySkin`
+/// field or a named tone, so a project's skin file reaches the keyboard legend too.
+///
+/// **Each falls back to its `chrome.rs` constant**, exactly as [`crate::chrome::RowFills`] does:
+/// a harness that builds `badges` without a skin gets the shipped palette, which is what every
+/// test that reads a badge's ink already expects. That is why moving a colour here re-pins nothing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BadgeInk {
+    /// The box a labelled cluster stands on — a panel's own ground.
+    pub panel: Color,
+    /// A chord's ink, and the box's hairline. `key` is a tone: gooey#33 gave a host a map for
+    /// colours no field carries, and this is one.
+    pub key: Color,
+    /// A description's ink, one step quieter than the chord. The skin's `text_muted` **is**
+    /// `chrome::DIM` (0.700, 0.685, 0.655), so this is a field and not a tone.
+    pub dim: Color,
+    /// The wash the layer paints across the window so badges read over any ground.
+    pub veil: Color,
+}
+
+impl BadgeInk {
+    /// The shipped palette, for a build with no skin.
+    pub const SHIPPED: BadgeInk = BadgeInk {
+        panel: PANEL_BG,
+        key: KEY,
+        dim: chrome::DIM,
+        veil: VEIL,
+    };
+
+    /// The skin's ink where it has one, the shipped constant where it does not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> BadgeInk {
+        let Some(skin) = skin else { return BadgeInk::SHIPPED };
+        BadgeInk {
+            panel: skin.surface,
+            key: skin.tone("key").unwrap_or(KEY),
+            dim: skin.text_muted,
+            veil: skin.tone("veil").unwrap_or(VEIL),
+        }
+    }
+}
+
 /// **One badge, wherever it is going.** The pad and the ordinary flow spawn the same thing; a second
 /// spelling of a badge is the drift `chrome.rs` exists to stop, one module along.
 fn one_badge(
@@ -2306,6 +2362,7 @@ fn one_badge(
     boxed: bool,
     chord_col: f32,
     does_col: f32,
+    ink: BadgeInk,
 ) {
     c.spawn((
         Badge(badge.actions.clone()),
@@ -2334,14 +2391,14 @@ fn one_badge(
         // grounds: against the bright viewport the near-black fill is maximum
         // contrast, and against a panel — where the fill matches the ground —
         // the border is what separates it. The border is not decoration.
-        BackgroundColor(if boxed { Color::NONE } else { PANEL_BG }),
-        BorderColor::all(if boxed { Color::NONE } else { KEY }),
+        BackgroundColor(if boxed { Color::NONE } else { ink.panel }),
+        BorderColor::all(if boxed { Color::NONE } else { ink.key }),
         // The rest state a lit chord returns to. Transparent inside a box, which is what lets
         // `flash_live_badges` still read: an unlit row shows the box's own fill, and a lit one
         // takes `ROW_SELECTED` + `ACCENT` and stands out *within* the box rather than beside it.
         BadgeRest(
-            if boxed { Color::NONE } else { PANEL_BG },
-            if boxed { Color::NONE } else { KEY },
+            if boxed { Color::NONE } else { ink.panel },
+            if boxed { Color::NONE } else { ink.key },
         ),
         bevy::picking::Pickable::IGNORE,
     ))
@@ -2357,7 +2414,7 @@ fn one_badge(
                 ..default()
             },
             Text::new(badge.chord.clone()),
-            TextColor(KEY),
+            TextColor(ink.key),
             // The chord is the one thing a badge exists to have read, so it gets the reading
             // size — the descriptions stay at `HINT`, quieter on both axes.
             chrome::font(chrome::text::BODY),
@@ -2404,7 +2461,7 @@ fn one_badge(
                     Text::new(badge.does.to_owned()),
                     // Quieter than the chord: the chord is what the eye scans
                     // for, the words are what tell it whether to stop.
-                    TextColor(chrome::DIM),
+                    TextColor(ink.dim),
                     chrome::font(chrome::text::HINT),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     bevy::picking::Pickable::IGNORE,
