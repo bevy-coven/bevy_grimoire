@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **274-siren-builds** `ccbe2b9` The audio panel's feature builds: a duplicate module declaration and a missing plugin kept --features bevy_siren from compiling, and its four tests unreachable (#274) *No clip: visible, not yet recorded: the panel's AUDIO section sits below the fold and a storyboard's wheel step does not reach MapControlsPane (four attempts, reported on #274); proved by cargo test -p bevy_cauldron --features bevy_siren --test editor audio_panel (4 passed)*
 - **210-colour-ceiling** `0ee551a` The editor's colour table only shrinks: a ceiling on constants and their uses while #210's migration runs *No clip: a test ratchet, no visible surface; proved by crates/bevy_cauldron/tests/the_colour_table_only_shrinks.rs (fails when a 29th colour constant is added)*
 - **280-lens-ratchet** `491fe09` The loop's own research lenses are checked against the tree: six of ten said 'not built' about work that is in it (#280) *No clip: a test and a filed issue, no visible surface; proved by crates/bevy_cauldron/tests/the_commands_lenses_match_the_tree.rs (fails when the stale set changes)*
 - **210-list-words-skin** `35d6696` The shared list's words come from the editor skin, so a project's theme reaches every row (#210) *No clip: invisible by design, as the issue asks: the skin's four values are the four constants today, asserted by the_lists_ink_is_the_skins_and_the_skin_is_the_palette*
