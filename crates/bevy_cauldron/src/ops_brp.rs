@@ -290,6 +290,51 @@ pub(crate) fn put_back(
     }
 }
 
+/// **`grimoire/pointer` — where the cursor is, and how far down the input chain it has got.**
+///
+/// Three passes lost time to a live drag that does nothing while a headless one works, and every
+/// attempt ended at the same wall: the editor's input state is **not observable over BRP**. Measured on
+/// a running editor: `PointerLocation` came back `{}`, and no `bevy_fairy` resource was reflectable, so
+/// a pass could not tell whether the recorder's cursor arrived, whether `view::Pointer` held a
+/// position, or whether the picker had a location — the three facts that decide the question.
+///
+/// Each part answers a different question, and a drag that does nothing is one of them being wrong:
+///
+/// * `cursor` — what [`crate::view::Pointer`] decided, which is the crate's one answer to "where is the
+///   cursor" (it reads the injected cursor through `bevy_fairy`, not the window);
+/// * `target` and `position` — what `bevy_picking` was actually given, which is what its backend tests;
+/// * `over_ui` — the layout's own answer, which is a *different* question from the picker's.
+pub fn pointer_payload(
+    cursor: Option<Vec2>,
+    location: Option<(String, Vec2)>,
+    over_ui: bool,
+) -> Value {
+    let at = |p: Vec2| json!([p.x, p.y]);
+    json!({
+        "cursor": cursor.map(at),
+        "target": location.as_ref().map(|(t, _)| t.clone()),
+        "position": location.map(|(_, p)| at(p)),
+        "over_ui": over_ui,
+    })
+}
+
+/// **`grimoire/pointer` — read the input chain.** See [`pointer_payload`] for what each part means.
+fn pointer(
+    _: In<Value>,
+    cursor: Option<Res<crate::view::Pointer>>,
+    over_ui: Option<Res<crate::view::OverUi>>,
+    pointers: Query<&bevy::picking::pointer::PointerLocation>,
+) -> Result<Value, String> {
+    let location = pointers
+        .iter()
+        .find_map(|l| l.location().map(|l| (format!("{:?}", l.target), l.position)));
+    Ok(pointer_payload(
+        cursor.and_then(|c| c.0),
+        location,
+        over_ui.is_some_and(|o| o.0),
+    ))
+}
+
 /// **`grimoire/project_root` — which project the editor has open.**
 ///
 /// **A read, and the one fact the MCP server cannot know for itself.** The server is told a
@@ -2120,6 +2165,18 @@ impl Plugin for OpsBridgePlugin {
         if !app.is_plugin_added::<crate::command_run::CommandRunPlugin>() {
             app.add_plugins(crate::command_run::CommandRunPlugin);
         }
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/pointer",
+                "Where the cursor is, and how far down the input chain it has got: what \
+                 `view::Pointer` decided, what `bevy_picking` was given, and whether the layout says \
+                 the pointer is over the interface. Three passes could not see this, which is why a \
+                 live drag that did nothing could not be diagnosed.",
+            )
+            .example(json!({})),
+            pointer,
+        );
 
         app.add_debug_command(
             DebugCommandInfo::new(
