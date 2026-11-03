@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **all-demos-fresh** `6a71ded` All nine standing demos show the current editor again: build-a-map re-recorded from its two storyboard defects *No clip: recorded media, not a feature; docs/media/build-a-map.gif and tools/demo/stale.py reporting nine fresh*
+- **blank-frame-calibrated** `c1460ce` A calibrated blank-frame check fails the run on a blank capture and passes on a good one, proved with a replayed model *No clip: a test over the check policy; proved by crates/bevy_oracle/tests/a_calibrated_blank_frame_check_fails_the_run.rs*
 - **clip-calibration-record** `43f348e` The clip check's calibration is a file a test reads: 61.5% on 122 labelled samples, so the check stays advisory *No clip: a calibration record and its test; proved by crates/bevy_oracle/tests/the_clips_calibration_is_recorded.rs*
 - **snip-receipt** `19598ac` Ctrl+\ arms the snip and shows a receipt, instead of a red 'nothing was changed' over the editor on every press *No clip: a false refusal message removed; proved by crates/bevy_cauldron/tests/an_operation_that_writes_nothing_needs_no_log.rs (reports the banner without the fix, no problem with it)*
 - **dock-resize-floor** `5258721` A dock resize stops at 96 px, so the viewport is never squashed to nothing *No clip: a floor on a split's panes; proved by crates/bevy_cauldron/tests/a_dock_resize_never_covers_the_viewport.rs (47 px without it, 115 px with it, at SplitFraction 0.95)*
