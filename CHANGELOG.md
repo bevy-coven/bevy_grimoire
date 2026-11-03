@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-02
 
+- **255-view-cycle-grid** `778d102` a view verb is an operation: the grid key and an agent dispatch the same change *No clip: no visible surface changed — the grid rung cycles exactly as before, now through an operation; proved by operations_have_two_front_ends 8/8*
 - **254-blank-frame-calibrated** `ef8a26f` the blank_frame check is measured at 100% on 60 samples, and its calibration is the owner's to turn on *No clip: a measurement and a doc; proved by the recorded set and figures in docs/decide/checking-captures.md*
 - **253-clip-agreement** `054fe45` the clip check's agreement is measured: 61.5% on 122 samples, so it stays advisory *No clip: a measurement and a CLI flag; proved by clip::tests::a_scored_sample_reads_the_answer_the_request_asked_for and the recorded figure*
 - **252-panel-labels** `38e0575` every panel says what it is to a screen reader *No clip: accessible-name only, nothing on screen changes; proved by the_shell_is_a_gooey_dock::every_panel_answers_a_screen_reader_by_its_name (failed before: Named panels ["MAP"])*
