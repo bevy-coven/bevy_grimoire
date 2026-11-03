@@ -1164,7 +1164,16 @@ pub fn spawn_frame(mut commands: Commands) {
         .spawn((
             bevy_gooey::split(bevy_gooey::SplitAxis::Horizontal, (), ()),
             bevy_gooey::SplitFraction(0.22),
-            bevy::picking::Pickable::IGNORE,
+            // **`Pickable::default()`, not `IGNORE`** (UI-30, #224). `bevy_picking` skips an
+            // entity *and everything below it* when the entity is `IGNORE`, so an ignoring split
+            // root made its divider — the one grabbable node in the frame — unhittable: the
+            // pointer reached the divider's cursor, the drag press landed on nothing, and the
+            // fraction stayed at 0.22 through every drag. The frame's rule is about `Hovered`
+            // propagating (`spawn_frame`'s header), and a pickable node without `Hovered` sets
+            // none: the panes keep `IGNORE` via `adopt_the_shell_split`, and the divider carries
+            // no `Hovered` in this gooey revision. Measured over BRP after the fix: a 105-px drag
+            // takes `SplitFraction` from 0.22 to 0.32.
+            bevy::picking::Pickable::default(),
             ShellSplit,
         ))
         .id();

@@ -1,0 +1,26 @@
+{
+  "name": "shell_regions",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "chunks": [
+    {
+      "seconds": 6
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.5,
+      "caption": "the Cauldron's shell: a left dock, the viewport, a right dock and the status bar"
+    },
+    {
+      "at": 2.2,
+      "key": "KeyD",
+      "mods": [
+        "ShiftLeft"
+      ],
+      "hold": 1.2,
+      "caption": "panning the viewport: the world fits inside the hole the docks leave"
+    }
+  ]
+}
