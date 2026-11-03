@@ -577,6 +577,8 @@ fn spawn_compose_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
         true,
         // Starts hidden: the editor opens in map mode.
         true,
+        // What a screen reader calls this panel (UI-30, #224).
+        "COMPOSE",
     )
     .insert(ComposeRoot)
     .with_children(|p| {

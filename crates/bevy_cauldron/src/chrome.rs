@@ -766,6 +766,9 @@ pub fn panel_root<'a>(
     width: f32,
     full_height: bool,
     hidden: bool,
+    // What a screen reader calls this panel. Every spawner has one — it is the heading the panel
+    // draws — so this is never a second copy of a name (see `headless::the_tab_strip_describes_itself`).
+    label: &str,
 ) -> EntityCommands<'a> {
     let mut node = Node {
         width: Val::Px(width),
@@ -797,6 +800,11 @@ pub fn panel_root<'a>(
         .spawn((
             node,
             PanelWidth { preferred: width, side },
+            // **The panel's name, for something that cannot see it** (UI-30, #224). A `Role::Panel` is a
+            // box in the accessibility tree with no name on it, so a reader meets the editor as a set of
+            // unlabelled regions. `label` is what the panel calls itself on screen, passed in by its
+            // spawner; `AccessibleLabel` is what a reader reads out.
+            bevy::prelude::AccessibleLabel::new(label),
             BackgroundColor(PANEL_BG),
             Ground(PANEL_BG),
             // The edge and the corner are what make this read as a surface rather than as a

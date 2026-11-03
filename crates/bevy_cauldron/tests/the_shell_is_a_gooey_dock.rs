@@ -92,3 +92,31 @@ fn the_viewport_has_its_own_pane_in_the_dock_layout() {
         }
     }
 }
+
+/// **Every region of the shell answers to a screen reader by its name** (UI-30, #224, acceptance item 1).
+///
+/// A `Role::Panel` is a box in the accessibility tree with **no name on it**, so the editor met a
+/// reader as four or five unlabelled regions: "panel, panel, panel". The acceptance asks that a
+/// headless test find each region *by its accessible label*, which is only true if the panels carry
+/// one — so this asks the tree the same question a reader would.
+///
+/// It is deliberately not satisfied by the heading drawn inside the panel: a `Text` node is read out
+/// when focus reaches it, which is no help to someone who needs to know what the region *is* before
+/// they enter it.
+#[test]
+fn every_panel_answers_a_screen_reader_by_its_name() {
+    let (_root, mut app) = editor("shell-a11y");
+    let world = app.world_mut();
+    // Every node in the tree that carries a name, whatever its role: what matters is that the
+    // region a person is in can say what it is, not which role the crate happened to give the box.
+    let mut named_nodes = world.query::<&bevy::prelude::AccessibleLabel>();
+    let named: Vec<String> = named_nodes.iter(world).map(|l| l.0.clone()).collect();
+
+    for region in ["INSPECTOR", "PLACE"] {
+        assert!(
+            named.iter().any(|n| n == region),
+            "the `{region}` panel has no accessible name, so a screen reader meets it as an \
+             unlabelled box. Named panels: {named:?}"
+        );
+    }
+}

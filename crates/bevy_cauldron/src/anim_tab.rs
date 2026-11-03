@@ -353,6 +353,8 @@ fn spawn_panels(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         crate::chrome::CONTROLS_W,
         true,
         true,
+        // What a screen reader calls this panel (UI-30, #224).
+        "ANIMATION",
     )
     .insert(AnimRoot)
     .with_children(|p| {
@@ -394,6 +396,8 @@ fn spawn_panels(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         crate::chrome::LIST_W,
         true,
         true,
+        // What a screen reader calls this panel (UI-30, #224).
+        "RIGS",
     )
     .insert(AnimRoot)
     .with_children(|p| {

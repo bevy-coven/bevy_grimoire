@@ -4555,6 +4555,8 @@ fn spawn_tiles_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         true,
         // Starts hidden: the editor opens in map mode.
         true,
+        // What a screen reader calls this panel (UI-30, #224).
+        "CONTROLS",
     )
     .insert(TilesRoot)
     .with_children(|p| {
@@ -4622,6 +4624,8 @@ fn spawn_tiles_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         crate::chrome::LIST_W,
         true,
         true,
+        // What a screen reader calls this panel (UI-30, #224).
+        "TILES",
     )
     .insert(TilesRoot)
     // **`list_heading`, and the panel is named for what it lists.**

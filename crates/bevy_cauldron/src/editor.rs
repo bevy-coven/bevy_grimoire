@@ -3338,6 +3338,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
         // of. One left width and every panel scrollable is the 2026-09-03 decision (F15, D8).
         true,
         false,
+        // What a screen reader calls this panel (UI-30, #224): the heading it draws.
+        "INSPECTOR",
     )
     .insert(crate::tiles::MapRoot)
     .id();
@@ -3781,6 +3783,8 @@ fn spawn_palette_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
         // Pinned top AND bottom — the whole point of this panel.
         true,
         false,
+        // What a screen reader calls this panel (UI-30, #224): the heading it draws.
+        "PLACE",
     )
     // Tagged like the panel above so `tiles::apply_mode` hides it with the rest of the map tab — it
     // iterates every `MapRoot`, so a second one needs no change there. Without this the palette would
