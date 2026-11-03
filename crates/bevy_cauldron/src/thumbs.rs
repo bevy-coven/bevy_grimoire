@@ -76,6 +76,10 @@ const MESH_WAIT_FRAMES: u32 = 600;
 /// slot is the same ground under a different role, so the value is stated once, in chrome.
 const BACKDROP: Color = crate::chrome::SLOT_BG;
 
+/// **The bake's key in [`crate::jobs::Jobs`]** (UI-22, #223) — the producer's own name for its work,
+/// so the band and the stop button reach *this* job and no other.
+const BAKING: &str = "thumbs";
+
 /// The booth camera. Every other camera query filters positively on `view::MainCamera`, which is what
 /// stops this one breaking them; this marker is just how the baker finds its own camera back.
 #[derive(Component)]
@@ -115,6 +119,10 @@ pub struct Thumbnails {
     booth: Option<Entity>,
     /// The cache readback of the portrait being taken, while there is one.
     capture: Option<Capture>,
+    /// **A person stopped the bake** (UI-22, #223), so it does not stand the booth up again. Cleared
+    /// when the library changes, because a new piece is a new question and the answer to "bake this"
+    /// is the person's to give again.
+    stopped: bool,
 }
 
 impl Thumbnails {
@@ -331,6 +339,7 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         camera: None,
         booth: None,
         capture: None,
+        stopped: false,
     });
 }
 
@@ -364,6 +373,12 @@ fn prune(mut thumbs: ResMut<Thumbnails>, project: Option<Res<Project>>) {
     if !project.is_changed() {
         return;
     }
+    // **A changed library is a new question** (UI-22, #223): a person who stopped the bake and then
+    // imported a piece meant *that* piece to have a portrait. Cleared before the early return below,
+    // because the common case is a change with nothing dead in it — importing a piece adds one.
+    if thumbs.stopped {
+        thumbs.stopped = false;
+    }
     let live = |id: &str| project.library.descriptors.iter().any(|d| d.id == id);
     // Checked before any mutable touch, so the common frame does not mark the resource changed.
     let anything_dead = thumbs.images.keys().any(|id| !live(id))
@@ -390,6 +405,12 @@ fn unfinished(
     // Asking the library every frame costs a `position` over ~40 short strings and lets the booth return.
     match (thumbs, project) {
         (Some(t), Some(p)) => {
+            // **A stopped bake stays stopped** (UI-22, #223). Without this the run condition keeps
+            // asking "is anything left" and the very next frame stands the booth back up, which is a
+            // stop button that stops nothing. `prune` clears the flag when the library changes.
+            if t.stopped {
+                return false;
+            }
             let order = order.as_deref().map_or(&[][..], |o| o.0.as_slice());
             t.pending(&p.library, order).is_some() || t.camera.is_some()
         }
@@ -440,12 +461,29 @@ fn bake(
     order: Res<ThumbOrder>,
     project: Res<Project>,
     assets: Res<AssetServer>,
+    // **The bake is a job a person can see and stop** (UI-22, #223). `Option` so `ThumbsPlugin`
+    // still boots beside a harness that never added `JobsPlugin` — the resource is the editor's,
+    // and a bake without it simply reports nothing.
+    jobs: Option<Res<crate::jobs::Jobs>>,
     children: Query<&Children>,
     meshes: Query<(), With<Mesh3d>>,
     subjects: Query<&Subject>,
     bounds: Query<(&Aabb, &GlobalTransform)>,
     mut cams: Query<(&mut Transform, &mut Projection, &mut RenderTarget), With<ThumbnailCamera>>,
 ) {
+    // **A stop is honoured at a seam and nowhere else** (UI-22, #223): between two pieces, never
+    // during a portrait's own readback, which is the despawned-screenshot panic of #264. The booth
+    // comes down with it and `stopped` keeps it down, so a piece with no portrait keeps an empty
+    // tile instead of the whole library being restaged the next frame.
+    if let Some(jobs) = jobs.as_deref()
+        && jobs.cancel_requested(BAKING)
+    {
+        teardown(&mut commands, &mut thumbs);
+        thumbs.stopped = true;
+        jobs.finish(BAKING);
+        info!("the palette bake was stopped; {} piece(s) keep a blank tile", thumbs.images.len() - thumbs.baked.len());
+        return;
+    }
     // Every descriptor gets a handle as soon as it exists, so the palette has something to bind
     // before this one's turn comes round. A piece with a cached portrait gets its picture here and
     // is done — before `pending` is asked, so it is never staged.
@@ -469,8 +507,24 @@ fn bake(
         // Nothing left to take. The booth comes down, but the resource keeps every portrait it has —
         // and stands back up the moment a piece is imported.
         teardown(&mut commands, &mut thumbs);
+        if let Some(jobs) = jobs.as_deref() {
+            jobs.finish(BAKING);
+        }
         return;
     };
+    // **What the band says while the bake runs** (UI-22, #223). Its step is the piece just taken,
+    // because that is the number a person can act on ("4 of 40" says how long they are waiting); a
+    // piece with no mesh is marked baked and never counted, so the denominator is honest.
+    if let Some(jobs) = jobs.as_deref() {
+        let total = project.library.descriptors.len().max(1);
+        let done = thumbs.baked.len().min(total);
+        jobs.set(
+            BAKING,
+            "Baking previews",
+            format!("{done} of {total}"),
+            Some(done as f32 / total as f32),
+        );
+    }
     let Some(d) = project.library.descriptors.get(ix).cloned() else {
         return;
     };
@@ -810,6 +864,7 @@ mod tests {
             camera: None,
             booth: None,
             capture: None,
+            stopped: false,
         }
     }
 

@@ -112,9 +112,15 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
             // **The capture sequencer** -- the editor takes the frames, so frame 0 is the state
             // before the operation and the operation is applied after it.
             crate::sequencer::SequencerPlugin,
-            // **The write-through** (`--live`): every committed change is saved at once, so a game
-            // watching the project reloads it. Inert unless `live::LiveWrite` is inserted.
-            crate::live::LivePlugin,
+            (
+                // **The write-through** (`--live`): every committed change is saved at once, so a game
+                // watching the project reloads it. Inert unless `live::LiveWrite` is inserted.
+                crate::live::LivePlugin,
+                // **Background jobs a person can see and stop** (UI-22, #223): the record, the band's
+                // item, and the popover that lists them. In the shared list because a headless test
+                // starts a job and reads the band the same way a person does.
+                crate::jobs::JobsPlugin,
+            ),
         ),
     ));
     // **The paint system belongs to the editor too.** `bevy_grimoire::apply_paint` is what gives a

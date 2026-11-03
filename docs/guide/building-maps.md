@@ -152,3 +152,17 @@ An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z
 1. Press `Home`.
 
 **What you see:** `Home` frames the locked placement when there is one. If there is none, it frames the whole map. Framing moves the camera only, so it is not in the undo history.
+
+## Watch and stop a background job
+
+**Goal:** See what the editor is doing while it does it, and stop it if you do not want it.
+
+![The status band says "Baking previews 3 of 40"; a click on it lists the job, and Stop leaves the band quiet.](../media/jobs.gif)
+
+1. Open a project with a library. The editor bakes a portrait of every piece for the PLACE list, and the status band says so while it works.
+2. Click the words in the band. A list opens with one row per job.
+3. Click a row to stop that job.
+
+**What you see:** The band reads `Baking previews 3 of 40` and the number climbs. A piece whose bake was stopped keeps an empty tile rather than holding the whole library behind it. The band says nothing at all when no job is running, so a quiet band means quiet. Two jobs at once read as `Baking previews 3 of 40 +1`, and the list names every one.
+
+**If it goes wrong:** Stopping the bake is not undoable, but it costs nothing either: importing a piece, or editing the library at all, asks the bake for the new pieces' portraits again.

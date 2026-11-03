@@ -422,6 +422,7 @@ door_state![
     crate::editor::TargetLock,
     crate::editor::UnderCursor,
     crate::thumbs::ThumbOrder,
+    crate::jobs::Jobs,
     crate::editor::EdgeFaults,
     crate::tiles::ImportState,
     crate::tiles::CellEdit,
@@ -692,6 +693,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // The palette's own order, rewritten whenever it rebuilds: what the booth bakes first is a fact
     // about what this door is showing, not about the kit.
     ("bevy_cauldron::thumbs::ThumbOrder", Ownership::Door),
+    // **`Door`, because a job is this door's work** (UI-22, #223). A bake carried across a door change
+    // would name a portrait of a project nobody is looking at, and a stop request would land on a job
+    // that is no longer the one holding the booth.
+    ("bevy_cauldron::jobs::Jobs", Ownership::Door),
     ("bevy_cauldron::editor::EdgeFaults", Ownership::Door),
     ("bevy_cauldron::tiles::ImportState", Ownership::Door),
     ("bevy_cauldron::tiles::CellEdit", Ownership::Door),

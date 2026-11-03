@@ -391,3 +391,4 @@ mod the_two_paths_read_one_judgement_the_same_way;
 mod an_injected_pointer_over_a_dock_is_pickable;
 mod an_injected_drag_moves_the_dock_divider;
 mod the_pointer_payload_says_where_the_cursor_got_to;
+mod background_jobs_show_and_can_be_stopped;
