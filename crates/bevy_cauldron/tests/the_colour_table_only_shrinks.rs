@@ -86,10 +86,18 @@ fn uses_outside_chrome(names: &[String], dir: &Path) -> usize {
 /// test that pins a panel's fill to the skin, which is the direction this ratchet exists to push. The
 /// owner's rule for a protected count is "raise it by exactly what your change adds", and 14 is
 /// exactly what that file adds; every pre-existing file still measures 268 (`assumed owner exception:
-/// the test-use ceiling +14`). A slice that migrates call sites still only lowers these.
+/// the test-use ceiling +14`). Slice 4c added five more of the same kind — a band's ground and a
+/// project's `bar_bg` tone — so it went 282 → 287 (`assumed owner exception: the test-use ceiling +5`).
+///
+/// **This leg is the wrong shape, and a later pass should look at it.** The constant count and the
+/// `src/` count both *fall* as the migration proceeds; this one *rises* every time a new test pins a
+/// constant to the skin, which is the direction #210 wants. Two raises in one pass is the evidence. It
+/// stays as it is because removing an assertion is not a pass's to do — but a check that has to be
+/// raised to permit correct work is measuring the wrong thing, and the honest replacement is a
+/// per-file ceiling, or none.
 const CONSTANTS_CEILING: usize = 28;
 const PRODUCT_USES_CEILING: usize = 551;
-const TEST_USES_CEILING: usize = 282;
+const TEST_USES_CEILING: usize = 287;
 
 #[test]
 fn the_colour_table_only_shrinks() {
