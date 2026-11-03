@@ -676,8 +676,13 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         camera,
         [
-            "FrameView", "PanForward", "PanBack", "PanLeft", "PanRight", "TurnViewLeft",
-            "TurnViewRight", "ScrubBack", "ScrubFwd", "PlayPause", "ToggleGhost", "CycleCamPreset",
+            "FrameView", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
+            "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "CellLeft", "CellRight",
+            "CellForward", "CellBack", "LayerDown", "LayerUp", "BuildForward", "BuildLeft",
+            "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",
+            "BuildDrop", "BuildSlot", "BuildArm", "AlignForward", "AlignBack", "AlignLeft",
+            "AlignRight", "BuildNew", "BuildDropMember", "ClearTile", "BuildTurn", "BuildRung",
+            "ScrubBack", "ScrubFwd", "PlayPause", "ToggleGhost", "CycleCamPreset",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \
@@ -689,9 +694,9 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         view,
         [
-            "MainMenu", "CycleTarget", "MoveMode", "PageEnter", "PageLeave", "TileOpen",
-            "TilePrev", "TileNext", "CloseTile", "FocusFilter", "FocusTagFilter", "PrevCandidate",
-            "NextCandidate", "FocusCandidates", "CopyInfo", "FocusLibrary",
+            "MainMenu", "CycleTarget", "MoveMode", "TilePrev", "TileNext", "FocusFilter",
+            "FocusTagFilter", "PrevCandidate", "NextCandidate", "FocusCandidates", "CopyInfo",
+            "FocusLibrary",
         ],
         "the `View` set changed. That is allowed — but it is a deliberate act: a verb moves here only \
          when its whole effect is what a person is looking through, and it is then a candidate for a \

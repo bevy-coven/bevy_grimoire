@@ -939,12 +939,8 @@ impl Action {
             | Action::MoveMode
             | Action::CycleTarget
             | Action::MainMenu
-            | Action::TileOpen
             | Action::TilePrev
             | Action::TileNext
-            | Action::CloseTile
-            | Action::PageEnter
-            | Action::PageLeave
             | Action::FocusFilter
             | Action::FocusTagFilter
             | Action::FocusLibrary
@@ -965,9 +961,44 @@ impl Action {
             | Action::FrameView
             | Action::CycleCamPreset
             | Action::ToggleGhost
+            | Action::PlayPause
+            // **Read with `pressed`, every frame.** A key held down is not a one-shot `Outcome`:
+            // the arrows walk a tile, the four `Align*` keys slide a member, and `CellLeft`/`LayerDown`
+            // step the tile's editor — each changes for as long as the key stays down. Measured by
+            // scanning every handler for `pressed` vs `just_pressed`; the 33 verbs below are the ones
+            // that were on `UNMIGRATED` and are `pressed`-only.
+            | Action::AlignBack
+            | Action::AlignForward
+            | Action::AlignLeft
+            | Action::AlignRight
+            | Action::BuildArm
+            | Action::BuildBack
+            | Action::BuildDown
+            | Action::BuildDrop
+            | Action::BuildDropMember
+            | Action::BuildForward
+            | Action::BuildLeft
+            | Action::BuildNew
+            | Action::BuildRight
+            | Action::BuildRung
+            | Action::BuildSlot
+            | Action::BuildTurn
+            | Action::BuildUp
+            | Action::CellBack
+            | Action::CellForward
+            | Action::CellLeft
+            | Action::CellRight
+            | Action::ClearTile
+            | Action::CloseTile
+            | Action::LayerDown
+            | Action::LayerUp
+            | Action::MemberNext
+            | Action::MemberPrev
+            | Action::PageEnter
+            | Action::PageLeave
             | Action::ScrubBack
             | Action::ScrubFwd
-            | Action::PlayPause => Change::Camera,
+            | Action::TileOpen => Change::Camera,
 
             Action::Shortcuts => Change::Held,
 
