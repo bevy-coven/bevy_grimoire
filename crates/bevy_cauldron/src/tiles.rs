@@ -8989,6 +8989,8 @@ fn draw_ink(
     p: &mut ChildSpawnerCommands,
     ink: &[RowInk],
     thumbs: Option<&crate::thumbs::Thumbnails>,
+    // **The list's words come from the running skin** (UI-02, #210), on `RowFills`' shape.
+    words: ListInk,
 ) {
     for row in ink {
         match row {
@@ -9038,7 +9040,7 @@ fn draw_ink(
                         // where it came from, and repeating it on 145 rows is the same word 145
                         // times.
                         Text::new(leaf.clone()),
-                        TextColor(TEXT),
+                        TextColor(words.read),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                 });
@@ -9146,7 +9148,7 @@ fn draw_ink(
                     .with_children(|row| {
                         row.spawn((
                             Text::new("+ New Tile"),
-                            TextColor(ACCENT),
+                            TextColor(words.accent),
                             crate::chrome::font(crate::chrome::text::BODY),
                         ));
                     })
@@ -9155,7 +9157,7 @@ fn draw_ink(
             RowInk::Say(say) => {
                 p.spawn((
                     Text::new(say.clone()),
-                    TextColor(DIM),
+                    TextColor(words.quiet),
                     crate::chrome::font(crate::chrome::text::BODY),
                 ));
             }
@@ -9315,6 +9317,9 @@ fn rebuild_candidates(
     suggestions: Res<crate::labels::Suggestions>,
     // `Option`: the map door has no thumbnails and this system is not gated on the door.
     thumbs: Option<Res<crate::thumbs::Thumbnails>>,
+    // **The list's words come from the running skin** (UI-02, #210). `Option` for the harness that
+    // never added `EditorUiPlugin`; `ListInk::of` falls back to the shipped constants there.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut drawn: ResMut<DrawnRows>,
 ) {
     let on_tiles = *mode == Mode::Tiles;
@@ -9414,7 +9419,7 @@ fn rebuild_candidates(
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
-            draw_ink(p, &ink, thumbs.as_deref());
+            draw_ink(p, &ink, thumbs.as_deref(), ListInk::of(skin.as_deref()));
         });
     }
     drawn.0 = ink;
@@ -9745,6 +9750,36 @@ struct DetailInputs<'w, 's> {
 /// what is painted rather than about a resource that happens to hold the same value.
 pub fn unchecked_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
     skin.and_then(|s| s.unchecked).unwrap_or(crate::chrome::UNCHECKED)
+}
+
+/// **The three inks the shared list draws its words in** (UI-02, #210), on `RowFills`' shape: one
+/// expression the system and a test both read, so an assertion here is an assertion about what is
+/// painted.
+///
+/// `draw_ink` was the largest single reader of `chrome::TEXT` and `chrome::LABEL` in this file — 181
+/// sites between the two and its siblings — and none of them could see a project's skin file. Each
+/// falls back to its constant when no skin is running (a headless harness that never added
+/// `EditorUiPlugin`), which is what every protected test already reads.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ListInk {
+    /// A row's own words: a piece's name, a count.
+    pub read: Color,
+    /// A quiet part: a pack's count, a file's name under its heading.
+    pub quiet: Color,
+    /// The cursor's row.
+    pub accent: Color,
+    /// A refusal.
+    pub danger: Color,
+}
+
+impl ListInk {
+    /// From the running skin when there is one, the constants when there is not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> ListInk {
+        match skin {
+            Some(s) => ListInk { read: s.text, quiet: s.text_muted, accent: s.accent, danger: s.danger },
+            None => ListInk { read: TEXT, quiet: DIM, accent: ACCENT, danger: DANGER },
+        }
+    }
 }
 
 /// **What the Meshes pane says about `piece` and the project's standards** (#138 slice 4): one line
