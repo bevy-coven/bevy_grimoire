@@ -381,3 +381,4 @@ mod a_dock_resize_never_covers_the_viewport;
 mod an_operation_that_writes_nothing_needs_no_log;
 mod the_wired_labelling_paths_agree_on_the_same_pieces;
 mod the_two_paths_read_one_judgement_the_same_way;
+mod an_injected_pointer_over_a_dock_is_pickable;

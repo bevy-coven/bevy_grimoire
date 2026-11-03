@@ -697,7 +697,12 @@ fn inject_clicks(
 fn retarget_pointer(
     surface: Option<Res<Surface>>,
     pointer: Option<Res<crate::view::Pointer>>,
-    window: Query<(), With<bevy::window::PrimaryWindow>>,
+    // **The hole the world is drawn through**, by its own computed rect. The frame's furniture —
+    // docks, the split divider, the bars — deliberately carries no `Hovered` (`spawn_frame`'s header
+    // explains why), so `view::OverUi` cannot answer "over a panel" there. The viewport's rect can:
+    // it is the one region that *is* the map, and everything else in the frame is the interface.
+    hole: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<crate::chrome::ViewportSlot>>,
+    window: Query<Entity, With<bevy::window::PrimaryWindow>>,
     mut pointers: Query<&mut PointerLocation>,
 ) {
     let (Some(surface), Some(pointer)) = (surface, pointer) else {
@@ -715,9 +720,9 @@ fn retarget_pointer(
     // system re-pointed a gooey test's click from the interface camera onto the **viewport image**.
     // Picking then hit the map, the click never reached the button, and the failure looked like a
     // toolbar that ignored clicks: measured as an observer that ran 0 times on a live 36 x 29 option.
-    if window.is_empty() {
+    let Ok(primary_window) = window.single() else {
         return;
-    }
+    };
     let onto = bevy::camera::NormalizedRenderTarget::Image(ImageRenderTarget {
         handle: surface.image.clone(),
         scale_factor: 1.0,
@@ -733,11 +738,46 @@ fn retarget_pointer(
                 }
             }
             Some(at) => {
+                // **A pointer over the frame's own furniture stays on the window** (UI-30, #224).
+                //
+                // Everything above re-points the pointer at the surface image because the interface
+                // renders there. That is right for the map — the image is where the map's picking
+                // reads it — and wrong over a dock: `bevy_ui`'s backend keeps a pointer only for
+                // cameras whose `RenderTarget` **equals the pointer's own target**, so an
+                // image-targeted pointer never reaches a window-space node. Measured on the fixture
+                // project: the pointer sat at the split divider's own centre (218.5, 398.0) with
+                // target `Image(..)`, so a press reached nothing and **no dock could be resized** —
+                // by a person or by `tools/demo/record.py`. Pass 273 spent three attempts on the
+                // drag believing `inject_clicks` was at fault; this was the cause.
+                //
+                // `view::OverUi` already answers "is the pointer over a panel", once a frame, and is
+                // what nine click drivers read rather than each re-deriving it. Here it decides the
+                // target: over a panel the window (so the UI picker keeps it), over the world the
+                // image (so the map does). `sense_over_ui` uses the same rects, so the two cannot
+                // disagree about where the boundary is.
+                let over_the_world = hole.single().is_ok_and(|(node, tf)| {
+                    node.size() != Vec2::ZERO && node.contains_point(*tf, at)
+                });
+                let over_a_panel = !over_the_world;
+                let target = if over_a_panel {
+                    // **The window a pointer over the interface has to name.** `bevy_ui`'s backend
+                    // keeps a pointer only for cameras whose `RenderTarget` equals the pointer's
+                    // own, and the interface's cameras draw to the window while the map's draws to
+                    // an image. Naming the window here is `WindowRef`'s own normalization — the same
+                    // call `mouse_pick_events` makes on a cursor event — rather than a second way to
+                    // say "the primary window".
+                    bevy::window::WindowRef::Entity(primary_window)
+                        .normalize(Some(primary_window))
+                        .map(bevy::camera::NormalizedRenderTarget::Window)
+                        .unwrap_or_else(|| onto.clone())
+                } else {
+                    onto.clone()
+                };
                 // Compare before writing: `PointerLocation` is change-detected and the hovermap is
                 // rebuilt off it, so a blind write every frame would make `Changed` meaningless for
                 // everything downstream — the standing constraint `chrome::Follow` records.
                 let want = bevy::picking::pointer::Location {
-                    target: onto.clone(),
+                    target,
                     position: at,
                 };
                 if slot.location.as_ref() != Some(&want) {
