@@ -2949,9 +2949,9 @@ fn adopt_the_shell_split(
     roles: Query<&bevy_gooey::Role>,
     has_hover: Query<(), With<Hovered>>,
     pickable: Query<&bevy::picking::Pickable>,
-    children: Query<&Children>,
-    parents: Query<&ChildOf>,
+    tree: (Query<&Children>, Query<&ChildOf>),
 ) {
+    let (children, parents) = tree;
     let Some(frame) = frame else { return };
     for split in &splits {
         let Some(kids) = children.get(split).ok() else { continue };
@@ -2962,10 +2962,10 @@ fn adopt_the_shell_split(
                         commands.entity(child).remove::<Hovered>();
                     }
                 }
-                Ok(bevy_gooey::Role::SplitPane) => {
-                    if !pickable.get(child).is_ok_and(|p| *p == bevy::picking::Pickable::IGNORE) {
-                        commands.entity(child).insert(bevy::picking::Pickable::IGNORE);
-                    }
+                Ok(bevy_gooey::Role::SplitPane)
+                    if !pickable.get(child).is_ok_and(|p| *p == bevy::picking::Pickable::IGNORE) =>
+                {
+                    commands.entity(child).insert(bevy::picking::Pickable::IGNORE);
                 }
                 _ => {}
             }
