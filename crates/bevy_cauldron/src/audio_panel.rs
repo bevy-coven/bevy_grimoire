@@ -213,3 +213,20 @@ pub fn bus_rows(mix: &bevy_siren::SirenMix, buses: &[String]) -> Vec<String> {
         })
         .collect()
 }
+
+/// **The panel's plugin** (S-01, #274).
+///
+/// It exists so `EditorUiPlugin` has one name to add, and it deliberately adds **nothing**: the panel's
+/// state, its audition observer and its read system are registered beside the rest of the editor's
+/// observers in `editor.rs`, where a reader looking for "what does the editor register" finds them
+/// without opening this file. A second registration here would be a second `SirenPlugins` add, which
+/// panics.
+///
+/// **Why this is worth a comment rather than an empty struct.** `editor.rs` named this type from the
+/// commit that added the panel and the type was never written, so `--features bevy_siren` did not
+/// compile for any caller: the feature was unreachable, and the panel's test could not build either.
+pub struct AudioPanelPlugin;
+
+impl bevy::prelude::Plugin for AudioPanelPlugin {
+    fn build(&self, _app: &mut bevy::prelude::App) {}
+}
