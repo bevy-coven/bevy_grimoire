@@ -30,8 +30,9 @@
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
 //! | `grimoire_list_rules` | the block rules a layout is generated from, as the project states them |
 //! | `grimoire_run_command` | run a registered editor command by its id, as its shortcut would |
+//! | `grimoire_jobs_stop` | ask a background job, such as the palette's thumbnail bake, to stop |
 //!
-//! **Sixteen tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Seventeen tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -257,6 +258,15 @@ pub struct LogParams {
     /// **How many entries at most**, 1 to 200. The default is 50, which is a screenful.
     #[serde(default = "fifty")]
     pub limit: usize,
+}
+
+/// **The parameters of `grimoire_jobs_stop`.**
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct JobsStopParams {
+    /// **Which job to stop**: its own name. `thumbs` is the palette's thumbnail bake, and
+    /// `grimoire_state.jobs.items` lists every key that is running.
+    pub key: String,
 }
 
 /// **The parameters of `grimoire_state`.**
@@ -1405,6 +1415,49 @@ impl Grimoire {
             .await
         {
             Ok(v) => Ok(CallToolResult::structured(v)),
+            Err(e) => Ok(refusal(&e)),
+        }
+    }
+
+    /// **`grimoire_jobs_stop` — ask a background job to stop** (UI-22, #223).
+    ///
+    /// **The same request the status band's popover makes.** An agent that sees a long bake in
+    /// `grimoire_state.jobs` can stop it with the same flag a person's click sets, so a job is never
+    /// stoppable by one front end and not the other (P1, "one command, many doors").
+    #[tool(
+        name = "grimoire_jobs_stop",
+        description = "Ask a background job to stop, the same request the status band's popover \
+                       makes: the producer stops at its own next seam, so the answer is `asked` and \
+                       grimoire_state.jobs shows it go. `key` is the job's own name — `thumbs` is \
+                       the palette's thumbnail bake — and grimoire_state.jobs.items lists every key \
+                       that is running. Refuses, and stops nothing, on a key that is not running, \
+                       naming what is. Nothing is lost when a bake is stopped: importing a piece, or \
+                       editing the library at all, asks for the new pieces' portraits again.",
+        annotations(
+            title = "Stop a background job",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn jobs_stop(
+        &self,
+        Parameters(p): Parameters<JobsStopParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        match self
+            .editor
+            .call("grimoire/jobs_stop", json!({"key": p.key}))
+            .await
+        {
+            Ok(v) => {
+                let refused = v.get("outcome").and_then(|o| o.as_str()) == Some("refused");
+                if refused {
+                    Ok(CallToolResult::structured_error(v))
+                } else {
+                    Ok(CallToolResult::structured(v))
+                }
+            }
             Err(e) => Ok(refusal(&e)),
         }
     }

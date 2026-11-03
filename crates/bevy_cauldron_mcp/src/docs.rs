@@ -117,6 +117,19 @@ pub const TOOLS: &[ToolDoc] = &[
         idempotent: false,
     },
     ToolDoc {
+        name: "grimoire_jobs_stop",
+        description: "Ask a background job to stop, the same request the status band's popover makes: \
+                      the producer stops at its own next seam, so the answer is `asked` and \
+                      grimoire_state.jobs shows it go. `key` is the job's own name — `thumbs` is the \
+                      palette's thumbnail bake — and grimoire_state.jobs.items lists every key that \
+                      is running. Refuses, and stops nothing, on a key that is not running, naming \
+                      what is. Nothing is lost when a bake is stopped: importing a piece, or editing \
+                      the library at all, asks for the new pieces' portraits again.",
+        read_only: false,
+        destructive: false,
+        idempotent: true,
+    },
+    ToolDoc {
         name: "grimoire_state",
         description: "What the editor is holding right now: the open map and its bounds, how many \
                        pieces it has, what is armed, what is selected, which door and tab are open, \
@@ -493,6 +506,14 @@ pub fn schemas() -> Value {
                 "operation_id": {"type": ["string", "null"]},
                 "dry_run": {"type": "boolean", "default": false},
                 "turn": {"type": "boolean", "default": false, "description": "Take back the whole result you last presented, newest change first, in one call. Refused when nothing has been presented."},
+            },
+        },
+        "grimoire_jobs_stop": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key"],
+            "properties": {
+                "key": {"type": "string", "description": "Which job to stop: its own name. thumbs is the palette's thumbnail bake."}
             },
         },
         "grimoire_state": {

@@ -203,3 +203,61 @@ fn click(app: &mut App, target: Entity) {
     });
     app.update();
 }
+
+// ── the agent's door ─────────────────────────────────────────────────────────────────────────────
+
+/// **An agent sees the same jobs the band draws and stops one through the same request** (UI-22, #223;
+/// `docs/ui/vision.md` P1, "one command, many doors").
+///
+/// The band is one door onto `Jobs`; `grimoire/state.jobs` is the other, and `grimoire/jobs_stop` makes
+/// the same request the popover's Stop row makes — so a job is never visible to one and invisible to
+/// the other, and the recorder can aim at the band's words by reading them rather than guessing.
+#[test]
+fn an_agent_reads_the_jobs_the_band_draws_and_stops_one_through_the_same_request() {
+    let mut app = editor("jobs-agent", 3);
+    app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
+    app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
+    for _ in 0..4 {
+        app.update();
+    }
+
+    let state = call(&mut app, "grimoire/state", serde_json::json!({}));
+    let jobs = &state["jobs"];
+    assert_eq!(jobs["count"], serde_json::json!(1), "state: {state}");
+    assert_eq!(
+        jobs["line"], serde_json::json!(band_said(&mut app).expect("the band says it")),
+        "the agent reads exactly the words the band draws, not a second answer"
+    );
+    assert_eq!(jobs["items"][0]["key"], serde_json::json!("thumbs"), "state: {state}");
+
+    // **A key nobody is running refuses and names what is**, so "stopped nothing" cannot read as success.
+    let refused = call(&mut app, "grimoire/jobs_stop", serde_json::json!({"key": "no_such_job"}));
+    assert_eq!(refused["outcome"], serde_json::json!("refused"), "answer: {refused}");
+    assert_eq!(refused["running"][0]["key"], serde_json::json!("thumbs"), "answer: {refused}");
+    assert!(!app.world().resource::<Jobs>().cancel_requested("thumbs"), "a refusal stops nothing");
+
+    let asked = call(&mut app, "grimoire/jobs_stop", serde_json::json!({"key": "thumbs"}));
+    assert_eq!(asked["outcome"], serde_json::json!("asked"), "answer: {asked}");
+    assert!(
+        app.world().resource::<Jobs>().cancel_requested("thumbs"),
+        "the door sets the same flag the band's Stop row sets"
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    let after = call(&mut app, "grimoire/state", serde_json::json!({}));
+    assert_eq!(after["jobs"]["count"], serde_json::json!(0), "the bake stopped when its own seam came: {after}");
+}
+
+/// One BRP call, as `a_command_runs_by_id_through_the_agents_door.rs` makes it.
+fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::Value {
+    use bevy::remote::{RemoteMethodSystemId, RemoteMethods};
+    let id = match app.world().resource::<RemoteMethods>().get(method) {
+        Some(RemoteMethodSystemId::Instant(id)) => *id,
+        _ => panic!("no method `{method}` is registered"),
+    };
+    app.world_mut()
+        .run_system_with(id, Some(params))
+        .unwrap_or_else(|e| panic!("{method}: {e:?}"))
+        .unwrap_or_else(|e| panic!("{method}: {e:?}"))
+}

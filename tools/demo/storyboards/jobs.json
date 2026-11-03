@@ -1,0 +1,23 @@
+{
+  "name": "jobs",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "crop": [0, 940, 960, 1060],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 4.0,
+      "caption": "the band says what the editor is doing"
+    },
+    {
+      "click": {"label": "Baking previews"},
+      "seconds": 3.0,
+      "caption": "a click lists the job"
+    },
+    {
+      "seconds": 2.0,
+      "caption": "Stop ends it, and the band goes quiet"
+    }
+  ]
+}

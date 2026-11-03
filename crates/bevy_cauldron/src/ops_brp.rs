@@ -318,6 +318,38 @@ pub fn pointer_payload(
     })
 }
 
+/// **`grimoire/jobs_stop` — ask a background job to stop** (UI-22, #223).
+///
+/// **The same request the band's popover makes**, so an agent is not a second kind of person: the
+/// producer polls the same flag at the same seam. It answers what is left running, so a caller can see
+/// the request land rather than guessing — a stop takes effect at the producer's next seam, not inside
+/// this call.
+///
+/// Refuses on a key nobody is running, because "stopped nothing" and "stopped the bake" must not read
+/// alike; the answer names what *is* running so the caller can pick.
+fn jobs_stop(In(params): In<Value>, jobs: Option<Res<crate::jobs::Jobs>>) -> Result<Value, String> {
+    let Some(jobs) = jobs else {
+        return Err("this editor has no job record (no JobsPlugin)".to_owned());
+    };
+    let key = params.get("key").and_then(|k| k.as_str()).ok_or("pass key, the job to stop")?;
+    let running = jobs.snapshot();
+    let Some((found, _)) = running.iter().find(|(k, _)| *k == key) else {
+        return Ok(json!({
+            "outcome": "refused",
+            "reason": format!("no job named `{key}` is running; the request would stop nothing"),
+            "running": running.iter().map(|(k, job)| json!({"key": k, "title": job.title})).collect::<Vec<_>>(),
+        }));
+    };
+    jobs.request_cancel(found);
+    Ok(json!({
+        "outcome": "asked",
+        "key": found,
+        // Said plainly, because a caller that assumed the job was gone would read the next answer wrong.
+        "note": "the producer stops at its own next seam; read grimoire_state.jobs to see it go",
+        "running": running.len(),
+    }))
+}
+
 /// **`grimoire/pointer` — read the input chain.** See [`pointer_payload`] for what each part means.
 fn pointer(
     _: In<Value>,
@@ -465,6 +497,9 @@ pub struct StateParams {
 #[allow(clippy::too_many_arguments)]
 fn editor_state(
     In(params): In<StateParams>,
+    // **What the editor is doing** (UI-22, #223). `Option`, like every other resource here: the harness
+    // that never added `JobsPlugin` still answers, and a missing `Res<T>` panics its system in Bevy 0.19.
+    jobs: Option<Res<crate::jobs::Jobs>>,
     loaded: Loaded,
     state: Option<Res<crate::editor::EditorState>>,
     tiles: Option<Res<crate::tiles::ImportState>>,
@@ -621,9 +656,27 @@ fn editor_state(
     });
     // **Where the person is looking** (UI-90, #256): the screen, the workspace, the panels and the region with the keys.
     let ui = ui_json(screen.as_deref(), door.as_deref(), keys_live.as_deref());
+    // **The work the editor is doing** (UI-22, #223): the same record the band draws, in the band's own
+    // words, plus each job's key and fraction. An agent asks "is the editor busy" here rather than
+    // squinting at a screenshot, and `jobs_stop` is how it asks one to stop.
+    let working = jobs.as_deref().map(|j| {
+        json!({
+            "line": j.line(),
+            "count": j.len(),
+            "progress": j.band_progress(),
+            "items": j.snapshot().iter().map(|(key, job)| json!({
+                "key": key,
+                "title": job.title,
+                "detail": job.detail,
+                "progress": job.progress,
+                "cancelled": job.cancel_requested(),
+            })).collect::<Vec<_>>(),
+        })
+    });
     Ok(json!({
         "map": map,
         "ui": ui,
+        "jobs": working,
         // **The notes an agent can claim, and with `note` the bundle to work one** (#91).
         "notes": open.as_ref().map(|o| crate::ops_notes::state_json(
             o,
@@ -2183,6 +2236,19 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({})),
             pointer,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/jobs_stop",
+                "Ask a background job to stop: the same request the status band's popover makes. \
+                 key is the job's own name (`thumbs` is the palette's thumbnail bake; \
+                 grimoire_state.jobs.items names them). The producer stops at its next seam, so the \
+                 answer is `asked` rather than `stopped` — read grimoire_state.jobs to see it go. \
+                 Refuses, and stops nothing, on a key that is not running, naming what is.",
+            )
+            .example(json!({"key": "thumbs"})),
+            jobs_stop,
         );
 
         app.add_debug_command(
