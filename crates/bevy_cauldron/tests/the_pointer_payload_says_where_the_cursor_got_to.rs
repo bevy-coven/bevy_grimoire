@@ -50,3 +50,29 @@ fn each_step_is_reported_separately_so_a_failure_can_be_located() {
     assert_eq!(payload["target"], serde_json::json!("Image(..)"));
     assert_eq!(payload["position"], serde_json::json!([218.5, 398.0]));
 }
+
+/// **The picker's own state is the next question**, and pass 283 could not ask it: after the schedule
+/// fix `inject_clicks` *sees* the press, yet the drag still does nothing. `pressing` and `dragging` are
+/// `bevy_picking`'s own counts (`PointerButtonState`), and a press that arrives without a drag is
+/// exactly `pressing = 1, dragging = 0` — the shape measured headlessly before the `Move` was written.
+///
+/// Reporting them turns "the drag does nothing" into one of two answers: the press never became picking
+/// input (0 and 0), or it became a press and no drag (1 and 0), or the drag ran and the divider was not
+/// its target (1 and 1 with no fraction change).
+#[test]
+fn the_picker_s_pressing_and_dragging_counts_are_reported() {
+    let payload = bevy_cauldron::ops_brp::pointer_payload_with_buttons(None, None, false, None);
+    assert!(
+        payload["pressing"].is_null() && payload["dragging"].is_null(),
+        "with no pointer state to read, both are `null` rather than a fabricated `0`: a real zero \
+         means the picker looked and found nothing, which is a different answer: {payload}"
+    );
+
+    let payload = bevy_cauldron::ops_brp::pointer_payload_with_buttons(None, None, false, Some((1, 0)));
+    assert_eq!(payload["pressing"], serde_json::json!(1));
+    assert_eq!(
+        payload["dragging"],
+        serde_json::json!(0),
+        "a press with no drag is the shape that made four passes think the press was lost"
+    );
+}

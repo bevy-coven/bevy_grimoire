@@ -323,15 +323,22 @@ fn pointer(
     _: In<Value>,
     cursor: Option<Res<crate::view::Pointer>>,
     over_ui: Option<Res<crate::view::OverUi>>,
+    state: Option<Res<bevy::picking::events::PointerState>>,
     pointers: Query<&bevy::picking::pointer::PointerLocation>,
 ) -> Result<Value, String> {
+    use bevy::picking::pointer::{PointerButton, PointerId};
     let location = pointers
         .iter()
         .find_map(|l| l.location().map(|l| (format!("{:?}", l.target), l.position)));
-    Ok(pointer_payload(
+    let buttons = state
+        .as_ref()
+        .and_then(|s| s.get(PointerId::Mouse, PointerButton::Primary))
+        .map(|b| (b.pressing.len(), b.dragging.len()));
+    Ok(pointer_payload_with_buttons(
         cursor.and_then(|c| c.0),
         location,
         over_ui.is_some_and(|o| o.0),
+        buttons,
     ))
 }
 
@@ -2512,4 +2519,24 @@ fn data_files_json(grimoire_dir: &std::path::Path) -> Value {
             })
             .collect(),
     }
+}
+
+/// **The payload with the picker's own counts**, which is what [`pointer_payload`] leaves out.
+///
+/// Pass 283 fixed a real fault (`inject_clicks` was reading the press a frame early) and the drag still
+/// did nothing, which leaves exactly two possibilities and no way to tell them apart from outside:
+/// `bevy_picking` never made a press of it, or it made a press and never a drag. `PointerButtonState`
+/// answers both, and reporting it costs one field.
+pub fn pointer_payload_with_buttons(
+    cursor: Option<Vec2>,
+    location: Option<(String, Vec2)>,
+    over_ui: bool,
+    buttons: Option<(usize, usize)>,
+) -> Value {
+    let mut payload = pointer_payload(cursor, location, over_ui);
+    if let Value::Object(map) = &mut payload {
+        map.insert("pressing".to_owned(), buttons.map(|(p, _)| json!(p)).unwrap_or(Value::Null));
+        map.insert("dragging".to_owned(), buttons.map(|(_, d)| json!(d)).unwrap_or(Value::Null));
+    }
+    payload
 }
