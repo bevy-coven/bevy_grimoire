@@ -27,6 +27,28 @@ NEXTEST_RUN = re.compile(r"^\s*timed\s+test\s+\S*cargo nextest run", re.MULTILIN
 DOCTEST_RUN = re.compile(r"^\s*timed\s+doc\s+\S*cargo test\b.*--doc", re.MULTILINE)
 
 
+# A note about the past (a measurement, a refusal), or a prohibition, is not an instruction to run the
+# slow runner.
+_NOT_AN_INSTRUCTION = ("never run", "did not run", "not run", "measured", "sanctuary")
+
+
+def slow_runner_instructions(text):
+    """The lines that tell a pass to run `cargo test` where nextest would do."""
+    offenders = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("|"):
+            continue
+        for m in re.finditer(r"cargo test[^`\n]*", line):
+            if "--doc" in m.group(0) or "--test readme" in m.group(0):
+                continue
+            window = line[max(0, m.start() - 80):m.start()]
+            if any(phrase in window.casefold() for phrase in _NOT_AN_INSTRUCTION):
+                continue
+            offenders.append(line.strip()[:120])
+            break
+    return offenders
+
+
 class TestTheGateUsesTheFastRunner(unittest.TestCase):
     def setUp(self):
         self.assertTrue(GATE.exists(), f"{GATE} is missing")
@@ -65,6 +87,20 @@ class TestTheGuidanceSaysTheSame(unittest.TestCase):
                       "command there sends every pass back to it")
         self.assertIn("`cargo test --workspace --doc`", self.command,
                       "and the doctest step, or the command implies nextest covers the examples")
+
+    def test_no_instruction_still_tells_a_pass_to_run_cargo_test(self):
+        """**The command is the prompt a pass copies from.** A pass on big ran
+        `cargo test -p bevy_cauldron --test editor <name>::` because a line still said so, after the
+        gate itself had moved. Every `cargo test` left in the command must be one nextest cannot run
+        (`--doc`, `--test readme`) or a note about the past — and the scratch case below proves the
+        check sees the drift rather than passing on a comment that happens to name nextest."""
+        offenders = slow_runner_instructions(COMMAND.read_text(encoding="utf-8"))
+        self.assertEqual(offenders, [],
+                         "the loop command still tells a pass to run `cargo test`; a pass copies "
+                         "the command, so this is how the slow runner came back after the gate moved")
+        drift = "Run one file's tests with `cargo test -p bevy_cauldron --test editor <name>::`."
+        self.assertEqual(len(slow_runner_instructions(drift)), 1,
+                         "the check must flag the exact instruction that a pass copied")
 
     def test_the_repo_rules_name_nextest(self):
         self.assertTrue(AGENTS.exists(), f"{AGENTS} is missing")
