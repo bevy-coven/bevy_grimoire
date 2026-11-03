@@ -350,7 +350,10 @@ fn rebuild_picker(
     picker: Res<picker::Picker>,
     body: Query<Entity, With<picker::PickerBody>>,
     children: Query<&Children>,
+    // **The picker's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
 ) {
+    let ink = PanelInk::of(skin.as_deref());
     if !(project.is_changed() || armed.is_changed() || picker.is_changed()) {
         return;
     }
@@ -380,7 +383,7 @@ fn rebuild_picker(
             crate::chrome::row_value(
                 p,
                 "none — this project stamps nothing",
-                crate::chrome::DIM,
+                ink.quiet,
                 (),
             );
             return;
@@ -395,7 +398,7 @@ fn rebuild_picker(
                 .with_children(|row| {
                     row.spawn((
                         Text::new(c.id.clone()),
-                        TextColor(crate::chrome::TEXT),
+                        TextColor(ink.read),
                         crate::chrome::font(crate::chrome::text::BODY),
                     ));
                     if is_armed {
@@ -404,7 +407,7 @@ fn rebuild_picker(
                         // thing the same way.
                         row.spawn((
                             Text::new("  *"),
-                            TextColor(crate::chrome::ACCENT),
+                            TextColor(ink.accent),
                             crate::chrome::font(crate::chrome::text::BODY),
                         ));
                     }
@@ -2341,6 +2344,36 @@ struct ComposeInput<'w, 's> {
     body: Query<'w, 's, Entity, With<ComposeBody>>,
     lines: Query<'w, 's, Entity, With<ComposeLine>>,
     receipt: Query<'w, 's, &'static mut Text, With<ComposeReceipt>>,
+    /// **The panel's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<'w, bevy_gooey::GooeySkin>>,
+}
+
+/// **The composition panel's ink, from the editor's skin** (UI-02, #210).
+///
+/// Three inks carry its prose: what is read (`TEXT`), the quieter count and hint lines (`DIM`),
+/// and the accent that marks the row being acted on. A refusal that is the budget's is `DANGER`.
+/// **Each falls back to its `chrome.rs` constant**, the seam `chrome::RowFills` established, so a
+/// harness with no skin draws the shipped palette and no protected test re-pins.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelInk {
+    /// What is read: a row's words, a value.
+    pub read: Color,
+    /// What is only looked at when wanted: a count, a hint, a walk with nothing in it.
+    pub quiet: Color,
+    /// The row being acted on.
+    pub accent: Color,
+    /// The budget's refusal.
+    pub danger: Color,
+}
+
+impl PanelInk {
+    /// The skin's ink where it has one, the shipped constants where it does not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> PanelInk {
+        let Some(skin) = skin else {
+            return PanelInk { read: TEXT, quiet: DIM, accent: ACCENT, danger: DANGER };
+        };
+        PanelInk { read: skin.text, quiet: skin.text_muted, accent: skin.accent, danger: skin.danger }
+    }
 }
 
 /// **Everything the panel says, derived on the spot.**
@@ -2358,7 +2391,9 @@ fn rebuild(input: ComposeInput<'_, '_>) {
         body,
         lines,
         mut receipt,
+        skin,
     } = input;
+    let ink = PanelInk::of(skin.as_deref());
     if !(state.is_changed() || armed.is_changed() || project.is_changed()) {
         return;
     }
@@ -2400,13 +2435,13 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                 keys::chord(Action::CarouselPrev),
                 keys::chord(Action::CarouselNext),
             ),
-            DIM,
+            ink.quiet,
         ));
     }
     if !budget.line.is_empty() {
         lines.push(Line::Prose(
             budget.line.clone(),
-            if budget.over { DANGER } else { DIM },
+            if budget.over { ink.danger } else { ink.quiet },
         ));
     }
     if comps.is_empty() {
@@ -2415,7 +2450,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
              may seat any bound kit's pieces. A project with none stamps nothing, which is not a \
              broken one."
                 .to_owned(),
-            DIM,
+            ink.quiet,
         ));
     }
 
@@ -2445,7 +2480,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
             if state.focus == Pane::Members && walkable { "  <- arrows" } else { "" }
         )));
         if !walkable {
-            lines.push(Line::Prose(nothing_to_walk(c), DIM));
+            lines.push(Line::Prose(nothing_to_walk(c), ink.quiet));
         }
         for (i, m) in c.members.iter().enumerate() {
             // The cursor **as given** — see `clamp_selection`, which is now the only thing that
@@ -2478,7 +2513,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                             ));
                             row.spawn((
                                 Text::new(text),
-                                TextColor(TEXT),
+                                TextColor(ink.read),
                                 crate::chrome::font(ROW_PX),
                             ));
                             if armed {
@@ -2486,7 +2521,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                                 // carry for "this is the one a stamp places".
                                 row.spawn((
                                     Text::new("  *"),
-                                    TextColor(ACCENT),
+                                    TextColor(ink.accent),
                                     crate::chrome::font(ROW_PX),
                                 ));
                             }
@@ -2498,7 +2533,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                         |row| {
                             row.spawn((
                                 Text::new(text),
-                                TextColor(TEXT),
+                                TextColor(ink.read),
                                 crate::chrome::font(ROW_PX),
                             ));
                         },
@@ -2515,7 +2550,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                     ))
                     .with_children(|row| {
                         crate::chrome::row_label(row, crate::chrome::COL_LABEL, name);
-                        crate::chrome::row_value(row, band, TEXT, ());
+                        crate::chrome::row_value(row, band, ink.read, ());
                     });
                 }
                 Line::Rail { tint, lines } => {

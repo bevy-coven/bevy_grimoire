@@ -321,6 +321,7 @@ mod the_map_opens_framed;
 mod the_meshes_pane_names_modules_that_do_not_nest;
 mod the_meshes_pane_names_the_standards_a_piece_breaks;
 mod the_meshes_pane_says_how_sure_the_labels_are;
+mod the_compose_panel_draws_in_the_skins_ink;
 mod the_model_written_ink_comes_from_the_skin;
 mod the_panes_inks_come_from_the_skin;
 mod the_next_undo_is_named;
