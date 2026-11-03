@@ -70,16 +70,6 @@
       ]
     },
     {
-      "at": 1.75,
-      "click_label": "sofa",
-      "within": [
-        1080,
-        215,
-        1280,
-        265
-      ]
-    },
-    {
       "at": 2.05,
       "caption": "R turns the armed piece a quarter turn"
     },

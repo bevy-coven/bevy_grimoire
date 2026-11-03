@@ -46,6 +46,14 @@ fn editor(name: &str) -> App {
     app
 }
 
+/// Every live `PaletteRow` entity, sorted — the identity of the rows on screen.
+fn row_entities(app: &mut App) -> Vec<Entity> {
+    let mut rows = app.world_mut().query_filtered::<Entity, With<PaletteRow>>();
+    let mut out: Vec<Entity> = rows.iter(app.world()).collect();
+    out.sort();
+    out
+}
+
 fn armed(app: &App) -> Option<String> {
     let project = app.world().resource::<Project>();
     let state = app.world().resource::<EditorState>();
@@ -136,4 +144,36 @@ fn one_click_on_a_row_with_the_filter_idle_arms_that_piece() {
         app.update();
     }
     assert_eq!(armed(&app).as_deref(), Some("site/gate"));
+}
+
+/// **A blur does not rebuild the palette, so the rows a click is on stay standing.**
+///
+/// `on_row_click` blurs the filter box after arming, and `blur` writes `Filters`. While the palette
+/// rebuilt on *any* `Filters` change, that write despawned every row — including the one just armed —
+/// and the tap that armed a piece also took the row away. Measured on a running editor: the first tap
+/// after typing cost **1** rebuild and armed nothing, the second cost **0** and armed the piece.
+///
+/// The assertion is on the **rows**, not on the condition: every `PaletteRow` entity must survive the
+/// blur. A gate that watched the whole resource rebuilds them into a new set, and an entity id is what
+/// tells the two apart.
+#[test]
+fn blurring_the_filter_leaves_the_palette_rows_standing() {
+    let mut app = editor("blur_keeps_rows");
+    app.world_mut().resource_mut::<Filters>().take_focus(Pane::Palette);
+    app.update();
+    assert!(app.world().resource::<Filters>().typing(), "the box starts with the keyboard");
+
+    let before = row_entities(&mut app);
+    assert!(!before.is_empty(), "the fixture must have rows, or this asserts nothing");
+
+    app.world_mut().resource_mut::<Filters>().blur();
+    app.update();
+    app.update();
+
+    let after = row_entities(&mut app);
+    assert_eq!(
+        before, after,
+        "blurring the box changed which rows exist: the palette rebuilt for a write that changed no \
+         text, and a click that armed a row would have despawned it in the same frame"
+    );
 }

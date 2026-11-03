@@ -77,6 +77,24 @@ impl Pane {
 /// did — the condition is `Project` / `Folded` / `Filters` / `ThumbGeneration` — and the claim was
 /// load-bearing enough that `editor::arm_palette_rows` exists precisely because it is false: the
 /// palette's selection has to be written onto rows that already exist.)
+/// **The four texts, for "did what the list shows change?"** (#278).
+///
+/// Kept beside `Filters` rather than inside it so the answer is a comparison of *text*, which is what
+/// the list is narrowed by, and not of the whole resource — `focus` is written by every click in and
+/// out of a box, and a row click that blurs the box must not read as "the list changed".
+#[derive(Resource, Default, PartialEq, Eq, Debug)]
+pub struct FilterTexts(pub [String; 4]);
+
+/// **What the lists are narrowed to**, in one value, so a change to it can be compared.
+pub fn filter_texts(filters: &Filters) -> FilterTexts {
+    FilterTexts([
+        filters.palette.clone(),
+        filters.candidates.clone(),
+        filters.rigs.clone(),
+        filters.tags.clone(),
+    ])
+}
+
 #[derive(Resource, Default)]
 pub struct Filters {
     palette: String,

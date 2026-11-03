@@ -15,6 +15,7 @@
 //! had just put down while the ghost — the only thing on screen showing a facing — sat still.
 
 use bevy::camera::visibility::ViewVisibility;
+use crate::filter::FilterTexts;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
@@ -2721,7 +2722,14 @@ impl Plugin for EditorPlugin {
                             // they keep `or_else` and its skip is free.
                             resource_exists_and_changed::<Project>
                                 .or_else(resource_changed::<Folded>)
-                                .or_else(resource_changed::<crate::filter::Filters>)
+                                // **A change that only moved the keyboard does not change what the
+                                // list shows** (#278, measured 2026-11-03). `on_row_click` blurs the
+                                // filter after arming, and `blur` writes `Filters` — so with a plain
+                                // `resource_changed` the click that armed a row also rebuilt every
+                                // row, and the row it had just armed was despawned in the same frame.
+                                // Measured: the first tap after typing cost exactly **1** rebuild and
+                                // armed nothing, the second cost **0** and armed the piece.
+                                .or_else(the_filter_text_changed)
                                 // A newly created portrait handle has to be bound, and binding
                                 // happens when the row is built. See `thumbs::ThumbGeneration` for
                                 // why this is not `resource_changed::<Thumbnails>`.
@@ -3847,6 +3855,26 @@ struct PaletteSource<'w> {
     filters: Res<'w, crate::filter::Filters>,
     fold: Res<'w, Folded>,
 }
+
+/// **Did the filter's *text* change, or only which box has the keyboard?** (#278)
+///
+/// `on_row_click` blurs the box after arming, and `blur` writes `Filters`. With a plain
+/// `resource_changed` that write rebuilt every row — so the click that armed a row also despawned it.
+/// Measured: the first tap after typing cost exactly **1** rebuild and armed nothing; the second cost
+/// **0** and armed the piece. Comparing the texts instead means a click that only moves the keyboard
+/// leaves the rows standing, which is what `arm_palette_rows` was built to do.
+fn the_filter_text_changed(filters: Res<crate::filter::Filters>, mut last: Local<Option<FilterTexts>>) -> bool {
+    if !filters.is_changed() {
+        return false;
+    }
+    let now = crate::filter::filter_texts(&filters);
+    if last.as_ref() == Some(&now) {
+        return false;
+    }
+    *last = Some(now);
+    true
+}
+
 
 /// **The palette, grouped.**
 ///
