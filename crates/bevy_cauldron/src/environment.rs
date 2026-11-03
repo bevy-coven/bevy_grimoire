@@ -521,6 +521,14 @@ pub fn dress_camera(
             commands.entity(entity).insert(bevy_elements::ElementsCamera::default());
         } else {
             commands.entity(entity).remove::<bevy_elements::ElementsCamera>();
+            // **`Hdr` is ours to take back** (#193 step 3). `ElementsCamera` arrives with
+            // `#[require(Hdr)]`, so the crate cannot tell whether this camera had `Hdr` before it
+            // dressed it — bevy_elements#55 says plainly that this is "left to the caller
+            // (bevy_grimoire removes it itself)", and until now nothing here did. A camera left HDR
+            // after the file goes is the state in which the viewport draws one flat colour for the
+            // rest of the session: measured on big 2026-11-03, the viewport patch fell from
+            // std 99.4 (the plain view) to std 1.7 (one colour), and stayed there.
+            commands.entity(entity).remove::<bevy::camera::Hdr>();
         }
         composite_surface(wanted, &mut world, interface.iter_mut());
     }
