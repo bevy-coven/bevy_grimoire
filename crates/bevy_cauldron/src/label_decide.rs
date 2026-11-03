@@ -95,3 +95,43 @@ pub fn suggestion_from(
     }
     Ok(out)
 }
+
+/// **Which path labels a kit** (D5's second acceptance item): the `choice` questions here, or the old
+/// free-form JSON through `vlm.rs`.
+///
+/// Both exist until the measured agreement says the new one is equal or better, and this is what
+/// decides between them — never a guess in the calling code. `GRIMOIRE_LABEL_PATH` names one:
+/// `decide` (the default) or `vlm`. An **unset** variable is `decide`, because a new install is not
+/// a migration and the decision path is the one this repository is moving to; a value that names
+/// neither is refused rather than silently defaulted, because a typo that quietly keeps the old path is
+/// how a migration stalls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Path {
+    /// Closed `choice` questions through `bevy_oracle`.
+    Decide,
+    /// A chat model's JSON through `vlm.rs`. Kept until the measurement allows its removal.
+    Vlm,
+}
+
+impl Path {
+    /// The environment variable that chooses.
+    pub const VAR: &'static str = "GRIMOIRE_LABEL_PATH";
+
+    /// Read one value. `None` is `Decide`; a name neither path has is an error naming both.
+    pub fn named(value: Option<&str>) -> Result<Path, String> {
+        match value.map(str::trim) {
+            None | Some("") | Some("decide") => Ok(Path::Decide),
+            Some("vlm") => Ok(Path::Vlm),
+            Some(other) => Err(format!(
+                "{}={other} names no labelling path; say `decide` (closed questions) or \
+                 `vlm` (the old free-form JSON)",
+                Self::VAR
+            )),
+        }
+    }
+
+    /// Read it from the environment, the way the editor does.
+    pub fn from_env() -> Result<Path, String> {
+        Self::named(std::env::var(Self::VAR).ok().as_deref())
+    }
+}

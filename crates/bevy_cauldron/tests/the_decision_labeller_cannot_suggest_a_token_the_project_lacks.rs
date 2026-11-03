@@ -11,7 +11,7 @@
 
 use bevy_grimoire_core::vocab::{Token, Vocabularies, Vocabulary};
 
-use bevy_cauldron::label_decide::{axes, request_for, suggestion_from};
+use bevy_cauldron::label_decide::{axes, request_for, suggestion_from, Path};
 
 /// A project vocabulary with a deliberately small `kind` axis, so a token outside it is easy to name.
 fn vocab() -> Vocabularies {
@@ -94,4 +94,21 @@ fn a_token_the_project_lacks_can_never_be_read_back_as_a_suggestion() {
     );
     let suggestion = suggestion_from(&v, good).expect("`seating` is a kind the project has");
     assert_eq!(suggestion.get("kind").map(String::as_str), Some("seating"));
+}
+
+#[test]
+fn the_config_selects_the_path_and_refuses_a_name_neither_has() {
+    // **Both paths exist until the measurement allows the old one's removal**, so something has to
+    // choose between them, and it is config rather than a guess at the call site.
+    assert_eq!(Path::named(None), Ok(Path::Decide), "an unset variable is the path this repo is moving to");
+    assert_eq!(Path::named(Some("")), Ok(Path::Decide));
+    assert_eq!(Path::named(Some("decide")), Ok(Path::Decide));
+    assert_eq!(Path::named(Some("vlm")), Ok(Path::Vlm), "the old path stays reachable until the measurement");
+
+    // A typo is refused, never silently defaulted: a quiet fallback is how a migration stalls.
+    let error = Path::named(Some("decide2")).expect_err("a name neither path has is refused");
+    assert!(
+        error.contains("decide2") && error.contains("GRIMOIRE_LABEL_PATH"),
+        "the refusal names the bad value and the variable: {error}"
+    );
 }
