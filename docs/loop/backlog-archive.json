@@ -2045,6 +2045,22 @@
       "evidence": "bevy_debugger_bevy/src/commands.rs has no text/logical-key path; typing letters into the new-map NAME field and the shelf filter did nothing (2026-10-23 live tutorial run and cycle 6/9 agents). Fix belongs in the bevy_debugger_mcp repo.",
       "last_failure": "",
       "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-039",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "A hero storyboard on a big building: snip the abbey, the agent turns or removes it, then Cmd+Z",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Not judged: unconfirmed. Set when reproduced."
+      },
+      "status": "fixed",
+      "evidence": "Confirmed **already fixed** on main (measured 2026-11-02, pass 226): `hero.json` as it stands records PASS — agent `placement_remove bed` 6.20%, Ctrl+Z 6.31%, longest static 1.40 s, 0.23 MB, scene 42.3%. The abbey was never needed; E-039's premise (a big building is required) is wrong. The change bar is cleared by FRAMING: the same bed removal framed tight measures 10.24%. A clip on any piece passes when `setup.grimoire_frame_view` lands the piece across most of the viewport, and `render.py` is given `scale: 1` with a crop matching the capture (its default scale is 2, which crops 2560x1406 out of a 1280x720 frame and shrinks the editor to a corner).",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
     }
   ]
 }
