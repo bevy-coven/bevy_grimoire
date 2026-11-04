@@ -516,6 +516,13 @@ fn editor_state(
     screen: Option<Res<State<crate::screen::Screen>>>,
     // **Which keys the editor is reading and who holds them** (UI-90), for `ui.focus`.
     keys_live: Option<Res<crate::keys::Live>>,
+    // **The preview's clock** (#282): what the crate is actually told the hour is, and what the
+    // scrubber asked for. The two are separate on purpose — the changelog line says the scrubber
+    // "holds the preview at an hour of day", and the only way to tell whether the preview follows is
+    // to read both. Measured 2026-11-03: the sky did not change between 6:00 and 23:00 while the file
+    // path did, so these two numbers are the next question.
+    #[cfg(feature = "bevy_elements")] clock: Option<Res<bevy_elements::WorldClock>>,
+    #[cfg(feature = "bevy_elements")] scrub: Option<Res<crate::environment::ClockScrub>>,
 ) -> Result<Value, String> {
     let Loaded { project, open, game, reloads, live, diagnostics, busy } = loaded;
     // **The agent's presentation, and the person's answer to it** (S1.7). `None` until an agent
@@ -673,6 +680,19 @@ fn editor_state(
             })).collect::<Vec<_>>(),
         })
     });
+    // **The preview's clock, and what the scrubber asked for** (#282). `hour` is what the crate
+    // reads; `scrub` is what the ENVIRONMENT panel's buttons set. A `scrub` of 23 beside an `hour` of
+    // 12 is the scrubber not reaching the clock; two equal numbers beside an unchanged sky is the
+    // crate not following its own clock. Gated with the feature, because both types are its.
+    #[cfg(feature = "bevy_elements")]
+    let preview_clock = clock.as_deref().map_or(Value::Null, |c| json!({
+        "hour": c.hour,
+        "paused": c.paused,
+    }));
+    #[cfg(feature = "bevy_elements")]
+    let preview_scrub = scrub.as_deref().map_or(Value::Null, |s| json!(s.0));
+    #[cfg(not(feature = "bevy_elements"))]
+    let (preview_clock, preview_scrub) = (Value::Null, Value::Null);
     Ok(json!({
         "map": map,
         "ui": ui,
@@ -711,6 +731,12 @@ fn editor_state(
         // call, so an edit to that file is seen by the next answer with no restart.
         "relations": open.as_ref().map(|o| relations_json(&o.map.placements, &o.map_path)),
         "project": project_summary,
+        // **The preview's clock, and what the scrubber asked for** (#282). `hour` is what the crate
+        // reads; `scrub` is what the ENVIRONMENT panel's buttons set. A `scrub` of 23 beside an
+        // `hour` of 12 is the scrubber not reaching the clock; two equal numbers beside an unchanged
+        // sky is the crate not following its own clock.
+        "clock": preview_clock,
+        "clock_scrub": preview_scrub,
         "editor": editor,
         "presentation": presentation,
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),

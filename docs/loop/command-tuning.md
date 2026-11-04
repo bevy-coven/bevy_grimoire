@@ -34,3 +34,11 @@ ceiling is treated as a refusal: name what did not arrive in the log line and ca
 issue rather than waiting again.
 
 **Watch.** Zero steps at 30:00, and no pass whose log line says it waited twice for the same thing.
+
+## Tuning 3 — a click that does nothing: ask the picker what it hit, before forming a theory (pass 382)
+
+**Measured.** The inspector's `23:00` button "could not be clicked" for at least six passes (273, 280, 281, 283, 378–381): each blamed a different layer (`Pickable::IGNORE` on an ancestor, the picker's target, a hover rule, the sky not following) and spent builds and a test file on it. Pass 382 found the cause in about ten minutes by reading one BRP resource, `world.get_resources` on `bevy_picking::hover::HoverMap`, after pressing at the button's own reported centre: the entity under the pointer was the **viewport** (size 724 x 582), because the left pane was 204 px wide around a 456 px panel. The first draft in the tree had blamed `IGNORE`; `bevy_ui`'s `picking_backend.rs` (read in two minutes) does not stop at an ignoring ancestor, so that theory was falsifiable from the source without a build.
+
+**Change.** When an injected click changes nothing, the first two steps are `world.get_resources` for `HoverMap` (then `world.get_components` for the hit entity's size and `UiGlobalTransform`), and reading the vendored `bevy_picking`/`bevy_ui` source for the rule a theory rests on. A theory that cannot name which entity the picker did hit is not yet a theory.
+
+**Watch.** No issue about an unresponsive control is carried across more than one pass; and a log line that blames a picking rule names the vendored file and line it rests on.

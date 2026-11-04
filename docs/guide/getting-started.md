@@ -66,6 +66,8 @@ Arming a piece means choosing the piece that your next click will place. A **pla
 
 Press Home to frame the view. With a locked placement, Home frames that placement. Otherwise it frames the whole map. Framing does not change the map.
 
+**Resize the docks.** The thin bar between the INSPECTOR on the left and the map is a divider. Drag it left or right and the inspector narrows or widens with it, its rows reflowing to the new width, while the map keeps the rest of the window. Until you drag it, the dock is as wide as the inspector asks to be. The wheel over the inspector scrolls it to the sections below the fold, such as ENVIRONMENT.
+
 ## Undo and redo
 
 1. Press Cmd+Z. The second placement disappears.

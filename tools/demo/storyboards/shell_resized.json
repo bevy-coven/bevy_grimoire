@@ -1,0 +1,54 @@
+{
+ "name": "shell_resized",
+ "fps": 8,
+ "scale": 1,
+ "width": 760,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 3.5
+  },
+  {
+   "seconds": 3.5
+  },
+  {
+   "seconds": 3.5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.3,
+   "caption": "the Cauldron's shell: the inspector fills its dock, the viewport keeps the rest"
+  },
+  {
+   "at": 1.0,
+   "secs": 1.6,
+   "caption": "person: drag the divider left \u2014 the dock narrows and the inspector reflows with it",
+   "drag_divider": -90
+  },
+  {
+   "at": 4.0,
+   "secs": 1.8,
+   "caption": "person: drag it right \u2014 the dock widens, the viewport gives way and is never covered",
+   "drag_divider": 190
+  },
+  {
+   "at": 7.4,
+   "caption": "the divider is the person's from the first drag: the layout stays where it was put"
+  }
+ ]
+}

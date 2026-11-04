@@ -304,9 +304,45 @@ impl EditorState {
         self.redo.len()
     }
 
-    /// **The whole history, oldest first (E-018)**, for the history list: the undo stack, then the
+    /// **The history, oldest first (E-018, UI-53)**, for the history list: the undo stack, then the
     /// redo stack in the order redo would replay it. Row `n` is the entry at position `n`, and a
     /// jump to position `n` leaves that entry applied.
+    ///
+    /// **Only the rows asked for.** The list shows a window around the current position
+    /// ([`EditorState::history_window`]), and the whole list is 5,000 entries on a long session, so
+    /// building every label to throw all but seven away was an allocation per entry per refresh
+    /// (UI-53's "5,000 log lines scroll within the UI frame budget"). `first` and `last` are
+    /// 1-based positions, both inclusive; a position past the end is not returned.
+    pub fn history_window(&self, first: usize, last: usize) -> Vec<HistoryRow> {
+        let total = self.undo.len() + self.redo.len();
+        let first = first.max(1);
+        let last = last.min(total);
+        if first > last {
+            return Vec::new();
+        }
+        (first..=last)
+            .filter_map(|position| self.history_row(position))
+            .collect()
+    }
+
+    /// **One row of the history by position**, or `None` past the end: the undo stack first, then the
+    /// redo stack in the order redo would replay it.
+    pub fn history_row(&self, position: usize) -> Option<HistoryRow> {
+        if position == 0 || position > self.undo.len() + self.redo.len() {
+            return None;
+        }
+        let (op, redo) = if position <= self.undo.len() {
+            (&self.undo[position - 1], false)
+        } else {
+            let back = position - self.undo.len();
+            (self.redo.get(self.redo.len().checked_sub(back)?)?, true)
+        };
+        Some(HistoryRow { position, agent: op.by_agent(), label: op.kind(redo) })
+    }
+
+    /// **The whole history, oldest first (E-018)**, for a caller that wants all of it: the undo stack,
+    /// then the redo stack in the order redo would replay it. The panel uses
+    /// [`EditorState::history_window`] instead, so 5,000 entries do not cost 5,000 labels a frame.
     pub fn history(&self) -> Vec<HistoryRow> {
         let undone = self.redo.iter().rev().map(|op| (op, true));
         self.undo
@@ -2425,6 +2461,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
         app.add_plugins(crate::toolbar::ToolbarPlugin);
+        app.add_plugins(crate::empty_state::EmptyStatePlugin);
+        app.add_plugins(crate::menu_bar::MenuBarPlugin);
         #[cfg(feature = "bevy_siren")]
         app.add_plugins(crate::audio_panel::AudioPanelPlugin);
         app.add_observer(on_play_click);
@@ -7807,7 +7845,14 @@ fn refresh_history(
         return;
     }
     let depth = state.undo_depth();
-    let rows = state.history();
+    // **The window, not the whole list** (UI-53): only the rows on screen are labelled, so a session
+    // with 5,000 entries costs seven labels a refresh rather than five thousand. The window is the
+    // same `2 * HISTORY_EACH_WAY + 1` the block spawns, around the current position.
+    let rows = state.history_window(
+        (depth as isize - HISTORY_EACH_WAY).max(1) as usize,
+        (depth as isize + HISTORY_EACH_WAY).max(1) as usize,
+    );
+    let first = rows.first().map_or(0, |r| r.position);
     for (mut slot, children, mut pickable) in &mut slots {
         let position = usize::try_from(depth as isize + slot.offset)
             .ok()
@@ -7832,8 +7877,10 @@ fn refresh_history(
                 let (what, who) = if p == 0 {
                     ("before the first change".to_owned(), "")
                 } else {
-                    let row = &rows[p - 1];
-                    (row.label.clone(), if row.agent { "agent" } else { "you" })
+                    match rows.get(p.saturating_sub(first)) {
+                        Some(row) => (row.label.clone(), if row.agent { "the Familiar" } else { "you" }),
+                        None => (String::new(), ""),
+                    }
                 };
                 let now = if slot.current { "now: " } else { "" };
                 let who = if who.is_empty() {

@@ -1,0 +1,44 @@
+{
+ "name": "menu_bar",
+ "fps": 8,
+ "scale": 1,
+ "width": 640,
+ "chunks": [
+  {
+   "seconds": 3.0
+  },
+  {
+   "seconds": 3.0
+  },
+  {
+   "seconds": 3.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.3,
+   "caption": "the Cauldron's menu bar: every command, in exactly one menu"
+  },
+  {
+   "at": 1.0,
+   "click_label": "Edit",
+   "caption": "person: Edit \u2014 each row shows the key it answers to"
+  },
+  {
+   "at": 3.4,
+   "click_label": "View",
+   "caption": "person: View"
+  },
+  {
+   "at": 5.8,
+   "click_label": "Map",
+   "caption": "person: Map \u2014 a row that cannot run greys out and says why"
+  }
+ ],
+ "crop": [
+  0,
+  0,
+  640,
+  600
+ ]
+}
