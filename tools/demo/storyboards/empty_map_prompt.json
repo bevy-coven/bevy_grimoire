@@ -30,14 +30,14 @@
   },
   {
    "at": 4.0,
-   "click_label": "lamp_tall",
+   "click_label": "Lamp tall",
    "within": [
     1030,
     100,
     1280,
     700
    ],
-   "caption": "person: picks lamp_tall from the list"
+   "caption": "person: picks the tall lamp from the list"
   },
   {
    "at": 5.2,

@@ -77,9 +77,33 @@ pub fn map_file_name(name: &str) -> String {
     format!("{name}.map.ron")
 }
 
+/// **The words a person reads for an id**: its last `/` segment, underscores as spaces, the first
+/// letter capitalised. `furniture/toilet_roll_holder` reads "Toilet roll holder".
+///
+/// The inverse of [`to_snake_case`] for display only: the id stays the name on disk and in every
+/// operation, and a screen that shows these words keeps the id where a person can find it (a
+/// tooltip), because two kits may each have a `wall` and both read "Wall".
+pub fn display_name(id: &str) -> String {
+    let last = id.rsplit('/').next().unwrap_or(id);
+    let spaced = last.replace('_', " ");
+    let mut chars = spaced.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_id_reads_as_words_without_its_namespace() {
+        assert_eq!(display_name("furniture/toilet_roll_holder"), "Toilet roll holder");
+        assert_eq!(display_name("lamp_tall"), "Lamp tall");
+        assert_eq!(display_name("wall_2"), "Wall 2");
+        assert_eq!(display_name(""), "");
+    }
 
     #[test]
     fn already_snake_is_left_alone() {

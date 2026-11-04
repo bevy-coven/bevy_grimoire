@@ -2639,6 +2639,7 @@ impl Plugin for EditorPlugin {
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
                 (
+                    arm_the_first_shown_piece,
                     crate::thumbs::setup,
                     spawn_panel,
                     spawn_palette_panel,
@@ -3930,6 +3931,22 @@ fn the_filter_text_changed(filters: Res<crate::filter::Filters>, mut last: Local
 }
 
 
+/// **A map opens with the palette's first row armed** (#289).
+///
+/// `EditorState` arms library row 0 so the first click places something, but the palette groups
+/// rows by kind, so row 0 can be drawn anywhere: the bedroom's sat half-way down, and
+/// [`keep_palette_selection_on_screen`] scrolled the list there on open. Arming the row drawn first
+/// keeps the first click useful and opens the list at its top.
+fn arm_the_first_shown_piece(palette: PaletteSource, mut state: ResMut<EditorState>) {
+    let PaletteSource {
+        project,
+        open,
+        filters,
+        fold,
+    } = palette;
+    state.brush = palette_indices(&project, &open, &fold, &filters).first().copied();
+}
+
 /// **The palette, grouped.**
 ///
 /// Forty-one rows is a list you scroll past; grouped by what a thing IS it becomes a handful of
@@ -4048,6 +4065,10 @@ fn rebuild_palette(
                     palette_row
                         .entry::<Node>()
                         .and_modify(|mut n| n.align_items = AlignItems::Center);
+                    // **The id and the count's unit, where a person can find them** (#289): the row
+                    // reads as words, and two kits may each have a `wall` that both read "Wall".
+                    let tris = project.triangles.get(ix).copied().unwrap_or(0);
+                    palette_row.insert(bevy_gooey::Tooltip::new(palette_tooltip(&d.id, tris)));
                     palette_row.with_children(|row| {
                             let mut slot = row.spawn((
                                 Node {
@@ -4073,17 +4094,21 @@ fn rebuild_palette(
                             row.spawn((
                                 Node {
                                     flex_grow: 1.0,
-                                    // See `tiles::count_cell`: the id wraps inside its own column
+                                    // See `tiles::count_cell`: the name wraps inside its own column
                                     // rather than pushing the cost out of the row.
                                     // CHROME-OK: zero is not a spacing step.
                                     min_width: Val::Px(0.0),
+                                    overflow: Overflow::clip_x(),
                                     ..default()
                                 },
-                                Text::new(d.id.clone()),
+                                Text::new(bevy_grimoire_core::naming::display_name(&d.id)),
                                 TextColor(TEXT),
                                 crate::chrome::font(crate::chrome::text::BODY),
+                                // **A word longer than the column breaks inside itself** (#289): with
+                                // the default word-boundary break, `toilet_roll_holder` was one word
+                                // the row could not wrap, and it drew over the count beside it.
+                                TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
                             ));
-                            let tris = project.triangles.get(ix).copied().unwrap_or(0);
                             crate::tiles::count_cell(row, brief_count(tris), cost_tint(tris));
                     });
                 }
@@ -8774,6 +8799,15 @@ fn brief_count(n: usize) -> String {
         n if n < 1_000_000 => format!("{}k", n / 1_000),
         n => format!("{:.1}M", n as f32 / 1_000_000.0),
     }
+}
+
+/// **What a palette row's tooltip says**: the piece's id, as operations and files name it, and its
+/// triangle count with its unit, which the row's own column draws bare (#289).
+fn palette_tooltip(id: &str, triangles: usize) -> String {
+    if triangles == 0 {
+        return id.to_owned();
+    }
+    format!("{id} · {} triangles", with_thousands(triangles))
 }
 
 /// Group a number for reading. The total is meant to be compared against itself over time, so the

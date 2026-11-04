@@ -162,14 +162,19 @@ fn a_click_at_a_visible_rows_position_arms_that_piece() {
     let (half, mid) = (size * 0.5, centre);
 
     // **A row inside the palette whose words name a piece the fixture has**, so the arm can be read
-    // back by id rather than by an index that changes with the library.
+    // back by id rather than by an index that changes with the library. A row reads its piece's
+    // display name (#289), so the words are matched against that and the id is read back.
     let project = app.world().resource::<bevy_cauldron::project::Project>();
     let wanted: Vec<String> = project.library.descriptors.iter().map(|d| d.id.clone()).collect();
     let (id, at) = rows
         .iter()
         .filter(|(_, at)| (at.x - mid.x).abs() <= half.x && (at.y - mid.y).abs() <= half.y)
-        .find(|(words, _)| wanted.iter().any(|id| id == words))
-        .map(|(words, at)| (words.clone(), *at))
+        .find_map(|(words, at)| {
+            wanted
+                .iter()
+                .find(|id| bevy_grimoire_core::naming::display_name(id) == *words)
+                .map(|id| (id.clone(), *at))
+        })
         .unwrap_or_else(|| {
             panic!(
                 "no piece row is reported inside the palette {centre:?} x {size:?}; the fixture's \

@@ -1,0 +1,46 @@
+{
+  "name": "palette_words",
+  "fps": 10,
+  "scale": 1,
+  "width": 760,
+  "crop": [
+    700,
+    64,
+    1280,
+    700
+  ],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 5.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "caption": "person: the PLACE list opens at its top, each piece named in words"
+    },
+    {
+      "at": 1.2,
+      "click_label": "filter",
+      "within": [1043, 170, 1265, 230]
+    },
+    {
+      "at": 1.4,
+      "type": "toilet"
+    },
+    {
+      "at": 1.6,
+      "caption": "person: a long name wraps beside its triangle count instead of drawing over it"
+    },
+    {
+      "at": 2.8,
+      "click_label": "Toilet roll holder",
+      "within": [1030, 100, 1280, 700]
+    },
+    {
+      "at": 3.0,
+      "caption": "person: arms it; the row's tooltip names its id and its triangles"
+    }
+  ]
+}
