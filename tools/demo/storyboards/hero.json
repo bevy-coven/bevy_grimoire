@@ -1,106 +1,106 @@
 {
-  "name": "hero",
-  "fps": 15,
-  "scale": 1,
-  "width": 600,
-  "crop": [
-    500,
-    170,
-    940,
-    560
-  ],
-  "setup": [
-    {
-      "mcp": "grimoire_frame_view",
-      "args": {
-        "target": {
-          "rect": [
-            -3.2,
-            -2.5,
-            0.6,
-            1.5
-          ]
-        }
-      }
+ "name": "hero",
+ "fps": 15,
+ "scale": 1,
+ "width": 600,
+ "crop": [
+  390,
+  130,
+  1020,
+  664
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -3.2,
+      -2.5,
+      0.6,
+      1.5
+     ]
     }
-  ],
-  "chunks": [
-    {
-      "seconds": 4.4
-    },
-    {
-      "seconds": 2.5,
-      "operation": {
-        "name": "placement_remove",
-        "parameters": {
-          "id": "bed"
-        }
-      }
-    },
-    {
-      "seconds": 2.0
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 4.4
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "placement_remove",
+    "parameters": {
+     "id": "bed"
     }
-  ],
-  "steps": [
-    {
-      "at": 0.3,
-      "caption": "person: Ctrl+\\ arms the snip tool"
-    },
-    {
-      "at": 0.6,
-      "key": "Backslash",
-      "mods": [
-        "ControlLeft"
-      ]
-    },
-    {
-      "at": 1.1,
-      "caption": "person: drag a box round the bed"
-    },
-    {
-      "at": 1.1,
-      "drag": [
-        585,
-        300,
-        820,
-        480
-      ],
-      "secs": 1.2
-    },
-    {
-      "at": 3.0,
-      "caption": "person: type a note, Enter saves"
-    },
-    {
-      "at": 3.1,
-      "type": "remove the bed"
-    },
-    {
-      "at": 3.6,
-      "key": "Enter"
-    },
-    {
-      "at": 4.2,
-      "mcp": "grimoire_list_snips",
-      "args": {
-        "limit": 1
-      },
-      "caption": "agent: reads the snip"
-    },
-    {
-      "at": 4.5,
-      "caption": "agent: placement_remove bed"
-    },
-    {
-      "at": 5.3,
-      "caption": "person: Ctrl+Z puts it back"
-    },
-    {
-      "at": 5.5,
-      "key": "KeyZ",
-      "mods": [
-        "ControlLeft"
-      ]
-    }
-  ]
+   }
+  },
+  {
+   "seconds": 2.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.3,
+   "caption": "person: Ctrl+\\ arms the snip tool"
+  },
+  {
+   "at": 0.6,
+   "key": "Backslash",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "at": 1.1,
+   "caption": "person: drag a box round the bed"
+  },
+  {
+   "at": 1.1,
+   "drag": [
+    560,
+    285,
+    1010,
+    575
+   ],
+   "secs": 1.2
+  },
+  {
+   "at": 3.0,
+   "caption": "person: type a note, Enter saves"
+  },
+  {
+   "at": 3.1,
+   "type": "remove the bed"
+  },
+  {
+   "at": 3.6,
+   "key": "Enter"
+  },
+  {
+   "at": 4.2,
+   "mcp": "grimoire_list_snips",
+   "args": {
+    "limit": 1
+   },
+   "caption": "agent: reads the snip"
+  },
+  {
+   "at": 4.5,
+   "caption": "agent: placement_remove bed"
+  },
+  {
+   "at": 5.3,
+   "caption": "person: Ctrl+Z puts it back"
+  },
+  {
+   "at": 5.5,
+   "key": "KeyZ",
+   "mods": [
+    "ControlLeft"
+   ]
+  }
+ ]
 }

@@ -1,50 +1,50 @@
 {
-  "name": "frame_the_map",
-  "fps": 15,
-  "scale": 1,
-  "width": 520,
-  "crop": [
-    385,
-    115,
-    1035,
-    685
-  ],
-  "setup": [
-    {
-      "mcp": "grimoire_frame_view",
-      "args": {
-        "target": {
-          "rect": [
-            -3.0,
-            -2.5,
-            -1.4,
-            -1.0
-          ]
-        }
-      }
+ "name": "frame_the_map",
+ "fps": 15,
+ "scale": 1,
+ "width": 520,
+ "crop": [
+  388,
+  130,
+  1018,
+  664
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -3.0,
+      -2.5,
+      -1.4,
+      -1.0
+     ]
     }
-  ],
-  "chunks": [
-    {
-      "seconds": 3.0
-    }
-  ],
-  "steps": [
-    {
-      "at": 0.0,
-      "cursor": [
-        200,
-        400
-      ]
-    },
-    {
-      "at": 0.0,
-      "caption": "person: the view is zoomed in on one corner of the bedroom"
-    },
-    {
-      "at": 1.0,
-      "key": "Home",
-      "caption": "person: Home frames the whole 6 x 5 m room"
-    }
-  ]
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 3.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    200,
+    400
+   ]
+  },
+  {
+   "at": 0.0,
+   "caption": "person: the view is zoomed in on one corner of the bedroom"
+  },
+  {
+   "at": 1.0,
+   "key": "Home",
+   "caption": "person: Home frames the whole 6 x 5 m room"
+  }
+ ]
 }
