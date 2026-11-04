@@ -152,6 +152,11 @@ const CELL: f32 = 8.0;
 /// than any of it.
 const BODY_CHAR_W: f32 = chrome::BODY_CHAR_W;
 
+/// **How many characters a box's chord column holds before a chord wraps** (#291): the longest single
+/// chord the census has, `Shift+Ctrl+Z`. A row's chords are joined with ` · `, so wrapping at its spaces
+/// puts one chord on a line.
+const CHORD_WRAP_CHARS: usize = 12;
+
 /// **Nothing renders `keys::rows`.**
 ///
 /// A constant rather than a comment, so `keys::tests::the_row_ceiling_has_no_rendering_left_to_guard`
@@ -721,7 +726,7 @@ fn rebuild_badges(
         live_badges
             .iter()
             .filter(|b| b.home == home)
-            .map(|b| b.chord.chars().count())
+            .map(|b| b.chord.chars().count().min(CHORD_WRAP_CHARS))
             .max()
             .unwrap_or(0) as f32
             * BODY_CHAR_W
@@ -2403,26 +2408,38 @@ fn one_badge(
         bevy::picking::Pickable::IGNORE,
     ))
     .with_children(|b| {
-        b.spawn((
-            Node {
-                // The chord holds a column so the descriptions line up down the box —
-                // `docs/ui.md` §3.1's argument that a panel is rows and not strings, applied to the
-                // last thing in this editor that was still a string. Only inside a box: a bare chip
-                // in a band is its own object and hugs its chord.
-                min_width: if boxed { Val::Px(chord_col) } else { Val::Auto },
-                flex_shrink: 0.0,
-                ..default()
-            },
+        // **The chord holds a column** so the descriptions line up down the box — `docs/ui.md` §3.1's
+        // argument that a panel is rows and not strings, applied to the last thing in this editor that
+        // was still a string. Only inside a box: a bare chip in a band is its own object and hugs its
+        // chord.
+        //
+        // **A long chord wraps at its spaces** (#291). A row's chords are joined with ` · ` (`B · Shift+B ·
+        // Ctrl+B · M`), and one unbroken line made the column as wide as the longest of them — 24
+        // characters in the legend — so at the first-run window (1067 x 600 logical) the boxes were
+        // wider than the stage they stand in and could only be drawn on top of one another. The column
+        // is capped at [`CHORD_WRAP_CHARS`], and the width lives on a wrapper for the reason the
+        // description's does (below): a `Text` measures itself before its own `max_width` applies.
+        let chord = (
             Text::new(badge.chord.clone()),
             TextColor(ink.key),
             // The chord is the one thing a badge exists to have read, so it gets the reading
             // size — the descriptions stay at `HINT`, quieter on both axes.
             chrome::font(chrome::text::BODY),
-            // A chord with a space in it is one token to a reader and two to a
-            // line-breaker.
-            TextLayout::new(Justify::Left, LineBreak::NoWrap),
+            TextLayout::new(Justify::Left, if boxed { LineBreak::WordBoundary } else { LineBreak::NoWrap }),
             bevy::picking::Pickable::IGNORE,
-        ));
+        );
+        b.spawn((
+            Node {
+                min_width: if boxed { Val::Px(chord_col) } else { Val::Auto },
+                max_width: if boxed { Val::Px(chord_col) } else { Val::Auto },
+                flex_shrink: 0.0,
+                ..default()
+            },
+            bevy::picking::Pickable::IGNORE,
+        ))
+        .with_children(|w| {
+            w.spawn(chord);
+        });
         if boxed {
             // **The width lives on a wrapper, not on the text node.**
             //
