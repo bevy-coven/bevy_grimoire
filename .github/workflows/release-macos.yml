@@ -2,7 +2,10 @@ name: Release Cauldron (macOS)
 # **The downloadable app** (`tools/release/macos/build_app.sh`): a tag `bevy_cauldron-vX.Y.Z` builds Cauldron.app
 # with every family crate, signs it with the Developer ID, notarizes and staples it, and publishes the DMG, the
 # update zip and SHA256SUMS as a GitHub Release, which is what the in-app updater reads (`src/update.rs`).
-# A GitHub-hosted macOS runner: big is Linux, and every dependency is a public repository.
+# **Runs on mac_air, a self-hosted runner** (owner, 2026-11-04): a hosted macOS job waited minutes for a machine and
+# started cold. mac_air is the Mac the owner compiles on; its runner (`~/actions-runner-bevy_grimoire`, a launchd
+# agent) keeps the cargo target between runs, so a release rebuilds only what changed. mac_air asleep or off means
+# the job waits in the queue: there is no hosted fallback. Fork pull requests need approval before any job runs.
 on:
   push:
     tags: ["bevy_cauldron-v*"]
@@ -22,7 +25,7 @@ env:
   CARGO_PROFILE_RELEASE_DEBUG: 0
 jobs:
   app:
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, mac_air]
     timeout-minutes: 150
     permissions:
       contents: write
@@ -32,9 +35,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: false
-      - uses: dtolnay/rust-toolchain@stable
-      # A hosted runner starts empty, so the cache action is how a second release does not rebuild Bevy.
-      - uses: Swatinem/rust-cache@v2
+      # Outside the checkout, which `actions/checkout` cleans: this is what makes the next release incremental.
+      - name: Keep the cargo target between runs
+        run: echo "CARGO_TARGET_DIR=$HOME/actions-runner-bevy_grimoire/cargo-target" >> "$GITHUB_ENV"
       - name: Version
         id: version
         run: |
@@ -56,6 +59,8 @@ jobs:
             [ -n "${!s}" ] || { echo "secret for $s is not set: see the release plan's prerequisites" >&2; exit 1; }
           done
           KC="$RUNNER_TEMP/build.keychain"
+          # A self-hosted runner is a person's Mac: remember their keychain search list, so the cleanup puts it back.
+          security list-keychains -d user | tr -d '"' > "$RUNNER_TEMP/keychains-before"
           KC_PASSWORD=$(openssl rand -hex 24)
           echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p "$KC_PASSWORD" "$KC"
@@ -63,7 +68,7 @@ jobs:
           security unlock-keychain -p "$KC_PASSWORD" "$KC"
           security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$P12_PASSWORD" -A -t cert -f pkcs12
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASSWORD" "$KC"
-          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security list-keychains -d user -s "$KC" $(cat "$RUNNER_TEMP/keychains-before")
           rm "$RUNNER_TEMP/cert.p12"
           IDENTITY=$(security find-identity -v -p codesigning "$KC" | grep -m1 'Developer ID Application' | sed -E 's/.*"(.*)"/\1/')
           [ -n "$IDENTITY" ] || { echo "no Developer ID Application identity in the certificate" >&2; exit 1; }
@@ -75,6 +80,7 @@ jobs:
           echo "CAULDRON_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
           echo "CAULDRON_NOTARIZE=1" >> "$GITHUB_ENV"
           echo "APPLE_NOTARY_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "CAULDRON_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Build, sign, notarize
         env:
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
@@ -96,3 +102,13 @@ jobs:
         run: |
           gh release create "bevy_cauldron-v$V" dist/Cauldron-*.dmg dist/Cauldron-*.zip dist/SHA256SUMS \
             --target "$GITHUB_SHA" --title "Cauldron $V" --generate-notes
+      - name: Remove the signing keychain and the notary key
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/keychains-before" ]; then
+            security list-keychains -d user -s $(cat "$RUNNER_TEMP/keychains-before")
+          fi
+          if [ -n "${CAULDRON_KEYCHAIN:-}" ]; then
+            security delete-keychain "$CAULDRON_KEYCHAIN"
+          fi
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/keychains-before"
