@@ -50,6 +50,9 @@ pub enum AppVerb {
     OpenRecent(PathBuf),
     /// Ask for meshes to add to the library.
     AddMeshes,
+    /// Start the first-map tour (`tour.rs`).
+    #[cfg(feature = "debugger")]
+    TakeTour,
     /// Quit, asking first when a map has unsaved edits.
     Quit,
     /// Show the keymap: every command and its chord.
@@ -72,6 +75,8 @@ impl AppVerb {
             AppVerb::OpenProject => "Open project…".to_owned(),
             AppVerb::OpenRecent(path) => launcher::name_of(path),
             AppVerb::AddMeshes => crate::add_meshes::ACTION.to_owned(),
+            #[cfg(feature = "debugger")]
+            AppVerb::TakeTour => "Take the tour".to_owned(),
             AppVerb::Quit => "Quit".to_owned(),
             AppVerb::KeyboardShortcuts => "Keyboard shortcuts".to_owned(),
             AppVerb::GettingStarted => "Getting started guide".to_owned(),
@@ -139,6 +144,8 @@ pub fn run(world: &mut World, verb: AppVerb) {
         AppVerb::AddMeshes => {
             world.write_message(PickRequest(PickFor::AddMeshes));
         }
+        #[cfg(feature = "debugger")]
+        AppVerb::TakeTour => crate::tour::start_or_say_why(world),
         AppVerb::Quit => {
             world.write_message(QuitRequested);
         }

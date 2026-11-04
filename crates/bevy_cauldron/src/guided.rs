@@ -328,7 +328,26 @@ impl Plugin for GuidePlugin {
             },
         );
 
+        // **The first-map tour's three** (`guides/first_map.json`, `tour.rs`). Each asks what the person has done since the tour began
+        // (`crate::tour::Tour`), because the example map arrives with pieces placed and a turn made before the tour is not the
+        // person's. With no `Tour` — an agent posting the same script — the baseline is an empty map, so they read as "the map has a
+        // piece" and "a piece is turned".
+        let piece_chosen = app.register_system(|_: In<Value>, state: Res<crate::editor::EditorState>| state.brush.is_some());
+        let piece_placed = app.register_system(|_: In<Value>, tour: Option<Res<crate::tour::Tour>>, open: Option<Res<OpenMap>>| {
+            let none = crate::tour::Tour::default();
+            open.is_some_and(|open| tour.as_deref().unwrap_or(&none).placed(&open))
+        });
+        let piece_turned = app.register_system(
+            |_: In<Value>, tour: Option<Res<crate::tour::Tour>>, open: Option<Res<OpenMap>>, state: Res<crate::editor::EditorState>| {
+                let none = crate::tour::Tour::default();
+                open.is_some_and(|open| tour.as_deref().unwrap_or(&none).turned(&open, &state))
+            },
+        );
+
         let mut checkpoints = app.world_mut().resource_mut::<Checkpoints>();
+        checkpoints.register("a piece is chosen", piece_chosen);
+        checkpoints.register("a piece was placed", piece_placed);
+        checkpoints.register("a piece was turned", piece_turned);
         checkpoints.register("the Tiles tab is open", tiles_tab);
         checkpoints.register("the Map tab is open", map_tab);
         checkpoints.register("a tile is open", tile_open);

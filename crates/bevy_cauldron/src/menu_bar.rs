@@ -241,6 +241,9 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
             })
             .collect(),
         "help" => vec![
+            // The tour is the agent's guide channel, which the `debugger` feature builds (it is on by default, and in the app).
+            #[cfg(feature = "debugger")]
+            Slot::Verb(AppVerb::TakeTour),
             Slot::Verb(AppVerb::KeyboardShortcuts),
             Slot::Command(Action::Shortcuts),
             Slot::Separator,
