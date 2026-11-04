@@ -398,7 +398,11 @@ pub struct LauncherPlugin;
 
 impl Plugin for LauncherPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((crate::new_project::NewProjectPlugin, crate::picker::PickerPlugin, crate::project_page::ProjectPagePlugin))
+        // The chooser is the editor's too (Add meshes…); whichever of the two plugins is built first adds it.
+        if !app.is_plugin_added::<crate::picker::PickerPlugin>() {
+            app.add_plugins(crate::picker::PickerPlugin);
+        }
+        app.add_plugins((crate::new_project::NewProjectPlugin, crate::project_page::ProjectPagePlugin))
             .add_message::<OpenRequest>()
             .add_message::<OpenMapRequest>()
             .init_resource::<SplashArt>()

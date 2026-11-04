@@ -24,9 +24,11 @@
 
 use bevy::prelude::*;
 
+use crate::add_meshes::{ACTION as ADD_MESHES, AddMeshesButton, NO_PIECES};
 use crate::chrome::{Frame, FrameSystems};
 use crate::confirm::Confirm;
-use crate::project::OpenMap;
+use crate::project::{OpenMap, Project};
+use crate::ui::accent_button;
 use crate::screen::Screen;
 
 /// What the prompt says. One sentence, no full stop, as the writing style has every label.
@@ -36,8 +38,16 @@ pub const SENTENCE: &str = "Place a piece from the library";
 pub const ACTION: &str = "Open library";
 
 /// The overlay: the sentence and the action, centred over the viewport.
-#[derive(Component)]
-pub struct EmptyMapPrompt;
+///
+/// A project whose library has no pieces says so and offers **Add meshes…** ([`crate::add_meshes`]); a library with pieces and a
+/// map with none says [`SENTENCE`]. The prompt is the kind that is wanted, and swaps when the library gains its first piece.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmptyMapPrompt {
+    /// The library has pieces; the map has no placements.
+    NoPlacements,
+    /// The library has no pieces at all.
+    NoPieces,
+}
 
 /// The prompt's button.
 #[derive(Component)]
@@ -66,32 +76,33 @@ fn keep_the_prompt_while_the_map_is_empty(
     mut commands: Commands,
     frame: Option<Res<Frame>>,
     open: Option<Res<OpenMap>>,
+    project: Option<Res<Project>>,
     confirm: Option<Res<Confirm>>,
-    prompt: Query<Entity, With<EmptyMapPrompt>>,
+    prompt: Query<(Entity, &EmptyMapPrompt)>,
 ) {
     // **A question takes the prompt away**, and only a question: a menu opens as a gooey modal
     // popover (a `Dialog`), and a prompt behind one is where it belongs.
-    let wanted = open.is_some_and(|o| o.map.placements.is_empty()) && !confirm.is_some_and(|c| c.is_open());
-    let standing = prompt.iter().next();
-    match (wanted, standing) {
-        (true, None) => {
-            let Some(frame) = frame else { return };
-            spawn_prompt(&mut commands, frame.viewport);
-        }
-        (false, Some(_)) => {
-            for e in &prompt {
-                commands.entity(e).despawn();
-            }
-        }
-        _ => {}
+    let map_is_empty = open.is_some_and(|o| o.map.placements.is_empty()) && !confirm.is_some_and(|c| c.is_open());
+    let wanted = map_is_empty.then(|| {
+        if project.is_some_and(|p| p.library.descriptors.is_empty()) { EmptyMapPrompt::NoPieces } else { EmptyMapPrompt::NoPlacements }
+    });
+    let standing = prompt.iter().next().map(|(_, kind)| *kind);
+    if wanted == standing {
+        return;
+    }
+    for (e, _) in &prompt {
+        commands.entity(e).despawn();
+    }
+    if let (Some(kind), Some(frame)) = (wanted, frame) {
+        spawn_prompt(&mut commands, frame.viewport, kind);
     }
 }
 
-fn spawn_prompt(commands: &mut Commands, viewport: Entity) {
+fn spawn_prompt(commands: &mut Commands, viewport: Entity, kind: EmptyMapPrompt) {
     commands
         .spawn((
             Name::new("EmptyMapPrompt"),
-            EmptyMapPrompt,
+            kind,
             Node {
                 // PLACES-ITSELF-OK: an overlay on the viewport, not a panel in the frame's flow.
                 // `Frame` owns where docks go; this sits over the hole the world is drawn through.
@@ -108,8 +119,16 @@ fn spawn_prompt(commands: &mut Commands, viewport: Entity) {
             ChildOf(viewport),
         ))
         .with_children(|p| {
-            p.spawn(bevy_gooey::label(SENTENCE));
-            p.spawn((bevy_gooey::button(ACTION), OpenLibraryButton));
+            match kind {
+                EmptyMapPrompt::NoPlacements => {
+                    p.spawn(bevy_gooey::label(SENTENCE));
+                    p.spawn((bevy_gooey::button(ACTION), OpenLibraryButton));
+                }
+                EmptyMapPrompt::NoPieces => {
+                    p.spawn(bevy_gooey::label(NO_PIECES));
+                    p.spawn((accent_button(ADD_MESHES), AddMeshesButton));
+                }
+            }
         });
 }
 

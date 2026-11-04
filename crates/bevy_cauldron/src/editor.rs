@@ -2470,6 +2470,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
         app.add_plugins(crate::toolbar::ToolbarPlugin);
         app.add_plugins(crate::empty_state::EmptyStatePlugin);
+        app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
         app.add_plugins(crate::inspector_view::InspectorPlugin);
         app.add_plugins(crate::selection::SelectionPlugin);
@@ -3986,6 +3987,11 @@ fn rebuild_palette(
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
+            // **A library with no pieces says so, and where to get some** (#301): the same sentence and button as the map's own empty state.
+            if project.library.descriptors.is_empty() {
+                p.spawn(bevy_gooey::label(crate::add_meshes::NO_PIECES));
+                p.spawn((bevy_gooey::button(crate::add_meshes::ACTION), crate::add_meshes::AddMeshesButton));
+            }
             for (category, members) in palette_categories(&project, &open, &filters) {
                 let folded = fold.0.contains(&category);
                 p.spawn((
@@ -5568,6 +5574,10 @@ fn drop_reference(
         let bevy::window::FileDragAndDrop::DroppedFile { path_buf, .. } = drop else {
             continue;
         };
+        // A mesh is for the library (`add_meshes`), not a reference.
+        if crate::add_meshes::is_mesh_file(path_buf) {
+            continue;
+        }
         let (Some(project), Some(open)) = (project.as_deref(), open.as_deref()) else {
             state.status.problem(format!("{} was dropped with no map open, so it is not a reference", path_buf.display()));
             continue;
