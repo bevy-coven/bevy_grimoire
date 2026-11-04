@@ -24,6 +24,8 @@ cargo run -p bevy_cauldron -- .
 
 The editor opens a menu of the project's kits and maps; choose a map in the MAPS column. Run it with no argument and it opens the launcher instead: the projects you opened before (most recent first, with when), a folder to type, **New project…** and what the changelog added since you last opened one; opening a project starts the editor on it, at its kit and map menu, and **Copy command line** gives the line that does the same from a terminal. On your own game, pass its root instead of `.`; a project from before the rename has its `assets/emerge` folder moved to `assets/grimoire` the first time it opens. [Getting started](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/getting-started.md) walks through your first map.
 
+**On a Mac with Apple Silicon**, download `Cauldron-<version>-macos-arm64.dmg` from the [releases](https://github.com/bevy-coven/bevy_grimoire/releases) and drag Cauldron into Applications: it is the same editor with every family crate built in, signed and notarized. Its launcher shows its version, **Open example** copies the example project to `~/Documents/Cauldron Example` and opens it, and when a newer release exists the launcher and the editor's top bar offer **Update to v…**, which downloads it, checks its checksum and signature, and restarts into it (it waits while a map has unsaved changes). `tools/release/macos/build_app.sh` builds the same app locally.
+
 To let the Familiar drive the open editor, add the MCP server to your MCP client (the editor must be running):
 
 ```json
