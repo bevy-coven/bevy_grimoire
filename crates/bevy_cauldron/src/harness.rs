@@ -120,6 +120,9 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
                 // item, and the popover that lists them. In the shared list because a headless test
                 // starts a job and reads the band the same way a person does.
                 crate::jobs::JobsPlugin,
+                // **The app's own update** (`update.rs`): inert without the `Updater` only `main` inserts
+                // inside a `.app`; in the shared list so a headless test can insert one and click it.
+                crate::update::UpdatePlugin,
             ),
         ),
     ));

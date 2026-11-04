@@ -149,6 +149,10 @@ bevy_oracle = { path = "../bevy_oracle" }
 # Cmd+C on the detail pane — the pane's text into the system clipboard, so an author can hand a
 # piece's facts to an agent. Text only; the image-data feature would drag image deps in twice.
 arboard = { version = "3", default-features = false }
+# The updater (`update.rs`): a release's tag is compared as semver, and its zip is checked against the
+# release's `SHA256SUMS` before the running app is swapped for it.
+semver = "1"
+sha2 = "0.10"
 # The debugger's companion plugin. **Optional**, so it is absent from the resolved dependency graph
 # of an ordinary build — `cargo tree -i bevy_debugger_bevy` finds no package without the feature, and
 # neither does `bevy_remote`. A git dependency on `bevy-coven/bevy_fairy`, the successor of

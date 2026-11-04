@@ -234,7 +234,12 @@ impl Plugin for LauncherPlugin {
     }
 }
 
-fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, changelog: Option<Res<ChangelogText>>) {
+fn build_launcher(
+    mut commands: Commands,
+    recents: Option<Res<RecentProjects>>,
+    changelog: Option<Res<ChangelogText>>,
+    updater: Option<Res<crate::update::Updater>>,
+) {
     let stored = recents.as_deref().and_then(|r| recent::Recent::load(&r.0).ok());
     let rows = stored.as_ref().map(recent::Recent::listing).unwrap_or_default();
     let text = changelog.as_deref().map_or(CHANGELOG, |c| c.0.as_str());
@@ -301,6 +306,7 @@ fn build_launcher(mut commands: Commands, recents: Option<Res<RecentProjects>>, 
                 });
                 card.spawn((label(launcher.problem.clone().unwrap_or_default()), ProblemLine));
                 card.spawn((label(""), CommandLine));
+                card.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
             });
         });
     commands.insert_resource(launcher);
@@ -338,6 +344,9 @@ fn project_row(row: &Listed, now: u64) -> impl Bundle {
                         let Ok(row) = rows.get(activate.entity) else { return };
                         let line = command_line(&row.0, None, None);
                         let copied = if off.is_some() { Err("no clipboard in this run".to_owned()) } else { copy_to_clipboard(&line) };
+                    if let Some(updater) = updater.as_deref() {
+                        actions.spawn(crate::update::update_button(updater.label()));
+                    }
                         launcher.problem = match copied {
                             Ok(()) => None,
                             Err(e) => Some(format!("the clipboard did not take it ({e}); the line is below")),

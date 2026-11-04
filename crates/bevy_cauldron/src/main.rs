@@ -130,6 +130,8 @@ fn main() -> AppExit {
     if let Some(file) = bevy_cauldron::settings::user_file() {
         app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     }
+    // **The installed app's own update** (`update.rs`): only inside a `.app`, so `cargo run` never replaces itself.
+    bevy_cauldron::update::insert_for_the_running_app(&mut app);
 
     // **Both screens' plugins, always added.** Which one *runs* is the state's business, not the
     // plugin list's — a list that changed with the screen would be two plugin graphs, and only one

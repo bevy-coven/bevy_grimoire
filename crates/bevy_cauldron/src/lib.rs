@@ -171,6 +171,7 @@ pub mod thumbs;
 pub mod tiles;
 pub mod toolbar;
 pub mod token_prompt;
+pub mod update;
 pub mod view;
 pub mod vlm;
 pub mod watch;

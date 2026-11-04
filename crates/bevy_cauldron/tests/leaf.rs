@@ -51,6 +51,8 @@ const ALLOWED: &[(&str, &str)] = &[
     ("ureq", "the VLM transport — one blocking POST from a task-pool thread"),
     ("base64", "data-URI image parts for the booth renders"),
     ("image", "encodes the booth's RGBA readback to PNG"),
+    ("semver", "the updater compares a release tag's version with this build's (`update.rs`); already in the lockfile through other crates"),
+    ("sha2", "the updater checks a downloaded app against its release's SHA256SUMS before replacing the running one (`update.rs`)"),
     (
         "bevy_grimoire_snip",
         "the one crop, shared by the editor's snip and the MCP's grimoire_snip, so a picture from either door is cut the same way",

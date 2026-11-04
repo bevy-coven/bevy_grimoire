@@ -414,3 +414,4 @@ mod the_pointer_payload_says_where_the_cursor_got_to;
 mod background_jobs_show_and_can_be_stopped;
 mod a_row_click_while_filtering_arms_it;
 mod undressing_gives_the_editors_view_back;
+mod the_updater_offers_the_newest_release;
