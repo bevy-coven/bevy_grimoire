@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **292-window-fits-screen** `15732c1` The window fits your screen when it opens and comes back where you left it (#292) *No clip: window size and position only; proved by tests/the_window_fits_the_screen_and_is_remembered.rs*
+- **294-open-in-process** `82ff045` Opening a project from the launcher no longer starts a second Cauldron: the same window moves to it (#294) *No clip: no new screen: the launcher already opened projects, now without a second process; proved by tests/a_project_opens_in_the_same_process.rs*
 - **289-palette-words** `4cbe088` The PLACE list opens at its top with its first row armed, names each piece in words, and wraps a long name beside its triangle count instead of drawing over it; a row's tooltip gives the id and its triangles (#289)<br><a href="docs/changelog/media/2026-11-04-289-palette-words.mp4"><img src="docs/changelog/media/2026-11-04-289-palette-words.png" width="320" alt="clip"></a>
 - **285-no-adhoc-release** `a11c2b8` A release is published only when it is signed with the Developer ID and notarized: an ad-hoc build stays a test artifact (#285) *No clip: a release workflow guard with no surface; proved by the publish step's DEVELOPER_ID check in release-macos.yml*
 - **launcher-splash** `0474d7c` The launcher opens on a pixel-art splash of a murder of crows over a yellow moon, made with Retro Diffusion; the news list shows three entries so every button still fits a 720 px window<br><a href="docs/changelog/media/2026-11-04-launcher-splash.mp4"><img src="docs/changelog/media/2026-11-04-launcher-splash.png" width="320" alt="clip"></a>
