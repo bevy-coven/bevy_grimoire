@@ -6,7 +6,9 @@ pass, no session carried between them, the repository as the only memory. It is 
 how to start it, stop it, and read what it did.
 
 `build-loop` runs itself forever: one fresh `omp` process per pass, no session carried between them,
-DeepSeek 4.1 Flash, and the repository as the only memory. This file is how to start it, stop it, and
+and the repository as the only memory. **The model is a setting, not a property of the driver**: it
+defaults to `claude-sonnet-5-5` (`wiggum.sh:143`) and each supervisor overrides it — big's emerge unit
+runs `ollama-cloud/deepseek-v4.1-flash`, `zz-speed.conf` and `zz-burn.conf` run `anthropic/claude-sonnet-5-5`. This file is how to start it, stop it, and
 read what it did.
 
 **Setting up a loop on a machine that does not have it yet — its supervisor, its clone, its display, and
@@ -22,8 +24,8 @@ the gate prerequisite — is `docs/loop/RUNNING-A-LOOP.md`.** This file assumes 
 | protected evaluator | the repo's harness + tests | the score. **No pass may edit it.** |
 
 Every loop repo's command is `.omp/commands/build-loop.md` (the owner's rule since 2026-10-28: one name to
-know, in bevy_grimoire, bevy_elements, bevy_lights and bevy_society), and it wins over the generic `bevy-loop`
-where both exist. A repo with no loop command of its own, such as `bevy_debugger_mcp`, runs the generic one.
+know; on this laptop it is `bevy_carnage`, `bevy_flora`, `bevy_gooey`, `bevy_grimoire`, `bevy_lights` and
+`bevy_society`), and it wins over the generic `bevy-loop` where both exist. A repo with no loop command of its own, such as `bevy_debugger_mcp`, runs the generic one.
 
 ## What runs what
 
@@ -31,7 +33,7 @@ where both exist. A repo with no loop command of its own, such as `bevy_debugger
 flowchart TD
   unit["systemd user unit<br/>wiggum@emerge.service"] --> drv["tools/loop/wiggum.sh __driver"]
   drv -->|"one pass, then sleep 60s"| omp["omp -p /build-loop<br/>fresh context"]
-  omp --> gate["cargo build · clippy · test --workspace"]
+  omp --> gate["clippy · cargo nextest run --workspace<br/>cargo test --workspace --doc"]
   omp --> acc["accept.py --source ~/bevy_emerge_loop/assets → 10/10"]
   acc --> ed["bevy_cauldron<br/>windowed — needs a display"]
   unit -->|"ExecStartPre"| xvfb["Xvfb, one number per loop"]
@@ -117,15 +119,24 @@ its tree is saved as a snapshot and parked on a branch at the next start.
 
 ## Tests for the driver
 
-Four regression suites sit beside the driver, each building a throwaway repo, an origin and a fake `omp` (no model, no waiting). Run them against the file you are about to install, on macOS (bash 3.2) and on Linux (bash 5); the driver was changed on 2026-10-28 and all four passed on the macOS laptop.
+The driver's regression suites each build a throwaway repo, an origin and a fake `omp` (no model, no
+waiting). Run them against the file you are about to install, on macOS (bash 3.2) and on Linux (bash 5).
+
+**The driver argument must be an ABSOLUTE path.** Each suite `cd`s into its throwaway repo before
+launching the driver, so `tools/loop/wiggum.sh` is not found from there and seven checks fail with
+`No such file or directory` — which reads like a broken driver and is not one (measured 2026-11-04:
+5 of 12 passed with the relative path, 12 of 12 with `$PWD/...`).
 
 ```sh
-bash tools/loop/test_wiggum_start.sh    tools/loop/wiggum.sh   # start without setsid, the default model, the dirty guard: 12 checks, about 30 s
-bash tools/loop/test_wiggum_drain.sh    tools/loop/wiggum.sh   # drain versus stop: 23 checks
-bash tools/loop/test_wiggum_park.sh     tools/loop/wiggum.sh   # the park step: 57 checks across 18 cases
-bash tools/loop/test_wiggum_settings.sh tools/loop/wiggum.sh   # the repo's .omp/wiggum/ settings file and omp overlay, WIGGUM_SNAPSHOT: 25 checks
-python3 -m unittest tools/loop/test_omp_keys.py                # omp_keys.py, the stored-key tool: 7 tests
+D="$PWD/tools/loop/wiggum.sh"
+bash tools/loop/test_wiggum_start.sh    "$D"   # start without setsid, the default model, the dirty guard: 12 checks, about 30 s
+bash tools/loop/test_wiggum_drain.sh    "$D"   # drain versus stop: 23 checks
+bash tools/loop/test_wiggum_park.sh     "$D"   # the park step: 57 checks across 18 cases
+bash tools/loop/test_wiggum_settings.sh "$D"   # the repo's .omp/wiggum/ settings file and omp overlay, WIGGUM_SNAPSHOT: 27 checks
+python3 -m unittest discover -s tools/loop -p 'test_*.py'   # accept, command core, fast tests, omp keys, pre-push LFS, steps
 ```
+
+Measured 2026-11-04 on the macOS laptop, all green: start 12, drain 23, park 57, settings 27.
 
 Steering a running loop (focus, settings, provider, keys) is in `docs/loop/RUNNING-A-LOOP.md`, "Steer a loop".
 
@@ -133,9 +144,9 @@ Steering a running loop (focus, settings, provider, keys) is in `docs/loop/RUNNI
 
 | | |
 |---|---|
-| driver log | `~/target/emerge-loop/wiggum/driver.log` |
-| each pass, full output | `~/target/emerge-loop/wiggum/passes/pass-NNNN-*.log` |
-| systemd's view | `~/target/emerge-loop/wiggum/systemd.log` |
+| driver log | `~/.local/state/wiggum/<clone>/driver.log` |
+| each pass, full output | `~/.local/state/wiggum/<clone>/passes/pass-NNNN-*.log` |
+| systemd's view | the journal: `journalctl --user -u wiggum@<loop>` (the units log to `journal`, so there is no `systemd.log`) |
 | what a pass did | `~/bevy_emerge_loop/docs/loop/iterations/`, `docs/loop/log.md` |
 | what is still open | `~/bevy_emerge_loop/docs/loop/backlog.json` |
 | how long every step took | `~/.local/state/wiggum/<clone>/steps.tsv`, one row per model turn, tool call, background job and wait, written after each pass by `tools/loop/steps.py record`; pushed after each pass to the repo's `loop-stats` branch as `steps/<clone>.tsv` with a report in `steps/<clone>.md` |
@@ -180,8 +191,9 @@ there stops it with `status: "blocked"` for a human to run an evaluator pass.
 ## What it costs
 
 One pass every ~30–60 minutes, 20–40 minutes of model time each. **There is no spend cap in the units** —
-`WIGGUM_MAX` bounds the pass count. It **defaults to 0 (forever) in the script**, but every installed
-supervisor sets it to 400 on purpose: the driver exits **0** at the cap and `Restart=on-failure` /
+`WIGGUM_MAX` bounds the pass count. It **defaults to 0 (forever) in the script**, and the installed
+supervisors disagree on purpose: the committed plist sets 400, big's `wiggum@emerge.service.d/zz-speed.conf`
+sets 100000, and `tools/loop/wiggum.service` sets 0 — each for its own host: the driver exits **0** at the cap and `Restart=on-failure` /
 `KeepAlive.Crashed` will not restart a clean exit, so a small number ends the loop silently rather than
 bounding spend. To bound it for real, lower it and accept that it ends:
 

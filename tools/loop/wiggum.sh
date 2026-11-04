@@ -722,11 +722,19 @@ driver() {
   if [ -f "$SETTINGS_FILE" ]; then log "driver settings from ${SETTINGS_FILE#"$REPO"/}:$(printf ' %s' $SETTINGS_ACCEPTED)"; fi
   local idle_streak=0
 
+  # **Every stop says which one it was, in the exit status.** `Restart=on-failure` in a unit can only
+  # bring back a loop that a supervisor should retry, so the two stops that deserve a restart — five
+  # consecutive failed passes, and the disk floor — must not look like a deliberate drain. Before this,
+  # every stop fell out of the loop and the function returned 0, while `docs/loop/RUNNING-A-LOOP.md`
+  # claimed a give-up exited 1 and `zz-burn.conf` relied on it: a loop that failed five passes in a row
+  # stayed dead, which is the exact failure that drop-in was written to fix (found 2026-11-04).
+  local stop=ok
   while :; do
-    [ -f "$STOPFILE" ] && { log "driver STOP: stop file"; break; }
-    [ -f "$DRAINFILE" ] && { log "driver STOP: drain requested, no pass in flight"; break; }
+    [ -f "$STOPFILE" ] && { log "driver STOP: stop file"; stop=stopped; break; }
+    [ -f "$DRAINFILE" ] && { log "driver STOP: drain requested, no pass in flight"; stop=drained; break; }
     if [ "$MAX_PASSES" -gt 0 ] && [ "$(cat "$COUNTER" 2>/dev/null || echo 0)" -ge "$MAX_PASSES" ]; then
       log "driver STOP: reached WIGGUM_MAX=$MAX_PASSES"
+      stop=max
       break
     fi
 
@@ -744,6 +752,7 @@ driver() {
       log "pass failed rc=$rc consecutive=$FAILS"
       if [ "$FAILS" -ge 5 ]; then
         log "driver STOP: 5 consecutive failures — see $DRIVER_LOG and $PASS_LOG_DIR"
+        stop=failed
         break
       fi
     else
@@ -779,7 +788,14 @@ driver() {
     done
   done
   rm -f "$PIDFILE"
-  log "driver EXIT after $(cat "$COUNTER" 2>/dev/null || echo 0) pass(es)"
+  log "driver EXIT after $(cat "$COUNTER" 2>/dev/null || echo 0) pass(es) — stop=$stop"
+  # 0 for the stops a person asked for (stop, drain, WIGGUM_MAX reached); non-zero for the two a
+  # supervisor should retry (five consecutive failures, and the disk floor in `one_pass`). This is what
+  # makes `Restart=on-failure` mean what the units' comments say it means.
+  case "$stop" in
+    failed) return 1 ;;
+    *) return 0 ;;
+  esac
 }
 
 case "${1:-}" in

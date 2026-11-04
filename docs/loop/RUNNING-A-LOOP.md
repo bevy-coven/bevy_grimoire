@@ -239,8 +239,10 @@ Measured 2026-10-28 with both Ollama accounts at their weekly limit: omp tried t
   on big: `zz-burn.conf` carried `Restart=always`, `wiggum@gooey`'s 80th pass drained at 11:23:04 with zero
   open `grimoire-ui` requests and systemd restarted it at 11:25:07 for pass 81. `on-failure` keeps the one
   behaviour the owner asked for in that file — a loop that **failed** five passes in a row comes back
-  after 120 s — while a drain stays down. `wiggum.sh` therefore exits **0** when it drains and **1** when
-  it gives up (`EXIT_GAVE_UP`); check both before changing one.
+  after 120 s — while a drain stays down. `wiggum.sh` therefore exits **0** for the stops a person asked
+  for (`stop`, `drain`, `WIGGUM_MAX` reached) and **1** when it gives up after five consecutive failed
+  passes; check both before changing one. (Until 2026-11-04 it exited 0 for every stop, so a loop that
+  failed five passes stayed down and this bullet's own promise was false.)
 - **`TimeoutStopSec`/`ExitTimeOut` > `WIGGUM_PASS_TIMEOUT`**, or a stop cuts a pass mid-edit.
 - **`CARGO_TARGET_DIR` outside the repo, one per loop.** Workspace crates at one version share an artifact
   hash across checkouts, so a shared dir makes cargo call one tree's units `Fresh` and silently run the

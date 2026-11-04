@@ -89,10 +89,11 @@
     <string>400</string>
     <key>WIGGUM_THINK</key>
     <string>medium</string>
-    <!-- **Two hours, not the 75 minutes big uses.** This loop's gate is `cargo test --workspace` plus
-         `accept.py`, which links 54 mapper test binaries before it can score anything; that took ~6.5
-         min on big and is slower on ten cores with a second loop resident. A pass killed at the ceiling
-         after doing the work is pure loss. -->
+    <!-- **Two hours, not the 75 minutes big uses.** This loop's gate is clippy, `cargo nextest run
+         --workspace` and `cargo test --workspace --doc` plus `accept.py`; the mapper's 54 per-file test
+         binaries were folded into one `--test editor` binary (autotests = false), so the gate rebuilds
+         one binary instead of 54. Measured on big's gate.log to 2026-11-03: clippy ~73 s, nextest
+         154-181 s, doctests ~110 s. A pass killed at the ceiling after doing the work is pure loss. -->
     <key>WIGGUM_PASS_TIMEOUT</key>
     <string>7200</string>
     <key>RUSTUP_TOOLCHAIN</key>

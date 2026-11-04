@@ -23,13 +23,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libx11-dev mesa-vulkan-drivers xvfb pkg-config clang
       - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - shell: bash
-        run: xvfb-run -a cargo test --workspace 2>&1 | tee test-output.txt
+      - name: workspace tests (nextest)
+        run: xvfb-run -a cargo nextest run --workspace --no-fail-fast 2>&1 | tee test-output.txt
+      - name: doctests (nextest does not run them)
+        run: cargo test --workspace --doc 2>&1 | tee doc-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-output
-          path: test-output.txt
+          path: |
+            test-output.txt
+            doc-output.txt

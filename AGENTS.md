@@ -22,7 +22,11 @@ Games depend on these crates by path and the editor runs on a game as its projec
 
 - Changes a game needs are made here, in their own commits, with tests here. Never copy a crate into a game or patch it there.
 - Every API change lists the consumer callsites it breaks.
-- Before pushing, run `cargo nextest run --workspace` here and `cargo test` in each consumer.
+- **Run only the crate or module you touched** (`cargo nextest run -p <crate>`, or
+  `cargo nextest run -p bevy_cauldron --test editor -E 'test(<module>::)'`), never the whole workspace by
+  hand: the push is the full gate (`tools/loop/hooks/pre-push` runs clippy over every target,
+  `cargo nextest run --workspace` and `cargo test --workspace --doc`), and a hand-run is a second full pass
+  for nothing. A consumer (`Sanctuary`, `bevy_emerge`) is checked with `cargo nextest run` in its own clone.
 - If a consumer change depends on an unpushed commit here, the consumer's agents are told which commit (Sanctuary: `AGENTS_CHAT.md`).
 
 Consumers: Sanctuary (`/Users/ladvien/sanctuary`, decision 0087).
