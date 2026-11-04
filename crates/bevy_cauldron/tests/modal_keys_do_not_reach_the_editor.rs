@@ -178,7 +178,7 @@ fn tap(app: &mut App, keys: &[KeyCode]) {
 fn heading_for_the_menu(app: &App) -> bool {
     matches!(
         app.world().get_resource::<NextState<bevy_cauldron::screen::Screen>>(),
-        Some(NextState::Pending(bevy_cauldron::screen::Screen::Menu))
+        Some(NextState::Pending(bevy_cauldron::screen::Screen::Project))
     )
 }
 

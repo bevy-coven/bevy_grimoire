@@ -352,10 +352,9 @@ pub const fn ink(colour: Color) -> [u8; 4] {
 
 /// **The editor's interface scale**, and the one `main` starts the application at.
 ///
-/// Named here rather than written as a number in two places, because there is a second screen that
-/// legitimately runs at a different one: the menu multiplies `UiScale` by the display's scale factor
-/// so its offscreen capture rasterises sharp (`chooser::fit_capture_to_window`), and hands this back
-/// on the way out. Two owners of one value need one name for it.
+/// Named here rather than written as a number in two places: `main` starts at it and
+/// `fit_surface_to_window` scales from it. The menu screen that once ran at its own scale (its
+/// offscreen capture) went with the chooser (#296).
 ///
 /// **Raised on 2026-09-03, then made a base rather than an answer.** `fit_surface_to_window`
 /// multiplies this by the display's scale factor, which reports *density* and not *size*: on a
