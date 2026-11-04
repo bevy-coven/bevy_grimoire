@@ -6,6 +6,8 @@ A standalone world-building editor: open a project directory, author a map from 
 
 > **Part of [`bevy-coven/bevy_grimoire`](https://github.com/bevy-coven/bevy_grimoire)** (`crates/bevy_cauldron/`), MIT OR Apache-2.0, Bevy 0.20. It began as `crates/emerge-mapper/` in [`Ladvien/foundation_vs_slop`](https://github.com/Ladvien/foundation_vs_slop) with the history kept; that repo still carries the GPL Bevy 0.19 original until it ports to this one. Issues and PRs belong in `bevy_grimoire`.
 
+Started with no project, it opens on a launcher: a pixel-art splash of a murder of crows (made with Retro Diffusion, `tools/ui/splash-jobs.json`), the recent projects, and the changelog entries added since you last opened one.
+
 ## Four tabs
 
 - **Map** — palette, ghost, place, fill, undo.

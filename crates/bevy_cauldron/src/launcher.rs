@@ -25,6 +25,8 @@
 
 use std::path::{Path, PathBuf};
 
+use bevy::asset::RenderAssetUsages;
+use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::prelude::*;
 use bevy_gooey::{TextHint, ValueChange, button, heading, label, list, menu, observe, panel, screen, text_input};
 
@@ -51,8 +53,28 @@ pub struct News {
 /// How wide the launcher's card is, in logical pixels: wide enough for a project's row, narrower than the window.
 pub const CARD_WIDTH: f32 = 840.0;
 
-/// How many new entries the launcher lists before it says how many more there are.
-const NEWS_ROWS: usize = 6;
+/// The launcher's splash: pixel art by Retro Diffusion (`tools/ui/splash-jobs.json`), embedded like the icon sheet.
+pub const SPLASH_PNG: &[u8] = include_bytes!("../assets/ui/splash.png");
+
+/// The splash is drawn at this many logical pixels per art pixel: a whole number keeps the pixel grid crisp.
+const SPLASH_SCALE: f32 = 2.0;
+
+/// The splash decoded with a nearest sampler, because linear filtering blurs pixel art.
+fn splash_image() -> Result<Image, String> {
+    Image::from_buffer(
+        SPLASH_PNG,
+        ImageType::Extension("png"),
+        CompressedImageFormats::NONE,
+        true,
+        ImageSampler::nearest(),
+        RenderAssetUsages::default(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// How many new entries the launcher lists before it says how many more there are: three, so the list, the splash
+/// and a full recent list still fit a 720 px window (owner, 2026-11-04; six squeezed the splash to a sliver).
+const NEWS_ROWS: usize = 3;
 
 /// The longest a title is shown; a changelog line carries its whole story and the launcher shows the start.
 const TITLE_CHARS: usize = 140;
@@ -287,7 +309,20 @@ fn build_launcher(
     recents: Option<Res<RecentProjects>>,
     changelog: Option<Res<ChangelogText>>,
     updater: Option<Res<crate::update::Updater>>,
+    mut images: ResMut<Assets<Image>>,
+    // The handle and the art's size in pixels, kept so re-entering the launcher (a cancelled load) reuses one image.
+    mut splash: Local<Option<(Handle<Image>, Vec2)>>,
 ) {
+    if splash.is_none() {
+        match splash_image() {
+            Ok(image) => {
+                let size = Vec2::new(image.width() as f32, image.height() as f32);
+                *splash = Some((images.add(image), size));
+            }
+            // The PNG is compiled in, so a splash that will not decode is a build fault: the launcher shows none.
+            Err(e) => error!("the launcher's splash does not decode: {e}"),
+        }
+    }
     let stored = recents.as_deref().and_then(|r| recent::Recent::load(&r.0).ok());
     let rows = stored.as_ref().map(recent::Recent::listing).unwrap_or_default();
     let text = changelog.as_deref().map_or(CHANGELOG, |c| c.0.as_str());
@@ -303,8 +338,27 @@ fn build_launcher(
         .insert(Pickable::default())
         .with_children(|root| {
             root.spawn((panel(), LauncherCard))
-                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+                // Bounded by the viewport, not by `screen()`, whose root grows with its content; `min_height: 0` lets the bound
+                // win over the card's content height, so its children give way instead of the window's edge.
+                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_WIDTH), max_width: Val::Percent(100.0), max_height: Val::Vh(100.0), min_height: Val::Px(0.0), ..default() })
                 .with_children(|card| {
+                if let Some((handle, size)) = splash.as_ref() {
+                    card.spawn((
+                        ImageNode::new(handle.clone()),
+                        // The height is what gives way when the card would outgrow the window (six new lines and a full recent
+                        // list): the splash shrinks, its width following through the aspect ratio, and every button stays on screen.
+                        Node {
+                            height: Val::Px(size.y * SPLASH_SCALE),
+                            min_height: Val::Px(0.0),
+                            max_width: Val::Percent(100.0),
+                            aspect_ratio: Some(size.x / size.y),
+                            flex_shrink: 1.0,
+                            align_self: AlignSelf::Center,
+                            ..default()
+                        },
+                        Name::new("launcher splash"),
+                    ));
+                }
                 card.spawn(heading("Cauldron"));
                 card.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
                 card.spawn(label("The editor that writes a grimoire, the book your game loads."));
