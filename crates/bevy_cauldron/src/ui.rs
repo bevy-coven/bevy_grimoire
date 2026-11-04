@@ -89,6 +89,67 @@ impl Plugin for EditorUiPlugin {
                 .after(crate::family_host::Reloaded)
                 .before(bevy_gooey::GooeySystems::Style),
         );
+        app.add_systems(Update, paint_marked_buttons.after(bevy_gooey::GooeySystems::Style));
+    }
+}
+
+/// **The one primary button of a screen**, filled with the skin's accent (#295). `bevy_gooey` has only one kind of button, so
+/// this marks a [`bevy_gooey::button`] and [`paint_marked_buttons`] repaints it after gooey's own restyle
+/// (bevy-coven/bevy_gooey#40 asks for the widget itself). A screen has at most one.
+#[derive(Component)]
+pub struct AccentButton;
+
+/// A [`bevy_gooey::button`] marked as the screen's primary action: [`AccentButton`].
+pub fn accent_button(text: impl Into<String>) -> impl Bundle {
+    (bevy_gooey::button(text), AccentButton)
+}
+
+/// How far the accent moves toward white while hovered, and toward black while pressed.
+const ACCENT_HOVER_MIX: f32 = 0.18;
+const ACCENT_PRESS_MIX: f32 = 0.2;
+
+/// Repaints an [`AccentButton`] (accent fill, accent text) and a [`bevy::ui::Selected`] button (a card or a navigation row that
+/// is the chosen one: the skin's hovered fill). It runs after gooey's restyle, which does not restyle on a colour change, so the
+/// two never fight; a pressed selected button keeps gooey's own pressed fill.
+#[allow(clippy::type_complexity)]
+fn paint_marked_buttons(
+    skin: Res<bevy_gooey::GooeySkin>,
+    mut buttons: Query<
+        (&mut BackgroundColor, Has<AccentButton>, Option<&bevy::picking::hover::Hovered>, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
+        (With<bevy_gooey::Role>, Or<(With<AccentButton>, With<bevy::ui::Selected>)>),
+    >,
+    mut texts: Query<(&bevy_gooey::Role, &mut TextColor)>,
+) {
+    for (mut fill, accent, hovered, pressed, disabled, children) in &mut buttons {
+        let want = if disabled {
+            skin.surface
+        } else if accent {
+            let base = skin.accent;
+            if pressed {
+                bevy::color::Mix::mix(&base, &Color::BLACK, ACCENT_PRESS_MIX)
+            } else if hovered.is_some_and(|h| h.0) {
+                bevy::color::Mix::mix(&base, &Color::WHITE, ACCENT_HOVER_MIX)
+            } else {
+                base
+            }
+        } else if pressed {
+            continue;
+        } else {
+            skin.hovered()
+        };
+        if fill.0 != want {
+            fill.0 = want;
+        }
+        if accent && !disabled {
+            for child in children.into_iter().flat_map(|c| c.iter()) {
+                if let Ok((role, mut ink)) = texts.get_mut(child)
+                    && *role == bevy_gooey::Role::ButtonText
+                    && ink.0 != skin.accent_text
+                {
+                    ink.0 = skin.accent_text;
+                }
+            }
+        }
     }
 }
 

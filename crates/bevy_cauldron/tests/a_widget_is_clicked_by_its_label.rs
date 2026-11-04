@@ -45,9 +45,12 @@ fn a_recent_project_is_opened_by_clicking_its_name() {
 
     let row = find_by_label(&mut app, "alpha").expect("the launcher has one button that says alpha");
     assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Launcher, "nothing opens until a row is chosen");
-    click(&mut app, row);
-    for _ in 0..3 {
-        app.update();
+    // A first click chooses the card; a second on the same card opens it.
+    for _ in 0..2 {
+        click(&mut app, row);
+        for _ in 0..3 {
+            app.update();
+        }
     }
     assert_eq!(
         app.world().resource::<MenuOpening>().root,

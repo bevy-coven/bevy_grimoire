@@ -638,6 +638,24 @@ pub fn create_project_with(parent: &Path, raw_name: &str, vocab: &[u8]) -> Resul
              is there."
         ));
     }
+    write_project_files(&dir, vocab)?;
+    Ok(dir)
+}
+
+/// **Make the folder `dir` a project in place**: it gets what a project needs and keeps everything it held. Refused for a
+/// path that is not a folder, and for one that already is a project (its files are not rewritten).
+pub fn make_project_here(dir: &Path, vocab: &[u8]) -> Result<(), String> {
+    if !dir.is_dir() {
+        return Err(format!("{} is not a folder", dir.display()));
+    }
+    if dir.join(GRIMOIRE_DIR).exists() {
+        return Err(format!("{} is already a project", dir.display()));
+    }
+    write_project_files(dir, vocab)
+}
+
+/// What a project is made of, written under `dir`: `kits.ron` with no kit, and the vocabulary.
+fn write_project_files(dir: &Path, vocab: &[u8]) -> Result<(), String> {
     let grimoire = dir.join(GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).map_err(|e| format!("cannot make {}: {e}", grimoire.display()))?;
 
@@ -660,7 +678,7 @@ pub fn create_project_with(parent: &Path, raw_name: &str, vocab: &[u8]) -> Resul
     // `create_kit`'s own note), no `maps/` (`save_atomic` creates it), no kit — the `+ new kit`
     // row makes one, and because `create_kit` calls `bind_kit`, that first kit also becomes the
     // authoring kit with no extra code.
-    Ok(dir)
+    Ok(())
 }
 
 /// **Write the map's bash**, leaving every other field as it was. Same door `write_settings` uses:

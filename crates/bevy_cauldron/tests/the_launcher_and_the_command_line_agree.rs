@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use bevy_cauldron::args;
-use bevy_cauldron::launcher::{self, ClipboardOff, Launcher, LauncherPlugin};
+use bevy_cauldron::launcher::{self, ClipboardOff, LauncherPlugin};
 use bevy_cauldron::recent::{self, RecentProjects};
 use bevy_cauldron::screen::Screen;
 use bevy_gooey::Role;
@@ -101,22 +101,28 @@ fn copy_command_line_shows_the_line_for_the_row_even_when_the_clipboard_cannot_t
     for _ in 0..4 {
         app.update();
     }
-    let button = {
+    // The card's context menu holds the verb; its item acts on the card the menu is open for.
+    let item = {
         let world = app.world_mut();
-        let mut q = world.query::<(Entity, &Children)>();
+        let card = world.query_filtered::<Entity, With<bevy_cauldron::launcher::ProjectCard>>().single(world).expect("a recent project has a card");
+        let menu = world.query::<&bevy_gooey::ContextMenu>().iter(world).next().map(|m| m.0).expect("a card names its menu");
+        let mut items = world.query::<(Entity, &Children)>();
         let mut texts = world.query::<(&Role, &Text)>();
-        q.iter(world)
-            .find_map(|(e, kids)| kids.iter().find_map(|k| texts.get(world, k).ok().filter(|(r, t)| **r == Role::ButtonText && t.0 == "Copy command line").map(|_| e)))
-            .expect("a recent project's row has a Copy command line button")
+        let item = items
+            .iter(world)
+            .filter(|(e, _)| world.get::<ChildOf>(*e).is_some_and(|p| p.parent() == menu))
+            .find_map(|(e, kids)| kids.iter().find_map(|k| texts.get(world, k).ok().filter(|(_, t)| t.0 == "Copy command line").map(|_| e)))
+            .expect("the menu has Copy command line");
+        world.entity_mut(menu).insert(bevy_gooey::ContextTarget(card));
+        item
     };
-    app.world_mut().commands().trigger(Activate { entity: button });
+    app.world_mut().commands().trigger(Activate { entity: item });
     for _ in 0..3 {
         app.update();
     }
 
     let want = launcher::command_line(&root.canonicalize().unwrap(), None, None);
-    assert_eq!(app.world().resource::<Launcher>().line.as_deref(), Some(want.as_str()));
-    let mut q = app.world_mut().query::<(&Role, &Text)>();
-    assert!(q.iter(app.world()).any(|(r, t)| *r == Role::Label && t.0 == want), "the line is on the screen, to copy by hand if the clipboard is out of reach");
+    let mut toasts = app.world_mut().query::<&bevy_gooey::Toast>();
+    assert!(toasts.iter(app.world()).any(|t| t.text().contains(&want)), "the line is on the screen, to copy by hand if the clipboard is out of reach");
     let _ = std::fs::remove_dir_all(&scratch);
 }

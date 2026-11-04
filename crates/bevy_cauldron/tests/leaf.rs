@@ -61,6 +61,7 @@ const ALLOWED: &[(&str, &str)] = &[
         "bevy_oracle",
         "the after-edit checks (#111): typed yes/no questions to a decision model about what an agent's operation changed — authoring time only, never in a game",
     ),
+    ("rfd", "the OS's own folder and file chooser for Open folder…, Locate…, a new project's location and Add meshes… (`picker.rs`, #298); its `xdg-portal` backend talks D-Bus to the desktop's portal and builds no GTK"),
     ("arboard", "Cmd+C copies the live tab's text, problems first, for handing to an agent"),
     (
         "bevy_debugger_bevy",

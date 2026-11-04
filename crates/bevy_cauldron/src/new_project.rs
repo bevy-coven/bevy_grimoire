@@ -19,11 +19,11 @@ use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy_gooey::{FieldProblem, TextHint, ValueChange, button, choice, heading, label, observe, panel, text_input};
 
-use crate::launcher::{Launcher, OpenRequest, ProblemLine};
+use crate::launcher::{Launcher, OpenRequest};
 use crate::screen::Screen;
 
 /// The vocabulary every new project starts from, byte for byte as the example project keeps it.
-const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.ron");
+pub(crate) const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.ron");
 
 /// What a new project starts with.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -185,7 +185,7 @@ fn spawn_the_card(
     mut commands: Commands,
     form: Option<Res<NewProjectForm>>,
     cards: Query<(), With<FormCard>>,
-    root: Query<Entity, With<crate::launcher::LauncherRoot>>,
+    root: Query<Entity, With<crate::launcher::HomeContent>>,
 ) {
     let Some(form) = form else { return };
     if !cards.is_empty() {
@@ -217,9 +217,6 @@ fn spawn_the_card(
                 }),
             ));
             card.spawn((label(""), ReasonLine));
-            // A Create that fails after the form is ready (a folder that cannot be made, a kit that was not) says so here:
-            // the launcher's own line is on the card this form replaces.
-            card.spawn((label(""), ProblemLine));
             card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
                 row.spawn((
                     button("Create"),

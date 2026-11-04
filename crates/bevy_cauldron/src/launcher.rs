@@ -1,35 +1,50 @@
-//! **The launcher: the first screen of a Cauldron started with no project** (UI-10, #216).
+//! **The Projects home: the first screen of a Cauldron started with no project** (UI-10, #216; #295).
 //!
-//! `bevy_cauldron` with no argument (and `--live`, which names no project) lists the projects it has opened, most recent first, with each one's
-//! name, folder and when it was last opened (`recent.rs`, UI-11), and offers to open a folder a person
-//! types, or the example project that ships with the source. A project named on the command line skips
-//! this screen: a bare `ROOT` goes to the chooser, and a door or a map goes through the loading screen (`loading.rs`) into the editor.
+//! `bevy_cauldron` with no argument (and `--live`, which names no project) fills the window with a sidebar and a
+//! page. The sidebar holds the splash, the three destinations (Projects, Learn, What's new), Settings, the version and the
+//! updater. The Projects page lists the projects the editor has opened, most recent first, as cards (`recent.rs`, UI-11) with a
+//! filter, and offers New project and Open folder…; on a first run, with nothing opened yet, it is a welcome whose one accent
+//! button is **Open the example**. A project named on the command line skips this screen.
 //!
 //! # Opening a project happens in this process
 //!
 //! A project's meshes are named relative to the asset root, and the asset root is a reader that can move
-//! (`project_assets.rs`, #294): choosing a project points it there ([`crate::project_assets::open_project`])
-//! and the window goes on to the chooser, with no second process and no second window. [`command_line`] is
-//! what a person pastes into a terminal to open the same project the same way; it is the argv `open_project` parses.
+//! (`project_assets.rs`, #294): choosing a project points it there ([`crate::project_assets::open_project`]),
+//! with no second process and no second window. [`command_line`] is what a person pastes into a terminal to open the same
+//! project the same way; it is the argv `open_project` parses.
 //!
-//! The chooser (`chooser.rs`) is still where a kit and a map are picked, until the workbench (UI-30) takes that
-//! over; this screen replaces only the way into a project.
+//! # The file chooser is the OS's own
 //!
-//! # What is here, and what is not yet
+//! Folders and files are chosen with the system's chooser (`picker.rs`, #298): `rfd` with its `xdg-portal` backend on
+//! Linux, which talks D-Bus to the desktop's portal and so pulls no GTK into the build (`rfd`'s other Linux backend
+//! does, which is why a typed path stood here before). A system with no chooser service gets a toast saying so. A folder
+//! that is not a project is a toast too, with the button that makes it one.
 //!
-//! A typed folder path, not the OS folder dialog: no family crate opens one and `rfd`'s Linux backends
-//! pull a D-Bus stack or GTK into every build, which wants its own reviewed step. The thumbnail on each
-//! row waits for the thumbnail cache; the Settings button opens the settings screen (`settings_screen.rs`, UI-71).
+//! # What is built from what is missing in `bevy_gooey`
+//!
+//! A card, the accent button and the vertical navigation are local until bevy_gooey#41, #40 and #42 land: a card is a gooey
+//! button's skeleton with an image and two quiet lines, the accent button is [`crate::ui::AccentButton`], and the navigation is
+//! three buttons, the chosen one marked [`bevy::ui::Selected`].
 
 use std::path::{Path, PathBuf};
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
+use bevy::input_focus::InputFocusVisible;
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy_gooey::{TextHint, ValueChange, button, heading, label, list, menu, observe, panel, screen, text_input};
+use bevy::ui::Selected;
+use bevy::ui::auto_directional_navigation::AutoDirectionalNavigation;
+use bevy_gooey::{
+    Activate, ContextMenu, ContextTarget, Role, SplitAxis, SplitFraction, SplitMin, TextHint, ToastAction, ValueChange, button, context_menu,
+    fuzzy_score, heading, label, menu_item, observe, screen, separator, split, text_input, toast, toast_alert,
+};
 
-use crate::recent::{self, Listed, RecentProjects};
+use crate::picker::{PickFor, PickRequest, Picked};
+use crate::recent::{self, Listed, Recent, RecentProjects};
 use crate::screen::Screen;
+use crate::ui::accent_button;
+
 
 /// The binary's name, as the copied command line spells it.
 pub const PROGRAM: &str = "bevy_cauldron";
@@ -54,9 +69,6 @@ pub const CARD_WIDTH: f32 = 840.0;
 /// The launcher's splash: pixel art by Retro Diffusion (`tools/ui/splash-jobs.json`), embedded like the icon sheet.
 pub const SPLASH_PNG: &[u8] = include_bytes!("../assets/ui/splash.png");
 
-/// The splash is drawn at this many logical pixels per art pixel: a whole number keeps the pixel grid crisp.
-const SPLASH_SCALE: f32 = 2.0;
-
 /// The splash decoded with a nearest sampler, because linear filtering blurs pixel art.
 fn splash_image() -> Result<Image, String> {
     Image::from_buffer(
@@ -69,10 +81,6 @@ fn splash_image() -> Result<Image, String> {
     )
     .map_err(|e| e.to_string())
 }
-
-/// How many new entries the launcher lists before it says how many more there are: three, so the list, the splash
-/// and a full recent list still fit a 720 px window (owner, 2026-11-04; six squeezed the splash to a sliver).
-const NEWS_ROWS: usize = 3;
 
 /// The longest a title is shown; a changelog line carries its whole story and the launcher shows the start.
 const TITLE_CHARS: usize = 140;
@@ -109,16 +117,48 @@ pub fn whats_new(text: &str, seen: Option<&str>) -> Vec<News> {
     }
 }
 
-/// A person chose a project to open: a row of the list, the example, or a typed folder.
+/// A person chose a project to open: a card, the example, a folder from the chooser or a new project.
 #[derive(Message, Clone, Debug, PartialEq)]
 pub struct OpenRequest(pub PathBuf);
 
-/// **What the launcher is showing.** Rebuilt every time the screen is entered.
+/// A person chose to open a project **on a map**: the example's, from the welcome. Everything else about the request is
+/// [`OpenRequest`]'s.
+#[derive(Message, Clone, Debug, PartialEq)]
+pub struct OpenMapRequest(pub PathBuf, pub String);
+
+/// The page the sidebar shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HomeTab {
+    #[default]
+    Projects,
+    Learn,
+    WhatsNew,
+}
+
+impl HomeTab {
+    pub const ALL: [HomeTab; 3] = [HomeTab::Projects, HomeTab::Learn, HomeTab::WhatsNew];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            HomeTab::Projects => "Projects",
+            HomeTab::Learn => "Learn",
+            HomeTab::WhatsNew => "What's new",
+        }
+    }
+}
+
+/// **What the Projects home is showing.** Rebuilt every time the screen is entered.
 #[derive(Resource, Default, Debug)]
 pub struct Launcher {
     /// The recent projects as [`recent::Recent::listing`] orders them.
     pub rows: Vec<Listed>,
-    /// A refusal, shown on the screen until the next choice.
+    /// The card a click chose; a second activation of it, or one from the keyboard, opens it.
+    pub selected: Option<PathBuf>,
+    /// What the filter box holds.
+    pub filter: String,
+    /// The page the sidebar chose.
+    pub tab: HomeTab,
+    /// A refusal to say: the launcher shows each new one as a toast. The updater and the new-project form write it.
     pub problem: Option<String>,
     /// The example project, when this build has one beside it.
     pub example: Option<PathBuf>,
@@ -130,9 +170,13 @@ pub struct Launcher {
     pub new_project_asked: bool,
     /// Create or Cancel was pressed on that form; `new_project.rs` takes it down and clears this.
     pub new_project_done: bool,
-    /// The command line last asked for with "Copy command line", shown whether or not the clipboard took it.
-    pub line: Option<String>,
+    /// The cards are out of date (a project was removed or located): the next frame draws them again.
+    pub dirty: bool,
 }
+
+/// **Take the tour was pressed**: the example is being opened so the editor can offer its tour. The editor takes this on entering.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct TourRequested;
 
 /// **A run with no clipboard to reach**: "Copy command line" says so instead of touching the OS clipboard. A
 /// test inserts it, so a headless run never overwrites what a person has copied.
@@ -239,38 +283,81 @@ fn example_to_open(example: &Path) -> Result<PathBuf, String> {
     })
 }
 
-/// A typed path as a folder: `~` is the home folder.
-fn typed_path(text: &str) -> PathBuf {
-    let text = text.trim();
-    match text.strip_prefix("~/").and_then(|rest| dirs::home_dir().map(|h| h.join(rest))) {
-        Some(p) => p,
-        None => PathBuf::from(text),
-    }
-}
+/// Where "Getting started guide" opens.
+pub const GUIDE_URL: &str = "https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/getting-started.md";
 
-/// A recent project's row: its folder, and whether that folder is gone.
-#[derive(Component)]
-struct ProjectRow(PathBuf);
+/// Where "See every change" opens.
+pub const CHANGELOG_URL: &str = "https://github.com/bevy-coven/bevy_grimoire/blob/main/CHANGELOG.md";
 
-/// The "Copy command line" button of a recent project's row.
-#[derive(Component)]
-struct CopyLine(PathBuf);
+/// The sidebar's width, in logical pixels.
+const SIDEBAR_PX: f32 = 240.0;
+/// The splash in the sidebar: the art is 256 x 80, drawn at the sidebar's width.
+const SIDEBAR_SPLASH: Vec2 = Vec2::new(SIDEBAR_PX, 75.0);
+/// The least the page beside the sidebar may be.
+const PAGE_MIN_PX: f32 = 480.0;
+/// The welcome card's splash is drawn at this many logical pixels per art pixel.
+const WELCOME_SPLASH_SCALE: f32 = 2.0;
+/// A project card's width, and the picture's size inside it.
+const CARD_PX: f32 = 184.0;
+const THUMB: Vec2 = Vec2::new(160.0, 90.0);
+/// The longest a folder is shown before its middle is cut.
+const FOLDER_CHARS: usize = 24;
+/// The mark of a cut.
+const FOLDER_ELLIPSIS: char = '…';
 
-/// The launcher's own root node, which the new-project form is added to.
+/// The splash decoded once, and its size in art pixels.
+#[derive(Resource, Default)]
+struct SplashArt(Option<(Handle<Image>, Vec2)>);
+
+/// The window's root node, which the context menu hangs under.
 #[derive(Component)]
 pub struct LauncherRoot;
 
-/// The launcher's list card, which the new-project form replaces while it is open.
+/// The pages' container, which the new-project form replaces while it is open.
 #[derive(Component)]
 pub struct LauncherCard;
 
-/// The line that shows the refusal.
+/// The page beside the sidebar: where the new-project form stands while it is open.
 #[derive(Component)]
-pub(crate) struct ProblemLine;
+pub struct HomeContent;
 
-/// The line that shows the command line last asked for.
 #[derive(Component)]
-struct CommandLine;
+struct SidebarRoot;
+
+/// One page of the home; only the sidebar's choice is shown.
+#[derive(Component)]
+struct HomePage(HomeTab);
+
+/// The body of the Projects page: the welcome or the grid, drawn again when the cards change.
+#[derive(Component)]
+struct ProjectsBody;
+
+/// The scrolling box the cards stand in.
+#[derive(Component)]
+struct ProjectGrid;
+
+/// A sidebar row.
+#[derive(Component)]
+pub struct NavTab(pub HomeTab);
+
+/// The shared menu every card names.
+#[derive(Component)]
+struct CardMenu;
+
+/// A project's card. `key` is what the filter reads: its name and its folder.
+#[derive(Component)]
+pub struct ProjectCard {
+    pub path: PathBuf,
+    key: String,
+}
+
+/// The card of a project whose folder is gone: it does not open, and offers Locate… and Remove.
+#[derive(Component)]
+pub struct MissingCard {
+    pub path: PathBuf,
+    key: String,
+}
+
 
 /// "3 days ago", for a time in seconds since the epoch.
 pub fn ago(then: u64, now: u64) -> String {
@@ -293,175 +380,435 @@ pub struct LauncherPlugin;
 
 impl Plugin for LauncherPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(crate::new_project::NewProjectPlugin).add_message::<OpenRequest>()
-            .add_systems(OnEnter(Screen::Launcher), build_launcher)
+        app.add_plugins((crate::new_project::NewProjectPlugin, crate::picker::PickerPlugin))
+            .add_message::<OpenRequest>()
+            .add_message::<OpenMapRequest>()
+            .init_resource::<SplashArt>()
+            .add_observer(on_toast_action)
+            .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
-                (open_requested, show_problem, show_line).chain().run_if(in_state(Screen::Launcher)),
+                (hide_the_divider, open_requested, on_picked, say_the_problem, redraw_the_cards, apply_filter, show_the_tab, mark_the_selection)
+                    .chain()
+                    .run_if(in_state(Screen::Launcher)),
             );
     }
+}
+
+/// The sidebar is not a thing to resize, so its divider is not drawn and not reachable.
+fn hide_the_divider(mut dividers: Query<&mut Node, With<bevy_gooey::SplitDivider>>) {
+    for mut node in &mut dividers {
+        if node.display != Display::None {
+            node.display = Display::None;
+        }
+    }
+}
+
+/// The names a card and the filter share: its folder's name, then the folder.
+fn card_key(path: &Path) -> String {
+    format!("{} {}", name_of(path), path.display())
+}
+
+/// `text` cut in the middle with an ellipsis when it is longer than `max` characters.
+pub fn middle_ellipsis(text: &str, max: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max || max < 3 {
+        return text.to_owned();
+    }
+    let keep = max - 1;
+    let tail = keep / 2;
+    let head = keep - tail;
+    chars[..head].iter().chain(std::iter::once(&FOLDER_ELLIPSIS)).chain(chars[chars.len() - tail..].iter()).collect()
+}
+
+/// A folder as a person reads it: the home folder is `~`, and a long one loses its middle.
+fn shown_folder(path: &Path) -> String {
+    let full = match dirs::home_dir().and_then(|home| path.strip_prefix(&home).ok().map(Path::to_path_buf)) {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
+    };
+    middle_ellipsis(&full, FOLDER_CHARS)
+}
+
+/// A quiet line under a name.
+fn quiet(text: impl Into<String>) -> impl Bundle {
+    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::LABEL))
 }
 
 fn build_launcher(
     mut commands: Commands,
     recents: Option<Res<RecentProjects>>,
     changelog: Option<Res<ChangelogText>>,
-    updater: Option<Res<crate::update::Updater>>,
     mut images: ResMut<Assets<Image>>,
-    // The handle and the art's size in pixels, kept so re-entering the launcher (a cancelled load) reuses one image.
-    mut splash: Local<Option<(Handle<Image>, Vec2)>>,
+    mut splash: ResMut<SplashArt>,
 ) {
-    if splash.is_none() {
+    if splash.0.is_none() {
         match splash_image() {
             Ok(image) => {
                 let size = Vec2::new(image.width() as f32, image.height() as f32);
-                *splash = Some((images.add(image), size));
+                splash.0 = Some((images.add(image), size));
             }
-            // The PNG is compiled in, so a splash that will not decode is a build fault: the launcher shows none.
-            Err(e) => error!("the launcher's splash does not decode: {e}"),
+            // The PNG is compiled in, so a splash that will not decode is a build fault: the home shows none.
+            Err(e) => error!("the home's splash does not decode: {e}"),
         }
     }
-    let stored = recents.as_deref().and_then(|r| recent::Recent::load(&r.0).ok());
-    let rows = stored.as_ref().map(recent::Recent::listing).unwrap_or_default();
+    let (stored, problem) = match recents.as_deref().map(|r| Recent::load(&r.0)) {
+        Some(Ok(r)) => (Some(r), None),
+        Some(Err(e)) => (None, Some(e)),
+        None => (None, None),
+    };
+    let rows = stored.as_ref().map(Recent::listing).unwrap_or_default();
     let text = changelog.as_deref().map_or(CHANGELOG, |c| c.0.as_str());
     let whats_new = whats_new(text, stored.as_ref().and_then(|r| r.changelog_seen.as_deref()));
     let newest = news(text).first().map(|n| n.id.clone());
-    let problem = recents.as_deref().and_then(|r| recent::Recent::load(&r.0).err());
-    let example = example_project();
-    let now = recent::now();
-    let launcher = Launcher { rows, problem, example, whats_new, newest, ..default() };
+    commands.insert_resource(Launcher { rows, problem, example: example_project(), whats_new, newest, ..default() });
 
     commands
-        .spawn((screen(), DespawnOnExit(Screen::Launcher), LauncherRoot, Name::new("launcher")))
+        .spawn((screen(), DespawnOnExit(Screen::Launcher), LauncherRoot, Name::new("projects home")))
         .insert(Pickable::default())
         .with_children(|root| {
-            root.spawn((panel(), LauncherCard))
-                // Bounded by the viewport, not by `screen()`, whose root grows with its content; `min_height: 0` lets the bound
-                // win over the card's content height, so its children give way instead of the window's edge.
-                .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_WIDTH), max_width: Val::Percent(100.0), max_height: Val::Vh(100.0), min_height: Val::Px(0.0), ..default() })
-                .with_children(|card| {
-                if let Some((handle, size)) = splash.as_ref() {
-                    card.spawn((
-                        ImageNode::new(handle.clone()),
-                        // The height is what gives way when the card would outgrow the window (six new lines and a full recent
-                        // list): the splash shrinks, its width following through the aspect ratio, and every button stays on screen.
-                        Node {
-                            height: Val::Px(size.y * SPLASH_SCALE),
-                            min_height: Val::Px(0.0),
-                            max_width: Val::Percent(100.0),
-                            aspect_ratio: Some(size.x / size.y),
-                            flex_shrink: 1.0,
-                            align_self: AlignSelf::Center,
-                            ..default()
-                        },
-                        Name::new("launcher splash"),
-                    ));
-                }
-                card.spawn(heading("Cauldron"));
-                card.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
-                card.spawn(label("The editor that writes a grimoire, the book your game loads."));
-                if !launcher.whats_new.is_empty() {
-                    card.spawn(heading("New since you last opened"));
-                    for item in launcher.whats_new.iter().take(NEWS_ROWS) {
-                        card.spawn(label(format!("{}: {}", item.id, item.title)));
-                    }
-                    if launcher.whats_new.len() > NEWS_ROWS {
-                        card.spawn(label(format!("and {} more in CHANGELOG.md", launcher.whats_new.len() - NEWS_ROWS)));
-                    }
-                }
-                card.spawn(heading("Recent projects"));
-                if launcher.rows.is_empty() {
-                    card.spawn(label("No project has been opened yet. Type a folder below, or open the example."));
-                } else {
-                    let rows: Vec<_> = launcher.rows.iter().map(|r| project_row(r, now)).collect();
-                    card.spawn(list(5.0, Children::spawn(SpawnIter(rows.into_iter()))));
-                }
-                card.spawn((
-                    text_input("Open a folder", ""),
-                    TextHint("a folder, then Enter".into()),
-                    observe(|change: On<ValueChange<String>>, mut out: MessageWriter<OpenRequest>| {
-                        if change.is_final && !change.value.trim().is_empty() {
-                            out.write(OpenRequest(typed_path(&change.value)));
-                        }
-                    }),
-                ));
-                card.spawn(menu()).with_children(|actions| {
-                    actions.spawn((
-                        button("New project…"),
-                        observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true),
-                    ));
-                    actions.spawn((
-                        button("Settings"),
-                        observe(|_: On<bevy_gooey::Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
-                            out.write(crate::settings_screen::OpenSettings);
-                        }),
-                    ));
-                    if let Some(updater) = updater.as_deref() {
-                        actions.spawn(crate::update::update_button(updater.label()));
-                    }
-                    if let Some(example) = launcher.example.clone() {
-                        actions.spawn((
-                            button("Open example"),
-                            observe(move |_: On<bevy_gooey::Activate>, mut out: MessageWriter<OpenRequest>, mut launcher: ResMut<Launcher>| {
-                                match example_to_open(&example) {
-                                    Ok(root) => {
-                                        out.write(OpenRequest(root));
-                                    }
-                                    Err(e) => launcher.problem = Some(e),
-                                }
-                            }),
-                        ));
-                    }
-                });
-                card.spawn((label(launcher.problem.clone().unwrap_or_default()), ProblemLine));
-                card.spawn((label(""), CommandLine));
-            });
+            // `SplitMin` holds the sidebar at its width and the divider is fixed: the sidebar is not a thing to resize.
+            root.spawn((
+                split(
+                    SplitAxis::Horizontal,
+                    (Role::Surface(1), Node { flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, SidebarRoot),
+                    (Role::Surface(0), Node { flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_GROUP), min_height: Val::Px(0.0), ..default() }, HomeContent),
+                ),
+                SplitFraction(0.0),
+                SplitMin::new(SIDEBAR_PX, PAGE_MIN_PX),
+            ));
         });
-    commands.insert_resource(launcher);
 }
 
-/// One recent project: its name as a button that opens it, its folder, when it was opened, and the button
-/// that copies the line that opens it from a terminal.
-fn project_row(row: &Listed, now: u64) -> impl Bundle {
-    let path = row.project.path.clone();
-    let when = if row.missing {
-        format!("missing: {} is not there now", path.display())
-    } else {
-        format!("{}  ·  opened {}", path.display(), ago(row.project.last_opened, now))
+/// What a card or a page needs to be drawn, bundled so the builders stay within the argument budget.
+struct Art<'a> {
+    splash: Option<(Handle<Image>, Vec2)>,
+    images: &'a mut Assets<Image>,
+    now: u64,
+    menu: Entity,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fill_the_home(
+    mut commands: Commands,
+    launcher: Res<Launcher>,
+    splash: Res<SplashArt>,
+    updater: Option<Res<crate::update::Updater>>,
+    mut images: ResMut<Assets<Image>>,
+    root: Query<Entity, With<LauncherRoot>>,
+    sidebar: Query<Entity, With<SidebarRoot>>,
+    content: Query<Entity, With<HomeContent>>,
+) {
+    let (Ok(root), Ok(sidebar), Ok(content)) = (root.single(), sidebar.single(), content.single()) else { return };
+    let menu = commands.spawn((context_menu(()), CardMenu, ChildOf(root))).id();
+    spawn_card_menu(&mut commands, menu);
+
+    commands.entity(sidebar).with_children(|side| {
+        if let Some((handle, _)) = splash.0.as_ref() {
+            side.spawn((ImageNode::new(handle.clone()), Node { width: Val::Px(SIDEBAR_SPLASH.x), height: Val::Px(SIDEBAR_SPLASH.y), ..default() }, Name::new("sidebar splash")));
+        }
+        for tab in HomeTab::ALL {
+            let badge = if tab == HomeTab::WhatsNew && !launcher.whats_new.is_empty() { format!(" ({})", launcher.whats_new.len()) } else { String::new() };
+            let mut nav = side.spawn((button(format!("{}{badge}", tab.label())), NavTab(tab), observe(move |_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.tab = tab)));
+            if tab == launcher.tab {
+                nav.insert(Selected);
+            }
+        }
+        side.spawn(Node { flex_grow: 1.0, ..default() });
+        side.spawn((
+            button("Settings"),
+            observe(|_: On<Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
+                out.write(crate::settings_screen::OpenSettings);
+            }),
+        ));
+        side.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
+        if let Some(updater) = updater.as_deref() {
+            side.spawn(crate::update::update_button(updater.label()));
+        }
+    });
+
+    let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
+    commands.entity(content).with_children(|content| {
+        content.spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }, LauncherCard)).with_children(|pages| {
+            pages
+                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, HomePage(HomeTab::Projects)))
+                .with_children(|page| {
+                    page.spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, ProjectsBody))
+                        .with_children(|body| projects_body(body, &launcher, &mut art));
+                });
+            pages
+                .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_GROUP), display: Display::None, ..default() }, HomePage(HomeTab::Learn)))
+                .with_children(|page| learn_page(page, &launcher));
+            pages
+                .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
+                .with_children(|page| news_page(page, &launcher));
+        });
+    });
+}
+
+/// The Projects page: the welcome on a first run, else the header, the filter and the cards.
+fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art) {
+    if launcher.rows.is_empty() {
+        welcome(body, launcher, art);
+        return;
+    }
+    body.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|header| {
+        header.spawn(heading("Projects"));
+        header.spawn(Node { flex_grow: 1.0, ..default() });
+        // The one accent button of the page: New project, or, with nothing else to start from, nothing.
+        header.spawn((accent_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
+        header.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
+    });
+    body.spawn((
+        text_input("", launcher.filter.clone()),
+        TextHint("Filter projects".into()),
+        observe(|change: On<ValueChange<String>>, mut launcher: ResMut<Launcher>| launcher.filter = change.value.clone()),
+    ));
+    // FOLLOW-OK: the cards are a grid of focusable buttons, not a list with a highlight of its own: gooey's focus navigation
+    // scrolls a focused card into view, and the wheel scrolls the rest.
+    crate::chrome::scroll_list(body, ProjectGrid).with_children(|scroll| {
+        scroll.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_GROUP), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|grid| {
+            for row in &launcher.rows {
+                if row.missing {
+                    missing_card(grid, row);
+                } else {
+                    project_card(grid, row, art);
+                }
+            }
+        });
+    });
+}
+
+/// The first run: the splash, what this is, and **Open the example** as the one accent button.
+fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
+    body.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, justify_content: JustifyContent::Center, flex_grow: 1.0, row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|card| {
+        if let Some((handle, size)) = art.splash.as_ref() {
+            card.spawn((
+                ImageNode::new(handle.clone()),
+                Node { width: Val::Px(size.x * WELCOME_SPLASH_SCALE), height: Val::Px(size.y * WELCOME_SPLASH_SCALE), max_width: Val::Percent(100.0), aspect_ratio: Some(size.x / size.y), ..default() },
+                Name::new("welcome splash"),
+            ));
+        }
+        card.spawn(heading("Welcome to Cauldron"));
+        card.spawn(label("Build levels from your own pieces, and hand your game a grimoire it can load."));
+        card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|actions| {
+            let example = launcher.example.is_some();
+            if example {
+                actions.spawn((accent_button("Open the example"), observe(open_the_example)));
+            }
+            let new = observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true);
+            if example {
+                actions.spawn((button("New project"), new));
+            } else {
+                actions.spawn((accent_button("New project"), new));
+            }
+            actions.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
+        });
+        card.spawn(quiet("Everything here can be changed later in Settings."));
+    });
+}
+
+/// Opens the example project on its map: the one beside the source, the person's own copy, or the app's copy made theirs first.
+fn open_the_example(_: On<Activate>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenMapRequest>, mut plain: MessageWriter<OpenRequest>) {
+    match launcher.example.clone().map(|example| example_to_open(&example)) {
+        None => {}
+        Some(Ok(root)) => match example_map(&root) {
+            Some(map) => {
+                out.write(OpenMapRequest(root, map));
+            }
+            None => {
+                plain.write(OpenRequest(root));
+            }
+        },
+        Some(Err(e)) => launcher.problem = Some(e),
+    }
+}
+
+/// The map the example opens on: `bedroom` when it has one, else its first.
+const EXAMPLE_MAP: &str = "bedroom";
+
+fn example_map(root: &Path) -> Option<String> {
+    let maps = crate::chooser::Catalog::scan(root).ok()?.maps;
+    maps.iter().find(|m| m.name == EXAMPLE_MAP).or(maps.first()).map(|m| m.name.clone())
+}
+
+/// The picture on a card: the newest portrait of a piece the project has baked (`thumbs.rs` keeps them in
+/// `target/grimoire_thumbs`), cropped to the card's shape; else the splash, cropped the same way.
+fn card_picture(root: &Path, art: &mut Art) -> Option<ImageNode> {
+    let newest = std::fs::read_dir(root.join("target/grimoire_thumbs"))
+        .ok()?
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "png"))
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .max()
+        .map(|(_, path)| path);
+    let baked = newest.and_then(|path| std::fs::read(path).ok()).and_then(|bytes| {
+        Image::from_buffer(&bytes, ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default, RenderAssetUsages::default()).ok()
+    });
+    let (handle, size) = match baked {
+        Some(image) => {
+            let size = Vec2::new(image.width() as f32, image.height() as f32);
+            (art.images.add(image), size)
+        }
+        None => art.splash.clone()?,
     };
-    let open = path.clone();
-    let copy = path.clone();
-    (
-        Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() },
-        children![
-            (
-                button(name_of(&path)),
-                ProjectRow(open),
-                observe(|activate: On<bevy_gooey::Activate>, rows: Query<&ProjectRow>, mut out: MessageWriter<OpenRequest>| {
-                    if let Ok(row) = rows.get(activate.entity) {
-                        out.write(OpenRequest(row.0.clone()));
-                    }
-                }),
-            ),
-            label(when),
-            (
-                button("Copy command line"),
-                CopyLine(copy),
-                observe(
-                    |activate: On<bevy_gooey::Activate>, rows: Query<&CopyLine>, off: Option<Res<ClipboardOff>>, mut launcher: ResMut<Launcher>| {
-                        let Ok(row) = rows.get(activate.entity) else { return };
-                        let line = command_line(&row.0, None, None);
-                        let copied = if off.is_some() { Err("no clipboard in this run".to_owned()) } else { copy_to_clipboard(&line) };
-                        launcher.problem = match copied {
-                            Ok(()) => None,
-                            Err(e) => Some(format!("the clipboard did not take it ({e}); the line is below")),
-                        };
-                        launcher.line = Some(line);
-                    },
-                ),
-            ),
-        ],
-    )
+    // The middle band of the picture that is as wide as the card's picture is for its height.
+    let (w, h) = (size.x, size.y);
+    let band = (w / THUMB.x * THUMB.y).min(h);
+    let wide = (band / THUMB.y * THUMB.x).min(w);
+    let rect = Rect::from_center_size(Vec2::new(w / 2.0, h / 2.0), Vec2::new(wide, band));
+    Some(ImageNode::new(handle).with_rect(rect))
+}
+
+fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
+    let path = row.project.path.clone();
+    let picture = card_picture(&path, art);
+    let when = format!("Opened {}", ago(row.project.last_opened, art.now));
+    let key = card_key(&path);
+    grid.spawn((
+        Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        // CHROME-OK: a card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
+        bevy::ui_widgets::Button,
+        Role::Button,
+        Hovered::default(),
+        // FOCUS-DECISION-REOPENED: a card is a button like gooey's own (which carry a `TabIndex` too), reached by Tab and the arrows on a screen no editor chord routes
+        bevy::input_focus::tab_navigation::TabIndex(0),
+        AutoDirectionalNavigation::default(),
+        ContextMenu(art.menu),
+        ProjectCard { path: path.clone(), key },
+        observe(on_card),
+    ))
+    .with_children(|card| {
+        if let Some(picture) = picture {
+            card.spawn((picture, Node { width: Val::Px(THUMB.x), height: Val::Px(THUMB.y), ..default() }, Pickable::IGNORE));
+        }
+        card.spawn((Text::new(name_of(&path)), Role::ButtonText, Pickable::IGNORE));
+        card.spawn((quiet(shown_folder(&path)), Pickable::IGNORE));
+        card.spawn((quiet(when), Pickable::IGNORE));
+    });
+}
+
+fn missing_card(grid: &mut ChildSpawnerCommands, row: &Listed) {
+    let path = row.project.path.clone();
+    let key = card_key(&path);
+    grid.spawn((
+        Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        Role::Card,
+        MissingCard { path: path.clone(), key },
+    ))
+    .with_children(|card| {
+        card.spawn(quiet(name_of(&path)));
+        card.spawn(label("Folder not found"));
+        card.spawn(quiet(shown_folder(&path)));
+        card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_ROW), ..default() }).with_children(|actions| {
+            let locate = path.clone();
+            actions.spawn((button("Locate…"), observe(move |_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::Locate(locate.clone()))); })));
+            let gone = path.clone();
+            actions.spawn((
+                button("Remove"),
+                observe(move |_: On<Activate>, recents: Option<Res<RecentProjects>>, mut launcher: ResMut<Launcher>| remove_from_list(recents.as_deref(), &mut launcher, &gone)),
+            ));
+        });
+    });
+}
+
+/// A card was activated: the first press chooses it, a second (or any press from the keyboard) opens it.
+fn on_card(activate: On<Activate>, cards: Query<&ProjectCard>, keyboard: Option<Res<InputFocusVisible>>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenRequest>) {
+    let Ok(card) = cards.get(activate.entity) else { return };
+    if keyboard.is_some_and(|k| k.0) || launcher.selected.as_ref() == Some(&card.path) {
+        out.write(OpenRequest(card.path.clone()));
+    } else {
+        launcher.selected = Some(card.path.clone());
+    }
+}
+
+/// Takes `path` out of the recent list (the folder is untouched) and draws the cards again.
+fn remove_from_list(recents: Option<&RecentProjects>, launcher: &mut Launcher, path: &Path) {
+    match edit_recent(recents, |r| {
+        r.remove(path);
+        Ok(())
+    }) {
+        Ok(rows) => {
+            launcher.rows = rows;
+            launcher.dirty = true;
+        }
+        Err(e) => launcher.problem = Some(e),
+    }
+}
+
+/// Reads the recent list, applies `edit`, writes it back, and returns the list as shown.
+fn edit_recent(recents: Option<&RecentProjects>, edit: impl FnOnce(&mut Recent) -> Result<(), String>) -> Result<Vec<Listed>, String> {
+    let Some(file) = recents.map(|r| &r.0) else { return Err("this run keeps no list of projects".to_owned()) };
+    let mut list = Recent::load(file)?;
+    edit(&mut list)?;
+    list.save(file)?;
+    Ok(list.listing())
+}
+
+/// What a menu item of a card does.
+#[derive(Clone, Copy)]
+enum Verb {
+    Open,
+    Show,
+    CopyLine,
+    Remove,
+}
+
+/// "Show in Finder" on a Mac, "Show in Files" elsewhere.
+const SHOW: &str = if cfg!(target_os = "macos") { "Show in Finder" } else { "Show in Files" };
+
+fn spawn_card_menu(commands: &mut Commands, menu: Entity) {
+    for (label, verb) in [("Open", Verb::Open), (SHOW, Verb::Show), ("Copy command line", Verb::CopyLine), ("Remove from list", Verb::Remove)] {
+        if matches!(verb, Verb::Remove) {
+            commands.spawn((separator(), ChildOf(menu)));
+        }
+        commands.spawn((menu_item(label), ChildOf(menu))).observe(on_card_verb(verb));
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn on_card_verb(
+    verb: Verb,
+) -> impl FnMut(On<Activate>, Query<&ChildOf>, Query<&ContextTarget>, Query<&ProjectCard>, Option<Res<RecentProjects>>, Option<Res<ClipboardOff>>, ResMut<Launcher>, MessageWriter<OpenRequest>, Commands) {
+    move |activate, parents, targets, cards, recents, off, mut launcher, mut out, mut commands| {
+        let Some(card) = ContextTarget::of(activate.entity, &parents, &targets).and_then(|e| cards.get(e).ok()) else { return };
+        match verb {
+            Verb::Open => {
+                out.write(OpenRequest(card.path.clone()));
+            }
+            Verb::Show => {
+                if let Err(e) = open_in_os(&card.path.to_string_lossy()) {
+                    launcher.problem = Some(e);
+                }
+            }
+            Verb::CopyLine => {
+                let line = command_line(&card.path, None, None);
+                let copied = if off.is_some() { Err("no clipboard in this run".to_owned()) } else { copy_to_clipboard(&line) };
+                match copied {
+                    Ok(()) => commands.spawn(toast(format!("Copied: {line}"))),
+                    Err(e) => commands.spawn(toast_alert(format!("The clipboard did not take it ({e}). The line is: {line}")).sticky()),
+                };
+            }
+            Verb::Remove => remove_from_list(recents.as_deref(), &mut launcher, &card.path),
+        }
+    }
+}
+
+/// Opens a folder or an address with the system's own opener, without waiting for it.
+pub fn open_in_os(target: &str) -> Result<(), String> {
+    let (program, args): (&str, &[&str]) = if cfg!(target_os = "macos") {
+        ("open", &[])
+    } else if cfg!(target_os = "windows") {
+        ("explorer", &[])
+    } else {
+        ("xdg-open", &[])
+    };
+    let mut child = std::process::Command::new(program).args(args).arg(target).spawn().map_err(|e| format!("could not run {program}: {e}"))?;
+    // Reaped on its own thread, so the opener never lingers as a zombie of this process.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 /// Puts `text` on the OS clipboard, as `notice.rs`'s Cmd+C does.
@@ -469,15 +816,56 @@ fn copy_to_clipboard(text: &str) -> Result<(), String> {
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text)).map_err(|e| e.to_string())
 }
 
-/// The ways a request to open a project ends: refused on the screen, or opened in this process
-/// ([`crate::project_assets::open_project`]).
+/// The Learn page: the tour, the example, the written guide and the keys.
+fn learn_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
+    page.spawn(heading("Learn"));
+    let example = launcher.example.is_some();
+    page.spawn(label("Start with a two-minute tour of the example, or read the guide."));
+    if example {
+        page.spawn((
+            button("Take the tour"),
+            observe(|activate: On<Activate>, mut commands: Commands, launcher: ResMut<Launcher>, out: MessageWriter<OpenMapRequest>, plain: MessageWriter<OpenRequest>| {
+                commands.insert_resource(TourRequested);
+                open_the_example(activate, launcher, out, plain);
+            }),
+        ));
+        page.spawn((button("Open the example"), observe(open_the_example)));
+    }
+    page.spawn((button("Getting started guide"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| {
+        if let Err(e) = open_in_os(GUIDE_URL) {
+            launcher.problem = Some(e);
+        }
+    })));
+    page.spawn((button("Keyboard shortcuts"), observe(|_: On<Activate>, mut out: MessageWriter<crate::keymap_screen::OpenKeymap>| { out.write(crate::keymap_screen::OpenKeymap); })));
+}
+
+/// The What's new page: what the changelog added since the last time a project was opened from here.
+fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
+    page.spawn(heading("What's new"));
+    if launcher.whats_new.is_empty() {
+        page.spawn(label("You have seen everything that is new."));
+    }
+    for item in &launcher.whats_new {
+        page.spawn(label(format!("{}: {}", item.id, item.title)));
+    }
+    page.spawn((button("See every change"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| {
+        if let Err(e) = open_in_os(CHANGELOG_URL) {
+            launcher.problem = Some(e);
+        }
+    })));
+}
+
+/// The ways a request to open a project ends: a toast that says why not, or the project opened in this process
+/// ([`crate::project_assets::open_project`]), on a map when the request names one.
 fn open_requested(
     mut commands: Commands,
     mut requests: MessageReader<OpenRequest>,
+    mut on_a_map: MessageReader<OpenMapRequest>,
     mut launcher: ResMut<Launcher>,
     recents: Option<Res<RecentProjects>>,
 ) {
-    let Some(OpenRequest(root)) = requests.read().last().cloned() else { return };
+    let wanted = on_a_map.read().last().map(|OpenMapRequest(root, map)| (root.clone(), Some(map.clone()))).or_else(|| requests.read().last().map(|OpenRequest(root)| (root.clone(), None)));
+    let Some((root, map)) = wanted else { return };
     match check_project(&root) {
         Ok(root) => {
             launcher.problem = None;
@@ -487,38 +875,139 @@ fn open_requested(
                 warn!("recent projects not updated: {e}");
             }
             commands.queue(move |world: &mut World| {
-                if let Err(e) = crate::project_assets::open_project(world, &root, None)
-                    && let Some(mut launcher) = world.get_resource_mut::<Launcher>()
-                {
-                    launcher.problem = Some(e);
+                if let Err(e) = crate::project_assets::open_project(world, &root, map.as_deref()) {
+                    world.spawn(toast_alert(e).sticky());
                 }
             });
         }
-        Err(e) => launcher.problem = Some(e),
-    }
-}
-
-fn show_problem(launcher: Res<Launcher>, mut lines: Query<&mut Text, With<ProblemLine>>) {
-    if !launcher.is_changed() {
-        return;
-    }
-    let want = launcher.problem.clone().unwrap_or_default();
-    for mut text in &mut lines {
-        if text.0 != want {
-            text.0 = want.clone();
+        // A folder that is not a project can become one in place; anything else is only said.
+        Err(_) if root.is_dir() => {
+            commands.spawn(toast_alert("That folder is not a Cauldron project. Make it one?").action("Make it a project", format!("{MAKE_PROJECT}{}", root.display())).sticky());
+        }
+        Err(e) => {
+            commands.spawn(toast_alert(e).sticky());
         }
     }
 }
 
-fn show_line(launcher: Res<Launcher>, mut lines: Query<&mut Text, With<CommandLine>>) {
-    if !launcher.is_changed() {
-        return;
-    }
-    let want = launcher.line.clone().unwrap_or_default();
-    for mut text in &mut lines {
-        if text.0 != want {
-            text.0 = want.clone();
+/// The id of the toast button that makes the folder after it a project.
+const MAKE_PROJECT: &str = "make-project:";
+
+/// "Make it a project" was pressed: the folder gets what a project needs, keeps everything it held, and opens.
+fn on_toast_action(action: On<ToastAction>, mut commands: Commands, mut out: MessageWriter<OpenRequest>) {
+    let Some(folder) = action.id.strip_prefix(MAKE_PROJECT).map(PathBuf::from) else { return };
+    match crate::chooser::make_project_here(&folder, crate::new_project::VOCAB) {
+        Ok(()) => {
+            out.write(OpenRequest(folder));
+        }
+        Err(e) => {
+            commands.spawn(toast_alert(e).sticky());
         }
     }
 }
 
+/// An answer from the file chooser: Open folder… opens, Locate… repoints the card.
+fn on_picked(mut picked: MessageReader<Picked>, recents: Option<Res<RecentProjects>>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenRequest>) {
+    for Picked { for_what, paths } in picked.read() {
+        let Some(path) = paths.first() else { continue };
+        match for_what {
+            PickFor::OpenFolder => {
+                out.write(OpenRequest(path.clone()));
+            }
+            PickFor::Locate(old) => match edit_recent(recents.as_deref(), |r| r.locate(old, path)) {
+                Ok(rows) => {
+                    launcher.rows = rows;
+                    launcher.dirty = true;
+                }
+                Err(e) => launcher.problem = Some(e),
+            },
+            // The new-project form's Location and the editor's Add meshes… take their own answers.
+            PickFor::Location | PickFor::AddMeshes => {}
+        }
+    }
+}
+
+/// Says each new refusal in a toast. The text stays in [`Launcher::problem`] until the next choice clears it.
+fn say_the_problem(mut commands: Commands, launcher: Res<Launcher>, mut said: Local<Option<String>>) {
+    if !launcher.is_changed() {
+        return;
+    }
+    if launcher.problem != *said {
+        if let Some(problem) = launcher.problem.clone() {
+            commands.spawn(toast_alert(problem).sticky());
+        }
+        said.clone_from(&launcher.problem);
+    }
+}
+
+/// Draws the Projects body again after the cards changed.
+fn redraw_the_cards(
+    mut commands: Commands,
+    mut launcher: ResMut<Launcher>,
+    splash: Res<SplashArt>,
+    mut images: ResMut<Assets<Image>>,
+    body: Query<Entity, With<ProjectsBody>>,
+    menu: Query<Entity, With<CardMenu>>,
+) {
+    if !launcher.dirty {
+        return;
+    }
+    launcher.dirty = false;
+    let (Ok(body), Ok(menu)) = (body.single(), menu.single()) else { return };
+    let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
+    commands.entity(body).despawn_children();
+    commands.entity(body).with_children(|body| projects_body(body, &launcher, &mut art));
+}
+
+/// Hides the cards the filter does not match, by [`fuzzy_score`] over each one's name and folder.
+/// A card of either kind, with the words the filter reads.
+type Filterable = (&'static mut Node, Option<&'static ProjectCard>, Option<&'static MissingCard>);
+
+#[allow(clippy::type_complexity)]
+fn apply_filter(launcher: Res<Launcher>, mut cards: Query<Filterable, Or<(With<ProjectCard>, With<MissingCard>)>>) {
+    let query = launcher.filter.trim();
+    for (mut node, project, missing) in &mut cards {
+        let key = project.map(|c| c.key.as_str()).or(missing.map(|c| c.key.as_str())).unwrap_or_default();
+        let show = query.is_empty() || fuzzy_score(query, key).is_some();
+        let display = if show { Display::Flex } else { Display::None };
+        if node.display != display {
+            node.display = display;
+        }
+    }
+}
+
+/// Shows the page the sidebar chose, and marks its row.
+fn show_the_tab(launcher: Res<Launcher>, mut pages: Query<(&HomePage, &mut Node)>, nav: Query<(Entity, &NavTab, Has<Selected>)>, mut commands: Commands) {
+    for (page, mut node) in &mut pages {
+        let display = if page.0 == launcher.tab { Display::Flex } else { Display::None };
+        if node.display != display {
+            node.display = display;
+        }
+    }
+    for (entity, tab, selected) in &nav {
+        match (tab.0 == launcher.tab, selected) {
+            (true, false) => {
+                commands.entity(entity).insert(Selected);
+            }
+            (false, true) => {
+                commands.entity(entity).remove::<Selected>();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Marks the chosen card.
+fn mark_the_selection(launcher: Res<Launcher>, cards: Query<(Entity, &ProjectCard, Has<Selected>)>, mut commands: Commands) {
+    for (entity, card, selected) in &cards {
+        match (launcher.selected.as_ref() == Some(&card.path), selected) {
+            (true, false) => {
+                commands.entity(entity).insert(Selected);
+            }
+            (false, true) => {
+                commands.entity(entity).remove::<Selected>();
+            }
+            _ => {}
+        }
+    }
+}
