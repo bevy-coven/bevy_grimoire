@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::{Activate, ValueChange};
-use bevy_cauldron::launcher::{self, ClipboardOff, Handoff, Launcher, LauncherPlugin};
+use bevy_cauldron::chooser::MenuOpening;
+use bevy_cauldron::launcher::{ClipboardOff, Launcher, LauncherPlugin};
 use bevy_cauldron::new_project::{self, CreateButton, LocationField, NameField, NewProject, ReasonLine, Template, TemplateChoice};
 use bevy_cauldron::recent::{self, RecentProjects};
 use bevy_cauldron::screen::Screen;
@@ -92,7 +93,7 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
 
     // A script can activate a disabled button; nothing is made and the refusal is shown.
     press(&mut app, "Create");
-    assert!(app.world().get_resource::<Handoff>().is_none());
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Launcher, "nothing is opened");
     assert!(app.world().resource::<Launcher>().problem.as_deref().is_some_and(|p| p.contains("already exists")));
     let said = app.world().resource::<Launcher>().problem.clone().unwrap();
     let mut shown = app.world_mut().query::<(&Role, &Text, &bevy::ui::ComputedNode)>();
@@ -109,7 +110,8 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
     press(&mut app, "Create");
     let made = places.join("harbour");
     assert!(made.join("assets/grimoire/kits.ron").is_file() && made.join("assets/grimoire/vocab.ron").is_file(), "the project is written");
-    assert_eq!(app.world().get_resource::<Handoff>(), Some(&Handoff(launcher::argv_for(&made.canonicalize().unwrap(), None, None))), "and opened the way a recent row is");
+    assert_eq!(app.world().resource::<MenuOpening>().root, made.canonicalize().unwrap(), "and opened the way a recent row is, in this process");
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Menu);
     assert!(app.world_mut().query_filtered::<(), With<NameField>>().iter(app.world()).next().is_none(), "the form is gone");
     let listed = recent::Recent::load(&dir.join("recent.ron")).unwrap().listing();
     assert_eq!(listed[0].project.path, made.canonicalize().unwrap(), "and it is at the top of the recent list");

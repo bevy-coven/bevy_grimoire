@@ -245,13 +245,24 @@ const EMBEDDED_FONT: &[u8] = include_bytes!("../assets/fonts/FiraMono-Regular.tt
 /// carry the editor's font in its own assets, and a project that cannot boot for want of one would
 /// make every consumer vendor a file. Any read error other than "not found" is still an error.
 pub fn install_font(app: &mut App, root: &Path) -> Result<(), String> {
-    let path = root.join("assets/fonts/FiraMono-Regular.ttf");
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => EMBEDDED_FONT.to_vec(),
-        Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
+    install_font_in(app.world_mut(), Some(root))
+}
+
+/// [`install_font`] on a running world, for a project opened while the app runs ([`crate::project_assets`]).
+/// With no project (`None`) the face compiled into this crate is installed.
+pub fn install_font_in(world: &mut World, root: Option<&Path>) -> Result<(), String> {
+    let bytes = match root {
+        Some(root) => {
+            let path = root.join("assets/fonts/FiraMono-Regular.ttf");
+            match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => EMBEDDED_FONT.to_vec(),
+                Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
+            }
+        }
+        None => EMBEDDED_FONT.to_vec(),
     };
-    app.world_mut()
+    world
         .resource_mut::<Assets<Font>>()
         .insert(AssetId::default(), Font::from_bytes(bytes))
         .map_err(|e| format!("cannot install the editor font: {e}"))
@@ -299,15 +310,14 @@ pub fn build_headless_at(
     #[cfg(feature = "debugger")]
     app.init_resource::<bevy_debugger_bevy::DebugCursor>();
 
-    // Absolute, for the same reason `main.rs` canonicalizes: a relative `file_path` resolves
-    // against `CARGO_MANIFEST_DIR` (the CRATE dir under `cargo test -p`), not the workspace.
+    // Absolute, because the project is the asset root and a relative root would resolve against
+    // `CARGO_MANIFEST_DIR` (the CRATE dir under `cargo test -p`), not the workspace.
     let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    // **The project as the asset root, through the same reader the binary uses**, so a test that opens a
+    // second project reads the second project's meshes (`crate::project_assets`).
+    crate::project_assets::install(&mut app, Some(root.clone()));
     app.add_plugins(
         DefaultPlugins
-            .set(AssetPlugin {
-                file_path: root.to_string_lossy().into_owned() + "/assets",
-                ..default()
-            })
             // No window, and nothing that would make the app want to exit when it has none.
             .set(WindowPlugin {
                 primary_window: None,

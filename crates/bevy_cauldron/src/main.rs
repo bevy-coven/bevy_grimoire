@@ -1,7 +1,7 @@
 //! **bevy_cauldron** — the binary. Argument parsing and the app; everything else is the
 //! library beside this, so `tests/` can drive the editor without a window. See `lib.rs`.
 
-use bevy_cauldron::{args, chooser, harness, screen, screen::Screen};
+use bevy_cauldron::{args, chooser, harness, project_assets, screen, screen::Screen};
 
 use bevy::prelude::*;
 // `DefaultPlugins::disable` is `PluginGroup`'s method, and the prelude does not carry the trait.
@@ -30,16 +30,6 @@ fn main() -> AppExit {
         return AppExit::Success;
     }
     let root = args::root_of(&argv);
-    // A project from before the rename keeps its data in `assets/emerge`; move it once, or refuse to
-    // guess when both folders exist.
-    match bevy_grimoire_core::project_data::migrate_legacy_data_dir(&root) {
-        Ok(Some(moved)) => println!("{moved}"),
-        Ok(None) => {}
-        Err(e) => {
-            eprintln!("{e}");
-            return AppExit::error();
-        }
-    }
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
@@ -53,6 +43,10 @@ fn main() -> AppExit {
     let plugins = DefaultPlugins.build();
 
     let mut app = App::new();
+    // **The project is the asset root, and which project is decided later** (`project_assets`): a project named
+    // on the command line is pointed at below, and one chosen on the launcher is pointed at when it is chosen.
+    // Registered before `DefaultPlugins`, which builds the asset sources.
+    project_assets::install(&mut app, None);
     app.add_plugins(
         plugins
             // **One repeated log line filled a 16 GB RAM disk** (`bevy_cauldron::log_filter`): an
@@ -63,14 +57,8 @@ fn main() -> AppExit {
                 filter: bevy_cauldron::log_filter::LOG_SILENCES.to_owned(),
                 ..default()
             })
-            .set(AssetPlugin {
-                // Meshes are named relative to the project, so the project IS the asset root.
-                // Absolute, because Bevy resolves a relative `file_path` against `CARGO_MANIFEST_DIR`
-                // — which under `cargo run -p bevy_cauldron` is the CRATE, so `./assets` landed on
-                // `crates/bevy_cauldron/assets` and every mesh 404'd.
-                file_path: root.to_string_lossy().into_owned() + "/assets",
-                ..default()
-            })
+            // Meshes are named relative to the project, so the project IS the asset root: the default asset
+            // source is `project_assets::ProjectAssetReader`, installed above, and `AssetPlugin` keeps no path.
             .set(WindowPlugin {
                 primary_window: Some(Window {
                     // **One window for both screens**, so the title is state rather than a build-time
@@ -113,14 +101,11 @@ fn main() -> AppExit {
 
     // **A bare `bevy_cauldron` opens the launcher** (`launcher.rs`, UI-10); a project named on the command
     // line skips it. `insert_state` before `ScreenPlugin`, whose `init_state` leaves a state that exists as it is.
-    if args::opens_the_launcher(&argv) {
-        app.insert_state(Screen::Launcher);
-    } else if args::names_a_door(&argv) {
-        app.insert_state(Screen::Loading);
-    }
+    let first = if args::opens_the_launcher(&argv) { Screen::Launcher } else { project_assets::screen_for(&argv) };
+    app.insert_state(first);
     // The state both halves are gated by, and the two transitions that load and unload a door.
     app.add_plugins(screen::ScreenPlugin);
-    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::launcher::HandoffPlugin, bevy_cauldron::loading::LoadingPlugin));
+    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::loading::LoadingPlugin));
     // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the
     // binary names the file: a test's editor has none, so no test writes to the real data directory.
     if let Some(file) = bevy_cauldron::recent::user_file() {
@@ -153,27 +138,32 @@ fn main() -> AppExit {
 
     app.add_systems(Update, name_the_window);
 
-    // **A door named on the command line skips the menu**, by choosing on its behalf: the menu's
-    // output IS this argv (`args::open`), so `bevy_cauldron . --door kit --kit ozea` and pressing
-    // Enter on the same row take the identical path in.
+    // **A project named on the command line is opened the way one chosen on the launcher is**
+    // (`project_assets::point_at`): the menu's output IS this argv (`args::open`), so
+    // `bevy_cauldron . --door kit --kit ozea` and pressing Enter on the same row take the identical path in.
+    // The state it names is the one inserted above, so the window starts on it.
     //
-    // **Opened on the loading screen** (`loading.rs`, UI-20): the open runs as named stages off the
-    // main thread, so a slow project shows a spinner and then a progress bar instead of a window that
-    // does not answer, and a project that will not open is said on that screen (and on the terminal
-    // the flag was typed into) with a way back to the launcher. `GRIMOIRE_LOAD_STAGE_DELAY_MS` pauses
-    // as each stage starts, to see the screen on a project that opens too fast to.
-    if args::names_a_door(&argv) {
-        app.insert_resource(bevy_cauldron::loading::LoadRequest(argv.clone()));
-        if let Some(ms) = std::env::var("GRIMOIRE_LOAD_STAGE_DELAY_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
+    // **A door or a map is opened on the loading screen** (`loading.rs`, UI-20): the open runs as named stages
+    // off the main thread, so a slow project shows a spinner and then a progress bar instead of a window that
+    // does not answer, and a project that will not open is said on that screen (and on the terminal the flag
+    // was typed into) with a way back to the launcher. `GRIMOIRE_LOAD_STAGE_DELAY_MS` pauses as each stage
+    // starts, to see the screen on a project that opens too fast to.
+    if first == Screen::Launcher {
+        // No project: the face compiled in, until one is chosen.
+        if let Err(e) = harness::install_font_in(app.world_mut(), None) {
+            eprintln!("bevy_cauldron: {e}");
+            std::process::exit(1);
+        }
+    } else {
+        if let Err(e) = project_assets::point_at(app.world_mut(), &argv) {
+            eprintln!("{e}");
+            return AppExit::error();
+        }
+        if first == Screen::Loading
+            && let Some(ms) = std::env::var("GRIMOIRE_LOAD_STAGE_DELAY_MS").ok().and_then(|v| v.parse::<u64>().ok())
+        {
             app.insert_resource(bevy_cauldron::loading::StageDelay(std::time::Duration::from_millis(ms)));
         }
-    }
-
-    // **Replace the default face rather than hand a handle to 41 call sites.** `TextFont::default()`
-    // names `AssetId::default()`, which is where `TextPlugin` puts the 95-codepoint subset.
-    if let Err(e) = harness::install_font(&mut app, &root) {
-        eprintln!("bevy_cauldron: {e}");
-        std::process::exit(1);
     }
 
     app.run()

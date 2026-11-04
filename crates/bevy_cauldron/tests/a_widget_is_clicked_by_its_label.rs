@@ -10,7 +10,8 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use bevy_cauldron::launcher::{Handoff, LauncherPlugin};
+use bevy_cauldron::chooser::MenuOpening;
+use bevy_cauldron::launcher::LauncherPlugin;
 use bevy_cauldron::recent::{self, RecentProjects};
 use bevy_cauldron::screen::Screen;
 use bevy_gooey::testing::{click, find_by_label, focused_label};
@@ -43,13 +44,17 @@ fn a_recent_project_is_opened_by_clicking_its_name() {
     }
 
     let row = find_by_label(&mut app, "alpha").expect("the launcher has one button that says alpha");
-    assert!(app.world().get_resource::<Handoff>().is_none(), "nothing opens until a row is chosen");
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Launcher, "nothing opens until a row is chosen");
     click(&mut app, row);
+    for _ in 0..3 {
+        app.update();
+    }
     assert_eq!(
-        app.world().get_resource::<Handoff>(),
-        Some(&Handoff(vec![alpha.to_string_lossy().into_owned()])),
-        "a click on the row named alpha hands the next process that folder (focus is on {:?})",
+        app.world().resource::<MenuOpening>().root,
+        alpha,
+        "a click on the row named alpha opens that folder in this process (focus is on {:?})",
         focused_label(&app)
     );
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Menu);
     let _ = std::fs::remove_dir_all(&dir);
 }

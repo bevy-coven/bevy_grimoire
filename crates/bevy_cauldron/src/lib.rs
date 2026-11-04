@@ -152,6 +152,7 @@ pub mod ops_people;
 pub mod ops_scripts;
 pub mod ops_runs;
 pub mod project;
+pub mod project_assets;
 pub mod recent;
 pub mod trusted;
 pub mod screen;
