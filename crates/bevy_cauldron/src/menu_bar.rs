@@ -92,12 +92,16 @@ fn keep_the_menu_bar(
     mut commands: Commands,
     frame: Option<Res<Frame>>,
     live: Option<Res<Live>>,
-    dialogs: Query<(), With<bevy_gooey::Dialog>>,
+    question: Option<Res<crate::confirm::Confirm>>,
     bars: Query<Entity, With<EditorMenuBar>>,
 ) {
     let Some(frame) = frame else { return };
     let standing = bars.iter().next();
-    let wanted = dialogs.is_empty();
+    // **A question, not any dialog.** A menu opens as a gooey modal popover, which is a `Dialog`, so
+    // "no dialog" would despawn the bar the moment a menu opens — measured here, the first take of
+    // this slice's clip showed it. What must stand down is the editor's own question, which is drawn
+    // over a scrim that covers the bar and is what the dialog tests count.
+    let wanted = !question.is_some_and(|q| q.is_open());
     match (wanted, standing) {
         (true, None) => spawn_menu_bar(&mut commands, &frame, live.as_deref().copied()),
         (false, Some(bar)) => {

@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-04
+
+- **225-menu-bar** `88b8f45` The menu bar: every command in exactly one menu — File, Edit, View, Map, Meshes, Tiles, Compose, Rigs, Tools, Help — with the key it answers to, and a row that cannot run greys out and says why (UI-31, #225) <br><a href="docs/changelog/media/2026-11-04-225-menu-bar.mp4"><img src="docs/changelog/media/2026-11-04-225-menu-bar.png" width="320" alt="clip"></a>
+
 ## 2026-11-03
 
 - **283-scrollbar-wheel** `c5e98aa` A wheel over a panel's scrollbar scrolls the panel: the track forwards the notch to the area it belongs to (#283) *No clip: an input fix with no new surface; proved by a_wheel_over_the_inspector_scrolls_it::a_wheel_over_the_inspectors_scrollbar_scrolls_it (fails without the observer)*

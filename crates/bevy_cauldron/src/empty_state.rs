@@ -67,12 +67,11 @@ fn keep_the_prompt_while_the_map_is_empty(
     frame: Option<Res<Frame>>,
     open: Option<Res<OpenMap>>,
     confirm: Option<Res<Confirm>>,
-    dialogs: Query<(), With<bevy_gooey::Dialog>>,
     prompt: Query<Entity, With<EmptyMapPrompt>>,
 ) {
-    let wanted = open.is_some_and(|o| o.map.placements.is_empty())
-        && !confirm.is_some_and(|c| c.is_open())
-        && dialogs.is_empty();
+    // **A question takes the prompt away**, and only a question: a menu opens as a gooey modal
+    // popover (a `Dialog`), and a prompt behind one is where it belongs.
+    let wanted = open.is_some_and(|o| o.map.placements.is_empty()) && !confirm.is_some_and(|c| c.is_open());
     let standing = prompt.iter().next();
     match (wanted, standing) {
         (true, None) => {
