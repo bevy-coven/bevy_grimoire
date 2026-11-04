@@ -88,7 +88,13 @@ pub struct ToolbarAtlas {
 /// The bar is a gooey [`toolbar`](bevy_gooey::toolbar) inserted straight after the chrome bar, so it is
 /// the window's shape and nothing a panel adds: the docks get what is left, as they did before there
 /// was a toolbar.
-pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, mut layouts: ResMut<Assets<TextureAtlasLayout>>, frame: Option<Res<crate::chrome::Frame>>) {
+pub fn spawn_toolbar(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    frame: Option<Res<crate::chrome::Frame>>,
+    skin: Res<bevy_gooey::GooeySkin>,
+) {
     let Some(frame) = frame else {
         return;
     };
@@ -110,6 +116,11 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
     };
     let layout = layouts.add(icons::layout());
     commands.insert_resource(ToolbarAtlas { image: image.clone(), layout: layout.clone() });
+    // **The first button stands off the window's edge by a skin gap** (#290). gooey keeps a tooltip
+    // `gap` clear of the window, and a box that cannot sit centred under a button at the bar's left end
+    // slides along the button's edge; a button nearer the edge than that margin makes every below-the-
+    // button place count as clipped, so the box was put *beside* the button, over its neighbours.
+    let edge = skin.gap;
 
     let bar = commands
         .spawn((
@@ -119,7 +130,7 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
                 // which exactly one is on, which is a tool mode exactly. Its value is written from
                 // `EditorState` every frame by [`the_group_follows_the_armed_tool`], and a choice it
                 // reports is handed to the same chord queue every other button uses.
-                parent.spawn((
+                let mut modes = parent.spawn((
                     ToolModes,
                     bevy_gooey::toggle_group(
                         tools().iter().filter_map(|(id, _)| {
@@ -133,6 +144,9 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
                         0,
                     ),
                 ));
+                if let Some(mut node) = modes.get_mut::<Node>() {
+                    node.margin.left = Val::Px(edge);
+                }
                 parent.spawn(bevy_gooey::toolbar_separator());
                 // **Everything else is a one-shot command**, so it is a button and never a member of a
                 // group: a lit "Undo" would be lying about what `Ctrl+Z` did.
