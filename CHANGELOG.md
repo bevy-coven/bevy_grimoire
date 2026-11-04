@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **210-stage-chips** `49b619b` The rig bench's staging chips and their quiet line take the skin's ink, so a project's palette reaches the one row of the bench an author drives (#210) *No clip: invisible by design: the editor's own skin carries the same two colours, so its look is unchanged; proved by the_stage_chips_take_the_skins_ink.rs*
 - **239-history-window** `09b80b4` The history panel reads only the rows it shows, so a long session's 5,000 entries cost seven labels a refresh instead of five thousand, and an agent's row says 'the Familiar' (UI-53, #239) *No clip: no visible change in a short session; proved by the_history_lists_only_the_rows_on_screen.rs (the window is the rows asked for, and agrees with the whole list)*
 - **225-menu-bar** `88b8f45` The menu bar: every command in exactly one menu — File, Edit, View, Map, Meshes, Tiles, Compose, Rigs, Tools, Help — with the key it answers to, and a row that cannot run greys out and says why (UI-31, #225) <br><a href="docs/changelog/media/2026-11-04-225-menu-bar.mp4"><img src="docs/changelog/media/2026-11-04-225-menu-bar.png" width="320" alt="clip"></a>
 
