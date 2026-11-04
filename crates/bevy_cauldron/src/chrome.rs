@@ -429,6 +429,17 @@ pub const DOCK_MIN_W: f32 = LIST_W * 0.6;
 /// went from **69 px to 379**: the sliver is gone, and the panels are still panels.
 pub const VIEWPORT_MIN_W: f32 = 420.0;
 
+/// **The share of the window the viewport is owed once the window is wide enough for that to be
+/// more than [`VIEWPORT_MIN_W`]** (#282). The frame's own test says the viewport "must hold a usable
+/// share of the window", and the shell's `SplitFraction(0.22)` used to give it 56% of a 1280 px
+/// window by letting the left panel overflow its pane; a panel that fits its pane cannot, so the
+/// share is asked of the docks instead.
+pub const VIEWPORT_SHARE: f32 = 0.52;
+
+/// **What the shell's divider costs**, in the `Val::Px` units the panel widths are written in:
+/// gooey's divider is 29 px on screen at the editor's 1.2 scale, measured on big, 2026-11-03.
+pub const DIVIDER_W: f32 = 24.0;
+
 // ── the widget layer ─────────────────────────────────────────────────────────────────────────────
 
 /// **`bevy_feathers`' machinery, with this editor's palette in it.**
@@ -902,6 +913,14 @@ pub struct ViewportSlot;
 #[derive(Component)]
 pub struct ShellSplit;
 
+/// **The shell's split is still sized by its left panel, not by a person** — see
+/// [`size_the_shell_split`]. Present from spawn until the first time the fraction is written by anyone else.
+#[derive(Component, Default)]
+struct SplitUnsized {
+    /// The fraction this system last wrote, so a different one is known to be somebody else's.
+    wrote: Option<f32>,
+}
+
 /// Everything that spawns into a dock runs after this.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FrameSystems;
@@ -1078,10 +1097,19 @@ fn fit_docks_to_the_window(
     // **The viewport is paid first.** The docks were not overflowing a 900 px window — measured, they
     // took 835 of it and left the map 65 — so the question is not "do they fit" but "what is the map
     // owed". `squeeze` is the fraction of its preferred width each panel keeps.
-    let squeeze = if room - (sum_pref + sum_overhead) >= VIEWPORT_MIN_W {
+    //
+    // **Owed: the floor, or its share of the window, and the divider comes out of the room first**
+    // (#282). The shell's split costs a divider's width that the two fixed docks never paid, and a
+    // pane that is as wide as its panel (see [`size_the_shell_split`]) leaves the map what is left:
+    // measured 741 px at a 1600 px window, 28 short of the 769 the docks alone left, and 504 at 1280
+    // where the frame's own test asks for half the window. So the map is owed [`VIEWPORT_SHARE`] of
+    // the window once that is more than the floor, and the panels give the difference back.
+    let room = room - DIVIDER_W;
+    let owed = VIEWPORT_MIN_W.max(VIEWPORT_SHARE * room);
+    let squeeze = if room - (sum_pref + sum_overhead) >= owed {
         1.0
     } else {
-        let affordable = room - VIEWPORT_MIN_W - sum_overhead;
+        let affordable = room - owed - sum_overhead;
         (affordable / sum_pref).clamp(0.0, 1.0)
     };
     // **No panel narrower than the floor**, which binds hardest on the *narrowest* side: the two
@@ -1248,6 +1276,7 @@ pub fn spawn_frame(mut commands: Commands) {
             // takes `SplitFraction` from 0.22 to 0.32.
             bevy::picking::Pickable::default(),
             ShellSplit,
+            SplitUnsized::default(),
         ))
         .id();
     // **What makes the split's panes fit is the regions being parented into them**
@@ -3081,6 +3110,73 @@ fn adopt_the_shell_split(
     }
 }
 
+/// **Give the left pane the width of the panel in it** (#282, #283).
+///
+/// The split was spawned with `SplitFraction(0.22)`, which at a 1280 px window is a 204 px pane
+/// around a panel that asks for `CONTROLS_W` 380 (456 on screen). The pane clips what overflows it
+/// and the viewport is drawn over the rest, so the right half of every control in the inspector was
+/// cut off or unreachable — `ENVIRONMENT`'s `18:30` drew half a button, `23:00` none, and a click at
+/// `23:00`'s own reported centre landed on the viewport (measured on big, 2026-11-03: the pointer's
+/// `HoverMap` entry was the viewport node).
+///
+/// **Follow the panel until the person moves the divider** — a window that resizes, or a second
+/// dock that is laid out a frame after the first, changes the width the panel was squeezed to, and a
+/// pane sized once would keep the first answer (measured: 386 px against the 349 the settled
+/// widths ask for). This runs while [`SplitUnsized`] is on the split, which the frame spawns with
+/// it, remembering what it wrote; a fraction that is no longer what it wrote is a drag, an arrow
+/// key or a game setting, and the marker comes off for good. The width is the widest visible left
+/// panel **as [`fit_docks_to_the_window`] sized it** plus the margin the panel carries
+/// (`2 * MARGIN`, the same overhead that system measures), over the split's room in the same
+/// `Val::Px` units, so a narrow window's squeezed panel gets a pane squeezed to match.
+fn size_the_shell_split(
+    mut commands: Commands,
+    mut splits: Query<(Entity, &mut bevy_gooey::SplitFraction, &mut SplitUnsized, &ComputedNode, &Children)>,
+    dividers: Query<&ComputedNode, With<bevy_gooey::SplitDivider>>,
+    panels: Query<(&PanelWidth, &Node, &ComputedNode)>,
+    windows: Query<(), With<bevy::window::PrimaryWindow>>,
+) {
+    // **No window, no room to answer for**: [`fit_docks_to_the_window`] returns here too, so a panel's
+    // width is still its preferred one and a pane sized to it would be the wrong pane.
+    if windows.is_empty() {
+        return;
+    }
+    let mut want = 0.0f32;
+    for (panel, node, computed) in &panels {
+        if panel.side != Side::Left || node.display == Display::None || computed.size().x <= 0.0 {
+            continue;
+        }
+        if let Val::Px(w) = node.width {
+            want = want.max(w);
+        }
+    }
+    if want <= 0.0 {
+        return;
+    }
+    for (split, mut fraction, mut sized, node, kids) in &mut splits {
+        // **Someone else wrote the fraction since this did**: a drag, an arrow key, a game setting.
+        // It is theirs from now on.
+        if sized.wrote.is_some_and(|w| w != fraction.0) {
+            commands.entity(split).remove::<SplitUnsized>();
+            continue;
+        }
+        let bar = kids
+            .iter()
+            .find_map(|c| dividers.get(c).ok())
+            .map_or(0.0, |d| d.size().x * d.inverse_scale_factor());
+        let extent = node.size().x * node.inverse_scale_factor() - bar;
+        if extent <= 0.0 {
+            continue;
+        }
+        let to = ((want + 2.0 * MARGIN) / extent).clamp(0.0, 1.0);
+        if fraction.0 != to {
+            fraction.0 = to;
+        }
+        if sized.wrote != Some(to) {
+            sized.wrote = Some(to);
+        }
+    }
+}
+
 pub struct ChromePlugin;
 
 impl Plugin for ChromePlugin {
@@ -3152,6 +3248,13 @@ impl Plugin for ChromePlugin {
                 Update,
                 fit_docks_to_the_window
                     .after(FrameSystems)
+                    .run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            .add_systems(
+                Update,
+                size_the_shell_split
+                    .after(fit_docks_to_the_window)
+                    .after(adopt_the_shell_split)
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             .add_systems(Update,
