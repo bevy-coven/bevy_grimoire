@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-03
 
+- **283-scrollbar-wheel** `c5e98aa` A wheel over a panel's scrollbar scrolls the panel: the track forwards the notch to the area it belongs to (#283) *No clip: an input fix with no new surface; proved by a_wheel_over_the_inspector_scrolls_it::a_wheel_over_the_inspectors_scrollbar_scrolls_it (fails without the observer)*
 - **255-empty-map** `c435d2c` An empty map says what to do next: 'Place a piece from the library' over the viewport with an Open library button that puts the keyboard in the PLACE filter, and the prompt goes with the first piece (UI-81, #255)<br><a href="docs/changelog/media/2026-11-03-255-empty-map.mp4"><img src="docs/changelog/media/2026-11-03-255-empty-map.png" width="320" alt="clip"></a>
 - **224-shell-resized** `d80febd` The shell's docks resize: dragging the divider narrows or widens the left dock and the inspector reflows with it, and the viewport keeps the rest (UI-30, #224)<br><a href="docs/changelog/media/2026-11-03-224-shell-resized.mp4"><img src="docs/changelog/media/2026-11-03-224-shell-resized.png" width="320" alt="clip"></a>
 - **282-inspector-fits** `d786f11` The inspector's buttons fit the pane: the left dock is as wide as its panel, so ENVIRONMENT's 6:00, 12:00, 18:30 and 23:00 are all pressable and the preview's lighting follows each (#282, #283)<br><a href="docs/changelog/media/2026-11-03-282-inspector-fits.mp4"><img src="docs/changelog/media/2026-11-03-282-inspector-fits.png" width="320" alt="clip"></a>
