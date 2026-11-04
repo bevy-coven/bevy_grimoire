@@ -132,3 +132,92 @@ fn the_settings_screen_says_nothing_internal() {
         .expect("the Settings dialog is open");
     assert_plain(&mut app, "the Settings screen", Some(dialog));
 }
+
+/// A stepped editor opened on `mode`'s panel, so a workspace is read as a person finds it.
+fn editor_on(tag: &str, mode: bevy_cauldron::tiles::Mode) -> App {
+    let root = fixtures::Fixture::new(tag).descriptor("floor", "alpha").build("m");
+    let mut app = harness::build_headless_at(&root, "m", None, mode).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..6 {
+        app.update();
+    }
+    app
+}
+
+/// **The Map workspace** (#302): the strip, the toolbar, the inspector and the status band.
+#[test]
+fn the_map_workspace_says_nothing_internal() {
+    let mut app = editor_on("plain_map", bevy_cauldron::tiles::Mode::Map);
+    assert_plain(&mut app, "the Map workspace", None);
+}
+
+/// **The Kit workspace** (#302): every panel of it, because the Kit's one workspace holds several.
+#[test]
+fn the_kit_workspace_says_nothing_internal() {
+    use bevy_cauldron::tiles::Mode;
+    for (mode, name) in [(Mode::Meshes, "Meshes"), (Mode::Tiles, "Tiles"), (Mode::Compose, "Compose"), (Mode::Anim, "Anim")] {
+        let mut app = editor_on(&format!("plain_kit_{name}"), mode);
+        assert_plain(&mut app, &format!("the Kit workspace on its {name} panel"), None);
+    }
+}
+
+/// A scratch directory under the system temp dir, removed when it goes out of scope.
+struct Scratch(std::path::PathBuf);
+
+impl Scratch {
+    fn new(tag: &str) -> Scratch {
+        let dir = std::env::temp_dir().join(format!("grimoire_plain_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        Scratch(dir)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// The Projects home over a recent list holding `projects`, the last one first.
+fn the_home(tag: &str, scratch: &Scratch, projects: &[&str]) -> App {
+    let root = fixtures::Fixture::new(tag).descriptor("floor", "alpha").build("m");
+    let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    let file = scratch.0.join("recent.ron");
+    for name in projects {
+        let folder = scratch.0.join(name);
+        std::fs::create_dir_all(folder.join("assets/grimoire")).expect("a project folder");
+        bevy_cauldron::recent::record(&file, &folder).expect("a recent entry");
+    }
+    app.insert_resource(bevy_cauldron::recent::RecentProjects(file)).add_plugins(bevy_cauldron::launcher::LauncherPlugin);
+    app.world_mut().resource_mut::<NextState<bevy_cauldron::screen::Screen>>().set(bevy_cauldron::screen::Screen::Launcher);
+    for _ in 0..4 {
+        app.update();
+    }
+    app
+}
+
+/// **The Projects home on a first run**: the welcome.
+#[test]
+fn the_first_run_welcome_says_nothing_internal() {
+    let scratch = Scratch::new("welcome");
+    let mut app = the_home("plain_welcome", &scratch, &[]);
+    assert_plain(&mut app, "the first-run welcome", None);
+}
+
+/// **The Projects home with projects listed**: the sidebar, the header and a card per project.
+#[test]
+fn the_projects_home_with_projects_says_nothing_internal() {
+    let scratch = Scratch::new("cards");
+    let mut app = the_home("plain_cards", &scratch, &["alpha", "beta"]);
+    assert_plain(&mut app, "the Projects home", None);
+}
+
+/// **The project page**: the breadcrumb, a card per map, a row per kit.
+#[test]
+fn the_project_page_says_nothing_internal() {
+    let root = fixtures::Fixture::new("plain_page").descriptor("floor", "alpha").build("m");
+    let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.add_plugins(bevy_cauldron::loading::LoadingPlugin);
+    harness::stand_on_the_project_page(&mut app, &root);
+    assert_plain(&mut app, "the project page", None);
+}

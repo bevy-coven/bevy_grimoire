@@ -1839,6 +1839,12 @@ struct ReceiptLabel;
 #[derive(Component)]
 pub struct TriangleTotal;
 
+/// **The label column of the readout block, in logical px**: `RELATIONS`, its longest single word, is
+/// 9 glyphs of the 10 px label face (6 px each, 54 px), and the column is that and 4 px of air. Wider
+/// than `COL_LABEL` by exactly what that word needs: a column the width of `COL_WIDE` costs the value
+/// column the room the two-line receipt and hint slots are measured against.
+const READOUT_LABEL_W: f32 = 58.0;
+
 /// One labelled row of the readout. A field per line, rather than one string with separators in it,
 /// because a separator is a thing the reader has to parse and a column is not.
 #[derive(Component, Clone, Copy, PartialEq)]
@@ -3585,7 +3591,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                             // is the one that changes with it: `LAST` for a receipt, `HINT` for a hint.
                             crate::chrome::row_label_with(
                                 row,
-                                crate::chrome::COL_LABEL,
+                                READOUT_LABEL_W,
                                 field.label(),
                                 ReceiptLabel,
                             );
@@ -3599,12 +3605,14 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                                 crate::chrome::row_value(col, "", TEXT, Field::Last);
                             });
                         } else {
-                            // `COL_LABEL`: these hold an ordinary word (`brush`, `edges`). A longer one
-                            // (`RELATIONS`, `UNDER CURSOR`) pushes its own box wider, and `row_label`'s
-                            // own margin keeps the value a gap from its last letter (#302). A wider
-                            // column for the block was tried and costs the value column the width the
-                            // two-line receipt and hint slots are measured against.
-                            crate::chrome::row_label(row, crate::chrome::COL_LABEL, field.label());
+                            // `READOUT_LABEL_W` holds the longest single word here (`RELATIONS`), and
+                            // `UNDER CURSOR` stands on two lines inside it, so every value starts at
+                            // the same place and none touches its label (#302).
+                            if field == Field::Under {
+                                crate::chrome::row_label_wrapping(row, READOUT_LABEL_W, field.label());
+                            } else {
+                                crate::chrome::row_label(row, READOUT_LABEL_W, field.label());
+                            }
                             crate::chrome::row_value(row, "", TEXT, field);
                         }
                     });
@@ -7926,7 +7934,12 @@ fn history_row_clicked(
 fn refresh_history(
     state: Res<EditorState>,
     open: Res<OpenMap>,
-    mut slots: Query<(&mut HistorySlot, &Children, &mut bevy::picking::Pickable)>,
+    mut slots: Query<(
+        &mut HistorySlot,
+        &Children,
+        &mut bevy::picking::Pickable,
+        &mut Visibility,
+    )>,
     mut texts: Query<(&mut Text, &mut TextColor), With<HistoryText>>,
 ) {
     if !state.is_changed() && !open.is_changed() {
@@ -7941,11 +7954,22 @@ fn refresh_history(
         (depth as isize + HISTORY_EACH_WAY).max(1) as usize,
     );
     let first = rows.first().map_or(0, |r| r.position);
-    for (mut slot, children, mut pickable) in &mut slots {
+    for (mut slot, children, mut pickable, mut visibility) in &mut slots {
         let position = usize::try_from(depth as isize + slot.offset)
             .ok()
             .filter(|&p| p <= rows.len());
         slot.position = position;
+        // **A spare row draws nothing, and still holds its height** (#302). The list is always
+        // `2 * HISTORY_EACH_WAY + 1` rows tall so nothing below it moves as the history grows; a
+        // row with no entry behind it was a blank bar. `Hidden`, not `Display::None`, keeps the room.
+        let shown = if position.is_some() {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *visibility != shown {
+            *visibility = shown;
+        }
         // **A spare or current row is not a pointer target** (the click observer refuses it), so it
         // must not light up on hover either. `Hovered` is read from the pointer's hit, and an ignored
         // entity is never hit, so the row goes non-pickable here and stays pickable when it is live.
@@ -8044,11 +8068,11 @@ fn refresh_status(
     let StatusInk { read, quiet, accent, danger } = StatusInk::of(skin.as_deref());
     // `none` covers both "nothing armed" and "the armed index no longer exists", which read the same
     // to an author and want the same word.
+    // A piece is named for people: `lamp_tall` is a file's name, `Lamp tall` is what the palette says.
     let brush = state
         .brush
         .and_then(|ix| project.library.descriptors.get(ix))
-        .map(|d| d.id.as_str())
-        .unwrap_or("none");
+        .map_or_else(|| "none".to_owned(), |d| bevy_grimoire_core::naming::display_name(&d.id));
 
     // **The label follows the words in the slot** (B-013): `HINT` while a hint speaks, `LAST` otherwise.
     let label = if state.hint.is_empty() { "LAST" } else { "HINT" };
@@ -8115,7 +8139,7 @@ fn refresh_status(
                     read,
                 ),
             },
-            Field::Brush => (brush.to_owned(), read),
+            Field::Brush => (brush.clone(), read),
             // ACCENT while something is under the cursor, because it is a live answer that changes
             // as the mouse moves — the same colour the name field uses while it is being typed.
             Field::Under => (under.0.clone(), accent),
@@ -8178,8 +8202,14 @@ fn refresh_status(
             ),
             // **What the next Cmd+Z and Cmd+Shift+Z will do**, named from the two stacks. See
             // [`stack_row`].
-            Field::Undo => stack_row(state.undo_next(&open.map), state.undo_depth()),
-            Field::Redo => stack_row(state.redo_next(&open.map), state.redo_depth()),
+            Field::Undo => stack_row(
+                state.undo_next(&open.map).map(|phrase| named_receipt(&phrase, &project.library)),
+                state.undo_depth(),
+            ),
+            Field::Redo => stack_row(
+                state.redo_next(&open.map).map(|phrase| named_receipt(&phrase, &project.library)),
+                state.redo_depth(),
+            ),
             // **The hint takes the receipt's slot while it speaks** (B-013), in the refusal colour: a
             // refusal has to read differently from a success, or "NOT SAVED" scrolls past as if it were a
             // receipt. The receipt comes back when the hint clears.
@@ -8189,7 +8219,7 @@ fn refresh_status(
             // other one — `stamp refused:`, `is not a number of metres`, every `cannot draw it:` —
             // in the same grey as `stamped 4 piece(s)`. Refusals go to the block above now, and the
             // write site is what decides, so there is nothing left here to be wrong about.
-            Field::Last => (plain_receipt(state.status.note_text()), quiet),
+            Field::Last => (named_receipt(&plain_receipt(state.status.note_text()), &project.library), quiet),
             // **The worst repeat first, then how many other looks repeat**, short enough for one line.
             // Dim when nothing repeats, the EDGES rule: a standing line that is fine stays quiet.
             // Under the project's `repetition.ron` (#139), the rules `grimoire_state` reports under; a
@@ -8224,6 +8254,63 @@ fn refresh_status(
             colour.0 = tint;
         }
     }
+}
+
+/// **A receipt that names a piece the way the palette does** (#302): `placed lamp_tall at (2.3, 1.3)`
+/// becomes `placed lamp tall at (2.3, 1.3)`, and ``added `bath` `` becomes `added Bath`.
+///
+/// A piece's id is a file-safe name (`lamp_tall`), which the palette already shows as `Lamp tall`. Two
+/// spellings are met in receipts and each is made what a person says:
+///
+/// - **A name in backticks** (a quoted id: ``added `bath` ``) loses its backticks and reads as the
+///   palette spells it, because the quoting is how the code marks an id and the palette's name is what the
+///   person sees on screen. Only a lone word is meant (letters, digits, `_`, `/` and `-`): a quoted file
+///   (`kits.ron`) or a chord (`Ctrl+Z`) is not a name and keeps its quotes.
+/// - **A name run into a sentence** (`placed lamp_tall`) is spelled lower case and spaced. Only a name the
+///   library knows is touched, so a word that merely has an underscore in it (a file or a key) stays as it
+///   is, and a receipt with no underscore costs nothing.
+pub fn named_receipt(text: &str, library: &bevy_grimoire_core::library::Library) -> String {
+    let text = unquote_names(text);
+    if !text.contains('_') {
+        return text;
+    }
+    let mut named: Vec<&str> = library
+        .descriptors
+        .iter()
+        .filter_map(|d| d.id.rsplit('/').next())
+        .filter(|name| name.contains('_') && text.contains(name))
+        .collect();
+    // The longest first, so a name that holds another is spelled out whole.
+    named.sort_by_key(|name| std::cmp::Reverse(name.len()));
+    named.dedup();
+    let mut out = text.clone();
+    for name in named {
+        out = out.replace(name, &bevy_grimoire_core::naming::display_name(name).to_lowercase());
+    }
+    out
+}
+
+/// A quoted lone word is a name: it reads as the palette spells it, with no backticks (see [`named_receipt`]).
+fn unquote_names(text: &str) -> String {
+    // An odd number of backticks is not a quoting this can read: leave the text as it is.
+    if !text.matches('`').count().is_multiple_of(2) {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len());
+    for (at, part) in text.split('`').enumerate() {
+        let quoted = at % 2 == 1;
+        let is_name = quoted && !part.is_empty() && part.chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '/' | '-'));
+        if is_name {
+            out.push_str(&bevy_grimoire_core::naming::display_name(part));
+        } else if quoted {
+            out.push('`');
+            out.push_str(part);
+            out.push('`');
+        } else {
+            out.push_str(part);
+        }
+    }
+    out
 }
 
 /// **A receipt, as a person reads it** (#302): `placed lamp_tall@1 at (2.31, 1.31)` becomes `placed
@@ -15713,7 +15800,7 @@ pub fn under_readout(
         // this line cannot come to name a key the build does not read.
         Some(p) => format!(
             "{}  — {}{} edits it",
-            p.id,
+            piece_name(&p.id),
             layer_of(p, descriptor),
             keys::chord_text(keys::binding(Action::EditTile))
         ),
@@ -15721,6 +15808,12 @@ pub fn under_readout(
         // eye stops reading a line that always has something in it.
         None => String::new(),
     }
+}
+
+/// **A placed piece's name as a person reads it**: `coffee_table@3` is `Coffee table`. The `@3` says which
+/// of several of one kind an operation meant and the underscore is a file's spelling; neither is on the map.
+fn piece_name(id: &str) -> String {
+    bevy_grimoire_core::naming::display_name(id.split('@').next().unwrap_or(id))
 }
 
 /// **Which of its two layers this placement took, when that is a question** — E-059.
@@ -15747,7 +15840,7 @@ fn layer_of(
         return String::new();
     }
     match &p.on {
-        Some(host) => format!("on `{host}`  — "),
+        Some(host) => format!("on {}  — ", piece_name(host)),
         None => "on the floor  — ".to_owned(),
     }
 }

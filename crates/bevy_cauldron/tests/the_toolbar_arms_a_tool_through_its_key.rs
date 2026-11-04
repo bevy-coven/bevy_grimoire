@@ -72,9 +72,9 @@ fn the_toolbar_shows_registered_commands_that_have_icons() {
     };
     assert_eq!(
         group.map(|c| c.0),
-        Some(bevy_cauldron::toolbar::tools().len()),
-        "the mode group must hold every tool in `tools()`, or a mode has no button and is reachable \
-         only by key"
+        Some(bevy_cauldron::toolbar::tools().len() + 1),
+        "the mode group must hold Place and every tool in `tools()`, or a mode has no button and is \
+         reachable only by key"
     );
     for (id, _) in bevy_cauldron::toolbar::tools() {
         assert!(
@@ -163,8 +163,9 @@ fn the_armed_tools_option_is_the_only_lit_one() {
         q.iter(world).next().copied().expect("the mode group is on the bar")
     };
     assert_eq!(
-        value.0, 2,
-        "Clone is index 2 of `tools()`, and the group's value is the single lit option"
+        Some(value.0),
+        bevy_cauldron::toolbar::group_index(bevy_cauldron::editor::Tool::Clone),
+        "Clone is option 3 (Place, Move, Erase, Clone), and the group's value is the single lit option"
     );
 
     let lit: Vec<&'static str> = {

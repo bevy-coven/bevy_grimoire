@@ -3183,8 +3183,8 @@ fn the_under_readout_is_blank_while_the_pointer_is_on_a_panel() {
     // Over the world, pointing at something: the line names it and the key that acts on it.
     let said = under_readout(false, Some(&piece), None);
     assert!(
-        said.contains("crate@7"),
-        "the readout must name the piece: `{said}`"
+        said.contains("Crate") && !said.contains('@'),
+        "the readout must name the piece as a person reads it, with no instance number: `{said}`"
     );
     assert!(
         said.contains(&bevy_cauldron::keys::chord_text(
@@ -10105,13 +10105,14 @@ fn the_palette_rows_live_in_a_scroll_container() {
         app.update();
     }
 
-    // The palette renders each descriptor id as a row. Other panels may render the same id, so the
-    // claim is existential: at least one such text sits under a scrolling ancestor.
+    // The palette renders each descriptor as a row, named as a person reads it (`wall` is `Wall`, #289).
+    // Other panels may render the same name, so the claim is existential: at least one such text sits
+    // under a scrolling ancestor.
     let rows: Vec<Entity> = app
         .world_mut()
         .query::<(Entity, &Text)>()
         .iter(app.world())
-        .filter(|(_, t)| t.0 == "wall")
+        .filter(|(_, t)| t.0 == "Wall")
         .map(|(e, _)| e)
         .collect();
     assert!(
@@ -16436,7 +16437,7 @@ fn the_under_readout_says_which_layer_a_two_way_piece_took() {
     let seated = placed("pile@1", Some("smithy_workbench"));
     let said = under_readout(false, Some(&seated), Some(&two_way));
     assert!(
-        said.contains("smithy_workbench"),
+        said.contains("Smithy workbench"),
         "a piece seated on a host must say which host, or the author cannot tell it from one on \
          the floor: `{said}`"
     );
@@ -16462,7 +16463,7 @@ fn the_under_readout_says_which_layer_a_two_way_piece_took() {
     };
     let said = under_readout(false, Some(&placed("lamp@1", Some("desk"))), Some(&surface_only));
     assert!(
-        !said.contains("on `desk`") && !said.contains("floor"),
+        !said.contains("on Desk") && !said.contains("floor"),
         "a seated `OnSurface` piece has the same `on` as a two-way one, so only the variant can \
          tell them apart: `{said}`"
     );

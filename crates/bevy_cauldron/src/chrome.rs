@@ -2391,6 +2391,25 @@ pub fn row_label(row: &mut ChildSpawnerCommands, width: f32, label: &str) {
     row_label_with(row, width, label, ());
 }
 
+/// **A [`row_label`] that keeps its column and says a long phrase on two lines** (#302).
+///
+/// `row_label` lets a label wider than its column push the value right, which keeps the words apart and
+/// moves that one row's value out of line with every other row's. Here the column is the label's width
+/// and a phrase of two words wraps inside it, so `UNDER CURSOR` stands as `UNDER` over `CURSOR` and its
+/// value starts where the others do. A word still wider than `width` is the caller's to size the column
+/// for: it is never cut.
+pub fn row_label_wrapping(row: &mut ChildSpawnerCommands, width: f32, label: &str) {
+    let id = row_label_with(row, width, label, ());
+    row.commands()
+        .entity(id)
+        .insert(TextLayout::new(Justify::Left, LineBreak::WordBoundary))
+        .queue(move |mut label: EntityWorldMut| {
+            if let Some(mut node) = label.get_mut::<Node>() {
+                node.width = Val::Px(width);
+            }
+        });
+}
+
 /// [`row_label`] with a marker on its label, for a label that changes while the row is on screen.
 pub fn row_label_with(
     row: &mut ChildSpawnerCommands,
@@ -3769,10 +3788,7 @@ pub fn spawn_chrome_bar(
     });
 
     // **The way out names where it goes**: the project's own name, which is the page it returns to (`project_page.rs`).
-    let back = project
-        .as_deref()
-        .and_then(|p| p.root.file_name())
-        .map_or_else(|| "Projects".to_owned(), |n| n.to_string_lossy().into_owned());
+    let back = back_name(project.as_deref());
 
     commands.entity(frame.chrome_bar).with_children(|bar| {
         bar.spawn((
@@ -3882,7 +3898,8 @@ pub fn repaint_where_you_are(
 /// and belongs to the window; the log answers *"what has gone wrong here"*, is a stack of lines
 /// rather than one, and a band that grew to hold it would move the viewport every time a refusal
 /// landed.
-pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
+pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>, project: Option<Res<crate::project::Project>>) {
+    let back = back_name(project.as_deref());
     commands.entity(frame.status).with_children(|band| {
         // **The problem is not here any more.** It used to be a flow child of this band — a padded,
         // wrapping block inside twenty-six pixels of chrome, so it stood proud of the band it was
@@ -3929,7 +3946,7 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>) {
             },
             bevy::picking::Pickable::IGNORE,
         ));
-        shortcut_hint(band);
+        shortcut_hint(band, &back);
     });
 }
 
@@ -4149,7 +4166,15 @@ pub fn light_the_back_button(
     }
 }
 
-pub fn shortcut_hint(parent: &mut ChildSpawnerCommands) {
+/// **Where the way out goes, in words**: the project's folder name, which is the page `Cmd+O` and the
+/// back button return to (`project_page.rs`), and `Projects` when no project is open.
+fn back_name(project: Option<&crate::project::Project>) -> String {
+    project
+        .and_then(|p| p.root.file_name())
+        .map_or_else(|| "Projects".to_owned(), |n| n.to_string_lossy().into_owned())
+}
+
+pub fn shortcut_hint(parent: &mut ChildSpawnerCommands, back: &str) {
     parent.spawn((
         // **The way out is named here, not only on the button above it.**
         //
@@ -4164,7 +4189,7 @@ pub fn shortcut_hint(parent: &mut ChildSpawnerCommands) {
         // reason the document was replaced is that a reader had to carry a phrase from it back to
         // something on screen.
         Text::new(format!(
-            "Hold {} — every key lands on what it does   ·   {} back to kits & maps",
+            "Hold {} — every key lands on what it does   ·   {} back to {back}",
             keys::chord(keys::Action::Shortcuts),
             keys::chord(keys::Action::MainMenu),
         )),

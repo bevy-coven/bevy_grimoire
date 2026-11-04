@@ -48,6 +48,7 @@ pub const ICONS: &[&str] = &[
     "panel.familiar",
     "panel.reload",
     "panel.log",
+    "map.place_mode",
 ];
 // icons:end
 
