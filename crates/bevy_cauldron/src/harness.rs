@@ -251,15 +251,19 @@ pub fn install_font(app: &mut App, root: &Path) -> Result<(), String> {
 /// [`install_font`] on a running world, for a project opened while the app runs ([`crate::project_assets`]).
 /// With no project (`None`) the face compiled into this crate is installed.
 ///
-/// **Installed once per process.** Bevy's text pipeline registers a font asset the first time it sees its id (`load_font_assets_into_font_collection`
-/// keeps the ids it has registered) and gives the asset the alias that handles resolve through. An asset put over an id it already registered
-/// has no alias and is never registered, so every `Text` using the default handle draws nothing — the editor opened from the home after the
-/// home itself was drawn. So a second call leaves the first face in place: the face a project opened in a running process draws in is the one
-/// the process started with.
+/// # A face over a registered face
+///
+/// Bevy's text pipeline (`bevy_text::load_font_assets_into_font_collection`) registers a font asset with the shaper the first
+/// time it sees the asset's id and gives it the alias that handles resolve through; it remembers the ids it registered. An asset
+/// put over an id it already registered arrives with no alias and is never registered, so every `Text` on the default handle then
+/// draws nothing — the editor opened from the home after the home itself was drawn.
+///
+/// The pipeline does notice a **removed** asset: it clears its collection, registers every remaining face again and marks every
+/// `TextFont` changed. So a second face is a removal now and the new face a frame later ([`PendingFont`]), once a frame has shown the
+/// pipeline the removal ([`mark_the_removal_seen`], [`seat_the_pending_font`]); for that frame the editor's text has no face. A
+/// face with the same bytes as the one installed changes nothing, so the common case — two projects with no font of their own —
+/// never blanks.
 pub fn install_font_in(world: &mut World, root: Option<&Path>) -> Result<(), String> {
-    if world.contains_resource::<EditorFont>() {
-        return Ok(());
-    }
     let bytes = match root {
         Some(root) => {
             let path = root.join("assets/fonts/FiraMono-Regular.ttf");
@@ -271,17 +275,52 @@ pub fn install_font_in(world: &mut World, root: Option<&Path>) -> Result<(), Str
         }
         None => EMBEDDED_FONT.to_vec(),
     };
-    world
-        .resource_mut::<Assets<Font>>()
-        .insert(AssetId::default(), Font::from_bytes(bytes))
-        .map_err(|e| format!("cannot install the editor font: {e}"))?;
+    let replacing = world.contains_resource::<EditorFont>();
+    let mut fonts = world.resource_mut::<Assets<Font>>();
+    if replacing {
+        if fonts.get(AssetId::default()).is_some_and(|installed| installed.data.as_ref() == bytes.as_slice()) {
+            return Ok(());
+        }
+        // Removed now, put back by `seat_the_pending_font` after the pipeline has seen it gone.
+        fonts.remove(AssetId::default());
+        world.insert_resource(PendingFont { bytes, removal_seen: false });
+        return Ok(());
+    }
+    fonts.insert(AssetId::default(), Font::from_bytes(bytes)).map_err(|e| format!("cannot install the editor font: {e}"))?;
     world.insert_resource(EditorFont);
     Ok(())
 }
 
-/// The editor's face is installed over the default font asset ([`install_font_in`] says why only once).
+/// The editor's face has been installed over the default font asset.
 #[derive(Resource)]
 struct EditorFont;
+
+/// **A face waiting to replace the one removed**: [`install_font_in`] took the installed face away, and the text pipeline has
+/// to see it gone before the new one can take its id.
+#[derive(Resource)]
+pub(crate) struct PendingFont {
+    bytes: Vec<u8>,
+    /// A frame has run the text pipeline since the removal.
+    removal_seen: bool,
+}
+
+/// The end of a frame: the text pipeline (in `PostUpdate`) has run since a pending face's removal.
+pub(crate) fn mark_the_removal_seen(pending: Option<ResMut<PendingFont>>) {
+    if let Some(mut pending) = pending {
+        pending.removal_seen = true;
+    }
+}
+
+/// The start of the next frame, before the pipeline runs again: the pending face takes the default id, which the pipeline then
+/// registers as a new face with an alias of its own.
+pub(crate) fn seat_the_pending_font(mut commands: Commands, pending: Option<ResMut<PendingFont>>, mut fonts: ResMut<Assets<Font>>) {
+    let Some(mut pending) = pending.filter(|p| p.removal_seen) else { return };
+    let face = Font::from_bytes(std::mem::take(&mut pending.bytes));
+    if let Err(e) = fonts.insert(AssetId::default(), face) {
+        error!("cannot install the project's font: {e}");
+    }
+    commands.remove_resource::<PendingFont>();
+}
 
 /// **Stands a stepped editor on the project page of `root`**, as opening a project from the home does: the home's plugins are added when
 /// they are not, the asset root and the agent bridge's root point at the project, and the screen is the page. For tests, which drive the
@@ -430,22 +469,63 @@ pub fn build_headless_at(
 
 #[cfg(test)]
 mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+
     use super::*;
 
-    /// **A font installed over the one already registered is not installed.** The text pipeline names an asset (its alias) the frame it first
-    /// registers it; an asset put over that id arrives with no alias and every `Text` on the default handle then draws nothing. This is what an
-    /// editor opened from the home looked like: text everywhere in the ECS, none on screen.
+    /// A font file for a project in a scratch folder: the embedded face and `extra` trailing bytes, so two projects' faces differ
+    /// and both are still the face.
+    fn project_with_a_font(tag: &str, extra: usize) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("grimoire_font_{tag}_{}", std::process::id()));
+        let fonts = root.join("assets/fonts");
+        std::fs::create_dir_all(&fonts).unwrap_or_else(|e| panic!("{e}"));
+        let mut bytes = EMBEDDED_FONT.to_vec();
+        bytes.extend(std::iter::repeat_n(0u8, extra));
+        std::fs::write(fonts.join("FiraMono-Regular.ttf"), bytes).unwrap_or_else(|e| panic!("{e}"));
+        root
+    }
+
+    fn installed_len(world: &World) -> Option<usize> {
+        world.resource::<Assets<Font>>().get(AssetId::default()).map(|f| f.data.len())
+    }
+
+    /// **Another project's face replaces the installed one in two steps**: the removal, which the text pipeline has to see, then the
+    /// new face. Put over the registered id in one go it arrives with no alias and every `Text` draws nothing.
     #[test]
-    fn a_second_font_install_leaves_the_registered_face_alone() {
+    fn a_second_face_is_a_removal_and_then_the_new_face() {
+        let (one, two) = (project_with_a_font("one", 0), project_with_a_font("two", 8));
+        let mut world = World::new();
+        world.init_resource::<Assets<Font>>();
+        install_font_in(&mut world, Some(&one)).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(installed_len(&world), Some(EMBEDDED_FONT.len()), "the first project's face is installed");
+
+        install_font_in(&mut world, Some(&two)).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(installed_len(&world), None, "the registered face is removed, not written over");
+
+        // Before the pipeline has seen the removal nothing is put back.
+        world.run_system_once(seat_the_pending_font).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(installed_len(&world), None, "a face seated in the frame of the removal would arrive unregistered");
+        world.run_system_once(mark_the_removal_seen).unwrap_or_else(|e| panic!("{e}"));
+        world.run_system_once(seat_the_pending_font).unwrap_or_else(|e| panic!("{e}"));
+        world.flush();
+        assert_eq!(installed_len(&world), Some(EMBEDDED_FONT.len() + 8), "the second project's face, once the removal was seen");
+        assert!(!world.contains_resource::<PendingFont>());
+        let _ = std::fs::remove_dir_all(one);
+        let _ = std::fs::remove_dir_all(two);
+    }
+
+    /// **The same face again changes nothing**, so two projects that carry no font of their own never blank the text.
+    #[test]
+    fn the_same_face_again_leaves_the_registered_face_alone() {
         let mut world = World::new();
         world.init_resource::<Assets<Font>>();
         install_font_in(&mut world, None).unwrap_or_else(|e| panic!("{e}"));
-        // The text pipeline's own naming of a font it registered.
         world.resource_mut::<Assets<Font>>().get_mut(AssetId::default()).unwrap_or_else(|| panic!("the face is installed")).alias = "registered".to_owned();
 
         install_font_in(&mut world, Some(Path::new("/nonexistent/project"))).unwrap_or_else(|e| panic!("{e}"));
 
         let alias = world.resource::<Assets<Font>>().get(AssetId::default()).map(|f| f.alias.clone());
-        assert_eq!(alias.as_deref(), Some("registered"), "the registered face was replaced by one the pipeline never saw");
+        assert_eq!(alias.as_deref(), Some("registered"), "the registered face was touched");
+        assert!(!world.contains_resource::<PendingFont>());
     }
 }

@@ -1,0 +1,21 @@
+{
+  "name": "add_meshes_drop",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [{"seconds": 10}, {"seconds": 10}],
+  "steps": [
+    {"at": 0.3, "caption": "a new Empty project: no pieces yet"},
+    {"at": 1.0, "click_label": "New project"},
+    {"at": 2.4, "click_label": "project name"},
+    {"at": 2.8, "type": "Blank"},
+    {"at": 3.6, "click": [948, 163]},
+    {"at": 5.2, "caption": "Empty: add your own .glb meshes"},
+    {"at": 6.4, "click_label": "Create"},
+    {"at": 11.0, "caption": "the map and the list both say so, and offer Add meshes…"},
+    {"at": 14.0, "drop_file": "/tmp/np-meshes/chair.glb"},
+    {"at": 14.4, "caption": "a .glb dropped on the window: copied in, imported, armed"},
+    {"at": 16.5, "click": [703, 470]}
+  ]
+}

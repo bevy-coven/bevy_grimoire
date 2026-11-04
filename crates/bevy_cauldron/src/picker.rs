@@ -78,8 +78,8 @@ pub struct PickerOff;
 /// The toast's words. It names the service a person installs and the other way in, with no program name.
 pub const NO_CHOOSER: &str = "This system has no file chooser service (xdg-desktop-portal). Install it, or open a project from a terminal by giving its folder as the argument.";
 
-/// The extensions Add meshes… offers.
-pub const MESH_EXTENSIONS: [&str; 2] = ["glb", "gltf"];
+/// The extensions Add meshes… offers: `piece_import` reads one `.glb`, and a `.gltf` is a file plus its `.bin`.
+pub const MESH_EXTENSIONS: [&str; 1] = ["glb"];
 
 /// The chooser in flight: what it is for, and its answer when it has one.
 #[derive(Resource, Default)]

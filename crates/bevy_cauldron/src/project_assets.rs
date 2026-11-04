@@ -109,7 +109,10 @@ pub fn install(app: &mut App, root: Option<PathBuf>) {
         AssetSourceId::Default,
         AssetSourceBuilder::new(move || Box::new(ProjectAssetReader::new(shared.clone()))),
     )
-    .insert_resource(root);
+    .insert_resource(root)
+    // A project's own font replaces the installed one over two frames (`harness::install_font_in`).
+    .add_systems(First, crate::harness::seat_the_pending_font)
+    .add_systems(Last, crate::harness::mark_the_removal_seen);
 }
 
 /// **A project that is waiting for the open door to close.** [`open_project`] called while the editor is up

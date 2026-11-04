@@ -584,6 +584,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`: it is the one thing that says which project the asset server reads**, moved by
     // `project_assets::open_project` and by nothing a door change does.
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
+    // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
+    ("bevy_cauldron::harness::EditorFont", Ownership::Session),
     ("bevy_cauldron::project::OpenMap", Ownership::Project),
     ("bevy_cauldron::tiles::Door", Ownership::Project),
     ("bevy_cauldron::tiles::Mode", Ownership::Project),

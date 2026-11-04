@@ -1697,6 +1697,8 @@ mod tests {
     #[test]
     fn making_a_project_here_keeps_what_the_folder_held_and_refuses_one_that_is_already_a_project() {
         let dir = Root::new("project-here");
+        // `Root` is already a project; this is about a folder that is not one yet.
+        std::fs::remove_dir_all(dir.0.join(GRIMOIRE_DIR)).unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(dir.0.join("notes.txt"), "mine").unwrap_or_else(|e| panic!("{e}"));
         make_project_here(&dir.0, b"(vocab)").unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(std::fs::read_to_string(dir.0.join("notes.txt")).unwrap_or_default(), "mine");

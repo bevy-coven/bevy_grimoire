@@ -41,6 +41,20 @@ plutil -lint "$APP/Contents/Info.plist"
 cp "$MACOS_DIR/Cauldron.icns" "$APP/Contents/Resources/Cauldron.icns"
 # The example project: tracked files only, copied to ~/Documents on first open (launcher::example_to_open).
 git archive HEAD assets | tar -x -C "$APP/Contents/Resources/example"
+# The What's new page's stills, where launcher::still_image looks: Contents/Resources/<the path the changelog gives>.
+# Only the entries the page lists, so the app carries a few images and not every clip's still. The stills are Git LFS
+# objects: release-macos.yml pulls them, and a pointer file that is still one is left out (the page lists that entry without
+# its picture) with a warning.
+NEWS_SHOWN=10 # launcher::NEWS_SHOWN; a test in launcher.rs fails when the two differ
+while read -r still; do
+  [ -n "$still" ] || continue
+  if head -c 40 "$still" | grep -q '^version https://git-lfs'; then
+    echo "build_app.sh: $still is an LFS pointer, not copied (git lfs pull --include=\"docs/changelog/media/*.png\")" >&2
+    continue
+  fi
+  mkdir -p "$APP/Contents/Resources/$(dirname "$still")"
+  cp "$still" "$APP/Contents/Resources/$still"
+done < <(python3 tools/release/macos/news_stills.py CHANGELOG.md "$NEWS_SHOWN")
 
 if [ "$IDENTITY" = - ]; then
   codesign --force --options runtime --entitlements "$MACOS_DIR/entitlements.plist" --sign - "$APP"

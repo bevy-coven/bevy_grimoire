@@ -111,7 +111,8 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
     let made = places.join("harbour");
     assert!(made.join("assets/grimoire/kits.ron").is_file() && made.join("assets/grimoire/vocab.ron").is_file(), "the project is written");
     assert_eq!(app.world().resource::<PointedAt>().root, made.canonicalize().unwrap(), "and opened the way a recent row is, in this process");
-    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Project);
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Loading, "on its first map");
+    assert!(bevy_cauldron::catalog::Catalog::scan(&made).unwrap().map("first_map").is_some(), "which Create made");
     assert!(app.world_mut().query_filtered::<(), With<NameField>>().iter(app.world()).next().is_none(), "the form is gone");
     let listed = recent::Recent::load(&dir.join("recent.ron")).unwrap().listing();
     assert_eq!(listed[0].project.path, made.canonicalize().unwrap(), "and it is at the top of the recent list");
@@ -134,7 +135,7 @@ fn a_location_that_is_not_a_folder_and_a_name_with_nothing_usable_are_each_said_
 }
 
 #[test]
-fn the_one_kit_template_makes_a_project_with_a_first_kit_and_cancel_makes_nothing() {
+fn the_empty_template_makes_a_project_with_one_bound_kit_and_cancel_makes_nothing() {
     let dir = scratch("kit");
     let mut app = on_the_launcher("kit", &dir);
     press(&mut app, "New project");
@@ -147,7 +148,8 @@ fn the_one_kit_template_makes_a_project_with_a_first_kit_and_cancel_makes_nothin
     let made = dir.join("meadow");
     let catalog = bevy_cauldron::catalog::Catalog::scan(&made).unwrap();
     assert_eq!(catalog.kits.len(), 1, "one empty kit, bound");
-    assert_eq!(catalog.authoring.as_deref(), Some("meadow"));
+    assert_eq!(catalog.authoring.as_deref(), Some("main"));
+    assert_eq!(catalog.maps.len(), 1, "and its first map");
 
     let mut app = on_the_launcher("kit_cancel", &dir);
     press(&mut app, "New project");
@@ -156,6 +158,6 @@ fn the_one_kit_template_makes_a_project_with_a_first_kit_and_cancel_makes_nothin
     press(&mut app, "Cancel");
     assert!(!dir.join("never").exists(), "Cancel writes nothing");
     assert!(app.world_mut().query_filtered::<(), With<NameField>>().iter(app.world()).next().is_none());
-    assert_eq!(new_project::check(&NewProject { name: "x".into(), location: dir.to_string_lossy().into_owned(), template: Template::Empty }).reason(), None);
+    assert_eq!(new_project::check(&NewProject { name: "x".into(), location: dir.to_string_lossy().into_owned(), template: Template::Starter }).reason(), None);
     let _ = std::fs::remove_dir_all(&dir);
 }

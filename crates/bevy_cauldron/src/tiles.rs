@@ -8823,6 +8823,8 @@ enum RowInk {
     NewTile,
     /// A sentence where rows would be.
     Say(String),
+    /// **Add meshes…**, under the sentence that says the project has no meshes.
+    AddMeshes,
 }
 
 /// **The ink the list is currently drawn from.** A resource rather than a `Local` because a
@@ -8900,6 +8902,11 @@ fn list_ink(
                 // sentence.
                 let say = if state.scan_failed {
                     "the scan could not read assets/ — see the problem line".to_owned()
+                } else if state.scanned && project.library.descriptors.is_empty() {
+                    // No mesh to import and none imported: the project has none, and the button is the way to add some (#301).
+                    ink.push(RowInk::Say(crate::add_meshes::NO_MESHES.to_owned()));
+                    ink.push(RowInk::AddMeshes);
+                    return ink;
                 } else if state.scanned {
                     "every mesh under assets/ is already in the library".to_owned()
                 } else {
@@ -9181,6 +9188,9 @@ fn draw_ink(
                     TextColor(words.quiet),
                     crate::chrome::font(crate::chrome::text::BODY),
                 ));
+            }
+            RowInk::AddMeshes => {
+                p.spawn((bevy_gooey::button(crate::add_meshes::ACTION), crate::add_meshes::AddMeshesButton));
             }
         }
     }

@@ -296,5 +296,25 @@ class DragDividerAsksTheEditor(unittest.TestCase):
         finally:
             record.brp = original
 
+    def test_a_drop_file_step_writes_the_window_systems_message_for_the_primary_window(self):
+        sent = []
+
+        def fake(port, method, params):
+            sent.append((method, params))
+            return {"result": [{"entity": 77}]} if method == "world.query" else {"result": None}
+
+        original = record.brp
+        record.brp = fake
+        try:
+            tl = record.Timeline()
+            step = {"_kind": "drop_file", "drop_file": "/tmp/crate.glb", "at": 0.0}
+            self.assertEqual(record.kind_of({"at": 1.0, "drop_file": "/tmp/crate.glb"}), "drop_file")
+            record.do_step(step, tl, record.Injector(1), None)
+        finally:
+            record.brp = original
+        message = [p for m, p in sent if m == "world.write_message"][0]
+        self.assertEqual(message["message"], "bevy_window::event::FileDragAndDrop")
+        self.assertEqual(message["value"], {"DroppedFile": {"window": 77, "path_buf": "/tmp/crate.glb"}})
+
     def test_a_drag_divider_step_is_its_own_kind(self):
         self.assertEqual(record.kind_of({"at": 1.0, "drag_divider": -90, "secs": 1.0}), "drag_divider")

@@ -271,7 +271,7 @@ pub fn user_example() -> Option<PathBuf> {
 }
 
 /// Copies the folder `from` to `to`: files and folders, never a symlink.
-fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
     for entry in std::fs::read_dir(from)? {
         let entry = entry?;
@@ -1135,5 +1135,20 @@ fn mark_the_selection(launcher: Res<Launcher>, cards: Query<(Entity, &ProjectCar
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The app carries the stills the What's new page lists**: `build_app.sh` copies the stills of the newest entries with a For you
+    /// sentence into the app's Resources, and how many is [`NEWS_SHOWN`] written in the script. When the two differ the page lists
+    /// entries whose pictures the app does not hold.
+    #[test]
+    fn the_release_script_copies_as_many_stills_as_the_page_lists() {
+        let script = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/release/macos/build_app.sh")).unwrap_or_else(|e| panic!("{e}"));
+        let line = format!("NEWS_SHOWN={NEWS_SHOWN} ");
+        assert!(script.contains(&line), "build_app.sh must say `{}` so the app holds what the page shows", line.trim());
     }
 }
