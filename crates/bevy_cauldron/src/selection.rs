@@ -69,7 +69,16 @@ impl Selection {
                 }
                 want.push(id.to_owned());
             }
-            None => return false,
+            // **A released lock is an empty selection** (`Esc`, or a piece that stopped resolving):
+            // the set is anchored on it, so it cannot outlive it.
+            None => {
+                if self.ids.is_empty() && self.primary.is_none() {
+                    return false;
+                }
+                self.ids.clear();
+                self.primary = None;
+                return true;
+            }
         }
         for id in &self.ids {
             if want.iter().any(|w| w == id) {
@@ -102,6 +111,20 @@ impl Selection {
                 self.ids.push(id.to_owned());
                 true
             }
+        }
+    }
+
+    /// **A Shift-click on `id`**, which is at `at`. With nothing locked the piece *becomes* the primary
+    /// (it takes a held lock, so it stays selected when the cursor walks away); with a primary it joins
+    /// the set beside it, or leaves it again. Shift-clicking the primary itself changes nothing. `true`
+    /// when the set changed.
+    pub(crate) fn shift_click(&mut self, lock: &mut TargetLock, id: &str, at: (f32, f32)) -> bool {
+        match lock.placement_id().map(str::to_owned) {
+            None => {
+                lock.hold(id, at);
+                self.only(id)
+            }
+            Some(primary) => self.toggle(id, Some(&primary)),
         }
     }
 

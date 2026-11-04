@@ -982,6 +982,14 @@ impl TargetLock {
     pub fn placement_id(&self) -> Option<&str> {
         self.0.as_ref().map(|(id, _)| id.as_str())
     }
+
+    /// **Hold the lock on `id`**, as [`lock_on_placement`] does and for the same reason: the cursor is
+    /// on the piece that was just Shift-clicked, but a held lock does not lapse when it walks away,
+    /// and the selection the inspector reads is anchored on it. `at` is the piece's own position.
+    pub(crate) fn hold(&mut self, id: &str, at: (f32, f32)) {
+        self.0 = Some((id.to_owned(), at));
+        self.1 = true;
+    }
 }
 
 /// **Lock onto the placement `id` on the open map**, as a click on it would: the gold marker stands on
@@ -7447,8 +7455,9 @@ fn named_box(
 }
 
 /// **Resolve a frame target to the box it means.** The one place a name is read, so no caller can read
-/// a target differently. `lock` is the placement the target lock holds: the Map has no
-/// multi-select, so "the selection" is that one piece. A refusal says what to change, and nothing is
+/// a target differently. `lock` is the placement the target lock holds, which is the selection's
+/// *primary* (`selection::Selection`): the frame target frames that one piece, not the set beside it.
+/// A refusal says what to change, and nothing is
 /// framed on one.
 pub fn resolve_frame(
     target: &FrameTarget,
@@ -14905,6 +14914,15 @@ struct MoveInput<'w> {
     anchor: Res<'w, FineAnchor>,
     picture: Res<'w, StampPicture>,
     compose: Res<'w, crate::compose::Armed>,
+    chosen: Chosen<'w>,
+}
+
+/// What the person has chosen on the map: the lock (the primary) and the selection set around it.
+/// One bundle, because `drive_move` is at clippy's argument limit.
+#[derive(bevy::ecs::system::SystemParam)]
+struct Chosen<'w> {
+    lock: ResMut<'w, TargetLock>,
+    selection: ResMut<'w, crate::selection::Selection>,
 }
 
 /// Where the cursor is, and which UI node it is over.
@@ -14951,6 +14969,7 @@ fn drive_move(
         anchor,
         picture,
         compose,
+        chosen: Chosen { mut lock, mut selection },
     } = input;
     let Aim { over_ui, pointer, snip } = aim;
     let MapWrite {
@@ -15001,7 +15020,24 @@ fn drive_move(
             let probe = open.map.to_map_space((hit.x, hit.z));
             // **One competition over both lists** — see `pick_subject`. A stamped row resolves to
             // its stamp, so grabbing a member picks up the instance rather than reaching into it.
-            let held = match pick_subject(&project, &open, &picture, probe) {
+            let picked = pick_subject(&project, &open, &picture, probe);
+            // **Shift-click selects; it does not carry** (#236, #89). Shift on a *drop* is the finer
+            // snap and is untouched — only the grab is read, and only for a piece, since a stamp is
+            // not a placement the pose operations address.
+            if keys::shift_held(&keyboard)
+                && let Some(Subject::Placement(index)) = picked
+                && let Some(p) = open.map.placements.get(index)
+            {
+                let (id, at) = (p.id.clone(), p.at);
+                let changed = selection.shift_click(&mut lock, &id, at);
+                state.status.note(match (changed, selection.len()) {
+                    (false, _) => format!("`{id}` is the primary of the selection already"),
+                    (true, 1) => format!("`{id}` selected — Shift-click more to add beside it, Esc releases"),
+                    (true, n) => format!("{n} pieces selected — Shift-click one again to leave, Esc releases"),
+                });
+                return;
+            }
+            let held = match picked {
                 Some(Subject::Placement(index)) => {
                     let Some(p) = open.map.placements.get(index) else {
                         return;
