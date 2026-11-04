@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **298-native-picker** `378d038` Folders and meshes are chosen with the system's own file chooser, and a system without one says so (#298) *No clip: the chooser is the system's own window; proved by the_picker_says_when_there_is_no_chooser*
 - **288-other-door-click** `5c0da88` Clicking the other workspace's name beside the tabs switches to it (#288) *No clip: proved by a_click_on_the_other_door_crosses_to_it*
 - **293-leave-discard** `f8963b4` Leaving an edited map offers Save and leave, Discard changes, or Stay (#293)<br><a href="docs/changelog/media/2026-11-04-293-leave-discard.mp4"><img src="docs/changelog/media/2026-11-04-293-leave-discard.png" width="320" alt="clip"></a>
 - **287-menu-escape** `4a78e30` Esc that closes a menu keeps the armed piece (#287) *No clip: proved by modal_keys_do_not_reach_the_editor::escape_that_closes_a_menu_keeps_the_armed_brush*
