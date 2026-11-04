@@ -2,13 +2,15 @@
 
 The Map door is one of the editor's three workspaces. It is where you lay pieces on the ground. A **piece** is one kit item you place. A **placement** is one piece on the map. A **stamp** is a composition laid down as one unit. A **composition** is a named group of pieces that you keep for reuse. This page covers the tasks you do on the Map. For the file formats, see [data files](data-files.md). For every key, see [keys](keys.md).
 
-![The Map door's 3D view and PLACE list on the bedroom map: the list is filtered to the sofa and the sofa armed, R turns it a quarter turn, a click places it, X and a click remove it, and Ctrl+Z puts it back](../media/build-a-map.gif)
+![The Map door's 3D view of the bedroom map: a sofa is armed from the PLACE list, R turns it a quarter turn, a click places it, X and a click remove it, and Ctrl+Z puts it back](../media/build-a-map.gif)
 
 The clip shows the jobs below in one pass: arm a piece from the PLACE list, set its facing with `R` while it is armed, click to place, `X` and a click to remove, and Cmd+Z to undo (the clip was recorded on Linux, where the key is Ctrl+Z). The INSPECTOR on the left, outside the clip's frame, names each step: BRUSH and YAW for the armed piece, MAP for the count, LAST for the newest change, and the history list with who made each one.
 
 ## Place a piece and undo it
 
 **Goal:** Put one piece on the ground and take it back.
+
+A new map with nothing on it says **Place a piece from the library** over the viewport and offers **Open library**, which puts the keyboard in the PLACE list's filter, as `Cmd+F` does. The prompt goes the moment the map has a piece.
 
 ![The PLACE list is filtered to the sofa and the sofa armed, a click places it on the floor, and Ctrl+Z takes it back.](../media/place-and-undo.gif)
 
