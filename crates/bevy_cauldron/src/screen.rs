@@ -684,6 +684,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Door`, like the selection it mirrors**: the entity the inspector edits belongs to the open
     // project's map, and another door's map is another selection.
     ("bevy_cauldron::inspector_view::PoseInspector", Ownership::Door),
+    // **`Session`**: where the person is looking, not this door's state. A door change keeps it, and the
+    // pieces that are not on the new map are dropped the next frame.
+    ("bevy_cauldron::selection::Selection", Ownership::Session),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.
     #[cfg(feature = "bevy_siren")]

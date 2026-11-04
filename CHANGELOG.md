@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **236-selection-set** `HEAD` The Map has a selection set: the lock's piece first, any number beside it *No clip: a session resource nothing draws yet, the base for the inspector's mixed values; proved by the_selection_set_the_inspector_reads*
 - **210-list-headings** `82049b0` The three list headings (PLACE, RIGS, PIECES) draw in the skin's ink, so a project's palette reaches the name of every list (#210) *No clip: invisible by design: the editor's own skin carries no label tone, so its look is unchanged; proved by list_headings_take_the_skins_ink.rs*
 - **236-pose-inspector** `27d573e` The inspector edits the selection's pose through gooey's reflect inspector: a facing or lift change dispatches placement_set_pose or placement_set_lift, one undo step each (UI-50, #236) *No clip: an inspector's fields, not a new surface: the panel that shows them is the next slice (the multi-selection and its clip); proved by the_inspector_edits_through_the_operation.rs*
 - **210-stage-chips** `49b619b` The rig bench's staging chips and their quiet line take the skin's ink, so a project's palette reaches the one row of the bench an author drives (#210) *No clip: invisible by design: the editor's own skin carries the same two colours, so its look is unchanged; proved by the_stage_chips_take_the_skins_ink.rs*

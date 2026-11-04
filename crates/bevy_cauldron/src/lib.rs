@@ -155,6 +155,7 @@ pub mod project;
 pub mod recent;
 pub mod trusted;
 pub mod screen;
+pub mod selection;
 pub mod keymap_screen;
 pub mod project_config;
 pub mod setting_catalogue;
