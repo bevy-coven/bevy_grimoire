@@ -163,12 +163,60 @@ pub fn check_project(root: &Path) -> Result<PathBuf, String> {
     Ok(std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()))
 }
 
-/// The example project that ships with the source this build came from, or the folder `GRIMOIRE_EXAMPLE`
-/// names; `None` when there is none to open.
+/// The example project to offer, or `None` when there is none: the folder `GRIMOIRE_EXAMPLE` names, the
+/// one beside the source this build came from, the copy a person already has ([`user_example`]), or the
+/// one inside the installed app ([`bundled_example`]), which is copied out before it is opened.
 pub fn example_project() -> Option<PathBuf> {
     let from_env = std::env::var_os("GRIMOIRE_EXAMPLE").map(PathBuf::from);
     let beside_source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    from_env.into_iter().chain(std::iter::once(beside_source)).find_map(|p| check_project(&p).ok())
+    from_env
+        .into_iter()
+        .chain(std::iter::once(beside_source))
+        .chain(user_example())
+        .find_map(|p| check_project(&p).ok())
+        .or_else(bundled_example)
+}
+
+/// The example inside the macOS app: `Contents/Resources/example`, beside `Contents/MacOS/<exe>`.
+pub fn bundled_example() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    check_project(&exe.parent()?.join("../Resources/example")).ok()
+}
+
+/// Where the bundled example is copied to be opened, so saves never write inside the signed app.
+pub fn user_example() -> Option<PathBuf> {
+    Some(dirs::document_dir()?.join("Cauldron Example"))
+}
+
+/// Copies the folder `from` to `to`: files and folders, never a symlink.
+fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let target = to.join(entry.file_name());
+        if kind.is_dir() {
+            copy_tree(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// The folder "Open example" opens: `example` itself, or for the app's bundled copy the person's own copy
+/// of it, made on the first open.
+fn example_to_open(example: &Path) -> Result<PathBuf, String> {
+    if bundled_example().as_deref() != Some(example) {
+        return Ok(example.to_path_buf());
+    }
+    let Some(mine) = user_example() else { return Err("this user has no Documents folder to copy the example into".to_owned()) };
+    if !mine.exists() {
+        copy_tree(example, &mine).map_err(|e| format!("the example was not copied to {}: {e}", mine.display()))?;
+    }
+    check_project(&mine).map_err(|_| {
+        format!("{} exists and is not a project: rename it, then open the example again", mine.display())
+    })
 }
 
 /// A typed path as a folder: `~` is the home folder.
@@ -258,6 +306,7 @@ fn build_launcher(
                 .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
                 .with_children(|card| {
                 card.spawn(heading("Cauldron"));
+                card.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
                 card.spawn(label("The editor that writes a grimoire, the book your game loads."));
                 if !launcher.whats_new.is_empty() {
                     card.spawn(heading("New since you last opened"));
@@ -295,18 +344,25 @@ fn build_launcher(
                             out.write(crate::settings_screen::OpenSettings);
                         }),
                     ));
+                    if let Some(updater) = updater.as_deref() {
+                        actions.spawn(crate::update::update_button(updater.label()));
+                    }
                     if let Some(example) = launcher.example.clone() {
                         actions.spawn((
                             button("Open example"),
-                            observe(move |_: On<bevy_gooey::Activate>, mut out: MessageWriter<OpenRequest>| {
-                                out.write(OpenRequest(example.clone()));
+                            observe(move |_: On<bevy_gooey::Activate>, mut out: MessageWriter<OpenRequest>, mut launcher: ResMut<Launcher>| {
+                                match example_to_open(&example) {
+                                    Ok(root) => {
+                                        out.write(OpenRequest(root));
+                                    }
+                                    Err(e) => launcher.problem = Some(e),
+                                }
                             }),
                         ));
                     }
                 });
                 card.spawn((label(launcher.problem.clone().unwrap_or_default()), ProblemLine));
                 card.spawn((label(""), CommandLine));
-                card.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
             });
         });
     commands.insert_resource(launcher);
@@ -344,9 +400,6 @@ fn project_row(row: &Listed, now: u64) -> impl Bundle {
                         let Ok(row) = rows.get(activate.entity) else { return };
                         let line = command_line(&row.0, None, None);
                         let copied = if off.is_some() { Err("no clipboard in this run".to_owned()) } else { copy_to_clipboard(&line) };
-                    if let Some(updater) = updater.as_deref() {
-                        actions.spawn(crate::update::update_button(updater.label()));
-                    }
                         launcher.problem = match copied {
                             Ok(()) => None,
                             Err(e) => Some(format!("the clipboard did not take it ({e}); the line is below")),
