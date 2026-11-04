@@ -398,11 +398,7 @@ pub struct LauncherPlugin;
 
 impl Plugin for LauncherPlugin {
     fn build(&self, app: &mut App) {
-        // The chooser is the editor's too (Add meshes…); whichever of the two plugins is built first adds it.
-        if !app.is_plugin_added::<crate::picker::PickerPlugin>() {
-            app.add_plugins(crate::picker::PickerPlugin);
-        }
-        app.add_plugins((crate::new_project::NewProjectPlugin, crate::project_page::ProjectPagePlugin))
+        app.add_plugins((crate::new_project::NewProjectPlugin, crate::picker::PickerPlugin, crate::project_page::ProjectPagePlugin))
             .add_message::<OpenRequest>()
             .add_message::<OpenMapRequest>()
             .init_resource::<SplashArt>()
@@ -1139,5 +1135,20 @@ fn mark_the_selection(launcher: Res<Launcher>, cards: Query<(Entity, &ProjectCar
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The app carries the stills the What's new page lists**: `build_app.sh` copies the stills of the newest entries with a For you
+    /// sentence into the app's Resources, and how many is [`NEWS_SHOWN`] written in the script. When the two differ the page lists
+    /// entries whose pictures the app does not hold.
+    #[test]
+    fn the_release_script_copies_as_many_stills_as_the_page_lists() {
+        let script = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/release/macos/build_app.sh")).unwrap_or_else(|e| panic!("{e}"));
+        let line = format!("NEWS_SHOWN={NEWS_SHOWN} ");
+        assert!(script.contains(&line), "build_app.sh must say `{}` so the app holds what the page shows", line.trim());
     }
 }
