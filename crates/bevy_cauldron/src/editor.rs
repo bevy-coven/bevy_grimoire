@@ -2941,16 +2941,21 @@ pub fn leave_for_menu(dirty: bool, state: &mut EditorState, confirm: &mut crate:
     // delete answered to `Y` and the labeller's overwrite answered to `Enter`. Three questions,
     // three vocabularies.
     //
-    // **`D` discard is gone with it, and that is a decision rather than an oversight.** `Cmd+O` and
-    // the back button already save and go (`save_and_leave`), chosen at the keyboard 2026-08-18 —
-    // so a discard offered on this one route meant the same gesture kept work on two paths out of
-    // three and threw it away on the third. Y here saves and goes, exactly as they do.
+    // **`D` discards, and it is the one way out that throws work away.** It was taken out with the
+    // migration to `confirm` because `Cmd+O` and the back button already save and go
+    // (`save_and_leave`), so a discard on this one route meant the same gesture kept work on two
+    // paths out of three. It is back (#293) because without it a person who wants the file as it was
+    // has no way to say so: leaving saved the edits whatever they thought of them. It is a key of its
+    // own and never `Esc` or `N`, which stay on the map, so the answer a reflex gives still cannot
+    // lose work, and `Cmd+O` and the back button still save.
     if dirty {
-        confirm.ask(
+        confirm.ask_three(
             crate::confirm::Asked::LeaveMap,
             "Leave this map?",
-            "It has unsaved edits. Leaving saves them first.",
-            "Save and go",
+            "It has unsaved edits. Leaving saves them first, unless you discard them.",
+            "Save and leave",
+            "Discard changes",
+            KeyCode::KeyD,
             "Stay",
         );
     } else {
@@ -3050,6 +3055,19 @@ fn back_to_the_menu(
     }
 }
 
+/// **Put the map back to what its file says**, for the leave question's `D`.
+///
+/// The file is read again rather than the editor's own record of it (`OpenMap::saved`), because the
+/// question is "what is on disk", and a file an agent or the person edited by hand since the last
+/// save is the answer to that. A map with no file yet is the empty one `OpenMap::open` makes, which is
+/// what discarding a map that was never saved leaves. **A file that does not read is a refusal** and
+/// the map is left as it was: a discard that cannot say what it is discarding to must not go.
+fn discard_changes(open: &mut OpenMap, project: &Project) -> Result<(), String> {
+    let reloaded = OpenMap::open(project, &open.saved().name)?;
+    *open = reloaded;
+    Ok(())
+}
+
 /// **Cross to the other door, keeping the project.**
 ///
 /// **The same verb on both doors.** The key says *"the other door"* and never names a direction — a
@@ -3092,14 +3110,14 @@ fn switch_door(world: &mut World) {
 
 /// **Answer the leaving question, and nothing else.**
 ///
-/// The keys are `crate::confirm`'s now — `Y` proceeds, `N` stops, `Esc` a synonym for `N` — so this
-/// only routes the answer. It used to own three of its own (`S` save, `D` discard, `Esc` stay) while
-/// the chooser answered `Y` and the labeller answered `Enter`; that spread is what
-/// `confirm`'s module note is about.
+/// The keys are `crate::confirm`'s — `Y` proceeds, `N` stops, `Esc` a synonym for `N`, and `D` is the
+/// middle answer of a dirty map — so this only routes the answer. It used to own three of its own
+/// (`S` save, `D` discard, `Esc` stay) while the chooser answered `Y` and the labeller answered
+/// `Enter`; that spread is what `confirm`'s module note is about.
 ///
-/// **`Y` saves and goes on a dirty map.** Discard went with the migration, deliberately: `Cmd+O` and
-/// the back button already save and go, so a discard offered on this one route meant the same
-/// gesture kept your work on two paths out of three.
+/// **`Y` saves and goes on a dirty map, and `D` goes without saving**: the map is read again from
+/// its file first ([`discard_changes`]), so what the editor holds on the way out is the file's, not
+/// the edit that was refused.
 ///
 /// **Ordering makes the press that raises the question distinct from the press that answers it.**
 /// This runs `.before(keys::Phase::Act)`, and the peel that calls `leave_for_menu` runs *in* `Act` —
@@ -3112,18 +3130,26 @@ fn answer_the_leaving_prompt(
     mut next: ResMut<NextState<crate::screen::Screen>>,
     mut confirm: ResMut<crate::confirm::Confirm>,
 ) {
-    let Some(agreed) = confirm.answer(crate::confirm::Asked::LeaveMap) else {
+    let Some(choice) = confirm.answer_choice(crate::confirm::Asked::LeaveMap) else {
         return;
     };
     state.leaving = false;
-    if !agreed {
+    if choice == crate::confirm::Choice::No {
         state.status.note("staying on this map".to_owned());
+        return;
+    }
+    let mut open = open;
+    if choice == crate::confirm::Choice::Alt
+        && let (Some(open), Some(project)) = (open.as_deref_mut(), project.as_deref())
+        && let Err(e) = discard_changes(open, project)
+    {
+        state.status.problem(format!("NOT DISCARDED: {e} — staying on this map"));
         return;
     }
     // **Saving is the going.** `save_and_leave` is the same door `Cmd+O` and the back button walk,
     // so a refused save keeps you here with the reason rather than leaving on a map that was never
-    // written — the one path out of this that does not reach the menu.
-    let mut open = open;
+    // written — the one path out of this that does not reach the menu. After a discard the map is the
+    // file's, so there is nothing to write and it only goes.
     save_and_leave(
         open.as_deref_mut(),
         project.as_deref(),

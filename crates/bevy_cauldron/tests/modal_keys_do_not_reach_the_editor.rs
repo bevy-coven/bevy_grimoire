@@ -167,3 +167,71 @@ fn escape_that_closes_a_menu_keeps_the_armed_brush() {
         "the Esc that closed the menu must not also put the armed piece down"
     );
 }
+
+/// One frame with `keys` down and no settling after, for the answer that sets a state change which the
+/// next frame would act on (leaving the map tears the door down).
+fn tap(app: &mut App, keys: &[KeyCode]) {
+    app.world_mut().resource_mut::<Script>().next = keys.to_vec();
+    app.update();
+}
+
+fn heading_for_the_menu(app: &App) -> bool {
+    matches!(
+        app.world().get_resource::<NextState<bevy_cauldron::screen::Screen>>(),
+        Some(NextState::Pending(bevy_cauldron::screen::Screen::Menu))
+    )
+}
+
+fn placements_in_the_file(app: &App) -> usize {
+    let path = &app.world().resource::<OpenMap>().map_path;
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    bevy_grimoire_core::map::Map::parse(&text).unwrap_or_else(|e| panic!("{e}")).placements.len()
+}
+
+/// **The leave question has three answers, and `D` is Discard** (#293). The edit is dropped, the map
+/// is what the file says, and the editor goes: nothing is written.
+#[test]
+fn d_discards_the_edit_and_goes() {
+    let mut app = editor("modal_keys_discard");
+    app.world_mut().resource_mut::<EditorState>().brush = None;
+    dirty_the_map(&mut app);
+    let in_file = placements_in_the_file(&app);
+    assert_eq!(app.world().resource::<OpenMap>().map.placements.len(), in_file + 1, "one edit beyond the file");
+
+    press(&mut app, &[KeyCode::Escape]);
+    assert!(app.world().resource::<Confirm>().is_open(), "Esc asks");
+    assert!(!heading_for_the_menu(&app), "asking is not going");
+
+    tap(&mut app, &[KeyCode::KeyD]);
+    assert!(heading_for_the_menu(&app), "D goes");
+    assert_eq!(
+        app.world().resource::<OpenMap>().map.placements,
+        bevy_grimoire_core::map::Map::parse(
+            &std::fs::read_to_string(&app.world().resource::<OpenMap>().map_path).unwrap_or_default()
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+        .placements,
+        "the map the editor leaves holds the file's placements, not the discarded edit"
+    );
+    assert!(!app.world().resource::<OpenMap>().dirty(), "nothing is left unsaved");
+    assert_eq!(placements_in_the_file(&app), in_file, "and nothing was written");
+}
+
+/// **`Y` still saves and goes, and `N` still stays**: the third answer did not move the other two.
+#[test]
+fn y_saves_and_goes_and_n_stays() {
+    let mut app = editor("modal_keys_save");
+    app.world_mut().resource_mut::<EditorState>().brush = None;
+    dirty_the_map(&mut app);
+    let in_file = placements_in_the_file(&app);
+
+    press(&mut app, &[KeyCode::Escape]);
+    press(&mut app, &[KeyCode::KeyN]);
+    assert!(!heading_for_the_menu(&app), "N stays");
+    assert!(app.world().resource::<OpenMap>().dirty(), "and keeps the edit");
+
+    press(&mut app, &[KeyCode::Escape]);
+    tap(&mut app, &[KeyCode::KeyY]);
+    assert!(heading_for_the_menu(&app), "Y goes");
+    assert_eq!(placements_in_the_file(&app), in_file + 1, "after writing the edit");
+}

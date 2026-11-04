@@ -142,6 +142,15 @@ pub enum Choice {
     No,
 }
 
+/// **The middle answer of a three-way question**: its button's words and the key that answers it.
+struct Alt {
+    label: String,
+    /// Answered by this key, as `Y` and `N` answer the other two. A key per question rather than one
+    /// for all, because the middle answer means a different thing in each (the trust question's whole
+    /// project is `P`, the leave question's discard is `D`).
+    key: KeyCode,
+}
+
 /// The question on screen, if there is one.
 struct Question {
     of: Asked,
@@ -150,8 +159,8 @@ struct Question {
     title: String,
     body: String,
     yes: String,
-    /// The middle button of a three-way question, answered by `P`.
-    alt: Option<String>,
+    /// The middle button of a three-way question.
+    alt: Option<Alt>,
     no: String,
 }
 
@@ -187,7 +196,8 @@ impl Confirm {
         self.raise(of, title.into(), body.into(), yes.into(), None, no.into());
     }
 
-    /// **Raise a question with a middle answer**, `P` or its button: yes, alt or no.
+    /// **Raise a question with a middle answer**, `alt_key` or its button: yes, alt or no.
+    #[allow(clippy::too_many_arguments)]
     pub fn ask_three(
         &mut self,
         of: Asked,
@@ -195,12 +205,14 @@ impl Confirm {
         body: impl Into<String>,
         yes: impl Into<String>,
         alt: impl Into<String>,
+        alt_key: KeyCode,
         no: impl Into<String>,
     ) {
-        self.raise(of, title.into(), body.into(), yes.into(), Some(alt.into()), no.into());
+        let alt = Alt { label: alt.into(), key: alt_key };
+        self.raise(of, title.into(), body.into(), yes.into(), Some(alt), no.into());
     }
 
-    fn raise(&mut self, of: Asked, title: String, body: String, yes: String, alt: Option<String>, no: String) {
+    fn raise(&mut self, of: Asked, title: String, body: String, yes: String, alt: Option<Alt>, no: String) {
         if self.question.is_some() {
             return;
         }
@@ -320,10 +332,10 @@ fn answer_by_key(mut keyboard: ResMut<ButtonInput<KeyCode>>, mut confirm: ResMut
     if confirm.question.is_none() {
         return;
     }
-    let has_alt = confirm.question.as_ref().is_some_and(|q| q.alt.is_some());
+    let alt_key = confirm.question.as_ref().and_then(|q| q.alt.as_ref()).map(|alt| alt.key);
     if take(&mut keyboard, KeyCode::KeyY) {
         confirm.settle(true);
-    } else if has_alt && take(&mut keyboard, KeyCode::KeyP) {
+    } else if alt_key.is_some_and(|key| take(&mut keyboard, key)) {
         confirm.settle_choice(Choice::Alt);
     } else if take(&mut keyboard, KeyCode::KeyN) | take(&mut keyboard, KeyCode::Escape) {
         confirm.settle(false);
@@ -338,6 +350,17 @@ pub fn take(keyboard: &mut ButtonInput<KeyCode>, key: KeyCode) -> bool {
         keyboard.clear_just_pressed(key);
     }
     pressed
+}
+
+/// **The letter a letter key is printed as**, for the line that names the keys. A question's middle
+/// answer is a letter key (`P`, `D`); anything else names itself by its `Debug` spelling, which is
+/// still the key's own name and not a blank.
+fn key_letter(key: KeyCode) -> String {
+    let name = format!("{key:?}");
+    match name.strip_prefix("Key") {
+        Some(letter) => letter.to_owned(),
+        None => name,
+    }
 }
 
 /// The same two answers, by pointer, by Enter or Space on the focused button, or by the pad: a
@@ -412,14 +435,17 @@ fn sync_dialog(
                             yes.insert(AutoFocus);
                         }
                         if let Some(alt) = &q.alt {
-                            answers.spawn((button(alt.clone()), ConfirmButton(Choice::Alt)));
+                            answers.spawn((button(alt.label.clone()), ConfirmButton(Choice::Alt)));
                         }
                         let mut no = answers.spawn((button(q.no.clone()), ConfirmButton(Choice::No)));
                         if destructive {
                             no.insert(AutoFocus);
                         }
                     });
-                    card.spawn(label(if q.alt.is_some() { "Y this one  ·  P the whole project  ·  N not now" } else { "Y proceeds  ·  N stops" }));
+                    card.spawn(label(match &q.alt {
+                        Some(alt) => format!("Y {}  ·  {} {}  ·  N {}", q.yes, key_letter(alt.key), alt.label, q.no),
+                        None => "Y proceeds  ·  N stops".to_owned(),
+                    }));
                 });
         });
 }
