@@ -1,0 +1,15 @@
+{
+  "name": "app_menus",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "chunks": [{"seconds": 4.0}, {"seconds": 4.0}, {"seconds": 4.0}, {"seconds": 4.0}],
+  "steps": [
+    {"at": 0.2, "caption": "the File menu: new, open, recent, add meshes, save, close, quit"},
+    {"at": 0.6, "click_label": "File"},
+    {"at": 2.6, "click_label": "Open recent", "caption": "Open recent lists the last five projects"},
+    {"at": 4.6, "click_label": "Help", "caption": "the Help menu: the tour, the keys, the guide, what's new, report a problem, about"},
+    {"at": 8.6, "click_label": "About Cauldron", "caption": "About: the version and the licence"},
+    {"at": 12.6, "key": "Escape", "caption": "Esc closes it"}
+  ]
+}

@@ -331,11 +331,7 @@ pub(crate) struct SplashArt(pub(crate) Option<(Handle<Image>, Vec2)>);
 #[derive(Component)]
 pub struct LauncherRoot;
 
-/// The pages' container, which the new-project form replaces while it is open.
-#[derive(Component)]
-pub struct LauncherCard;
-
-/// The page beside the sidebar: where the new-project form stands while it is open.
+/// The page beside the sidebar.
 #[derive(Component)]
 pub struct HomeContent;
 
@@ -390,7 +386,7 @@ pub fn ago(then: u64, now: u64) -> String {
 }
 
 /// A project's name: its folder's last word.
-fn name_of(path: &Path) -> String {
+pub(crate) fn name_of(path: &Path) -> String {
     path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned())
 }
 
@@ -518,8 +514,9 @@ fn build_launcher(
     let text = changelog.as_deref().map_or(CHANGELOG, |c| c.0.as_str());
     let whats_new = whats_new(text, stored.as_ref().and_then(|r| r.changelog_seen.as_deref()));
     let newest = news(text).first().map(|n| n.id.clone());
-    // The page the sidebar was on is kept: the project page's sidebar sends a person here to a page.
-    commands.insert_resource(Launcher { rows, problem, example: example_project(), news: for_you(text), whats_new, newest, tab: before.tab, ..default() });
+    // The page the sidebar was on is kept: the project page's sidebar sends a person here to a page, and the editor's File → New
+    // project… to the form on it.
+    commands.insert_resource(Launcher { rows, problem, example: example_project(), news: for_you(text), whats_new, newest, tab: before.tab, new_project_asked: before.new_project_asked, ..default() });
     spawn_shell(&mut commands, Screen::Launcher);
 }
 
@@ -608,7 +605,7 @@ fn fill_the_home(
 
     let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
     commands.entity(content).with_children(|content| {
-        content.spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }, LauncherCard)).with_children(|pages| {
+        content.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }).with_children(|pages| {
             pages
                 .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, HomePage(HomeTab::Projects)))
                 .with_children(|page| {

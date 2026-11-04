@@ -219,7 +219,7 @@ pub fn identity(action: Action) -> (&'static str, &'static str) {
         Action::Shortcuts => ("help.show_keys", "Show every key on what it does"),
         Action::Save => ("file.save", "Save"),
         Action::Snip => ("tools.snip", "Snip an area of the editor"),
-        Action::MainMenu => ("file.main_menu", "Back to the menu"),
+        Action::MainMenu => ("file.main_menu", "Close project"),
         Action::SwitchDoor => ("view.switch_door", "Switch to the other workspace"),
         Action::ShowErrors => ("view.show_errors", "Show this session's errors"),
         Action::CopyInfo => ("edit.copy_tab_text", "Copy this tab's text"),

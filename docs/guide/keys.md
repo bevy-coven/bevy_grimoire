@@ -21,7 +21,7 @@ The "Works when" column names the state the editor must be in:
 - **While a piece is in hand** means you have picked a piece up and not yet dropped it.
 - **While a derivation waits** means the editor has proposed a result and is waiting for a yes or no.
 - **While browsing tiles** means the Tiles panel is live, and the arrow keys walk the tiles.
-- **While a composition is being picked** means the composition picker has the arrow keys.
+- **While a composition is being picked** means the composition picker has the keys that walk it.
 
 A key marked "in filter boxes" still walks its list while a filter box has focus. Every other key pauses while you type in a name, an id, or a filter box. Typing the letter `S` in a name does not save the map, because saving is `Cmd+S`.
 
@@ -69,7 +69,7 @@ These keys work on the Map tab.
 | `H` | Any time | Target the stack. |
 | `Up` / `Down` | Nothing in hand | Walk the palette. Hold Shift to move five at a time. Works in filter boxes. |
 | `P` | Nothing in hand | Take the arrow keys to the compositions. |
-| `Up` / `Down` | While a composition is being picked | Walk the compositions. Hold Shift to move five at a time. |
+| `Shift+Up` / `Shift+Down` | While a composition is being picked | Walk the compositions. |
 | `Enter` | While a composition is being picked | Arm this composition for the map. |
 | `R` | Any time | Turn left, 15° a press: the armed piece if one is armed, otherwise the placed piece under the pointer. |
 | `T` | Any time | Turn right, 15° a press: the armed piece if one is armed, otherwise the placed piece under the pointer. |

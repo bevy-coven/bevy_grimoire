@@ -66,7 +66,7 @@ use bevy_gooey::{button, dialog, heading, label, menu, panel};
 pub enum Asked {
     /// The chooser is about to delete the highlighted kit or map.
     DeleteEntry,
-    /// The chooser is about to close the application.
+    /// The application is about to quit with a map's unsaved edits (`app_verbs.rs`): save and quit, discard, or stay.
     QuitApp,
     /// The editor is leaving a map with unsaved edits.
     LeaveMap,

@@ -1,0 +1,41 @@
+{
+  "steps": [
+    {
+      "label": "Pick a piece",
+      "goal": "a piece in hand follows the pointer, so you see where it will land before you put it down",
+      "do": [
+        "click any piece in the palette on the left"
+      ],
+      "checkpoint": "a piece is chosen",
+      "recovery": "if the palette is empty, add some meshes first: File, then Add meshes"
+    },
+    {
+      "label": "Place it",
+      "goal": "a click on the ground puts the piece down, and you can keep clicking to place more",
+      "do": [
+        "click the floor of the map"
+      ],
+      "checkpoint": "a piece was placed",
+      "recovery": "a click over the interface places nothing, so aim at the ground and not at a panel"
+    },
+    {
+      "label": "Turn it",
+      "goal": "R turns a piece and T turns it the other way, so walls and furniture can face any way",
+      "do": [
+        "press R",
+        "it turns the piece in hand, or the piece under the pointer when your hand is empty"
+      ],
+      "checkpoint": "a piece was turned",
+      "recovery": "if a text field has the keyboard, press Escape first"
+    },
+    {
+      "label": "Save the map",
+      "goal": "your edit lives in memory until you save, and the status bar says when it is written",
+      "do": [
+        "press Ctrl+S, or Cmd+S on a Mac"
+      ],
+      "checkpoint": "the map is saved",
+      "recovery": "if the save is refused, the status bar says why"
+    }
+  ]
+}

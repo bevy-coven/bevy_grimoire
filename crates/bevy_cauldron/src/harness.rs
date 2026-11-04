@@ -139,8 +139,11 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
     // script names a condition nobody watches.
     //
     // The `#[cfg]` is on the module rather than on a tuple element, so the list above stays one list.
+    //
+    // **The first-map tour rides on it** (`tour.rs`): it posts its script through the guide's own handler and watches the steps
+    // the way a client of the watch stream would, so it is wherever the guide is.
     #[cfg(feature = "debugger")]
-    app.add_plugins(crate::guided::GuidePlugin);
+    app.add_plugins((crate::guided::GuidePlugin, crate::tour::TourPlugin));
     // **The agent's presentation question** (S1.7). Its own `add_plugins` call rather than a tuple
     // element: the list above is one element away from Bevy's fifteen-plugin cap, and a plugin that
     // owns one question and one system does not need to be in that list.

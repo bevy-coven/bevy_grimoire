@@ -2873,7 +2873,7 @@ pub mod picker {
         if crate::keys::just_pressed(&input, *keys, crate::keys::Action::PickComposition) {
             picker.active = !picker.active;
             let said = if picker.active {
-                "the arrows walk the compositions — Enter arms one"
+                "Shift+up and Shift+down walk the compositions — Enter arms one"
             } else {
                 "the arrows walk the palette"
             };

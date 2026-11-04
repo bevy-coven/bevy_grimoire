@@ -1,0 +1,86 @@
+{
+  "name": "first_tour",
+  "fps": 8,
+  "scale": 1,
+  "width": 960,
+  "chunks": [
+    {
+      "seconds": 5.0
+    },
+    {
+      "seconds": 5.0
+    },
+    {
+      "seconds": 5.0
+    },
+    {
+      "seconds": 4.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "caption": "first run: Open the example"
+    },
+    {
+      "at": 0.6,
+      "click_label": "Open the example"
+    },
+    {
+      "at": 2.8,
+      "caption": "the editor offers the tour, once"
+    },
+    {
+      "at": 3.4,
+      "click_label": "Start"
+    },
+    {
+      "at": 3.8,
+      "caption": "step 1: pick a piece"
+    },
+    {
+      "at": 5.4,
+      "click_label": "Fridge",
+      "within": [
+        1030,
+        150,
+        1280,
+        700
+      ]
+    },
+    {
+      "at": 7.6,
+      "caption": "step 2: place it"
+    },
+    {
+      "at": 9.4,
+      "click": [
+        860,
+        590
+      ]
+    },
+    {
+      "at": 11.6,
+      "caption": "step 3: turn it with R"
+    },
+    {
+      "at": 13.4,
+      "key": "KeyR"
+    },
+    {
+      "at": 15.6,
+      "caption": "step 4: save with Ctrl+S"
+    },
+    {
+      "at": 17.4,
+      "key": "KeyS",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 18.0,
+      "caption": "the tour is done"
+    }
+  ]
+}

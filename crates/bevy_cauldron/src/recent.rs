@@ -53,6 +53,10 @@ pub struct Recent {
     /// has none, which fits the window to the monitor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowFrame>,
+    /// The editor has offered the first-map tour (#253): it is offered once, the first time a project opens, and stays in
+    /// Help → Take the tour. A file written before this field has not offered it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tour_offered: bool,
 }
 
 /// Where the editor's window was: its top-left corner in **physical** pixels, which is the unit
@@ -86,7 +90,7 @@ pub struct Listed {
 
 impl Default for Recent {
     fn default() -> Self {
-        Recent { version: RECENT_VERSION, projects: Vec::new(), changelog_seen: None, window: None }
+        Recent { version: RECENT_VERSION, projects: Vec::new(), changelog_seen: None, window: None, tour_offered: false }
     }
 }
 
@@ -227,5 +231,16 @@ pub fn remember_window(file: &Path, frame: WindowFrame) -> Result<(), String> {
         return Ok(());
     }
     recent.window = Some(frame);
+    recent.save(file)
+}
+
+/// Remembers that the first-map tour has been offered, in the list at `file`, reading and writing it. A list this build cannot
+/// read is left as it is, as [`record`] leaves it.
+pub fn mark_tour_offered(file: &Path) -> Result<(), String> {
+    let mut recent = Recent::load(file)?;
+    if recent.tour_offered {
+        return Ok(());
+    }
+    recent.tour_offered = true;
     recent.save(file)
 }
