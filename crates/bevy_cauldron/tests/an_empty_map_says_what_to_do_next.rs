@@ -24,17 +24,18 @@ fn editor(name: &str, with_a_piece: bool) -> App {
     app
 }
 
-fn shown(app: &mut App) -> Display {
+/// How many prompts stand: the prompt is spawned while it is wanted and despawned when it is not, because
+/// the interface's tests count every `ButtonText` in the world and a hidden button is still one.
+fn standing(app: &mut App) -> usize {
     let world = app.world_mut();
-    let mut q = world.query_filtered::<&Node, With<EmptyMapPrompt>>();
-    q.single(world).expect("the editor has one empty-map prompt").display
+    world.query_filtered::<(), With<EmptyMapPrompt>>().iter(world).count()
 }
 
 /// **An empty map shows its sentence and its action.**
 #[test]
 fn an_empty_map_shows_the_prompt_and_its_action() {
     let mut app = editor("empty_map_prompt", false);
-    assert_ne!(shown(&mut app), Display::None, "a map with no placements shows the prompt");
+    assert_eq!(standing(&mut app), 1, "a map with no placements shows the prompt");
     assert!(
         find_by_label(&mut app, ACTION).is_ok(),
         "the prompt offers one button that says {ACTION:?}"
@@ -46,24 +47,24 @@ fn an_empty_map_shows_the_prompt_and_its_action() {
 #[test]
 fn a_map_with_a_piece_hides_the_prompt() {
     let mut app = editor("empty_map_prompt_full", true);
-    assert_eq!(shown(&mut app), Display::None, "a map that has a placement is not empty");
+    assert_eq!(standing(&mut app), 0, "a map that has a placement is not empty");
 }
 
 /// **The prompt follows the map**: emptied it comes, and the first placement takes it away again.
 #[test]
 fn the_prompt_follows_whether_the_map_has_a_piece() {
     let mut app = editor("empty_map_prompt_follows", true);
-    assert_eq!(shown(&mut app), Display::None);
+    assert_eq!(standing(&mut app), 0);
     let piece = {
         let mut open = app.world_mut().resource_mut::<bevy_cauldron::project::OpenMap>();
         std::mem::take(&mut open.map.placements)
     };
     assert!(!piece.is_empty(), "the fixture map had a piece to take away");
     app.update();
-    assert_ne!(shown(&mut app), Display::None, "a map with nothing in it shows the prompt");
+    assert_eq!(standing(&mut app), 1, "a map with nothing in it shows the prompt");
     app.world_mut().resource_mut::<bevy_cauldron::project::OpenMap>().map.placements = piece;
     app.update();
-    assert_eq!(shown(&mut app), Display::None, "one placement and the map is no longer empty");
+    assert_eq!(standing(&mut app), 0, "one placement and the map is no longer empty");
 }
 
 /// Every key the keyboard was told about, in order: what a queued chord becomes a frame or two later.
@@ -95,4 +96,17 @@ fn the_action_asks_for_the_library_filter() {
         seen.contains(&KeyCode::KeyF),
         "a click on {ACTION:?} must press the library filter's chord (Cmd+F); the keys pressed were {seen:?}"
     );
+}
+
+/// **A question that is open takes the prompt away**, and the prompt comes back when it is answered: a
+/// second button behind a modal is noise, and the dialog tests count every button in the world.
+#[test]
+fn an_open_question_takes_the_prompt_away() {
+    use bevy_cauldron::confirm::{Asked, Confirm};
+    let mut app = editor("empty_map_prompt_dialog", false);
+    assert_eq!(standing(&mut app), 1);
+    app.world_mut().resource_mut::<Confirm>().ask(Asked::DeleteEntry, "Delete?", "gone", "Delete", "Keep");
+    app.update();
+    app.update();
+    assert_eq!(standing(&mut app), 0, "a question is open, so the prompt stands down");
 }

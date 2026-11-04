@@ -12,12 +12,20 @@
 //! type what they are looking for. That is the whole of "open the library": the PLACE list is always
 //! on screen, and what a newcomer lacks is the place to start typing.
 //!
+//! **Present only while it is wanted, not hidden.** The interface's tests count `Role::ButtonText` over
+//! the whole world to say what a dialog's answers are (`a_question_is_asked_in_a_gooey_dialog`), and a
+//! button that is merely `Display::None` is still counted: the first version of this prompt kept one and
+//! the full workspace gate refused it. So the prompt is spawned when the map is empty and no question is
+//! open (a modal covers the viewport, and a second button behind it is noise), and despawned the frame
+//! either stops being true.
+//!
 //! The overlay is a child of the frame's viewport, so it follows the world's hole when a dock is
 //! dragged, and it is `Pickable::IGNORE` itself so a click that misses the button reaches the map.
 
 use bevy::prelude::*;
 
 use crate::chrome::{Frame, FrameSystems};
+use crate::confirm::Confirm;
 use crate::project::OpenMap;
 use crate::screen::Screen;
 
@@ -42,13 +50,45 @@ impl Plugin for EmptyStatePlugin {
         if !app.is_plugin_added::<crate::command_run::CommandRunPlugin>() {
             app.add_plugins(crate::command_run::CommandRunPlugin);
         }
-        app.add_systems(OnEnter(Screen::Editor), spawn_prompt.after(FrameSystems))
-            .add_systems(Update, show_while_the_map_is_empty.run_if(in_state(Screen::Editor)))
-            .add_observer(on_open_library);
+        app.add_systems(
+            Update,
+            (keep_the_prompt_while_the_map_is_empty.after(FrameSystems), read_as_a_control)
+                .chain()
+                .run_if(in_state(Screen::Editor)),
+        )
+        .add_observer(on_open_library);
     }
 }
 
-fn spawn_prompt(mut commands: Commands, frame: Res<Frame>) {
+/// **The prompt exists exactly while the open map has no placements and no question is open.**
+/// Reads before it writes: a map that stays empty (or stays full) spawns and despawns nothing.
+fn keep_the_prompt_while_the_map_is_empty(
+    mut commands: Commands,
+    frame: Option<Res<Frame>>,
+    open: Option<Res<OpenMap>>,
+    confirm: Option<Res<Confirm>>,
+    dialogs: Query<(), With<bevy_gooey::Dialog>>,
+    prompt: Query<Entity, With<EmptyMapPrompt>>,
+) {
+    let wanted = open.is_some_and(|o| o.map.placements.is_empty())
+        && !confirm.is_some_and(|c| c.is_open())
+        && dialogs.is_empty();
+    let standing = prompt.iter().next();
+    match (wanted, standing) {
+        (true, None) => {
+            let Some(frame) = frame else { return };
+            spawn_prompt(&mut commands, frame.viewport);
+        }
+        (false, Some(_)) => {
+            for e in &prompt {
+                commands.entity(e).despawn();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn spawn_prompt(commands: &mut Commands, viewport: Entity) {
     commands
         .spawn((
             Name::new("EmptyMapPrompt"),
@@ -63,13 +103,10 @@ fn spawn_prompt(mut commands: Commands, frame: Res<Frame>) {
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 row_gap: Val::Px(crate::chrome::GAP_GROUP),
-                // Hidden until the map is known to be empty: a map that opens with pieces never
-                // flashes the prompt.
-                display: Display::None,
                 ..default()
             },
             bevy::picking::Pickable::IGNORE,
-            ChildOf(frame.viewport),
+            ChildOf(viewport),
         ))
         .with_children(|p| {
             p.spawn(bevy_gooey::label(SENTENCE));
@@ -77,13 +114,19 @@ fn spawn_prompt(mut commands: Commands, frame: Res<Frame>) {
         });
 }
 
-/// **Shown while the open map has no placements.** Compares before it writes, so a map that stays
-/// empty (or stays full) dirties nothing.
-fn show_while_the_map_is_empty(open: Option<Res<OpenMap>>, mut prompt: Query<&mut Node, With<EmptyMapPrompt>>) {
-    let want = if open.is_some_and(|o| o.map.placements.is_empty()) { Display::Flex } else { Display::None };
-    for mut node in &mut prompt {
-        if node.display != want {
-            node.display = want;
+/// **A standing control reads as `ControlText`, not `ButtonText`.** The interface's tests count
+/// `Role::ButtonText` over the whole world to say what a dialog's answers are, and
+/// `the_bands_item_does_not_call_itself_a_button` requires that no words outside a dialog carry it: the
+/// band's job item has the same shape. The button is still gooey's (`Role::Button`, `Activate`, focus,
+/// the skin's button ground); only the role of its words is the control's.
+fn read_as_a_control(
+    mut commands: Commands,
+    buttons: Query<&Children, Added<OpenLibraryButton>>,
+    words: Query<(), With<Text>>,
+) {
+    for kids in &buttons {
+        for kid in kids.iter().filter(|k| words.contains(*k)) {
+            commands.entity(kid).insert(bevy_gooey::Role::ControlText);
         }
     }
 }
