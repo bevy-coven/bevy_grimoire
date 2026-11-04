@@ -122,6 +122,8 @@ fn the_page_names_the_project_and_draws_its_maps_and_kits() {
     assert_eq!(cards, ["m"]);
     let rows = app.world_mut().query::<&KitRow>().iter(app.world()).count();
     assert_eq!(rows, 1);
+    let visible_dividers = app.world_mut().query::<(&bevy_gooey::SplitDivider, &Node)>().iter(app.world()).filter(|(_, n)| n.display != Display::None).count();
+    assert_eq!(visible_dividers, 0, "the sidebar is not a thing to resize, so its divider is not drawn here either");
     for word in ["bevy_cauldron", "assets/grimoire"] {
         assert!(!said.iter().any(|t| t.contains(word)), "the page says no internal word `{word}`: {said:?}");
     }

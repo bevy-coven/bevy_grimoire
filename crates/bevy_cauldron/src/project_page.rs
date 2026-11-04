@@ -200,7 +200,7 @@ impl Plugin for ProjectPagePlugin {
             .add_systems(OnEnter(Screen::Project), (build_page, fill_page).chain())
             .add_systems(
                 Update,
-                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), act, answer_the_question, follow_the_files, redraw, show_the_form).chain().run_if(in_state(Screen::Project)),
+                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), launcher::hide_the_divider, act, answer_the_question, follow_the_files, redraw, show_the_form).chain().run_if(in_state(Screen::Project)),
             );
     }
 }

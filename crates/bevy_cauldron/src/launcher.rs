@@ -416,7 +416,7 @@ impl Plugin for LauncherPlugin {
 }
 
 /// The sidebar is not a thing to resize, so its divider is not drawn and not reachable.
-fn hide_the_divider(mut dividers: Query<&mut Node, With<bevy_gooey::SplitDivider>>) {
+pub(crate) fn hide_the_divider(mut dividers: Query<&mut Node, With<bevy_gooey::SplitDivider>>) {
     for mut node in &mut dividers {
         if node.display != Display::None {
             node.display = Display::None;
