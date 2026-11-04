@@ -268,3 +268,33 @@ class ScrollToStopsWhenTheWordsArrive(unittest.TestCase):
 
     def test_a_scroll_to_step_is_a_scroll_and_not_a_caption(self):
         self.assertEqual(record.kind_of({"at": 1.0, "scroll_to": "6:00", "over": [120, 300]}), "scroll_to")
+
+
+class DragDividerAsksTheEditor(unittest.TestCase):
+    """**A storyboard drags the shell's divider where the editor says it is** (#224), not at a pixel
+    that the inspector's width moves: the first recording aimed at x = 401 while the divider sat at
+    363, pressed on the viewport and moved nothing."""
+
+    def test_the_centre_is_the_dividers_own(self):
+        row = {"entity": 1, "components": {
+            "bevy_ui::ui_transform::UiGlobalTransform": [1.0, 0.0, 0.0, 1.0, 363.5, 398.0],
+            "bevy_gooey::split::SplitDivider": {},
+        }}
+        original = record.brp
+        record.brp = lambda port, method, params: {"result": [row]}
+        try:
+            self.assertEqual(record.divider_centre(1), (363.5, 398.0))
+        finally:
+            record.brp = original
+
+    def test_no_divider_is_an_error_not_a_drag_from_nowhere(self):
+        original = record.brp
+        record.brp = lambda port, method, params: {"result": []}
+        try:
+            with self.assertRaises(RuntimeError):
+                record.divider_centre(1)
+        finally:
+            record.brp = original
+
+    def test_a_drag_divider_step_is_its_own_kind(self):
+        self.assertEqual(record.kind_of({"at": 1.0, "drag_divider": -90, "secs": 1.0}), "drag_divider")

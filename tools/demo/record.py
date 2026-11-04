@@ -37,6 +37,10 @@ Storyboard format (JSON):
       {"at": 2.0, "hold": "KeyD", "secs": 1.5},
       {"at": 2.5, "drag": [x0, y0, x1, y1], "secs": 1.6},   press, drag, release (snip box)
       {"at": 3.0, "wheel": {"y": 1, "n": 3, "at": [x, y]}},
+      {"at": 3.2, "scroll_to": "6:00", "over": [x, y], "region": [x0, y0, x1, y1]},
+                                                wheel over (x, y) until the editor says those words are
+                                                inside the region (the panel's rect), then let go
+      {"at": 3.5, "drag_divider": -90, "secs": 1.6},   drag the shell's split divider by dx px, found by BRP
       {"at": 4.0, "type": "44"},
       {"at": 5.0, "mcp": "grimoire_frame_view", "args": {...}, "caption": "agent: frames the walls"},
       {"at": 5.5, "mcp": "grimoire_apply_operation", "args": {...}, "as": "built"},
@@ -395,9 +399,29 @@ def scroll_to(port, inj, label, at, region=None, prefix=False, max_notches=40, p
     raise RuntimeError(f"scroll_to: {label!r} never came inside {region or 'the window'} in {max_notches} notches")
 
 
+def divider_centre(port):
+    """Where the shell's split divider is drawn, in the input space, from BRP's `world.query`."""
+    rows = brp(port, "world.query", {
+        "data": {"components": ["bevy_ui::ui_transform::UiGlobalTransform",
+                                "bevy_gooey::split::SplitDivider"]},
+    }).get("result", [])
+    for row in rows:
+        at = row.get("components", {}).get("bevy_ui::ui_transform::UiGlobalTransform")
+        if isinstance(at, list) and len(at) >= 6:
+            return (at[4], at[5])
+    raise RuntimeError("drag_divider: the editor reports no split divider")
+
+
 def do_step(step, timeline, inj, agent, named=None):
     named = {} if named is None else named
     kind = step.get("_kind")
+    if kind == "drag_divider":
+        # **The shell's divider is found by asking the editor, never by a pixel** (#224): its position
+        # depends on the width the inspector's panel asks for, which a layout change moves. The drag
+        # then runs as any other `drag` does, from the divider's centre by `drag_divider` px along x.
+        x, y = divider_centre(inj.port)
+        step = {**step, "drag": [x, y, x + step["drag_divider"], y]}
+        kind = "drag"
     if kind == "cursor":
         x, y = step["cursor"]
         inj.cursor(x, y)
@@ -515,7 +539,7 @@ def kind_of(step):
     # `events.json` as a storyboard that only had captions. It went unnoticed because no storyboard
     # used it until the status band's job item — a widget whose words move, so a guessed pixel cannot
     # reach it.
-    for k in ("scroll_to", "click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
+    for k in ("scroll_to", "drag_divider", "click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
         if k in step:
             return k
     raise ValueError(f"step has no action: {step}")
