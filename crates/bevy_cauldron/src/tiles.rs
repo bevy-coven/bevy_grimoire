@@ -4266,7 +4266,8 @@ fn spawn_tab_strip(
             .observe(cross_on_click)
             .with_children(|m| {
                 m.spawn((
-                    Text::new("the other door"),
+                    // Written every frame by [`name_the_other_door`], which says the other workspace's name.
+                    Text::new(String::new()),
                     TextColor(MUTED),
                     // **`BODY`, not `LABEL`.** `LABEL` is 10 px and the strip's own labels are
                     // `TAB`'s 13 — so at `LABEL` the phrase is a whisper beside a shout. `BODY` is
@@ -4325,7 +4326,13 @@ fn name_the_other_door(
     };
     for mut label in &mut labels {
         let text = match other {
-            Some(d) => format!("the {} door", d.label().to_lowercase()),
+            // **The workspace's own name** (#302): the tab says `Map` or `Kit`, as the title of the
+            // workspace it leads to, and not what the code calls one.
+            Some(d) => {
+                let word = d.label().to_lowercase();
+                let mut letters = word.chars();
+                letters.next().map(|first| first.to_uppercase().chain(letters).collect()).unwrap_or(word)
+            }
             None => String::new(),
         };
         if label.0 != text {

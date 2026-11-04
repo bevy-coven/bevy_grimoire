@@ -31,6 +31,18 @@ fn readout(app: &mut App) -> usize {
 fn a_visible_mesh_the_render_world_took_is_skipped_and_the_rest_still_counts() {
     let root = fixtures::Fixture::new("tris_extracted").descriptor("floor", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    // The count is behind View -> Show statistics (#302); this asks for it.
+    let file = std::env::temp_dir().join(format!("grimoire_stats_tris_{}/settings.ron", std::process::id()));
+    std::fs::create_dir_all(file.parent().expect("a folder")).expect("a scratch folder");
+    std::fs::write(&file, "(version: 1, show_statistics: Some(true))").expect("a settings file");
+    app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
+    for _ in 0..80 {
+        app.update();
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        if app.world().resource::<bevy_cauldron::settings::EditorSettings>().show_statistics {
+            break;
+        }
+    }
     for _ in 0..3 {
         app.update();
     }

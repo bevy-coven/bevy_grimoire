@@ -85,6 +85,9 @@ pub struct EditorSettings {
     pub show_grid: bool,
     /// How strongly the map's grid is drawn: 1.0 is the skin's grid colour, less is fainter.
     pub grid_strength: f32,
+    /// The triangle count is shown at the top right (#302). Off until asked for: it is a number for
+    /// someone tuning a scene, and the first thing a newcomer reads at the top of the window.
+    pub show_statistics: bool,
     /// The rebound commands of every layer, by command id: what the keymap screen shows against each
     /// command's default chord.
     pub keymap: BTreeMap<String, Shortcut>,
@@ -99,6 +102,7 @@ impl Default for EditorSettings {
             reduced_motion: false,
             show_grid: true,
             grid_strength: 1.0,
+            show_statistics: false,
             keymap: BTreeMap::new(),
         }
     }
@@ -124,6 +128,8 @@ pub struct SettingsLayer {
     pub show_grid: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grid_strength: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_statistics: Option<bool>,
     /// **Rebound commands**: a command's id (`file.save`, `commands::Command::id`) and the chord that
     /// now runs it. A command the file leaves out keeps its default chord (UI-72, #250).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -140,6 +146,7 @@ impl Default for SettingsLayer {
             reduced_motion: None,
             show_grid: None,
             grid_strength: None,
+            show_statistics: None,
             keymap: BTreeMap::new(),
         }
     }
@@ -193,6 +200,7 @@ impl EditorSettings {
             out.reduced_motion = layer.reduced_motion.unwrap_or(out.reduced_motion);
             out.show_grid = layer.show_grid.unwrap_or(out.show_grid);
             out.grid_strength = layer.grid_strength.unwrap_or(out.grid_strength);
+            out.show_statistics = layer.show_statistics.unwrap_or(out.show_statistics);
             // Per command: a later layer's binding replaces the earlier one's for that command alone.
             out.keymap.extend(layer.keymap.iter().map(|(id, chord)| (id.clone(), *chord)));
         }

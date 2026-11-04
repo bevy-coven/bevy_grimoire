@@ -13274,11 +13274,21 @@ fn a_row_beyond_the_fold_is_pointed_at_from_its_pane() {
 /// more: it means `badges::place_badges` broke its own contract, or a screen genuinely has more
 /// badge than stage — either way a bug, not a wording chore.
 ///
-/// Measured at two shapes: the harness default, and the author's actual window in physical texels
+/// Measured at three shapes: the harness default, the author's actual window in physical texels
 /// — the geometry on which a square-surfaced suite stayed green while the real screen buried the
-/// legend.
+/// legend — and the window a first run opens at, 1280x720 logical pixels. At the editor's `UiScale`
+/// of 1.2 that is 1067x600 logical pixels, the smallest shape the editor ships at (#291).
 #[test]
 fn no_badge_cluster_draws_through_another() {
+    /// The shapes the editor is measured at.
+    #[derive(Clone, Copy, PartialEq)]
+    enum Shape {
+        /// A resized surface, in physical texels.
+        Texels(u32, u32),
+        /// A primary window, in logical pixels, with the shell laid out for it.
+        Window(u32, u32),
+    }
+
     use bevy::ui::{ComputedNode, UiGlobalTransform};
     use bevy_cauldron::badges::{BadgeCluster, Lead, LeadSeg};
 
@@ -13294,21 +13304,43 @@ fn no_badge_cluster_draws_through_another() {
 
     let mut through = Vec::new();
     let mut checked = 0usize;
-    for surface in [None, Some((2560u32, 1406u32))] {
+    for surface in [None, Some(Shape::Texels(2560, 1406)), Some(Shape::Window(1280, 720))] {
         for mode in TABS {
             let mut app = badges_up(&root, mode);
             // The populated pane, not the empty one: the first real-kit capture found the fallback
             // firing exactly where an unselected fixture had nothing to measure.
             stage_a_piece(&mut app);
-            if let Some((w, h)) = surface {
-                harness::resize_surface(&mut app, w, h).unwrap_or_else(|e| panic!("{e}"));
-                for _ in 0..8 {
-                    app.update();
+            match surface {
+                None => {}
+                Some(Shape::Texels(w, h)) => {
+                    harness::resize_surface(&mut app, w, h).unwrap_or_else(|e| panic!("{e}"));
+                    for _ in 0..8 {
+                        app.update();
+                    }
+                }
+                // **A real window, not a resized image.** The shell sizes its docks and its split from
+                // the primary window (`chrome::fit_docks_to_the_window`, `size_the_shell_split`) and a
+                // headless run has none, so a resized surface leaves the left panel overflowing a pane
+                // 0.22 of the body wide — 418 px of rows in a 219 px dock — which is not a screen
+                // anyone sees. The window brings the surface, `UiScale` and the shell with it, as the
+                // windowed binary has them.
+                Some(Shape::Window(w, h)) => {
+                    app.world_mut().spawn((
+                        bevy::window::Window {
+                            resolution: bevy::window::WindowResolution::new(w, h),
+                            ..default()
+                        },
+                        bevy::window::PrimaryWindow,
+                    ));
+                    for _ in 0..12 {
+                        app.update();
+                    }
                 }
             }
             let tag = match surface {
                 None => mode.label().to_owned(),
-                Some((w, h)) => format!("{} at {w}x{h}", mode.label()),
+                Some(Shape::Texels(w, h)) => format!("{} at {w}x{h}", mode.label()),
+                Some(Shape::Window(w, h)) => format!("{} in a {w}x{h} window", mode.label()),
             };
 
             let drawn: Vec<(String, Rect, Option<[Entity; 3]>)> = {
@@ -13369,6 +13401,28 @@ fn no_badge_cluster_draws_through_another() {
                 // through the other.
                 hit.width() > 1.0 && hit.height() > 1.0
             };
+            // **The toolbar's chips are gooey's, and they are held to the same rule** (#291). `K` shows
+            // a chord on every toolbar button too, and the chords are wider than the buttons they sit
+            // on — `Shift+B`, `Ctrl+Shift+Z` on 33 px — so one chip per button drew over its
+            // neighbour's into a line nobody could read. They exist only with a window (gooey's overlay
+            // asks the primary window where the screen ends), so the first two shapes have none.
+            let chips: Vec<(String, Rect)> = {
+                let mut q = app.world_mut().query_filtered::<(&Text, &ComputedNode, &UiGlobalTransform, &InheritedVisibility), With<bevy_gooey::ShortcutBadge>>();
+                q.iter(app.world())
+                    .filter(|(_, n, _, vis)| n.size() != Vec2::ZERO && vis.get())
+                    .map(|(t, n, tf, _)| (t.0.clone(), Rect::from_center_size(tf.translation, n.size())))
+                    .collect()
+            };
+            if matches!(surface, Some(Shape::Window(..))) && mode == TABS[0] {
+                assert!(chips.len() >= 8, "{tag}: only {} toolbar chip(s) are drawn while K is held; the toolbar has a chord on most buttons", chips.len());
+            }
+            for (i, (a_name, a)) in chips.iter().enumerate() {
+                for (b_name, b) in chips.iter().skip(i + 1) {
+                    if covers(*a, *b) {
+                        through.push(format!("{tag}: the toolbar chips `{a_name}` and `{b_name}` overlap"));
+                    }
+                }
+            }
             for (i, (a_name, a, _)) in drawn.iter().enumerate() {
                 for (b_name, b, _) in drawn.iter().skip(i + 1) {
                     if covers(*a, *b) {
@@ -13411,8 +13465,8 @@ fn no_badge_cluster_draws_through_another() {
         through.join("\n  ")
     );
     assert!(
-        checked >= TABS.len() * 2,
-        "only {checked} cluster(s) were measured across two shapes of {} tabs; the rule is being \
+        checked >= TABS.len() * 3,
+        "only {checked} cluster(s) were measured across three shapes of {} tabs; the rule is being \
          enforced against nothing",
         TABS.len()
     );

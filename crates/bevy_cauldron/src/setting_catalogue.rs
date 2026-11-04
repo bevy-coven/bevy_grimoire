@@ -16,7 +16,7 @@
 
 use std::path::Path;
 
-use crate::settings::{EditorSettings, GRID_STRENGTH_RANGE, KIND, SCALE_RANGE, SettingsLayer, Theme};
+use crate::settings::{EditorSettings, GRID_STRENGTH_RANGE, KIND, SettingsLayer, Theme};
 
 /// One key's value: what a control shows and what a write carries.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,6 +51,14 @@ pub struct Setting {
     pub kind: Kind,
 }
 
+/// **The ends of the two size sliders**: 75% to 200%. A file may set any size
+/// [`crate::settings::SCALE_RANGE`] allows, and a slider shows the nearest end of this range for one
+/// outside it; the range is what a person can reach by moving the control.
+pub const SIZE_SLIDER: (f32, f32) = (0.75, 2.0);
+
+/// **How far one step of a scale slider moves it**: a twentieth, 5%.
+pub const SCALE_STEP: f32 = 0.05;
+
 /// The categories, in the order the screen's tabs show them.
 pub const CATEGORIES: &[&str] = &["Appearance", "Accessibility", "Map"];
 
@@ -63,28 +71,35 @@ pub const CATALOGUE: &[Setting] = &[
         key: "theme",
         label: "Theme",
         category: "Appearance",
-        description: "The look of the editor's chrome. The theme settings (UI-73) apply it.",
+        description: "The colours and look of the editor.",
         kind: Kind::Options(THEMES),
     },
     Setting {
         key: "text_scale",
         label: "Text size",
         category: "Appearance",
-        description: "Text as a multiple of the size the design was drawn at. The theme settings (UI-73) apply it.",
-        kind: Kind::Scale { min: SCALE_RANGE.0, max: SCALE_RANGE.1 },
+        description: "How large the text is. 100% is the size the editor was designed at.",
+        kind: Kind::Scale { min: SIZE_SLIDER.0, max: SIZE_SLIDER.1 },
     },
     Setting {
         key: "interface_scale",
         label: "Interface size",
         category: "Appearance",
-        description: "Spacing and targets as a multiple of the size the design was drawn at. The theme settings (UI-73) apply it.",
-        kind: Kind::Scale { min: SCALE_RANGE.0, max: SCALE_RANGE.1 },
+        description: "How large buttons and spacing are. 100% is the size the editor was designed at.",
+        kind: Kind::Scale { min: SIZE_SLIDER.0, max: SIZE_SLIDER.1 },
+    },
+    Setting {
+        key: "show_statistics",
+        label: "Show statistics",
+        category: "Appearance",
+        description: "Show how many triangles are drawn, at the top right of the window.",
+        kind: Kind::Switch,
     },
     Setting {
         key: "reduced_motion",
         label: "Reduced motion",
         category: "Accessibility",
-        description: "Changes land without easing. The theme settings (UI-73) apply it.",
+        description: "Changes appear at once instead of easing in.",
         kind: Kind::Switch,
     },
     Setting {
@@ -151,6 +166,7 @@ impl EditorSettings {
             "reduced_motion" => Value::On(self.reduced_motion),
             "show_grid" => Value::On(self.show_grid),
             "grid_strength" => Value::Number(self.grid_strength),
+            "show_statistics" => Value::On(self.show_statistics),
             _ => return None,
         })
     }
@@ -181,6 +197,7 @@ impl SettingsLayer {
             "reduced_motion" => self.reduced_motion.map(Value::On),
             "show_grid" => self.show_grid.map(Value::On),
             "grid_strength" => self.grid_strength.map(Value::Number),
+            "show_statistics" => self.show_statistics.map(Value::On),
             _ => None,
         }
     }
@@ -194,6 +211,7 @@ impl SettingsLayer {
             ("reduced_motion", Value::On(on)) => self.reduced_motion = Some(on),
             ("show_grid", Value::On(on)) => self.show_grid = Some(on),
             ("grid_strength", Value::Number(n)) => self.grid_strength = Some(n),
+            ("show_statistics", Value::On(on)) => self.show_statistics = Some(on),
             _ => return false,
         }
         true
@@ -208,6 +226,7 @@ impl SettingsLayer {
             "reduced_motion" => self.reduced_motion = None,
             "show_grid" => self.show_grid = None,
             "grid_strength" => self.grid_strength = None,
+            "show_statistics" => self.show_statistics = None,
             _ => {}
         }
     }

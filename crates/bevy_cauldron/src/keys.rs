@@ -1412,7 +1412,7 @@ pub const BINDINGS: &[Binding] = &[
         false,
         Context::Global,
         "=",
-        "the other door",
+        "the other workspace",
     )
     .at(Home::Control(ControlId::DoorStrip)),
     // **`Cmd+E` for the errors, and the legend is where it lives** — the panel it opens is not on

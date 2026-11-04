@@ -22,6 +22,7 @@
 //! colour and sizes no glyph.
 
 use bevy::prelude::*;
+use bevy::ui::{ComputedNode, UiGlobalTransform};
 
 use crate::commands::{self, Command};
 use crate::editor::{EditorState, Tool};
@@ -53,6 +54,11 @@ impl Plugin for ToolbarPlugin {
             (the_group_follows_the_armed_tool, mark_the_armed_tool)
                 .run_if(in_state(crate::screen::Screen::Editor)),
         )
+        // After gooey has styled a chip, so the place it was given is the one this replaces.
+        .add_systems(
+            Update,
+            stagger_the_chips.after(bevy_gooey::GooeySystems::Style).run_if(in_state(crate::screen::Screen::Editor)),
+        )
         // **The one dispatch.** gooey's `Activate` is a click, `Enter`, `Space` or a pad's south
         // button, so every way a person meets a button ends in the same observer.
         .add_observer(on_toolbar_activate)
@@ -61,6 +67,88 @@ impl Plugin for ToolbarPlugin {
         // through [`tools`] rather than trusting the order in two places.
         .add_observer(on_tool_mode_chosen);
     }
+}
+
+/// How many rows the chips of the bar stand in: two, because a chord is wider than the button it names
+/// but narrower than two of them, so alternate buttons' chips can share a row.
+const CHIP_ROWS: usize = 2;
+
+/// The air between two chips, in logical px: a chip's own border is one device pixel, and two that touch
+/// read as one.
+const CHIP_GAP_PX: f32 = 1.0;
+
+/// **Each button's shortcut chip stands over its own button, and none stands on another's** (#291).
+///
+/// Holding `K` shows a chord on every toolbar button (gooey's `ShortcutBadges`), drawn at the button's
+/// right edge. A chord is wider than the 33 px button (`Ctrl+Shift+Z`, `Shift+B`), so every chip drew
+/// over its neighbour's and the row read `Xift+B Ctrl+B…`. gooey places a chip from the skin and has no
+/// idea its neighbour has one, so the bar's own host stands them: **centred on the button, in one of two
+/// rows inside the bar**, a chip going to the row where it needs the least shove right of its centre.
+/// Two rows cost no ground — the bar is tall enough for both, and nothing else stands on it — where a
+/// row *below* the bar would stand on the door strip and its own chips.
+///
+/// Gooey writes a chip's place once, when it is styled, so this writes it again only when it differs:
+/// a chip already where it belongs costs one comparison, and the system does nothing at all while no
+/// chip stands (the query is empty).
+fn stagger_the_chips(
+    bars: Query<(&ComputedNode, &UiGlobalTransform), With<Toolbar>>,
+    mut chips: Query<(Entity, &ChildOf, &ComputedNode, &mut Node), With<bevy_gooey::ShortcutBadge>>,
+    buttons: Query<(&ComputedNode, &UiGlobalTransform, &ChildOf), Without<bevy_gooey::ShortcutBadge>>,
+    parents: Query<&ChildOf>,
+    toolbar: Query<(), With<Toolbar>>,
+) {
+    let Ok((bar, bar_at)) = bars.single() else {
+        return;
+    };
+    let bar_rect = logical_rect(bar, bar_at);
+    // The chips that are the bar's, with where their buttons are: a chip is a child of its button, and a
+    // button is the bar's child, or its mode group's.
+    let mut mine: Vec<(Entity, Rect, Vec2)> = Vec::new();
+    for (chip, owner, node, _) in &chips {
+        let Ok((button, button_at, _)) = buttons.get(owner.parent()) else {
+            continue;
+        };
+        let on_the_bar = std::iter::successors(Some(owner.parent()), |e| parents.get(*e).ok().map(|p| p.parent()))
+            .take(3)
+            .any(|e| toolbar.contains(e));
+        if !on_the_bar || node.size() == Vec2::ZERO {
+            continue;
+        }
+        let size = node.size() * node.inverse_scale_factor;
+        mine.push((chip, logical_rect(button, button_at), size));
+    }
+    mine.sort_by(|a, b| a.1.center().x.total_cmp(&b.1.center().x));
+
+    let mut row_right = [f32::MIN; CHIP_ROWS];
+    for (chip, button, size) in mine {
+        let want_left = button.center().x - size.x * 0.5;
+        // The row where the chip lands nearest its button's centre, and the left edge it gets there.
+        let (row, left) = (0..CHIP_ROWS)
+            .map(|r| (r, want_left.max(row_right[r] + CHIP_GAP_PX)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .unwrap_or((0, want_left));
+        row_right[row] = left + size.x;
+        let rows_height = CHIP_ROWS as f32 * size.y + (CHIP_ROWS - 1) as f32 * CHIP_GAP_PX;
+        let top = bar_rect.min.y + (bar_rect.height() - rows_height).max(0.0) * 0.5 + row as f32 * (size.y + CHIP_GAP_PX);
+        let Ok((_, _, _, mut node)) = chips.get_mut(chip) else {
+            continue;
+        };
+        let (want_x, want_y) = (Val::Px(left - button.min.x), Val::Px(top - button.min.y));
+        if node.left != want_x {
+            node.left = want_x;
+        }
+        if node.top != want_y {
+            node.top = want_y;
+        }
+        if node.right != Val::Auto {
+            node.right = Val::Auto;
+        }
+    }
+}
+
+/// A laid-out node's rectangle in logical px.
+fn logical_rect(node: &ComputedNode, at: &UiGlobalTransform) -> Rect {
+    Rect::from_center_size(at.translation * node.inverse_scale_factor, node.size() * node.inverse_scale_factor)
 }
 
 /// **The tool modes' gooey toggle group**, so one option of it is lit at a time and the light is the
@@ -88,7 +176,13 @@ pub struct ToolbarAtlas {
 /// The bar is a gooey [`toolbar`](bevy_gooey::toolbar) inserted straight after the chrome bar, so it is
 /// the window's shape and nothing a panel adds: the docks get what is left, as they did before there
 /// was a toolbar.
-pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, mut layouts: ResMut<Assets<TextureAtlasLayout>>, frame: Option<Res<crate::chrome::Frame>>) {
+pub fn spawn_toolbar(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    frame: Option<Res<crate::chrome::Frame>>,
+    skin: Res<bevy_gooey::GooeySkin>,
+) {
     let Some(frame) = frame else {
         return;
     };
@@ -110,6 +204,11 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
     };
     let layout = layouts.add(icons::layout());
     commands.insert_resource(ToolbarAtlas { image: image.clone(), layout: layout.clone() });
+    // **The first button stands off the window's edge by a skin gap** (#290). gooey keeps a tooltip
+    // `gap` clear of the window, and a box that cannot sit centred under a button at the bar's left end
+    // slides along the button's edge; a button nearer the edge than that margin makes every below-the-
+    // button place count as clipped, so the box was put *beside* the button, over its neighbours.
+    let edge = skin.gap;
 
     let bar = commands
         .spawn((
@@ -119,7 +218,7 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
                 // which exactly one is on, which is a tool mode exactly. Its value is written from
                 // `EditorState` every frame by [`the_group_follows_the_armed_tool`], and a choice it
                 // reports is handed to the same chord queue every other button uses.
-                parent.spawn((
+                let mut modes = parent.spawn((
                     ToolModes,
                     bevy_gooey::toggle_group(
                         tools().iter().filter_map(|(id, _)| {
@@ -133,6 +232,9 @@ pub fn spawn_toolbar(mut commands: Commands, mut images: ResMut<Assets<Image>>, 
                         0,
                     ),
                 ));
+                if let Some(mut node) = modes.get_mut::<Node>() {
+                    node.margin.left = Val::Px(edge);
+                }
                 parent.spawn(bevy_gooey::toolbar_separator());
                 // **Everything else is a one-shot command**, so it is a button and never a member of a
                 // group: a lit "Undo" would be lying about what `Ctrl+Z` did.

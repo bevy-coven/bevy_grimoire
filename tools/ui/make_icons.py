@@ -104,12 +104,19 @@ def save():
 
 
 def fill_bucket():
+    """A paint bucket: the tub tipped on its corner with an open rim, a handle over it and a drop of
+    paint spilling from its lip (the glyph every paint program uses for fill; a flat block with a handle
+    read as a printer)."""
     c = Canvas()
-    c.poly([(2, 6), (12, 6), (10, 14), (4, 14)])
-    c.clear(4, 8, 9, 9)
-    c.path([(4, 6), (4, 2), (10, 2), (10, 6)])
-    c.fill(13, 8, 13, 11)
-    c.fill(12, 11, 14, 13)
+    c.poly([(0.5, 8.5), (6.5, 2.5), (12.5, 8.5), (6.5, 14.5)])
+    # The open rim: a line of the background just inside the upper-left edge.
+    for x, y in [(3, 9), (4, 8), (5, 7), (6, 6), (7, 5)]:
+        c.px(x, y, False)
+    c.path([(6, 2), (7, 1), (10, 1), (13, 4), (13, 7)])
+    # The drop.
+    c.fill(14, 10, 14, 10)
+    c.fill(13, 11, 15, 13)
+    c.fill(14, 14, 14, 14)
     return c
 
 
