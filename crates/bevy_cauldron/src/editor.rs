@@ -2598,7 +2598,9 @@ impl Plugin for EditorPlugin {
                     wire_back_buttons,
                     back_to_the_menu.in_set(keys::Phase::Act),
                     // Ahead of every verb, because two of its three answers are also map verbs.
-                    answer_the_leaving_prompt.before(keys::Phase::Act),
+                    answer_the_leaving_prompt
+                        .after(crate::confirm::ConfirmKeys)
+                        .before(keys::Phase::Act),
                 )
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )

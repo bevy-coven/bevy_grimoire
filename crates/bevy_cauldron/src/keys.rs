@@ -3438,7 +3438,17 @@ impl Plugin for KeysPlugin {
             .init_resource::<Repeat>()
             // `chain()` makes the sets run in the order listed
             // (`bevy-0.19.0/examples/ecs/ecs_guide.rs:330`).
-            .configure_sets(Update, (Phase::Sense, Phase::Text, Phase::Act).chain())
+            .configure_sets(
+                Update,
+                (
+                    (Phase::Sense, Phase::Text, Phase::Act).chain(),
+                    // **The verbs run after gooey's `Navigate`** (#286), where a dialog that closes on
+                    // `Esc` takes the press (`confirm::take`). Sensed *before* it, so a palette's own
+                    // field still owns the key on the frame it goes; acting *after* it, so a key that
+                    // closed a dialog is not also a verb on the tab behind in the same frame.
+                    Phase::Act.after(bevy_gooey::GooeySystems::Navigate),
+                ),
+            )
             .add_systems(
                 Update,
                 // **Before gooey's `Navigate`**, where the command palette closes itself on Esc and

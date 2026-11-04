@@ -97,14 +97,14 @@ pub enum Asked {
 
 impl Asked {
     /// **Does this question own the keyboard while it is up?** When it does, the census is quiet, like an
-    /// open text field, so the key that answers it is not also a verb on the tab behind it.
+    /// open text field, so the keys that answer it are not also verbs on the tab behind it *while it is
+    /// up* (the trust question's `Y`, `P` and `N` are all census keys).
     ///
-    /// **Only the trust question, because it is the only one whose answer keys are all census keys that
-    /// do something else and whose answer must not have a side effect.** The others are left as they
-    /// were: the agent's presentation lets Cmd+Z through by design (a person may take the turn back
-    /// while the card is up), and the leave-map flow's keys are read by the editor's own handlers. They
-    /// still share the leak this fixes for the trust question (`N` is a verb on the Map door): a
-    /// separate piece of work, not widened here because it changes behaviour the suite pins.
+    /// **Only the trust question, because it is the only one whose answer must not have a side effect
+    /// on any frame it is up.** The others are left as they were: the agent's presentation lets Cmd+Z
+    /// through by design (a person may take the turn back while the card is up). The *answering* press
+    /// is a different matter and is every question's: [`take`] consumes it, so no verb behind a
+    /// question reads the `N` that settled it (#286).
     pub fn owns_keyboard(self) -> bool {
         matches!(self, Asked::TrustCommand)
     }
@@ -275,20 +275,29 @@ struct ConfirmButton(Choice);
 #[derive(Component)]
 struct ConfirmDialog(u64);
 
+/// **The system that reads the answer keys.** A reader of [`Confirm::answer`] that must see the answer
+/// in the frame the key was pressed orders itself `.after(ConfirmKeys)`; left unordered, the executor
+/// chose, and an answer arrived a frame late on the runs that chose wrong.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ConfirmKeys;
+
 pub struct ConfirmPlugin;
 
 impl Plugin for ConfirmPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Confirm>()
-            // **Before `Phase::Act`**, so the frame a question is answered is not also a frame in
-            // which the answer key does its ordinary job. `Y` is not bound in the editor's census
-            // today, but `N` is `RotateMeshX` on the Meshes tab — so without this ordering,
-            // refusing a prompt would also turn the focused mesh a quarter turn.
+            // **Before every phase of the keys** (`Sense`, `Text`, `Act`), so the frame a question is
+            // answered is not also a frame in which the answer key does its ordinary job. `Y` is not
+            // bound in the editor's census today, but `N` is `RotateMeshX` on the Meshes tab and
+            // `RenameMap` on the Map tab (a `Phase::Text` field opens on it) — so without this
+            // ordering, refusing a prompt would also turn the focused mesh or open the name field.
+            // `Before(Act)` alone left the text fields unordered against the answer: a race the
+            // multithreaded executor lost about one frame in three (#286).
             .add_systems(
                 Update,
-                (answer_by_key, sync_dialog)
+                (answer_by_key.in_set(ConfirmKeys), sync_dialog)
                     .chain()
-                    .before(crate::keys::Phase::Act),
+                    .before(crate::keys::Phase::Sense),
             )
             .add_systems(Last, |mut confirm: ResMut<Confirm>| confirm.owner_answered = false)
             .add_observer(answer_by_activate);
@@ -301,17 +310,34 @@ impl Plugin for ConfirmPlugin {
 /// identically on the menu, where the editor's key census does not exist at all. gooey's navigation
 /// plugin is added (menus need it, UI-36) and sends the dialog a `Cancel` on `Esc`, which nothing here
 /// observes; `Esc` is read here too, and is the answer.
-fn answer_by_key(keyboard: Res<ButtonInput<KeyCode>>, mut confirm: ResMut<Confirm>) {
+///
+/// **The key that answers is taken, not only read** (#286). `just_pressed` stays true for the whole
+/// frame, and the editor's verbs read the same `ButtonInput` later in it: measured at the keyboard,
+/// `N` to stay on a map also opened *Rename the map* (`N`), and `Esc` to refuse also reached whatever
+/// `Esc` backs out of. [`take`] clears the press, and this runs before `keys::Phase::Act`, so the verbs
+/// that run after see a key nobody pressed.
+fn answer_by_key(mut keyboard: ResMut<ButtonInput<KeyCode>>, mut confirm: ResMut<Confirm>) {
     if confirm.question.is_none() {
         return;
     }
-    if keyboard.just_pressed(KeyCode::KeyY) {
+    let has_alt = confirm.question.as_ref().is_some_and(|q| q.alt.is_some());
+    if take(&mut keyboard, KeyCode::KeyY) {
         confirm.settle(true);
-    } else if keyboard.just_pressed(KeyCode::KeyP) && confirm.question.as_ref().is_some_and(|q| q.alt.is_some()) {
+    } else if has_alt && take(&mut keyboard, KeyCode::KeyP) {
         confirm.settle_choice(Choice::Alt);
-    } else if keyboard.just_pressed(KeyCode::KeyN) || keyboard.just_pressed(KeyCode::Escape) {
+    } else if take(&mut keyboard, KeyCode::KeyN) | take(&mut keyboard, KeyCode::Escape) {
         confirm.settle(false);
     }
+}
+
+/// **Was `key` pressed this frame? If so, nobody else sees it pressed.** One name for the rule every
+/// modal that closes on a key follows, so "read" and "consumed" cannot drift apart.
+pub fn take(keyboard: &mut ButtonInput<KeyCode>, key: KeyCode) -> bool {
+    let pressed = keyboard.just_pressed(key);
+    if pressed {
+        keyboard.clear_just_pressed(key);
+    }
+    pressed
 }
 
 /// The same two answers, by pointer, by Enter or Space on the focused button, or by the pad: a
