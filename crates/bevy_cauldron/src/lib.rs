@@ -176,3 +176,4 @@ pub mod update;
 pub mod view;
 pub mod vlm;
 pub mod watch;
+pub mod window_frame;

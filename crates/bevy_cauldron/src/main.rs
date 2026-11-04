@@ -64,6 +64,13 @@ fn main() -> AppExit {
                     // **One window for both screens**, so the title is state rather than a build-time
                     // decision — see [`name_the_window`].
                     title: "Cauldron".to_owned(),
+                    // **Never smaller than the layout is built for**; where it opens, and where it goes back
+                    // to, is `window_frame`'s decision (#292).
+                    resize_constraints: bevy::window::WindowResizeConstraints {
+                        min_width: bevy_cauldron::window_frame::MIN_SIZE.x,
+                        min_height: bevy_cauldron::window_frame::MIN_SIZE.y,
+                        ..default()
+                    },
                     // **Fullscreen for automated checks.** A virtual pointer is ABSOLUTE over the
                     // whole output, so a screen fraction only means a window fraction when the
                     // window IS the screen.
@@ -105,7 +112,7 @@ fn main() -> AppExit {
     app.insert_state(first);
     // The state both halves are gated by, and the two transitions that load and unload a door.
     app.add_plugins(screen::ScreenPlugin);
-    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::loading::LoadingPlugin));
+    app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::loading::LoadingPlugin, bevy_cauldron::window_frame::WindowFramePlugin));
     // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the
     // binary names the file: a test's editor has none, so no test writes to the real data directory.
     if let Some(file) = bevy_cauldron::recent::user_file() {
