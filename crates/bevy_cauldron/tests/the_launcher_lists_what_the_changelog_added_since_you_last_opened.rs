@@ -69,7 +69,7 @@ fn texts(app: &mut App, role: Role) -> Vec<String> {
 #[test]
 fn the_launcher_shows_the_newer_entries_and_remembers_the_newest_once_a_project_is_opened() {
     let (mut app, dir) = launcher_with("older", Some("alpha"));
-    assert!(texts(&mut app, Role::Heading).contains(&"New since you last opened".to_owned()));
+    assert!(texts(&mut app, Role::Heading).contains(&"What's new".to_owned()));
     let labels = texts(&mut app, Role::Label);
     assert!(labels.contains(&"gamma: The third thing".to_owned()) && labels.contains(&"beta: The second thing, with a clip".to_owned()), "{labels:?}");
     assert!(!labels.iter().any(|l| l.starts_with("alpha:")), "the entry already seen is not listed: {labels:?}");
@@ -84,9 +84,12 @@ fn the_launcher_shows_the_newer_entries_and_remembers_the_newest_once_a_project_
             .find_map(|(e, kids)| kids.iter().find_map(|k| t.get(world, k).ok().filter(|(r, t)| **r == Role::ButtonText && t.0 == name).map(|_| e)))
             .unwrap()
     };
-    app.world_mut().commands().trigger(Activate { entity: button });
-    app.update();
-    app.update();
+    // The first press chooses the card, the second opens it.
+    for _ in 0..2 {
+        app.world_mut().commands().trigger(Activate { entity: button });
+        app.update();
+        app.update();
+    }
     let stored = Recent::load(&dir.join("recent.ron")).unwrap();
     assert_eq!(stored.changelog_seen.as_deref(), Some("gamma"), "opening a project is what marks the news as read");
     assert!(launcher::whats_new(CHANGELOG, stored.changelog_seen.as_deref()).is_empty());
@@ -96,7 +99,7 @@ fn the_launcher_shows_the_newer_entries_and_remembers_the_newest_once_a_project_
 #[test]
 fn nothing_is_listed_when_the_newest_entry_was_the_last_one_seen() {
     let (mut app, dir) = launcher_with("same", Some("gamma"));
-    assert!(!texts(&mut app, Role::Heading).contains(&"New since you last opened".to_owned()));
+    assert!(texts(&mut app, Role::Label).contains(&"You have seen everything that is new.".to_owned()));
     assert!(app.world().resource::<Launcher>().whats_new.is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }

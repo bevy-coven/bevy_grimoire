@@ -79,7 +79,7 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
     let mut app = on_the_launcher("taken", &dir);
     assert!(app.world_mut().query_filtered::<(), With<NameField>>().iter(app.world()).next().is_none(), "no form until it is asked for");
 
-    press(&mut app, "New project…");
+    press(&mut app, "New project");
     assert!(create_is_disabled(&mut app), "an empty form cannot be created");
     assert_eq!(reason(&mut app), "Type a name for the project.", "and says why, before anything is typed");
     assert_eq!(problem_on::<NameField>(&mut app), None, "an untouched name is not an error");
@@ -122,7 +122,7 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
 fn a_location_that_is_not_a_folder_and_a_name_with_nothing_usable_are_each_said_on_their_own_field() {
     let dir = scratch("fields");
     let mut app = on_the_launcher("fields", &dir);
-    press(&mut app, "New project…");
+    press(&mut app, "New project");
     type_into::<LocationField>(&mut app, dir.join("nowhere").to_str().unwrap());
     assert!(problem_on::<LocationField>(&mut app).is_some_and(|p| p.contains("is not a folder")));
     type_into::<LocationField>(&mut app, dir.to_str().unwrap());
@@ -137,7 +137,7 @@ fn a_location_that_is_not_a_folder_and_a_name_with_nothing_usable_are_each_said_
 fn the_one_kit_template_makes_a_project_with_a_first_kit_and_cancel_makes_nothing() {
     let dir = scratch("kit");
     let mut app = on_the_launcher("kit", &dir);
-    press(&mut app, "New project…");
+    press(&mut app, "New project");
     type_into::<LocationField>(&mut app, dir.to_str().unwrap());
     type_into::<NameField>(&mut app, "meadow");
     let choice = app.world_mut().query_filtered::<Entity, With<TemplateChoice>>().single(app.world()).unwrap();
@@ -150,7 +150,7 @@ fn the_one_kit_template_makes_a_project_with_a_first_kit_and_cancel_makes_nothin
     assert_eq!(catalog.authoring.as_deref(), Some("meadow"));
 
     let mut app = on_the_launcher("kit_cancel", &dir);
-    press(&mut app, "New project…");
+    press(&mut app, "New project");
     type_into::<LocationField>(&mut app, dir.to_str().unwrap());
     type_into::<NameField>(&mut app, "never");
     press(&mut app, "Cancel");
