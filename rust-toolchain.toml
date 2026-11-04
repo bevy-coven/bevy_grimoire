@@ -7,6 +7,6 @@
 # which was intended. It agreed by luck. A pin makes it agree by definition, and makes `rustup` select
 # the toolchain automatically in both places, in CI, and for anyone who clones.
 #
-# Bump this deliberately, in its own commit, with `cargo test --workspace` green on both machines —
+# Bump this deliberately, in its own commit, with `cargo nextest run --workspace` green on both machines —
 # never as a side effect of a feature.
 channel = "1.98.1"

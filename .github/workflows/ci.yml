@@ -15,18 +15,15 @@ env:
 jobs:
   test:
     name: test (workspace)
-    runs-on: ubuntu-latest
+    # **A self-hosted runner** (owner, 2026-11-04). Eight sibling repos already run here, the registry
+    # allocates `bevy-coven/bevy_grimoire 1`, and big carries the toolchain, `cargo-nextest`, `Xvfb` and
+    # `xvfb-run` the workspace test needs. big is shared and runs systemd-oomd, which has SIGKILLed a CI
+    # container under memory pressure: a job lost that way is rerun, not diagnosed.
+    runs-on: [self-hosted, big]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Bevy Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libx11-dev mesa-vulkan-drivers xvfb pkg-config clang
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
       - name: workspace tests (nextest)
         run: xvfb-run -a cargo nextest run --workspace --no-fail-fast 2>&1 | tee test-output.txt
       - name: doctests (nextest does not run them)

@@ -5,8 +5,8 @@ live here now, are Python 3 standard library only, and never write to a person's
 copies an `assets` directory to `/tmp` first and closes the editor it launched by its own pid.
 
 **`common.py`** — what the others share: the repo path, `binary(name)` (a workspace binary looked up
-through `cargo metadata`'s target directory, so the shared `~/.cargo-target-shared/global` is found
-rather than assumed), `free_port()`, `make_scratch(source, dest)`, `class Editor` (one editor
+through `cargo metadata`'s target directory, so whatever `CARGO_TARGET_DIR` is set to on the host is
+found rather than assumed), `free_port()`, `make_scratch(source, dest)`, `class Editor` (one editor
 process, `wait_ready(pred)` polling `grimoire/state`, closed by pid), and `class Client` (the demo
 recorder's `McpClient` plus `tools/list`). It imports `McpClient` and `brp` from `tools/demo/record.py`
 rather than writing a second MCP client.
