@@ -2425,6 +2425,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
         app.add_plugins(crate::toolbar::ToolbarPlugin);
+        app.add_plugins(crate::empty_state::EmptyStatePlugin);
         #[cfg(feature = "bevy_siren")]
         app.add_plugins(crate::audio_panel::AudioPanelPlugin);
         app.add_observer(on_play_click);

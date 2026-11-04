@@ -151,6 +151,7 @@ mod a_mesh_the_render_world_took_does_not_crash_the_triangle_count;
 mod the_editors_key_light_steps_aside_for_the_sun;
 mod after_edit_checks_say_what_they_found;
 mod after_edit_waits_for_the_picture;
+mod an_empty_map_says_what_to_do_next;
 mod an_agent_can_define_a_composition;
 mod an_agent_can_set_a_composition_envelope;
 mod an_agent_can_stamp_a_composition;

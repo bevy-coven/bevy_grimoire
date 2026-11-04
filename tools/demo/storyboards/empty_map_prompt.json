@@ -1,0 +1,51 @@
+{
+ "name": "empty_map_prompt",
+ "fps": 8,
+ "scale": 1,
+ "width": 760,
+ "chunks": [
+  {
+   "seconds": 3.0
+  },
+  {
+   "seconds": 3.0
+  },
+  {
+   "seconds": 3.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.3,
+   "caption": "a new empty map says what to do next"
+  },
+  {
+   "at": 1.2,
+   "click_label": "Open library",
+   "caption": "person: Open library \u2014 the library's filter takes the keyboard"
+  },
+  {
+   "at": 2.4,
+   "type": "lamp"
+  },
+  {
+   "at": 4.0,
+   "click_label": "lamp_tall",
+   "within": [
+    1030,
+    100,
+    1280,
+    700
+   ],
+   "caption": "person: picks lamp_tall from the list"
+  },
+  {
+   "at": 5.2,
+   "click": [
+    640,
+    420
+   ],
+   "caption": "person: places it \u2014 the prompt goes with the first piece"
+  }
+ ]
+}
