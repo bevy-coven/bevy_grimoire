@@ -23,7 +23,8 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
-use bevy_gooey::{FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, heading, label, observe, panel, text_input};
+use bevy::input_focus::AutoFocus;
+use bevy_gooey::{Cancel, FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, dialog, heading, label, observe, panel, text_input};
 
 use crate::launcher::{Launcher, OpenMapRequest};
 use crate::picker::{PickFor, PickRequest, Picked};
@@ -267,7 +268,7 @@ impl Plugin for NewProjectPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (open_the_form, spawn_the_card, show_the_form, take_the_location, close_the_form, swap_the_cards).chain().run_if(in_state(Screen::Launcher)),
+            (open_the_form, spawn_the_card, show_the_form, take_the_location, close_the_form).chain().run_if(in_state(Screen::Launcher)),
         )
         .add_systems(OnExit(Screen::Launcher), |mut commands: Commands| commands.remove_resource::<NewProjectForm>());
     }
@@ -298,22 +299,32 @@ fn spawn_the_card(
     mut commands: Commands,
     form: Option<Res<NewProjectForm>>,
     cards: Query<(), With<FormCard>>,
-    root: Query<Entity, With<crate::launcher::HomeContent>>,
 ) {
     let Some(form) = form else { return };
     if !cards.is_empty() {
         return;
     }
-    let Ok(root) = root.single() else { return };
     let start = form.0.clone();
-    commands.entity(root).with_children(|root| {
-        root.spawn((panel(), FormCard))
+    // A modal dialog over the home, as the project page's New map is: gooey centres the card and holds the keyboard inside it.
+    // Esc is its Cancel, which closes the form as the Cancel button does.
+    commands
+        .spawn((
+            dialog(),
+            FormCard,
+            DespawnOnExit(Screen::Launcher),
+            Name::new("new project"),
+            observe(|_: On<Cancel>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),
+        ))
+        .with_children(|scrim| {
+        scrim.spawn(panel())
             .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(FORM_WIDTH), max_width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
             .with_children(|card| {
                 card.spawn(heading("New project"));
                 card.spawn((
                     text_input("Name", start.name.clone()),
                     NameField,
+                    // Ready to type in the moment the form opens.
+                    AutoFocus,
                     TextHint("project name".into()),
                     observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
                 ));
@@ -363,7 +374,7 @@ fn spawn_the_card(
                     ));
                 });
             });
-    });
+        });
 }
 
 /// Puts [`check`]'s words on the fields and on Create, every time the form changes.
@@ -440,14 +451,4 @@ fn close_the_form(mut commands: Commands, mut launcher: ResMut<Launcher>, cards:
         commands.entity(card).despawn();
     }
     commands.remove_resource::<NewProjectForm>();
-}
-
-/// The launcher's list gives its place to the form while the form is open, so neither is cut off by the window.
-fn swap_the_cards(form: Option<Res<NewProjectForm>>, mut cards: Query<&mut Node, With<crate::launcher::LauncherCard>>) {
-    let want = if form.is_some() { Display::None } else { Display::Flex };
-    for mut node in &mut cards {
-        if node.display != want {
-            node.display = want;
-        }
-    }
 }

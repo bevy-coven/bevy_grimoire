@@ -331,11 +331,7 @@ pub(crate) struct SplashArt(pub(crate) Option<(Handle<Image>, Vec2)>);
 #[derive(Component)]
 pub struct LauncherRoot;
 
-/// The pages' container, which the new-project form replaces while it is open.
-#[derive(Component)]
-pub struct LauncherCard;
-
-/// The page beside the sidebar: where the new-project form stands while it is open.
+/// The page beside the sidebar.
 #[derive(Component)]
 pub struct HomeContent;
 
@@ -608,7 +604,7 @@ fn fill_the_home(
 
     let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
     commands.entity(content).with_children(|content| {
-        content.spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }, LauncherCard)).with_children(|pages| {
+        content.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }).with_children(|pages| {
             pages
                 .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, HomePage(HomeTab::Projects)))
                 .with_children(|page| {
