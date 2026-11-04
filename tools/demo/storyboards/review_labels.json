@@ -28,7 +28,7 @@
       }
     },
     {
-      "at": 1.2,
+      "at": 0.8,
       "mcp": "grimoire_apply_operation",
       "args": {
         "operation": "door_open",
