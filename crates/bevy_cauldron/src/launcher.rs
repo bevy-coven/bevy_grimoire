@@ -198,7 +198,7 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
         if kind.is_dir() {
             copy_tree(&entry.path(), &target)?;
         } else if kind.is_file() {
-            std::fs::copy(entry.path(), &target)?;
+            bevy_grimoire_core::atomic_file::write_new(&target, std::fs::read(entry.path())?)?;
         }
     }
     Ok(())

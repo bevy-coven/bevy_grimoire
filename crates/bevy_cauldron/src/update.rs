@@ -338,7 +338,7 @@ fn stage(offer: &Offer, running: &Path) -> Result<PathBuf, String> {
     }
     let parent = running.parent().ok_or_else(|| format!("{} has no folder", running.display()))?;
     let probe = parent.join(".cauldron-update-probe");
-    std::fs::write(&probe, b"").and_then(|()| std::fs::remove_file(&probe)).map_err(|_| {
+    bevy_grimoire_core::atomic_file::write_cache(&probe, b"").and_then(|()| std::fs::remove_file(&probe)).map_err(|_| {
         format!("{} is not writable: install Cauldron in a folder you own, or download the DMG", parent.display())
     })?;
     Ok(new)
@@ -364,6 +364,7 @@ fn team_of(codesign_stderr: &str) -> Option<String> {
 /// the old arguments. Any failed move puts the old app back and opens that instead.
 #[cfg(target_os = "macos")]
 const SWAP_SH: &str = r#"#!/bin/sh
+exec >"$(dirname "$0")/swap.log" 2>&1
 pid="$1"; old="$2"; new="$3"; shift 3
 relaunch() { if [ "$#" -gt 0 ]; then open "$old" --args "$@"; else open "$old"; fi; }
 while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
@@ -382,9 +383,7 @@ fn swap(new: &Path, running: &Path) -> Result<(), String> {
         .and_then(Path::parent)
         .ok_or_else(|| format!("{} is not in an update folder", new.display()))?;
     let script = dir.join("swap.sh");
-    std::fs::write(&script, SWAP_SH).map_err(|e| format!("{}: {e}", script.display()))?;
-    let log = std::fs::File::create(dir.join("swap.log")).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let err = log.try_clone().map_err(|e| e.to_string())?;
+    bevy_grimoire_core::atomic_file::write_cache(&script, SWAP_SH).map_err(|e| format!("{}: {e}", script.display()))?;
     Command::new("/bin/sh")
         .arg(&script)
         .arg(std::process::id().to_string())
@@ -392,8 +391,8 @@ fn swap(new: &Path, running: &Path) -> Result<(), String> {
         .arg(new)
         .args(std::env::args_os().skip(1))
         .stdin(Stdio::null())
-        .stdout(log)
-        .stderr(err)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("the swap did not start: {e}"))

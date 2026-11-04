@@ -58,6 +58,11 @@ const ALLOWED: &[Allowed] = &[
         needle: "let mut f = std::fs::OpenOptions::new()",
         why: "the operation log is an append (`append(true)`), so it cannot lose an earlier line by being rewritten, and nobody edits it",
     },
+    Allowed {
+        file: "bevy_cauldron/src/update.rs",
+        needle: "let mut file = std::fs::File::create(to)",
+        why: "the updater streams a ~100 MB release zip into its own cache folder, hashing it as it lands; no project or game reads it, and a zip whose sha256 does not match is deleted",
+    },
 ];
 
 fn workspace_root() -> PathBuf {
