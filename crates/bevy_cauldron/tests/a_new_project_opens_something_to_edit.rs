@@ -89,6 +89,14 @@ fn fill_in(app: &mut App, place: &Path, name: &str) {
     type_into::<NameField>(app, name);
 }
 
+/// The image files a `.glb` names by path (`images[].uri`) rather than embeds: the asset server reads each beside the mesh.
+fn external_images(glb: &Path) -> Vec<String> {
+    let bytes = std::fs::read(glb).unwrap_or_else(|e| panic!("{}: {e}", glb.display()));
+    let json_len = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]) as usize;
+    let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + json_len]).unwrap_or_else(|e| panic!("{}: {e}", glb.display()));
+    json["images"].as_array().into_iter().flatten().filter_map(|i| i["uri"].as_str()).filter(|uri| !uri.starts_with("data:")).map(str::to_owned).collect()
+}
+
 #[test]
 fn a_starter_project_opens_on_first_map_with_its_pieces_in_the_palette() {
     let dir = scratch("starter");
@@ -108,6 +116,12 @@ fn a_starter_project_opens_on_first_map_with_its_pieces_in_the_palette() {
     assert_eq!(project.triangles.len(), project.library.descriptors.len());
     assert!(project.triangles.iter().all(|t| *t > 0), "every row's mesh path resolves after the copy: {:?}", project.triangles);
     assert!(made.join("assets/kenney_prototype-kit/License.txt").is_file(), "the licence travels with the meshes");
+    for descriptor in &project.library.descriptors {
+        let mesh = made.join("assets").join(descriptor.mesh.as_deref().unwrap_or_default());
+        for image in external_images(&mesh) {
+            assert!(mesh.parent().is_some_and(|dir| dir.join(&image).is_file()), "{} draws with {image}, which the copy must hold beside it", mesh.display());
+        }
+    }
     for _ in 0..6 {
         app.update();
     }

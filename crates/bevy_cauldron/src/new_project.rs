@@ -57,6 +57,12 @@ const PROTOTYPE_ROWS: &str = "assets/grimoire/library_kenney_from_manifests.ron"
 /// What a Starter kit's library says about itself, in place of the example's "generated" note.
 const PROTOTYPE_NOTE: &str = "Kenney's Prototype Kit (CC0, its licence is beside the meshes). Add your own meshes from the library; they land in this kit.";
 
+/// How wide the form is, in logical pixels: narrow enough that a field sits near its label.
+const FORM_WIDTH: f32 = 560.0;
+
+/// What the folder line says before a name is typed, so the form does not jump when the first letter makes it appear.
+const FOLDER_UNNAMED: &str = "Folder: named after the project";
+
 /// The folder, inside the person's documents, that new projects go in by default.
 const DEFAULT_PLACE: &str = "Cauldron Projects";
 
@@ -302,7 +308,7 @@ fn spawn_the_card(
     let start = form.0.clone();
     commands.entity(root).with_children(|root| {
         root.spawn((panel(), FormCard))
-            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
+            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(FORM_WIDTH), max_width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
             .with_children(|card| {
                 card.spawn(heading("New project"));
                 card.spawn((
@@ -311,7 +317,7 @@ fn spawn_the_card(
                     TextHint("project name".into()),
                     observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
                 ));
-                card.spawn((crate::launcher::quiet(""), FolderLine));
+                card.spawn((crate::launcher::quiet(FOLDER_UNNAMED), FolderLine));
                 card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::End, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
                     row.spawn((
                         text_input("Location", start.location.clone()),
@@ -393,7 +399,7 @@ fn show_the_form(
         }
     }
     let said = problems.reason().unwrap_or_default().to_owned();
-    let folder = if form.0.name.trim().is_empty() { String::new() } else { format!("Folder: {}", folder_name(&form.0.name)) };
+    let folder = if form.0.name.trim().is_empty() { FOLDER_UNNAMED.to_owned() } else { format!("Folder: {}", folder_name(&form.0.name)) };
     let note = form.0.template.describe();
     set_text(&mut texts.p0(), &said);
     set_text(&mut texts.p1(), &folder);
