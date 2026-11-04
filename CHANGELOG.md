@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **285-no-adhoc-release** `a11c2b8` A release is published only when it is signed with the Developer ID and notarized: an ad-hoc build stays a test artifact (#285) *No clip: a release workflow guard with no surface; proved by the publish step's DEVELOPER_ID check in release-macos.yml*
 - **launcher-splash** `0474d7c` The launcher opens on a pixel-art splash of a murder of crows over a yellow moon, made with Retro Diffusion; the news list shows three entries so every button still fits a 720 px window<br><a href="docs/changelog/media/2026-11-04-launcher-splash.mp4"><img src="docs/changelog/media/2026-11-04-launcher-splash.png" width="320" alt="clip"></a>
 - **cauldron-macos-app** `dd32932` Cauldron ships as a macOS app: a DMG per tagged release, the version on the launcher, and an Update to vX.Y.Z button that downloads the release, checks its checksum and signature, swaps the app and restarts into it<br><a href="docs/changelog/media/2026-11-04-cauldron-app-update.mp4"><img src="docs/changelog/media/2026-11-04-cauldron-app-update.png" width="320" alt="clip"></a>
 - **236-shift-click** `0ea921f` Shift-click on a piece selects it and adds more beside it, instead of picking it up (#236, #89) *No clip: the selection has no drawn marker yet: the inspector's mixed-value panel is the next slice and carries the clip; proved by shift_click_selects_pieces_beside_each_other.rs*
