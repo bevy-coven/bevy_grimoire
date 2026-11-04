@@ -10,7 +10,7 @@
 //!   read, hands the work to a [`FileAssetReader`] rooted at `<root>/assets`. With no project open it
 //!   answers `NotFound`, which is the truth.
 //! * [`open_project`] is the **one** way into a project, whether the command line named it or a person chose
-//!   it on the launcher: it points the root at the project, installs the project's font, tells the chooser
+//!   it on the launcher: it points the root at the project, installs the project's font, tells the agent bridge
 //!   where it is, and sends the window to the screen the arguments ask for.
 //!
 //! Nothing here keeps a path prefix per project or a second asset server. An asset whose path is the
@@ -118,14 +118,21 @@ pub fn install(app: &mut App, root: Option<PathBuf>) {
 #[derive(Resource, Clone, Debug)]
 pub struct PendingOpen(pub Vec<String>);
 
-/// The screen the arguments ask for: the loading screen for a door or a map, the chooser for a bare project.
+/// The screen the arguments ask for: the loading screen for a door or a map, the project page for a bare project.
 pub fn screen_for(argv: &[String]) -> Screen {
-    if crate::args::names_a_door(argv) { Screen::Loading } else { Screen::Menu }
+    if crate::args::names_a_door(argv) { Screen::Loading } else { Screen::Project }
+}
+
+/// **The project this process was pointed at**, by [`point_at`]: what the agent bridge reads as the root while no door is open, so
+/// `map_create` has a directory before a project is loaded. Absent in a headless editor, which is opened on its project directly.
+#[derive(Resource, Clone, Debug)]
+pub struct PointedAt {
+    pub root: PathBuf,
 }
 
 /// **Everything about a project that was decided from its root when the process started**, done for
 /// `argv`'s project: the data folder a project from before the rename gets moved, the asset root, the font, the
-/// chooser's root and the loader's request. Returns the screen to show. Does not change the screen: `main` calls
+/// agent bridge's root and the loader's request. Returns the screen to show. Does not change the screen: `main` calls
 /// this before the state machine runs, where the state it chose is already the one returned.
 pub fn point_at(world: &mut World, argv: &[String]) -> Result<Screen, String> {
     let root = crate::args::root_of(argv);
@@ -138,9 +145,7 @@ pub fn point_at(world: &mut World, argv: &[String]) -> Result<Screen, String> {
     }
     crate::harness::install_font_in(world, Some(&root))?;
     world.resource::<ProjectRoot>().set(Some(root.clone()));
-    // The chooser's own state describes the project it scanned, which is no longer this one.
-    world.remove_resource::<crate::chooser::Chooser>();
-    world.insert_resource(crate::chooser::MenuOpening { root, preselect: crate::args::split(argv).kit.map(str::to_owned) });
+    world.insert_resource(PointedAt { root });
     let screen = screen_for(argv);
     if screen == Screen::Loading {
         world.insert_resource(crate::loading::LoadRequest(argv.to_vec()));

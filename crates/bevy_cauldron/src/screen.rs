@@ -2,7 +2,7 @@
 //!
 //! # One application, two screens
 //!
-//! These were two processes. The chooser built its own `App`, ran to completion, launched the editor
+//! These were two processes. The menu built its own `App`, ran to completion, launched the editor
 //! as a child, and a supervisor spawned a fresh menu per lap — because **winit builds at most one
 //! event loop per process**, so a second `App::run` in one process dies on `RecreationAttempt`.
 //!
@@ -10,12 +10,12 @@
 //! inserted before the editor's plugins, and in Bevy 0.19 a **missing `Res<T>` panics its system**
 //! rather than skipping it. Around a hundred parameter positions take `Res<Project>`, so a menu
 //! living inside the editor's `App` meant gating every one of them — *"Gating is feasible… it is the
-//! **cost** that is the argument"* (`chooser.rs`).
+//! **cost** that is the argument"* (the chooser, which the project page replaced).
 //!
 //! Asked for at the keyboard, 2026-08-16: *"can we not open a whole another editing window? I'd like
 //! to keep the same bevy application running across whether it's the UI or the editor."* So the cost
 //! gets paid. This state is what pays it: every editor system runs `in_state(Screen::Editor)`, so in
-//! [`Screen::Menu`] none of them run and none of them fetch a `Project` that is not there.
+//! [`Screen::Project`] none of them run and none of them fetch a `Project` that is not there.
 //!
 //! # A door change is a full teardown
 //!
@@ -56,22 +56,22 @@ use bevy::prelude::*;
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Screen {
     /// The launcher: the projects opened before, and a way to open another (`launcher.rs`). `main` starts here
-    /// when no project is named; a bare `ROOT` starts at [`Screen::Menu`] and a door or a map at [`Screen::Loading`].
+    /// when no project is named; a bare `ROOT` starts at [`Screen::Project`] and a door or a map at [`Screen::Loading`].
+    #[default]
     Launcher,
     /// A project being opened as named stages, with a spinner and a progress bar when it takes long
     /// (`loading.rs`). `main` starts here when the command line names a door; it ends in [`Screen::Editor`],
     /// or back in [`Screen::Launcher`] when it is cancelled or the project will not open.
     Loading,
-    /// The chooser: kits, maps, and what each one is.
-    #[default]
-    Menu,
+    /// The project page: a project's maps and kits (`project_page.rs`), where a project opened from the home lands before a door opens.
+    Project,
     /// A door, with a [`crate::project::Project`] loaded and a [`crate::tiles::Door`] chosen.
     Editor,
 }
 
 /// **The plugin that owns the transitions into and out of a door** (the menu's exit, the loader's, and the editor's).
 ///
-/// `OnExit(Menu)` opens the project, because a state transition runs every `OnExit` before any
+/// The project page's exit to the editor opens the project, because a state transition runs every `OnExit` before any
 /// `OnEnter` — so by the time the editor's own spawns run, `Project` is already in the World and the
 /// hundred systems that take it are not looking at an empty slot.
 ///
@@ -85,7 +85,7 @@ impl Plugin for ScreenPlugin {
         if !app.world().contains_resource::<State<Screen>>() {
             app.init_state::<Screen>();
         }
-        app.add_systems(OnExit(Screen::Menu), open_the_door)
+        app.add_systems(OnTransition { exited: Screen::Project, entered: Screen::Editor }, open_the_door)
             // The loader leaves for the editor only with a door in hand; leaving for the launcher (cancelled,
             // or a project that would not open) has nothing to open, so it is the one exit that is not
             // `OnExit(Loading)`.
@@ -96,24 +96,34 @@ impl Plugin for ScreenPlugin {
     }
 }
 
-/// Put what the menu opened into the World. An exclusive system, so the resources exist the instant
+/// **The door the project page, the loader or an agent chose, already opened.**
+///
+/// Still one parser: the argv `[root, map?, --door, d, --kit, k]` goes to `args::open`. The *opening* happens **before** the state moves,
+/// not after: the transition into the editor used to carry the argv and let [`open_the_door`] open it, whose failure branch could not work —
+/// Bevy runs `ExitSchedules` and `EnterSchedules` in one `StateTransition` pass, so a `NextState` written during `OnExit` is not read until
+/// the *next* pass and `OnEnter(Editor)` ran anyway, against a world with no `Project`. Opening first means the only way into
+/// `Screen::Editor` is with a door in hand, and a door that will not open is refused where a person is looking.
+#[derive(Resource)]
+pub struct Chosen(pub crate::args::Opened);
+
+/// Put what the project page opened into the World. An exclusive system, so the resources exist the instant
 /// this returns rather than whenever a command queue is next flushed — `OnEnter(Editor)` is the very
 /// next schedule and every system in it assumes a loaded project.
 ///
 /// **This cannot fail, and that is the point.** It used to call `args::open` here and, on an error,
-/// write the reason onto the chooser and set `NextState(Menu)`. That never worked: a
+/// write the reason onto the page and set `NextState(Project)`. That never worked: a
 /// `StateTransition` runs `ExitSchedules` then `EnterSchedules` in one pass, so the `NextState` was
 /// not read until the following pass and `OnEnter(Editor)` ran regardless — against a world with no
 /// `Project` and no `Door`, which panics rather than returning. The open moved to
-/// `chooser::drive_chooser` and to the loading screen (`loading.rs`), both of which can refuse in place; what arrives here is a
-/// door already open. See [`crate::chooser::Chosen`].
+/// the loading screen (`loading.rs`) and an agent's `map_open`, both of which can refuse in place; what arrives here is a
+/// door already open. See [`Chosen`].
 fn open_the_door(world: &mut World) {
-    let Some(chosen) = world.remove_resource::<crate::chooser::Chosen>() else {
+    let Some(chosen) = world.remove_resource::<Chosen>() else {
         // Reached only when something set the state directly. Loud, because the alternative is an
         // editor with no project and a hundred systems finding out one at a time.
-        error!("entering a door with nothing chosen — staying on the menu");
+        error!("entering a door with nothing chosen — staying on the project page");
         if let Some(mut next) = world.get_resource_mut::<NextState<Screen>>() {
-            next.set(Screen::Menu);
+            next.set(Screen::Project);
         }
         return;
     };
@@ -200,11 +210,11 @@ pub struct Crossing;
 /// `PendingIfDifferent` suppresses the schedules. So `OnExit(Editor)` runs [`close_the_door`] — the
 /// teardown, unchanged — and `OnEnter(Editor)` runs the spawns.
 ///
-/// **And the chooser never appears.** A same-state transition runs neither `OnExit(Menu)` nor
-/// `OnEnter(Menu)`, so `ChooserPlugin`'s `build_chooser` / `spawn_screen` / `spawn_menu_bars` never
+/// **And the project page never appears.** A same-state transition runs neither `OnExit(Project)` nor
+/// `OnEnter(Project)`, so the project page's `build_page` / `fill_page` never
 /// run. The author sees the editor tear down and the other door build, in one frame.
 ///
-/// The alternative — hopping through `Screen::Menu` — would build the whole chooser UI and tear it
+/// The alternative — hopping through `Screen::Project` — would build the whole page's UI and tear it
 /// down, which is a flash of the wrong screen on every crossing.
 ///
 /// # The `Project` never leaves the world
@@ -334,11 +344,11 @@ pub fn cross(world: &mut World, to: crate::tiles::Door) -> Result<(), String> {
     // left behind. That is the one thing `close_the_door` cannot do on its own: it *removes* the
     // project, and something has to put the new door's back.
     //
-    // **The chooser never appears.** A same-state transition runs neither `OnExit(Menu)` nor
-    // `OnEnter(Menu)`, so `ChooserPlugin`'s `build_chooser` / `spawn_screen` / `spawn_menu_bars`
+    // **The project page never appears.** A same-state transition runs neither `OnExit(Project)` nor
+    // `OnEnter(Project)`, so the project page's `build_page` / `fill_page`
     // never run. The author sees the editor tear down and the other door build, in one frame.
     //
-    // **The alternative — hopping through `Screen::Menu` — would build the whole chooser UI and
+    // **The alternative — hopping through `Screen::Project` — would build the whole page's UI and
     // tear it down**, which is a flash of the wrong screen on every crossing.
     if let Some(mut next) = world.get_resource_mut::<NextState<Screen>>() {
         next.set(Screen::Editor);
@@ -476,7 +486,7 @@ door_state![
 /// **Despawn every root a screen could have spawned.** The one implementation, called by both
 /// screens' teardowns.
 ///
-/// It was two: this and `chooser::tear_down_menu`, which spelled the same reachability rule as its
+/// It was two: this and the page's own teardown, which spelled the same reachability rule as its
 /// own query — and the copies drifted the first time the rule gained a clause. `crate::surface` was
 /// excluded from [`scene_roots`] and swept away by the other one anyway, which left the editor with
 /// no camera for its interface, seventy-six UI nodes computing a target of nothing, and a window

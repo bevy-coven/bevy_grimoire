@@ -1657,7 +1657,7 @@ fn cell_glyph(c: Option<&bevy_grimoire_core::descriptor::SubCell>) -> &'static s
 /// **`Option<ResMut<Project>>`, and every global observer here needs the same.**
 ///
 /// This fires for *any* `Activate` in the application, not only ones inside this panel — and
-/// `Project` is a **door's** resource, removed by `screen::close_the_door`. On `Screen::Menu` it does
+/// `Project` is a **door's** resource, removed by `screen::close_the_door`. On `Screen::Project` it does
 /// not exist, and in Bevy 0.19 a missing `Res<T>` **panics its system** rather than skipping
 /// (`bevy_ecs/error/handler.rs:130`).
 ///

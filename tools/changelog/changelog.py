@@ -8,10 +8,14 @@ to see what was added, so a line that cannot be watched has to say why.
 
     changelog.py clip  --out docs/changelog/media/<date>-<id>.mp4 (--frames DIR [--fps N] | --video FILE)
                        [--start S] [--duration S] [--poster S] [--crop X0,Y0,X1,Y1|WxH]
-    changelog.py add   --id ID --title TEXT [--sha SHA] [--date YYYY-MM-DD]
+    changelog.py add   --id ID --title TEXT [--sha SHA] [--date YYYY-MM-DD] [--user SENTENCE]
                        (--clip <date>-<id> | --link PATH | --no-clip REASON)
     changelog.py check [--since YYYY-MM-DD]
     changelog.py page  [--out FILE] [--open]
+
+`--user SENTENCE` is the line as a person who never reads this file would say it, stored as ` *For you: <sentence>*`
+right after the title; the editor's What's new page lists only the entries that have one. It names no issue id and no
+file path, and `check` refuses one that does.
 
 `--repo DIR` (before the command) picks the repository; the default is the git root of the working
 directory. Media lives in `<repo>/docs/changelog/media/`, stored by Git LFS (`.gitattributes`), and a
@@ -43,6 +47,9 @@ CRF_LADDER = (28, 32, 36, 40)
 THUMB_WIDTH = 320
 DATE_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})\s*$")
 REF_RE = re.compile(r'(?:href|src)="([^"]+)"')
+USER_MARK = " *For you: "
+# What a sentence for a person must not name: an issue or work-item id (#296, UI-30, E-008, S1.5), a path, a snake_case word.
+USER_JARGON_RE = re.compile(r"#\d+|\b[A-Z]{1,3}-\d+\b|\bS\d+\.\d+\b|[\w.-]+/[\w./-]+|\b[a-z]+(?:_[a-z0-9]+)+\b")
 HEADER = "# Changelog\n\nWhat each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.\n"
 
 
@@ -185,11 +192,34 @@ def media_html(href, still):
         html.escape(href, quote=True), html.escape(still, quote=True), THUMB_WIDTH)
 
 
-def entry_line(item_id, title, sha, clip=None, link=None, no_clip=None):
+def user_sentence(line):
+    """The `For you` sentence of an entry line, or None."""
+    start = line.find(USER_MARK)
+    if start < 0:
+        return None
+    rest = line[start + len(USER_MARK):]
+    end = rest.find("*")
+    return (rest if end < 0 else rest[:end]).strip()
+
+
+def check_user_sentence(sentence):
+    """Refuse a `For you` sentence that cannot be read by a person who never saw the repository."""
+    if not sentence or not sentence.strip():
+        raise Refusal("--user is one plain sentence, not nothing")
+    if "\n" in sentence or "*" in sentence:
+        raise Refusal("--user is one line without asterisks")
+    found = USER_JARGON_RE.search(sentence)
+    if found:
+        raise Refusal("--user is for people who do not know this repository: `{}` is an id, a path or a code name; say what they will see".format(found.group(0)))
+
+
+def entry_line(item_id, title, sha, clip=None, link=None, no_clip=None, user=None):
     head = "- **{}**".format(item_id)
     if sha:
         head += " `{}`".format(sha)
     text = "{} {}".format(head, title.strip())
+    if user:
+        text += "{}{}*".format(USER_MARK, user.strip())
     if clip:
         base = "{}/{}".format(MEDIA_DIR, clip)
         return "{}<br>{}\n".format(text, media_html(base + ".mp4", base + ".png"))
@@ -237,7 +267,9 @@ def cmd_add(repo, args):
         raise Refusal("no file at {}".format(args.link))
     if "\n" in args.title:
         raise Refusal("the title is one line")
-    line = entry_line(args.id, args.title, args.sha, args.clip, args.link, args.no_clip)
+    if args.user is not None:
+        check_user_sentence(args.user)
+    line = entry_line(args.id, args.title, args.sha, args.clip, args.link, args.no_clip, args.user)
     lines = read_lines(repo)
     with open(changelog_path(repo), "w") as fh:
         fh.writelines(insert_entry(lines, date, line))
@@ -278,6 +310,12 @@ def check(repo, since=None):
         dates.append(date)
         if since and date < since:
             continue
+        sentence = user_sentence(text)
+        if sentence is not None:
+            try:
+                check_user_sentence(sentence)
+            except Refusal as refusal:
+                problems.append("CHANGELOG.md:{}: the `For you` sentence: {}".format(n, refusal))
         refs = REF_RE.findall(text) + re.findall(r"\]\(([^)\s]+)\)", text)
         if not refs and "No clip:" not in text:
             problems.append("CHANGELOG.md:{}: no clip and no `No clip:` reason".format(n))
@@ -347,6 +385,12 @@ def render_page(repo, lines):
                 out.append("</ul>")
             out.append("<h2>{}</h2><ul>".format(date))
             current = date
+        sentence = user_sentence(text)
+        if sentence is not None:
+            try:
+                check_user_sentence(sentence)
+            except Refusal as refusal:
+                problems.append("CHANGELOG.md:{}: the `For you` sentence: {}".format(n, refusal))
         refs = REF_RE.findall(text) + re.findall(r"\]\(([^)\s]+)\)", text)
         words = re.sub(r"<[^>]+>", "", re.sub(r"\[clip\]\([^)]*\)", "", text[2:]))
         words = html.escape(words)
@@ -412,6 +456,7 @@ def main(argv=None):
     a.add_argument("--clip", help="<name>: docs/changelog/media/<name>.mp4 and .png")
     a.add_argument("--link", help="existing media elsewhere in the repo, relative to its root")
     a.add_argument("--no-clip", dest="no_clip", help="why there is no clip, and the test that proves the change")
+    a.add_argument("--user", help="the change in one plain sentence for a person who never reads this file; the editor's What's new lists only entries that have one")
     k = sub.add_parser("check", help="every line has a clip or a reason; every clip is capped and in LFS")
     k.add_argument("--since", help="check only entries on or after YYYY-MM-DD")
     p = sub.add_parser("page", help="write one HTML page that plays every clip")

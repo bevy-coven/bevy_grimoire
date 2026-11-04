@@ -17,7 +17,7 @@
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;
-mod a_chooser_row_draws_in_the_skins_ink;
+mod a_page_line_draws_in_the_skins_ink;
 mod a_filter_box_draws_in_the_skins_ink;
 mod a_palette_row_reports_a_clickable_position;
 mod the_shells_divider_moves_under_a_drag;
@@ -421,3 +421,4 @@ mod undressing_gives_the_editors_view_back;
 mod the_updater_offers_the_newest_release;
 mod modal_keys_do_not_reach_the_editor;
 mod a_click_on_the_other_door_crosses_to_it;
+mod the_project_page;

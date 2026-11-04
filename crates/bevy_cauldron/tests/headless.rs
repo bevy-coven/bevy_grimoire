@@ -1598,107 +1598,6 @@ fn the_maps_bash_narrows_the_palette_but_never_hides_what_is_placed() {
     );
 }
 
-/// **The menu's columns run left to right in the order the data model nests: PROJECTS, KITS, MAPS.**
-///
-/// `PROJECT ||--o{ KIT` and `PROJECT ||--o{ MAP` (the ERD in `CLAUDE.md`) make the project the root,
-/// and the one cross-edge between its children runs `MAP → BASH → KIT` — a map is made of kits, so
-/// kits come first and the map is what they add up to.
-///
-/// **Read off the spawned hierarchy, not off `render()`.** `Screen` carries rows and headers and
-/// says nothing about geometry, so the flat rendering cannot see a column order at all — the only
-/// place it exists is the child order under `chrome::Frame::body`, which is what this walks. That
-/// is also the half a green suite missed for as long as it did: `Focus::ALL` walked
-/// projects→kits→policy→maps→settings while the columns read `MAPS | KITS | PROJECTS`, so one `Tab`
-/// meant right, then left, then right, and every test still passed.
-#[test]
-fn the_menu_columns_run_project_then_kits_then_maps() {
-    let root = Fixture::new("column-order")
-        .descriptor("bench", "props")
-        .kit("site", "ozea", &["site/wall"])
-        .build("m");
-
-    let mut app = harness::build_headless(&root, "m", None)
-        .unwrap_or_else(|e| panic!("the fixture project must open: {e}"));
-    // **Into the menu.** The harness opens straight into a door, because that is the entry point it
-    // exists to serve; the chooser is the other screen and its plugin is added here.
-    app.add_plugins(bevy_cauldron::chooser::ChooserPlugin {
-        root: root.clone(),
-        preselect: None,
-    });
-    app.world_mut()
-        .resource_mut::<NextState<bevy_cauldron::screen::Screen>>()
-        .set(bevy_cauldron::screen::Screen::Menu);
-    for _ in 0..4 {
-        app.update();
-    }
-
-    let body = app.world().resource::<bevy_cauldron::chrome::Frame>().body;
-    // The first `Text` in a column's subtree is its list heading — `spawn_screen` spawns the header
-    // before the list under each panel.
-    let first_text = |world: &World, at: Entity| -> Option<String> {
-        let mut stack = vec![at];
-        while let Some(e) = stack.pop() {
-            if let Some(t) = world.get::<Text>(e) {
-                return Some(t.0.clone());
-            }
-            if let Some(children) = world.get::<Children>(e) {
-                for c in children.iter().rev() {
-                    stack.push(c);
-                }
-            }
-        }
-        None
-    };
-    let world = app.world();
-    let columns: Vec<String> = world
-        .get::<Children>(body)
-        .map(|c| c.iter().collect::<Vec<_>>())
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|col| first_text(world, col))
-        .collect();
-
-    assert_eq!(
-        columns,
-        vec!["PROJECTS".to_owned(), "KITS".to_owned(), "MAPS".to_owned()],
-        "the columns are the hierarchy, left to right"
-    );
-
-    // **And `left`/`right` walk them in that order**, one press per column, so the key and the
-    // layout cannot come to disagree again. There is no `Tab`: the rest of the editor navigates
-    // with arrows and nothing else — see `Focus`.
-    //
-    // **They clamp at the ends; they used to wrap.** Reported at the keyboard 2026-09-03: two right
-    // presses from KITS landed back on PROJECTS, which reads as the selection having jumped rather
-    // than as the end of a row — and nothing on screen said which column had the keyboard, so there
-    // was no way to tell the wrap from a misfire. Both halves were fixed together: the panel holding
-    // the keyboard lights its border (`chrome::Focused`), and the walk stops at the edge, because a
-    // three-item row of columns is an ordered row and not a carousel.
-    use bevy_cauldron::chooser::Focus;
-    let mut chooser = app.world_mut().resource_mut::<bevy_cauldron::chooser::Chooser>();
-    chooser.focus = Focus::Projects;
-    let mut walk = vec![chooser.focus];
-    for _ in 0..3 {
-        chooser.cross(1);
-        walk.push(chooser.focus);
-    }
-    assert_eq!(
-        walk,
-        vec![Focus::Projects, Focus::Kits, Focus::Maps, Focus::Maps],
-        "one press per column, in the order they are drawn, stopping at the right-hand end"
-    );
-
-    // The other end, which is the half a wrap test never covered.
-    for _ in 0..3 {
-        chooser.cross(-1);
-    }
-    assert_eq!(
-        chooser.focus,
-        Focus::Projects,
-        "and walking back stops at the left-hand end rather than reappearing on MAPS"
-    );
-}
-
 /// **A map naming a bash the project does not declare is refused by name at the door.**
 ///
 /// Not resolved to every-kit, which is the only other thing it could do and is a palette nobody
@@ -6917,29 +6816,6 @@ fn every_checkpoint_a_shipped_guide_names_is_registered_and_runs() {
     let registered = app.world().resource::<Checkpoints>().names();
     assert!(!registered.is_empty(), "GuidePlugin registered nothing");
 
-    // **The chooser is a second app with a second vocabulary**, and a guide says which it drives.
-    // Checking every script against the editor's names would have been the easy fix and the wrong
-    // one: it would let an editor script name a chooser condition and still pass.
-    let mut chooser_app = App::new();
-    chooser_app
-        .insert_resource(bevy_cauldron::chooser::Chooser::new(
-            std::path::PathBuf::from("."),
-            bevy_cauldron::chooser::Catalog {
-                kits: Vec::new(),
-                maps: Vec::new(),
-                authoring: None,
-                bashes: Vec::new(),
-                projects: Vec::new(),
-            },
-            None,
-        ))
-        .add_plugins(bevy_cauldron::chooser::ChooserGuidePlugin);
-    let chooser_names = chooser_app.world().resource::<Checkpoints>().names();
-    assert!(
-        !chooser_names.is_empty(),
-        "ChooserGuidePlugin registered nothing"
-    );
-
     let mut seen = 0;
     for entry in entries.flatten() {
         let path = entry.path();
@@ -6959,16 +6835,10 @@ fn every_checkpoint_a_shipped_guide_names_is_registered_and_runs() {
             .unwrap_or_else(|| panic!("{name} has no `steps` array"));
         assert!(!steps.is_empty(), "{name} has an empty script");
 
-        // Which app this script drives. Absent means the editor, so every existing guide is
-        // unchanged and only a script that needs the other vocabulary has to say so.
-        let (app_name, vocabulary) = match script["app"].as_str() {
-            Some("chooser") => ("chooser", &chooser_names),
-            Some(other) => panic!(
-                "{name}: `app` is `{other}`, which is not an app this editor has. Use `chooser`, \
-                 or leave it out for the editor."
-            ),
-            None => ("editor", &registered),
-        };
+        // A guide drives the editor, whose vocabulary is `registered`. The chooser's own guide went with the chooser, and a script that
+        // names another app would be checked against the wrong names.
+        assert!(script["app"].is_null(), "{name}: `app` names an app this editor does not have. A guide drives the editor, so leave it out.");
+        let vocabulary = &registered;
 
         for step in steps {
             let label = step["label"].as_str().unwrap_or("");
@@ -6998,7 +6868,7 @@ fn every_checkpoint_a_shipped_guide_names_is_registered_and_runs() {
             };
             assert!(
                 vocabulary.iter().any(|r| r == checkpoint),
-                "{name}: step `{label}` watches `{checkpoint}`, which the {app_name} does not \
+                "{name}: step `{label}` watches `{checkpoint}`, which the editor does not \
                  register. It would park for ever. Registered: {}",
                 vocabulary.join(", ")
             );
@@ -10496,7 +10366,7 @@ fn the_room_script_can_actually_be_followed() {
 
 /// **An ASSET-CONTRACT test — it reads the shipped corpus on purpose.**
 ///
-/// The chooser exists because nothing on screen said which kit was loaded, and the piece count is
+/// The project page exists because nothing on screen said which kit was loaded, and the piece count is
 /// the fact that answers it. This asserts that fact is available from what actually ships: the
 /// scan finds the shipped kits, and it can tell the blank one from a populated one.
 ///
@@ -10508,8 +10378,8 @@ fn the_room_script_can_actually_be_followed() {
 /// scans, `site_v2` is empty by design (`docs/2026-08-15-blank-slate-handoff.md` §1) and `site` is
 /// not, and the root kit is reachable with no `--kit` at all.
 #[test]
-fn the_chooser_sees_the_shipped_project() {
-    use bevy_cauldron::chooser::Catalog;
+fn the_project_page_sees_the_shipped_project() {
+    use bevy_cauldron::catalog::Catalog;
 
     let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -10629,14 +10499,14 @@ fn escape_peels_to_the_selection_then_asks_then_goes() {
 
     // **The way back is a state change, not an exit.** It was `AppExit` with a code the parent
     // process compared against; both screens are one application now (`screen.rs`), so leaving sets
-    // `Screen::Menu`. Read as *pending*: `StateTransition` runs before `Update`, so the set made by
+    // `Screen::Project`. Read as *pending*: `StateTransition` runs before `Update`, so the set made by
     // this frame's key applies on the next one — and checking it here rather than stepping again
     // keeps the door's teardown out of the middle of the test.
     let heading_back = |app: &App| {
         matches!(
             app.world()
                 .get_resource::<NextState<bevy_cauldron::screen::Screen>>(),
-            Some(NextState::Pending(bevy_cauldron::screen::Screen::Menu))
+            Some(NextState::Pending(bevy_cauldron::screen::Screen::Project))
         )
     };
 
@@ -10670,7 +10540,7 @@ fn escape_peels_to_the_selection_then_asks_then_goes() {
     // **And `Y` answers it, not a third `Esc`.**
     //
     // This used to be `Esc` three times, which is what the original report asked for — but `Esc`
-    // agreeing here while `Esc` refused the chooser's delete is exactly the spread `crate::confirm`
+    // agreeing here while `Esc` refused the project page's delete is exactly the spread `crate::confirm`
     // was built to end. `Esc` still refuses, so the peel's own promise is intact: the key that
     // backs out never commits anything.
     tap(&mut app, KeyCode::Escape);
@@ -10755,14 +10625,14 @@ fn the_menu_key_saves_and_goes() {
     };
     // **The way back is a state change, not an exit.** It was `AppExit` with a code the parent
     // process compared against; both screens are one application now (`screen.rs`), so leaving sets
-    // `Screen::Menu`. Read as *pending*: `StateTransition` runs before `Update`, so the set made by
+    // `Screen::Project`. Read as *pending*: `StateTransition` runs before `Update`, so the set made by
     // this frame's key applies on the next one — and checking it here rather than stepping again
     // keeps the door's teardown out of the middle of the test.
     let heading_back = |app: &App| {
         matches!(
             app.world()
                 .get_resource::<NextState<bevy_cauldron::screen::Screen>>(),
-            Some(NextState::Pending(bevy_cauldron::screen::Screen::Menu))
+            Some(NextState::Pending(bevy_cauldron::screen::Screen::Project))
         )
     };
     // **Cancel the pending departure and stay in the door.**
@@ -10831,7 +10701,7 @@ fn the_menu_key_saves_and_goes() {
 
 /// **Leaving a door has to survive the frames after it.**
 ///
-/// `the_menu_key_saves_and_goes` stops at the pending `Screen::Menu` on purpose, so nothing in this
+/// `the_menu_key_saves_and_goes` stops at the pending `Screen::Project` on purpose, so nothing in this
 /// file ever ran a frame *after* `OnExit(Editor)` dropped the `Project`. A run condition in the
 /// Tiles plugin read `resource_changed::<Project>` with no `Option`, so the first frame after the
 /// door closed panicked on a missing `Res<Project>` and `Cmd+O` and the `‹ kits & maps` button
@@ -10849,11 +10719,11 @@ fn leaving_a_door_survives_the_frames_after_it() {
     for _ in 0..3 {
         app.update();
     }
-    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Menu);
+    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Project);
     for _ in 0..5 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Menu, "the door closed");
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Project, "the door closed");
     assert!(app.world().get_resource::<Project>().is_none(), "and took its project with it");
 }
 

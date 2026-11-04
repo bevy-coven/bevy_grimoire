@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::{Activate, ValueChange};
-use bevy_cauldron::chooser::MenuOpening;
+use bevy_cauldron::project_assets::PointedAt;
 use bevy_cauldron::launcher::{ClipboardOff, Launcher, LauncherPlugin};
 use bevy_cauldron::new_project::{self, CreateButton, LocationField, NameField, NewProject, ReasonLine, Template, TemplateChoice};
 use bevy_cauldron::recent::{self, RecentProjects};
@@ -110,8 +110,8 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
     press(&mut app, "Create");
     let made = places.join("harbour");
     assert!(made.join("assets/grimoire/kits.ron").is_file() && made.join("assets/grimoire/vocab.ron").is_file(), "the project is written");
-    assert_eq!(app.world().resource::<MenuOpening>().root, made.canonicalize().unwrap(), "and opened the way a recent row is, in this process");
-    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Menu);
+    assert_eq!(app.world().resource::<PointedAt>().root, made.canonicalize().unwrap(), "and opened the way a recent row is, in this process");
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Project);
     assert!(app.world_mut().query_filtered::<(), With<NameField>>().iter(app.world()).next().is_none(), "the form is gone");
     let listed = recent::Recent::load(&dir.join("recent.ron")).unwrap().listing();
     assert_eq!(listed[0].project.path, made.canonicalize().unwrap(), "and it is at the top of the recent list");
@@ -145,7 +145,7 @@ fn the_one_kit_template_makes_a_project_with_a_first_kit_and_cancel_makes_nothin
     app.update();
     press(&mut app, "Create");
     let made = dir.join("meadow");
-    let catalog = bevy_cauldron::chooser::Catalog::scan(&made).unwrap();
+    let catalog = bevy_cauldron::catalog::Catalog::scan(&made).unwrap();
     assert_eq!(catalog.kits.len(), 1, "one empty kit, bound");
     assert_eq!(catalog.authoring.as_deref(), Some("meadow"));
 

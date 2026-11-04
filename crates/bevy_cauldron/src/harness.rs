@@ -250,7 +250,16 @@ pub fn install_font(app: &mut App, root: &Path) -> Result<(), String> {
 
 /// [`install_font`] on a running world, for a project opened while the app runs ([`crate::project_assets`]).
 /// With no project (`None`) the face compiled into this crate is installed.
+///
+/// **Installed once per process.** Bevy's text pipeline registers a font asset the first time it sees its id (`load_font_assets_into_font_collection`
+/// keeps the ids it has registered) and gives the asset the alias that handles resolve through. An asset put over an id it already registered
+/// has no alias and is never registered, so every `Text` using the default handle draws nothing — the editor opened from the home after the
+/// home itself was drawn. So a second call leaves the first face in place: the face a project opened in a running process draws in is the one
+/// the process started with.
 pub fn install_font_in(world: &mut World, root: Option<&Path>) -> Result<(), String> {
+    if world.contains_resource::<EditorFont>() {
+        return Ok(());
+    }
     let bytes = match root {
         Some(root) => {
             let path = root.join("assets/fonts/FiraMono-Regular.ttf");
@@ -265,7 +274,28 @@ pub fn install_font_in(world: &mut World, root: Option<&Path>) -> Result<(), Str
     world
         .resource_mut::<Assets<Font>>()
         .insert(AssetId::default(), Font::from_bytes(bytes))
-        .map_err(|e| format!("cannot install the editor font: {e}"))
+        .map_err(|e| format!("cannot install the editor font: {e}"))?;
+    world.insert_resource(EditorFont);
+    Ok(())
+}
+
+/// The editor's face is installed over the default font asset ([`install_font_in`] says why only once).
+#[derive(Resource)]
+struct EditorFont;
+
+/// **Stands a stepped editor on the project page of `root`**, as opening a project from the home does: the home's plugins are added when
+/// they are not, the asset root and the agent bridge's root point at the project, and the screen is the page. For tests, which drive the
+/// page by its widgets and by [`crate::project_page::PageAction`].
+pub fn stand_on_the_project_page(app: &mut App, root: &Path) {
+    if !app.is_plugin_added::<crate::launcher::LauncherPlugin>() {
+        app.add_plugins(crate::launcher::LauncherPlugin);
+    }
+    app.world().resource::<crate::project_assets::ProjectRoot>().set(Some(root.to_path_buf()));
+    app.insert_resource(crate::project_assets::PointedAt { root: root.to_path_buf() });
+    app.world_mut().resource_mut::<NextState<crate::screen::Screen>>().set(crate::screen::Screen::Project);
+    for _ in 0..4 {
+        app.update();
+    }
 }
 
 /// **A stepped editor**: the real plugins, no window, no device, no sound.
@@ -396,4 +426,26 @@ pub fn build_headless_at(
     }
     install_font(&mut app, &root)?;
     Ok(app)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **A font installed over the one already registered is not installed.** The text pipeline names an asset (its alias) the frame it first
+    /// registers it; an asset put over that id arrives with no alias and every `Text` on the default handle then draws nothing. This is what an
+    /// editor opened from the home looked like: text everywhere in the ECS, none on screen.
+    #[test]
+    fn a_second_font_install_leaves_the_registered_face_alone() {
+        let mut world = World::new();
+        world.init_resource::<Assets<Font>>();
+        install_font_in(&mut world, None).unwrap_or_else(|e| panic!("{e}"));
+        // The text pipeline's own naming of a font it registered.
+        world.resource_mut::<Assets<Font>>().get_mut(AssetId::default()).unwrap_or_else(|| panic!("the face is installed")).alias = "registered".to_owned();
+
+        install_font_in(&mut world, Some(Path::new("/nonexistent/project"))).unwrap_or_else(|e| panic!("{e}"));
+
+        let alias = world.resource::<Assets<Font>>().get(AssetId::default()).map(|f| f.alias.clone());
+        assert_eq!(alias.as_deref(), Some("registered"), "the registered face was replaced by one the pipeline never saw");
+    }
 }

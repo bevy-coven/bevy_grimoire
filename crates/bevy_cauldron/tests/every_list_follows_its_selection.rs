@@ -144,15 +144,17 @@ fn every_scrollable_list_has_something_that_follows_its_selection() {
         }
     }
 
-    // **Seven, and stated as a number rather than as "some".** The floor was three, which is what
+    // **Four, and stated as a number rather than as "some".** It was seven while the chooser's three columns were followed lists; the
+    // project page's cards are a grid of focusable buttons that gooey's own navigation scrolls into view, so there is no list to follow.
+    // The floor was three, which is what
     // let the reflow above hide: three of the ten call sites were still on one line, so the
     // assertion passed while the parser had gone blind to the rest. It is the real count now, so
     // slack cannot absorb the next one — and the three exempt panes (`DetailPane`, `JournalList`,
     // `SlotPane`, each carrying `FOLLOW-OK:` at its spawn) are deliberately not in it.
     assert_eq!(
         markers.len(),
-        7,
-        "expected the editor's seven followed scrollable lists; found {markers:?}. If a list was \
+        4,
+        "expected the editor's four followed scrollable lists; found {markers:?}. If a list was \
          added, raise this number with it; if `scroll_list` was renamed, rename it here too — a \
          ratchet that silently matches nothing is worse than none."
     );

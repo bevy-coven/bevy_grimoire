@@ -144,21 +144,17 @@ fn a_list_survives_a_round_trip_through_its_file() {
 }
 
 /// **Every way into the editor records the opening**, because `open_the_door` is the one way in: an
-/// agent's `map_open` from the menu goes through it as a person's Enter does.
+/// agent's `map_open` from the project page goes through it as a person's Enter does.
 #[test]
-fn entering_the_editor_from_the_menu_records_the_project() {
+fn entering_the_editor_from_the_project_page_records_the_project() {
     let s = Scratch::new("enter");
     let root = fixtures::Fixture::new("recent_enter").descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
-    app.add_plugins(bevy_cauldron::chooser::ChooserPlugin { root: root.clone(), preselect: None });
     app.insert_resource(RecentProjects(s.file()));
-    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Menu);
-    for _ in 0..5 {
-        app.update();
-    }
-    assert!(!s.file().exists(), "being on the menu opens nothing");
+    bevy_cauldron::harness::stand_on_the_project_page(&mut app, &root);
+    assert!(!s.file().exists(), "being on the project page opens nothing");
 
     let id = match app.world().resource::<bevy::remote::RemoteMethods>().get("grimoire/operation_apply") {
         Some(bevy::remote::RemoteMethodSystemId::Instant(id)) => *id,

@@ -110,10 +110,10 @@ class Run:
         """Can an agent start working in the map it just made — on the editor it already has?
 
         This step found E-067 (`door_open` takes a door and a tab, and nothing took a map's name) and
-        then E-078 (`map_open` exists and applies from the menu, and the window stayed on the menu).
+        then E-078 (`map_open` exists and applies from the project page, and the window stayed on it).
         Until E-078 it **relaunched the editor on the map** and passed on that, recording the relaunch
         as a `workaround` — which meant the loop's headline number measured the script rather than the
-        product. The relaunch is gone: `map_open` applied on the menu now enters the editor on that
+        product. The relaunch is gone: `map_open` applied on the project page now enters the editor on that
         map, and the map arriving is what the step waits for on the **same** editor.
         """
         t0 = time.time()
@@ -123,8 +123,8 @@ class Run:
         # **The crossing is the screen's, so the screen is what is waited for.**
         #
         # A predicate on the map's name alone would pass on a build with the defect this step is
-        # here to catch: `map_open` on the menu inserted `Project` and `OpenMap` and left the screen
-        # at `Menu`, so `grimoire/state` reported `map.name == courtyard` with the MAPS column in
+        # here to catch: `map_open` on the project page inserted `Project` and `OpenMap` and left the screen
+        # at the project page, so `grimoire/state` reported `map.name == courtyard` with the maps in
         # front of the person — measured 2026-10-25, and found by the review rather than by the
         # script. `screen` is `grimoire/state`'s own answer for exactly this, and the map's name is
         # kept beside it because entering the *wrong* map is the other way to be wrong.
@@ -137,7 +137,7 @@ class Run:
         except TimeoutError:
             return _record(
                 self.steps, "open_map", "fail",
-                "map_open applied but the editor stayed on the menu",
+                "map_open applied but the editor stayed on the project page",
                 (time.time() - t0) * 1000,
             )
         return _record(
@@ -278,7 +278,7 @@ def run(source, out, glb=None):
     report = {"source": str(source), "scratch": str(scratch), "glb": glb,
               "load_avg_1m": os.getloadavg()[0], "request": REQUEST}
 
-    editor = Editor(scratch)  # the menu: no door, because the map does not exist yet
+    editor = Editor(scratch)  # the project page: no door, because the map does not exist yet
     # **Every editor this run starts, so a failure closes all of them.** `Run` holds its list, and a
     # step that ever starts a second process is reaped by the same loop.
     run_ = None
@@ -290,7 +290,7 @@ def run(source, out, glb=None):
         # raced the first frame and the first step reported a BRP timeout under load. The
         # predicate is the call the next step actually makes.
         # `grimoire/project_root` answers from the moment the bridge's plugin is added, and that is
-        # this editor's own definition of "the menu is up" — the same predicate the project-root guard
+        # this editor's own definition of "the project page is up" — the same predicate the project-root guard
         # uses. Waiting on `grimoire/operation_list` instead made the script give up after 120 s while
         # the editor was still starting: a method that is not registered yet raises on every poll, and
         # the loop treated "not yet" as "never".

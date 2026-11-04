@@ -9,8 +9,6 @@
 //! - **A successful rename removes the old file.** One map, one file, one name. Before this, a
 //!   rename left two files answering to one map, and the stale one refused to open with a message
 //!   about a schema mismatch.
-//! - **`Escape` leaves no draft**, so the chooser's panel describes the highlighted map.
-//! - **A settings click sets the field**, so clicking `NAME` opens `NAME`.
 //!
 //! The core's half — the no-replace primitive itself — is in
 //! `bevy_grimoire_core/tests/a_rename_never_replaces.rs`.
@@ -174,7 +172,7 @@ fn a_rename_that_cannot_remove_the_old_file_names_the_old_file() {
 /// **A rename changes the name and nothing else.**
 ///
 /// The metamorphic test, and it is about the **name**, not the bytes. Every map save re-serializes
-/// the file — the chooser's own rename has always done so, through the same
+/// the file — the project page's rename has always done so, through the same
 /// `ron::ser::to_string_pretty` — so a byte-for-byte round trip is not a property this editor has
 /// and never promised. **A rename's promise is narrower and it is the one that matters: one map,
 /// one file, one name, and the name agrees with the file's own `name:` field.**
@@ -215,57 +213,5 @@ fn a_rename_changes_the_name_and_nothing_else() {
     assert!(
         text.contains("name: \"m\""),
         "the file's own name does not agree with its filename:\n{text}"
-    );
-}
-
-/// **`Escape` from a name field leaves no draft.**
-///
-/// The defect, measured at the keyboard: one `Escape` too few left a `New::Map` draft alive, and
-/// `map_rows`' `(Some(New::Map(d)), _)` arm kept winning over the map the cursor was on — so the
-/// MAP INFO panel read *"NEW MAP IN kit / NAME (needs a name) / BOUNDS 10 x 4 x 10"* while the
-/// MAPS list beside it highlighted a real map with 727 pieces.
-#[test]
-fn escape_from_a_name_field_leaves_no_draft() {
-    let src = std::fs::read_to_string("src/chooser.rs").expect("chooser.rs is there");
-    // **The field handler's Escape clears the draft.** It is the only key that reaches that
-    // handler, and the chord handler's Escape is stopped by `swallowed`.
-    let field_escape = src
-        .split("Key::Escape => {")
-        .nth(1)
-        .expect("the field handler has an Escape arm")
-        .split("Key::Backspace")
-        .next()
-        .expect("the Escape arm ends");
-    assert!(
-        field_escape.contains("chooser.creating = None"),
-        "the name field's Escape does not clear the draft it belongs to, so a `New::Map` survives and \\
-         the MAP INFO panel keeps describing a map that does not exist while the list highlights a \\
-         real one. The field handler's Escape:\\n{field_escape}"
-    );
-}
-
-/// **A settings click sets the field the row names.**
-///
-/// The defect, measured at the keyboard: clicking the `NAME` row's value opened the `ORIGIN`
-/// row's field, and the author's map name went into the origin — *"0 x 0 x 0town_block_ is not
-/// three numbers"*.
-#[test]
-fn a_settings_click_sets_the_field() {
-    let src = std::fs::read_to_string("src/chooser.rs").expect("chooser.rs is there");
-    assert!(
-        src.contains("RowPane::Settings => {"),
-        "the settings click does not have its own arm, so it cannot set the field"
-    );
-    let arm = src
-        .split("RowPane::Settings => {")
-        .nth(1)
-        .expect("the settings arm exists")
-        .split("RowPane::Projects")
-        .next()
-        .expect("the arm ends");
-    assert!(
-        arm.contains("chooser.field ="),
-        "the settings click moves the focus but not the field, so the row you click is not the \\
-         field you get. The arm:\\n{arm}"
     );
 }

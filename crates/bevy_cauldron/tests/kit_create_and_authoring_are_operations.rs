@@ -1,14 +1,16 @@
 //! **An agent can make a kit and say where new work lands, and the project chooser's two verbs are the
 //! same operations (E-002, #129 slice 20).**
 //!
-//! The menu's `+ new kit` row and `A` on the kits column wrote `assets/grimoire` with writes of their own,
+//! The chooser's `+ new kit` row and `A` on the kits column wrote `assets/grimoire` with writes of their own,
 //! so an agent could import meshes and place pieces and never start the kit they belong in. They are now
 //! `kit_create` and `kit_set_authoring`. The agent tests go through the registered BRP methods; the person
-//! tests use the chooser's own `make_it` and the operation the `A` key dispatches, from a menu that has a
+//! tests use the project page's New kit dialog and its Make default item, from a page that has a
 //! root and no loaded project, and assert on `kits.ron`, the files and the log.
 
 use bevy::prelude::*;
-use bevy_cauldron::chooser::{Catalog, Chooser};
+use bevy::ui_widgets::{Activate, ValueChange};
+use bevy_gooey::FieldProblem;
+use bevy_cauldron::project_page::{CreateButton, NameField, PageAction, PageDialog};
 use bevy_cauldron::harness;
 use bevy_cauldron::ops::{self, Entry};
 use bevy_cauldron::project::Project;
@@ -156,26 +158,50 @@ fn an_agent_chooses_the_authoring_kit_and_one_undo_chooses_it_back() {
     let _ = app.world().resource::<Project>();
 }
 
-/// **The menu's `+ new kit` row is one `kit_create` line stamped as a person's, in the root's log**, from a
-/// screen that has a root and no loaded project.
+/// **The page's New kit dialog is one `kit_create` line stamped as a person's, in the root's log**, from a screen that has a root and no
+/// loaded project.
 #[test]
-fn the_menus_new_kit_row_makes_the_kit_through_the_operation() {
-    let root = fixtures::Fixture::new("kit-menu").descriptor("site/wall", "alpha").build("m");
-    let catalog = Catalog::scan(&root).unwrap_or_else(|e| panic!("{e}"));
-    let mut chooser = Chooser::new(root.clone(), catalog, None);
+fn the_pages_new_kit_dialog_makes_the_kit_through_the_operation() {
+    let root = fixtures::Fixture::new("kit-page").descriptor("site/wall", "alpha").build("m");
+    let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    harness::stand_on_the_project_page(&mut app, &root);
     let lines = log_at(&root).len();
 
-    bevy_cauldron::chooser::make_kit_for_test(&mut chooser, "cellar").unwrap_or_else(|e| panic!("{e}"));
+    make_kit(&mut app, "cellar");
 
-    assert!(root.join("assets/grimoire/cellar/library.ron").exists(), "the row made no kit");
+    assert!(root.join("assets/grimoire/cellar/library.ron").exists(), "the dialog made no kit");
     assert!(kits_ron(&root).contains("cellar"), "kits.ron does not bind it");
     let entries = log_at(&root);
-    assert_eq!(entries.len(), lines + 1, "one row is one log line");
+    assert_eq!(entries.len(), lines + 1, "one dialog is one log line");
     let last = entries.last().expect("a line");
     assert_eq!(last.op, "kit_create");
     assert_eq!(format!("{:?}", last.source), "Human", "a person's kit must be stamped as a person's");
+    assert!(
+        app.world_mut().query_filtered::<(), With<PageDialog>>().iter(app.world()).next().is_none(),
+        "and the dialog is gone"
+    );
 
-    let again = bevy_cauldron::chooser::make_kit_for_test(&mut chooser, "cellar");
-    assert!(again.is_err(), "a second kit of one name was made");
+    // A second kit of that name is a problem on the field, Create makes nothing, and no line is logged.
+    make_kit(&mut app, "cellar");
     assert_eq!(log_at(&root).len(), lines + 1, "a refusal logged a line");
+    let problem = app.world_mut().query_filtered::<&FieldProblem, With<NameField>>().iter(app.world()).next().map(|p| p.text.clone());
+    assert!(problem.is_some_and(|p| p.contains("already here")), "the dialog says why, beside the name");
+}
+
+/// Opens the New kit dialog, types `name` and presses Create.
+fn make_kit(app: &mut App, name: &str) {
+    app.world_mut().write_message(PageAction::NewKit);
+    for _ in 0..3 {
+        app.update();
+    }
+    let field = app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).expect("the dialog has a name field");
+    app.world_mut().commands().trigger(ValueChange::<String> { source: field, value: name.to_owned(), is_final: false });
+    for _ in 0..3 {
+        app.update();
+    }
+    let create = app.world_mut().query_filtered::<Entity, With<CreateButton>>().single(app.world()).expect("and a Create button");
+    app.world_mut().commands().trigger(Activate { entity: create });
+    for _ in 0..3 {
+        app.update();
+    }
 }

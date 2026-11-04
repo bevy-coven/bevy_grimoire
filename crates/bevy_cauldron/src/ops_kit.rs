@@ -1,8 +1,8 @@
 //! **Making a kit and choosing where new work lands, as registered operations** (E-002, #129 slice 20):
 //! `kit_create` and `kit_set_authoring`.
 //!
-//! The project chooser made a kit (`chooser::create_kit`) and pointed `authoring` at one
-//! (`chooser::set_authoring`) with writes of its own, so an agent could place pieces and import meshes
+//! The project chooser made a kit (`catalog::create_kit`) and pointed `authoring` at one
+//! (`catalog::set_authoring`) with writes of its own, so an agent could place pieces and import meshes
 //! and never start the kit they belong in. Both now dispatch these from the menu, which has a root and no
 //! loaded project, so the log line goes in the root's `oplog.jsonl` (the way `map_create`'s does).
 //!
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::chooser::{GRIMOIRE_DIR, new_kit_files};
+use crate::catalog::{GRIMOIRE_DIR, new_kit_files};
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
 
 fn root(ctx: &Ctx) -> Result<PathBuf, Refusal> {
@@ -185,7 +185,7 @@ impl Operation for KitCreate {
         }
         let (root, name) = Self::plan_create(ctx, &p)?;
         let prior = kits_text(&root)?;
-        let dir = crate::chooser::create_kit(&root, &name).map_err(Refusal::new)?;
+        let dir = crate::catalog::create_kit(&root, &name).map_err(Refusal::new)?;
         let after = json!({"kit": name, "kits": kits_text(&root)?, "path": dir.to_string_lossy()});
         Ok(Outcome {
             summary: format!("made the empty kit `{name}` and bound it"),
@@ -297,7 +297,7 @@ impl Operation for KitSetAuthoring {
             ("new work lands in no particular kit again".to_owned(), None)
         } else {
             let kit = self.plan(ctx, params)?["authoring"].as_str().unwrap_or_default().to_owned();
-            crate::chooser::set_authoring(&root, &kit).map_err(Refusal::new)?;
+            crate::catalog::set_authoring(&root, &kit).map_err(Refusal::new)?;
             (format!("new work lands in `{kit}`"), Some(kit))
         };
         let inverse = match &before {

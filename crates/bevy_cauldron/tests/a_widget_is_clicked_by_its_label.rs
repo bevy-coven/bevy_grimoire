@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use bevy_cauldron::chooser::MenuOpening;
+use bevy_cauldron::project_assets::PointedAt;
 use bevy_cauldron::launcher::LauncherPlugin;
 use bevy_cauldron::recent::{self, RecentProjects};
 use bevy_cauldron::screen::Screen;
@@ -53,11 +53,11 @@ fn a_recent_project_is_opened_by_clicking_its_name() {
         }
     }
     assert_eq!(
-        app.world().resource::<MenuOpening>().root,
+        app.world().resource::<PointedAt>().root,
         alpha,
         "a click on the row named alpha opens that folder in this process (focus is on {:?})",
         focused_label(&app)
     );
-    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Menu);
+    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Project);
     let _ = std::fs::remove_dir_all(&dir);
 }

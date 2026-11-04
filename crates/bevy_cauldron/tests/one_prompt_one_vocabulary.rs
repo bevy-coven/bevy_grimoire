@@ -5,7 +5,7 @@
 //!
 //! | asked by | agree | refuse | third answer |
 //! |---|---|---|---|
-//! | `chooser` delete / quit | `Y` | `Esc` | — |
+//! | chooser delete / quit | `Y` | `Esc` | — |
 //! | `editor` leaving a dirty map | `S` | `Esc` | `D` discards |
 //! | `labels` re-label judged pieces | `Enter` | `Esc` | — |
 //!
@@ -17,7 +17,7 @@
 //! `ButtonInput` instead of asking `confirm`. That is invisible to any test that only drives the
 //! prompts that exist today, and it is exactly how the second vocabulary appeared the first time.
 //!
-//! The same argument `the_way_back_actually_goes_back.rs` makes for `Screen::Menu`, and
+//! The same argument `the_way_back_actually_goes_back.rs` makes for `Screen::Project`, and
 //! `compose_is_read_only.rs` for writes.
 
 use std::path::Path;
@@ -29,14 +29,13 @@ fn read(rel: &str) -> String {
 
 /// **The features that ask questions go through `confirm` and hold no prompt state of their own.**
 ///
-/// `Chooser::ask` and `LabelQueue::ask` survive on purpose — they carry the *subject* (which map is
+/// `ProjectPage::asking` and `LabelQueue::ask` survive on purpose — they carry the *subject* (which map is
 /// pending, which two target sets the walk would take), which the modal deliberately does not know.
 /// What must not survive is a second place that decides which key means yes.
 #[test]
 fn every_prompt_is_raised_through_confirm() {
     for (file, asked) in [
-        ("src/chooser.rs", "Asked::DeleteEntry"),
-        ("src/chooser.rs", "Asked::QuitApp"),
+        ("src/project_page.rs", "Asked::DeleteEntry"),
         ("src/editor.rs", "Asked::LeaveMap"),
         ("src/labels.rs", "Asked::RelabelJudged"),
     ] {
@@ -61,8 +60,7 @@ fn every_prompt_is_raised_through_confirm() {
 /// up**, which `Confirm::is_open` gates rather than any spelling of the key.
 #[test]
 fn only_confirm_reads_the_answer_keys() {
-    // `chooser.rs` is exempt for `KeyY` only in its own tests, which drive the old hint strings.
-    for file in ["src/chooser.rs", "src/editor.rs", "src/labels.rs", "src/tiles.rs"] {
+    for file in ["src/project_page.rs", "src/editor.rs", "src/labels.rs", "src/tiles.rs"] {
         let src = read(file);
         let code = src
             .split("#[cfg(test)]")

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_cauldron::chooser::MenuOpening;
+use bevy_cauldron::project_assets::PointedAt;
 use bevy_cauldron::launcher::{Launcher, LauncherPlugin, MissingCard, OpenRequest, ProjectCard};
 use bevy_cauldron::picker::{PickFor, Picked};
 use bevy_cauldron::ui::AccentButton;
@@ -96,7 +96,7 @@ fn screen_of(app: &App) -> Screen {
 
 /// The folder the asset server and the chooser are pointed at.
 fn pointed_at(app: &App) -> (Option<PathBuf>, PathBuf) {
-    (app.world().resource::<ProjectRoot>().current(), app.world().resource::<MenuOpening>().root.clone())
+    (app.world().resource::<ProjectRoot>().current(), app.world().resource::<PointedAt>().root.clone())
 }
 
 /// Every `Text` on screen.
@@ -132,7 +132,7 @@ fn the_home_lists_two_recent_projects_as_cards_and_opens_the_second_by_its_name(
     assert_eq!(screen_of(&app), Screen::Launcher, "and opens nothing");
     press(&mut app, "alpha");
     assert_eq!(pointed_at(&app), (Some(alpha.clone()), alpha.clone()), "the window opens that folder, in this process");
-    assert_eq!(screen_of(&app), Screen::Menu, "and goes on to its kits and maps");
+    assert_eq!(screen_of(&app), Screen::Project, "and goes on to its kits and maps");
     let again = recent::Recent::load(&s.0.join("recent.ron")).unwrap().listing();
     assert_eq!(again[0].project.path, alpha, "opening a project moves it to the top of the list");
 }

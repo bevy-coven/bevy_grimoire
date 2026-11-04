@@ -3,7 +3,7 @@
 //! The brief's second step is *"the in-editor agent turns that into typed editor operations"*, and
 //! its first is a developer describing what they want. "Make me a 40 metre courtyard with a note"
 //! is the simplest request in that loop, and until now there was **no tool that could do it**: the
-//! chooser wrote a map's file directly (`chooser::create_map`), outside the registry, so the only way
+//! chooser wrote a map's file directly (`catalog::create_map`), outside the registry, so the only way
 //! to make one was to be a person at the keyboard on the menu screen.
 //!
 //! That is the parity gap this file closes. `map_create` makes a map the way every other operation
@@ -163,27 +163,22 @@ fn map_create_is_recorded_in_the_log() {
     );
 }
 
-/// **The menu shows a map it did not make itself.**
+/// **The project page shows a map it did not make itself.**
 ///
-/// The list rescanned only when the menu acted, so a map written by an agent left the MAPS column
-/// showing what was there before — measured 2026-10-24, where an MCP client made `courtyard` and the
-/// menu still drew `+ new map` alone. The file was on disk and the screen said nothing had happened.
-///
-/// **Read from the chooser's own catalog**, which is the list the column draws: a map appearing there
-/// is a map the person can see and press Enter on.
+/// The list rescanned only when the page acted, so a map written by an agent left the maps showing what was there before — measured
+/// 2026-10-24, where an MCP client made `courtyard` and the screen still drew `+ new map` alone. The scan is what the page draws from,
+/// so a map appearing in it is a map the person can see (`the_page_follows_a_map_an_agent_makes` pins the redraw).
 #[test]
-fn the_menu_shows_a_map_an_agent_made() {
-    use bevy_cauldron::chooser::{Catalog, Chooser, GRIMOIRE_DIR, MAPS_DIR};
+fn the_catalog_finds_a_map_an_agent_made() {
+    use bevy_cauldron::catalog::{Catalog, GRIMOIRE_DIR, MAPS_DIR};
 
     let root = fixtures::Fixture::new("map_shows_up")
         .descriptor("site/wall", "alpha")
         .build("m");
     let dir = root.join(GRIMOIRE_DIR).join(MAPS_DIR);
-    let catalog = Catalog::scan(&root).unwrap_or_else(|e| panic!("{e}"));
-    let before = catalog.maps.len();
+    let before = Catalog::scan(&root).unwrap_or_else(|e| panic!("{e}")).maps.len();
 
-    // A caller that writes the file and never touches the `Chooser` — which is exactly what the MCP
-    // path is.
+    // A caller that writes the file and never touches the page — which is exactly what the MCP path is.
     let text = "(
     version: 7,
     name: \"annexe\",
@@ -198,16 +193,6 @@ fn the_menu_shows_a_map_an_agent_made() {
     std::fs::write(dir.join("annexe.map.ron"), text).unwrap_or_else(|e| panic!("{e}"));
 
     let after = Catalog::scan(&root).unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(
-        after.maps.len(),
-        before + 1,
-        "a map written into the directory is a map the menu's next scan finds; if this fails the \
-         fault is in `Catalog::scan`, not in the column"
-    );
-    // And `Chooser` holds that catalog, so the column draws it.
-    let c = Chooser::new(root.clone(), after, None);
-    assert!(
-        c.catalog.maps.iter().any(|m| m.name == "annexe"),
-        "the chooser the column reads does not hold the map that is on disk"
-    );
+    assert_eq!(after.maps.len(), before + 1, "a map written into the directory is a map the next scan finds");
+    assert!(after.maps.iter().any(|m| m.name == "annexe"));
 }

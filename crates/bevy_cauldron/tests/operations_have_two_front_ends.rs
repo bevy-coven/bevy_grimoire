@@ -32,7 +32,7 @@
 //! operations.
 
 use bevy_cauldron::keys::Action;
-use bevy_cauldron::ops::{CHOOSER_ENTRY_POINTS, UI_ENTRY_POINTS};
+use bevy_cauldron::ops::{PAGE_ENTRY_POINTS, UI_ENTRY_POINTS};
 
 use crate::fixtures;
 
@@ -56,7 +56,7 @@ use crate::fixtures;
 /// vocabulary is still the operation's, and `grimoire_list_operations` says what the names are.
 ///
 /// **The UI entry-point tables are product code** (`ops::UI_ENTRY_POINTS` and
-/// `ops::CHOOSER_ENTRY_POINTS`, E-086), so a loop pass adds an operation and its UI row in one
+/// `ops::PAGE_ENTRY_POINTS`, E-086), so a loop pass adds an operation and its UI row in one
 /// commit; this file reads them and the ratchet is unchanged.
 const BRP_COMMANDS: &[&str] = &[
     "grimoire/operation_list",
@@ -476,14 +476,14 @@ fn every_operation_has_a_ui_entry_point_and_the_other_way_round() {
         !registry.is_empty(),
         "the registry is empty, so the parity rules are being enforced against nothing"
     );
-    // **Two screens, both scanned.** The chooser is a second place a person changes state, and the
+    // **Two screens, both scanned.** The project page is a second place a person changes state, and the
     // walk only read `editor.rs` — so `map_create` could have had a dialog that wrote the file
     // itself and this test would not have seen it (E-008). A UI path is a UI path whichever screen
     // it is on.
     // Both are read by `ui_source` below; the two bindings were the scan's old shape and are gone.
     let ui: Vec<(&str, &str)> = UI_ENTRY_POINTS
         .iter()
-        .chain(CHOOSER_ENTRY_POINTS.iter())
+        .chain(PAGE_ENTRY_POINTS.iter())
         .copied()
         .collect();
     let mut without = Vec::new();

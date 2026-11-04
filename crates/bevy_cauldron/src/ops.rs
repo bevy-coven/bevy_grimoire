@@ -631,12 +631,12 @@ pub trait Operation: 'static {
 ///
 /// # Why this is an operation and not just the chooser's function
 ///
-/// `chooser::create_map` writes a map's file, and it was the only way to make one: a person, at the
+/// `catalog::create_map` writes a map's file, and it was the only way to make one: a person, at the
 /// keyboard, on the menu screen. The brief's second step is *"the in-editor agent turns that into
 /// typed editor operations"*, and the first thing anyone asks for is a place to work — so the
 /// simplest request in the whole loop had no tool behind it.
 ///
-/// **The write itself is not duplicated.** This calls the same `chooser::create_map`, so the naming
+/// **The write itself is not duplicated.** This calls the same `catalog::create_map`, so the naming
 /// rule, the refusal for a name already in use, and the validate-then-atomic write are one
 /// implementation with two front ends rather than two that agree by habit.
 ///
@@ -876,7 +876,7 @@ pub mod map_create {
             };
             // **The chooser's own function, so the two front ends cannot drift.** Its refusals are
             // already sentences an author can act on, and it is the write every other path uses.
-            let path = crate::chooser::create_map(&maps_dir, &name, bounds, origin, note.clone())
+            let path = crate::catalog::create_map(&maps_dir, &name, bounds, origin, note.clone())
                 .map_err(Refusal::new)?;
             let (x, y, z) = bounds;
             Ok(Outcome {
@@ -4459,19 +4459,18 @@ fn strings(value: &serde_json::Value, out: &mut Vec<String>) {
 /// mapper's twenty thousand lines for "which key writes a map's origin" is a heuristic and a
 /// heuristic that finds nothing is not a proof.
 ///
-/// **The menu's own entry points.** The second screen, and the one where a project's maps begin —
+/// **The project page's own entry points.** The screen where a project's maps begin —
 /// so the verb that makes one belongs here, because the editor has no map to make one from.
 ///
 /// **Product code, not test code (E-086).** The parity test
 /// (`tests/operations_have_two_front_ends.rs`) reads this table and [`UI_ENTRY_POINTS`], so a new
 /// operation and its UI row land in one commit, and the test still fails an operation without one.
-pub const CHOOSER_ENTRY_POINTS: &[(&str, &str)] = &[
-    // **The new-map dialog**, whose Enter dispatches `map_create` through `make_it`. The dialog is
-    // a front end: it collects the four fields and hands them to the operation, so the naming rule,
-    // the refusal for a name in use and the write are one implementation (E-008).
+pub const PAGE_ENTRY_POINTS: &[(&str, &str)] = &[
+    // **The new-map dialog**, whose Create dispatches `map_create`. The dialog is a front end: it collects the fields and hands
+    // them to the operation, so the naming rule, the refusal for a name in use and the write are one implementation (E-008).
     ("map_create", "\"map_create\""),
-    // **The `+ new kit` row and `A` on the kits column** (E-002, #129 slice 20) dispatch `kit_create` and
-    // `kit_set_authoring` from the menu, which has a root and no loaded project.
+    // **The New kit dialog and a kit's Make default item** (E-002, #129 slice 20) dispatch `kit_create` and `kit_set_authoring`
+    // from the project page, which has a root and no loaded project.
     ("kit_create", "\"kit_create\""),
     ("kit_set_authoring", "\"kit_set_authoring\""),
 ];

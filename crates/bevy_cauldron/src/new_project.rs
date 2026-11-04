@@ -3,13 +3,13 @@
 //!
 //! The checks are [`check`], one function over the three fields, so the words under a field, the reason beside
 //! Create and the refusal when Create is pressed anyway (a button that is only dimmed can still be activated by a
-//! script) are the same sentence. Creating writes `assets/grimoire` through [`crate::chooser::create_project_with`]
+//! script) are the same sentence. Creating writes `assets/grimoire` through [`crate::catalog::create_project_with`]
 //! and then opens the project the way a recent row does ([`crate::launcher::OpenRequest`]).
 //!
 //! # Templates
 //!
 //! `Empty` is a project with a vocabulary and no kit. `One empty kit` adds a first kit named after the project
-//! ([`crate::chooser::create_kit`]) so the chooser has something to author in. A template that copies a kit of the
+//! ([`crate::catalog::create_kit`]) so the chooser has something to author in. A template that copies a kit of the
 //! example project was the issue's first wording; it would copy the meshes the kit names too (90 files, tens of
 //! megabytes) into every new project, so it is left until a project can reference the example's meshes in place.
 
@@ -123,9 +123,9 @@ pub fn create(form: &NewProject) -> Result<PathBuf, String> {
     if let Some(reason) = problems.reason() {
         return Err(reason.to_owned());
     }
-    let dir = crate::chooser::create_project_with(Path::new(form.location.trim()), &form.name, VOCAB)?;
+    let dir = crate::catalog::create_project_with(Path::new(form.location.trim()), &form.name, VOCAB)?;
     if form.template == Template::OneKit
-        && let Err(e) = crate::chooser::create_kit(&dir, &folder_name(&form.name))
+        && let Err(e) = crate::catalog::create_kit(&dir, &folder_name(&form.name))
     {
         return Err(format!("{} was made, but its first kit was not: {e}", dir.display()));
     }
