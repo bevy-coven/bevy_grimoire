@@ -4260,6 +4260,10 @@ fn spawn_tab_strip(
                 },
                 OtherDoorMark,
             ))
+            // **A click on the name is the key.** The mark says where `=` goes, and a name that names
+            // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
+            // is never aimed at it there.
+            .observe(cross_on_click)
             .with_children(|m| {
                 m.spawn((
                     Text::new("the other door"),
@@ -4277,6 +4281,17 @@ fn spawn_tab_strip(
                 ));
             });
         });
+}
+
+/// **A click on the other door's name crosses to it**, by the one path `=` takes. Deferred, because
+/// the crossing takes the whole `World`; the `EditorState` check is for the same reason `click_tab`
+/// has it: a global pointer observer fires on every screen.
+fn cross_on_click(_click: On<PointerClick>, mut commands: Commands) {
+    commands.queue(|world: &mut World| {
+        if world.contains_resource::<crate::editor::EditorState>() {
+            crate::editor::cross_to_the_other_door(world);
+        }
+    });
 }
 
 /// **The mark that names the other door** — the cue the crossing hangs on.

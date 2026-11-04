@@ -418,3 +418,5 @@ mod background_jobs_show_and_can_be_stopped;
 mod a_row_click_while_filtering_arms_it;
 mod undressing_gives_the_editors_view_back;
 mod the_updater_offers_the_newest_release;
+mod modal_keys_do_not_reach_the_editor;
+mod a_click_on_the_other_door_crosses_to_it;

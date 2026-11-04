@@ -72,7 +72,36 @@ impl Plugin for MenuBarPlugin {
                 .after(FrameSystems)
                 .run_if(in_state(Screen::Editor)),
         )
-            .add_observer(on_menu_item_activate);
+        .add_systems(
+            Update,
+            take_the_escape_that_closed_a_menu
+                .after(bevy_gooey::GooeySystems::Navigate)
+                .before(crate::keys::Phase::Act)
+                .run_if(in_state(Screen::Editor)),
+        )
+        .add_observer(on_menu_item_activate);
+    }
+}
+
+/// **`Esc` that closes a menu is the menu's, not also the editor's back-out** (#287).
+///
+/// gooey closes an open menu on `Esc` in its `Navigate` set, and `Esc` is the editor's own `Cancel`,
+/// which peels the armed piece: one press put the menu away *and* the brush down. gooey does not say
+/// that it took the key, but it does take `MenuOpen` off the title when it closes the menu, so a press
+/// of `Esc` in the frame a menu closed is the press that closed it, and it is taken ([`take`]) before
+/// the verbs run. A menu closed by choosing a row or by a click elsewhere has no `Esc` in its frame, so
+/// nothing is taken from it.
+///
+/// [`take`]: crate::confirm::take
+fn take_the_escape_that_closed_a_menu(
+    mut closed: RemovedComponents<bevy_gooey::MenuOpen>,
+    mut keyboard: ResMut<ButtonInput<KeyCode>>,
+) {
+    // Drained every frame, so a menu closed by a click does not leave its removal waiting for a later
+    // `Esc`.
+    let a_menu_closed = closed.read().count() > 0;
+    if a_menu_closed {
+        crate::confirm::take(&mut keyboard, KeyCode::Escape);
     }
 }
 

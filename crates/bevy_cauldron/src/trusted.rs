@@ -104,6 +104,7 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
         format!("{}\nin {}", request.spec.display(), request.root.display()),
         "Allow this command",
         "Trust the whole project",
+        KeyCode::KeyP,
         "Not now",
     );
     state.trust.awaiting = Some(request);

@@ -97,14 +97,14 @@ pub enum Asked {
 
 impl Asked {
     /// **Does this question own the keyboard while it is up?** When it does, the census is quiet, like an
-    /// open text field, so the key that answers it is not also a verb on the tab behind it.
+    /// open text field, so the keys that answer it are not also verbs on the tab behind it *while it is
+    /// up* (the trust question's `Y`, `P` and `N` are all census keys).
     ///
-    /// **Only the trust question, because it is the only one whose answer keys are all census keys that
-    /// do something else and whose answer must not have a side effect.** The others are left as they
-    /// were: the agent's presentation lets Cmd+Z through by design (a person may take the turn back
-    /// while the card is up), and the leave-map flow's keys are read by the editor's own handlers. They
-    /// still share the leak this fixes for the trust question (`N` is a verb on the Map door): a
-    /// separate piece of work, not widened here because it changes behaviour the suite pins.
+    /// **Only the trust question, because it is the only one whose answer must not have a side effect
+    /// on any frame it is up.** The others are left as they were: the agent's presentation lets Cmd+Z
+    /// through by design (a person may take the turn back while the card is up). The *answering* press
+    /// is a different matter and is every question's: [`take`] consumes it, so no verb behind a
+    /// question reads the `N` that settled it (#286).
     pub fn owns_keyboard(self) -> bool {
         matches!(self, Asked::TrustCommand)
     }
@@ -142,6 +142,15 @@ pub enum Choice {
     No,
 }
 
+/// **The middle answer of a three-way question**: its button's words and the key that answers it.
+struct Alt {
+    label: String,
+    /// Answered by this key, as `Y` and `N` answer the other two. A key per question rather than one
+    /// for all, because the middle answer means a different thing in each (the trust question's whole
+    /// project is `P`, the leave question's discard is `D`).
+    key: KeyCode,
+}
+
 /// The question on screen, if there is one.
 struct Question {
     of: Asked,
@@ -150,8 +159,8 @@ struct Question {
     title: String,
     body: String,
     yes: String,
-    /// The middle button of a three-way question, answered by `P`.
-    alt: Option<String>,
+    /// The middle button of a three-way question.
+    alt: Option<Alt>,
     no: String,
 }
 
@@ -187,7 +196,8 @@ impl Confirm {
         self.raise(of, title.into(), body.into(), yes.into(), None, no.into());
     }
 
-    /// **Raise a question with a middle answer**, `P` or its button: yes, alt or no.
+    /// **Raise a question with a middle answer**, `alt_key` or its button: yes, alt or no.
+    #[allow(clippy::too_many_arguments)]
     pub fn ask_three(
         &mut self,
         of: Asked,
@@ -195,12 +205,14 @@ impl Confirm {
         body: impl Into<String>,
         yes: impl Into<String>,
         alt: impl Into<String>,
+        alt_key: KeyCode,
         no: impl Into<String>,
     ) {
-        self.raise(of, title.into(), body.into(), yes.into(), Some(alt.into()), no.into());
+        let alt = Alt { label: alt.into(), key: alt_key };
+        self.raise(of, title.into(), body.into(), yes.into(), Some(alt), no.into());
     }
 
-    fn raise(&mut self, of: Asked, title: String, body: String, yes: String, alt: Option<String>, no: String) {
+    fn raise(&mut self, of: Asked, title: String, body: String, yes: String, alt: Option<Alt>, no: String) {
         if self.question.is_some() {
             return;
         }
@@ -275,20 +287,29 @@ struct ConfirmButton(Choice);
 #[derive(Component)]
 struct ConfirmDialog(u64);
 
+/// **The system that reads the answer keys.** A reader of [`Confirm::answer`] that must see the answer
+/// in the frame the key was pressed orders itself `.after(ConfirmKeys)`; left unordered, the executor
+/// chose, and an answer arrived a frame late on the runs that chose wrong.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ConfirmKeys;
+
 pub struct ConfirmPlugin;
 
 impl Plugin for ConfirmPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Confirm>()
-            // **Before `Phase::Act`**, so the frame a question is answered is not also a frame in
-            // which the answer key does its ordinary job. `Y` is not bound in the editor's census
-            // today, but `N` is `RotateMeshX` on the Meshes tab — so without this ordering,
-            // refusing a prompt would also turn the focused mesh a quarter turn.
+            // **Before every phase of the keys** (`Sense`, `Text`, `Act`), so the frame a question is
+            // answered is not also a frame in which the answer key does its ordinary job. `Y` is not
+            // bound in the editor's census today, but `N` is `RotateMeshX` on the Meshes tab and
+            // `RenameMap` on the Map tab (a `Phase::Text` field opens on it) — so without this
+            // ordering, refusing a prompt would also turn the focused mesh or open the name field.
+            // `Before(Act)` alone left the text fields unordered against the answer: a race the
+            // multithreaded executor lost about one frame in three (#286).
             .add_systems(
                 Update,
-                (answer_by_key, sync_dialog)
+                (answer_by_key.in_set(ConfirmKeys), sync_dialog)
                     .chain()
-                    .before(crate::keys::Phase::Act),
+                    .before(crate::keys::Phase::Sense),
             )
             .add_systems(Last, |mut confirm: ResMut<Confirm>| confirm.owner_answered = false)
             .add_observer(answer_by_activate);
@@ -301,16 +322,44 @@ impl Plugin for ConfirmPlugin {
 /// identically on the menu, where the editor's key census does not exist at all. gooey's navigation
 /// plugin is added (menus need it, UI-36) and sends the dialog a `Cancel` on `Esc`, which nothing here
 /// observes; `Esc` is read here too, and is the answer.
-fn answer_by_key(keyboard: Res<ButtonInput<KeyCode>>, mut confirm: ResMut<Confirm>) {
+///
+/// **The key that answers is taken, not only read** (#286). `just_pressed` stays true for the whole
+/// frame, and the editor's verbs read the same `ButtonInput` later in it: measured at the keyboard,
+/// `N` to stay on a map also opened *Rename the map* (`N`), and `Esc` to refuse also reached whatever
+/// `Esc` backs out of. [`take`] clears the press, and this runs before `keys::Phase::Act`, so the verbs
+/// that run after see a key nobody pressed.
+fn answer_by_key(mut keyboard: ResMut<ButtonInput<KeyCode>>, mut confirm: ResMut<Confirm>) {
     if confirm.question.is_none() {
         return;
     }
-    if keyboard.just_pressed(KeyCode::KeyY) {
+    let alt_key = confirm.question.as_ref().and_then(|q| q.alt.as_ref()).map(|alt| alt.key);
+    if take(&mut keyboard, KeyCode::KeyY) {
         confirm.settle(true);
-    } else if keyboard.just_pressed(KeyCode::KeyP) && confirm.question.as_ref().is_some_and(|q| q.alt.is_some()) {
+    } else if alt_key.is_some_and(|key| take(&mut keyboard, key)) {
         confirm.settle_choice(Choice::Alt);
-    } else if keyboard.just_pressed(KeyCode::KeyN) || keyboard.just_pressed(KeyCode::Escape) {
+    } else if take(&mut keyboard, KeyCode::KeyN) | take(&mut keyboard, KeyCode::Escape) {
         confirm.settle(false);
+    }
+}
+
+/// **Was `key` pressed this frame? If so, nobody else sees it pressed.** One name for the rule every
+/// modal that closes on a key follows, so "read" and "consumed" cannot drift apart.
+pub fn take(keyboard: &mut ButtonInput<KeyCode>, key: KeyCode) -> bool {
+    let pressed = keyboard.just_pressed(key);
+    if pressed {
+        keyboard.clear_just_pressed(key);
+    }
+    pressed
+}
+
+/// **The letter a letter key is printed as**, for the line that names the keys. A question's middle
+/// answer is a letter key (`P`, `D`); anything else names itself by its `Debug` spelling, which is
+/// still the key's own name and not a blank.
+fn key_letter(key: KeyCode) -> String {
+    let name = format!("{key:?}");
+    match name.strip_prefix("Key") {
+        Some(letter) => letter.to_owned(),
+        None => name,
     }
 }
 
@@ -386,14 +435,17 @@ fn sync_dialog(
                             yes.insert(AutoFocus);
                         }
                         if let Some(alt) = &q.alt {
-                            answers.spawn((button(alt.clone()), ConfirmButton(Choice::Alt)));
+                            answers.spawn((button(alt.label.clone()), ConfirmButton(Choice::Alt)));
                         }
                         let mut no = answers.spawn((button(q.no.clone()), ConfirmButton(Choice::No)));
                         if destructive {
                             no.insert(AutoFocus);
                         }
                     });
-                    card.spawn(label(if q.alt.is_some() { "Y this one  ·  P the whole project  ·  N not now" } else { "Y proceeds  ·  N stops" }));
+                    card.spawn(label(match &q.alt {
+                        Some(alt) => format!("Y {}  ·  {} {}  ·  N {}", q.yes, key_letter(alt.key), alt.label, q.no),
+                        None => "Y proceeds  ·  N stops".to_owned(),
+                    }));
                 });
         });
 }

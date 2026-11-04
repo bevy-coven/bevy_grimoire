@@ -211,7 +211,10 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
     let state = KeymapDialog { scope: available.first().copied().unwrap_or_default(), ..default() };
     commands
         .spawn((dialog(), Name::new("keymap"), state, Built::default()))
-        .observe(|cancel: On<Cancel>, mut commands: Commands| {
+        .observe(|cancel: On<Cancel>, mut keyboard: ResMut<ButtonInput<KeyCode>>, mut commands: Commands| {
+            // **The `Esc` that closes this is this dialog's alone** (#286): taken, so the editor's
+            // own `Esc` (back out, ask to leave) does not also read it in the same frame.
+            crate::confirm::take(&mut keyboard, KeyCode::Escape);
             commands.entity(cancel.entity).despawn();
         })
         .with_children(|dialog| {

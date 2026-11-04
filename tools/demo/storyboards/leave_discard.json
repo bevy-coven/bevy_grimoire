@@ -1,0 +1,60 @@
+{
+ "name": "leave_discard",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "chunks": [
+  {
+   "seconds": 4.0
+  },
+  {
+   "seconds": 5.0
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.3,
+   "click_label": "lamp_tall",
+   "within": [
+    1030,
+    100,
+    1280,
+    700
+   ],
+   "caption": "person: arms lamp_tall and places one \u2014 the map has an unsaved edit"
+  },
+  {
+   "at": 1.4,
+   "click": [
+    640,
+    420
+   ]
+  },
+  {
+   "at": 2.6,
+   "key": "Escape",
+   "caption": "person: Esc puts the piece down"
+  },
+  {
+   "at": 2.0,
+   "cursor": [
+    200,
+    560
+   ]
+  },
+  {
+   "at": 3.4,
+   "key": "Escape",
+   "caption": "person: Esc again asks before leaving"
+  },
+  {
+   "at": 5.4,
+   "caption": "three answers: Save and leave (Y), Discard changes (D), Stay (N or Esc)"
+  },
+  {
+   "at": 7.2,
+   "key": "KeyD",
+   "caption": "person: D \u2014 leaves without writing the lamp"
+  }
+ ]
+}
