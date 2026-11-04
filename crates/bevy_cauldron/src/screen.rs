@@ -463,6 +463,9 @@ door_state![
     // The light map's shown/hidden and its last bake (#103): a view of this door's map, released with it.
     #[cfg(feature = "bevy_light_grid")]
     crate::light_overlay::LightOverlay,
+    // The inspector's pose view (UI-50, #236): which entity gooey's reflect inspector edits, which is
+    // this door's selection, so a door change starts afresh.
+    crate::inspector_view::PoseInspector,
     // The audio panel's buses, cues and selection (S-01): a view of this door's project's sound.
     #[cfg(feature = "bevy_siren")]
     crate::audio_panel::AudioPanel,
@@ -678,6 +681,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::environment::ClockScrub", Ownership::Door),
     #[cfg(feature = "bevy_light_grid")]
     ("bevy_cauldron::light_overlay::LightOverlay", Ownership::Door),
+    // **`Door`, like the selection it mirrors**: the entity the inspector edits belongs to the open
+    // project's map, and another door's map is another selection.
+    ("bevy_cauldron::inspector_view::PoseInspector", Ownership::Door),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.
     #[cfg(feature = "bevy_siren")]
