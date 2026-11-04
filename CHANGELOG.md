@@ -4,7 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
-- **304-first-run-walk** `ee55acd` A standing first-run walk drives a new person's first minutes under Xvfb and checks every step over BRP (#304) *No clip: a developer check with no surface of its own; proved by running tools/ux/first_run_walk.py (11 steps pass on main)*
+- **304-first-run-walk** `c0fddd8` A standing first-run walk drives a new person's first minutes under Xvfb and checks every step over BRP (#304) *No clip: a developer check with no surface of its own; proved by running tools/ux/first_run_walk.py (11 steps pass on main)*
 - **300-news-stills** `beee1cc` What's new shows each entry's picture in the installed app (#300) *No clip: release packaging; verified by the next release*
 - **294-project-font** `b959870` A project's own font applies when it is opened from the home (#294) *No clip: invisible unless a project carries its own font; proved by a_projects_own_font_applies_when_it_is_opened_in_the_same_process*
 - **301-add-meshes** `3a3a3d7` An empty project says it has no pieces and offers Add meshes; a dropped .glb joins the library and is ready to place (#301) *For you: A project with no pieces yet offers to add your own meshes, and you can also drop them onto the window.*<br><a href="docs/changelog/media/2026-11-04-301-add-meshes.mp4"><img src="docs/changelog/media/2026-11-04-301-add-meshes.png" width="320" alt="clip"></a>
