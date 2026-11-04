@@ -345,7 +345,13 @@ const SLOT_COL: f32 = 84.0;
 /// See [`SLOT_COL`].
 const KIND_COL: f32 = 30.0;
 
-fn spawn_panels(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
+fn spawn_panels(
+    mut commands: Commands,
+    frame: Res<crate::chrome::Frame>,
+    // **A list heading's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+) {
+    let heading = crate::chrome::ListHeadingInk::of(skin.as_deref());
     crate::chrome::panel_root(
         &mut commands,
         &frame,
@@ -401,7 +407,7 @@ fn spawn_panels(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
     )
     .insert(AnimRoot)
     .with_children(|p| {
-        crate::chrome::list_heading(p, "RIGS");
+        crate::chrome::list_heading_in(p, "RIGS", heading);
         crate::filter::spawn(p, crate::filter::Pane::Rigs, None);
         crate::chrome::scroll_list(p, (RigList, crate::chrome::Control(crate::keys::ControlId::Rigs)));
     });

@@ -152,6 +152,7 @@ mod the_editors_key_light_steps_aside_for_the_sun;
 mod the_menu_bar_holds_every_command;
 mod the_history_lists_only_the_rows_on_screen;
 mod a_batch_pose_is_one_undo;
+mod list_headings_take_the_skins_ink;
 mod the_inspector_edits_through_the_operation;
 mod the_stage_chips_take_the_skins_ink;
 mod after_edit_checks_say_what_they_found;

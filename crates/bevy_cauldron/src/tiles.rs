@@ -4545,7 +4545,13 @@ const TILES_PANEL_TABS: &[Mode] = &[Mode::Meshes, Mode::Tiles];
 /// panel that is not pinned to the bottom of the viewport is never reached. 318 candidates scrolled
 /// in a 300 px window. Now it is `chrome::scroll_list` inside a `full_height` panel, which is bounded
 /// by construction.
-fn spawn_tiles_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
+fn spawn_tiles_panel(
+    mut commands: Commands,
+    frame: Res<crate::chrome::Frame>,
+    // **A list heading's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+) {
+    let heading = crate::chrome::ListHeadingInk::of(skin.as_deref());
     crate::chrome::panel_root(
         &mut commands,
         &frame,
@@ -4638,7 +4644,7 @@ fn spawn_tiles_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
     // for, and the section headers ("IN LIBRARY", "NOT YET IMPORTED") still carry the live counts.
     // The heading is the panel's name, not a second count and not a running order.
     .with_children(|p| {
-        crate::chrome::list_heading(p, "PIECES");
+        crate::chrome::list_heading_in(p, "PIECES", heading);
         // **The batch, while it runs** — above the list it is filling. See `paint_label_progress`.
         p.spawn((
             Node {

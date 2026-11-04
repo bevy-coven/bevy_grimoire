@@ -3862,7 +3862,13 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 ///
 /// Right edge rather than a second column beside the keys: the left panel keeps its width, and the map
 /// stays visible in the band between them, which is the thing being authored.
-fn spawn_palette_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
+fn spawn_palette_panel(
+    mut commands: Commands,
+    frame: Res<crate::chrome::Frame>,
+    // **A list heading's ink, from the editor's skin** (UI-02, #210).
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+) {
+    let heading = crate::chrome::ListHeadingInk::of(skin.as_deref());
     crate::chrome::panel_root(
         &mut commands,
         &frame,
@@ -3879,7 +3885,7 @@ fn spawn_palette_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
     // sit over the tiles tab offering pieces that tab cannot place.
     .insert(crate::tiles::MapRoot)
     .with_children(|p| {
-        crate::chrome::list_heading(p, "PLACE");
+        crate::chrome::list_heading_in(p, "PLACE", heading);
         crate::filter::spawn(p, crate::filter::Pane::Palette, None);
         crate::chrome::scroll_list(p, (PaletteList, crate::chrome::Control(crate::keys::ControlId::Palette)));
     });

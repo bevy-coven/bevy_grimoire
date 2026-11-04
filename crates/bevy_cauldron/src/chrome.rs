@@ -2333,9 +2333,39 @@ fn forward_a_wheel_over_a_scrollbar(
 /// filter and list. One step louder than [`section`] (10 vs 9) because it heads the panel, not a
 /// block within one — the two roles the 2026-08-17 type-role decision named.
 pub fn list_heading(parent: &mut ChildSpawnerCommands, text: &str) {
+    list_heading_in(parent, text, ListHeadingInk::SHIPPED);
+}
+
+/// **The ink a list heading draws in** (UI-02, #210): the shipped [`LABEL`] where there is no skin, the
+/// skin's own label tone where there is one.
+///
+/// A separate value rather than a `Res<GooeySkin>` parameter because every caller builds its heading
+/// inside a `with_children` closure, where a system parameter cannot reach — the caller reads the skin
+/// once, beside the panel it is spawning, and passes the answer in. That is the same shape
+/// [`RowFills::of`] and [`BenchInk::of`] use.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ListHeadingInk(pub Color);
+
+impl ListHeadingInk {
+    /// The shipped palette, for a build with no skin.
+    pub const SHIPPED: ListHeadingInk = ListHeadingInk(LABEL);
+
+    /// The skin's ink where it has one, the shipped constant where it does not. `label` is a **tone**
+    /// rather than a field (gooey has none for a list's quiet heading), so a project's skin that names
+    /// it gets its own; the editor's own skin does not carry one, which keeps it byte-identical.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> ListHeadingInk {
+        match skin {
+            Some(skin) => ListHeadingInk(skin.tone("label").unwrap_or(LABEL)),
+            None => ListHeadingInk::SHIPPED,
+        }
+    }
+}
+
+/// **A list heading in a given ink.** The builder every panel uses; see [`ListHeadingInk`].
+pub fn list_heading_in(parent: &mut ChildSpawnerCommands, text: &str, ink: ListHeadingInk) {
     parent.spawn((
         Text::new(text.to_owned()),
-        TextColor(LABEL),
+        TextColor(ink.0),
         font(text::HEADING),
     ));
 }
