@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **cauldron-macos-app** `dd32932` Cauldron ships as a macOS app: a DMG per tagged release, the version on the launcher, and an Update to vX.Y.Z button that downloads the release, checks its checksum and signature, swaps the app and restarts into it<br><a href="docs/changelog/media/2026-11-04-cauldron-app-update.mp4"><img src="docs/changelog/media/2026-11-04-cauldron-app-update.png" width="320" alt="clip"></a>
 - **236-shift-click** `0ea921f` Shift-click on a piece selects it and adds more beside it, instead of picking it up (#236, #89) *No clip: the selection has no drawn marker yet: the inspector's mixed-value panel is the next slice and carries the clip; proved by shift_click_selects_pieces_beside_each_other.rs*
 - **236-selection-set** `1ac9173` The Map has a selection set: the lock's piece first, any number beside it *No clip: a session resource nothing draws yet, the base for the inspector's mixed values; proved by the_selection_set_the_inspector_reads*
 - **210-list-headings** `82049b0` The three list headings (PLACE, RIGS, PIECES) draw in the skin's ink, so a project's palette reaches the name of every list (#210) *No clip: invisible by design: the editor's own skin carries no label tone, so its look is unchanged; proved by list_headings_take_the_skins_ink.rs*
