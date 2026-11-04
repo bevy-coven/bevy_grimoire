@@ -433,7 +433,7 @@ fn load_on_entry(
     match std::fs::read_to_string(&path) {
         Ok(text) => match Rigs::parse(&text) {
             Ok(rigs) => {
-                bench.status.note(format!("{} rig(s) in {}", rigs.rigs.len(), path.display()));
+                bench.status.note(format!("{} rig(s) in this project", rigs.rigs.len()));
                 // **Check-all runs on open — for whatever is not already measured.** The audit
                 // should not wait to be asked for: unmeasured rigs enter the queue now (one
                 // measures per frame), so the stale badge and the C summary are warm from the
@@ -451,9 +451,12 @@ fn load_on_entry(
             }
             // The manifest is on disk and unreadable — the tab has nothing to show and the author
             // has a file to fix. Exactly what the block is for.
-            Err(e) => bench.status.problem(format!("{}: {e}", path.display())),
+            Err(e) => bench.status.problem(format!("rigs.ron: {e}")),
         },
-        Err(e) => bench.status.problem(format!("cannot read {}: {e}", path.display())),
+        // **A project with no rigs file has no rigs, which is not a fault** (#302): every new project
+        // starts so, and the panel said `cannot read <a path inside the project>` on its first open.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => bench.status.note("no rigs in this project yet".to_owned()),
+        Err(e) => bench.status.problem(format!("cannot read rigs.ron: {e}")),
     }
 }
 

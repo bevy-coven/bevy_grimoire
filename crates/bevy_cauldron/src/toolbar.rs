@@ -51,7 +51,7 @@ impl Plugin for ToolbarPlugin {
         )
         .add_systems(
             Update,
-            (the_group_follows_the_armed_tool, mark_the_armed_tool)
+            (the_group_follows_the_armed_tool, mark_the_armed_tool, label_the_primary_group)
                 .run_if(in_state(crate::screen::Screen::Editor)),
         )
         // After gooey has styled a chip, so the place it was given is the one this replaces.
@@ -221,14 +221,21 @@ pub fn spawn_toolbar(
                 let mut modes = parent.spawn((
                     ToolModes,
                     bevy_gooey::toggle_group(
-                        tools().iter().filter_map(|(id, _)| {
+                        std::iter::once(icons::index(PLACE_ICON).map(|index| {
+                            bevy_gooey::GroupOption::icon(
+                                bevy_gooey::IconSource::Atlas { image: image.clone(), layout: layout.clone(), index },
+                                bevy_gooey::Tooltip::new(PLACE_TITLE),
+                            )
+                        }))
+                        .flatten()
+                        .chain(tools().iter().filter_map(|(id, _)| {
                             let command = commands::by_id(id)?;
                             let index = icons::index(command.id)?;
                             Some(bevy_gooey::GroupOption::icon(
                                 bevy_gooey::IconSource::Atlas { image: image.clone(), layout: layout.clone(), index },
                                 bevy_gooey::Tooltip::new(command.title).with_shortcut(command.shortcut),
                             ))
-                        }),
+                        })),
                         0,
                     ),
                 ));
@@ -328,6 +335,101 @@ pub fn tools() -> [(&'static str, Option<Tool>); 4] {
     ]
 }
 
+/// The icon of the group's first option, **Place**: the tool every other one goes back to. It is the
+/// tool the editor is in when none is armed, so it has no command of its own and no key — pressing the
+/// armed tool's key again, or Esc, is the way back, and this option asks for the same.
+const PLACE_ICON: &str = "map.place_mode";
+
+/// What the Place option is called when the pointer rests on it.
+const PLACE_TITLE: &str = "Place pieces";
+
+/// How many options come before the tool commands in the mode group: Place.
+const PLACE_OPTIONS: usize = 1;
+
+/// The group option that stands for `tool`, or `None` for a tool the group has no option for (a
+/// note). Place is option 0; the tool commands follow in [`tools`]'s order.
+pub fn group_index(tool: Tool) -> Option<usize> {
+    if tool == Tool::Place {
+        return Some(0);
+    }
+    tools().iter().position(|(_, mode)| *mode == Some(tool)).map(|at| at + PLACE_OPTIONS)
+}
+
+/// **The command whose key puts `tool` down**, because every tool's key is a toggle: pressed while its
+/// tool is armed, it returns to placing. `None` for Place, which is already where that leads.
+fn leaving_command(tool: Tool) -> Option<&'static str> {
+    tools()
+        .iter()
+        .find(|(_, mode)| *mode == Some(tool))
+        .map(|(id, _)| *id)
+        .or((tool == Tool::Note).then_some("map.note"))
+}
+
+/// The word under a tool's icon.
+fn tool_label(tool: Tool) -> &'static str {
+    match tool {
+        Tool::Place => "Place",
+        Tool::Move => "Move",
+        Tool::Remove => "Erase",
+        Tool::Clone => "Clone",
+        Tool::Run => "Run",
+        Tool::Note => "Note",
+    }
+}
+
+/// The command whose button carries a word under its icon besides the tool modes: Fill, which the
+/// brush's own row of tools stands beside.
+const LABELLED_BUTTON: (&str, &str) = ("map.fill", "Fill");
+
+/// On a button or option that already has its word under the icon, so the system that adds it runs
+/// once per control.
+#[derive(Component)]
+struct Labelled;
+
+/// **The primary group says what it is in words** (#302): Place, Move, Erase, Clone, Run and Fill each
+/// carry their name under the icon, because a 16 px picture is a guess until it has been learned. The
+/// rest of the bar (undo, save, view) are the pictures everyone already knows and keep only a tooltip.
+///
+/// gooey's icon button has no slot for a word, so the control's node turns to a column and a text child
+/// goes under the icon. The skin styles the text by its role (a group option's like a tab's, so it
+/// takes the accent's ink when the option is lit, and a button's a control's: a `ButtonText` is what the
+/// dialogs and the pages call a button, and a toolbar's picture is not one of those); the control, its tooltip and its chip stay what they
+/// were, so the tooltip still sits on the button.
+fn label_the_primary_group(
+    mut commands: Commands,
+    groups: Query<&Children, With<ToolModes>>,
+    buttons: Query<(Entity, &ToolbarCommand), Without<Labelled>>,
+    done: Query<(), With<Labelled>>,
+    mut nodes: Query<&mut Node>,
+) {
+    let mut label = |entity: Entity, words: &'static str, role: bevy_gooey::Role| {
+        if let Ok(mut node) = nodes.get_mut(entity) {
+            node.flex_direction = FlexDirection::Column;
+        }
+        commands.entity(entity).insert(Labelled).with_child((
+            Text::new(words),
+            role,
+            bevy::text::TextLayout::new(bevy::text::Justify::Center, bevy::text::LineBreak::NoWrap),
+            bevy::picking::Pickable::IGNORE,
+        ));
+    };
+    let words: Vec<&'static str> = std::iter::once(tool_label(Tool::Place))
+        .chain(tools().iter().filter_map(|(_, mode)| mode.map(tool_label)))
+        .collect();
+    for children in &groups {
+        for (option, words) in children.iter().zip(words.iter().copied()) {
+            if done.get(option).is_err() {
+                label(option, words, bevy_gooey::Role::TabText);
+            }
+        }
+    }
+    for (button, command) in &buttons {
+        if command.0 == LABELLED_BUTTON.0 {
+            label(button, LABELLED_BUTTON.1, bevy_gooey::Role::ControlText);
+        }
+    }
+}
+
 /// **The group's value is the armed tool**, written from `EditorState` every time the tool changes and
 /// never from a click. A group that held its own choice would drift the moment a key changed the mode:
 /// `B` would arm Move and leave Remove lit.
@@ -338,7 +440,7 @@ pub fn the_group_follows_the_armed_tool(
     if !state.is_changed() {
         return;
     }
-    let Some(at) = tools().iter().position(|(_, tool)| *tool == Some(state.tool)) else {
+    let Some(at) = group_index(state.tool) else {
         return;
     };
     for mut value in &mut groups {
@@ -361,11 +463,12 @@ pub fn on_tool_mode_chosen(
     if groups.get(change.source).is_err() {
         return;
     }
-    let modes = tools();
-    let Some(&(id, _)) = modes.get(change.value) else {
-        return;
+    // Option 0 is Place, which is no command: the way to it is the armed tool's own key again.
+    let id = match change.value.checked_sub(PLACE_OPTIONS) {
+        Some(at) => tools().get(at).map(|(id, _)| *id),
+        None => state.as_deref().and_then(|state| leaving_command(state.tool)),
     };
-    let Some(command) = commands::by_id(id) else {
+    let Some(command) = id.and_then(commands::by_id) else {
         return;
     };
     chords.queue(&command, *live);

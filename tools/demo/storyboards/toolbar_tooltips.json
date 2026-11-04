@@ -1,0 +1,79 @@
+{
+  "name": "toolbar_tooltips",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1280,
+    400
+  ],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 9.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "the toolbar, each tool named under its picture"
+    },
+    {
+      "at": 0.6,
+      "cursor": [
+        42,
+        87
+      ]
+    },
+    {
+      "at": 1.0,
+      "caption": "hover Place: the tip opens under the button, centred on it"
+    },
+    {
+      "at": 2.2,
+      "cursor": [
+        163,
+        87
+      ]
+    },
+    {
+      "at": 2.6,
+      "caption": "Erase"
+    },
+    {
+      "at": 3.8,
+      "cursor": [
+        285,
+        87
+      ]
+    },
+    {
+      "at": 4.2,
+      "caption": "Run"
+    },
+    {
+      "at": 5.4,
+      "cursor": [
+        339,
+        87
+      ]
+    },
+    {
+      "at": 5.8,
+      "caption": "Undo, with its key"
+    },
+    {
+      "at": 7.0,
+      "cursor": [
+        473,
+        87
+      ]
+    },
+    {
+      "at": 7.4,
+      "caption": "Fill: every tip sits on the button it names"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "name": "editor_plain_words",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 7.0
+    },
+    {
+      "seconds": 6.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.05,
+      "cursor": [
+        820,
+        640
+      ]
+    },
+    {
+      "at": 0.3,
+      "caption": "Map and Kit: the workspaces by their plain names; the tools by theirs"
+    },
+    {
+      "at": 1.4,
+      "click_label": "Kit",
+      "within": [
+        100,
+        110,
+        200,
+        150
+      ],
+      "caption": "person: Kit"
+    },
+    {
+      "at": 3.4,
+      "click_label": "Map",
+      "within": [
+        300,
+        110,
+        600,
+        150
+      ],
+      "caption": "person: and back to Map"
+    },
+    {
+      "at": 5.0,
+      "click_label": "Server rack",
+      "within": [
+        1040,
+        150,
+        1270,
+        680
+      ],
+      "caption": "person: arms the Server rack -- the inspector names it as the palette does"
+    },
+    {
+      "at": 6.2,
+      "click": [
+        600,
+        625
+      ],
+      "caption": "person: places it -- the receipt and the history read plainly"
+    },
+    {
+      "at": 8.4,
+      "click_label": "Move",
+      "within": [
+        60,
+        70,
+        140,
+        105
+      ],
+      "caption": "person: Move"
+    },
+    {
+      "at": 10.0,
+      "click_label": "Place",
+      "within": [
+        10,
+        70,
+        75,
+        105
+      ],
+      "caption": "person: Place puts the tool down"
+    }
+  ]
+}

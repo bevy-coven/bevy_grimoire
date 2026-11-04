@@ -291,6 +291,16 @@ def log():
     return c
 
 
+def place():
+    """A piece to add: a box with its lid line, and a plus over its corner."""
+    c = Canvas()
+    c.rect(1, 6, 10, 14)
+    c.fill(1, 6, 10, 8)
+    c.fill(12, 1, 13, 7)
+    c.fill(10, 3, 15, 4)
+    return c
+
+
 UNDO = undo()
 ART = {
     "edit.undo": UNDO,
@@ -315,6 +325,7 @@ ART = {
     "panel.familiar": familiar(),
     "panel.reload": reload(),
     "panel.log": log(),
+    "map.place_mode": place(),
 }
 
 
