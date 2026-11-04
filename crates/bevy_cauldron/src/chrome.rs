@@ -1060,6 +1060,7 @@ fn fit_docks_to_the_window(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     ui_scale: Res<UiScale>,
     mut panels: Query<(&PanelWidth, &mut Node, &ComputedNode), Without<ViewportSlot>>,
+    owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -1118,7 +1119,14 @@ fn fit_docks_to_the_window(
     let floor_fraction = DOCK_MIN_W / sides.iter().copied().fold(f32::INFINITY, f32::min);
     let squeeze = squeeze.max(floor_fraction.min(1.0));
 
+    let person_owns_the_split = !owned.is_empty();
     for (want, mut node, _) in &mut panels {
+        // **The left panel is the pane's once a person has dragged the divider**
+        // ([`the_left_panel_follows_its_pane`]); writing its width here too would be two systems
+        // disagreeing about one number every frame.
+        if person_owns_the_split && want.side == Side::Left {
+            continue;
+        }
         let width = want.preferred * squeeze;
         if node.width != Val::Px(width) {
             node.width = Val::Px(width);
@@ -1263,8 +1271,11 @@ pub fn spawn_frame(mut commands: Commands) {
             // **Both panes keep a floor, so a drag cannot squash the world** (UI-30, #224).
             // Without it `SplitMin` is `(0, 0)` and `SplitFraction` 0.95 left the viewport 47 px of
             // a 1280-px body — a dock covering the world in the only way that matters. gooey's own
-            // dock uses the same 96 px for both panes.
-            bevy_gooey::SplitMin::new(96.0, bevy_gooey::DOCK_PANE_MIN_PX),
+            // dock uses the same 96 px for both panes. The left pane's floor is a panel's own
+            // (`DOCK_MIN_W` plus its margins), because a dragged-narrow pane makes the panel
+            // narrow with it ([`the_left_panel_follows_its_pane`]) and a panel under that floor
+            // stops being a panel.
+            bevy_gooey::SplitMin::new(DOCK_MIN_W + 2.0 * MARGIN, bevy_gooey::DOCK_PANE_MIN_PX),
             // **`Pickable::default()`, not `IGNORE`** (UI-30, #224). `bevy_picking` skips an
             // entity *and everything below it* when the entity is `IGNORE`, so an ignoring split
             // root made its divider — the one grabbable node in the frame — unhittable: the
@@ -3177,6 +3188,40 @@ fn size_the_shell_split(
     }
 }
 
+/// **Once a person drags the divider, the left panel is as wide as the pane they made** (#224).
+///
+/// Before that, [`size_the_shell_split`] sizes the pane to the panel; after it the pane is the
+/// person's, and a panel that kept its own width would be cut off by a narrower pane or float in a
+/// wider one — a dock that resizes without its content reflowing is not a dock. The panel's width
+/// is the pane's less its margins, never under [`DOCK_MIN_W`] (the pane's own floor, `SplitMin`,
+/// keeps the two from disagreeing). [`fit_docks_to_the_window`] leaves the left panel to this once
+/// the split is the person's, so one system writes the number.
+fn the_left_panel_follows_its_pane(
+    frame: Option<Res<Frame>>,
+    owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
+    parents: Query<&ChildOf>,
+    panes: Query<&ComputedNode>,
+    mut panels: Query<(&PanelWidth, &mut Node)>,
+    windows: Query<(), With<bevy::window::PrimaryWindow>>,
+) {
+    if owned.is_empty() || windows.is_empty() {
+        return;
+    }
+    let Some(frame) = frame else { return };
+    let Ok(pane) = parents.get(frame.left).map(|p| p.parent()) else { return };
+    let Ok(node) = panes.get(pane) else { return };
+    let wide = node.size().x * node.inverse_scale_factor();
+    if wide <= 0.0 {
+        return;
+    }
+    let width = Val::Px((wide - 2.0 * MARGIN).max(DOCK_MIN_W));
+    for (panel, mut n) in &mut panels {
+        if panel.side == Side::Left && n.width != width {
+            n.width = width;
+        }
+    }
+}
+
 pub struct ChromePlugin;
 
 impl Plugin for ChromePlugin {
@@ -3255,6 +3300,12 @@ impl Plugin for ChromePlugin {
                 size_the_shell_split
                     .after(fit_docks_to_the_window)
                     .after(adopt_the_shell_split)
+                    .run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            .add_systems(
+                Update,
+                the_left_panel_follows_its_pane
+                    .after(size_the_shell_split)
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             .add_systems(Update,

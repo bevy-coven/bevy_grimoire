@@ -95,3 +95,53 @@ fn a_narrow_window_still_leaves_the_viewport_its_floor() {
         bevy_gooey::DOCK_PANE_MIN_PX
     );
 }
+
+/// **A dock that is dragged narrower or wider takes its panel with it** (#224). Without this a
+/// narrower pane cut the panel off exactly as the default one did, and a wider one left it floating
+/// at its own width beside empty ground.
+#[test]
+fn a_dragged_dock_resizes_its_panel() {
+    let mut app = editor("left_pane_follows_drag", 1280);
+    let (left, split) = {
+        let left = app.world().resource::<Frame>().left;
+        let split = app
+            .world_mut()
+            .query_filtered::<Entity, With<bevy_gooey::Split>>()
+            .iter(app.world())
+            .next()
+            .expect("the shell has one split");
+        (left, split)
+    };
+    let pane = app.world().get::<ChildOf>(left).expect("adopted").parent();
+    let panel_width = |app: &mut App| -> f32 {
+        let world = app.world_mut();
+        let mut q = world.query::<(&PanelWidth, &Node, &ComputedNode)>();
+        q.iter(world)
+            .filter(|(w, n, c)| w.side == Side::Left && n.display != Display::None && c.size().x > 0.0)
+            .map(|(_, _, c)| c.size().x)
+            .fold(0.0, f32::max)
+    };
+    let settled = panel_width(&mut app);
+
+    for fraction in [0.30, 0.55] {
+        // What a drag, an arrow key or a game setting does: write the fraction.
+        app.world_mut().get_mut::<bevy_gooey::SplitFraction>(split).expect("fraction").0 = fraction;
+        for _ in 0..6 {
+            app.update();
+        }
+        let pane_rect = rect_of(&app, pane);
+        let panel = panel_width(&mut app);
+        assert!(
+            panel <= pane_rect.width() + 1.0,
+            "at SplitFraction {fraction} the pane is {} px and its panel {panel} px: a dragged dock \
+             must not cut its panel off",
+            pane_rect.width()
+        );
+        assert!(
+            panel >= pane_rect.width() - 2.0 * 12.0 * 1.2 - 2.0,
+            "at SplitFraction {fraction} the pane is {} px and its panel only {panel} px (it was \
+             {settled} px before the drag): the panel must widen with the dock, not float in it",
+            pane_rect.width()
+        );
+    }
+}

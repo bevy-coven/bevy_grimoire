@@ -64,6 +64,7 @@ mod a_label_and_its_value_are_two_things;
 mod a_label_set_on_effects_settles_as_the_kind_does;
 mod a_layout_proposed_in_an_area_leaves_the_rest_of_the_map;
 mod a_vlm_label_is_suggested_then_applied;
+mod a_wheel_over_the_inspector_scrolls_it;
 mod a_library_change_does_not_block_another_pieces_undo;
 mod a_made_map_can_be_taken_away_by_undo;
 mod a_map_can_be_renamed_through_the_registry;
