@@ -149,6 +149,7 @@ mod the_project_configuration_toggles_a_family_crate;
 mod the_project_configuration_leaves_a_pack_out;
 mod a_mesh_the_render_world_took_does_not_crash_the_triangle_count;
 mod the_editors_key_light_steps_aside_for_the_sun;
+mod the_menu_bar_holds_every_command;
 mod after_edit_checks_say_what_they_found;
 mod after_edit_waits_for_the_picture;
 mod an_empty_map_says_what_to_do_next;
