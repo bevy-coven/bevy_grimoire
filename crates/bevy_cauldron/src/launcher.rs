@@ -15,11 +15,11 @@
 //! The chooser (`chooser.rs`) is still where a kit and a map are picked, until the workbench (UI-30) takes that
 //! over; this screen replaces only the way into a project.
 //!
-//! # What is here, and what is not yet
+//! # The file chooser is the OS's own
 //!
-//! A typed folder path, not the OS folder dialog: no family crate opens one and `rfd`'s Linux backends
-//! pull a D-Bus stack or GTK into every build, which wants its own reviewed step. The thumbnail on each
-//! row waits for the thumbnail cache; the Settings button opens the settings screen (`settings_screen.rs`, UI-71).
+//! Folders and files are chosen with the system's chooser (`picker.rs`, #298): `rfd` with its `xdg-portal` backend on
+//! Linux, which talks D-Bus to the desktop's portal and so pulls no GTK into the build (`rfd`'s other Linux backend
+//! does, which is why a typed path stood here before). A system with no chooser service gets a toast saying so.
 
 use std::path::{Path, PathBuf};
 
@@ -293,7 +293,7 @@ pub struct LauncherPlugin;
 
 impl Plugin for LauncherPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(crate::new_project::NewProjectPlugin).add_message::<OpenRequest>()
+        app.add_plugins((crate::new_project::NewProjectPlugin, crate::picker::PickerPlugin)).add_message::<OpenRequest>()
             .add_systems(OnEnter(Screen::Launcher), build_launcher)
             .add_systems(
                 Update,
