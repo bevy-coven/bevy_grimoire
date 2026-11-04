@@ -17,6 +17,8 @@ use bevy_cauldron::keys;
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::keymap_screen::{KeymapDialog, OpenKeymap};
 use bevy_cauldron::settings_screen::SettingsDialog;
+use bevy_gooey::MenuOpen;
+use bevy_gooey::testing::{click, find_by_label};
 
 use crate::fixtures;
 
@@ -141,5 +143,27 @@ fn escape_that_closes_the_keymap_does_not_ask_to_leave_the_map() {
     assert!(
         !app.world().resource::<Confirm>().is_open(),
         "the Esc that closed the keymap must not also raise \"Leave this map?\""
+    );
+}
+
+/// **`Esc` that closes a menu is not also "put the brush down"** (#287). `Esc` is the editor's
+/// back-out, which peels the armed piece; a menu that closes on it took the press, and the piece in
+/// hand stays in hand.
+#[test]
+fn escape_that_closes_a_menu_keeps_the_armed_brush() {
+    let mut app = editor("modal_keys_menu");
+    app.world_mut().resource_mut::<EditorState>().brush = Some(0);
+
+    let file = find_by_label(&mut app, "File").expect("the menu bar has a File menu");
+    click(&mut app, file);
+    let open = |app: &mut App| app.world_mut().query::<&MenuOpen>().iter(app.world()).count();
+    assert_eq!(open(&mut app), 1, "a click on File opens its menu");
+
+    press(&mut app, &[KeyCode::Escape]);
+    assert_eq!(open(&mut app), 0, "Esc closes the menu");
+    assert_eq!(
+        app.world().resource::<EditorState>().brush,
+        Some(0),
+        "the Esc that closed the menu must not also put the armed piece down"
     );
 }
