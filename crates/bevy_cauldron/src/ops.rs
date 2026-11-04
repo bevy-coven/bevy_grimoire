@@ -2013,7 +2013,7 @@ pub mod tool_arm {
         let name = params
             .get("tool")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| Refusal::new("`tool` is missing; say one of ".to_owned() + &TOOLS.join(", ")))?;
+            .ok_or_else(|| Refusal::new(format!("`tool` is missing; say one of {}", TOOLS.join(", "))))?;
         crate::ops_view::tool_from_name(name).ok_or_else(|| {
             Refusal::new(format!(
                 "`{name}` is not a tool; say one of {}",
