@@ -45,4 +45,5 @@ An `--out` ending in `.mp4` writes a changelog clip instead: H.264 capped at 20 
   pixel steps were aimed above a bar that later gained a toolbar. Add `"within": [x0, y0, x1, y1]` when
   two widgets carry the same word — `sofa` is both a palette row and a piece on the map — so the
   rectangle, not entity order, says which one is meant.
+- **Scroll a panel to a widget by its words, not by a notch count.** `{"scroll_to": "6:00", "over": [120, 300], "region": [0, 120, 230, 690]}` puts the wheel over `over` (a point on the panel's *content*, never its scrollbar lane; not `at`, which is the step's time) and notches until the editor reports those words inside `region`, then lets the wheel go; a `click_label` for the same words follows. A notch count that was right for one window height put the clock buttons in the top bar at another (#282).
 - Storyboard format is in the header of `record.py`.

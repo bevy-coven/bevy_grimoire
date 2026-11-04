@@ -291,7 +291,7 @@ def resolve(value, named):
     return value
 
 
-def widget_centre(port, label, within=None, prefix=False):
+def widget_centre(port, label, within=None, prefix=False, bounded=True):
     """Where the interface draws the visible `Text` node whose words are `label`, in logical pixels.
 
     **Asks the running editor, never a guess.** `world.query` returns every `Text` with its
@@ -352,7 +352,7 @@ def widget_centre(port, label, within=None, prefix=False):
         # sit at y = 1900 in a 720 px window; clicking there lands off the window and the take fails
         # with a click that changed nothing. A word whose centre is outside the window is not the
         # widget the storyboard means, and saying so is better than aiming at nothing.
-        if not (0.0 <= x <= 1280.0 and 0.0 <= y <= 720.0):
+        if bounded and not (0.0 <= x <= 1280.0 and 0.0 <= y <= 720.0):
             continue
         # **`within` says which widget of that name.** A palette row and a placed piece can carry the
         # same word — `sofa` is both — and the rectangle is the storyboard's statement of which one it
@@ -363,6 +363,36 @@ def widget_centre(port, label, within=None, prefix=False):
                 continue
         return (x, y)
     raise RuntimeError(f"click_label: no visible widget says {want!r}")
+
+
+def scroll_to(port, inj, label, at, region=None, prefix=False, max_notches=40, pause=0.15):
+    """Wheel over `at` until the words `label` are drawn inside `region`, then return their centre.
+
+    **A storyboard names a widget and the panel to find it in, never a notch count** (#282). The
+    inspector's content is taller than the window and the wheel scrolls it by whole lines, so "12
+    notches" was right for one window height and put the buttons in the top bar (y = 6) at the next:
+    the following `click_label` clicked the bar's `kits & maps` and the editor left the project. The
+    editor reports where the words are even when they are off the window (`bounded=False`), so this
+    reads that after every notch and stops the moment they are inside `region` — `[x0, y0, x1, y1]`,
+    the window by default; give the panel's own rect, because a widget scrolled under a bar is
+    "inside the window" and still cannot be clicked.
+
+    The wheel is over `at` (a point on the panel's *content*, not its scrollbar lane: measured on big
+    2026-11-03, a wheel over the lane scrolled the other dock). A widget below the region is reached
+    by notches of `y = -1`, one above it by `y = +1`.
+    """
+    x0, y0, x1, y1 = region or [0.0, 0.0, 1280.0, 720.0]
+    inj.cursor(*at)
+    try:
+        for _ in range(max_notches + 1):
+            x, y = widget_centre(port, label, None, prefix, bounded=False)
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return (x, y)
+            inj.send(kind="Scroll", y=-1.0 if y > y1 else 1.0)
+            time.sleep(pause)
+    finally:
+        inj.clear_cursor()
+    raise RuntimeError(f"scroll_to: {label!r} never came inside {region or 'the window'} in {max_notches} notches")
 
 
 def do_step(step, timeline, inj, agent, named=None):
@@ -402,6 +432,10 @@ def do_step(step, timeline, inj, agent, named=None):
         timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
         timeline.add(t=timeline.now(), type="click", x=x, y=y)
         inj.send(kind="Mouse", button=step.get("button", "Left"), action="Tap")
+    elif kind == "scroll_to":
+        x, y = scroll_to(inj.port, inj, step["scroll_to"], step["over"], step.get("region"), step.get("prefix", False))
+        timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
+        timeline.add(t=timeline.now(), type="clear_cursor")
     elif kind == "key":
         mods = step.get("mods", [])
         for m in mods:
@@ -481,7 +515,7 @@ def kind_of(step):
     # `events.json` as a storyboard that only had captions. It went unnoticed because no storyboard
     # used it until the status band's job item — a widget whose words move, so a guessed pixel cannot
     # reach it.
-    for k in ("click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
+    for k in ("scroll_to", "click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
         if k in step:
             return k
     raise ValueError(f"step has no action: {step}")

@@ -1,0 +1,78 @@
+{
+ "name": "inspector_fits",
+ "fps": 8,
+ "scale": 1,
+ "width": 640,
+ "crop": [
+  8,
+  58,
+  960,
+  700
+ ],
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -4.5,
+      -4.5,
+      4.5,
+      4.5
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 2.5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.3,
+   "scroll_to": "6:00",
+   "over": [
+    120,
+    300
+   ],
+   "region": [
+    0,
+    130,
+    330,
+    640
+   ],
+   "caption": "person: the wheel over the inspector scrolls ENVIRONMENT into view; every button fits the pane"
+  },
+  {
+   "at": 2.0,
+   "click_label": "6:00",
+   "caption": "person: 6:00 \u2014 the preview is held at dawn, no file write, no undo step"
+  },
+  {
+   "at": 3.6,
+   "click_label": "12:00",
+   "caption": "person: 12:00 \u2014 noon"
+  },
+  {
+   "at": 5.2,
+   "click_label": "18:30",
+   "caption": "person: 18:30 \u2014 dusk"
+  },
+  {
+   "at": 6.8,
+   "click_label": "23:00",
+   "caption": "person: 23:00 \u2014 night; the button that used to sit under the viewport"
+  }
+ ]
+}

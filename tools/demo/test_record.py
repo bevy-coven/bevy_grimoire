@@ -194,3 +194,77 @@ class ClickLabelAsksTheEditor(unittest.TestCase):
             self.assertEqual(record.widget_centre(1, "sofa", [600, 100, 900, 500]), (700.0, 300.0))
         finally:
             record.brp = original
+
+
+class ScrollToStopsWhenTheWordsArrive(unittest.TestCase):
+    """**`scroll_to` asks the editor after every notch**, so a storyboard names a widget and a panel and
+    never a notch count (#282). A fixed count was right for one window height and put the clock
+    buttons at y = 6, inside the top bar, at another: the next click opened `kits & maps`."""
+
+    class Wheel:
+        """A panel whose one label moves 120 px per notch, as the inspector's content does."""
+
+        def __init__(self, y, floor=-400.0):
+            self.y = y
+            self.floor = floor
+            self.notches = 0
+            self.cursor_at = None
+            self.cleared = False
+            self.port = 1
+
+        def cursor(self, x, y):
+            self.cursor_at = (x, y)
+
+        def clear_cursor(self):
+            self.cleared = True
+
+        def send(self, **params):
+            self.notches += 1
+            self.y = max(self.floor, self.y + 120.0 * params["y"]) if params["y"] < 0 else self.y + 120.0
+
+        def reply(self, port, method, params):
+            row = {"entity": 1, "components": {
+                "bevy_ui::widget::text::Text": "6:00",
+                "bevy_ui::ui_node::ComputedNode": {"size": [40.0, 20.0]},
+                "bevy_ui::ui_transform::UiGlobalTransform": [1.0, 0.0, 0.0, 1.0, 56.0, self.y],
+            }}
+            return {"result": [row]}
+
+    def run_scroll(self, wheel, region):
+        original = record.brp
+        record.brp = wheel.reply
+        try:
+            return record.scroll_to(1, wheel, "6:00", (120, 300), region, pause=0.0)
+        finally:
+            record.brp = original
+
+    def test_it_stops_inside_the_panel_rather_than_after_a_fixed_count(self):
+        wheel = self.Wheel(927.5)
+        x, y = self.run_scroll(wheel, [0, 120, 230, 690])
+        self.assertTrue(120 <= y <= 690, y)
+        self.assertEqual(wheel.notches, 2, "927.5 -> 807.5 -> 687.5: the second notch is inside the panel")
+        self.assertTrue(wheel.cleared, "the wheel's cursor is let go")
+
+    def test_a_widget_already_in_the_region_takes_no_notch(self):
+        wheel = self.Wheel(300.0)
+        self.run_scroll(wheel, [0, 120, 230, 690])
+        self.assertEqual(wheel.notches, 0)
+
+    def test_a_widget_above_the_region_is_scrolled_back_down(self):
+        wheel = self.Wheel(6.0)
+        _, y = self.run_scroll(wheel, [0, 120, 230, 690])
+        self.assertTrue(120 <= y <= 690, y)
+
+    def test_a_widget_that_never_arrives_is_an_error_not_a_click_on_the_bar(self):
+        wheel = self.Wheel(927.5, floor=900.0)
+        original = record.brp
+        record.brp = wheel.reply
+        try:
+            with self.assertRaises(RuntimeError):
+                record.scroll_to(1, wheel, "6:00", (120, 300), [0, 120, 230, 690], max_notches=3, pause=0.0)
+        finally:
+            record.brp = original
+        self.assertTrue(wheel.cleared)
+
+    def test_a_scroll_to_step_is_a_scroll_and_not_a_caption(self):
+        self.assertEqual(record.kind_of({"at": 1.0, "scroll_to": "6:00", "over": [120, 300]}), "scroll_to")
