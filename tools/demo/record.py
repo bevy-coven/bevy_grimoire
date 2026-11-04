@@ -492,12 +492,22 @@ def do_step(step, timeline, inj, agent, named=None):
         timeline.add(t=timeline.now(), type="cursor", x=x0, y=y0)
         inj.send(kind="Mouse", button="Left", action="Press")
         timeline.add(t=timeline.now(), type="click", x=x0, y=y0)
+        # **The first move lands within 100 ms of the press, the rest spread over `secs`.**
+        #
+        # `check.py` tells a drag's press from a click by looking for a cursor move strictly later than
+        # the press and no more than `0.1 s` after it. A move 150 ms out (the old `secs / 8` on a 1.2 s
+        # box) is therefore *not* a drag: the press was classified as a `place` change moment and the
+        # check measured the cursor ring, not the box — hero failed at 1.63 %, 3.23 %, 4.17 % and 4.98 %
+        # against 5 % across four takes whose boxes were drawn correctly. A 30 ms first gap is inside
+        # the window a real drag has, and the remaining moves keep the drag's shape.
+        time.sleep(0.03)
         for i in range(1, 9):
             t = i / 8
             x, y = round(x0 + (x1 - x0) * t), round(y0 + (y1 - y0) * t)
+            if i > 1:
+                time.sleep(step["secs"] / 8)
             inj.cursor(x, y)
             timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
-            time.sleep(step["secs"] / 8)
         inj.send(kind="Mouse", button="Left", action="Release")
     elif kind == "mcp":
         # Stamped when the call starts: the editor acts on the call as it arrives, and a stamp taken

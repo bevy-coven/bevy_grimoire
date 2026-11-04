@@ -21,7 +21,7 @@ use bevy::ui_widgets::Activate;
 use bevy_grimoire_core::rigs::Playback;
 
 use crate::anim_tab::BenchState;
-use crate::chrome::{DIM, LABEL, ROW_BG, ROW_SELECTED, TEXT};
+use crate::chrome::{DIM, ROW_BG, ROW_SELECTED};
 use crate::tiles::Mode;
 
 /// The bench's staging corner — the third one.
@@ -734,7 +734,13 @@ pub(crate) fn refresh_scrub_ui(
 }
 
 /// The chip row and scrub line, spawned into the pane by `rebuild_slots`.
-pub(crate) fn spawn_chips(p: &mut ChildSpawnerCommands, rig: &bevy_grimoire_core::rigs::Rig) {
+pub(crate) fn spawn_chips(
+    p: &mut ChildSpawnerCommands,
+    rig: &bevy_grimoire_core::rigs::Rig,
+    // The bench's ink from the editor's skin (UI-02, #210): `read` for a chip's words and `label`
+    // for the quiet line under them.
+    ink: crate::anim_tab::BenchInk,
+) {
     crate::chrome::section(p, "STAGE");
     p.spawn(Node {
         flex_direction: FlexDirection::Row,
@@ -759,7 +765,7 @@ pub(crate) fn spawn_chips(p: &mut ChildSpawnerCommands, rig: &bevy_grimoire_core
                 BenchSlotChip(i),
                 &format!("{i} {label}"),
                 crate::chrome::text::CONTROL,
-                TEXT,
+                ink.read,
                 ROW_BG,
                 Color::NONE,
             );
@@ -779,7 +785,7 @@ pub(crate) fn spawn_chips(p: &mut ChildSpawnerCommands, rig: &bevy_grimoire_core
                 GhostChip,
                 "ghost (G): play the measured values over the declared",
                 crate::chrome::text::CONTROL,
-                TEXT,
+                ink.read,
                 ROW_BG,
                 Color::NONE,
             );
@@ -787,7 +793,7 @@ pub(crate) fn spawn_chips(p: &mut ChildSpawnerCommands, rig: &bevy_grimoire_core
     }
     p.spawn((
         Text::new("click: solo · mod-click: mix in/out"),
-        TextColor(LABEL),
+        TextColor(ink.label),
         crate::chrome::font(crate::chrome::text::HINT),
     ));
     p.spawn((

@@ -1134,7 +1134,11 @@ fn rebuild_slots(
             // an author *drives* rather than reads: which clip is soloed, what is in the mix, where
             // the scrub sits. Everything they were buried under is a report about the choice they
             // make here, so the choice goes first and the evidence follows it.
-            crate::anim_stage::spawn_chips(p, rig);
+            crate::anim_stage::spawn_chips(
+                p,
+                rig,
+                BenchInk { read, quiet, danger, accent, rest, label, on: row_selected },
+            );
             // **The provenance line** — is the recorded measurement about the file on disk? A
             // standing fact about the rig, so it sits with the mesh path rather than among the
             // findings, and STALE is the one word here allowed to shout.
