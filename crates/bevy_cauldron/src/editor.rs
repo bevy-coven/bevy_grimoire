@@ -1659,7 +1659,11 @@ pub struct PaletteList;
 struct CategoryHeader(String);
 
 /// A palette row, carrying its library index so one observer can serve all of them.
-#[derive(Component, Clone, Copy)]
+///
+/// Reflected so a BRP caller (`tools/ux/first_run_walk.py`) can ask which nodes are palette rows and
+/// click one, whatever its words are.
+#[derive(Component, Reflect, Clone, Copy)]
+#[reflect(Component)]
 pub struct PaletteRow(pub usize);
 
 /// The Map palette's scrollable list, read for its geometry and written for its scroll position.
@@ -2477,6 +2481,8 @@ impl Plugin for EditorPlugin {
         #[cfg(feature = "bevy_siren")]
         app.add_plugins(crate::audio_panel::AudioPanelPlugin);
         app.add_observer(on_play_click);
+        app.register_type::<PaletteRow>()
+            .register_type::<crate::chrome::ViewportSlot>();
         app.init_resource::<EditorState>()
             .init_resource::<MapFraming>()
             .init_resource::<RemovalDrag>()

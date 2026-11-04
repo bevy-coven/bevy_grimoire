@@ -905,8 +905,10 @@ pub struct Frame {
 /// **The node the world shows through, and the only one with no background.**
 ///
 /// `crate::surface` reads its rect and gives it to the map camera as a viewport, which is what makes
-/// the viewport a region rather than the whole window with panels floating over it.
-#[derive(Component)]
+/// the viewport a region rather than the whole window with panels floating over it. Reflected so a
+/// BRP caller (`tools/ux/first_run_walk.py`) can find the map on screen and click it.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub struct ViewportSlot;
 
 #[derive(Component)]
