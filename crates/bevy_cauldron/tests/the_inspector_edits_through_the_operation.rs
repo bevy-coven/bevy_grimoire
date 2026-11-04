@@ -11,7 +11,6 @@
 //! the view's own path ends with the map holding the new pose and one more undo line.
 
 use bevy::prelude::*;
-use bevy::reflect::Reflect;
 use bevy_cauldron::editor::{lock_on_placement, place_for_test, EditorState};
 use bevy_cauldron::inspector_view::{PoseInspector, PoseView};
 
