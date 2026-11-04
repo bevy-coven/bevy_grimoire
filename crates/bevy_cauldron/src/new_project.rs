@@ -367,7 +367,7 @@ fn show_the_form(
     name: Query<Entity, With<NameField>>,
     location: Query<Entity, With<LocationField>>,
     create: Query<Entity, With<CreateButton>>,
-    mut texts: ParamSet<(Query<&mut Text, With<ReasonLine>>, Query<&mut Text, With<FolderLine>>, Query<&mut Text, With<TemplateNote>>)>,
+    mut texts: ParamSet<(Lines<ReasonLine>, Lines<FolderLine>, Lines<TemplateNote>)>,
 ) {
     let Some(form) = form.filter(|f| f.is_changed()) else { return };
     let problems = check(&form.0);
@@ -400,7 +400,10 @@ fn show_the_form(
     set_text(&mut texts.p2(), note);
 }
 
-fn set_text<M: Component>(lines: &mut Query<&mut Text, With<M>>, said: &str) {
+/// The words of the one line marked `M`.
+type Lines<'w, 's, M> = Query<'w, 's, &'static mut Text, With<M>>;
+
+fn set_text<M: Component>(lines: &mut Lines<M>, said: &str) {
     for mut text in lines {
         if text.0 != said {
             text.0 = said.to_owned();
