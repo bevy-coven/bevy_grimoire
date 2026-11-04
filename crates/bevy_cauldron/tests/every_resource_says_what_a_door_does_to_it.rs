@@ -170,7 +170,7 @@ fn the_door_resets_what_it_says_it_owns() {
 fn every_global_observer_takes_its_resources_as_option() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut offenders = Vec::new();
-    for file in ["tiles.rs", "compose.rs", "editor.rs", "chooser.rs"] {
+    for file in ["tiles.rs", "compose.rs", "editor.rs", "project_page.rs"] {
         let path = dir.join(file);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
         let lines: Vec<&str> = text.lines().collect();

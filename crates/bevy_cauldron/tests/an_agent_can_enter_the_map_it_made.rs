@@ -1,6 +1,6 @@
 //! **An agent can enter the map it made** — E-078.
 //!
-//! `map_create` then `map_open` both apply from the menu, and the window stays on the menu: the
+//! `map_create` then `map_open` both apply from the project page, and the window stays on the project page: the
 //! operation changes the world, the screen is not its business, and a person who asked an agent to
 //! make a map and work in it had to relaunch the editor on top of the work the agent had already
 //! done. `tools/loop/accept.py` did exactly that relaunch, and recorded it as a workaround — so the
@@ -8,17 +8,17 @@
 //!
 //! # What is proved
 //!
-//! 1. **`map_open` on the menu enters the editor on that map**, through the same `Chosen` ->
-//!    `open_the_door` path the menu's Enter key takes — so it is not a second way into the editor.
+//! 1. **`map_open` on the project page enters the editor on that map**, through the same `Chosen` ->
+//!    `open_the_door` path a click on a map card takes — so it is not a second way into the editor.
 //! 2. **The map it entered is the one it named**, in the world *and* in the project's memory of it.
-//! 3. **A refused `map_open` leaves the person on the menu**, with nothing half-installed: no
+//! 3. **A refused `map_open` leaves the person on the project page**, with nothing half-installed: no
 //!    `Chosen` waiting to be consumed by a crossing that will never happen, and no `Project` for a
 //!    screen that has no door.
 //!
 //! # Why the screen is the thing asserted
 //!
 //! The gap was never "the operation does not know the map" — it did, and `grimoire/state` reported a
-//! map on the menu afterwards. The gap was that **the screen did not move**, so `State<Screen>` is
+//! map on the project page afterwards. The gap was that **the screen did not move**, so `State<Screen>` is
 //! the assertion, and the resources are checked beside it to prove the editor arrived with a door.
 
 use bevy::prelude::*;
@@ -29,10 +29,9 @@ use bevy_cauldron::tiles::Door;
 
 use crate::fixtures;
 
-/// **The menu, on a project that has a map to make.** The harness opens straight into a door, so the
-/// screen is put back to the menu itself — the same construction `tests/headless.rs` uses for the
-/// menu's own tests.
-fn on_the_menu(tag: &str) -> (std::path::PathBuf, App) {
+/// **The project page, on a project that has a map to make.** The harness opens straight into a door, so the
+/// screen is put back to the page itself.
+fn on_the_project_page(tag: &str) -> (std::path::PathBuf, App) {
     let root = fixtures::Fixture::new(tag)
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
@@ -40,18 +39,11 @@ fn on_the_menu(tag: &str) -> (std::path::PathBuf, App) {
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
-    app.add_plugins(bevy_cauldron::chooser::ChooserPlugin {
-        root: root.clone(),
-        preselect: None,
-    });
-    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Menu);
-    for _ in 0..5 {
-        app.update();
-    }
+    harness::stand_on_the_project_page(&mut app, &root);
     assert_eq!(
         *app.world().resource::<State<Screen>>().get(),
-        Screen::Menu,
-        "the menu is up"
+        Screen::Project,
+        "the project page is up"
     );
     (root, app)
 }
@@ -77,14 +69,14 @@ fn apply(app: &mut App, operation: &str, parameters: serde_json::Value) -> serde
     .unwrap_or_else(|e| panic!("the apply answers: {e}"))
 }
 
-/// **Making a map on the menu then opening it is entering it.**
+/// **Making a map on the project page then opening it is entering it.**
 ///
 /// The failing-before symptom is precise: before the fix the map is open (`grimoire/state` says so)
-/// and the screen is still `Menu`, so the window shows the MAPS column while every resource behind
+/// and the screen is still `Project`, so the window shows the maps while every resource behind
 /// it describes a courtyard.
 #[test]
-fn map_open_on_the_menu_enters_the_editor_on_that_map() {
-    let (_root, mut app) = on_the_menu("agent-enters");
+fn map_open_on_the_project_page_enters_the_editor_on_that_map() {
+    let (_root, mut app) = on_the_project_page("agent-enters");
 
     let made = apply(
         &mut app,
@@ -97,7 +89,7 @@ fn map_open_on_the_menu_enters_the_editor_on_that_map() {
     assert_eq!(opened["outcome"], "applied", "the map is opened: {opened}");
 
     // **The crossing is the screen's, and it happens on the next state transition.** `Chosen` is
-    // consumed by `open_the_door` on `OnExit(Menu)`, so a single update is not enough.
+    // consumed by `open_the_door` on the project page's exit, so a single update is not enough.
     for _ in 0..5 {
         app.update();
     }
@@ -106,7 +98,7 @@ fn map_open_on_the_menu_enters_the_editor_on_that_map() {
     assert_eq!(
         *world.resource::<State<Screen>>().get(),
         Screen::Editor,
-        "opening a map from the menu enters the editor"
+        "opening a map from the project page enters the editor"
     );
     assert_eq!(
         world.resource::<bevy_cauldron::project::OpenMap>().map.name,
@@ -124,7 +116,7 @@ fn map_open_on_the_menu_enters_the_editor_on_that_map() {
         "and the project remembers the map, so a crossing back to Maps reopens it"
     );
     assert!(
-        world.get_resource::<bevy_cauldron::chooser::Chosen>().is_none(),
+        world.get_resource::<bevy_cauldron::screen::Chosen>().is_none(),
         "the crossing consumed the door it entered"
     );
 }
@@ -132,18 +124,18 @@ fn map_open_on_the_menu_enters_the_editor_on_that_map() {
 /// **`grimoire/state` says which screen, because the map cannot.**
 ///
 /// This is the fact the acceptance script waits on, and it is asserted here because it is the half
-/// that would have hidden the bug: on the pre-fix build `map_open` applied on the menu installed
-/// `Project` and `OpenMap` and left the screen at `Menu`, so `grimoire/state` reported
-/// `map.name == "courtyard"` while the person was looking at the MAPS column. **A predicate on the
+/// that would have hidden the bug: on the pre-fix build `map_open` applied on the project page installed
+/// `Project` and `OpenMap` and left the screen at `Project`, so `grimoire/state` reported
+/// `map.name == "courtyard"` while the person was looking at the maps. **A predicate on the
 /// map alone passed on the defective build**, so `screen` is what the script reads, and this pins
 /// that the editor's own answer distinguishes the two.
 #[test]
 fn grimoire_state_says_which_screen_and_the_map_alone_does_not() {
-    let (_root, mut app) = on_the_menu("agent-screen");
+    let (_root, mut app) = on_the_project_page("agent-screen");
 
     let before = call(&mut app, "grimoire/state", serde_json::json!({}))
         .unwrap_or_else(|e| panic!("grimoire/state answers: {e}"));
-    assert_eq!(before["screen"], "menu", "the menu is the menu: {before}");
+    assert_eq!(before["screen"], "project", "the project page is the project page: {before}");
     assert!(before["map"].is_null(), "and holds no map yet: {before}");
 
     apply(
@@ -169,8 +161,8 @@ fn grimoire_state_says_which_screen_and_the_map_alone_does_not() {
 /// state change for any reason at all — and a `Project` on a screen with no door is what
 /// `OnEnter(Editor)` panics on.
 #[test]
-fn a_refused_map_open_on_the_menu_stays_on_the_menu() {
-    let (_root, mut app) = on_the_menu("agent-refused");
+fn a_refused_map_open_on_the_project_page_stays_on_the_project_page() {
+    let (_root, mut app) = on_the_project_page("agent-refused");
 
     let refused = apply(&mut app, "map_open", serde_json::json!({"name": "no_such_map"}));
     assert_eq!(refused["outcome"], "refused", "there is no such map: {refused}");
@@ -182,11 +174,11 @@ fn a_refused_map_open_on_the_menu_stays_on_the_menu() {
     let world = app.world();
     assert_eq!(
         *world.resource::<State<Screen>>().get(),
-        Screen::Menu,
+        Screen::Project,
         "a refusal is not a crossing"
     );
     assert!(
-        world.get_resource::<bevy_cauldron::chooser::Chosen>().is_none(),
+        world.get_resource::<bevy_cauldron::screen::Chosen>().is_none(),
         "and it leaves no door waiting to be entered"
     );
     assert!(

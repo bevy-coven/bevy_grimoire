@@ -138,7 +138,7 @@ fn fifty() -> usize {
 fn context(
     project: Option<ResMut<crate::project::Project>>,
     open: Option<ResMut<crate::project::OpenMap>>,
-    menu: Option<Res<crate::chooser::MenuOpening>>,
+    menu: Option<Res<crate::project_assets::PointedAt>>,
 ) -> Ctx {
     Ctx {
         view: None, trust_file: None,
@@ -383,7 +383,7 @@ fn project_root(
     _: In<serde_json::Value>,
     project: Option<Res<crate::project::Project>>,
     open: Option<Res<crate::project::OpenMap>>,
-    menu: Option<Res<crate::chooser::MenuOpening>>,
+    menu: Option<Res<crate::project_assets::PointedAt>>,
 ) -> Result<Value, String> {
     // **The menu's root counts.** The menu is the screen you are on before a door, and it knows
     // which directory it is about — so the server's own "are we pointed at the same project" check
@@ -394,7 +394,7 @@ fn project_root(
             return Ok(json!({
                 "project_root": menu.root.to_string_lossy(),
                 "map": serde_json::Value::Null,
-                "screen": "menu",
+                "screen": "project",
             }));
         }
         return Err("no project is open.".to_owned());
@@ -760,12 +760,12 @@ fn editor_state(
         "selected": tiles.as_ref().map(|t| t.selected_library_id.clone()),
         "door": door.map(|d| d.label()),
         "mode": mode.map(|m| m.label()),
-        // **`"launcher"`, `"loading"`, `"menu"` or `"editor"`.** A caller that needs "is the person looking at this map?" reads
+        // **`"launcher"`, `"loading"`, `"project"` or `"editor"`.** A caller that needs "is the person looking at this map?" reads
         // it here; nothing else in this answer can be told apart between the two screens.
         "screen": screen.map(|s| match *s.get() {
             crate::screen::Screen::Launcher => "launcher",
             crate::screen::Screen::Loading => "loading",
-            crate::screen::Screen::Menu => "menu",
+            crate::screen::Screen::Project => "project",
             crate::screen::Screen::Editor => "editor",
         }),
     }))
@@ -1310,7 +1310,7 @@ fn operation_preview(
     In(p): In<PreviewParams>,
     project: Option<ResMut<crate::project::Project>>,
     open: Option<ResMut<crate::project::OpenMap>>,
-    menu: Option<Res<crate::chooser::MenuOpening>>,
+    menu: Option<Res<crate::project_assets::PointedAt>>,
 ) -> Result<Value, String> {
     let Some(op) = ops::find(&p.operation) else {
         return Err(format!(
@@ -1394,13 +1394,13 @@ fn operation_apply(
     mode: Option<Res<crate::tiles::Mode>>,
     filters: Option<Res<crate::filter::Filters>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
-    menu: Option<Res<crate::chooser::MenuOpening>>,
+    menu: Option<Res<crate::project_assets::PointedAt>>,
     mut proposal: Option<ResMut<crate::editor::Proposal>>,
     mut clock: Option<ResMut<crate::editor::ProposalClock>>,
     // **Which screen the operation is being applied on (E-078).** `map_open` means two different
     // things and only the screen tells them apart: from a door it asks for the Map door, and from the
     // menu it is an *entry* — the same crossing the MAPS column's Enter makes. **Read the state, not
-    // the presence of a resource**: `MenuOpening` is inserted at plugin build and is on every screen,
+    // the presence of a resource**: `PointedAt` is inserted when a project is opened and stays on every screen,
     // and `EditorState`'s absence is a fact about the editor, not a name for the menu.
     screen: Option<Res<State<crate::screen::Screen>>>,
     mut screen_next: Option<ResMut<NextState<crate::screen::Screen>>>,
@@ -1562,7 +1562,7 @@ fn operation_apply(
     // **On the menu, `map_open` enters the editor (E-078)** — and it does it the way the MAPS
     // column's Enter does, not by installing resources and hoping the screen follows.
     //
-    // `Chosen` is what a crossing carries: `screen::open_the_door` consumes it on `OnExit(Menu)` and
+    // `Chosen` is what a crossing carries: `screen::open_the_door` consumes it on the project page's transition into the editor and
     // installs the project and the map through `Opened::insert_into`, an exclusive system, so
     // `OnEnter(Editor)` — the very next schedule — finds them. Inserting `Project` here instead would
     // put a loaded project on a screen that has no door, and a `NextState` read one pass late would
@@ -1570,7 +1570,7 @@ fn operation_apply(
     // records. **So there is exactly one way into the editor, and this is it.**
     let on_menu = screen
         .as_deref()
-        .is_some_and(|s| *s.get() == crate::screen::Screen::Menu);
+        .is_some_and(|s| *s.get() == crate::screen::Screen::Project);
     let entering = matches!(&applied, Ok(ops::Applied::Done { .. }))
         && on_menu
         && p.operation == "map_open";
@@ -1580,7 +1580,7 @@ fn operation_apply(
                 // **The project remembers the map's name**, mirroring `args::open`: a crossing from
                 // the Kit door back to Maps reads it to know which map to reopen.
                 fresh.open_map_name = Some(map.map.name.clone());
-                commands.insert_resource(crate::chooser::Chosen(crate::args::Opened {
+                commands.insert_resource(crate::screen::Chosen(crate::args::Opened {
                     project: fresh,
                     open_map: Some(map),
                     door: crate::tiles::Door::Map,

@@ -2592,7 +2592,7 @@ impl Plugin for EditorPlugin {
             // **The way back is not the Maps door's**, and gating it there was how the Kit and Rigs
             // doors ended up with no exit at all: the button every panel draws was never given its
             // observer, `Cmd+O` was handled inside a Maps-only system, and all three
-            // `next.set(Screen::Menu)` calls sat behind the same condition. See `leave_for_menu`.
+            // `next.set(Screen::Project)` calls sat behind the same condition. See `leave_for_menu`.
             .add_systems(Update,
                 (
                     wire_back_buttons,
@@ -3007,7 +3007,7 @@ pub fn save_and_leave(
             }
         }
     }
-    next.set(crate::screen::Screen::Menu);
+    next.set(crate::screen::Screen::Project);
 }
 
 /// **`Cmd+O` leaves this door for the chooser**, from whichever door is open.
@@ -3018,7 +3018,7 @@ pub fn save_and_leave(
 /// every panel. A globally advertised chord handled on one door in three is the dead key `keys.rs`
 /// refuses to ship, and it was the only chord out of the Kit door.
 ///
-/// Going back is a **state change** — `Screen::Menu`, whose `OnExit(Editor)` tears the door down and
+/// Going back is a **state change** — `Screen::Project`, whose `OnExit(Editor)` tears the door down and
 /// drops the project (`screen.rs`). It used to be a process exit carrying a code the parent compared
 /// against, because the menu was another program; both screens are one application now.
 ///
@@ -4350,7 +4350,7 @@ fn walk_palette(
 /// takes the Map door's resources. That was survivable while `chrome::list_row` was only ever called
 /// by editor panels. The moment the **menu** adopted the shared row vocabulary it spawned rows that
 /// carry `Button` too, and the first click on one panicked the whole application — `Res<Project>`
-/// does not exist on `Screen::Menu`, and in Bevy 0.19 a missing `Res<T>` panics rather than skipping
+/// does not exist on `Screen::Project`, and in Bevy 0.19 a missing `Res<T>` panics rather than skipping
 /// (`CLAUDE.md`; `bevy_ecs/error/handler.rs:130`).
 ///
 /// The row query already answers "is this mine" — a menu row has no `PaletteRow` — so the guard was

@@ -89,7 +89,7 @@ pub struct LoadReport(pub Vec<Problem>);
 /// Every file of the project at `root` that its kind's parser refuses, in file order: the ones the open itself
 /// does not need (a terrain, a water plan, a map not opened, the notes) and so cannot have failed it.
 pub fn report(root: &Path) -> Vec<Problem> {
-    let project_dir = root.join(crate::chooser::GRIMOIRE_DIR);
+    let project_dir = root.join(crate::catalog::GRIMOIRE_DIR);
     let mut out = Vec::new();
     for file in crate::reload_files::files(&project_dir, root, None, &[]) {
         let Some(kind) = reload::kind_by_id(&file.kind) else { continue };
@@ -202,7 +202,7 @@ fn build_the_screen(mut commands: Commands) {
                     }
                     commands.remove_resource::<LoadJob>();
                     // An answer already taken this frame left the opened project waiting as `Chosen`; cancelling lets it go.
-                    commands.remove_resource::<crate::chooser::Chosen>();
+                    commands.remove_resource::<crate::screen::Chosen>();
                     next.set(Screen::Launcher);
                 }),
             ));
@@ -219,7 +219,7 @@ fn poll_the_load(mut commands: Commands, job: Option<Res<LoadJob>>, mut next: Re
     };
     match answer {
         Ok(Ok(Loaded { opened, problems })) => {
-            commands.insert_resource(crate::chooser::Chosen(opened));
+            commands.insert_resource(crate::screen::Chosen(opened));
             commands.remove_resource::<LoadJob>();
             if problems.is_empty() {
                 next.set(Screen::Editor);
@@ -358,7 +358,7 @@ fn show_the_report(
                 row.spawn((
                     button("Back"),
                     observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, mut next: ResMut<NextState<Screen>>| {
-                        commands.remove_resource::<crate::chooser::Chosen>();
+                        commands.remove_resource::<crate::screen::Chosen>();
                         next.set(Screen::Launcher);
                     }),
                 ));

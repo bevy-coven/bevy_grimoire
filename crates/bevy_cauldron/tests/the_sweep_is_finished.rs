@@ -190,7 +190,7 @@ fn nobody_places_their_own_panel() {
 /// This is a crash, not tidiness, and it hid for months. An observer registered with `add_observer`
 /// fires for **any** matching event anywhere in the application — and `Project`, `OpenMap`, `Door`
 /// and `Mode` are inserted when a door opens and **removed by `screen::close_the_door`**. On
-/// `Screen::Menu` they do not exist, and in Bevy 0.19 a missing `Res<T>` **panics its system** rather
+/// `Screen::Project` they do not exist, and in Bevy 0.19 a missing `Res<T>` **panics its system** rather
 /// than skipping it.
 ///
 /// Every one of these observers already had the real guard — a `Query` answering "is this entity
@@ -316,7 +316,7 @@ fn a_global_observer_never_demands_a_doors_resource() {
     assert!(
         rogue.is_empty(),
         "these global observers demand a resource that belongs to a DOOR. They fire for any matching \
-         event anywhere, including on `Screen::Menu` where `close_the_door` has removed it — and a \
+         event anywhere, including on `Screen::Project` where `close_the_door` has removed it — and a \
          missing `Res<T>` panics rather than skipping, so the first click outside the editor takes \
          the application down. Take `Option<Res<..>>` and return early after the entity check, which \
          is the guard these already have and cannot reach:\n{}",

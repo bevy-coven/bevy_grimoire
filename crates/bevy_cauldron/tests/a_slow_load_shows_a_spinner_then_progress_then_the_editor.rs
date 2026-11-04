@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_cauldron::chooser::Chosen;
+use bevy_cauldron::screen::Chosen;
 use bevy_cauldron::launcher::LauncherPlugin;
 use bevy_cauldron::loading::{LoadFailed, LoadPhase, LoadReport, LoadRequest, LoadTiming, LoadingPlugin, ReportRow, StageDelay};
 use bevy_cauldron::project::{Project, Stage};

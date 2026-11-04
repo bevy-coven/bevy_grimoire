@@ -1,7 +1,7 @@
 //! **bevy_cauldron** — the binary. Argument parsing and the app; everything else is the
 //! library beside this, so `tests/` can drive the editor without a window. See `lib.rs`.
 
-use bevy_cauldron::{args, chooser, harness, project_assets, screen, screen::Screen};
+use bevy_cauldron::{args, harness, project_assets, screen, screen::Screen};
 
 use bevy::prelude::*;
 // `DefaultPlugins::disable` is `PluginGroup`'s method, and the prelude does not carry the trait.
@@ -29,7 +29,6 @@ fn main() -> AppExit {
         println!("{}", args::USAGE);
         return AppExit::Success;
     }
-    let root = args::root_of(&argv);
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
@@ -128,12 +127,6 @@ fn main() -> AppExit {
     // **Both screens' plugins, always added.** Which one *runs* is the state's business, not the
     // plugin list's — a list that changed with the screen would be two plugin graphs, and only one
     // of them would ever be the one under test.
-    // `--kit` off the one splitter, so the menu's preselection and the door's authoring kit cannot
-    // disagree about which word was the flag's value.
-    app.add_plugins(chooser::ChooserPlugin {
-        root: root.clone(),
-        preselect: args::split(&argv).kit.map(str::to_owned),
-    });
     harness::add_editor_plugins(&mut app);
     // **`--live`: every committed change goes to disk at once**, so a running game reloads it.
     if args::split(&argv).live {
@@ -146,7 +139,7 @@ fn main() -> AppExit {
     app.add_systems(Update, name_the_window);
 
     // **A project named on the command line is opened the way one chosen on the launcher is**
-    // (`project_assets::point_at`): the menu's output IS this argv (`args::open`), so
+    // (`project_assets::point_at`): the project page's output IS this argv (`args::open`), so
     // `bevy_cauldron . --door kit --kit ozea` and pressing Enter on the same row take the identical path in.
     // The state it names is the one inserted above, so the window starts on it.
     //
@@ -192,7 +185,7 @@ fn name_the_window(
     let want = match (screen.get(), door.as_deref()) {
         (Screen::Launcher, _) => "Cauldron".to_owned(),
         (Screen::Loading, _) => "Cauldron — opening a project".to_owned(),
-        (Screen::Menu, _) => "Cauldron — choose a kit or a map".to_owned(),
+        (Screen::Project, _) => "Cauldron — a project".to_owned(),
         (Screen::Editor, Some(d)) => {
             let door = d.label().to_lowercase();
             // **Which name to show is `chrome::subject`'s decision, not a second copy of it.** The

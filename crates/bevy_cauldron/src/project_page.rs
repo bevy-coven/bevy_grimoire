@@ -1,0 +1,881 @@
+//! **The project page: a project's maps and kits** (#296) — where a project opened from the home, or named on the command line,
+//! lands before an editor door opens. It is the chooser's replacement: `chooser.rs` was a keyboard-first four-column screen, and this
+//! is the same job in the window's own gooey widgets, standing in the home's shell (`launcher::spawn_shell`), so the sidebar stays.
+//!
+//! ```text
+//! Projects › my_game
+//!   Maps    [+ New map] [bedroom: 10 × 10 m, 4 m tall, 13 pieces placed] …
+//!   Kits    prototype · 12 pieces · Default for new pieces     + New kit
+//! ```
+//!
+//! # What it does, by the chooser's own names
+//!
+//! * **Kit create** and **map create** are the registry's operations (`kit_create`, `map_create`), dispatched with the project's root and no
+//!   loaded project: the page is the screen before a door, exactly as the chooser was, and an agent's call and a person's click are one
+//!   write. A new map opens at once, as the chooser's name field did.
+//! * **Authoring**: the kit marked *Default for new pieces* is `kits.ron`'s `authoring`, changed by `kit_set_authoring`.
+//! * **Delete** asks first, in the one prompt (`confirm.rs`), naming what goes; a kit the project still depends on is refused with the files
+//!   that name it ([`crate::catalog::ask_delete_kit`]).
+//! * **Bash**: a map's *uses pieces from* is one of the combinations `kits.ron` declares, chosen when the map is made and changed from its
+//!   menu ([`crate::catalog::cycle_bash`]).
+//! * **Map info** is on the card: its size in metres, how many pieces stand in it, where its pieces come from and why it will not open.
+//! * **An agent's `map_open` and `door_open`** enter the editor from here as from the chooser: `ops_brp` reads this screen as the one a
+//!   door is entered from.
+//!
+//! Every action is a [`PageAction`] message, so a button, a context menu and a test all ask the same way.
+//!
+//! # Esc goes back, and nothing here quits
+//!
+//! Esc closes a dialog, and with none open goes back to the grid. Quit is Cmd/Ctrl+Q (`confirm.rs`'s `QuitApp`), never a key a person
+//! presses to leave a dialog.
+
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+use bevy::prelude::*;
+use bevy::ecs::hierarchy::ChildSpawner;
+use bevy::ui::InteractionDisabled;
+use bevy::ui_widgets::observe;
+use bevy_gooey::{Activate, Cancel, ContextMenu, ContextTarget, FieldProblem, Role, ValueChange, button, choice, context_menu, dialog, heading, label, menu_item, number_field, panel, section, separator, text_input, toast, toast_alert, toggle};
+
+use crate::catalog::{self, Catalog, Kit, MapEntry, MapSummary, Pending, PolicyEntry, plural, size_in_metres};
+use crate::confirm::{Asked, Confirm};
+use crate::launcher::{self, HomeContent, Launcher, SidebarRoot, SplashArt};
+use crate::project_assets::{self, ProjectRoot};
+use crate::screen::Screen;
+use crate::ui::accent_button;
+
+/// The one message every action of the page goes through.
+#[derive(Message, Clone, Debug, PartialEq)]
+pub enum PageAction {
+    /// Open the map `0` in the Map door.
+    OpenMap(String),
+    /// Open the kit `0` in the Kit door.
+    OpenKit(String),
+    /// Ask for the new-map dialog.
+    NewMap,
+    /// Ask for the new-kit dialog.
+    NewKit,
+    /// Ask for the rename dialog of the map `0`.
+    RenameMap(String),
+    /// Ask whether to delete the map `0`.
+    DeleteMap(String),
+    /// Ask whether to delete the kit `0`.
+    DeleteKit(String),
+    /// Make the kit `0` the one new work lands in.
+    MakeDefault(String),
+    /// Change where the map `0` draws its pieces from: the next combination `kits.ron` declares, or every kit.
+    NextSource(String),
+    /// Ask for the settings dialog of the map `0`: its size, origin and note.
+    MapSettings(String),
+    /// Ask for the policy dialog of the kit `0`: what it leaves out and changes.
+    KitPolicy(String),
+    /// Ask whether to remove `entry` from the policy of the kit `kit`.
+    RemovePolicy { kit: String, entry: PolicyEntry },
+    /// Back to the home's grid.
+    Back,
+}
+
+/// **What the page is showing.** Rebuilt from disk every time the screen is entered, and whenever the project's files change.
+#[derive(Resource, Debug)]
+pub struct ProjectPage {
+    pub root: PathBuf,
+    pub catalog: Catalog,
+    /// What the question on screen was about, until it is answered.
+    pub asking: Option<Pending>,
+    /// The policy entry the question on screen is about to remove, with the kit it belongs to, until it is answered.
+    asking_policy: Option<(String, PolicyEntry)>,
+    /// The cards are out of date: the next frame draws them again.
+    pub dirty: bool,
+    /// The project's files as they were when the catalog was read ([`fingerprint`]).
+    seen: Vec<(PathBuf, SystemTime)>,
+    /// Seconds until the files are looked at again.
+    since: f32,
+}
+
+impl ProjectPage {
+    /// The project's folder name: the page's title.
+    pub fn name(&self) -> String {
+        self.root.file_name().map_or_else(|| self.root.display().to_string(), |n| n.to_string_lossy().into_owned())
+    }
+}
+
+/// How often, in seconds, the page looks at the project's files to see whether a map or a kit was made, renamed or deleted elsewhere (an
+/// agent, the editor, a person's file manager). A listing that follows its directory is what the chooser's `follow_the_maps_directory` did.
+const WATCH_SECS: f32 = 1.0;
+
+/// The files whose change makes the page out of date: the maps folder's entries, `kits.ron`, and each kit's library.
+pub fn fingerprint(root: &Path) -> Vec<(PathBuf, SystemTime)> {
+    let base = root.join(catalog::GRIMOIRE_DIR);
+    let mut watched = vec![base.join(catalog::MAPS_DIR), base.join(bevy_grimoire_core::kits::KITS_FILE)];
+    for dir in std::fs::read_dir(&base).into_iter().flatten().flatten().map(|e| e.path()) {
+        watched.push(dir.join(bevy_grimoire_core::policy::LIBRARY_FILE));
+    }
+    for map in std::fs::read_dir(base.join(catalog::MAPS_DIR)).into_iter().flatten().flatten() {
+        watched.push(map.path());
+    }
+    let mut out: Vec<_> = watched.into_iter().filter_map(|p| Some((p.clone(), std::fs::metadata(&p).ok()?.modified().ok()?))).collect();
+    out.sort();
+    out
+}
+
+/// A dialog's fields. Observers write it; Create reads it.
+#[derive(Resource, Debug, Clone, PartialEq)]
+struct Form {
+    kind: FormKind,
+    name: String,
+    /// Width, depth and height of a map, in metres.
+    metres: [f32; 3],
+    /// Where a map's floor starts, in metres (x, y, z).
+    origin: [f32; 3],
+    /// A map's note.
+    note: String,
+    /// Which "uses pieces from" is chosen: 0 is every kit, `n` is the project's `n`th bash.
+    source: usize,
+    /// Whether a new kit becomes the one new work lands in.
+    default: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum FormKind {
+    NewMap,
+    NewKit,
+    /// Renaming the map of this name.
+    RenameMap(String),
+    /// Changing the size, origin and note of the map of this name.
+    MapSettings(String),
+}
+
+impl Form {
+    /// A form of `kind` with nothing typed: a new map is ten metres square and four tall, at the world's origin.
+    fn new(kind: FormKind, name: String) -> Form {
+        Form { kind, name, metres: DEFAULT_METRES, origin: [0.0; 3], note: String::new(), source: 0, default: false }
+    }
+}
+
+/// A new map is ten metres square and four tall, as `Map::default` says.
+const DEFAULT_METRES: [f32; 3] = [10.0, 10.0, 4.0];
+/// How far one drag pixel or one key press moves a size, and the least and most a size may be.
+const METRES_STEP: f32 = 0.5;
+const METRES_MIN: f32 = 1.0;
+const METRES_MAX: f32 = 1000.0;
+
+#[derive(Component)]
+pub struct PageDialog;
+#[derive(Component)]
+pub struct NameField;
+#[derive(Component)]
+pub struct SavedAs;
+#[derive(Component)]
+pub struct CreateButton;
+/// A map size field of the New map and Map settings dialogs: width (0), depth (1) or height (2).
+#[derive(Component)]
+pub struct SizeField(pub usize);
+/// A map origin field of the Map settings dialog: x (0), y (1) or z (2).
+#[derive(Component)]
+pub struct OriginField(pub usize);
+/// The note field of the Map settings dialog.
+#[derive(Component)]
+pub struct NoteField;
+#[derive(Component)]
+struct PageBody;
+#[derive(Component)]
+struct MapMenu;
+#[derive(Component)]
+struct KitMenu;
+
+/// A map card, by the map's name.
+#[derive(Component)]
+pub struct MapCard(pub String);
+
+/// A kit row, by the kit's label.
+#[derive(Component)]
+pub struct KitRow(pub String);
+
+pub struct ProjectPagePlugin;
+
+impl Plugin for ProjectPagePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_message::<PageAction>()
+            .add_systems(OnEnter(Screen::Project), (build_page, fill_page).chain())
+            .add_systems(
+                Update,
+                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), act, answer_the_question, follow_the_files, redraw, show_the_form).chain().run_if(in_state(Screen::Project)),
+            );
+    }
+}
+
+fn build_page(mut commands: Commands, root: Res<ProjectRoot>, mut images: ResMut<Assets<Image>>, mut splash: ResMut<SplashArt>) {
+    launcher::ensure_splash(&mut images, &mut splash);
+    let Some(root) = root.current() else {
+        error!("the project page was entered with no project to show");
+        return;
+    };
+    let (catalog, problem) = match Catalog::scan(&root) {
+        Ok(c) => (c, None),
+        Err(e) => (Catalog { kits: Vec::new(), maps: Vec::new(), authoring: None, bashes: Vec::new() }, Some(e)),
+    };
+    let seen = fingerprint(&root);
+    commands.insert_resource(ProjectPage { root, catalog, asking: None, asking_policy: None, dirty: false, seen, since: 0.0 });
+    if let Some(problem) = problem {
+        commands.spawn(toast_alert(problem).sticky());
+    }
+    launcher::spawn_shell(&mut commands, Screen::Project);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fill_page(
+    mut commands: Commands,
+    page: Option<Res<ProjectPage>>,
+    launcher: Res<Launcher>,
+    splash: Res<SplashArt>,
+    updater: Option<Res<crate::update::Updater>>,
+    sidebar: Query<Entity, With<SidebarRoot>>,
+    content: Query<Entity, With<HomeContent>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let (Some(page), Ok(sidebar), Ok(content)) = (page, sidebar.single(), content.single()) else { return };
+    launcher::fill_sidebar(&mut commands, sidebar, &launcher, &splash, updater.as_deref());
+    let map_menu = commands.spawn((context_menu(()), MapMenu, ChildOf(content))).id();
+    let kit_menu = commands.spawn((context_menu(()), KitMenu, ChildOf(content))).id();
+    spawn_menus(&mut commands, map_menu, kit_menu, &page.catalog);
+    let body = commands
+        .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody, ChildOf(content)))
+        .id();
+    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone());
+}
+
+/// The page's body: the breadcrumb, then the Maps section and the Kits section.
+fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu: Entity, kit_menu: Entity, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>) {
+    commands.entity(body).with_children(|body| {
+        body.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_ROW), ..default() }).with_children(|crumbs| {
+            crumbs.spawn((button("Projects"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::Back); })));
+            crumbs.spawn(label("›"));
+            crumbs.spawn(heading(page.name()));
+        });
+        let picture = launcher::project_picture(&page.root, images, splash);
+        let maps = page.catalog.maps.iter().map(|m| (m.clone(), picture.clone())).collect::<Vec<_>>();
+        body.spawn(section(
+            "Maps",
+            true,
+            Children::spawn(bevy::ecs::spawn::SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
+                parent
+                    .spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_GROUP), row_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::vertical(Val::Px(crate::chrome::GAP_ROW)), ..default() })
+                    .with_children(|grid| {
+                        grid.spawn((button("+ New map"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::NewMap); })));
+                        for (map, picture) in &maps {
+                            map_card(grid, map, picture.clone(), map_menu);
+                        }
+                    });
+            })),
+        ));
+        let kits = page.catalog.kits.clone();
+        let authoring = page.catalog.authoring.clone();
+        body.spawn(section(
+            "Kits",
+            true,
+            Children::spawn(bevy::ecs::spawn::SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
+                parent.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), padding: UiRect::vertical(Val::Px(crate::chrome::GAP_ROW)), ..default() }).with_children(|rows| {
+                    for kit in &kits {
+                        kit_row(rows, kit, authoring.as_deref() == Some(kit.label.as_str()), kit_menu);
+                    }
+                    rows.spawn((button("+ New kit"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::NewKit); })));
+                });
+            })),
+        ));
+    });
+}
+
+/// A map: its picture, name, size in metres and how many pieces stand in it. One that will not open says why and can be deleted.
+fn map_card(grid: &mut ChildSpawner, map: &MapEntry, picture: Option<ImageNode>, menu: Entity) {
+    let name = map.name.clone();
+    let node = launcher::card_node();
+    match &map.summary {
+        MapSummary::Unreadable(why) => {
+            let gone = name.clone();
+            grid.spawn((node, Role::Card, MapCard(name.clone()))).with_children(|card| {
+                card.spawn(launcher::quiet(name.clone()));
+                card.spawn(label("Will not open"));
+                card.spawn(launcher::quiet(launcher::middle_ellipsis(why, 90)));
+                card.spawn((button("Delete"), observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::DeleteMap(gone.clone())); })));
+            });
+        }
+        MapSummary::Read { placements, stamps, bounds, bash, .. } => {
+            let open = name.clone();
+            grid.spawn((
+                node,
+                // CHROME-OK: a map card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
+                bevy::ui_widgets::Button,
+                Role::Button,
+                bevy::picking::hover::Hovered::default(),
+                bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+                ContextMenu(menu),
+                MapCard(name.clone()),
+                observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::OpenMap(open.clone())); }),
+            ))
+            .with_children(|card| {
+                if let Some(picture) = picture {
+                    card.spawn((picture, launcher::thumb_node(), Pickable::IGNORE));
+                }
+                card.spawn((Text::new(name.clone()), Role::ButtonText, Pickable::IGNORE));
+                card.spawn((launcher::quiet(size_in_metres(*bounds)), Pickable::IGNORE));
+                let pieces = placements + stamps;
+                card.spawn((launcher::quiet(if pieces == 0 { "Empty".to_owned() } else { format!("{pieces} {} placed", plural(pieces, "piece")) }), Pickable::IGNORE));
+                if let Some(bash) = bash {
+                    card.spawn((launcher::quiet(format!("Pieces from {bash}")), Pickable::IGNORE));
+                }
+            });
+        }
+    }
+}
+
+/// A kit's row: its name, how many pieces it holds, and a badge on the one new work lands in.
+fn kit_row(rows: &mut ChildSpawner, kit: &Kit, is_default: bool, menu: Entity) {
+    let label_text = kit.label.clone();
+    let open = kit.label.clone();
+    rows.spawn((
+        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::all(Val::Px(crate::chrome::GAP_ROW)), ..default() },
+        // CHROME-OK: a kit row is none of chrome's three clickables, it is a gooey button's skeleton with a count and a badge
+        bevy::ui_widgets::Button,
+        Role::Button,
+        bevy::picking::hover::Hovered::default(),
+        bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+        ContextMenu(menu),
+        KitRow(label_text.clone()),
+        observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::OpenKit(open.clone())); }),
+    ))
+    .with_children(|row| {
+        row.spawn((Text::new(label_text), Role::ButtonText, Pickable::IGNORE));
+        row.spawn((launcher::quiet(format!("{} {}", kit.pieces, plural(kit.pieces, "piece"))), Pickable::IGNORE));
+        if is_default {
+            row.spawn((Text::new("Default for new pieces"), Role::Label, Pickable::IGNORE));
+        }
+    });
+}
+
+/// What a context-menu item of a map or a kit does.
+#[derive(Clone, Copy)]
+enum Verb {
+    Open,
+    Rename,
+    Source,
+    Delete,
+    MakeDefault,
+    Settings,
+    Policy,
+}
+
+fn spawn_menus(commands: &mut Commands, map_menu: Entity, kit_menu: Entity, catalog: &Catalog) {
+    let mut maps = vec![("Open", Verb::Open), ("Rename", Verb::Rename), ("Map settings…", Verb::Settings)];
+    if !catalog.bashes.is_empty() {
+        maps.push(("Change where its pieces come from", Verb::Source));
+    }
+    for (text, verb) in maps {
+        commands.spawn((menu_item(text), ChildOf(map_menu))).observe(on_map_verb(verb));
+    }
+    commands.spawn((separator(), ChildOf(map_menu)));
+    commands.spawn((menu_item("Delete"), ChildOf(map_menu))).observe(on_map_verb(Verb::Delete));
+    for (text, verb) in [("Open", Verb::Open), ("Make default for new pieces", Verb::MakeDefault), ("Policy…", Verb::Policy)] {
+        commands.spawn((menu_item(text), ChildOf(kit_menu))).observe(on_kit_verb(verb));
+    }
+    commands.spawn((separator(), ChildOf(kit_menu)));
+    commands.spawn((menu_item("Delete"), ChildOf(kit_menu))).observe(on_kit_verb(Verb::Delete));
+}
+
+#[allow(clippy::type_complexity)]
+fn on_map_verb(verb: Verb) -> impl FnMut(On<Activate>, Query<&ChildOf>, Query<&ContextTarget>, Query<&MapCard>, MessageWriter<PageAction>) {
+    move |activate, parents, targets, cards, mut out| {
+        let Some(MapCard(name)) = ContextTarget::of(activate.entity, &parents, &targets).and_then(|e| cards.get(e).ok()) else { return };
+        out.write(match verb {
+            Verb::Open => PageAction::OpenMap(name.clone()),
+            Verb::Rename => PageAction::RenameMap(name.clone()),
+            Verb::Settings => PageAction::MapSettings(name.clone()),
+            Verb::Source => PageAction::NextSource(name.clone()),
+            Verb::Delete => PageAction::DeleteMap(name.clone()),
+            Verb::MakeDefault | Verb::Policy => return,
+        });
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn on_kit_verb(verb: Verb) -> impl FnMut(On<Activate>, Query<&ChildOf>, Query<&ContextTarget>, Query<&KitRow>, MessageWriter<PageAction>) {
+    move |activate, parents, targets, rows, mut out| {
+        let Some(KitRow(label)) = ContextTarget::of(activate.entity, &parents, &targets).and_then(|e| rows.get(e).ok()) else { return };
+        out.write(match verb {
+            Verb::Open => PageAction::OpenKit(label.clone()),
+            Verb::Delete => PageAction::DeleteKit(label.clone()),
+            Verb::MakeDefault => PageAction::MakeDefault(label.clone()),
+            Verb::Policy => PageAction::KitPolicy(label.clone()),
+            Verb::Rename | Verb::Source | Verb::Settings => return,
+        });
+    }
+}
+
+/// Esc closes a dialog; with none open and no question up it goes back to the grid. It runs before gooey's own Escape handling, so the Esc
+/// that closes a dialog is still a dialog's when this reads it.
+fn back_on_escape(keys: Res<ButtonInput<KeyCode>>, dialogs: Query<(), With<PageDialog>>, confirm: Option<Res<Confirm>>, mut out: MessageWriter<PageAction>) {
+    if keys.just_pressed(KeyCode::Escape) && dialogs.is_empty() && !confirm.is_some_and(|c| c.is_open()) {
+        out.write(PageAction::Back);
+    }
+}
+
+/// Dispatches one operation the way the chooser did: the project's root and no loaded project, the person as the source, the log line in
+/// the project's `oplog.jsonl`. A refusal is the sentence the page shows.
+fn from_the_page(root: &Path, operation: &str, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let mut ctx = crate::ops::Ctx { root: Some(root.to_path_buf()), source: crate::ops::Source::Human, session: "project page".to_owned(), ..crate::ops::Ctx::default() };
+    match crate::ops::dispatch(&mut ctx, operation, params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.after.unwrap_or(serde_json::Value::Null)),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
+}
+
+/// Runs `operation` on the map `name`, which the operation needs loaded with its project, and which it saves.
+fn on_the_map(root: &Path, name: &str, operation: &str, params: &serde_json::Value) -> Result<(), String> {
+    let project = crate::project::Project::open(root, None)?;
+    let open = crate::project::OpenMap::open(&project, name)?;
+    let mut ctx = crate::ops::Ctx { root: Some(root.to_path_buf()), project: Some(project), open: Some(open), source: crate::ops::Source::Human, session: "project page".to_owned(), ..crate::ops::Ctx::default() };
+    match crate::ops::dispatch(&mut ctx, operation, params) {
+        Ok(crate::ops::Applied::Done { .. }) => Ok(()),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
+}
+
+/// The action messages, carried out.
+#[allow(clippy::too_many_arguments)]
+fn act(
+    mut commands: Commands,
+    mut actions: MessageReader<PageAction>,
+    mut page: ResMut<ProjectPage>,
+    confirm: Option<ResMut<Confirm>>,
+    mut next: ResMut<NextState<Screen>>,
+    form: Option<Res<Form>>,
+    mut launcher: ResMut<Launcher>,
+    dialogs: Query<Entity, With<PageDialog>>,
+) {
+    let mut confirm = confirm;
+    for action in actions.read().cloned() {
+        match action {
+            PageAction::Back => {
+                // The grid is the project's parent: the page's sidebar entry for it is Projects.
+                launcher.tab = launcher::HomeTab::Projects;
+                next.set(Screen::Launcher);
+            }
+            PageAction::OpenMap(name) => {
+                let root = page.root.clone();
+                commands.queue(move |world: &mut World| {
+                    if let Err(e) = project_assets::open_project(world, &root, Some(&name)) {
+                        world.spawn(toast_alert(e).sticky());
+                    }
+                });
+            }
+            PageAction::OpenKit(label) => match page.catalog.kit(&label).map(|k| k.flag.clone()) {
+                None => {
+                    commands.spawn(toast_alert(format!("there is no kit `{label}`")).sticky());
+                }
+                Some(None) => {
+                    commands.spawn(toast_alert(format!("`{label}` is not a bound kit, so there is nothing to open it as.")).sticky());
+                }
+                Some(Some(flag)) => {
+                    let argv = vec![page.root.display().to_string(), "--door".to_owned(), crate::tiles::Door::Kit.label().to_lowercase(), "--kit".to_owned(), flag];
+                    commands.queue(move |world: &mut World| {
+                        if let Err(e) = project_assets::open_project_argv(world, &argv) {
+                            world.spawn(toast_alert(e).sticky());
+                        }
+                    });
+                }
+            },
+            PageAction::NewMap => open_dialog(&mut commands, &page, Form::new(FormKind::NewMap, String::new()), form.as_deref()),
+            PageAction::NewKit => {
+                let first = page.catalog.kits.is_empty();
+                open_dialog(&mut commands, &page, Form { default: first, ..Form::new(FormKind::NewKit, String::new()) }, form.as_deref());
+            }
+            PageAction::RenameMap(name) => open_dialog(&mut commands, &page, Form::new(FormKind::RenameMap(name.clone()), name), form.as_deref()),
+            PageAction::MapSettings(name) => match page.catalog.map(&name).map(|m| &m.summary) {
+                Some(MapSummary::Read { bounds, origin, note, .. }) => {
+                    let (width, height, depth) = *bounds;
+                    let settings = Form { metres: [width, depth, height], origin: [origin.0, origin.1, origin.2], note: note.clone().unwrap_or_default(), ..Form::new(FormKind::MapSettings(name.clone()), name) };
+                    open_dialog(&mut commands, &page, settings, form.as_deref());
+                }
+                Some(MapSummary::Unreadable(why)) => {
+                    commands.spawn(toast_alert(format!("`{name}` will not open, so it has no settings to change: {why}")).sticky());
+                }
+                None => {
+                    commands.spawn(toast_alert(format!("there is no map `{name}`")).sticky());
+                }
+            },
+            PageAction::KitPolicy(label) => {
+                if form.is_some() || !dialogs.is_empty() {
+                    continue;
+                }
+                match page.catalog.kit(&label).ok_or_else(|| format!("there is no kit `{label}`")).and_then(catalog::policy_entries) {
+                    Ok(entries) => open_policy_dialog(&mut commands, &label, entries),
+                    Err(e) => {
+                        commands.spawn(toast_alert(e).sticky());
+                    }
+                }
+            }
+            PageAction::RemovePolicy { kit, entry } => {
+                for dialog in &dialogs {
+                    commands.entity(dialog).despawn();
+                }
+                if let Some(confirm) = confirm.as_deref_mut() {
+                    confirm.ask(
+                        Asked::DeleteEntry,
+                        format!("Remove this from the policy of `{kit}`?"),
+                        format!("{}. Only this line of the kit's policy file goes, and its comments stay.", entry.shown),
+                        "Remove it",
+                        "Keep it",
+                    );
+                }
+                page.asking_policy = Some((kit, entry));
+            }
+            PageAction::DeleteMap(name) => {
+                let asked = catalog::ask_delete_map(&page.catalog, &name);
+                ask_to_delete(&mut commands, &mut page, confirm.as_deref_mut(), asked);
+            }
+            PageAction::DeleteKit(label) => {
+                let asked = catalog::ask_delete_kit(&page.root, &page.catalog, &label);
+                ask_to_delete(&mut commands, &mut page, confirm.as_deref_mut(), asked);
+            }
+            PageAction::MakeDefault(label) => {
+                if page.catalog.authoring.as_deref() == Some(label.as_str()) {
+                    // Already the one is not a change, and the operation says so by refusing; there is nothing to report.
+                    continue;
+                }
+                match from_the_page(&page.root, "kit_set_authoring", &serde_json::json!({ "kit": label })) {
+                    Ok(_) => page.dirty = true,
+                    Err(e) => {
+                        commands.spawn(toast_alert(e).sticky());
+                    }
+                }
+            }
+            PageAction::NextSource(name) => match catalog::cycle_bash(&page.catalog, &name) {
+                Ok(_) => page.dirty = true,
+                Err(e) => {
+                    commands.spawn(toast_alert(e).sticky());
+                }
+            },
+        }
+    }
+}
+
+/// Raises the delete question for `asked`, or says why it cannot be.
+fn ask_to_delete(commands: &mut Commands, page: &mut ProjectPage, confirm: Option<&mut Confirm>, asked: Result<Pending, String>) {
+    match asked {
+        Err(e) => {
+            commands.spawn(toast_alert(e).sticky());
+        }
+        Ok(pending) => {
+            let what = if pending.kit { "kit" } else { "map" };
+            if let Some(confirm) = confirm {
+                confirm.ask(
+                    Asked::DeleteEntry,
+                    format!("Delete the {what} `{}`?", pending.name),
+                    if pending.kit { "The whole kit directory goes, with everything in it. This cannot be undone." } else { "The map file is removed. This cannot be undone." },
+                    format!("Delete {what} `{}`", pending.name),
+                    "Keep it",
+                );
+            }
+            page.asking = Some(pending);
+        }
+    }
+}
+
+/// The answer to the delete question: the thing it named goes, or nothing does. A policy entry's removal is answered here too, and the
+/// policy dialog comes back with what is left.
+fn answer_the_question(mut commands: Commands, mut page: ResMut<ProjectPage>, confirm: Option<ResMut<Confirm>>, mut out: MessageWriter<PageAction>) {
+    let Some(mut confirm) = confirm else { return };
+    let Some(agreed) = confirm.answer(Asked::DeleteEntry) else { return };
+    if let Some((label, entry)) = page.asking_policy.take() {
+        if agreed {
+            let removed = page.catalog.kit(&label).ok_or_else(|| format!("there is no kit `{label}`")).and_then(|kit| catalog::remove_policy_entry(kit, &entry.row));
+            if let Err(e) = removed {
+                commands.spawn(toast_alert(e).sticky());
+            }
+        }
+        out.write(PageAction::KitPolicy(label));
+        return;
+    }
+    let Some(pending) = page.asking.take() else { return };
+    if !agreed {
+        return;
+    }
+    match catalog::delete_entry(&page.root, &pending) {
+        Ok(()) => {
+            page.dirty = true;
+            commands.spawn(toast(format!("Deleted `{}`", pending.name)));
+        }
+        Err(e) => {
+            commands.spawn(toast_alert(e).sticky());
+        }
+    }
+}
+
+/// Looks at the project's files once a second: a map or a kit made, renamed or deleted elsewhere draws.
+fn follow_the_files(time: Res<Time<Real>>, mut page: ResMut<ProjectPage>) {
+    page.since += time.delta_secs();
+    if page.since < WATCH_SECS {
+        return;
+    }
+    page.since = 0.0;
+    let now = fingerprint(&page.root);
+    if now != page.seen {
+        page.seen = now;
+        page.dirty = true;
+    }
+}
+
+/// Draws the body again from disk after anything changed.
+fn redraw(
+    mut commands: Commands,
+    mut page: ResMut<ProjectPage>,
+    body: Query<Entity, With<PageBody>>,
+    map_menu: Query<Entity, With<MapMenu>>,
+    kit_menu: Query<Entity, With<KitMenu>>,
+    splash: Res<SplashArt>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if !page.dirty {
+        return;
+    }
+    page.dirty = false;
+    let (Ok(body), Ok(map_menu), Ok(kit_menu)) = (body.single(), map_menu.single(), kit_menu.single()) else { return };
+    match Catalog::scan(&page.root) {
+        Ok(catalog) => page.catalog = catalog,
+        Err(e) => {
+            commands.spawn(toast_alert(e).sticky());
+            return;
+        }
+    }
+    page.seen = fingerprint(&page.root);
+    commands.entity(body).despawn_children();
+    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone());
+}
+
+// ── the dialogs ──────────────────────────────────────────────────────────────────────────────────
+
+/// Opens the dialog for `form`, unless one is already up.
+fn open_dialog(commands: &mut Commands, page: &ProjectPage, form: Form, existing: Option<&Form>) {
+    if existing.is_some() {
+        return;
+    }
+    let (title, accent) = match &form.kind {
+        FormKind::NewMap => ("New map", "Create"),
+        FormKind::NewKit => ("New kit", "Create"),
+        FormKind::RenameMap(_) => ("Rename the map", "Rename"),
+        FormKind::MapSettings(_) => ("Map settings", "Save"),
+    };
+    let bashes: Vec<String> = std::iter::once("Every kit".to_owned()).chain(page.catalog.bashes.iter().cloned()).collect();
+    let (kind, first, make_default) = (form.kind.clone(), form.name.clone(), form.default);
+    let (metres, origin, note) = (form.metres, form.origin, form.note.clone());
+    commands.insert_resource(form);
+    let dialog = commands.spawn((dialog(), PageDialog, observe(close_the_dialog))).id();
+    let card = commands.spawn((panel(), ChildOf(dialog))).id();
+    commands.entity(card).with_children(|card| {
+        card.spawn(heading(title));
+        if let FormKind::MapSettings(name) = &kind {
+            // A map's name is changed by Rename, which also moves its file; here it is only what the settings are of.
+            card.spawn(label(format!("Map: {name}")));
+        } else {
+            card.spawn((
+                text_input("Name", first),
+                NameField,
+                bevy_gooey::TextHint("a name".into()),
+                observe(|change: On<ValueChange<String>>, mut form: ResMut<Form>| form.name = change.value.clone()),
+            ));
+            card.spawn((label(""), SavedAs));
+        }
+        if matches!(kind, FormKind::NewMap | FormKind::MapSettings(_)) {
+            for (axis, name) in ["Width", "Depth", "Height"].into_iter().enumerate() {
+                card.spawn((
+                    number_field(format!("{name} (metres)"), metres[axis], METRES_STEP, METRES_MIN..=METRES_MAX),
+                    SizeField(axis),
+                    observe(move |change: On<ValueChange<f32>>, mut form: ResMut<Form>| form.metres[axis] = change.value),
+                ));
+            }
+        }
+        if kind == FormKind::NewMap {
+            card.spawn((choice("Uses pieces from", bashes, 0), observe(|change: On<ValueChange<usize>>, mut form: ResMut<Form>| form.source = change.value)));
+        }
+        if matches!(kind, FormKind::MapSettings(_)) {
+            for (axis, name) in ["x", "y (height)", "z"].into_iter().enumerate() {
+                card.spawn((
+                    number_field(format!("Origin {name} (metres)"), origin[axis], METRES_STEP, -METRES_MAX..=METRES_MAX),
+                    OriginField(axis),
+                    observe(move |change: On<ValueChange<f32>>, mut form: ResMut<Form>| form.origin[axis] = change.value),
+                ));
+            }
+            card.spawn((text_input("Note", note), NoteField, bevy_gooey::TextHint("what this map is for".into()), observe(|change: On<ValueChange<String>>, mut form: ResMut<Form>| form.note = change.value.clone())));
+        }
+        if kind == FormKind::NewKit {
+            card.spawn((toggle("Make it the default for new pieces", make_default), observe(|change: On<ValueChange<bool>>, mut form: ResMut<Form>| form.default = change.value)));
+        }
+        card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+            row.spawn((button("Cancel"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
+            row.spawn((accent_button(accent), CreateButton, observe(create_clicked)));
+        });
+    });
+}
+
+/// The policy dialog: what the kit `kit_label` leaves out and changes, one row each with a Remove.
+fn open_policy_dialog(commands: &mut Commands, kit_label: &str, entries: Vec<PolicyEntry>) {
+    let dialog = commands.spawn((dialog(), PageDialog, observe(close_the_dialog))).id();
+    let card = commands.spawn((panel(), ChildOf(dialog))).id();
+    commands.entity(card).with_children(|card| {
+        card.spawn(heading(format!("Policy of {kit_label}")));
+        if entries.is_empty() {
+            card.spawn(label("This kit leaves nothing out and changes nothing."));
+        }
+        for entry in entries {
+            let kit = kit_label.to_owned();
+            card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                row.spawn(label(entry.shown.clone()));
+                row.spawn((button("Remove"), observe(move |_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RemovePolicy { kit: kit.clone(), entry: entry.clone() }); })));
+            });
+        }
+        card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, ..default() }).with_children(|row| {
+            row.spawn((accent_button("Close"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
+        });
+    });
+}
+
+/// Esc, or the pad's B, closes the dialog.
+fn close_the_dialog(cancel: On<Cancel>, mut commands: Commands) {
+    commands.entity(cancel.entity).despawn();
+    commands.remove_resource::<Form>();
+}
+
+fn close(commands: &mut Commands, dialogs: &Query<Entity, With<PageDialog>>) {
+    for dialog in dialogs {
+        commands.entity(dialog).despawn();
+    }
+    commands.remove_resource::<Form>();
+}
+
+/// What the form says is wrong, or `None`: an empty name is not wrong yet (nothing has been typed), but is not ready either ([`ready`]).
+fn problem(form: &Form, catalog: &Catalog) -> Option<String> {
+    let saved = bevy_grimoire_core::naming::to_snake_case(&form.name);
+    if saved.is_empty() {
+        return (!form.name.trim().is_empty()).then(|| "That leaves nothing usable: use letters or digits.".to_owned());
+    }
+    match &form.kind {
+        FormKind::NewMap if catalog.map(&saved).is_some() => Some(format!("A map called `{saved}` is already here.")),
+        FormKind::NewKit if catalog.kit(&saved).is_some() => Some(format!("A kit called `{saved}` is already here.")),
+        FormKind::RenameMap(old) if *old == saved => Some("That is already its name.".to_owned()),
+        FormKind::RenameMap(_) if catalog.map(&saved).is_some() => Some(format!("A map called `{saved}` is already here.")),
+        FormKind::NewMap | FormKind::MapSettings(_) if form.metres.iter().any(|m| !m.is_finite() || *m <= 0.0) => Some("Every size needs to be more than zero.".to_owned()),
+        _ => None,
+    }
+}
+
+/// Whether Create can be pressed.
+fn ready(form: &Form, catalog: &Catalog) -> bool {
+    !bevy_grimoire_core::naming::to_snake_case(&form.name).is_empty() && problem(form, catalog).is_none()
+}
+
+/// What a submitted form leads to.
+enum Done {
+    /// The map was made: open it.
+    OpenMap(String),
+    /// Something changed on disk: draw the page again.
+    Refresh,
+}
+
+/// Does what the form asks, through the operations; the page is still the screen before a door.
+fn submit(form: &Form, page: &ProjectPage) -> Result<Done, String> {
+    if !ready(form, &page.catalog) {
+        return Err(problem(form, &page.catalog).unwrap_or_else(|| "Name it first.".to_owned()));
+    }
+    let saved = bevy_grimoire_core::naming::to_snake_case(&form.name);
+    match &form.kind {
+        FormKind::NewMap => {
+            let [width, depth, height] = form.metres;
+            let origin = bevy_grimoire_core::map::Map::default().origin;
+            let after = from_the_page(&page.root, "map_create", &serde_json::json!({ "name": form.name, "bounds": [width, height, depth], "origin": [origin.0, origin.1, origin.2], "note": null }))?;
+            let path = after["path"].as_str().map(PathBuf::from).ok_or_else(|| "the map was made but its path was not answered".to_owned())?;
+            if let Some(bash) = form.source.checked_sub(1).and_then(|i| page.catalog.bashes.get(i)) {
+                catalog::write_bash(&path, Some(bash))?;
+            }
+            Ok(Done::OpenMap(saved))
+        }
+        FormKind::NewKit => {
+            from_the_page(&page.root, "kit_create", &serde_json::json!({ "name": form.name }))?;
+            // The first kit made is where work lands by itself; any other becomes it only when asked.
+            if form.default && !page.catalog.kits.is_empty() {
+                from_the_page(&page.root, "kit_set_authoring", &serde_json::json!({ "kit": saved }))?;
+            }
+            Ok(Done::Refresh)
+        }
+        FormKind::RenameMap(old) => {
+            on_the_map(&page.root, old, "map_rename", &serde_json::json!({ "name": saved }))?;
+            Ok(Done::Refresh)
+        }
+        FormKind::MapSettings(name) => {
+            let [width, depth, height] = form.metres;
+            let [x, y, z] = form.origin;
+            // Cleared when empty: a note that is only spaces is no note.
+            let note = Some(form.note.trim()).filter(|n| !n.is_empty());
+            on_the_map(&page.root, name, "map_set_settings", &serde_json::json!({ "bounds": [width, height, depth], "origin": [x, y, z], "note": note }))?;
+            Ok(Done::Refresh)
+        }
+    }
+}
+
+fn create_clicked(_: On<Activate>, mut commands: Commands, form: Option<Res<Form>>, mut page: ResMut<ProjectPage>, dialogs: Query<Entity, With<PageDialog>>) {
+    let Some(form) = form else { return };
+    match submit(&form, &page) {
+        Ok(done) => {
+            close(&mut commands, &dialogs);
+            page.dirty = true;
+            if let Done::OpenMap(name) = done {
+                let root = page.root.clone();
+                commands.queue(move |world: &mut World| {
+                    if let Err(e) = project_assets::open_project(world, &root, Some(&name)) {
+                        world.spawn(toast_alert(e).sticky());
+                    }
+                });
+            }
+        }
+        Err(e) => {
+            commands.spawn(toast_alert(e).sticky());
+        }
+    }
+}
+
+/// Puts the form's words on the dialog every time it changes: what the name is saved as, what is wrong with it, and whether Create is ready.
+fn show_the_form(
+    mut commands: Commands,
+    form: Option<Res<Form>>,
+    page: Res<ProjectPage>,
+    name: Query<Entity, With<NameField>>,
+    create: Query<Entity, With<CreateButton>>,
+    mut saved_as: Query<&mut Text, With<SavedAs>>,
+) {
+    let Some(form) = form.filter(|f| f.is_changed()) else { return };
+    let saved = bevy_grimoire_core::naming::to_snake_case(&form.name);
+    let problem = problem(&form, &page.catalog);
+    for entity in &name {
+        match &problem {
+            Some(text) => {
+                commands.entity(entity).insert(FieldProblem::error(text.clone()));
+            }
+            None => {
+                commands.entity(entity).remove::<FieldProblem>();
+            }
+        }
+    }
+    let ready = ready(&form, &page.catalog);
+    for entity in &create {
+        if ready {
+            commands.entity(entity).remove::<InteractionDisabled>();
+        } else {
+            commands.entity(entity).insert(InteractionDisabled);
+        }
+    }
+    let said = if saved.is_empty() { String::new() } else { format!("Saved as {saved}") };
+    for mut text in &mut saved_as {
+        if text.0 != said {
+            text.0.clone_from(&said);
+        }
+    }
+}

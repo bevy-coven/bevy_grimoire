@@ -2526,7 +2526,7 @@ pub fn list_row<'a>(
 ///
 /// That was invisible while `list_row` was only ever called by editor panels. The moment the menu
 /// adopted the shared row vocabulary, its first click panicked: `Res<Project>` does not exist on
-/// `Screen::Menu`. Two observers were fixed to take `Option`; twenty-two were not, and each is the
+/// `Screen::Project`. Two observers were fixed to take `Option`; twenty-two were not, and each is the
 /// same landmine for the next caller.
 ///
 /// So a row that brings its own click handling says so, and stays off the bus. It keeps everything
@@ -3299,14 +3299,6 @@ impl Plugin for ChromePlugin {
                 spawn_frame.in_set(FrameSystems),
             )
             .add_systems(Update, adopt_the_shell_split.after(FrameSystems))
-            // **The menu gets the same frame**, and that is the point of it being the window's shape
-            // rather than the editor's: one answer to "how is this application laid out" instead of
-            // the two that let the menu drift into a fixed-pixel grid sitting in a window it did not
-            // fill.
-            .add_systems(
-                OnEnter(crate::screen::Screen::Menu),
-                spawn_frame.in_set(FrameSystems),
-            )
             // **The band's count watches the set in hand** (UI-34, #228): every frame, gated on the
             // resource, because a set is picked up and put down long after the screen is entered.
             // Registering it in the `OnEnter` tuple above would run it once, on the frame the band is
@@ -3777,6 +3769,12 @@ pub fn spawn_chrome_bar(
         }
     });
 
+    // **The way out names where it goes**: the project's own name, which is the page it returns to (`project_page.rs`).
+    let back = project
+        .as_deref()
+        .and_then(|p| p.root.file_name())
+        .map_or_else(|| "Projects".to_owned(), |n| n.to_string_lossy().into_owned());
+
     commands.entity(frame.chrome_bar).with_children(|bar| {
         bar.spawn((
             BackButton,
@@ -3796,7 +3794,7 @@ pub fn spawn_chrome_bar(
         ))
         .with_children(|b| {
             b.spawn((
-                Text::new("\u{2039} kits & maps".to_owned()),
+                Text::new(format!("\u{2039} {back}")),
                 TextColor(KEY),
                 font(text::BODY),
                 bevy::picking::Pickable::IGNORE,

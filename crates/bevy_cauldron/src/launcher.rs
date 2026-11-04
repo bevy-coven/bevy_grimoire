@@ -217,11 +217,11 @@ pub fn check_project(root: &Path) -> Result<PathBuf, String> {
     if !root.is_dir() {
         return Err(format!("{} is not a folder", root.display()));
     }
-    if !root.join(crate::chooser::GRIMOIRE_DIR).is_dir() {
+    if !root.join(crate::catalog::GRIMOIRE_DIR).is_dir() {
         return Err(format!(
             "{} is not a project: it has no {} folder",
             root.display(),
-            crate::chooser::GRIMOIRE_DIR
+            crate::catalog::GRIMOIRE_DIR
         ));
     }
     Ok(std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()))
@@ -307,7 +307,7 @@ const FOLDER_ELLIPSIS: char = '…';
 
 /// The splash decoded once, and its size in art pixels.
 #[derive(Resource, Default)]
-struct SplashArt(Option<(Handle<Image>, Vec2)>);
+pub(crate) struct SplashArt(pub(crate) Option<(Handle<Image>, Vec2)>);
 
 /// The window's root node, which the context menu hangs under.
 #[derive(Component)]
@@ -322,7 +322,7 @@ pub struct LauncherCard;
 pub struct HomeContent;
 
 #[derive(Component)]
-struct SidebarRoot;
+pub(crate) struct SidebarRoot;
 
 /// One page of the home; only the sidebar's choice is shown.
 #[derive(Component)]
@@ -380,11 +380,13 @@ pub struct LauncherPlugin;
 
 impl Plugin for LauncherPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((crate::new_project::NewProjectPlugin, crate::picker::PickerPlugin))
+        app.add_plugins((crate::new_project::NewProjectPlugin, crate::picker::PickerPlugin, crate::project_page::ProjectPagePlugin))
             .add_message::<OpenRequest>()
             .add_message::<OpenMapRequest>()
             .init_resource::<SplashArt>()
+            .init_resource::<Launcher>()
             .add_observer(on_toast_action)
+            .add_systems(Update, paint_the_quiet_lines)
             .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
@@ -430,28 +432,65 @@ fn shown_folder(path: &Path) -> String {
     middle_ellipsis(&full, FOLDER_CHARS)
 }
 
-/// A quiet line under a name.
-fn quiet(text: impl Into<String>) -> impl Bundle {
-    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::LABEL))
+/// A quiet line under a name: the skin's muted ink ([`quiet_ink`], painted by [`paint_the_quiet_lines`]).
+pub(crate) fn quiet(text: impl Into<String>) -> impl Bundle {
+    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::LABEL), Quiet)
+}
+
+/// A line of muted words (a card's folder, a count).
+#[derive(Component)]
+pub struct Quiet;
+
+/// The ink of a [`Quiet`] line: the skin's `text_muted`, or the shipped palette's own `LABEL` in a harness with no skin.
+pub fn quiet_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
+    skin.map_or(crate::chrome::LABEL, |s| s.text_muted)
+}
+
+/// Keeps every [`Quiet`] line in the skin's ink, from the frame it appears and whenever the skin changes.
+fn paint_the_quiet_lines(skin: Option<Res<bevy_gooey::GooeySkin>>, mut lines: Query<&mut TextColor, With<Quiet>>, fresh: Query<(), Added<Quiet>>) {
+    if fresh.is_empty() && !skin.as_ref().is_some_and(|s| s.is_changed()) {
+        return;
+    }
+    let ink = quiet_ink(skin.as_deref());
+    for mut line in &mut lines {
+        line.set_if_neq(TextColor(ink));
+    }
+}
+
+/// A card's box: its width, padding and the gap between its lines.
+pub(crate) fn card_node() -> Node {
+    Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }
+}
+
+/// The picture's box inside a card.
+pub(crate) fn thumb_node() -> Node {
+    Node { width: Val::Px(THUMB.x), height: Val::Px(THUMB.y), ..default() }
+}
+
+/// Decodes the splash once, into `splash`.
+pub(crate) fn ensure_splash(images: &mut Assets<Image>, splash: &mut SplashArt) {
+    if splash.0.is_some() {
+        return;
+    }
+    match splash_image() {
+        Ok(image) => {
+            let size = Vec2::new(image.width() as f32, image.height() as f32);
+            splash.0 = Some((images.add(image), size));
+        }
+        // The PNG is compiled in, so a splash that will not decode is a build fault: the home shows none.
+        Err(e) => error!("the home's splash does not decode: {e}"),
+    }
 }
 
 fn build_launcher(
     mut commands: Commands,
     recents: Option<Res<RecentProjects>>,
     changelog: Option<Res<ChangelogText>>,
+    before: Res<Launcher>,
     mut images: ResMut<Assets<Image>>,
     mut splash: ResMut<SplashArt>,
 ) {
-    if splash.0.is_none() {
-        match splash_image() {
-            Ok(image) => {
-                let size = Vec2::new(image.width() as f32, image.height() as f32);
-                splash.0 = Some((images.add(image), size));
-            }
-            // The PNG is compiled in, so a splash that will not decode is a build fault: the home shows none.
-            Err(e) => error!("the home's splash does not decode: {e}"),
-        }
-    }
+    ensure_splash(&mut images, &mut splash);
     let (stored, problem) = match recents.as_deref().map(|r| Recent::load(&r.0)) {
         Some(Ok(r)) => (Some(r), None),
         Some(Err(e)) => (None, Some(e)),
@@ -461,13 +500,19 @@ fn build_launcher(
     let text = changelog.as_deref().map_or(CHANGELOG, |c| c.0.as_str());
     let whats_new = whats_new(text, stored.as_ref().and_then(|r| r.changelog_seen.as_deref()));
     let newest = news(text).first().map(|n| n.id.clone());
-    commands.insert_resource(Launcher { rows, problem, example: example_project(), whats_new, newest, ..default() });
+    // The page the sidebar was on is kept: the project page's sidebar sends a person here to a page.
+    commands.insert_resource(Launcher { rows, problem, example: example_project(), whats_new, newest, tab: before.tab, ..default() });
+    spawn_shell(&mut commands, Screen::Launcher);
+}
 
+/// **The window the home and the project page share**: a split of a fixed sidebar and a page. `SplitMin` holds the sidebar at its width
+/// and the divider is not drawn ([`hide_the_divider`]): the sidebar is not a thing to resize. Everything on `screen` is despawned when it
+/// is left.
+pub(crate) fn spawn_shell(commands: &mut Commands, screen_of: Screen) -> Entity {
     commands
-        .spawn((screen(), DespawnOnExit(Screen::Launcher), LauncherRoot, Name::new("projects home")))
+        .spawn((screen(), DespawnOnExit(screen_of), LauncherRoot, Name::new("projects home")))
         .insert(Pickable::default())
         .with_children(|root| {
-            // `SplitMin` holds the sidebar at its width and the divider is fixed: the sidebar is not a thing to resize.
             root.spawn((
                 split(
                     SplitAxis::Horizontal,
@@ -477,7 +522,45 @@ fn build_launcher(
                 SplitFraction(0.0),
                 SplitMin::new(SIDEBAR_PX, PAGE_MIN_PX),
             ));
-        });
+        })
+        .id()
+}
+
+/// **The sidebar**: the splash, the three pages, Settings, the version and the updater. On the project page a press on a page goes
+/// back to the home on that page.
+pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &Launcher, splash: &SplashArt, updater: Option<&crate::update::Updater>) {
+    commands.entity(sidebar).with_children(|side| {
+        if let Some((handle, _)) = splash.0.as_ref() {
+            side.spawn((ImageNode::new(handle.clone()), Node { width: Val::Px(SIDEBAR_SPLASH.x), height: Val::Px(SIDEBAR_SPLASH.y), ..default() }, Name::new("sidebar splash")));
+        }
+        for tab in HomeTab::ALL {
+            let badge = if tab == HomeTab::WhatsNew && !launcher.whats_new.is_empty() { format!(" ({})", launcher.whats_new.len()) } else { String::new() };
+            let mut nav = side.spawn((
+                button(format!("{}{badge}", tab.label())),
+                NavTab(tab),
+                observe(move |_: On<Activate>, mut launcher: ResMut<Launcher>, screen: Res<State<Screen>>, mut next: ResMut<NextState<Screen>>| {
+                    launcher.tab = tab;
+                    if *screen.get() != Screen::Launcher {
+                        next.set(Screen::Launcher);
+                    }
+                }),
+            ));
+            if tab == launcher.tab {
+                nav.insert(Selected);
+            }
+        }
+        side.spawn(Node { flex_grow: 1.0, ..default() });
+        side.spawn((
+            button("Settings"),
+            observe(|_: On<Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
+                out.write(crate::settings_screen::OpenSettings);
+            }),
+        ));
+        side.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
+        if let Some(updater) = updater {
+            side.spawn(crate::update::update_button(updater.label()));
+        }
+    });
 }
 
 /// What a card or a page needs to be drawn, bundled so the builders stay within the argument budget.
@@ -503,29 +586,7 @@ fn fill_the_home(
     let menu = commands.spawn((context_menu(()), CardMenu, ChildOf(root))).id();
     spawn_card_menu(&mut commands, menu);
 
-    commands.entity(sidebar).with_children(|side| {
-        if let Some((handle, _)) = splash.0.as_ref() {
-            side.spawn((ImageNode::new(handle.clone()), Node { width: Val::Px(SIDEBAR_SPLASH.x), height: Val::Px(SIDEBAR_SPLASH.y), ..default() }, Name::new("sidebar splash")));
-        }
-        for tab in HomeTab::ALL {
-            let badge = if tab == HomeTab::WhatsNew && !launcher.whats_new.is_empty() { format!(" ({})", launcher.whats_new.len()) } else { String::new() };
-            let mut nav = side.spawn((button(format!("{}{badge}", tab.label())), NavTab(tab), observe(move |_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.tab = tab)));
-            if tab == launcher.tab {
-                nav.insert(Selected);
-            }
-        }
-        side.spawn(Node { flex_grow: 1.0, ..default() });
-        side.spawn((
-            button("Settings"),
-            observe(|_: On<Activate>, mut out: MessageWriter<crate::settings_screen::OpenSettings>| {
-                out.write(crate::settings_screen::OpenSettings);
-            }),
-        ));
-        side.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
-        if let Some(updater) = updater.as_deref() {
-            side.spawn(crate::update::update_button(updater.label()));
-        }
-    });
+    fill_sidebar(&mut commands, sidebar, &launcher, &splash, updater.as_deref());
 
     let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
     commands.entity(content).with_children(|content| {
@@ -628,15 +689,17 @@ fn open_the_example(_: On<Activate>, mut launcher: ResMut<Launcher>, mut out: Me
 const EXAMPLE_MAP: &str = "bedroom";
 
 fn example_map(root: &Path) -> Option<String> {
-    let maps = crate::chooser::Catalog::scan(root).ok()?.maps;
+    let maps = crate::catalog::Catalog::scan(root).ok()?.maps;
     maps.iter().find(|m| m.name == EXAMPLE_MAP).or(maps.first()).map(|m| m.name.clone())
 }
 
 /// The picture on a card: the newest portrait of a piece the project has baked (`thumbs.rs` keeps them in
 /// `target/grimoire_thumbs`), cropped to the card's shape; else the splash, cropped the same way.
-fn card_picture(root: &Path, art: &mut Art) -> Option<ImageNode> {
+pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>) -> Option<ImageNode> {
     let newest = std::fs::read_dir(root.join("target/grimoire_thumbs"))
-        .ok()?
+        .ok()
+        .into_iter()
+        .flatten()
         .flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "png"))
         .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
@@ -648,9 +711,9 @@ fn card_picture(root: &Path, art: &mut Art) -> Option<ImageNode> {
     let (handle, size) = match baked {
         Some(image) => {
             let size = Vec2::new(image.width() as f32, image.height() as f32);
-            (art.images.add(image), size)
+            (images.add(image), size)
         }
-        None => art.splash.clone()?,
+        None => splash?,
     };
     // The middle band of the picture that is as wide as the card's picture is for its height.
     let (w, h) = (size.x, size.y);
@@ -662,11 +725,11 @@ fn card_picture(root: &Path, art: &mut Art) -> Option<ImageNode> {
 
 fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let path = row.project.path.clone();
-    let picture = card_picture(&path, art);
+    let picture = project_picture(&path, art.images, art.splash.clone());
     let when = format!("Opened {}", ago(row.project.last_opened, art.now));
     let key = card_key(&path);
     grid.spawn((
-        Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        card_node(),
         // CHROME-OK: a card is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
         bevy::ui_widgets::Button,
         Role::Button,
@@ -680,7 +743,7 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     ))
     .with_children(|card| {
         if let Some(picture) = picture {
-            card.spawn((picture, Node { width: Val::Px(THUMB.x), height: Val::Px(THUMB.y), ..default() }, Pickable::IGNORE));
+            card.spawn((picture, thumb_node(), Pickable::IGNORE));
         }
         card.spawn((Text::new(name_of(&path)), Role::ButtonText, Pickable::IGNORE));
         card.spawn((quiet(shown_folder(&path)), Pickable::IGNORE));
@@ -692,7 +755,7 @@ fn missing_card(grid: &mut ChildSpawnerCommands, row: &Listed) {
     let path = row.project.path.clone();
     let key = card_key(&path);
     grid.spawn((
-        Node { flex_direction: FlexDirection::Column, width: Val::Px(CARD_PX), padding: UiRect::all(Val::Px(crate::chrome::PAD)), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        card_node(),
         Role::Card,
         MissingCard { path: path.clone(), key },
     ))
@@ -896,7 +959,7 @@ const MAKE_PROJECT: &str = "make-project:";
 /// "Make it a project" was pressed: the folder gets what a project needs, keeps everything it held, and opens.
 fn on_toast_action(action: On<ToastAction>, mut commands: Commands, mut out: MessageWriter<OpenRequest>) {
     let Some(folder) = action.id.strip_prefix(MAKE_PROJECT).map(PathBuf::from) else { return };
-    match crate::chooser::make_project_here(&folder, crate::new_project::VOCAB) {
+    match crate::catalog::make_project_here(&folder, crate::new_project::VOCAB) {
         Ok(()) => {
             out.write(OpenRequest(folder));
         }

@@ -2,7 +2,7 @@
 //!
 //! Source ratchets, not behaviour tests, and they exist because the defect they guard is invisible
 //! to a green suite. On 2026-08-16 `Cmd+O`, the `‹ kits & maps` button and the `Esc` peel all killed
-//! the application instead of returning to the menu — while two headless tests asserting the way
+//! the application instead of returning to the project page — while two headless tests asserting the way
 //! back stayed green, because both asserted on the *message* the editor wrote and the message was
 //! written correctly every time. It was dropped afterwards.
 //!
@@ -32,7 +32,7 @@ fn read(rel: &str) -> String {
 /// state may legitimately be set to prove something about setting it, and a unit test added to
 /// `editor.rs` later would redden a ratchet about the *editor* for a reason that has nothing to do
 /// with leaving a door. And `editor.rs`'s own scheduling note narrates the three
-/// `next.set(Screen::Menu)` calls that used to exist — so a scan that read prose counted four ways
+/// `next.set(Screen::Project)` calls that used to exist — so a scan that read prose counted four ways
 /// out and could not tell a regression from a paragraph.
 ///
 /// The `#[cfg(test)]` walk must skip **past** the module rather than stop at the first one, which is
@@ -119,10 +119,10 @@ fn the_editor_hands_its_exit_code_back() {
     );
 }
 
-/// **Every way out of a door goes through one door, and that door lands on the menu.**
+/// **Every way out of a door goes through one door, and that door lands on the project page.**
 ///
 /// Three gestures leave: `Cmd+O`, the chrome bar's back button, and `Y` to the unsaved-work
-/// question. This used to count `next.set(Screen::Menu)` in `editor.rs` and demand at least three of
+/// question. This used to count `next.set(Screen::Project)` in `editor.rs` and demand at least three of
 /// them, one per gesture — which was true when each gesture set the state itself.
 ///
 /// **They were then consolidated onto `save_and_leave`**, deliberately: a refused save has to keep
@@ -133,7 +133,7 @@ fn the_editor_hands_its_exit_code_back() {
 /// # It claimed a crate-wide property and read one file
 ///
 /// Both halves scanned `src/editor.rs` alone, while `src/screen.rs` has carried a second
-/// `next.set(Screen::Menu)` ever since the two screens became one application —
+/// `next.set(Screen::Project)` ever since the two screens became one application —
 /// `open_the_door`'s bail-out for a state set with nothing chosen. So *"the menu is reached from
 /// exactly one place"* was never true of the crate, and a fourth gesture added in any other file
 /// would have satisfied the assertion while going around the refused-save branch. The scan is the
@@ -144,13 +144,17 @@ fn the_editor_hands_its_exit_code_back() {
 /// cleared with every call site deleted. It is tied to the gestures instead — each of the three
 /// systems that leaves, asked whether its **own body** walks the door.
 #[test]
-fn every_way_out_of_a_door_lands_on_the_menu() {
+fn every_way_out_of_a_door_lands_on_the_project_page() {
     let code = code_outside_tests();
 
     let mut exits: Vec<(String, String)> = Vec::new();
     for (file, text) in &code {
+        // `harness.rs` stands a test's editor on the project page; it is test support, not a way out of a door.
+        if file == "harness.rs" {
+            continue;
+        }
         for line in text.lines() {
-            if line.contains(".set(") && line.contains("Screen::Menu)") {
+            if line.contains(".set(") && line.contains("Screen::Project)") {
                 exits.push((file.clone(), line.trim().to_owned()));
             }
         }
@@ -175,7 +179,7 @@ fn every_way_out_of_a_door_lands_on_the_menu() {
     assert_eq!(
         exits.len(),
         2,
-        "exactly two places in this crate set `Screen::Menu`: the one door out \
+        "exactly two places in this crate set `Screen::Project`: the one door out \
          (`editor::save_and_leave`) and `screen::open_the_door`'s entry bail-out. The scan found \
          {exits:?} — a third is a way out that can forget the save."
     );
@@ -212,12 +216,12 @@ fn every_way_out_of_a_door_lands_on_the_menu() {
         assert!(
             !text.contains("BACK_TO_MENU"),
             "`{file}` names `BACK_TO_MENU`: the exit code went with the process boundary, and \
-             naming it again would be a second way to say `Screen::Menu`."
+             naming it again would be a second way to say `Screen::Project`."
         );
     }
 }
 
-/// **The menu is a state, not a second process.**
+/// **The project page is a state, not a second process.**
 ///
 /// The whole point of the 2026-08-16 rebuild — *"can we not open a whole another editing window? I'd
 /// like to keep the same bevy application running."* One `App`, one window, two screens.
@@ -225,20 +229,20 @@ fn every_way_out_of_a_door_lands_on_the_menu() {
 /// Pinned by absence as well as presence: `main` re-spawning itself is exactly what came out, and it
 /// is the kind of thing that creeps back as "just for this one case".
 #[test]
-fn the_menu_is_a_state_and_not_another_process() {
+fn the_project_page_is_a_state_and_not_another_process() {
     let src = read("src/main.rs");
     assert!(
         src.contains("screen::ScreenPlugin"),
         "`main` must add the plugin that owns the two transitions."
     );
     assert!(
-        src.contains("chooser::ChooserPlugin") && src.contains("harness::add_editor_plugins"),
+        src.contains("launcher::LauncherPlugin") && src.contains("harness::add_editor_plugins"),
         "both screens' plugins are added to the one app; which of them RUNS is the state's business."
     );
     for gone in ["Command::new", "current_exe", "--choose", "fn supervise"] {
         assert!(
             !src.contains(gone),
-            "`{gone}` is the process design coming back. The menu is `Screen::Menu` now — a second \
+            "`{gone}` is the process design coming back. The menu is `Screen::Project` now — a second \
              process would be a second event loop, which winit refuses, and a second plugin graph, \
              which only one of the two would ever be tested."
         );
@@ -247,7 +251,7 @@ fn the_menu_is_a_state_and_not_another_process() {
 
 /// **A door is loaded before the screen that needs it is built.**
 ///
-/// `OnExit(Menu)` rather than `OnEnter(Editor)`, and the ordering is the whole reason: a state
+/// The transition out of the project page rather than `OnEnter(Editor)`, and the ordering is the whole reason: a state
 /// transition runs every `OnExit` before any `OnEnter`, so `Project` is in the World before the
 /// editor's spawns run. Reversed, roughly a hundred systems taking `Res<Project>` would each panic
 /// on their first frame — in Bevy 0.19 a missing `Res<T>` panics rather than skipping.
@@ -255,8 +259,8 @@ fn the_menu_is_a_state_and_not_another_process() {
 fn the_project_is_loaded_before_the_editor_is_built() {
     let src = read("src/screen.rs");
     assert!(
-        src.contains("OnExit(Screen::Menu), open_the_door"),
-        "the door must open on the way OUT of the menu, so the project exists before any \
+        src.contains("OnTransition { exited: Screen::Project, entered: Screen::Editor }, open_the_door"),
+        "the door must open on the way OUT of the project page, so the project exists before any \
          `OnEnter(Editor)` system looks for it."
     );
     assert!(

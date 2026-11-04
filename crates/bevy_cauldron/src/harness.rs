@@ -268,6 +268,21 @@ pub fn install_font_in(world: &mut World, root: Option<&Path>) -> Result<(), Str
         .map_err(|e| format!("cannot install the editor font: {e}"))
 }
 
+/// **Stands a stepped editor on the project page of `root`**, as opening a project from the home does: the home's plugins are added when
+/// they are not, the asset root and the agent bridge's root point at the project, and the screen is the page. For tests, which drive the
+/// page by its widgets and by [`crate::project_page::PageAction`].
+pub fn stand_on_the_project_page(app: &mut App, root: &Path) {
+    if !app.is_plugin_added::<crate::launcher::LauncherPlugin>() {
+        app.add_plugins(crate::launcher::LauncherPlugin);
+    }
+    app.world().resource::<crate::project_assets::ProjectRoot>().set(Some(root.to_path_buf()));
+    app.insert_resource(crate::project_assets::PointedAt { root: root.to_path_buf() });
+    app.world_mut().resource_mut::<NextState<crate::screen::Screen>>().set(crate::screen::Screen::Project);
+    for _ in 0..4 {
+        app.update();
+    }
+}
+
 /// **A stepped editor**: the real plugins, no window, no device, no sound.
 ///
 /// `root` is the project directory — the same argument the binary takes, and the asset root, because
