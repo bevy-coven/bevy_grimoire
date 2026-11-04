@@ -271,7 +271,7 @@ pub fn user_example() -> Option<PathBuf> {
 }
 
 /// Copies the folder `from` to `to`: files and folders, never a symlink.
-fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
     for entry in std::fs::read_dir(from)? {
         let entry = entry?;

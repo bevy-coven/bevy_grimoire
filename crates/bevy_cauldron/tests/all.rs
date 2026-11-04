@@ -80,6 +80,7 @@ mod a_person_removes_a_box_and_undoes_it;
 mod a_person_removes_a_piece_and_undoes_it;
 mod a_project_command_needs_the_persons_trust;
 mod a_project_opens_in_the_same_process;
+mod a_new_project_opens_something_to_edit;
 mod a_person_shift_clicks_two_pieces_into_one_note;
 mod a_person_snips_an_area_of_the_editor;
 mod a_person_types_a_terrain_preset;

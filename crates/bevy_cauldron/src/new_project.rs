@@ -1,26 +1,34 @@
-//! **The new-project wizard on the launcher** (UI-12, #218): a name, a place and a template, and a Create that
+//! **The new-project wizard on the Projects home** (UI-12, #218; #297): a name, a place and a template, and a Create that
 //! stays disabled for as long as the form says why it cannot.
 //!
 //! The checks are [`check`], one function over the three fields, so the words under a field, the reason beside
 //! Create and the refusal when Create is pressed anyway (a button that is only dimmed can still be activated by a
-//! script) are the same sentence. Creating writes `assets/grimoire` through [`crate::catalog::create_project_with`]
-//! and then opens the project the way a recent row does ([`crate::launcher::OpenRequest`]).
+//! script) are the same sentence. Creating writes `assets/grimoire` through [`crate::catalog::create_project_with`],
+//! makes the template's kit and its first map, and opens that map the way the example is opened
+//! ([`crate::launcher::OpenMapRequest`]): a new project lands in the editor with something to place.
 //!
 //! # Templates
 //!
-//! `Empty` is a project with a vocabulary and no kit. `One empty kit` adds a first kit named after the project
-//! ([`crate::catalog::create_kit`]) so the chooser has something to author in. A template that copies a kit of the
-//! example project was the issue's first wording; it would copy the meshes the kit names too (90 files, tens of
-//! megabytes) into every new project, so it is left until a project can reference the example's meshes in place.
+//! * **Starter** copies the Prototype Kit (CC0, with its licence) out of the example project into the new project,
+//!   binds one kit, `prototype`, as the authoring kit with the kit's rows, and makes `first_map`.
+//! * **Empty** is one kit, `main`, bound as the authoring kit with no pieces, and `first_map`; the editor's palette
+//!   then offers Add meshes… ([`crate::add_meshes`]).
+//!
+//! # The place
+//!
+//! The Location starts at `Cauldron Projects` in the person's documents folder, made when the first project is
+//! created there. It is never filled from anything else, and Choose… asks the system's own chooser.
 
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
-use bevy_gooey::{FieldProblem, TextHint, ValueChange, button, choice, heading, label, observe, panel, text_input};
+use bevy_gooey::{FieldProblem, TextHint, TextInputValue, ValueChange, button, choice, heading, label, observe, panel, text_input};
 
-use crate::launcher::{Launcher, OpenRequest};
+use crate::launcher::{Launcher, OpenMapRequest};
+use crate::picker::{PickFor, PickRequest, Picked};
 use crate::screen::Screen;
+use crate::ui::accent_button;
 
 /// The vocabulary every new project starts from, byte for byte as the example project keeps it.
 pub(crate) const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.ron");
@@ -29,19 +37,60 @@ pub(crate) const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.r
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Template {
     #[default]
+    Starter,
     Empty,
-    OneKit,
 }
 
+/// The kit a Starter project binds, and the one an Empty project binds.
+const STARTER_KIT: &str = "prototype";
+const EMPTY_KIT: &str = "main";
+
+/// The map every new project opens on, and its size in metres: width, depth, height.
+pub const FIRST_MAP: &str = "first_map";
+const FIRST_MAP_METRES: [f32; 3] = [10.0, 10.0, 4.0];
+
+/// Where the Prototype Kit's meshes are in the example project (and in the new one, which keeps the path so each row's
+/// `mesh` names the same file), and the file holding the kit's rows.
+const PROTOTYPE_MESHES: &str = "assets/kenney_prototype-kit";
+const PROTOTYPE_ROWS: &str = "assets/grimoire/library_kenney_from_manifests.ron";
+
+/// What a Starter kit's library says about itself, in place of the example's "generated" note.
+const PROTOTYPE_NOTE: &str = "Kenney's Prototype Kit (CC0, its licence is beside the meshes). Add your own meshes from the library; they land in this kit.";
+
+/// The folder, inside the person's documents, that new projects go in by default.
+const DEFAULT_PLACE: &str = "Cauldron Projects";
+
 impl Template {
-    pub const ALL: [Template; 2] = [Template::Empty, Template::OneKit];
+    pub const ALL: [Template; 2] = [Template::Starter, Template::Empty];
 
     pub fn label(self) -> &'static str {
         match self {
+            Template::Starter => "Starter",
             Template::Empty => "Empty",
-            Template::OneKit => "One empty kit",
         }
     }
+
+    /// The line under the choice, for the selected template.
+    pub fn describe(self) -> &'static str {
+        match self {
+            Template::Starter => "Prototype pieces you can place right away",
+            Template::Empty => "No pieces yet: add your own .glb meshes",
+        }
+    }
+
+    /// The kit the template binds as the authoring kit.
+    fn kit(self) -> &'static str {
+        match self {
+            Template::Starter => STARTER_KIT,
+            Template::Empty => EMPTY_KIT,
+        }
+    }
+}
+
+/// Where new projects go unless a person says otherwise: `Cauldron Projects` in the documents folder, or in the home folder
+/// of a system that has no documents folder.
+pub fn default_location() -> PathBuf {
+    dirs::document_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from(".")).join(DEFAULT_PLACE)
 }
 
 /// The form's three fields.
@@ -55,8 +104,7 @@ pub struct NewProject {
 
 impl Default for NewProject {
     fn default() -> Self {
-        let place = dirs::document_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from("."));
-        NewProject { name: String::new(), location: place.to_string_lossy().into_owned(), template: Template::Empty }
+        NewProject { name: String::new(), location: default_location().to_string_lossy().into_owned(), template: Template::default() }
     }
 }
 
@@ -92,9 +140,10 @@ pub fn check(form: &NewProject) -> Problems {
     let location = Path::new(form.location.trim());
     if form.location.trim().is_empty() {
         out.location = Some("Say which folder the project goes in.".to_owned());
-    } else if !location.is_dir() {
+    } else if !location.is_dir() && location != default_location() {
+        // The default place is made by Create, so its not being there yet is not a problem.
         out.location = Some(format!("{} is not a folder.", location.display()));
-    } else if std::fs::metadata(location).is_ok_and(|m| m.permissions().readonly()) {
+    } else if location.is_dir() && std::fs::metadata(location).is_ok_and(|m| m.permissions().readonly()) {
         out.location = Some(format!("{} cannot be written to.", location.display()));
     }
     if form.name.trim().is_empty() {
@@ -116,20 +165,54 @@ pub fn check(form: &NewProject) -> Problems {
     out
 }
 
-/// Makes the project the form describes and returns its folder. Refuses, with [`check`]'s sentence, a form that
-/// is not ready.
+/// Makes the project the form describes — its folder, its template's kit and `first_map` — and returns the folder.
+/// Refuses, with [`check`]'s sentence, a form that is not ready. A project that could not be finished is taken away again,
+/// so the same name can be tried once the cause is gone.
 pub fn create(form: &NewProject) -> Result<PathBuf, String> {
     let problems = check(form);
     if let Some(reason) = problems.reason() {
         return Err(reason.to_owned());
     }
-    let dir = crate::catalog::create_project_with(Path::new(form.location.trim()), &form.name, VOCAB)?;
-    if form.template == Template::OneKit
-        && let Err(e) = crate::catalog::create_kit(&dir, &folder_name(&form.name))
-    {
-        return Err(format!("{} was made, but its first kit was not: {e}", dir.display()));
+    let place = Path::new(form.location.trim());
+    std::fs::create_dir_all(place).map_err(|e| format!("cannot make {}: {e}", place.display()))?;
+    let dir = crate::catalog::create_project_with(place, &form.name, VOCAB)?;
+    if let Err(e) = fill(&dir, form.template) {
+        // Made a moment ago by this call and nothing else has opened it.
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(format!("{} was not made: {e}", dir.display()));
     }
     Ok(dir)
+}
+
+/// The template's kit, its pieces, and the first map, written into the project at `dir`.
+fn fill(dir: &Path, template: Template) -> Result<(), String> {
+    crate::catalog::create_kit(dir, template.kit())?;
+    if template == Template::Starter {
+        copy_prototype_kit(dir)?;
+    }
+    let [width, depth, height] = FIRST_MAP_METRES;
+    let origin = bevy_grimoire_core::map::Map::default().origin;
+    crate::project_page::from_the_page(
+        dir,
+        "map_create",
+        &serde_json::json!({ "name": FIRST_MAP, "bounds": [width, height, depth], "origin": [origin.0, origin.1, origin.2], "note": null }),
+    )?;
+    Ok(())
+}
+
+/// Copies the Prototype Kit's meshes and licence out of the example project into `dir`, and its rows into the Starter kit's library.
+fn copy_prototype_kit(dir: &Path) -> Result<(), String> {
+    let Some(example) = crate::launcher::example_project() else {
+        return Err("this copy of Cauldron has no example project to take the prototype pieces from; make an Empty project instead".to_owned());
+    };
+    let rows_path = example.join(PROTOTYPE_ROWS);
+    let text = std::fs::read_to_string(&rows_path).map_err(|e| format!("{}: {e}", rows_path.display()))?;
+    let mut library = bevy_grimoire_core::library::Library::parse(&text).map_err(|e| format!("{}: {e}", rows_path.display()))?;
+    library.note = Some(PROTOTYPE_NOTE.to_owned());
+    let meshes = example.join(PROTOTYPE_MESHES);
+    crate::launcher::copy_tree(&meshes, &dir.join(PROTOTYPE_MESHES)).map_err(|e| format!("{} was not copied: {e}", meshes.display()))?;
+    let into = dir.join(crate::catalog::GRIMOIRE_DIR).join(STARTER_KIT).join(bevy_grimoire_core::policy::LIBRARY_FILE);
+    bevy_grimoire_core::ron_surgery::save_atomic(&into, &library.to_ron()?)
 }
 
 /// The form on screen, while there is one.
@@ -156,6 +239,18 @@ pub struct TemplateChoice;
 #[derive(Component)]
 pub struct CreateButton;
 
+/// The line that says which folder Create will make.
+#[derive(Component)]
+pub struct FolderLine;
+
+/// The line under the Template choice that says what the selected template holds.
+#[derive(Component)]
+pub struct TemplateNote;
+
+/// The Choose… button beside Location.
+#[derive(Component)]
+pub struct ChooseButton;
+
 /// The line that says why Create is disabled.
 #[derive(Component)]
 pub struct ReasonLine;
@@ -166,17 +261,29 @@ impl Plugin for NewProjectPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (open_the_form, spawn_the_card, show_the_form, close_the_form, swap_the_cards).chain().run_if(in_state(Screen::Launcher)),
+            (open_the_form, spawn_the_card, show_the_form, take_the_location, close_the_form, swap_the_cards).chain().run_if(in_state(Screen::Launcher)),
         )
         .add_systems(OnExit(Screen::Launcher), |mut commands: Commands| commands.remove_resource::<NewProjectForm>());
     }
 }
 
 /// The launcher's "New project…" button asks for the form by setting [`Launcher::new_project_asked`]; the form is a
-/// resource so that the screen's own state (`Launcher`) stays about the list.
-fn open_the_form(mut commands: Commands, mut launcher: ResMut<Launcher>, form: Option<Res<NewProjectForm>>) {
+/// resource so that the screen's own state (`Launcher`) stays about the list. **Opening it forgets what the home last
+/// refused**: a toast about another folder has nothing to do with this form.
+fn open_the_form(
+    mut commands: Commands,
+    mut launcher: ResMut<Launcher>,
+    form: Option<Res<NewProjectForm>>,
+    refusals: Query<(Entity, &bevy_gooey::Toast)>,
+) {
     if launcher.new_project_asked && form.is_none() {
         commands.insert_resource(NewProjectForm::default());
+        launcher.problem = None;
+        for (toast, text) in &refusals {
+            if text.kind() == bevy_gooey::ToastKind::Alert {
+                commands.entity(toast).despawn();
+            }
+        }
     }
     launcher.new_project_asked = false;
 }
@@ -195,50 +302,61 @@ fn spawn_the_card(
     let start = form.0.clone();
     commands.entity(root).with_children(|root| {
         root.spawn((panel(), FormCard))
-            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), ..default() })
+            .insert(Node { flex_direction: FlexDirection::Column, width: Val::Px(crate::launcher::CARD_WIDTH), max_width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
             .with_children(|card| {
-            card.spawn(heading("New project"));
-            card.spawn((
-                text_input("Name", start.name.clone()),
-                NameField,
-                TextHint("project name".into()),
-                observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
-            ));
-            card.spawn((
-                text_input("Location", start.location.clone()),
-                LocationField,
-                observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.location = change.value.clone()),
-            ));
-            card.spawn((
-                choice("Template", Template::ALL.map(Template::label), 0),
-                TemplateChoice,
-                observe(|change: On<ValueChange<usize>>, mut form: ResMut<NewProjectForm>| {
-                    form.0.template = Template::ALL.get(change.value).copied().unwrap_or_default();
-                }),
-            ));
-            card.spawn((label(""), ReasonLine));
-            card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
-                row.spawn((
-                    button("Create"),
-                    CreateButton,
-                    observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenRequest>| {
-                        // Checked again here: a dimmed button can still be activated by a script.
-                        match create(&form.0) {
-                            Ok(dir) => {
-                                launcher.problem = None;
-                                launcher.new_project_done = true;
-                                out.write(OpenRequest(dir));
-                            }
-                            Err(e) => launcher.problem = Some(e),
-                        }
+                card.spawn(heading("New project"));
+                card.spawn((
+                    text_input("Name", start.name.clone()),
+                    NameField,
+                    TextHint("project name".into()),
+                    observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.name = change.value.clone()),
+                ));
+                card.spawn((crate::launcher::quiet(""), FolderLine));
+                card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::End, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                    row.spawn((
+                        text_input("Location", start.location.clone()),
+                        LocationField,
+                        observe(|change: On<ValueChange<String>>, mut form: ResMut<NewProjectForm>| form.0.location = change.value.clone()),
+                    ));
+                    row.spawn((
+                        button("Choose…"),
+                        ChooseButton,
+                        observe(|_: On<bevy_gooey::Activate>, mut out: MessageWriter<PickRequest>| {
+                            out.write(PickRequest(PickFor::Location));
+                        }),
+                    ));
+                });
+                card.spawn((
+                    choice("Template", Template::ALL.map(Template::label), Template::ALL.iter().position(|t| *t == start.template).unwrap_or_default()),
+                    TemplateChoice,
+                    observe(|change: On<ValueChange<usize>>, mut form: ResMut<NewProjectForm>| {
+                        form.0.template = Template::ALL.get(change.value).copied().unwrap_or_default();
                     }),
                 ));
-                row.spawn((
-                    button("Cancel"),
-                    observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),
-                ));
+                card.spawn((crate::launcher::quiet(start.template.describe()), TemplateNote));
+                card.spawn((label(""), ReasonLine));
+                card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                    row.spawn((
+                        button("Cancel"),
+                        observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),
+                    ));
+                    row.spawn((
+                        accent_button("Create"),
+                        CreateButton,
+                        observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenMapRequest>| {
+                            // Checked again here: a dimmed button can still be activated by a script.
+                            match create(&form.0) {
+                                Ok(dir) => {
+                                    launcher.problem = None;
+                                    launcher.new_project_done = true;
+                                    out.write(OpenMapRequest(dir, FIRST_MAP.to_owned()));
+                                }
+                                Err(e) => launcher.problem = Some(e),
+                            }
+                        }),
+                    ));
+                });
             });
-        });
     });
 }
 
@@ -249,7 +367,7 @@ fn show_the_form(
     name: Query<Entity, With<NameField>>,
     location: Query<Entity, With<LocationField>>,
     create: Query<Entity, With<CreateButton>>,
-    mut reason: Query<&mut Text, With<ReasonLine>>,
+    mut texts: ParamSet<(Query<&mut Text, With<ReasonLine>>, Query<&mut Text, With<FolderLine>>, Query<&mut Text, With<TemplateNote>>)>,
 ) {
     let Some(form) = form.filter(|f| f.is_changed()) else { return };
     let problems = check(&form.0);
@@ -275,9 +393,30 @@ fn show_the_form(
         }
     }
     let said = problems.reason().unwrap_or_default().to_owned();
-    for mut text in &mut reason {
+    let folder = if form.0.name.trim().is_empty() { String::new() } else { format!("Folder: {}", folder_name(&form.0.name)) };
+    let note = form.0.template.describe();
+    set_text(&mut texts.p0(), &said);
+    set_text(&mut texts.p1(), &folder);
+    set_text(&mut texts.p2(), note);
+}
+
+fn set_text<M: Component>(lines: &mut Query<&mut Text, With<M>>, said: &str) {
+    for mut text in lines {
         if text.0 != said {
-            text.0 = said.clone();
+            text.0 = said.to_owned();
+        }
+    }
+}
+
+/// The folder the chooser picked is the Location, in the form and in the field a person sees.
+fn take_the_location(mut picked: MessageReader<Picked>, form: Option<ResMut<NewProjectForm>>, mut field: Query<&mut TextInputValue, With<LocationField>>) {
+    let Some(mut form) = form else { return };
+    for Picked { for_what, paths } in picked.read() {
+        let (PickFor::Location, Some(folder)) = (for_what, paths.first()) else { continue };
+        let folder = folder.to_string_lossy().into_owned();
+        form.0.location.clone_from(&folder);
+        for mut value in &mut field {
+            value.0.clone_from(&folder);
         }
     }
 }

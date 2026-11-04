@@ -421,7 +421,7 @@ fn back_on_escape(keys: Res<ButtonInput<KeyCode>>, dialogs: Query<(), With<PageD
 
 /// Dispatches one operation the way the chooser did: the project's root and no loaded project, the person as the source, the log line in
 /// the project's `oplog.jsonl`. A refusal is the sentence the page shows.
-fn from_the_page(root: &Path, operation: &str, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn from_the_page(root: &Path, operation: &str, params: &serde_json::Value) -> Result<serde_json::Value, String> {
     let mut ctx = crate::ops::Ctx { root: Some(root.to_path_buf()), source: crate::ops::Source::Human, session: "project page".to_owned(), ..crate::ops::Ctx::default() };
     match crate::ops::dispatch(&mut ctx, operation, params) {
         Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.after.unwrap_or(serde_json::Value::Null)),
