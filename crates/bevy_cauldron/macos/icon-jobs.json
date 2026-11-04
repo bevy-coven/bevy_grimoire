@@ -1,0 +1,20 @@
+[
+  {
+    "name": "cauldron_default",
+    "prompt": "A bubbling black iron cauldron with glowing violet and green potion and rising magic smoke, a small black raven perched on its rim, in front of a huge glowing yellow full moon ringed in purple and orange, dark magic, 1980s airbrushed custom van mural, bold clean silhouette, centered, deep purple night sky background, no text",
+    "prompt_style": "rd_pro__default",
+    "width": 256,
+    "height": 256,
+    "num_images": 4,
+    "seed": 401
+  },
+  {
+    "name": "cauldron_fantasy",
+    "prompt": "A bubbling black iron cauldron with glowing violet and green potion and rising magic smoke, a small black raven perched on its rim, in front of a huge glowing yellow full moon ringed in purple and orange, dark magic, 1980s airbrushed custom van mural, bold clean silhouette, centered, deep purple night sky background, no text",
+    "prompt_style": "rd_pro__fantasy",
+    "width": 256,
+    "height": 256,
+    "num_images": 4,
+    "seed": 502
+  }
+]
