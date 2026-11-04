@@ -1907,7 +1907,7 @@ impl Field {
             Field::Brush => "BRUSH",
             Field::Yaw => "YAW",
             Field::Map => "MAP",
-            Field::Under => "UNDER",
+            Field::Under => "UNDER CURSOR",
             Field::Undo => "UNDO",
             Field::Redo => "REDO",
             Field::Last => "LAST",
@@ -3598,9 +3598,11 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                                 crate::chrome::row_value(col, "", TEXT, Field::Last);
                             });
                         } else {
-                            // `COL_LABEL`: these hold an ordinary word (`brush`, `under`, `edges`). It
-                            // was a bare 62 — one of the six unnamed label columns the audit counted,
-                            // which is why no two panels in this editor lined their values up (F8).
+                            // `COL_LABEL`: these hold an ordinary word (`brush`, `edges`). A longer one
+                            // (`RELATIONS`, `UNDER CURSOR`) pushes its own box wider, and `row_label`'s
+                            // own margin keeps the value a gap from its last letter (#302). A wider
+                            // column for the block was tried and costs the value column the width the
+                            // two-line receipt and hint slots are measured against.
                             crate::chrome::row_label(row, crate::chrome::COL_LABEL, field.label());
                             crate::chrome::row_value(row, "", TEXT, field);
                         }
@@ -7934,7 +7936,6 @@ fn refresh_history(
             .ok()
             .filter(|&p| p <= rows.len());
         slot.position = position;
-        slot.current = position == Some(depth);
         // **A spare or current row is not a pointer target** (the click observer refuses it), so it
         // must not light up on hover either. `Hovered` is read from the pointer's hit, and an ignored
         // entity is never hit, so the row goes non-pickable here and stays pickable when it is live.
@@ -8178,7 +8179,7 @@ fn refresh_status(
             // other one — `stamp refused:`, `is not a number of metres`, every `cannot draw it:` —
             // in the same grey as `stamped 4 piece(s)`. Refusals go to the block above now, and the
             // write site is what decides, so there is nothing left here to be wrong about.
-            Field::Last => (state.status.note_text().to_owned(), quiet),
+            Field::Last => (plain_receipt(state.status.note_text()), quiet),
             // **The worst repeat first, then how many other looks repeat**, short enough for one line.
             // Dim when nothing repeats, the EDGES rule: a standing line that is fine stays quiet.
             // Under the project's `repetition.ron` (#139), the rules `grimoire_state` reports under; a
@@ -8213,6 +8214,72 @@ fn refresh_status(
             colour.0 = tint;
         }
     }
+}
+
+/// **A receipt, as a person reads it** (#302): `placed lamp_tall@1 at (2.31, 1.31)` becomes `placed
+/// lamp_tall at (2.3, 1.3)`.
+///
+/// The `@1` is which of several pieces of one kind the operation meant, which an agent's log needs and a
+/// person cannot see on the map; and a position to a hundredth of a metre is a precision no one placed
+/// anything to. Only the readout is changed: the receipt itself, and the agent's log, keep every digit.
+/// A coordinate pair (`(x, y)`) is rounded to a tenth; every other number is left exactly as it is.
+pub fn plain_receipt(text: &str) -> String {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    let chars: Vec<char> = text.chars().collect();
+    // The `@N` of an instance, only where it follows a name and is the whole of its number.
+    let mut without: Vec<char> = Vec::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '@' && i > 0 && word(chars[i - 1]) {
+            let digits = chars[i + 1..].iter().take_while(|c| c.is_ascii_digit()).count();
+            if digits > 0 && !chars.get(i + 1 + digits).copied().is_some_and(word) {
+                i += 1 + digits;
+                continue;
+            }
+        }
+        without.push(chars[i]);
+        i += 1;
+    }
+    // A pair of decimals in brackets, rounded to a tenth.
+    let number = |from: usize| -> Option<(f32, usize)> {
+        let mut end = from;
+        if without.get(end) == Some(&'-') {
+            end += 1;
+        }
+        let whole = without[end..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if whole == 0 {
+            return None;
+        }
+        end += whole;
+        if without.get(end) != Some(&'.') {
+            return None;
+        }
+        let fraction = without[end + 1..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if fraction == 0 {
+            return None;
+        }
+        end += 1 + fraction;
+        let value: String = without[from..end].iter().collect();
+        value.parse().ok().map(|v| (v, end))
+    };
+    let mut out = String::with_capacity(without.len());
+    let mut i = 0;
+    while i < without.len() {
+        if without[i] == '('
+            && let Some((x, after_x)) = number(i + 1)
+            && without.get(after_x) == Some(&',')
+            && without.get(after_x + 1) == Some(&' ')
+            && let Some((y, after_y)) = number(after_x + 2)
+            && without.get(after_y) == Some(&')')
+        {
+            out.push_str(&format!("({x:.1}, {y:.1})"));
+            i = after_y + 1;
+            continue;
+        }
+        out.push(without[i]);
+        i += 1;
+    }
+    out
 }
 
 /// **The `RELATIONS` row's words and tint** for the open map: `none` with no relations file, `N met`
@@ -8792,8 +8859,20 @@ fn rename_keys(
 fn refresh_triangle_total(
     drawn: Query<(&ViewVisibility, &Mesh3d)>,
     meshes: Res<Assets<Mesh>>,
+    settings: Option<Res<crate::settings::EditorSettings>>,
     mut readout: Query<(&mut Text, &mut TextColor), With<TriangleTotal>>,
 ) {
+    // **Behind View → Show statistics** (#302). A count the author did not ask for is the first thing
+    // a newcomer reads at the top of the window, and it says nothing they can act on; so while it is
+    // off the readout says nothing and the sum over every visible mesh is not taken.
+    if !settings.is_some_and(|s| s.show_statistics) {
+        for (mut text, _) in &mut readout {
+            if !text.0.is_empty() {
+                text.0.clear();
+            }
+        }
+        return;
+    }
     let total: usize = drawn
         .iter()
         .filter(|(v, _)| v.get())

@@ -245,7 +245,10 @@ impl Labeler {
     fn parts(&self) -> (&'static str, &str) {
         match (self.read_for.is_some(), self.model.as_deref(), self.link) {
             (false, ..) => ("", ""),
-            (true, None, _) => ("labeler: not configured", ""),
+            // **Nothing, when there is no labeler to speak of** (#302): the line is a status, and "not
+            // configured" is the state of a feature the person has not asked for. A line that says it
+            // on every project, forever, is noise at the foot of the window.
+            (true, None, _) => ("", ""),
             (true, Some(m), Link::Untried) => ("labeler: ", model_short(m)),
             (true, Some(m), Link::Live) => ("connected: ", model_short(m)),
             (true, Some(m), Link::Down) => ("unreachable: ", model_short(m)),
@@ -1677,7 +1680,7 @@ mod tests {
         assert_eq!(l.line(), "", "nothing is claimed before the config is read");
 
         l.read_for = Some(std::path::PathBuf::from("/kit"));
-        assert_eq!(l.line(), "labeler: not configured");
+        assert_eq!(l.line(), "", "a project with no labeler says nothing about one (#302)");
 
         l.model = Some("qwen3-vl".to_owned());
         assert_eq!(

@@ -54,6 +54,12 @@ pub const MENUS: [(&str, &str); 10] = [
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MenuCommand(pub crate::keys::Action);
 
+/// **View → Show statistics** (#302): the one row of the bar that is a setting and not a command. It is a
+/// tick, and choosing it writes `show_statistics` to the user's settings file, which the editor reads back
+/// as it reads an edit made by hand; [`follow_the_statistics_setting`] keeps the tick on what the settings say.
+#[derive(Component)]
+pub struct StatisticsItem;
+
 /// The bar itself, so a test can find it and nothing else claims to be one.
 #[derive(Component)]
 pub struct EditorMenuBar;
@@ -67,7 +73,7 @@ impl Plugin for MenuBarPlugin {
         }
         app.add_systems(
             Update,
-            (keep_the_menu_bar, read_the_titles_as_controls, refresh_the_rows)
+            (keep_the_menu_bar, read_the_titles_as_controls, refresh_the_rows, follow_the_statistics_setting)
                 .chain()
                 .after(FrameSystems)
                 .run_if(in_state(Screen::Editor)),
@@ -122,6 +128,7 @@ fn keep_the_menu_bar(
     frame: Option<Res<Frame>>,
     live: Option<Res<Live>>,
     question: Option<Res<crate::confirm::Confirm>>,
+    settings: Option<Res<crate::settings::EditorSettings>>,
     bars: Query<Entity, With<EditorMenuBar>>,
 ) {
     let Some(frame) = frame else { return };
@@ -132,7 +139,7 @@ fn keep_the_menu_bar(
     // over a scrim that covers the bar and is what the dialog tests count.
     let wanted = !question.is_some_and(|q| q.is_open());
     match (wanted, standing) {
-        (true, None) => spawn_menu_bar(&mut commands, &frame, live.as_deref().copied()),
+        (true, None) => spawn_menu_bar(&mut commands, &frame, live.as_deref().copied(), settings.is_some_and(|s| s.show_statistics)),
         (false, Some(bar)) => {
             commands.entity(bar).despawn();
         }
@@ -161,7 +168,7 @@ fn read_the_titles_as_controls(
 
 /// **The bar itself, at the top of the window.** The chrome bar was index 0 of the frame's root, so the
 /// menu bar goes above it: index 0, and the chrome bar moves to 1.
-fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>) {
+fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, show_statistics: bool) {
     let live = live.unwrap_or_default();
     // One `Vec` per menu, built here rather than inside the spawner: the spawners are closures the
     // relationship machinery calls later, and a registry read inside one would be the second place
@@ -188,6 +195,25 @@ fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>) {
                                     MenuCommand(command.action),
                                     bevy_gooey::menu_item(command.title)
                                         .with_shortcut(command.shortcut_in(live)),
+                                ));
+                            }
+                            if title == "View" {
+                                menu.spawn((
+                                    StatisticsItem,
+                                    bevy_gooey::check_item("Show statistics", show_statistics),
+                                    bevy_gooey::observe(
+                                        |change: On<bevy_gooey::ValueChange<bool>>, file: Option<Res<crate::settings::UserSettingsFile>>| {
+                                            if let Some(file) = file
+                                                && let Err(why) = crate::setting_catalogue::write_key(
+                                                    &file.0,
+                                                    "show_statistics",
+                                                    Some(crate::setting_catalogue::Value::On(change.value)),
+                                                )
+                                            {
+                                                bevy::log::warn!("could not save Show statistics: {why}");
+                                            }
+                                        },
+                                    ),
                                 ));
                             }
                         })),
@@ -233,6 +259,26 @@ fn refresh_the_rows(
             None => {
                 commands.entity(entity).remove::<bevy_gooey::Disabled>();
             }
+        }
+    }
+}
+
+/// The tick on View → Show statistics says what the settings say, whichever way they were changed.
+fn follow_the_statistics_setting(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    items: Query<(Entity, Has<bevy_gooey::Checked>), With<StatisticsItem>>,
+    mut commands: Commands,
+) {
+    let Some(settings) = settings else { return };
+    for (item, ticked) in &items {
+        match (settings.show_statistics, ticked) {
+            (true, false) => {
+                commands.entity(item).insert(bevy_gooey::Checked);
+            }
+            (false, true) => {
+                commands.entity(item).remove::<bevy_gooey::Checked>();
+            }
+            _ => {}
         }
     }
 }

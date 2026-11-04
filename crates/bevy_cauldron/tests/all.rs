@@ -146,6 +146,7 @@ mod the_commands_lenses_match_the_tree;
 mod the_fill_button_is_the_fill_key;
 mod the_settings_screen_searches_and_resets;
 mod the_settings_sizes_are_sliders;
+mod the_editor_chrome_speaks_plainly;
 mod the_environment_panel_is_reachable;
 mod the_keymap_refuses_a_clash_and_saves_nothing;
 mod the_project_configuration_toggles_a_family_crate;

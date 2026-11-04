@@ -414,9 +414,12 @@ fn refresh(
     built.0 = Some(snapshot);
 }
 
+/// A scale slider that was just built or whose value moved.
+type PercentSlider = (With<PercentReadout>, Or<(Added<PercentReadout>, Changed<SliderValue>)>);
+
 /// **Write each scale slider's readout as a percentage**, once it is built and whenever its value moves.
 fn say_the_percentage(
-    sliders: Query<(Entity, &SliderValue), (With<PercentReadout>, Or<(Added<PercentReadout>, Changed<SliderValue>)>)>,
+    sliders: Query<(Entity, &SliderValue), PercentSlider>,
     children: Query<&Children>,
     mut readouts: Query<(&bevy_gooey::Role, &mut Text)>,
 ) {

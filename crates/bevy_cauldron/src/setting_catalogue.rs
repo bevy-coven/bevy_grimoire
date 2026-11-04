@@ -89,6 +89,13 @@ pub const CATALOGUE: &[Setting] = &[
         kind: Kind::Scale { min: SIZE_SLIDER.0, max: SIZE_SLIDER.1 },
     },
     Setting {
+        key: "show_statistics",
+        label: "Show statistics",
+        category: "Appearance",
+        description: "Show how many triangles are drawn, at the top right of the window.",
+        kind: Kind::Switch,
+    },
+    Setting {
         key: "reduced_motion",
         label: "Reduced motion",
         category: "Accessibility",
@@ -159,6 +166,7 @@ impl EditorSettings {
             "reduced_motion" => Value::On(self.reduced_motion),
             "show_grid" => Value::On(self.show_grid),
             "grid_strength" => Value::Number(self.grid_strength),
+            "show_statistics" => Value::On(self.show_statistics),
             _ => return None,
         })
     }
@@ -189,6 +197,7 @@ impl SettingsLayer {
             "reduced_motion" => self.reduced_motion.map(Value::On),
             "show_grid" => self.show_grid.map(Value::On),
             "grid_strength" => self.grid_strength.map(Value::Number),
+            "show_statistics" => self.show_statistics.map(Value::On),
             _ => None,
         }
     }
@@ -202,6 +211,7 @@ impl SettingsLayer {
             ("reduced_motion", Value::On(on)) => self.reduced_motion = Some(on),
             ("show_grid", Value::On(on)) => self.show_grid = Some(on),
             ("grid_strength", Value::Number(n)) => self.grid_strength = Some(n),
+            ("show_statistics", Value::On(on)) => self.show_statistics = Some(on),
             _ => return false,
         }
         true
@@ -216,6 +226,7 @@ impl SettingsLayer {
             "reduced_motion" => self.reduced_motion = None,
             "show_grid" => self.show_grid = None,
             "grid_strength" => self.grid_strength = None,
+            "show_statistics" => self.show_statistics = None,
             _ => {}
         }
     }
