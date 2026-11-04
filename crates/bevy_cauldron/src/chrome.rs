@@ -2291,6 +2291,36 @@ pub fn hide_idle_scrollbars(
     }
 }
 
+/// **A wheel turned over a scrollbar scrolls what the bar is for** (#283).
+///
+/// The track is a pickable node of its own, a sibling of the scroll area rather than inside it, so a
+/// wheel over its five pixels targeted the track, bubbled up through the panel and reached nothing:
+/// measured on big, 2026-11-03, a wheel at the inspector's right edge did nothing while the same
+/// wheel 12 px to the left scrolled it. `bevy_ui_widgets`' own handler (`scrollarea.rs`) only listens
+/// on the area, so this forwards the notch to the area the bar's `Scrollbar::target` names, with the
+/// same arithmetic: the pixels the event is worth, held to `[0, content - visible]`.
+fn forward_a_wheel_over_a_scrollbar(
+    mut scroll: On<bevy::picking::events::PointerScroll>,
+    tracks: Query<&bevy::ui_widgets::Scrollbar, With<ScrollTrack>>,
+    mut areas: Query<(&Node, &ComputedNode, &mut ScrollPosition), With<ScrollArea>>,
+    ratio: Res<bevy::input::mouse::MouseScrollPixelsPerLine>,
+) {
+    let Ok(bar) = tracks.get(scroll.entity) else {
+        return;
+    };
+    scroll.propagate(false);
+    let Ok((node, computed, mut position)) = areas.get_mut(bar.target) else {
+        return;
+    };
+    let visible = computed.size() * computed.inverse_scale_factor();
+    let content = computed.content_size() * computed.inverse_scale_factor();
+    let delta = scroll.to_pixels(&ratio);
+    let range = (content - visible).max(Vec2::ZERO);
+    if node.overflow.y == bevy::ui::OverflowAxis::Scroll {
+        position.y = (position.y - delta.y).clamp(0.0, range.y);
+    }
+}
+
 // ── the row vocabulary ───────────────────────────────────────────────────────────────────────────
 //
 // The builders below were each written AFTER their shape had been hand-rolled at least three times
@@ -3227,6 +3257,8 @@ pub struct ChromePlugin;
 impl Plugin for ChromePlugin {
     fn build(&self, app: &mut App) {
         app
+            // A wheel over a scrollbar scrolls its area (#283).
+            .add_observer(forward_a_wheel_over_a_scrollbar)
             // **The frame first, and everything that puts a panel in it after.** `Res<Frame>` is
             // how `panel_root` finds its dock, and in Bevy 0.19 a missing `Res<T>` panics its
             // system rather than skipping it — so this is an ordering the build must state, not one

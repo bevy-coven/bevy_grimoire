@@ -95,3 +95,60 @@ fn a_wheel_over_the_inspectors_content_scrolls_it() {
          ScrollArea took the event)"
     );
 }
+
+/// **A wheel turned over the inspector's scrollbar scrolls the inspector too** (#283). The track is a
+/// sibling of the scroll area, not inside it, so the wheel over its five pixels bubbled through the panel
+/// and reached nothing: measured live, a wheel at the panel's right edge did nothing while one 12 px to
+/// the left scrolled it.
+///
+/// The event is delivered to the track directly, as picking does once the pointer is over it: where the
+/// track is drawn in a windowless test is not where it is in the editor (the shell sizes its split from
+/// the window, which this app has not), so hit-testing it here would prove nothing about the real panel.
+#[test]
+fn a_wheel_over_the_inspectors_scrollbar_scrolls_it() {
+    use bevy::picking::backend::HitData;
+    use bevy::picking::events::{Pointer, PointerScroll};
+    use bevy::ui_widgets::Scrollbar;
+    use bevy_cauldron::chrome::ScrollTrack;
+
+    let mut app = editor("wheel_over_the_scrollbar");
+    let (area, before, range, _) = inspector(&mut app);
+    assert!(range > 100.0, "the inspector must have somewhere to scroll (range {range})");
+    assert_eq!(before, 0.0);
+
+    let track = {
+        let world = app.world_mut();
+        let mut q = world.query_filtered::<(Entity, &Scrollbar, &Node), With<ScrollTrack>>();
+        q.iter(world)
+            .find(|(_, bar, node)| bar.target == area && node.display != Display::None)
+            .map(|(e, ..)| e)
+            .expect("the inspector's scrollbar is drawn, since its content overflows")
+    };
+    let handle = app
+        .world()
+        .get_resource::<bevy_cauldron::surface::Surface>()
+        .map(|s| s.image.clone())
+        .unwrap_or_default();
+    let location = Location {
+        target: NormalizedRenderTarget::Image(ImageRenderTarget { handle, scale_factor: 1.0 }),
+        position: Vec2::ZERO,
+    };
+    for _ in 0..3 {
+        app.world_mut().trigger(PointerScroll {
+            entity: track,
+            pointer: Pointer::new(PointerId::Mouse, location.clone()),
+            unit: bevy::input::mouse::MouseScrollUnit::Line,
+            x: 0.0,
+            y: -1.0,
+            hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+            phase: bevy::input::touch::TouchPhase::Moved,
+        });
+        app.update();
+    }
+    let (_, after, _, _) = inspector(&mut app);
+    assert!(
+        after > 1.0,
+        "three wheel notches delivered to the scrollbar left the inspector at {after}: the track took \
+         the event and nothing forwarded it to the area"
+    );
+}
