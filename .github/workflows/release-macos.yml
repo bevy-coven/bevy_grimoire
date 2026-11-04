@@ -100,6 +100,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.version.outputs.v }}
         run: |
+          # An ad-hoc DMG is refused by Gatekeeper as "damaged" on every other Mac (audit 2026-11-04, #285):
+          # it stays an artifact of this run, for testing, and never becomes a release.
+          if [ "$DEVELOPER_ID" != 'true' ]; then
+            echo "an ad-hoc build is never published: it does not open on another Mac" >&2
+            exit 1
+          fi
           gh release create "bevy_cauldron-v$V" dist/Cauldron-*.dmg dist/Cauldron-*.zip dist/SHA256SUMS \
             --target "$GITHUB_SHA" --title "Cauldron $V" --generate-notes
       - name: Remove the signing keychain and the notary key
