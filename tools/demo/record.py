@@ -42,6 +42,9 @@ Storyboard format (JSON):
                                                 inside the region (the panel's rect), then let go
       {"at": 3.5, "drag_divider": -90, "secs": 1.6},   drag the shell's split divider by dx px, found by BRP
       {"at": 4.0, "type": "44"},
+      {"at": 4.5, "drop_file": "/tmp/crate.glb"},   a file dropped on the window, as the window system reports it
+                                                (a `FileDragAndDrop::DroppedFile` over BRP: no real drag can be made
+                                                under Xvfb)
       {"at": 5.0, "mcp": "grimoire_frame_view", "args": {...}, "caption": "agent: frames the walls"},
       {"at": 5.5, "mcp": "grimoire_apply_operation", "args": {...}, "as": "built"},
                                                 saves the answer's operation_id; "$built" anywhere in a
@@ -460,6 +463,16 @@ def do_step(step, timeline, inj, agent, named=None):
         x, y = scroll_to(inj.port, inj, step["scroll_to"], step["over"], step.get("region"), step.get("prefix", False))
         timeline.add(t=timeline.now(), type="cursor", x=x, y=y)
         timeline.add(t=timeline.now(), type="clear_cursor")
+    elif kind == "drop_file":
+        # **A file dropped on the window.** The window system sends `FileDragAndDrop::DroppedFile`; under Xvfb
+        # no drag can be made, so the same message is written through BRP, naming the primary window.
+        window = brp(inj.port, "world.query", {"data": {"components": []}, "filter": {"with": ["bevy_window::window::PrimaryWindow"]}})
+        rows = window.get("result", window)
+        if not rows:
+            raise RuntimeError("drop_file: the editor has no primary window")
+        brp(inj.port, "world.write_message", {"message": "bevy_window::event::FileDragAndDrop",
+                                              "value": {"DroppedFile": {"window": rows[0]["entity"], "path_buf": step["drop_file"]}}})
+        timeline.add(t=timeline.now(), type="drop", path=step["drop_file"])
     elif kind == "key":
         mods = step.get("mods", [])
         for m in mods:
@@ -549,7 +562,7 @@ def kind_of(step):
     # `events.json` as a storyboard that only had captions. It went unnoticed because no storyboard
     # used it until the status band's job item — a widget whose words move, so a guessed pixel cannot
     # reach it.
-    for k in ("scroll_to", "drag_divider", "click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "wheel", "mcp", "write", "settle", "caption"):
+    for k in ("scroll_to", "drag_divider", "click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "drop_file", "wheel", "mcp", "write", "settle", "caption"):
         if k in step:
             return k
     raise ValueError(f"step has no action: {step}")
