@@ -429,4 +429,5 @@ mod the_updater_offers_the_newest_release;
 mod modal_keys_do_not_reach_the_editor;
 mod a_click_on_the_other_door_crosses_to_it;
 mod the_project_page;
+mod the_menus_offer_the_app_verbs;
 mod a_new_project_form_opens_ready_to_type_in;

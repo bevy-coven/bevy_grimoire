@@ -576,12 +576,12 @@ enumerated! {
     /// It is a **capture**, not a registry operation: its output is a file a person and an agent
     /// read, and it changes no map, so it has no operation name. See `snip`.
     Snip,
-    /// **Back to the chooser** — leave this map and pick another.
+    /// **Close the project** — leave this map for the project page and pick another.
     ///
     /// `Cmd+O` because "open something else" is what every editor binds it to, and this screen has
-    /// no other opening verb to confuse it with. It is a **process** boundary, not a tab: the editor
-    /// was launched by the chooser and exits back to it, which is why the action lives here and the
-    /// mechanism lives in `main.rs`.
+    /// no other opening verb to confuse it with. It is a **screen** change, not a tab: the editor is
+    /// one state of the application (`screen.rs`), which is why the action lives here and the
+    /// mechanism lives in `editor::back_to_the_menu`. File → Close project is this row.
     MainMenu,
     Undo,
     Redo,
@@ -1548,9 +1548,10 @@ pub const BINDINGS: &[Binding] = &[
     // **The composition picker, and the arrows it takes.**
     //
     // `P` is free on the Map tab — it belongs to Meshes (`RotateMeshZ`) and Compose
-    // (`CarouselNext`), and neither of those contexts ever overlaps Map. The two arrow rows are the
-    // palette's own, re-bound at [`Stance::Picking`], so **the picker costs one new key and no new
-    // arrow**: the same two keys, meaning something different while the picker has them.
+    // (`CarouselNext`), and neither of those contexts ever overlaps Map. The two arrow rows walk the
+    // picker on **Shift**+arrow (#299): they were the palette's own bare arrows re-bound at
+    // [`Stance::Picking`], and the Map menu then showed Up and Down on two rows each. The palette
+    // keeps the bare arrows, so no chord in this context means two things.
     //
     // **A keyboard route is not a convenience here — it is the route.** `bevy_picking` reads the
     // mouse from the `WindowEvent` stream (`bevy_picking-0.20.0/src/input.rs:153`), and the editor's
@@ -1567,24 +1568,26 @@ pub const BINDINGS: &[Binding] = &[
         "take the arrows to the compositions",
     )
     .at(Home::Control(ControlId::Detail)),
-    bp(
+    bsp(
         Action::CompositionPrev,
         KeyCode::ArrowUp,
         false,
+        true,
         Stance::Picking,
         Context::Map,
         "up",
-        "walk the compositions / Shift: x5",
+        "walk the compositions",
     )
     .at(Home::Control(ControlId::Detail)),
-    bp(
+    bsp(
         Action::CompositionNext,
         KeyCode::ArrowDown,
         false,
+        true,
         Stance::Picking,
         Context::Map,
         "down",
-        "walk the compositions / Shift: x5",
+        "walk the compositions",
     )
     .at(Home::Control(ControlId::Detail)),
     // **A separate cluster from the aim keys, on purpose.** `Z`/`C` turn the BRUSH and must keep

@@ -73,8 +73,13 @@ fn an_empty_project_says_it_has_no_pieces_and_offers_to_add_meshes_on_the_map_an
     assert_eq!(prompt(&mut app), Some(EmptyMapPrompt::NoPieces), "the map's empty state is the no-pieces one");
     let said = texts(&mut app);
     assert!(said.iter().filter(|t| t.as_str() == NO_PIECES).count() == 2, "the map and the PLACE list each say {NO_PIECES:?}: {said:?}");
-    assert_eq!(said.iter().filter(|t| t.as_str() == ACTION).count(), 2, "and each offers {ACTION:?}");
-    assert_eq!(app.world_mut().query::<&AddMeshesButton>().iter(app.world()).count(), 2);
+    // The menu bar's File → Add meshes… (#299) says it too, so the count is of the two *buttons* the empty states draw, each saying it.
+    let buttons: Vec<Entity> = app.world_mut().query_filtered::<Entity, With<AddMeshesButton>>().iter(app.world()).collect();
+    assert_eq!(buttons.len(), 2, "the map and the PLACE list each offer a button");
+    for button in buttons {
+        let says = app.world().get::<Children>(button).is_some_and(|kids| kids.iter().any(|k| app.world().get::<Text>(k).is_some_and(|t| t.0 == ACTION)));
+        assert!(says, "each button says {ACTION:?}");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

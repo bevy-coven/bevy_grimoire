@@ -67,6 +67,7 @@ pub mod decide_labels;
 pub mod devshot;
 pub mod editor;
 pub mod inspector_view;
+pub mod app_verbs;
 pub mod menu_bar;
 pub mod empty_state;
 pub mod family_host;

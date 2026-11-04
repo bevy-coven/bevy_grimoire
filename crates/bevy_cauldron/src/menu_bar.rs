@@ -20,12 +20,16 @@
 //! toolbar and the empty-map prompt use, so a menu item and its key are one dispatcher and one undo
 //! step.
 
+use std::path::PathBuf;
+
+use bevy::ecs::spawn::{SpawnIter, SpawnWith};
 use bevy::prelude::*;
 
+use crate::app_verbs::AppVerb;
 use crate::chrome::{Frame, FrameSystems};
 use crate::command_run::Chords;
 use crate::commands::{self, Command};
-use crate::keys::Live;
+use crate::keys::{Action, Live};
 use crate::screen::Screen;
 
 /// **The order the menus read in** — `docs/ui/vision.md` §5's list, plus the three categories the
@@ -111,40 +115,48 @@ fn take_the_escape_that_closed_a_menu(
     }
 }
 
-/// **The bar is there while the workbench is, and not while a question is.**
+/// **The bar is there while the workbench is, a question or not** (#299).
 ///
-/// A modal dialog is drawn over a scrim that takes the pointer and the keys, so a menu bar showing
-/// through it is not a control a person can reach — and the interface's own tests count
-/// `Role::ButtonText` over the whole world to say what a dialog's answers are, which a bar of ten
-/// buttons breaks (`a_question_is_asked_in_a_gooey_dialog`). Hiding it is not enough: a `Display::None`
-/// button is still counted (the empty-map prompt learned that the hard way), so the bar is despawned
-/// and built again when the question closes.
+/// It used to be taken down while the editor's own question was up, because the interface's tests count `Role::ButtonText`
+/// over the whole world to say what a dialog's answers are. That made the layout jump by the bar's height (34 px) every
+/// time a question opened and closed. The bar's titles are retagged ([`read_the_titles_as_controls`]) and a menu's rows are
+/// not buttons, so the count is the dialog's alone, and the dialog's scrim covers the bar: nothing is reachable through it.
 ///
-/// It is a system rather than `OnEnter` for one more reason: the bar is a child of the frame's root,
-/// which the frame respawns on every door, so "there is a frame and no bar" is the condition that
-/// covers both a new screen and a new door.
+/// It is a system rather than `OnEnter` for one more reason: the bar is a child of the frame's root, which the frame
+/// respawns on every door, so "there is a frame and no bar" is the condition that covers both a new screen and a new door.
 fn keep_the_menu_bar(
     mut commands: Commands,
     frame: Option<Res<Frame>>,
     live: Option<Res<Live>>,
-    question: Option<Res<crate::confirm::Confirm>>,
     settings: Option<Res<crate::settings::EditorSettings>>,
+    recents: Option<Res<crate::recent::RecentProjects>>,
     bars: Query<Entity, With<EditorMenuBar>>,
 ) {
     let Some(frame) = frame else { return };
-    let standing = bars.iter().next();
-    // **A question, not any dialog.** A menu opens as a gooey modal popover, which is a `Dialog`, so
-    // "no dialog" would despawn the bar the moment a menu opens — measured here, the first take of
-    // this slice's clip showed it. What must stand down is the editor's own question, which is drawn
-    // over a scrim that covers the bar and is what the dialog tests count.
-    let wanted = !question.is_some_and(|q| q.is_open());
-    match (wanted, standing) {
-        (true, None) => spawn_menu_bar(&mut commands, &frame, live.as_deref().copied(), settings.is_some_and(|s| s.show_statistics)),
-        (false, Some(bar)) => {
-            commands.entity(bar).despawn();
-        }
-        _ => {}
+    if bars.iter().next().is_some() {
+        return;
     }
+    spawn_menu_bar(
+        &mut commands,
+        &frame,
+        live.as_deref().copied(),
+        settings.is_some_and(|s| s.show_statistics),
+        recent_projects(recents.as_deref()),
+    );
+}
+
+/// **The last [`RECENT_SHOWN`] projects that are still there**, as File → Open recent lists them.
+///
+/// [`RECENT_SHOWN`]: crate::app_verbs::RECENT_SHOWN
+fn recent_projects(recents: Option<&crate::recent::RecentProjects>) -> Vec<PathBuf> {
+    let Some(Ok(recent)) = recents.map(|r| crate::recent::Recent::load(&r.0)) else { return Vec::new() };
+    recent
+        .listing()
+        .into_iter()
+        .filter(|row| !row.missing)
+        .map(|row| row.project.path)
+        .take(crate::app_verbs::RECENT_SHOWN)
+        .collect()
 }
 
 /// **A bar title's words are `ControlText`, not `ButtonText`** — the same retag
@@ -166,55 +178,114 @@ fn read_the_titles_as_controls(
     }
 }
 
+/// **One row of a menu**: a command of the registry, a verb of the application, the recent projects as a submenu, a line
+/// between two groups, or the one setting the bar carries.
+#[derive(Clone, Debug)]
+enum Slot {
+    Command(Action),
+    Verb(AppVerb),
+    Recent(Vec<PathBuf>),
+    Separator,
+    Statistics,
+}
+
+/// **The Map menu, in the groups its keys fall into**: choosing and tools, turning and tipping, filling, and the map itself.
+/// A map command in none of them is appended after the last, and `the_map_menu_names_every_map_command` fails until it is
+/// placed, so the groups cannot go stale.
+pub const MAP_GROUPS: [&[Action]; 4] = [
+    // Place: what is in hand, and the tools that act on the pieces already down.
+    &[
+        Action::CycleTarget,
+        Action::PalettePrev,
+        Action::PaletteNext,
+        Action::PickComposition,
+        Action::CompositionPrev,
+        Action::CompositionNext,
+        Action::ArmComposition,
+        Action::Remove,
+        Action::MoveMode,
+        Action::CloneMode,
+        Action::RunMode,
+    ],
+    // Turn and tip: the pose of the piece in hand or under the cursor.
+    &[Action::TurnPieceLeft, Action::TurnPieceRight, Action::TipX, Action::TipZ, Action::Straighten, Action::LiftDown, Action::LiftUp],
+    // Fill: what the solvers lay down, and keeping or leaving it.
+    &[Action::Fill, Action::Generate, Action::GenerateDeclared, Action::GenerateComposed, Action::AcceptProposal],
+    // Map: the map's own settings and notes.
+    &[Action::GroupFromSet, Action::RenameMap, Action::NoteTool, Action::SetRule, Action::OwnToggle, Action::CycleGrid],
+];
+
+/// What `category`'s menu holds, in order. Every command of the category is in it exactly once: the ones the layout names where
+/// it names them, and any it does not after them.
+fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slot> {
+    let named: Vec<Slot> = match category {
+        "file" => vec![
+            Slot::Verb(AppVerb::NewProject),
+            Slot::Verb(AppVerb::OpenProject),
+            Slot::Recent(recent),
+            Slot::Separator,
+            Slot::Verb(AppVerb::AddMeshes),
+            Slot::Separator,
+            Slot::Command(Action::Save),
+            Slot::Command(Action::MainMenu),
+            Slot::Separator,
+            Slot::Verb(AppVerb::Quit),
+        ],
+        "map" => MAP_GROUPS
+            .iter()
+            .enumerate()
+            .flat_map(|(i, group)| {
+                let rows = group.iter().copied().map(Slot::Command);
+                let line = (i > 0).then_some(Slot::Separator);
+                line.into_iter().chain(rows)
+            })
+            .collect(),
+        "help" => vec![
+            Slot::Verb(AppVerb::KeyboardShortcuts),
+            Slot::Command(Action::Shortcuts),
+            Slot::Separator,
+            Slot::Verb(AppVerb::GettingStarted),
+            Slot::Verb(AppVerb::WhatsNew),
+            Slot::Separator,
+            Slot::Verb(AppVerb::ReportProblem),
+            Slot::Verb(AppVerb::About),
+        ],
+        _ => Vec::new(),
+    };
+    let left_over: Vec<Slot> = registry
+        .iter()
+        .filter(|c| c.category() == category)
+        .filter(|c| !named.iter().any(|s| matches!(s, Slot::Command(a) if *a == c.action)))
+        .map(|c| Slot::Command(c.action))
+        .collect();
+    let mut slots: Vec<Slot> = named.into_iter().chain(left_over).collect();
+    if category == "view" {
+        slots.push(Slot::Separator);
+        slots.push(Slot::Statistics);
+    }
+    slots
+}
+
 /// **The bar itself, at the top of the window.** The chrome bar was index 0 of the frame's root, so the
 /// menu bar goes above it: index 0, and the chrome bar moves to 1.
-fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, show_statistics: bool) {
+fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, show_statistics: bool, recent: Vec<PathBuf>) {
     let live = live.unwrap_or_default();
     // One `Vec` per menu, built here rather than inside the spawner: the spawners are closures the
     // relationship machinery calls later, and a registry read inside one would be the second place
     // that decides what a menu holds.
     let registry = commands::all();
-    let menus: Vec<(&'static str, Vec<Command>)> = MENUS
-        .iter()
-        .map(|(category, title)| {
-            let rows = registry.iter().copied().filter(|c| c.category() == *category).collect();
-            (*title, rows)
-        })
-        .collect();
+    let menus: Vec<(&'static str, Vec<Slot>)> =
+        MENUS.iter().map(|(category, title)| (*title, layout(category, &registry, recent.clone()))).collect();
     let bar = commands
         .spawn((
             EditorMenuBar,
             bevy_gooey::menu_bar(Children::spawn(SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
-                for (title, rows) in menus {
-                    let rows = rows.clone();
+                for (title, slots) in menus {
                     parent.spawn(bevy_gooey::menu_title(
                         title,
                         Children::spawn(SpawnWith(move |menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
-                            for command in &rows {
-                                menu.spawn((
-                                    MenuCommand(command.action),
-                                    bevy_gooey::menu_item(command.title)
-                                        .with_shortcut(command.shortcut_in(live)),
-                                ));
-                            }
-                            if title == "View" {
-                                menu.spawn((
-                                    StatisticsItem,
-                                    bevy_gooey::check_item("Show statistics", show_statistics),
-                                    bevy_gooey::observe(
-                                        |change: On<bevy_gooey::ValueChange<bool>>, file: Option<Res<crate::settings::UserSettingsFile>>| {
-                                            if let Some(file) = file
-                                                && let Err(why) = crate::setting_catalogue::write_key(
-                                                    &file.0,
-                                                    "show_statistics",
-                                                    Some(crate::setting_catalogue::Value::On(change.value)),
-                                                )
-                                            {
-                                                bevy::log::warn!("could not save Show statistics: {why}");
-                                            }
-                                        },
-                                    ),
-                                ));
+                            for slot in slots {
+                                spawn_slot(menu, slot, live, show_statistics);
                             }
                         })),
                     ));
@@ -223,6 +294,50 @@ fn spawn_menu_bar(commands: &mut Commands, frame: &Frame, live: Option<Live>, sh
         ))
         .id();
     commands.entity(frame.root).insert_children(0, &[bar]);
+}
+
+/// One row of a menu.
+fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot: Slot, live: Live, show_statistics: bool) {
+    match slot {
+        Slot::Command(action) => {
+            let command = commands::command(action);
+            menu.spawn((MenuCommand(action), bevy_gooey::menu_item(command.title).with_shortcut(command.shortcut_in(live))));
+        }
+        Slot::Verb(verb) => {
+            let mut item = bevy_gooey::menu_item(verb.title());
+            if let Some(shortcut) = verb.shortcut() {
+                item = item.with_shortcut(shortcut);
+            }
+            menu.spawn((verb, item));
+        }
+        Slot::Recent(projects) => {
+            let rows: Vec<_> = projects
+                .into_iter()
+                .map(|path| {
+                    let verb = AppVerb::OpenRecent(path);
+                    let item = bevy_gooey::menu_item(verb.title());
+                    (verb, item)
+                })
+                .collect();
+            menu.spawn(bevy_gooey::submenu("Open recent", Children::spawn(SpawnIter(rows.into_iter()))));
+        }
+        Slot::Separator => {
+            menu.spawn(bevy_gooey::separator());
+        }
+        Slot::Statistics => {
+            menu.spawn((
+                StatisticsItem,
+                bevy_gooey::check_item("Show statistics", show_statistics),
+                bevy_gooey::observe(|change: On<bevy_gooey::ValueChange<bool>>, file: Option<Res<crate::settings::UserSettingsFile>>| {
+                    if let Some(file) = file
+                        && let Err(why) = crate::setting_catalogue::write_key(&file.0, "show_statistics", Some(crate::setting_catalogue::Value::On(change.value)))
+                    {
+                        bevy::log::warn!("could not save Show statistics: {why}");
+                    }
+                }),
+            ));
+        }
+    }
 }
 
 /// **A row says the settings' chord, and why it cannot run when it cannot.**
