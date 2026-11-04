@@ -6319,8 +6319,16 @@ pub mod placement_set_pose {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Params {
-        /// The placement's id, as the map file and `grimoire/state` name it.
+        /// The placement's id, as the map file and `grimoire/state` name it. **Empty when `ids` is
+        /// given**, so one operation has one field that names what it poses.
+        #[serde(default)]
         pub id: String,
+        /// **Several placements, posed together** (UI-50, #236): an inspector can hold more than one
+        /// piece, and "typing 90 turns both" is one act, so it is **one** log line and **one** undo.
+        /// The single-`id` form is unchanged; a request with both names one thing twice and is
+        /// refused.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub ids: Vec<String>,
         /// The facing in degrees. Wrapped into `[0, 360)` before it is stored.
         pub yaw: f32,
         /// Quarter turns about X, then about Z, each 0 to 3. `[0, 0]` is upright.
@@ -6328,6 +6336,16 @@ pub mod placement_set_pose {
     }
 
     impl Params {
+        /// **Every placement this request poses**, in the order it named them: `ids`, else the one
+        /// `id`.
+        pub fn targets(&self) -> Vec<&str> {
+            if self.ids.is_empty() {
+                if self.id.is_empty() { Vec::new() } else { vec![self.id.as_str()] }
+            } else {
+                self.ids.iter().map(String::as_str).collect()
+            }
+        }
+
         /// **The JSON schema**, which is what an agent reads.
         pub fn schema() -> serde_json::Value {
             json!({
@@ -6375,6 +6393,18 @@ pub mod placement_set_pose {
                     p.tip
                 )));
             }
+            // **One field names what is posed.** `id` and `ids` together is a request that says the
+            // same thing twice, and guessing which wins would be a rule nobody could learn.
+            if !p.id.is_empty() && !p.ids.is_empty() {
+                return Err(Refusal::new(
+                    "name the placements with `id` (one) or `ids` (several), not both. Nothing was posed.",
+                ));
+            }
+            if p.targets().is_empty() {
+                return Err(Refusal::new(
+                    "no placement is named, so nothing was posed: give `id` or `ids`.",
+                ));
+            }
             Ok(p)
         }
     }
@@ -6409,14 +6439,29 @@ pub mod placement_set_pose {
             Some(json!({"map": open.map.name, "poses": poses}))
         }
 
-        /// **The posed piece's facing now**, against the one its change recorded.
+        /// **The posed pieces' facings now**, against the ones the change recorded.
+        ///
+        /// A single `id` projects to that piece alone, exactly as before. A batch projects to
+        /// `poses`, **the same list the change left**, so the undo's guard compares like with like:
+        /// the logged row is cut down to this projection's keys, and a batch whose projected shape
+        /// differed from what it wrote would refuse its own undo as "the map has changed outside the
+        /// operation log" (which it did, in the first version of this slice).
         fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
-            let Some(id) = after.get("id").and_then(serde_json::Value::as_str) else {
+            let open = ctx.open.as_ref()?;
+            if let Some(id) = after.get("id").and_then(serde_json::Value::as_str) {
+                let p = open.map.placements.iter().find(|q| q.id == id)?;
+                return Some(json!({"id": p.id, "yaw": p.yaw, "tip": [p.tip.0, p.tip.1]}));
+            }
+            let Some(poses) = after.get("poses").and_then(serde_json::Value::as_array) else {
                 return self.state(ctx);
             };
-            let open = ctx.open.as_ref()?;
-            let p = open.map.placements.iter().find(|q| q.id == id)?;
-            Some(json!({"id": p.id, "yaw": p.yaw, "tip": [p.tip.0, p.tip.1]}))
+            let mut now = Vec::with_capacity(poses.len());
+            for row in poses {
+                let id = row.get("id").and_then(serde_json::Value::as_str)?;
+                let p = open.map.placements.iter().find(|q| q.id == id)?;
+                now.push(json!({"id": p.id, "yaw": p.yaw, "tip": [p.tip.0, p.tip.1]}));
+            }
+            Some(json!({"poses": now}))
         }
 
         fn plan(
@@ -6430,61 +6475,116 @@ pub mod placement_set_pose {
                     "no map is open, so there are no placements to pose.",
                 ));
             };
-            if let Some(no) = super::placement_set_tip::refusal(
-                ctx.project.as_ref(),
-                open,
-                &p.id,
-                (p.tip[0], p.tip[1]),
-            ) {
-                return Err(no);
+            // **Every target, before anything moves**: a batch that posed three of four and then
+            // refused would be a half-turn nobody asked for.
+            let mut ids = Vec::new();
+            for id in p.targets() {
+                if let Some(no) = super::placement_set_tip::refusal(
+                    ctx.project.as_ref(),
+                    open,
+                    id,
+                    (p.tip[0], p.tip[1]),
+                ) {
+                    return Err(no);
+                }
+                if !open.map.placements.iter().any(|q| q.id == id) {
+                    return Err(Refusal::new(format!(
+                        "no placement is called `{id}` on this map, so nothing was posed."
+                    )));
+                }
+                ids.push(id);
             }
-            Ok(json!({"id": p.id, "yaw": super::placement_set_yaw::wrapped(p.yaw), "tip": p.tip}))
+            Ok(json!({"ids": ids, "yaw": super::placement_set_yaw::wrapped(p.yaw), "tip": p.tip}))
         }
 
         fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
             let p = Params::parse(params)?;
             let yaw = super::placement_set_yaw::wrapped(p.yaw);
             let tip = (p.tip[0], p.tip[1]);
+            let targets: Vec<String> = p.targets().iter().map(|s| (*s).to_owned()).collect();
             let Some(mut open) = ctx.open.take() else {
                 return Err(Refusal::new(
                     "no map is open, so there are no placements to pose.",
                 ));
             };
-            if let Some(no) =
-                super::placement_set_tip::refusal(ctx.project.as_ref(), &open, &p.id, tip)
-            {
-                ctx.open = Some(open);
-                return Err(no);
+            // **Everything checked before anything moves**, and every index found first: a batch
+            // whose third id is unknown must leave all three as they were.
+            for id in &targets {
+                if let Some(no) =
+                    super::placement_set_tip::refusal(ctx.project.as_ref(), &open, id, tip)
+                {
+                    ctx.open = Some(open);
+                    return Err(no);
+                }
             }
-            let Some(index) = open.map.placements.iter().position(|q| q.id == p.id) else {
-                ctx.open = Some(open);
-                return Err(Refusal::new(format!(
-                    "no placement is called `{}` on this map, so nothing was posed.",
-                    p.id
-                )));
-            };
-            // **The old facing, for the undo.** Its inverse is the same operation with this pair.
-            let old_yaw = std::mem::replace(&mut open.map.placements[index].yaw, yaw);
-            let old_tip = std::mem::replace(&mut open.map.placements[index].tip, tip);
-            let summary = if yaw == 0.0 && tip == (0, 0) {
-                format!("{} straight again", p.id)
+            let mut found: Vec<usize> = Vec::with_capacity(targets.len());
+            for id in &targets {
+                let Some(index) = open.map.placements.iter().position(|q| q.id == *id) else {
+                    ctx.open = Some(open);
+                    return Err(Refusal::new(format!(
+                        "no placement is called `{id}` on this map, so nothing was posed."
+                    )));
+                };
+                found.push(index);
+            }
+            // **The old facing of each, for the undo.** Its inverse is the same operation with these
+            // pairs.
+            let mut old: Vec<(String, f32, (u8, u8))> = Vec::with_capacity(found.len());
+            for index in &found {
+                let row = &mut open.map.placements[*index];
+                let before = (row.yaw, row.tip);
+                old.push((row.id.clone(), before.0, before.1));
+            }
+            // **Checked before anything moves**, so a refused batch leaves every piece as it was.
+            if old.len() > 1 {
+                let (_, first_yaw, first_tip) = &old[0];
+                if old.iter().any(|(_, y, t)| y != first_yaw || t != first_tip) {
+                    ctx.open = Some(open);
+                    return Err(Refusal::new(
+                        "these pieces were not facing the same way, so one undo could not put them \
+                         all back. Pose them one at a time, or turn them together from the same \
+                         facing.",
+                    ));
+                }
+            }
+            for index in &found {
+                let row = &mut open.map.placements[*index];
+                row.yaw = yaw;
+                row.tip = tip;
+            }
+            let summary = if targets.len() == 1 {
+                let id = &targets[0];
+                if yaw == 0.0 && tip == (0, 0) {
+                    format!("{id} straight again")
+                } else {
+                    format!(
+                        "posed {id} at {yaw:.0} deg, tipped {}/4 about X and {}/4 about Z",
+                        tip.0, tip.1
+                    )
+                }
             } else {
                 format!(
-                    "posed {} at {yaw:.0} deg, tipped {}/4 about X and {}/4 about Z",
-                    p.id, tip.0, tip.1
+                    "posed {} pieces at {yaw:.0} deg, tipped {}/4 about X and {}/4 about Z",
+                    targets.len(),
+                    tip.0,
+                    tip.1
                 )
             };
-            // **And the file, so the pose is not only in memory.** A refusal to save puts both old
-            // values back, so the editor and the file agree.
+            // **And the file, so the pose is not only in memory.** A refusal to save puts every old
+            // value back, so the editor and the file agree.
             let Some(project) = ctx.project.as_ref() else {
-                open.map.placements[index].yaw = old_yaw;
-                open.map.placements[index].tip = old_tip;
+                for (index, (_, old_yaw, old_tip)) in found.iter().zip(old.iter()) {
+                    open.map.placements[*index].yaw = *old_yaw;
+                    open.map.placements[*index].tip = *old_tip;
+                }
                 ctx.open = Some(open);
                 return Err(Refusal::new("no project is open."));
             };
             if let Err(e) = open.save(project) {
-                open.map.placements[index].yaw = old_yaw;
-                open.map.placements[index].tip = old_tip;
+                for (index, (_, old_yaw, old_tip)) in found.iter().zip(old.iter()) {
+                    open.map.placements[*index].yaw = *old_yaw;
+                    open.map.placements[*index].tip = *old_tip;
+                }
                 ctx.open = Some(open);
                 return Err(Refusal::new(format!(
                     "the file refused the pose, so nothing was written and the facing is unchanged: {e}"
@@ -6492,13 +6592,34 @@ pub mod placement_set_pose {
             }
             let map_name = open.map.name.clone();
             ctx.open = Some(open);
-            // **Only the posed piece is recorded**, so an unrelated edit cannot block its undo.
+            // **Every posed piece is recorded**, so an unrelated edit cannot block the undo, and one
+            // batch is one inverse: the same operation with each piece's old pair.
+            // **One piece keeps the shape it always had** (`{id, yaw, tip}`), because the undo's
+            // check compares the `after` it recorded against the map: a different shape is a
+            // refusal, and every existing caller's undo would break. A batch is the list form.
+            let (inverse, after) = if old.len() == 1 {
+                let (id, old_yaw, old_tip) = &old[0];
+                (
+                    json!({"id": id, "yaw": old_yaw, "tip": [old_tip.0, old_tip.1]}),
+                    json!({"map": map_name, "id": id, "yaw": yaw, "tip": [tip.0, tip.1]}),
+                )
+            } else {
+                let (_, old_yaw, old_tip) = &old[0];
+                let posed: Vec<serde_json::Value> = targets
+                    .iter()
+                    .map(|id| json!({"id": id, "yaw": yaw, "tip": [tip.0, tip.1]}))
+                    .collect();
+                (
+                    json!({"ids": targets, "yaw": old_yaw, "tip": [old_tip.0, old_tip.1]}),
+                    json!({"map": map_name, "poses": posed}),
+                )
+            };
             Ok(Outcome {
                 summary,
-                affected: 1,
+                affected: targets.len(),
                 saved: true,
-                inverse: Some(json!({"id": p.id, "yaw": old_yaw, "tip": [old_tip.0, old_tip.1]})),
-                after: Some(json!({"map": map_name, "id": p.id, "yaw": yaw, "tip": [tip.0, tip.1]})),
+                inverse: Some(inverse),
+                after: Some(after),
             })
         }
     }
