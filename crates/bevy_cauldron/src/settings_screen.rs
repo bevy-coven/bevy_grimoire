@@ -30,13 +30,15 @@ use bevy::ecs::spawn::{SpawnIter, SpawnWith};
 use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::picking::events::PointerRelease;
+use bevy::ui_widgets::{SliderPrecision, SliderRange, SliderStep, SliderValue};
 use bevy_gooey::{
-    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, number_field, observe, panel, tab_page, tabs,
-    text_input, toggle,
+    Activate, Cancel, TextHint, ValueChange, button, choice, dialog, heading, label, list, menu, observe, panel, slider, tab_page, tabs, text_input,
+    toggle,
 };
 
 use crate::project::Project;
-use crate::setting_catalogue::{self, CATEGORIES, Kind, Setting, Value};
+use crate::setting_catalogue::{self, CATEGORIES, Kind, SCALE_STEP, Setting, Value};
 use crate::settings::{PROJECT_FILE, SettingsLayer, UserSettingsFile};
 
 /// How often the open screen looks at the two files, in seconds.
@@ -116,6 +118,27 @@ impl Layer {
     }
 }
 
+/// A slider whose readout is a percentage: `1.25` reads `125%`. gooey draws a percentage only for a range
+/// of 0 to 1, and a size runs from 75% to 200%, so the readout is written here, after gooey has written
+/// the number ([`say_the_percentage`]).
+#[derive(Component)]
+struct PercentReadout;
+
+/// How many decimals a dragged slider keeps: hundredths, so the readout never shows a fraction of a percent.
+const SLIDER_DECIMALS: i32 = 2;
+
+/// A value to the nearest [`SCALE_STEP`], as a number a file reads back exactly (`1.25`, not
+/// `1.2500001`): counted in hundredths, which a step of 5% divides.
+fn on_the_step(value: f32) -> f32 {
+    let hundredths = (value / SCALE_STEP).round() * (SCALE_STEP * 100.0);
+    hundredths.round() / 100.0
+}
+
+/// A scale as a percentage: `1.25` is `125%`.
+fn percent(value: f32) -> String {
+    format!("{}%", (value * 100.0).round())
+}
+
 /// The page of the tabs a [`Rows`] column lists: `0` is *All*.
 #[derive(Component)]
 struct Rows(usize);
@@ -172,7 +195,11 @@ pub struct SettingsScreenPlugin;
 
 impl Plugin for SettingsScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh).chain());
+        app.add_message::<OpenSettings>().add_systems(Update, (chord, open, refresh).chain()).add_systems(
+            Update,
+            // After gooey has written its own readout (the number), so the percentage is the last word.
+            say_the_percentage.after(bevy_gooey::GooeySystems::Style),
+        );
     }
 }
 
@@ -233,7 +260,7 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
                     card.spawn(heading("Settings"));
                     if available.len() > 1 {
                         card.spawn((
-                            choice("Edit", ["Your settings", "This project"], 0),
+                            choice("Applies to", ["Just me", "This project"], 0),
                             observe(|c: On<ValueChange<usize>>, mut dialogs: Query<&mut SettingsDialog>| {
                                 if let Ok(mut d) = dialogs.single_mut() {
                                     d.scope = if c.value == 0 { Scope::User } else { Scope::Project };
@@ -387,6 +414,25 @@ fn refresh(
     built.0 = Some(snapshot);
 }
 
+/// **Write each scale slider's readout as a percentage**, once it is built and whenever its value moves.
+fn say_the_percentage(
+    sliders: Query<(Entity, &SliderValue), (With<PercentReadout>, Or<(Added<PercentReadout>, Changed<SliderValue>)>)>,
+    children: Query<&Children>,
+    mut readouts: Query<(&bevy_gooey::Role, &mut Text)>,
+) {
+    for (slider, value) in &sliders {
+        let said = percent(value.0);
+        for part in children.iter_descendants(slider) {
+            if let Ok((role, mut text)) = readouts.get_mut(part)
+                && *role == bevy_gooey::Role::SliderReadout
+                && text.0 != said
+            {
+                text.0 = said.clone();
+            }
+        }
+    }
+}
+
 /// One setting: its control, what it does, its default, whether it is modified and the Reset.
 fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, overridden: Option<Value>, default_value: Option<Value>) -> impl Bundle {
     let shown = own.unwrap_or(below);
@@ -402,14 +448,31 @@ fn setting_row(setting: &'static Setting, own: Option<Value>, below: Value, over
                     ));
                 }
                 (Kind::Scale { min, max }, Value::Number(n)) => {
-                    row.spawn((
-                        number_field(setting.label, n, 0.05, min..=max),
+                    let mut control = row.spawn((
+                        slider(setting.label, n, min..=max),
+                        PercentReadout,
+                        // **A write is the end of a move, never the middle of one.** The rows are built
+                        // again from the file, so a write on every frame of a drag would rebuild the
+                        // slider under the pointer. A key press and the end of a drag are final.
                         observe(move |c: On<ValueChange<f32>>, mut w: Writer| {
                             if c.is_final {
-                                w.set(key, Some(Value::Number(c.value)));
+                                w.set(key, Some(Value::Number(on_the_step(c.value))));
+                            }
+                        }),
+                        // **And a click on the rail is final too**, though gooey calls it a change in
+                        // progress: it sends no end, so the release is where the click is done.
+                        observe(move |release: On<PointerRelease>, sliders: Query<(&SliderValue, &SliderRange)>, mut w: Writer| {
+                            if let Ok((value, _)) = sliders.get(release.entity) {
+                                let landed = on_the_step(value.0);
+                                if (landed - n).abs() > f32::EPSILON {
+                                    w.set(key, Some(Value::Number(landed)));
+                                }
                             }
                         }),
                     ));
+                    // Inserted over the slider's own step (a twentieth of its range) rather than named in the
+                    // bundle, which would hold the component twice.
+                    control.insert((SliderStep(SCALE_STEP), SliderPrecision(SLIDER_DECIMALS)));
                 }
                 (Kind::Options(names), Value::Option(i)) => {
                     row.spawn((
