@@ -1,0 +1,73 @@
+{
+  "name": "settings_sliders",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    400,
+    40,
+    880,
+    680
+  ],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 8.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.05,
+      "cursor": [
+        820,
+        640
+      ]
+    },
+    {
+      "at": 0.3,
+      "caption": "the editor"
+    },
+    {
+      "at": 0.8,
+      "key": "Comma",
+      "mods": [
+        "ControlLeft"
+      ],
+      "caption": "person: Ctrl+, opens Settings"
+    },
+    {
+      "at": 2.2,
+      "cursor": [
+        507,
+        339
+      ],
+      "caption": "Text size is a slider, in percent"
+    },
+    {
+      "at": 3.0,
+      "drag": [
+        507,
+        339,
+        593,
+        339
+      ],
+      "secs": 1.6,
+      "caption": "person: drags it to 125%"
+    },
+    {
+      "at": 5.4,
+      "caption": "the setting is written when the thumb lets go"
+    },
+    {
+      "at": 6.4,
+      "drag": [
+        593,
+        339,
+        507,
+        339
+      ],
+      "secs": 1.4,
+      "caption": "and back to 100%"
+    }
+  ]
+}

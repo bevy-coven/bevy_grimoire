@@ -1,0 +1,38 @@
+{
+  "name": "hold_k_720",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 6.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.05,
+      "cursor": [
+        820,
+        640
+      ]
+    },
+    {
+      "at": 0.4,
+      "caption": "the Map at the smallest window, 1280 x 720"
+    },
+    {
+      "at": 1.2,
+      "caption": "person: hold K -- each key lands on its control, and no label draws over another"
+    },
+    {
+      "at": 1.3,
+      "hold": "KeyK",
+      "secs": 3.2
+    },
+    {
+      "at": 5.0,
+      "caption": "released: the labels go with the key"
+    }
+  ]
+}
