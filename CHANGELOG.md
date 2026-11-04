@@ -4,6 +4,10 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **288-other-door-click** `5c0da88` Clicking the other workspace's name beside the tabs switches to it (#288) *No clip: proved by a_click_on_the_other_door_crosses_to_it*
+- **293-leave-discard** `f8963b4` Leaving an edited map offers Save and leave, Discard changes, or Stay (#293)<br><a href="docs/changelog/media/2026-11-04-293-leave-discard.mp4"><img src="docs/changelog/media/2026-11-04-293-leave-discard.png" width="320" alt="clip"></a>
+- **287-menu-escape** `4a78e30` Esc that closes a menu keeps the armed piece (#287) *No clip: proved by modal_keys_do_not_reach_the_editor::escape_that_closes_a_menu_keeps_the_armed_brush*
+- **286-modal-keys** `56470be` A key that answers a dialog no longer also acts behind it: Esc closing Settings no longer asks to leave the map, and N for Stay no longer renames it (#286) *No clip: invisible key routing; proved by modal_keys_do_not_reach_the_editor*
 - **292-window-fits-screen** `15732c1` The window fits your screen when it opens and comes back where you left it (#292) *No clip: window size and position only; proved by tests/the_window_fits_the_screen_and_is_remembered.rs*
 - **294-open-in-process** `82ff045` Opening a project from the launcher no longer starts a second Cauldron: the same window moves to it (#294) *No clip: no new screen: the launcher already opened projects, now without a second process; proved by tests/a_project_opens_in_the_same_process.rs*
 - **289-palette-words** `4cbe088` The PLACE list opens at its top with its first row armed, names each piece in words, and wraps a long name beside its triangle count instead of drawing over it; a row's tooltip gives the id and its triangles (#289)<br><a href="docs/changelog/media/2026-11-04-289-palette-words.mp4"><img src="docs/changelog/media/2026-11-04-289-palette-words.png" width="320" alt="clip"></a>
