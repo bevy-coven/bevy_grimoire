@@ -222,5 +222,38 @@ class Page(Repo):
         self.assertLess(page.index("2026-10-28"), page.index("2026-10-21"))
 
 
+class ForYou(Repo):
+    """`--user`: the line a person who never reads the changelog would say, stored as ` *For you: <sentence>*`."""
+
+    def test_the_sentence_is_stored_right_after_the_title_and_before_the_reason(self):
+        rc, _, _ = self.cl("add", "--id", "E-1", "--title", "the title", "--date", "2026-10-28", "--user",
+                           "Your recent projects are on the first screen.", "--no-clip", "an API, proved by `a::t`")
+        self.assertEqual(rc, 0)
+        line = [l for l in self.text().splitlines() if l.startswith("- **E-1**")][0]
+        self.assertIn("the title *For you: Your recent projects are on the first screen.* *No clip: an API", line)
+        self.assertEqual(changelog.user_sentence(line), "Your recent projects are on the first screen.")
+        self.assertEqual(self.cl("check")[0], 0)
+
+    def test_a_line_without_the_option_has_no_sentence(self):
+        self.cl("add", "--id", "E-1", "--title", "t", "--date", "2026-10-28", "--no-clip", "r")
+        line = [l for l in self.text().splitlines() if l.startswith("- **E-1**")][0]
+        self.assertNotIn("For you", line)
+        self.assertIsNone(changelog.user_sentence(line))
+
+    def test_a_sentence_that_names_an_id_a_path_or_a_code_name_is_refused(self):
+        for bad in ("Fixed #296.", "Done as UI-30.", "Reads docs/guide/start.md.", "Makes map_create work.", "", "two\nlines", "has *stars*"):
+            rc, _, err = self.cl("add", "--id", "E-1", "--title", "t", "--date", "2026-10-28", "--user", bad, "--no-clip", "r")
+            self.assertEqual(rc, 2, bad)
+            self.assertIn("--user", err)
+        self.assertFalse(os.path.exists(os.path.join(self.repo, "CHANGELOG.md")), "a refusal writes nothing")
+
+    def test_check_refuses_a_sentence_already_in_the_file_that_names_an_id(self):
+        with open(os.path.join(self.repo, "CHANGELOG.md"), "w") as fh:
+            fh.write("# Changelog\n\n## 2026-10-28\n\n- **E-1** t *For you: Closes #296.* *No clip: r*\n")
+        rc, out, _ = self.cl("check")
+        self.assertEqual(rc, 1)
+        self.assertIn("the `For you` sentence", out)
+
+
 if __name__ == "__main__":
     unittest.main()

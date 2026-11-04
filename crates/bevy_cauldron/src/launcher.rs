@@ -61,6 +61,11 @@ pub struct ChangelogText(pub String);
 pub struct News {
     pub id: String,
     pub title: String,
+    /// The line's `*For you: <sentence>*`: the change as a person who never reads the changelog would say it. The What's new page
+    /// lists only the entries that have one (`tools/changelog/changelog.py add --user`).
+    pub user: Option<String>,
+    /// The still of the entry's clip, as the path the changelog gives (`docs/changelog/media/<name>.png`).
+    pub still: Option<String>,
 }
 
 /// How wide the launcher's card is, in logical pixels: wide enough for a project's row, narrower than the window.
@@ -85,8 +90,11 @@ fn splash_image() -> Result<Image, String> {
 /// The longest a title is shown; a changelog line carries its whole story and the launcher shows the start.
 const TITLE_CHARS: usize = 140;
 
+/// What starts a line's marked notes: the title ends at the first of these.
+const TITLE_ENDS: [&str; 3] = [" *No clip", "<br>", " *For you: "];
+
 /// Every entry of `text`, newest first as the file keeps them: a line `- **<id>** [`<sha>`] <title>`, the title
-/// ending where the line's `*No clip` note or its clip's markup begins.
+/// ending where the line's `*For you` sentence, its `*No clip` note or its clip's markup begins.
 pub fn news(text: &str) -> Vec<News> {
     text.lines()
         .filter_map(|line| {
@@ -97,22 +105,30 @@ pub fn news(text: &str) -> Vec<News> {
                 Some(after) => after.split_once('`').map_or(rest, |(_, t)| t.trim_start()),
                 None => rest,
             };
-            let end = [" *No clip", "<br>"].iter().filter_map(|m| rest.find(m)).min().unwrap_or(rest.len());
+            let end = TITLE_ENDS.iter().filter_map(|m| rest.find(m)).min().unwrap_or(rest.len());
             let mut title = rest[..end].trim().to_owned();
             if title.chars().count() > TITLE_CHARS {
                 title = title.chars().take(TITLE_CHARS - 1).collect::<String>() + "…";
             }
-            Some(News { id: id.to_owned(), title })
+            let user = rest.split_once(TITLE_ENDS[2]).and_then(|(_, after)| after.split_once('*')).map(|(sentence, _)| sentence.trim().to_owned()).filter(|s| !s.is_empty());
+            let still = rest.split_once("<img src=\"").and_then(|(_, after)| after.split_once('"')).map(|(src, _)| src.to_owned()).filter(|src| src.ends_with(".png"));
+            Some(News { id: id.to_owned(), title, user, still })
         })
         .collect()
 }
 
-/// The entries newer than `seen`, the id of the newest one a person has been shown. Nothing when none was
-/// stored (a first run has seen nothing to compare with) or when it is no longer in the file.
+/// The entries that have a sentence for a person, newest first: what the What's new page lists.
+pub fn for_you(text: &str) -> Vec<News> {
+    news(text).into_iter().filter(|n| n.user.is_some()).collect()
+}
+
+/// The entries with a sentence for a person that are newer than `seen`, the id of the newest entry a person has been shown. Nothing
+/// when none was stored (a first run has seen nothing to compare with) or when it is no longer in the file. This is the count on the
+/// sidebar's What's new.
 pub fn whats_new(text: &str, seen: Option<&str>) -> Vec<News> {
     let all = news(text);
     match seen.and_then(|id| all.iter().position(|n| n.id == id)) {
-        Some(at) => all[..at].to_vec(),
+        Some(at) => all[..at].iter().filter(|n| n.user.is_some()).cloned().collect(),
         None => Vec::new(),
     }
 }
@@ -162,7 +178,9 @@ pub struct Launcher {
     pub problem: Option<String>,
     /// The example project, when this build has one beside it.
     pub example: Option<PathBuf>,
-    /// What the changelog added since the last time a project was opened from here, newest first.
+    /// Every changelog entry that has a sentence for a person ([`for_you`]), newest first: the What's new page.
+    pub news: Vec<News>,
+    /// Those of them added since the last time a project was opened from here, newest first: the count on the sidebar's What's new.
     pub whats_new: Vec<News>,
     /// The id of the newest changelog entry, remembered when a project is opened.
     pub newest: Option<String>,
@@ -501,7 +519,7 @@ fn build_launcher(
     let whats_new = whats_new(text, stored.as_ref().and_then(|r| r.changelog_seen.as_deref()));
     let newest = news(text).first().map(|n| n.id.clone());
     // The page the sidebar was on is kept: the project page's sidebar sends a person here to a page.
-    commands.insert_resource(Launcher { rows, problem, example: example_project(), whats_new, newest, tab: before.tab, ..default() });
+    commands.insert_resource(Launcher { rows, problem, example: example_project(), news: for_you(text), whats_new, newest, tab: before.tab, ..default() });
     spawn_shell(&mut commands, Screen::Launcher);
 }
 
@@ -602,7 +620,7 @@ fn fill_the_home(
                 .with_children(|page| learn_page(page, &launcher));
             pages
                 .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
-                .with_children(|page| news_page(page, &launcher));
+                .with_children(|page| news_page(page, &launcher, &mut art));
         });
     });
 }
@@ -902,14 +920,55 @@ fn learn_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
     page.spawn((button("Keyboard shortcuts"), observe(|_: On<Activate>, mut out: MessageWriter<crate::keymap_screen::OpenKeymap>| { out.write(crate::keymap_screen::OpenKeymap); })));
 }
 
-/// The What's new page: what the changelog added since the last time a project was opened from here.
-fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
+/// How many entries the What's new page lists; the rest are one press away on "See every change".
+const NEWS_SHOWN: usize = 10;
+
+/// The still of an entry's clip, decoded, or `None` when it cannot be had: the changelog's stills are stored in Git LFS and are
+/// beside the source a build came from or in the app's `Resources`, so an install without them lists the entry without its picture.
+fn still_image(rel: &str) -> Option<Image> {
+    let beside_source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel);
+    let in_the_app = std::env::current_exe().ok().and_then(|exe| Some(exe.parent()?.join("../Resources").join(rel)));
+    let bytes = std::iter::once(beside_source).chain(in_the_app).find_map(|p| std::fs::read(p).ok())?;
+    // An LFS pointer or a damaged file does not decode, which is the same as no still.
+    Image::from_buffer(&bytes, ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default, RenderAssetUsages::default()).ok()
+}
+
+/// The What's new page: every change worth telling a person about, in a sentence and with the picture of its clip. A press opens the
+/// changelog on GitHub. The ones added since a project was last opened here are marked, and counted on the sidebar.
+fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art) {
     page.spawn(heading("What's new"));
-    if launcher.whats_new.is_empty() {
-        page.spawn(label("You have seen everything that is new."));
+    if launcher.news.is_empty() {
+        page.spawn(label("Nothing to tell you about yet."));
     }
-    for item in &launcher.whats_new {
-        page.spawn(label(format!("{}: {}", item.id, item.title)));
+    for item in launcher.news.iter().take(NEWS_SHOWN) {
+        let Some(sentence) = item.user.clone() else { continue };
+        let fresh = launcher.whats_new.iter().any(|n| n.id == item.id);
+        let picture = item.still.as_deref().and_then(still_image).map(|image| art.images.add(image));
+        page.spawn((
+            Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_GROUP), padding: UiRect::all(Val::Px(crate::chrome::PAD)), ..default() },
+            // CHROME-OK: an entry is none of chrome's three clickables, it is a gooey button's skeleton holding a picture (bevy_gooey#41)
+            bevy::ui_widgets::Button,
+            Role::Button,
+            bevy::picking::hover::Hovered::default(),
+            bevy::ui::auto_directional_navigation::AutoDirectionalNavigation::default(),
+            NewsEntry(item.id.clone()),
+            observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| {
+                if let Err(e) = open_in_os(CHANGELOG_URL) {
+                    launcher.problem = Some(e);
+                }
+            }),
+        ))
+        .with_children(|entry| {
+            if let Some(handle) = picture {
+                entry.spawn((ImageNode::new(handle), thumb_node(), Pickable::IGNORE));
+            }
+            entry.spawn(Node { flex_direction: FlexDirection::Column, flex_shrink: 1.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|words| {
+                if fresh {
+                    words.spawn((Text::new("New"), Role::Label, Pickable::IGNORE));
+                }
+                words.spawn((Text::new(sentence), Role::ButtonText, Pickable::IGNORE));
+            });
+        });
     }
     page.spawn((button("See every change"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| {
         if let Err(e) = open_in_os(CHANGELOG_URL) {
@@ -917,6 +976,10 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
         }
     })));
 }
+
+/// A What's new entry, by the changelog id it came from.
+#[derive(Component)]
+pub struct NewsEntry(pub String);
 
 /// The ways a request to open a project ends: a toast that says why not, or the project opened in this process
 /// ([`crate::project_assets::open_project`]), on a map when the request names one.
