@@ -68,6 +68,7 @@ pub mod devshot;
 pub mod editor;
 pub mod empty_state;
 pub mod family_host;
+pub mod log_filter;
 #[cfg(feature = "bevy_elements")]
 pub mod environment;
 pub mod fill;

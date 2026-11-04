@@ -4,6 +4,8 @@
 use bevy_cauldron::{args, chooser, harness, screen, screen::Screen};
 
 use bevy::prelude::*;
+// `DefaultPlugins::disable` is `PluginGroup`'s method, and the prelude does not carry the trait.
+use bevy::app::PluginGroup;
 
 /// **One application, two screens.**
 ///
@@ -39,9 +41,28 @@ fn main() -> AppExit {
         }
     }
 
+    // **`bevy_audio` is opened only when something plays a sound.** The editor links
+    // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
+    // (`crate::log_filter` has the measurement: 13.5 GB in five minutes). The only thing in this
+    // binary that plays anything is `bevy_siren`'s audition, behind the feature of that name, so a
+    // build without it — the editor on a headless box, a storyboard capture, CI — asks for no device
+    // at all rather than opening one to log its failure.
+    #[cfg(not(feature = "bevy_siren"))]
+    let plugins = DefaultPlugins.build().disable::<bevy::audio::AudioPlugin>();
+    #[cfg(feature = "bevy_siren")]
+    let plugins = DefaultPlugins.build();
+
     let mut app = App::new();
     app.add_plugins(
-        DefaultPlugins
+        plugins
+            // **One repeated log line filled a 16 GB RAM disk** (`bevy_cauldron::log_filter`): an
+            // editor with no audio device wrote 13.5 GB in five minutes, all of it `rodio::stream`'s
+            // ALSA error. `LogPlugin` puts its `level` first and `RUST_LOG` last, and a directive with
+            // a longer target beats both, so this silences that one target and nothing else.
+            .set(bevy::log::LogPlugin {
+                filter: bevy_cauldron::log_filter::LOG_SILENCES.to_owned(),
+                ..default()
+            })
             .set(AssetPlugin {
                 // Meshes are named relative to the project, so the project IS the asset root.
                 // Absolute, because Bevy resolves a relative `file_path` against `CARGO_MANIFEST_DIR`
