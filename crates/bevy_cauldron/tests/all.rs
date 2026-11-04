@@ -151,6 +151,7 @@ mod a_mesh_the_render_world_took_does_not_crash_the_triangle_count;
 mod the_editors_key_light_steps_aside_for_the_sun;
 mod the_menu_bar_holds_every_command;
 mod the_history_lists_only_the_rows_on_screen;
+mod the_stage_chips_take_the_skins_ink;
 mod after_edit_checks_say_what_they_found;
 mod after_edit_waits_for_the_picture;
 mod an_empty_map_says_what_to_do_next;
