@@ -1,5 +1,5 @@
 [Unit]
-Description=bevy_grimoire Wiggum loop (one fresh build-loop pass at a time)
+Description=bevy_emerge_loop Wiggum loop (one fresh build-loop pass at a time)
 # **Never spin.** A pass that dies instantly, five times running, is a broken machine or a broken
 # checkout, and `Restart=always` alone would retry it forever. Both keys are `[Unit]` keys; systemd
 # ignores them in `[Service]` with only a warning, which is how the first version was silently wrong.
@@ -85,7 +85,12 @@ IOSchedulingClass=idle
 KillSignal=SIGTERM
 TimeoutStopSec=300
 
-Restart=always
+# **`on-failure`, never `always`** (owner, 2026-11-02). `always` restarts a driver that *chose* to stop,
+# so `drain` can never end a loop: measured on big, `wiggum@gooey`'s 80th pass drained at 11:23:04 and
+# systemd restarted it at 11:25:07 for pass 81. `wiggum.sh` exits 0 for stop/drain/WIGGUM_MAX and 1 for
+# a give-up after five consecutive failed passes (see `docs/loop/RUNNING-A-LOOP.md`), which is exactly
+# the distinction `on-failure` acts on.
+Restart=on-failure
 RestartSec=120
 
 # **Log to the journal, not to a file, and the reason is the failure this unit already had.** An

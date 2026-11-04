@@ -56,7 +56,10 @@ After the hot-reload series, **the pass's item is the first ready issue labelled
 
 A grimoire is a book of knowledge, not an editor. In this repo **the book is what a game loads**: `bevy_grimoire` (the runtime that loads a library and a map), `bevy_grimoire_core` (constraint IR, solvers, WFC) and the project's `assets/grimoire/` folder. **The editor that writes that book, with the Familiar beside the person, is the Cauldron.** The owner chose the name from three on 2026-11-01. Everything else in this command that says "the editor" means the Cauldron.
 
-**First job of the next pass, ahead of every cluster and ahead of the demos' first job: rename them, completely, in one commit and one push.** The three crates (`bevy_grimoire_mapper`, `bevy_grimoire_mcp`, `bevy_grimoire_decide`) are `publish = false`, so crates.io is untouched.
+**The rename is DONE (verified 2026-11-04).** `crates/` now holds `bevy_cauldron`, `bevy_cauldron_mcp` and
+`bevy_oracle`; `bevy_grimoire_mapper`, `bevy_grimoire_mcp` and `bevy_grimoire_decide` exist only as history.
+**Do not redo it.** The record below is kept for the one case it still covers: a reference found pointing at
+an old name, fixed in the commit that finds it. All three crates are `publish = false`, so crates.io is untouchable.
 
 - **Renamed:** `crates/bevy_grimoire_mapper` becomes `crates/bevy_cauldron` and `crates/bevy_grimoire_mcp` becomes `crates/bevy_cauldron_mcp` (`git mv`, so history follows). Change the package, `[lib]` and `[[bin]]` names, every `use`, path, `-p <crate>`, `--test`, `--example` and `--features` reference in code, tests, `tools/` (including `tools/loop/hooks/pre-push`, whose editor-test-binary check names `crates/bevy_grimoire_mapper/tests/all.rs`), `.github/workflows/`, `Cargo.lock` and `.omp/commands/`. The window title, `--help`, the README, `AGENTS.md`, `docs/guide/`, `docs/ui/vision.md`, `docs/media/README.md` and `tools/demo/README.md` call the editor **Cauldron** and say **Grimoire** only where they mean the book. The README's first lines become: the Cauldron is the editor; a grimoire is what it writes and your game loads.
 - **Also renamed:** `crates/bevy_grimoire_decide` becomes `crates/bevy_oracle` (package, `[lib]`, every `use`, `-p`, test and doc reference; the owner picked the name on 2026-11-01). It asks a decision model typed questions, and is not tied to one editor. The MCP tool `grimoire_decide` keeps its name, because it acts on the grimoire and agents' configs name it.
@@ -80,11 +83,11 @@ The owner's rule for every pass of this loop. It is checked: after each pass the
 4. **Demos.** A change anyone can see ships its demo in the same pass: a changelog line with its clip from `tools/demo/record.py` and `render.py`, and the GIF in the README or `docs/guide/` when the change is a headline one; `--no-clip "visible, not yet recorded: <why>"` only when no display can be had, and then the next pass on a Mac records it first. A media file a published README names is never moved.
 5. **Read the last audit first.** In Orient, run `git fetch -q origin loop-stats && git show origin/loop-stats:steps/bevy_emerge_loop-audit.tsv | tail -3`. Anything the previous pass left in `missing` (`push`, `release`, `docs`, `demo?`) is this pass's first job, ahead of its item, because it finishes work already done; only a broken gate comes before it. `demo?` is met by a demo, or by one line in the log saying why the change is not visible.
 6. **The standing demos always show the current editor (owner, 2026-11-01: "we need to keep those demos up to date").** The eight GIFs in `docs/media/` (`hero`, `place-and-undo`, `agent-drives`, `agent-removes-then-undo`, `build-a-map`, `frame-the-map`, `move-the-camera`, `review-labels`) and `docs/media/editor.png` are what the README and `docs/guide/` show a new reader. The editor's UI is being rebuilt on bevy_gooey, so each one goes stale with the first visible slice. A **visible change** is a `CHANGELOG.md` line that has a clip. The old changelog clips in `docs/changelog/media/` are records of their day and are never re-recorded.
-   - **First job of the next pass, ahead of its cluster:** write `tools/demo/stale.py` with a unit test in `tools/demo/`. It reads each `docs/media/*.gif`'s *Captured* commit from `docs/media/README.md`, counts the visible changes whose `--sha` is a descendant of it, and prints per demo `fresh` or `stale` with those changelog lines (exit 1 when any is stale, so a pass can use it as a check). Then re-record all eight and `editor.png` on the editor as it is now, headless under the unit's Xvfb (`DISPLAY=:99`): fix every storyboard that no longer drives the UI (aim at a widget by its label or the position the editor reports for it, not a guessed pixel), pass `tools/demo/check.py` on each, look at its contact sheet, and rewrite its caption and its *Captured* column from the commit you recorded at. A GIF that shows the old UI is not done.
+   - **`tools/demo/stale.py` exists, with `tools/demo/test_stale.py` beside it (verified 2026-11-04) — write it only if it is missing.** It reads each `docs/media/*.gif`'s *Captured* commit from `docs/media/README.md`, counts the visible changes whose `--sha` is a descendant of it, and prints per demo `fresh` or `stale` with those changelog lines (exit 1 when any is stale, so a pass can use it as a check). Then re-record all eight and `editor.png` on the editor as it is now, headless under the unit's Xvfb (`DISPLAY=:99`): fix every storyboard that no longer drives the UI (aim at a widget by its label or the position the editor reports for it, not a guessed pixel), pass `tools/demo/check.py` on each, look at its contact sheet, and rewrite its caption and its *Captured* column from the commit you recorded at. A GIF that shows the old UI is not done.
    - **Every pass after that, before the final push:** run `python3 tools/demo/stale.py`. If the pass shipped a visible change, re-record every demo it lists as stale: `hero` first, then the rest. This is part of "Prove and ship"; give it up to 20 minutes. What the pass could not re-record is written in its log line as `owed demos: <names>`, and the next pass records those first, ahead of its cluster, exactly as for `demo?`.
    - **A slice that breaks a storyboard fixes it in the same slice.** The storyboards are in `tools/demo/storyboards/`, so a UI change that makes `record.py` fail is not finished until it records again.
    - A capture that comes out black or empty is not a demo: say so in the log line and keep the previous GIF, with its caption changed to what it still shows (the "README, demos and docs stay true" section).
-7. **A clip's file reaches GitHub, not only the pointer (found 2026-11-01).** `core.hooksPath=tools/loop/hooks` replaces git-lfs's own `pre-push` hook, so a push from this clone sent a clip's pointer to `main` and left the file on the clone: eight changelog media files (`docs/changelog/media/2026-11-01-105-scripts-panel.*`, `-200-terrain-bad-edit.*`, `-200-tree-file-bad-edit.png`, `-forest-season.*`) were missing on the server, and a fresh checkout failed with "smudge filter lfs failed". The owner uploaded those eight by hand with `git lfs push origin --object-id`. **Second job of the next pass, after the demos' first job:** make `tools/loop/hooks/pre-push` run `git lfs pre-push "$@"` (with the pushed refs on stdin, read once and passed on) before its own checks, and refuse the push when it fails; add a test in `tools/loop/` that a push through the hook uploads a new LFS object to a bare remote. Prove it from the LFS batch API: `curl -s -X POST -H 'Accept: application/vnd.git-lfs+json' -H 'Content-Type: application/vnd.git-lfs+json' https://github.com/bevy-coven/bevy_grimoire.git/info/lfs/objects/batch -d '{"operation":"download","transfers":["basic"],"objects":[{"oid":"<oid>","size":<size>}]}'` answers an `error.code` 404 for a missing object and a `.actions` or a 422 (size mismatch) for one that exists.
+7. **A clip's file reaches GitHub, not only the pointer (found 2026-11-01).** `core.hooksPath=tools/loop/hooks` replaces git-lfs's own `pre-push` hook, so a push from this clone sent a clip's pointer to `main` and left the file on the clone: eight changelog media files (`docs/changelog/media/2026-11-01-105-scripts-panel.*`, `-200-terrain-bad-edit.*`, `-200-tree-file-bad-edit.png`, `-forest-season.*`) were missing on the server, and a fresh checkout failed with "smudge filter lfs failed". The owner uploaded those eight by hand with `git lfs push origin --object-id`. **DONE (verified 2026-11-04): `tools/loop/hooks/pre-push:51` runs `git lfs pre-push "$@"` and `tools/loop/test_pre_push_lfs.py` tests it. Do not redo it.** The record below is what the fix was for. It runs `git lfs pre-push "$@"` (with the pushed refs on stdin, read once and passed on) before its own checks, and refuse the push when it fails; add a test in `tools/loop/` that a push through the hook uploads a new LFS object to a bare remote. Prove it from the LFS batch API: `curl -s -X POST -H 'Accept: application/vnd.git-lfs+json' -H 'Content-Type: application/vnd.git-lfs+json' https://github.com/bevy-coven/bevy_grimoire.git/info/lfs/objects/batch -d '{"operation":"download","transfers":["basic"],"objects":[{"oid":"<oid>","size":<size>}]}'` answers an `error.code` 404 for a missing object and a `.actions` or a 422 (size mismatch) for one that exists.
 
 ## Your work is saved even if you are killed
 
@@ -177,14 +180,19 @@ and the difference is invisible from inside the loop. So these paths are **read-
 **Append, never rewrite.** `docs/loop/log.md` is append-only: add your line at the bottom and do not
 touch another pass's.
 
-## Budget — a pass is 2½ hours of work, then stop
+## Budget — a pass is 150 minutes of work, then stop (the median pass is 45; the ceiling allows 180)
 
-The driver's ceiling is 3 hours (`WIGGUM_PASS_TIMEOUT=10800`). The Wiggum loop starts the next pass regardless, so **running long does not buy progress; it produces an
+The driver's ceiling is 75 minutes by default (`WIGGUM_PASS_TIMEOUT:-4500` in `tools/loop/wiggum.sh`);
+big's `zz-speed.conf` raises it to 3 hours (`WIGGUM_PASS_TIMEOUT=10800`), and the committed
+`tools/loop/wiggum.service` sets neither, so it gets the 75-minute default. The Wiggum loop starts the next pass regardless, so **running long does not buy progress; it produces an
 unpushed half-diff**. This is the single most common way a headless pass goes wrong.
 
 - **Orient and plan the cluster:** 10 minutes.
 - **Build the cluster, one issue after another:** 115 minutes.
 - **Prove and ship:** 25 minutes.
+
+That is 150 min, matching the checkpoints below. A pass that finishes in 45 is the normal case, not a
+breach — the budget is the ceiling, and the checkpoints are what stop a pass running into it.
 
 **Checkpoints, in this order, and take the earliest one you reach as you run out of time:**
 
@@ -201,10 +209,10 @@ broken tree having done a lot is a failure the next pass must clean up first.
 
 ## The command improves itself — and its core cannot be edited
 
-A pass is 45 minutes and the median is 34, so **where the time goes is the thing worth fixing**.
-`python3 tools/loop/steps.py report --state ~/.local/state/wiggum/bevy_emerge_loop --last 12` says.
-Read it once a pass, and let it change this file. That is the point: a prompt that never learns spends
-every pass the same 45 minutes the same way.
+The checkpoints cap a pass at 150 minutes but the median is far below that, so **where the time goes is
+the thing worth fixing**. `python3 tools/loop/steps.py report --state
+~/.local/state/wiggum/bevy_emerge_loop --last 12` says. Read it once a pass, and let it change this file.
+That is the point: a prompt that never learns spends every pass the same way.
 
 ### What you may change, and where
 
@@ -220,7 +228,7 @@ Watch: `wait: gate` under 10%, and no pass whose push is refused for a test the 
 ```
 
 **The core is frozen.** These are the owner's, and no pass may relax them whatever the report says:
-the 45-minute budget and its checkpoints; the protected evaluator (never edit a test, golden file,
+this 150-minute budget and its checkpoints; the protected evaluator (never edit a test, golden file,
 fixture or scoring harness to pass); one gate per push and never `--no-verify`; `Fixes #N` only on the
 commit that meets the last acceptance item; never leave the tree uncommitted; never force-push, reset
 or clean another pass's work; the two-way street (a crate's fix goes in that crate); and every rule in
@@ -273,7 +281,7 @@ Orient, and let it drive a tuning.
   previous pass died mid-edit. Finish it, revert only your own pass's edits, or commit what is safe.
 - Read `docs/loop/backlog.json` (open items), `AGENTS.md`, and the **last 3** entries of
   `docs/loop/log.md`. Not more: the log is long and a pass has a budget.
-- Read `docs/loop/command-tuning.md` — **how earlier passes learned to spend this 45 minutes better** —
+- Read `docs/loop/command-tuning.md` — **how earlier passes learned to spend a pass better** —
   and work the way its newest tunings say. Then run
   `python3 tools/loop/steps.py report --state ~/.local/state/wiggum/bevy_emerge_loop --last 12` and
   say in the log line which sink is biggest this pass. That report is what a tuning is judged against.
@@ -288,7 +296,7 @@ humans and for grepping a specific fact. A pass that spends 20 minutes reading h
 
 ## Machines — where a pass may run
 
-This loop runs on **big** (since 2026-11-01): a Ryzen 9 5900X with 24 threads and 31 GB of RAM, shared with HomeStill and gooey's loop. Its unit caps the loop at 11 GB (`MemoryMax`) and sets `CARGO_BUILD_JOBS=10` and `RUST_TEST_THREADS=8`. **Never ssh to another machine to build or test**: this is the biggest one, and the round trips cost 8% of pass time on big_mac.
+This loop runs on **big** (since 2026-11-01): a Ryzen 9 5900X with 24 threads and 31 GB of RAM, shared with HomeStill and gooey's loop. Its unit caps the loop at 11 GB (`MemoryMax`, with `MemoryHigh=8G`) and sets `CARGO_BUILD_JOBS=6` and `RUST_TEST_THREADS=4`. **Never ssh to another machine to build or test**: this is the biggest one, and the round trips cost 8% of pass time on big_mac.
 
 | | big |
 |---|---|

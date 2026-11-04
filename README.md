@@ -91,6 +91,6 @@ A game depends on `bevy_grimoire_core` and `bevy_grimoire` (`cargo add bevy_grim
 
 ## Who and licence
 
-Maintained by [@Ladvien](https://github.com/Ladvien). Issues and pull requests are welcome at [github.com/bevy-coven/bevy_grimoire/issues](https://github.com/bevy-coven/bevy_grimoire/issues); a game asks for what it needs with the `consumer` label. Read the org's [CONTRIBUTING.md](https://github.com/bevy-coven/.github/blob/main/CONTRIBUTING.md) and [`AGENTS.md`](https://github.com/bevy-coven/bevy_grimoire/blob/main/AGENTS.md) first, and run `cargo test --workspace` before you push.
+Maintained by [@Ladvien](https://github.com/Ladvien). Issues and pull requests are welcome at [github.com/bevy-coven/bevy_grimoire/issues](https://github.com/bevy-coven/bevy_grimoire/issues); a game asks for what it needs with the `consumer` label. Read the org's [CONTRIBUTING.md](https://github.com/bevy-coven/.github/blob/main/CONTRIBUTING.md) and [`AGENTS.md`](https://github.com/bevy-coven/bevy_grimoire/blob/main/AGENTS.md) first, and run `cargo nextest run --workspace` before you push.
 
 MIT OR Apache-2.0, at your option.

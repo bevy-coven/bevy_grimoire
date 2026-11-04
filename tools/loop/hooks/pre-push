@@ -88,9 +88,13 @@ if clean_merge_of_main; then
 else
   echo "pre-push gate: clippy and the test suite on ${target:0:9}; this takes minutes, so give git push a timeout of 1800 s or more" >&2
   timed clippy $cargo clippy --workspace --all-targets -q -- -D warnings || refuse "cargo clippy --workspace --all-targets -- -D warnings failed"
-  # **nextest runs test binaries in parallel; cargo test runs them serially.** Measured on big
-  # 2026-11-03 at one commit, 2,810 tests: `cargo test --workspace` 451 s, `cargo nextest run
-  # --workspace` 43 s. nextest does NOT run doctests, so `--doc` stays its own step.
+  # **nextest runs test binaries in parallel; cargo test runs them serially.** Measured on big at one
+  # commit, 2,810 tests: `cargo test --workspace` 451 s, bare `cargo nextest run --workspace` 43 s.
+  # **This step is not that 43 s.** It is the step as the gate runs it — clippy already done, on a warm
+  # target, `--no-fail-fast` — and big's own `bevy_emerge_loop/.git/gate.log` records it at 154-181 s
+  # over the 169 runs to 2026-11-03. Quoting the bare number here told every pass its gate was four
+  # times cheaper than it is (corrected 2026-11-04). nextest does NOT run doctests, so `--doc` is its
+  # own step below.
   test_runner="${LOOP_GATE_TEST:-}"
   if [ -z "$test_runner" ]; then
     if command -v cargo-nextest >/dev/null 2>&1 || cargo nextest --version >/dev/null 2>&1; then
