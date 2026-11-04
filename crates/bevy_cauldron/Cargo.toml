@@ -1,6 +1,6 @@
 [package]
 name = "bevy_cauldron"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "A standalone world-building editor: author maps from an asset library, save what a game can load."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
@@ -76,6 +76,8 @@ bevy_siren = ["dep:bevy_siren"]
 # file watcher, beside the editor's own `FileWatch`. Off by default and in no build the gate makes; it turns
 # on Bevy's `file_watcher` (the `notify` crates) and nothing else. `src/asset_spike.rs` says what it is for.
 asset_spike = ["bevy/file_watcher"]
+# Every family crate: the set the macOS app ships (`tools/release/macos/build_app.sh`).
+family_all = ["bevy_carnage", "bevy_elements", "bevy_flora", "bevy_lights", "bevy_light_grid", "bevy_orca", "bevy_society", "bevy_speech_bubbles", "bevy_stigmergy", "bevy_siren", "isomesh", "volume_snow"]
 
 [dependencies]
 bevy_carnage = { git = "https://github.com/bevy-coven/bevy_carnage", rev = "615c264e28680448b934d3f28b73487dd8b98750", default-features = false, features = ["serde"], optional = true }
