@@ -48,6 +48,22 @@ pub struct Recent {
     /// written before this field has none, which shows nothing as new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changelog_seen: Option<String>,
+    /// Where the window was when the editor last opened a project or closed (#292), so the next launch puts it
+    /// back, when that place is still on a monitor ([`crate::window_frame`]). A file written before this field
+    /// has none, which fits the window to the monitor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<WindowFrame>,
+}
+
+/// Where the editor's window was: its top-left corner in **physical** pixels, which is the unit
+/// `bevy::window::WindowPosition` takes, and its size in **logical** pixels, which is the unit a window's
+/// resolution is set in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowFrame {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -70,7 +86,7 @@ pub struct Listed {
 
 impl Default for Recent {
     fn default() -> Self {
-        Recent { version: RECENT_VERSION, projects: Vec::new(), changelog_seen: None }
+        Recent { version: RECENT_VERSION, projects: Vec::new(), changelog_seen: None, window: None }
     }
 }
 
@@ -200,5 +216,16 @@ pub fn record_seen(file: &Path, root: &Path, changelog_seen: Option<&str>) -> Re
     if let Some(id) = changelog_seen {
         recent.changelog_seen = Some(id.to_owned());
     }
+    recent.save(file)
+}
+
+/// Remembers where the window is in the list at `file`, reading and writing it. A list this build cannot read is
+/// left as it is, as [`record`] leaves it.
+pub fn remember_window(file: &Path, frame: WindowFrame) -> Result<(), String> {
+    let mut recent = Recent::load(file)?;
+    if recent.window == Some(frame) {
+        return Ok(());
+    }
+    recent.window = Some(frame);
     recent.save(file)
 }

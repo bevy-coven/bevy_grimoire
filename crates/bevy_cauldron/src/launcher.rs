@@ -5,17 +5,15 @@
 //! types, or the example project that ships with the source. A project named on the command line skips
 //! this screen: a bare `ROOT` goes to the chooser, and a door or a map goes through the loading screen (`loading.rs`) into the editor.
 //!
-//! # Opening a project is a hand-off, not a swap
+//! # Opening a project happens in this process
 //!
-//! Bevy resolves the asset root once, when `AssetPlugin` is built, and a project's meshes are named
-//! relative to it (`main.rs`). A second project cannot be opened in the same process without that root
-//! moving, so the launcher chooses and the **next process opens**: [`Handoff`] carries the argv
-//! (`<root>`, and `--live` when this process has it; `--kit` and `--door` are for the workbench to add), [`HandoffPlugin`] starts the same executable with it and
-//! exits this one. That is also what makes [`command_line`] honest: the line the launcher copies is the
-//! argv the launcher itself hands off.
+//! A project's meshes are named relative to the asset root, and the asset root is a reader that can move
+//! (`project_assets.rs`, #294): choosing a project points it there ([`crate::project_assets::open_project`])
+//! and the window goes on to the chooser, with no second process and no second window. [`command_line`] is
+//! what a person pastes into a terminal to open the same project the same way; it is the argv `open_project` parses.
 //!
-//! The chooser (`chooser.rs`) is still where a kit and a map are picked, in the process the hand-off
-//! starts, until the workbench (UI-30) takes that over; this screen replaces only the way into a project.
+//! The chooser (`chooser.rs`) is still where a kit and a map are picked, until the workbench (UI-30) takes that
+//! over; this screen replaces only the way into a project.
 //!
 //! # What is here, and what is not yet
 //!
@@ -471,13 +469,13 @@ fn copy_to_clipboard(text: &str) -> Result<(), String> {
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text)).map_err(|e| e.to_string())
 }
 
-/// The ways a request to open a project ends: refused on the screen, or handed to the next process.
+/// The ways a request to open a project ends: refused on the screen, or opened in this process
+/// ([`crate::project_assets::open_project`]).
 fn open_requested(
     mut commands: Commands,
     mut requests: MessageReader<OpenRequest>,
     mut launcher: ResMut<Launcher>,
     recents: Option<Res<RecentProjects>>,
-    live: Option<Res<crate::live::LiveWrite>>,
 ) {
     let Some(OpenRequest(root)) = requests.read().last().cloned() else { return };
     match check_project(&root) {
@@ -488,12 +486,13 @@ fn open_requested(
             {
                 warn!("recent projects not updated: {e}");
             }
-            // `--live` is a way of running, not a choice of project: the next process keeps it.
-            let mut argv = argv_for(&root, None, None);
-            if live.is_some() {
-                argv.push("--live".to_owned());
-            }
-            commands.insert_resource(Handoff(argv));
+            commands.queue(move |world: &mut World| {
+                if let Err(e) = crate::project_assets::open_project(world, &root, None)
+                    && let Some(mut launcher) = world.get_resource_mut::<Launcher>()
+                {
+                    launcher.problem = Some(e);
+                }
+            });
         }
         Err(e) => launcher.problem = Some(e),
     }
@@ -523,39 +522,3 @@ fn show_line(launcher: Res<Launcher>, mut lines: Query<&mut Text, With<CommandLi
     }
 }
 
-/// **The argv of the process that opens the chosen project.** Set by the launcher; taken by
-/// [`HandoffPlugin`]'s system in a binary, and read by a test, which starts nothing.
-#[derive(Resource, Clone, Debug, PartialEq)]
-pub struct Handoff(pub Vec<String>);
-
-/// Starts this executable again with the [`Handoff`] argv and ends this process. Added by `main` only: a
-/// test's editor must never start a window.
-pub struct HandoffPlugin;
-
-impl Plugin for HandoffPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, perform_handoff.run_if(resource_exists::<Handoff>));
-    }
-}
-
-fn perform_handoff(
-    mut commands: Commands,
-    handoff: Res<Handoff>,
-    mut launcher: Option<ResMut<Launcher>>,
-    mut exit: MessageWriter<AppExit>,
-) {
-    commands.remove_resource::<Handoff>();
-    let started = std::env::current_exe().and_then(|exe| std::process::Command::new(exe).args(&handoff.0).spawn());
-    match started {
-        Ok(_) => {
-            exit.write(AppExit::Success);
-        }
-        Err(e) => {
-            let reason = format!("cannot start the editor on {}: {e}", handoff.0.first().map_or("", String::as_str));
-            error!("{reason}");
-            if let Some(launcher) = launcher.as_mut() {
-                launcher.problem = Some(reason);
-            }
-        }
-    }
-}

@@ -90,7 +90,9 @@ impl Plugin for ScreenPlugin {
             // or a project that would not open) has nothing to open, so it is the one exit that is not
             // `OnExit(Loading)`.
             .add_systems(OnTransition { exited: Screen::Loading, entered: Screen::Editor }, open_the_door)
-            .add_systems(OnExit(Screen::Editor), close_the_door);
+            .add_systems(OnExit(Screen::Editor), close_the_door)
+            // A project opened from inside the editor is pointed at once its door is closed.
+            .add_systems(OnExit(Screen::Editor), crate::project_assets::apply_pending_open.after(close_the_door));
     }
 }
 
@@ -569,6 +571,9 @@ pub enum Ownership {
 pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // ── What was opened, and what was read off disk for it ──────────────────────────────────────
     ("bevy_cauldron::project::Project", Ownership::Project),
+    // **`Session`: it is the one thing that says which project the asset server reads**, moved by
+    // `project_assets::open_project` and by nothing a door change does.
+    ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     ("bevy_cauldron::project::OpenMap", Ownership::Project),
     ("bevy_cauldron::tiles::Door", Ownership::Project),
     ("bevy_cauldron::tiles::Mode", Ownership::Project),
