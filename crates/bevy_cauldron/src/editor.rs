@@ -3096,6 +3096,12 @@ fn switch_door(world: &mut World) {
     if world.resource::<EditorState>().leaving {
         return;
     }
+    cross_to_the_other_door(world);
+}
+
+/// **Cross to the other door** — what `=` does and what a click on the strip's name of it does (#288),
+/// so the two cannot disagree about which door is the other.
+pub fn cross_to_the_other_door(world: &mut World) {
     let Some(door) = world.get_resource::<crate::tiles::Door>().copied() else {
         return;
     };
