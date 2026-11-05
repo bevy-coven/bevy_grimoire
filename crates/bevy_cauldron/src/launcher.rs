@@ -664,12 +664,18 @@ fn fill_the_home(
             pages
                 .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
                 .with_children(|page| {
-                    // **The page scrolls, the way the Projects grid does** (`feedback-1793905912313`).
-                    // Ten entries with their pictures are ~800 logical px and the page's box is what a
-                    // 1280 x 703 window leaves — the capture's own note is "This has no scroll to it,
-                    // so the bottom gets cut off": the last entries and "See every change" were simply
-                    // unreachable. `scroll_list` is gooey's viewport plus its bar, and the bar shows
-                    // itself only when there is somewhere to go.
+                    // FOLLOW-OK: the entries are focusable buttons in a column, not a list with a
+                    // highlight of its own — gooey's focus navigation scrolls a focused entry into
+                    // view and the wheel scrolls the rest, which is what `ProjectGrid` beside this
+                    // page relies on for the same reason. There is no selection here for anything to
+                    // follow: the page exists so its rows can be read to the end, which is the
+                    // capture's complaint (`feedback-1793905912313`).
+                    //
+                    // **The page scrolls, the way the Projects grid does.** Ten entries with their
+                    // pictures are taller than the box a 1280 x 703 window leaves, and before this
+                    // the rows below the third were drawn past the window with nothing to bring them
+                    // in. `scroll_list` is gooey's viewport plus its bar, and the bar shows itself
+                    // only when there is somewhere to go.
                     crate::chrome::scroll_list(page, NewsScroll).with_children(|scroll| {
                         scroll.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
                             .with_children(|body| news_page(body, &launcher, &mut art));
