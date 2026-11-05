@@ -363,9 +363,10 @@ pub struct HomeContent;
 #[derive(Component)]
 pub(crate) struct SidebarRoot;
 
-/// One page of the home; only the sidebar's choice is shown.
+/// One page of the home; only the sidebar's choice is shown. `pub` so a test can find the page a capture
+/// is about — the same reason `project_page::PageBody` is.
 #[derive(Component)]
-struct HomePage(HomeTab);
+pub struct HomePage(pub HomeTab);
 
 /// The body of the Projects page: the welcome or the grid, drawn again when the cards change.
 #[derive(Component)]
@@ -661,8 +662,19 @@ fn fill_the_home(
                 .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_GROUP), display: Display::None, ..default() }, HomePage(HomeTab::Learn)))
                 .with_children(|page| learn_page(page, &launcher));
             pages
-                .spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
-                .with_children(|page| news_page(page, &launcher, &mut art));
+                .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_ROW), display: Display::None, ..default() }, HomePage(HomeTab::WhatsNew)))
+                .with_children(|page| {
+                    // **The page scrolls, the way the Projects grid does** (`feedback-1793905912313`).
+                    // Ten entries with their pictures are ~800 logical px and the page's box is what a
+                    // 1280 x 703 window leaves — the capture's own note is "This has no scroll to it,
+                    // so the bottom gets cut off": the last entries and "See every change" were simply
+                    // unreachable. `scroll_list` is gooey's viewport plus its bar, and the bar shows
+                    // itself only when there is somewhere to go.
+                    crate::chrome::scroll_list(page, NewsScroll).with_children(|scroll| {
+                        scroll.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() })
+                            .with_children(|body| news_page(body, &launcher, &mut art));
+                    });
+                });
         });
     });
 }
@@ -1036,7 +1048,7 @@ fn learn_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
 }
 
 /// How many entries the What's new page lists; the rest are one press away on "See every change".
-const NEWS_SHOWN: usize = 10;
+pub const NEWS_SHOWN: usize = 10;
 
 /// The still of an entry's clip, decoded, or `None` when it cannot be had: the changelog's stills are stored in Git LFS and are
 /// beside the source a build came from or in the app's `Resources`, so an install without them lists the entry without its picture.
@@ -1095,6 +1107,11 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
 /// A What's new entry, by the changelog id it came from.
 #[derive(Component)]
 pub struct NewsEntry(pub String);
+
+/// **The What's new page's scroll area** (`feedback-1793905912313`): the viewport `chrome::scroll_list`
+/// makes for the page's entries, so a test can find the box the page scrolls in.
+#[derive(Component)]
+pub struct NewsScroll;
 
 /// The ways a request to open a project ends: a toast that says why not, or the project opened in this process
 /// ([`crate::project_assets::open_project`]), on a map when the request names one.
