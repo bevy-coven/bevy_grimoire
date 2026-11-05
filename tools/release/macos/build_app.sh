@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds Cauldron.app (bevy_cauldron with every family crate), signs it, wraps it in a DMG, optionally
-# notarizes and staples both, and writes the update zip and SHA256SUMS. Run from the repo root on macOS.
+# Builds Cauldron.app (bevy_cauldron with every family crate, and its MCP server bevy_cauldron_mcp beside it), signs it,
+# wraps it in a DMG, optionally notarizes and staples both, and writes the update zip and SHA256SUMS. Run from the repo
+# root on macOS.
 #
 #   CAULDRON_SIGN_IDENTITY  codesign identity; default `-` (ad-hoc, no timestamp, no notarization)
 #   CAULDRON_NOTARIZE       1 to notarize (needs APPLE_NOTARY_KEY_PATH, APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER_ID)
@@ -31,11 +32,15 @@ NAME="Cauldron-$V-macos-arm64"
 echo "build_app.sh: Cauldron $V, identity $IDENTITY, notarize $NOTARIZE"
 
 cargo build --release -p bevy_cauldron --features family_all
+# The editor's own MCP server ships inside the app (#306), so an agent can drive an installed copy:
+# `ssh <mac> /Applications/Cauldron.app/Contents/MacOS/bevy_cauldron_mcp`.
+cargo build --release -p bevy_cauldron_mcp
 
 rm -rf dist
 APP=dist/Cauldron.app
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/example"
 cp "$T/release/bevy_cauldron" "$APP/Contents/MacOS/bevy_cauldron"
+cp "$T/release/bevy_cauldron_mcp" "$APP/Contents/MacOS/bevy_cauldron_mcp"
 sed "s/@VERSION@/$V/g" "$MACOS_DIR/Info.plist.in" > "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist"
 cp "$MACOS_DIR/Cauldron.icns" "$APP/Contents/Resources/Cauldron.icns"
@@ -56,9 +61,13 @@ while read -r still; do
   cp "$still" "$APP/Contents/Resources/$still"
 done < <(python3 tools/release/macos/news_stills.py CHANGELOG.md "$NEWS_SHOWN")
 
+# The nested binary is signed first, with the app's own flags: `codesign` on the bundle signs only its main executable,
+# and notarization refuses a bundle with an unsigned (or untimestamped) executable inside it.
 if [ "$IDENTITY" = - ]; then
+  codesign --force --options runtime --sign - "$APP/Contents/MacOS/bevy_cauldron_mcp"
   codesign --force --options runtime --entitlements "$MACOS_DIR/entitlements.plist" --sign - "$APP"
 else
+  codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/MacOS/bevy_cauldron_mcp"
   codesign --force --options runtime --timestamp --entitlements "$MACOS_DIR/entitlements.plist" --sign "$IDENTITY" "$APP"
 fi
 codesign --verify --deep --strict --verbose=2 "$APP"
