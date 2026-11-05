@@ -51,11 +51,20 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
       "reason": "a defect: the right side has no margin where the other sides do",
-      "commit": "",
-      "attempts": []
+      "commit": "9d6bdd9",
+      "attempts": [
+        {
+          "host": "big",
+          "backend": "Vulkan",
+          "window": "1280x703",
+          "ui_scale": 1.2,
+          "outcome": "reproduced",
+          "saw": "the splash's rect was 11.7 px inside the sidebar on the left and -11.7 px on the right: it ran 2*PAD past the padded content box"
+        }
+      ]
     },
     {
       "stem": "feedback-1793905912313",
