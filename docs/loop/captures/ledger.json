@@ -27,11 +27,20 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "blocked",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "needs a progress channel before it can be a bar rather than a picture of one: update::download already reads the bytes chunk by chunk (DOWNLOAD_CHUNK_BYTES) but reports only Staged(Result), the sidebar is filled once on OnEnter(Launcher) so nothing there repaints, and the download is macOS-only so a headless Linux pass cannot exercise the real path. The shape is settled and written down: a second channel drained every frame (poll() returns early on Empty), Updater::progress as (received, total) from the response's content-length, a gooey Meter in the sidebar replacing the button while Downloading, and the button back when Staged lands. It needs the owner's word on one thing the note does not settle: whether the bar replaces the button in place or appears under it",
-      "commit": "",
-      "attempts": []
+      "reason": "built: stream() reports (received, Content-Length) on its own frame-drained channel, Downloading carries the pair, the button says the percentage, and a gooey Meter under the button appears while downloading and is despawned when the state leaves it",
+      "commit": "2cf44b2",
+      "attempts": [
+        {
+          "host": "big",
+          "backend": "Vulkan",
+          "window": "1280x703",
+          "ui_scale": 1.2,
+          "outcome": "reproduced",
+          "saw": "before: pressing Update relabelled the button and nothing else moved; a download read the zip 64 KiB at a time and reported no bytes"
+        }
+      ]
     },
     {
       "stem": "feedback-1793905698793",
