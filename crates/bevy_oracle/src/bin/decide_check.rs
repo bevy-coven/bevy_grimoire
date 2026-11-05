@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use bevy_oracle::{Checks, Config, Evidence, Http, Transport, Verdict, evidence_from, run_checks};
 
 fn usage() -> String {
-    "usage: decide_check --captures DIR [--project DIR] [--bar F] [--ask] [--no-builtin] [--json]\n\
+    "usage: decide_check --captures DIR [--project DIR] [--bar F] [--ask] [--no-builtin] [--json] [--facts FILE]\n\
      \x20      decide_check --calibrate SET.ron [--check NAME] [--project DIR] [--model NAME]".to_owned()
 }
 
@@ -25,6 +25,10 @@ struct Args {
     ask: bool,
     no_builtin: bool,
     json: bool,
+    /// **The JSON a `facts` check reads**, for a check about words rather than pictures: the What's new
+    /// page's own sentences, say. One file for every check in the run, which is how a check about a
+    /// page reads the page.
+    facts: Option<PathBuf>,
     /// The labelled set to measure against, when this run is a calibration.
     calibrate: Option<PathBuf>,
     /// Which check to calibrate. The clip check unless named.
@@ -46,6 +50,7 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
         ask: false,
         no_builtin: false,
         json: false,
+        facts: None,
         calibrate: None,
         out: None,
         check: "clip_shows_its_title".to_owned(),
@@ -60,6 +65,7 @@ fn parse(argv: Vec<String>) -> Result<Args, String> {
             "--ask" => a.ask = true,
             "--no-builtin" => a.no_builtin = true,
             "--json" => a.json = true,
+            "--facts" => a.facts = Some(PathBuf::from(it.next().ok_or_else(usage)?)),
             "--calibrate" => a.calibrate = Some(PathBuf::from(it.next().ok_or_else(usage)?)),
             "--check" => a.check = it.next().ok_or_else(usage)?,
             "--model" => a.model = it.next().ok_or_else(usage)?,
@@ -132,7 +138,16 @@ fn main() {
                 }
             }
         }
-        Ok(evidence_from(&images, None))
+        // **A `facts` check is handed the facts**, which is the whole point of the flag: without it a
+        // check about words had no evidence to read and could only report `MissingEvidence`.
+        let facts = match &args.facts {
+            Some(path) => Some(
+                serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?)
+                    .map_err(|e| format!("{} is not JSON: {e}", path.display()))?,
+            ),
+            None => None,
+        };
+        Ok(evidence_from(&images, facts.clone()))
     };
 
     // **A calibration run** (#112): measure the check against a labelled set and print the figure the
