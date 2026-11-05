@@ -42,10 +42,23 @@ fn main() -> AppExit {
     let plugins = DefaultPlugins.build();
 
     let mut app = App::new();
+    // **The log goes to a file as well as to stderr** (`bevy_cauldron::log_file`, #306). Measured 2026-11-04 on
+    // `mac_air`: a release launched from Finder drew a black window and nothing said why — a bundle launch has no
+    // terminal for stdout, and macOS wrote no crash report. Opened *before* `DefaultPlugins` and before anything
+    // can panic, so the first line of a run that dies while the window is made still reaches the file.
+    let log = bevy_cauldron::log_file::LogFile::open();
+    if let Some(log) = &log {
+        log.line(&bevy_cauldron::log_file::starting_line(&argv));
+        bevy_cauldron::log_file::install_panic_hook(log.clone());
+    }
     // **The project is the asset root, and which project is decided later** (`project_assets`): a project named
     // on the command line is pointed at below, and one chosen on the launcher is pointed at when it is chosen.
     // Registered before `DefaultPlugins`, which builds the asset sources.
     project_assets::install(&mut app, None);
+    // In the world before `DefaultPlugins` builds its subscriber, which is where `plugin_layer` looks.
+    if let Some(log) = log.clone() {
+        app.insert_resource(log);
+    }
     app.add_plugins(
         plugins
             // **One repeated log line filled a 16 GB RAM disk** (`bevy_cauldron::log_filter`): an
@@ -54,6 +67,9 @@ fn main() -> AppExit {
             // a longer target beats both, so this silences that one target and nothing else.
             .set(bevy::log::LogPlugin {
                 filter: bevy_cauldron::log_filter::LOG_SILENCES.to_owned(),
+                // The file layer comes *after* the filter, so both sinks carry the same events: a log that
+                // said more or less than the terminal would be a second answer to the same question.
+                custom_layer: bevy_cauldron::log_file::plugin_layer,
                 ..default()
             })
             // Meshes are named relative to the project, so the project IS the asset root: the default asset
@@ -166,6 +182,10 @@ fn main() -> AppExit {
         }
     }
 
+    // **How far startup got, into the log** (`cauldron::startup`): "black window" could be the device, the surface,
+    // the first frame or the state machine; this line and `startup_probe`'s say which one it got to. `LogPlugin`
+    // installed the subscriber while `add_plugins` ran, so this reaches the file.
+    bevy::log::info!(target: "cauldron::startup", "plugins added; first screen {first:?}");
     app.run()
 }
 

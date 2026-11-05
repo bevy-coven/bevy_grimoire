@@ -72,6 +72,7 @@ pub mod menu_bar;
 pub mod empty_state;
 pub mod family_host;
 pub mod log_filter;
+pub mod log_file;
 #[cfg(feature = "bevy_elements")]
 pub mod environment;
 pub mod fill;
