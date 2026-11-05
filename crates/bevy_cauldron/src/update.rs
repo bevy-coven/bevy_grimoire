@@ -235,10 +235,20 @@ impl Updater {
         Self { feed, bundle, blocked: None, state: UpdateState::Idle, staging: None, rx: None }
     }
 
-    /// What the button reads.
+    /// **What the button reads, including the answer.**
+    ///
+    /// `UpToDate` used to read the same words as `Idle`, and the cost of that was measured at the
+    /// keyboard on 2026-11-05: a person pressed *Check for updates*, the check finished in half a
+    /// second, the label went back to *Check for updates*, and the button looked like it had not
+    /// worked. A check that finds nothing is an answer, and an answer with no words is
+    /// indistinguishable from a press that was dropped — so it says which version is the newest, and
+    /// the person can see that it *is* the one they have.
     pub fn label(&self) -> String {
         match &self.state {
-            UpdateState::Idle | UpdateState::UpToDate => "Check for updates".to_owned(),
+            UpdateState::Idle => "Check for updates".to_owned(),
+            UpdateState::UpToDate => {
+                format!("Up to date — v{}", env!("CARGO_PKG_VERSION"))
+            }
             UpdateState::Checking => "Checking for updates…".to_owned(),
             UpdateState::Available(offer) => format!("Update to v{}", offer.version),
             UpdateState::Downloading(v) => format!("Downloading v{v}…"),
@@ -249,6 +259,11 @@ impl Updater {
 
     /// Whether the editor's chrome bar shows the button: only when there is an update to take, one in
     /// progress, or one that failed. Nothing to offer leaves the bar as it was.
+    ///
+    /// **`UpToDate` is deliberately not here.** An up-to-date answer is not something to act on, and
+    /// the bar is the editor's working surface — a button that says "nothing to do" would sit over a
+    /// map being authored. The answer is on the row that was pressed, the home's own button, which is
+    /// always on screen and whose label changes the same frame ([`Updater::label`]).
     pub fn in_chrome(&self) -> bool {
         matches!(
             self.state,
@@ -535,8 +550,14 @@ fn poll(
             None
         }
         Msg::Checked(Ok(None)) => {
+            // **An answer with no words reads as a press that did nothing.** The label changes to
+            // `Up to date — v…` the same frame (see `Updater::label`), and this line is what a person
+            // sees on the row they pressed, in the same place a failure would appear.
             updater.state = UpdateState::UpToDate;
-            None
+            Some(format!(
+                "Cauldron v{} is the newest release.",
+                env!("CARGO_PKG_VERSION")
+            ))
         }
         Msg::Checked(Err(e)) => {
             warn!("update check failed: {e}");
@@ -577,9 +598,13 @@ fn poll(
             Some(e)
         }
     };
-    if let Some(e) = failed {
-        warn!("update: {e}");
-        tell(&e, editor.as_deref_mut(), launcher.as_deref_mut());
+    if let Some(said) = failed {
+        // **Said is not the same as wrong.** An up-to-date answer and a failure both go to the
+        // person's own line, and only a failure is a warning in the log.
+        if matches!(updater.state, UpdateState::Failed(_)) {
+            warn!("update: {said}");
+        }
+        tell(&said, editor.as_deref_mut(), launcher.as_deref_mut());
     }
 }
 

@@ -176,6 +176,53 @@ fn the_chrome_bar_offers_an_update_and_refuses_it_over_unsaved_work() {
     assert!(said.contains("Save the map first"), "the refusal says why: `{said}`");
 }
 
+/// **A check that finds nothing says so.**
+///
+/// Measured at the keyboard on 2026-11-05 against the installed 0.2.3: *Check for updates* was pressed,
+/// the check finished in half a second, and the label went back to *Check for updates* — because
+/// `UpToDate` read the same words as `Idle`. An answer with no words is indistinguishable from a press
+/// that was dropped, so the button names the version that is newest, and the row says it too.
+#[test]
+fn an_up_to_date_check_says_the_version_is_the_newest() {
+    // **The launcher's sidebar button**, which is the one always on screen: the editor's chrome bar
+    // shows an update button only while there is something to act on, so the row a person presses to
+    // check is the home's, and that is the row that has to answer.
+    use bevy_cauldron::launcher::LauncherPlugin;
+    use bevy_cauldron::screen::Screen;
+
+    let mut app = editor("updater-uptodate");
+    app.add_plugins(LauncherPlugin);
+    let mut updater = Updater::new("http://127.0.0.1:9/none".into(), "/nonexistent/Cauldron.app".into());
+    updater.state = UpdateState::UpToDate;
+    app.insert_resource(updater);
+    app.world_mut()
+        .resource_mut::<NextState<Screen>>()
+        .set(Screen::Launcher);
+    updates(&mut app, 8);
+
+    let want = format!("Up to date — v{}", env!("CARGO_PKG_VERSION"));
+    bevy_gooey::testing::find_by_label(&mut app, &want).unwrap_or_else(|e| {
+        panic!("the row names the version it checked: wanted `{want}`: {e:?}")
+    });
+    assert!(
+        bevy_gooey::testing::find_by_label(&mut app, "Check for updates").is_err(),
+        "an up-to-date check must not read as an idle one — that is the press that looked dropped"
+    );
+}
+
+/// **The answer reaches the person on the row they pressed**, which is where a failure would appear.
+#[test]
+fn the_up_to_date_answer_is_said_not_only_labelled() {
+    let mut updater = Updater::new("http://127.0.0.1:9/none".into(), "/nope/Cauldron.app".into());
+    updater.state = UpdateState::UpToDate;
+    assert_eq!(
+        updater.label(),
+        format!("Up to date — v{}", env!("CARGO_PKG_VERSION")),
+        "an unchanged label reads as a press that did nothing"
+    );
+    assert_ne!(updater.label(), "Check for updates", "Idle and UpToDate are different answers");
+}
+
 #[test]
 fn an_editor_with_no_updater_shows_no_update_button() {
     let mut app = editor("updater-none");

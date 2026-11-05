@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-05
 
+- **update-answer** Check for updates says the answer instead of silently reverting to the same words *For you: Press Check for updates and it now tells you which version is the newest, instead of looking like nothing happened.* *No clip: one label and one line of text; proved by an_up_to_date_check_says_the_version_is_the_newest and the_up_to_date_answer_is_said_not_only_labelled*
 - **feedback-reports** Two chords file a report on what is wrong: Cmd+D to the people who make Cauldron, Cmd+Shift+D about your project *For you: Hold Cmd and press D, point at whatever is wrong, and say what it is; the people who build Cauldron get the screen you saw. Cmd+Shift+D sends the same report about your own project to whoever is helping you build it.* *No clip: a key-driven gesture with no standing demo yet; proved by a_person_reports_to_the_developers and a_person_reports_about_this_project*
 
 ## 2026-11-04
