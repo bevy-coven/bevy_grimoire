@@ -8,9 +8,18 @@
       "kind": "bug",
       "status": "triaged",
       "host": "mac_air",
-      "reason": "a defect: the frame is wrong before it is right",
+      "reason": "reproduced on mac_air against the installed 0.2.6: one frame where the page body is laid out before the sidebar exists. The earlier 'texture not uploaded' cause was measured wrong (456d8ff caches the picture); this is a fill-order problem, not an asset one",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "Metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "2 of 8 second-click runs showed one frame of the project page with its body full width from x=10 and the sidebar banner, nav, Settings and version line all absent; the next frame is correct"
+        }
+      ]
     },
     {
       "stem": "feedback-1793903311065",
