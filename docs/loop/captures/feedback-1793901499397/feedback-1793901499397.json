@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "stem": "feedback-1793901499397",
+  "taken_at_ms": 1793901499397,
+  "audience": "developers",
+  "app_version": "0.2.5",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "subject": {
+    "kind": "element",
+    "entity": 115964115503,
+    "rect_px": [
+      605.0,
+      228.0,
+      1046.0,
+      577.0
+    ],
+    "path": [
+      {
+        "name": "projects home",
+        "role": "Screen",
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": "Split",
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": "SplitPane",
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": "Surface(0)",
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": null,
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": null,
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": null,
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": null,
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": null,
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": null,
+        "control": null,
+        "text": null
+      },
+      {
+        "name": null,
+        "role": "Button",
+        "control": null,
+        "text": "bevy_grimoire"
+      }
+    ]
+  },
+  "note": "When I press this button, there is a garbled flash, before the UI paints correctly.",
+  "picture": {
+    "file": "feedback-1793901499397.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "subject_picture": {
+    "file": "feedback-1793901499397_subject.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1793901499397.log"
+}

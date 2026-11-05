@@ -1,0 +1,64 @@
+{
+  "items": [
+    {
+      "stem": "feedback-1793901499397",
+      "taken_at_ms": 1793901499397,
+      "app_version": "0.2.5",
+      "record_version": 1,
+      "kind": "bug",
+      "status": "triaged",
+      "host": "mac_air",
+      "reason": "a defect: the frame is wrong before it is right",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793903311065",
+      "taken_at_ms": 1793903311065,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "enhancement",
+      "status": "triaged",
+      "host": "mac_air",
+      "reason": "only proposes new behaviour (a download bar on Update); nothing is wrong with the button today",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793905698793",
+      "taken_at_ms": 1793905698793,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "bug",
+      "status": "triaged",
+      "host": "mac_air",
+      "reason": "defects: hard to read, prose bad. The decision-model sentence is the suggested fix, not the kind, and is filed separately",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793905798698",
+      "taken_at_ms": 1793905798698,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "bug",
+      "status": "triaged",
+      "host": "mac_air",
+      "reason": "a defect: the right side has no margin where the other sides do",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793905912313",
+      "taken_at_ms": 1793905912313,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "bug",
+      "status": "triaged",
+      "host": "mac_air",
+      "reason": "a defect: the bottom is cut off and unreachable",
+      "commit": "",
+      "attempts": []
+    }
+  ]
+}

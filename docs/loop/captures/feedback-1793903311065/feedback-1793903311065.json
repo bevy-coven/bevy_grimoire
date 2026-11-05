@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "stem": "feedback-1793903311065",
+  "taken_at_ms": 1793903311065,
+  "audience": "developers",
+  "app_version": "0.2.6",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 4294966224,
+        "rect_px": [
+          29.0,
+          1252.0,
+          547.0,
+          1310.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Split",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "SplitPane",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Surface(1)",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Button",
+            "control": null,
+            "text": "Settings"
+          }
+        ]
+      },
+      "at": [
+        453.03125,
+        1284.8203
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "Can we make this a download bar whenever you hit \"Update,\" then when the update is finished, switch back to a button.\n",
+  "picture": {
+    "file": "feedback-1793903311065.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1793903311065_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1793903311065.log"
+}

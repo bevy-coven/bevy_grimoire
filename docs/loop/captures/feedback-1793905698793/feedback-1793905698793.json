@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "stem": "feedback-1793905698793",
+  "taken_at_ms": 1793905698793,
+  "audience": "developers",
+  "app_version": "0.2.6",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 4294966182,
+        "rect_px": [
+          605.0,
+          85.0,
+          2531.0,
+          209.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Split",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "SplitPane",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Surface(0)",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": "What's new"
+          },
+          {
+            "name": null,
+            "role": "Button",
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        621.1328,
+        134.64062
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "These boxes like this are are hard to read. The prose are bad. And there are several separate boxes.  Could we actually use a decision model to run all labels and prose through to make sure it is human readable?\n",
+  "picture": {
+    "file": "feedback-1793905698793.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1793905698793_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1793905698793.log"
+}
