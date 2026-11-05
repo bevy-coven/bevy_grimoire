@@ -134,3 +134,38 @@ of the window recorded a y of 4000 in a 720-pixel frame, and no picture would ha
    from its layout, so it cannot survive the change it may be reporting on.
 4. **A floating layer over the map is interface** before the map is the scene, so a tooltip, menu,
    popover, dialog or card over the viewport is still pickable.
+
+
+## After: a design critique of the Projects home, and 0.2.5
+
+The owner asked for a visual review of the first screen. Two isolated assessments (design review; source and
+contrast measurement) against the **shipped 0.2.4 app's own smoke screenshot**, because the app cannot be
+launched here: the GPU is held by a coding tenant (`gpu-tenant wait` timed out at 15 min twice) and no software
+Vulkan driver is installed. The bundled detector returned `[]` — it scans web markup, and this UI is Bevy nodes.
+
+Score **23/40**. Five findings fixed, one **withdrawn**:
+
+| finding | outcome |
+|---|---|
+| P1 the first thing read on every launch was `Cauldron v0.2.4 is the newest release.` in the danger skin | **my own regression from `9c6cdf0`**, shipped in 0.2.4. `Updater::manual`: a pressed check answers, a launch check that finds nothing says nothing |
+| P1 the screen never said what Cauldron is for | the pitch names Bevy 0.20 and the agent; three numbered steps; the tour is on the page |
+| P1 "headline = body = 10 px, nav out-sizes the headline" | **withdrawn.** My first pass measured whole-line bands and was wrong. Single glyphs against the skin's `text_size: 11.0` give headline 15, prose 11, nav 11, footnote 10 — the type was already sane |
+| P2 the hero is the loudest thing and the whitespace was not composed | top-aligned 560 px column; the crows stay the hero, as the owner asked |
+| P2 the sidebar carried one fact twice and gave a tab and a network action one skin | one quiet `v0.2.5 · up to date` line; a button only when `actionable()`; an accent rail on the selected tab |
+| P3 the footnote promised a choice the page did not have | it now says what `Open folder…` does not do |
+
+**Two corrections the process caught, both worth more than the findings.**
+
+1. **`no_internal_words_on_screen` refused my first copy.** It named `assets/grimoire`, and the ratchet is
+   right: a person never types that path. The sentence now says the *property* — nothing to export — and the
+   test asserts both the property's presence and the absence of any `assets/` path.
+2. **`Take the tour` exists on two pages now**, by design (the welcome and `Learn`), so the launcher test's
+   "exactly one button says this" helper had to be scoped. The duplicate is the finding, not a defect.
+
+**Shipped as 0.2.5** (`166b00b`, gate 209 s; release run 42062946718 passed build, sign, notarize, its own MCP
+smoke, and publish). Confirmed in the release's own 0.2.5 screenshot: no toast, `v0.2.5 · up to date` as one
+line, the accent rail on `Projects`, the pitch, the three steps, `Take the tour`, and the new footnote.
+
+**Not done:** the example's own thumbnail is not in the hero — the release build's project has no baked
+thumbnails at first run, so a real screenshot of the `bedroom` map needs a bake step in the release, or a
+committed still. That is the next slice if the owner wants the picture to say what the words now say.
