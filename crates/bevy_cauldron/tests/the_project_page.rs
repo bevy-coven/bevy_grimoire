@@ -22,7 +22,7 @@ use bevy_cauldron::harness;
 use bevy_cauldron::launcher::{Launcher, LauncherPlugin};
 use bevy_cauldron::loading::{LoadRequest, LoadingPlugin};
 use bevy_cauldron::project::{OpenMap, Project};
-use bevy_cauldron::project_page::{CreateButton, KitRow, MapCard, NameField, NoteField, OriginField, PageAction, PageDialog, ProjectPage, SavedAs, SizeField};
+use bevy_cauldron::project_page::{CreateButton, KitRow, MapCard, NameField, NoteField, OriginField, PageAction, PageBody, PageDialog, ProjectPage, SavedAs, SizeField};
 use bevy_cauldron::screen::Screen;
 use bevy_gooey::{FieldProblem, Role};
 
@@ -317,6 +317,102 @@ fn the_page_follows_a_map_an_agent_makes() {
     let text = std::fs::read_to_string(map_file(&root, "m")).unwrap().replacen("name: \"m\"", "name: \"annexe\"", 1);
     std::fs::write(map_file(&root, "annexe"), text).unwrap();
     until(&mut app, |app| app.world_mut().query::<&MapCard>().iter(app.world()).count() == before + 1);
+}
+
+/// **The frame a card click lands on draws the page, not a broken one.**
+///
+/// The owner's report on 0.2.5 (`mac_air`, 2026-11-05): *"When I press this button, there is a garbled
+/// flash, before the UI paints correctly."* The transition from the home to a project's page is one
+/// frame, and this asserts that frame is whole instead of asserting the steady state, which passed
+/// while the flash was there.
+///
+/// # Why the picture assertion is about the handle and not about `Assets::get`
+///
+/// `Assets<Image>::add` inserts into the main world at once (`bevy_asset-0.20.0/src/assets.rs:401`),
+/// so `images.get(&node.image).is_some()` is true the same frame a picture is minted — it would pass
+/// on the broken build and prove nothing.
+///
+/// **What this assertion does not claim.** It does not claim a texture minted on the crossing frame
+/// is missing from the GPU; that was the first reading of the owner's report and it was measured
+/// wrong. `StateTransition` runs before `Update` and asset extraction follows `PostUpdate`
+/// (`bevy_app-0.20.0/src/main_schedule.rs`), so a picture added while the page is built is uploaded
+/// before that frame draws. Captured on big under Xvfb at 15 fps against a 1 MiB portrait, the first
+/// frame of the page draws it correctly with no band, on both the cache-less and the caching build.
+///
+/// What it does pin is the one thing the crossing can still get wrong about pictures: the page must
+/// draw a picture the **home already had**, not mint a second copy of the same file. Before the
+/// cache, `project_picture` decoded and added the PNG on every call, so the home's card and the
+/// page's body each held their own upload of the identical file — two GPU copies and two decodes
+/// per project per screen. Sharing the handle is the property, and it is what a later change that
+/// reintroduced a per-call `images.add` would break.
+///
+/// The rest of the frame is pinned too, because "the page is whole" is the claim:
+///
+/// - **Exactly one `LauncherRoot`, never zero.** The home's root leaves by `DespawnOnExit` and the
+///   page's arrives by `OnEnter`; a frame with neither is the window with nothing on it.
+/// - **The page's own content.** `PageBody` and a `MapCard` are what tell the page apart from the
+///   home's `ProjectsBody`, so a frame still showing the home cannot pass.
+/// - **The divider is hidden**, because the sidebar is not a thing to resize: a frame where it is
+///   drawn is a line between the sidebar and the page that settles a frame later.
+#[test]
+fn the_first_frame_of_the_page_is_whole() {
+    let root = Fixture::new("page_first_frame").descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
+    // **A project with a picture**, as the owner's was: the newest PNG under `target/grimoire_thumbs`
+    // is what a card and the page body both draw. With none, both fall back to the splash, whose
+    // handle `SplashArt` keeps for the life of the process, and the defect this test is for cannot show.
+    let thumbs = root.join("target/grimoire_thumbs");
+    std::fs::create_dir_all(&thumbs).expect("the project has a thumbnail folder");
+    image::RgbaImage::from_pixel(128, 128, image::Rgba([90, 120, 160, 255])).save(thumbs.join("0000000000000001.png")).expect("a baked portrait");
+    let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.add_plugins(LauncherPlugin);
+    // The home, with this project as its one card, as opening it from the Projects home leaves things.
+    let file = root.join("recent.ron");
+    bevy_cauldron::recent::record(&file, &root).expect("the project is recorded");
+    app.insert_resource(bevy_cauldron::recent::RecentProjects(file));
+    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
+    for _ in 0..4 {
+        app.update();
+    }
+    assert_eq!(screen_of(&app), Screen::Launcher, "the editor stands on the home");
+    let card = app.world_mut().query_filtered::<Entity, With<bevy_cauldron::launcher::ProjectCard>>().single(app.world()).expect("the project has a card");
+
+    // **Every texture the home has already put on the GPU.** The page is allowed to draw these and
+    // nothing else: anything it mints now is uploaded too late to be drawn this frame.
+    let uploaded: Vec<AssetId<Image>> = app.world_mut().query::<&ImageNode>().iter(app.world()).map(|node| node.image.id()).collect();
+    assert!(!uploaded.is_empty(), "the home draws the splash and the card's picture: nothing to compare would make this test vacuous");
+
+    // The click: a first press chooses the card and a second opens it, and the second is the one that crosses.
+    app.world_mut().commands().trigger(Activate { entity: card });
+    app.update();
+    app.world_mut().commands().trigger(Activate { entity: card });
+    // **The frame the crossing lands on**, found by stepping to it rather than by counting: the click
+    // writes an `OpenRequest` in an observer, `open_requested` reads it in `Update` and queues the
+    // open, and a `NextState` written there is read by the *next* frame's `StateTransition`. Asserting
+    // a frame number would pin that plumbing; asserting the first frame the page exists pins the page.
+    for _ in 0..8 {
+        app.update();
+        if screen_of(&app) == Screen::Project {
+            break;
+        }
+    }
+    assert_eq!(screen_of(&app), Screen::Project, "the click crosses to the page");
+    for frame in 0..3 {
+        if frame > 0 {
+            app.update();
+        }
+        let roots = app.world_mut().query_filtered::<(), With<bevy_cauldron::launcher::LauncherRoot>>().iter(app.world()).count();
+        assert_eq!(roots, 1, "frame {frame}: exactly one root, the page's — never a window with nothing on it, and never the home under the page");
+        let bodies = app.world_mut().query_filtered::<(), With<PageBody>>().iter(app.world()).count();
+        assert_eq!(bodies, 1, "frame {frame}: the page's body is up");
+        let cards = app.world_mut().query::<&MapCard>().iter(app.world()).count();
+        assert!(cards >= 1, "frame {frame}: and it draws its own map cards");
+        let pictures: Vec<AssetId<Image>> = app.world_mut().query::<&ImageNode>().iter(app.world()).map(|node| node.image.id()).collect();
+        let fresh: Vec<AssetId<Image>> = pictures.iter().copied().filter(|id| !uploaded.contains(id)).collect();
+        assert!(fresh.is_empty(), "frame {frame}: every picture on the page is one the home already uploaded — {fresh:?} were minted on the transition and cannot be drawn yet");
+        let dividers: Vec<&Node> = app.world_mut().query_filtered::<&Node, With<bevy_gooey::SplitDivider>>().iter(app.world()).collect();
+        assert!(!dividers.is_empty(), "frame {frame}: the shell has a divider");
+        assert!(dividers.iter().all(|n| n.display == Display::None), "frame {frame}: and it is not drawn — the sidebar is not a thing to resize");
+    }
 }
 
 /// `LauncherPlugin` is the page's host: adding it twice is the harness's concern, never a test's.

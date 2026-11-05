@@ -327,6 +327,31 @@ const FOLDER_ELLIPSIS: char = '…';
 #[derive(Resource, Default)]
 pub(crate) struct SplashArt(pub(crate) Option<(Handle<Image>, Vec2)>);
 
+/// **One decoded picture per (path, modified time)**, so a card and a page share one texture and a
+/// redraw does not decode the PNG again.
+///
+/// `project_picture` used to read, decode and `images.add` on **every** call: once per card on the
+/// home, once for the project page's body, and again on every redraw. Each of those was a full PNG
+/// decode, a fresh `Image` in `Assets`, and a fresh upload for the GPU, for a file that had not
+/// changed. This keeps one handle per version of the file instead.
+///
+/// # What this is not
+///
+/// It is **not** the fix for the owner's "garbled flash" (`0.2.5`, `mac_air`, 2026-11-05). That was
+/// measured and the guess was wrong: a picture added while the page is built is uploaded before the
+/// frame is drawn, because `StateTransition` runs ahead of `Update` and asset extraction follows
+/// `PostUpdate` (`bevy_app-0.20.0/src/main_schedule.rs`). Captured on big under Xvfb at 15 fps
+/// against a 1 MiB portrait, the first frame of the page draws the picture correctly with no band —
+/// both with and without this cache. The frames that settle that are on big at
+/// `/tmp/pp-frames/big/`. What pins the crossing is
+/// `tests/the_project_page.rs::the_first_frame_of_the_page_is_whole`.
+///
+/// Keys on the file's modified time, so a freshly baked portrait is decoded again and the newest one
+/// keeps changing what the cards show — the cache is a decode and upload saver, never a staleness
+/// source.
+#[derive(Resource, Default)]
+pub(crate) struct ProjectPictures(std::collections::HashMap<(PathBuf, std::time::SystemTime), (Handle<Image>, Vec2)>);
+
 /// The window's root node, which the context menu hangs under.
 #[derive(Component)]
 pub struct LauncherRoot;
@@ -398,6 +423,7 @@ impl Plugin for LauncherPlugin {
             .add_message::<OpenRequest>()
             .add_message::<OpenMapRequest>()
             .init_resource::<SplashArt>()
+            .init_resource::<ProjectPictures>()
             .init_resource::<Launcher>()
             .add_observer(on_toast_action)
             .add_systems(Update, paint_the_quiet_lines)
@@ -598,6 +624,8 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
 struct Art<'a> {
     splash: Option<(Handle<Image>, Vec2)>,
     images: &'a mut Assets<Image>,
+    /// The decoded portraits, so a redraw reuses a texture the GPU already has ([`ProjectPictures`]).
+    pictures: &'a mut ProjectPictures,
     now: u64,
     menu: Entity,
 }
@@ -609,6 +637,7 @@ fn fill_the_home(
     splash: Res<SplashArt>,
     updater: Option<Res<crate::update::Updater>>,
     mut images: ResMut<Assets<Image>>,
+    mut pictures: ResMut<ProjectPictures>,
     root: Query<Entity, With<LauncherRoot>>,
     sidebar: Query<Entity, With<SidebarRoot>>,
     content: Query<Entity, With<HomeContent>>,
@@ -619,7 +648,7 @@ fn fill_the_home(
 
     fill_sidebar(&mut commands, sidebar, &launcher, &splash, updater.as_deref());
 
-    let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
+    let mut art = Art { splash: splash.0.clone(), images: &mut images, pictures: &mut pictures, now: recent::now(), menu };
     commands.entity(content).with_children(|content| {
         content.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), ..default() }).with_children(|pages| {
             pages
@@ -787,7 +816,10 @@ fn example_map(root: &Path) -> Option<String> {
 
 /// The picture on a card: the newest portrait of a piece the project has baked (`thumbs.rs` keeps them in
 /// `target/grimoire_thumbs`), cropped to the card's shape; else the splash, cropped the same way.
-pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>) -> Option<ImageNode> {
+///
+/// **`pictures` is what keeps a node's texture already on the GPU** — see [`ProjectPictures`]. Every
+/// caller passes it; there is no second way to get a picture.
+pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>, pictures: &mut ProjectPictures) -> Option<ImageNode> {
     let newest = std::fs::read_dir(root.join("target/grimoire_thumbs"))
         .ok()
         .into_iter()
@@ -795,16 +827,25 @@ pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: O
         .flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "png"))
         .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-        .max()
-        .map(|(_, path)| path);
-    let baked = newest.and_then(|path| std::fs::read(path).ok()).and_then(|bytes| {
-        Image::from_buffer(&bytes, ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default, RenderAssetUsages::default()).ok()
-    });
-    let (handle, size) = match baked {
-        Some(image) => {
-            let size = Vec2::new(image.width() as f32, image.height() as f32);
-            (images.add(image), size)
+        .max();
+    // **The same file, unchanged, is the same handle.** `modified` is the key's other half because a
+    // portrait baked again under the same name is a different picture.
+    let (handle, size) = match newest {
+        Some((modified, path)) => {
+            let key = (path.clone(), modified);
+            match pictures.0.get(&key) {
+                Some(cached) => cached.clone(),
+                None => {
+                    let bytes = std::fs::read(&path).ok()?;
+                    let image = Image::from_buffer(&bytes, ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default, RenderAssetUsages::default()).ok()?;
+                    let size = Vec2::new(image.width() as f32, image.height() as f32);
+                    let made = (images.add(image), size);
+                    pictures.0.insert(key, made.clone());
+                    made
+                }
+            }
         }
+        // The splash is one handle `SplashArt` keeps for the life of the process: it needs no cache.
         None => splash?,
     };
     // The middle band of the picture that is as wide as the card's picture is for its height.
@@ -817,7 +858,7 @@ pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: O
 
 fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let path = row.project.path.clone();
-    let picture = project_picture(&path, art.images, art.splash.clone());
+    let picture = project_picture(&path, art.images, art.splash.clone(), art.pictures);
     let when = format!("Opened {}", ago(row.project.last_opened, art.now));
     let key = card_key(&path);
     grid.spawn((
@@ -1146,6 +1187,7 @@ fn redraw_the_cards(
     mut launcher: ResMut<Launcher>,
     splash: Res<SplashArt>,
     mut images: ResMut<Assets<Image>>,
+    mut pictures: ResMut<ProjectPictures>,
     body: Query<Entity, With<ProjectsBody>>,
     menu: Query<Entity, With<CardMenu>>,
 ) {
@@ -1154,7 +1196,7 @@ fn redraw_the_cards(
     }
     launcher.dirty = false;
     let (Ok(body), Ok(menu)) = (body.single(), menu.single()) else { return };
-    let mut art = Art { splash: splash.0.clone(), images: &mut images, now: recent::now(), menu };
+    let mut art = Art { splash: splash.0.clone(), images: &mut images, pictures: &mut pictures, now: recent::now(), menu };
     commands.entity(body).despawn_children();
     commands.entity(body).with_children(|body| projects_body(body, &launcher, &mut art));
 }

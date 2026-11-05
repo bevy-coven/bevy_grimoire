@@ -40,7 +40,7 @@ use bevy_gooey::{Activate, Cancel, ContextMenu, ContextTarget, FieldProblem, Rol
 
 use crate::catalog::{self, Catalog, Kit, MapEntry, MapSummary, Pending, PolicyEntry, plural, size_in_metres};
 use crate::confirm::{Asked, Confirm};
-use crate::launcher::{self, HomeContent, Launcher, SidebarRoot, SplashArt};
+use crate::launcher::{self, HomeContent, Launcher, ProjectPictures, SidebarRoot, SplashArt};
 use crate::project_assets::{self, ProjectRoot};
 use crate::screen::Screen;
 use crate::ui::accent_button;
@@ -177,8 +177,9 @@ pub struct OriginField(pub usize);
 /// The note field of the Map settings dialog.
 #[derive(Component)]
 pub struct NoteField;
+/// The page's body: the breadcrumb and the Maps and Kits sections. `pub` so a test can tell the page apart from the home.
 #[derive(Component)]
-struct PageBody;
+pub struct PageBody;
 #[derive(Component)]
 struct MapMenu;
 #[derive(Component)]
@@ -233,6 +234,7 @@ fn fill_page(
     sidebar: Query<Entity, With<SidebarRoot>>,
     content: Query<Entity, With<HomeContent>>,
     mut images: ResMut<Assets<Image>>,
+    mut pictures: ResMut<ProjectPictures>,
 ) {
     let (Some(page), Ok(sidebar), Ok(content)) = (page, sidebar.single(), content.single()) else { return };
     launcher::fill_sidebar(&mut commands, sidebar, &launcher, &splash, updater.as_deref());
@@ -242,18 +244,19 @@ fn fill_page(
     let body = commands
         .spawn((Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: Val::Px(0.0), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }, PageBody, ChildOf(content)))
         .id();
-    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone());
+    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone(), &mut pictures);
 }
 
 /// The page's body: the breadcrumb, then the Maps section and the Kits section.
-fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu: Entity, kit_menu: Entity, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>) {
+#[allow(clippy::too_many_arguments)]
+fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu: Entity, kit_menu: Entity, images: &mut Assets<Image>, splash: Option<(Handle<Image>, Vec2)>, pictures: &mut ProjectPictures) {
     commands.entity(body).with_children(|body| {
         body.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(crate::chrome::GAP_ROW), ..default() }).with_children(|crumbs| {
             crumbs.spawn((button("Projects"), observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::Back); })));
             crumbs.spawn(label("›"));
             crumbs.spawn(heading(page.name()));
         });
-        let picture = launcher::project_picture(&page.root, images, splash);
+        let picture = launcher::project_picture(&page.root, images, splash, pictures);
         let maps = page.catalog.maps.iter().map(|m| (m.clone(), picture.clone())).collect::<Vec<_>>();
         body.spawn(section(
             "Maps",
@@ -626,6 +629,7 @@ fn follow_the_files(time: Res<Time<Real>>, mut page: ResMut<ProjectPage>) {
 }
 
 /// Draws the body again from disk after anything changed.
+#[allow(clippy::too_many_arguments)]
 fn redraw(
     mut commands: Commands,
     mut page: ResMut<ProjectPage>,
@@ -634,6 +638,7 @@ fn redraw(
     kit_menu: Query<Entity, With<KitMenu>>,
     splash: Res<SplashArt>,
     mut images: ResMut<Assets<Image>>,
+    mut pictures: ResMut<ProjectPictures>,
 ) {
     if !page.dirty {
         return;
@@ -649,7 +654,7 @@ fn redraw(
     }
     page.seen = fingerprint(&page.root);
     commands.entity(body).despawn_children();
-    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone());
+    draw_body(&mut commands, body, &page, map_menu, kit_menu, &mut images, splash.0.clone(), &mut pictures);
 }
 
 // ── the dialogs ──────────────────────────────────────────────────────────────────────────────────
