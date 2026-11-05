@@ -133,11 +133,21 @@ fn get_text(agent: &ureq::Agent, url: &str) -> Result<String, String> {
 /// first, so a release with no line for its zip is refused before ~100 MB are fetched. A zip whose
 /// sha256 differs is deleted and refused.
 pub fn fetch_verified(offer: &Offer, dir: &Path) -> Result<PathBuf, String> {
+    fetch_verified_reporting(offer, dir, &|_, _| {})
+}
+
+/// [`fetch_verified`], saying how the download is going: `progress(received, total)` as the bytes
+/// arrive. The checksum is still proved before the file is kept, whatever the progress said.
+pub fn fetch_verified_reporting(
+    offer: &Offer,
+    dir: &Path,
+    progress: &dyn Fn(u64, Option<u64>),
+) -> Result<PathBuf, String> {
     let agent = agent();
     let name = zip_name(&offer.version);
     let want = expected_sum(&get_text(&agent, &offer.sums_url)?, &name)?;
     let path = dir.join(&name);
-    let got = download(&agent, &offer.zip_url, &path).inspect_err(|_| {
+    let got = stream(&agent, &offer.zip_url, &path, progress).inspect_err(|_| {
         let _ = std::fs::remove_file(&path);
     })?;
     if got != want {
@@ -147,12 +157,25 @@ pub fn fetch_verified(offer: &Offer, dir: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Streams `url` into `to`, returning the lowercase sha256 of what was written.
-fn download(agent: &ureq::Agent, url: &str, to: &Path) -> Result<String, String> {
-    let mut reader = get(agent, url)?.into_body().into_reader();
+/// Streams `url` into `to`, calling `progress(received, total)` as it goes.
+///
+/// **`progress` is what makes a download bar possible** (`feedback-1793903311065`): the response's own
+/// `Content-Length`, and the bytes written so far. `total` is `None` when the server states no length,
+/// which is a bar that fills nothing rather than a bar that lies.
+fn stream(
+    agent: &ureq::Agent,
+    url: &str,
+    to: &Path,
+    progress: &dyn Fn(u64, Option<u64>),
+) -> Result<String, String> {
+    let response = get(agent, url)?;
+    let total = response.body().content_length();
+    let mut reader = response.into_body().into_reader();
     let mut file = std::fs::File::create(to).map_err(|e| format!("{}: {e}", to.display()))?;
     let mut hasher = Sha256::new();
     let mut chunk = vec![0u8; DOWNLOAD_CHUNK_BYTES];
+    let mut received = 0u64;
+    progress(0, total);
     loop {
         let n = reader.read(&mut chunk).map_err(|e| format!("{url}: {e}"))?;
         if n == 0 {
@@ -160,6 +183,8 @@ fn download(agent: &ureq::Agent, url: &str, to: &Path) -> Result<String, String>
         }
         hasher.update(&chunk[..n]);
         file.write_all(&chunk[..n]).map_err(|e| format!("{}: {e}", to.display()))?;
+        received += n as u64;
+        progress(received, total);
     }
     file.flush().map_err(|e| format!("{}: {e}", to.display()))?;
     Ok(format!("{:x}", hasher.finalize()))
@@ -203,7 +228,10 @@ pub enum UpdateState {
     Checking,
     UpToDate,
     Available(Offer),
-    Downloading(semver::Version),
+    /// **Downloading, with the bytes that have arrived** and the ones the response said it would send
+    /// (`None` when the server stated no length). The pair is what a progress bar draws, and the note
+    /// that asked for one is `feedback-1793903311065`.
+    Downloading { version: semver::Version, received: u64, total: Option<u64> },
     Installing(semver::Version),
     Failed(String),
 }
@@ -212,6 +240,10 @@ pub enum UpdateState {
 enum Msg {
     Checked(Result<Option<Offer>, String>),
     Staged(Result<PathBuf, String>),
+    /// **How much of the download has arrived**, sent on its own channel so it does not consume the
+    /// job's one answer: [`Updater::poll`] returns early while the answer channel is empty, which is
+    /// every frame of a download.
+    Progress { received: u64, total: Option<u64> },
 }
 
 /// **The running app's own update.** Inserted by `main` only, inside a `.app`.
@@ -237,11 +269,24 @@ pub struct Updater {
     staging: Option<Offer>,
     /// The answer of the job in flight, if one is.
     rx: Option<Mutex<mpsc::Receiver<Msg>>>,
+    /// **How far the download has got, on its own channel.** The answer channel is read only when it
+    /// has something, and a download's whole point is the frames before it does — so progress is
+    /// kept apart from the one answer a job sends.
+    progress_rx: Option<Mutex<mpsc::Receiver<Msg>>>,
 }
 
 impl Updater {
     pub fn new(feed: String, bundle: PathBuf) -> Self {
-        Self { feed, bundle, blocked: None, state: UpdateState::Idle, manual: false, staging: None, rx: None }
+        Self {
+            feed,
+            bundle,
+            blocked: None,
+            state: UpdateState::Idle,
+            manual: false,
+            staging: None,
+            rx: None,
+            progress_rx: None,
+        }
     }
 
     /// **What the button reads, including the answer.**
@@ -260,7 +305,15 @@ impl Updater {
             }
             UpdateState::Checking => "Checking for updates…".to_owned(),
             UpdateState::Available(offer) => format!("Update to v{}", offer.version),
-            UpdateState::Downloading(v) => format!("Downloading v{v}…"),
+            UpdateState::Downloading { version, received, total } => match total {
+                // **A number a person can watch**, which is what the note asked for: "a download bar
+                // whenever you hit Update" (`feedback-1793903311065`). Whole percent, because a
+                // tenth of a percent on 100 MB is a flicker rather than information.
+                Some(total) if *total > 0 => {
+                    format!("Downloading v{version}… {}%", (received.saturating_mul(100) / total).min(100))
+                }
+                _ => format!("Downloading v{version}…"),
+            },
             UpdateState::Installing(v) => format!("Restarting into v{v}…"),
             UpdateState::Failed(_) => "Update failed — try again".to_owned(),
         }
@@ -277,7 +330,7 @@ impl Updater {
     pub fn actionable(&self) -> bool {
         matches!(
             self.state,
-            UpdateState::Available(_) | UpdateState::Downloading(_) | UpdateState::Installing(_) | UpdateState::Failed(_)
+            UpdateState::Available(_) | UpdateState::Downloading { .. } | UpdateState::Installing(_) | UpdateState::Failed(_)
         )
     }
 
@@ -302,10 +355,42 @@ impl Updater {
     }
 
     fn begin_download(&mut self, offer: Offer) {
-        self.state = UpdateState::Downloading(offer.version.clone());
+        self.state = UpdateState::Downloading { version: offer.version.clone(), received: 0, total: None };
         self.staging = Some(offer.clone());
         let running = self.bundle.clone();
-        self.spawn(move || Msg::Staged(stage(&offer, &running)));
+        // **The progress channel is made here and read by `progress()`**, so the frames of a download
+        // carry the bytes that arrived without touching the channel the answer will come on.
+        let (send, receive) = mpsc::channel::<Msg>();
+        self.progress_rx = Some(Mutex::new(receive));
+        let (answer_send, answer) = mpsc::channel();
+        self.rx = Some(Mutex::new(answer));
+        std::thread::spawn(move || {
+            let report = |received: u64, total: Option<u64>| {
+                let _ = send.send(Msg::Progress { received, total });
+            };
+            let _ = answer_send.send(Msg::Staged(stage(&offer, &running, &report)));
+        });
+    }
+
+    /// **The latest progress a download has reported**, as `(received, total)`, taken from the channel
+    /// and written into the state. Called every frame by [`progress`]: a `Some` return means the state
+    /// changed, which is what makes the bar move.
+    fn take_progress(&mut self) -> bool {
+        let Some(rx) = self.progress_rx.as_ref() else { return false };
+        let Ok(rx) = rx.lock() else { return false };
+        let mut moved = false;
+        // **Drained, not read once**: a frame can fall behind several 64 KiB chunks, and a bar that
+        // showed every third chunk would crawl.
+        while let Ok(Msg::Progress { received, total }) = rx.try_recv() {
+            if let UpdateState::Downloading { received: had, total: had_total, .. } = &mut self.state
+                && (*had != received || *had_total != total)
+            {
+                *had = received;
+                *had_total = total;
+                moved = true;
+            }
+        }
+        moved
     }
 
     fn spawn(&mut self, job: impl FnOnce() -> Msg + Send + 'static) {
@@ -334,7 +419,7 @@ fn update_dir(version: &semver::Version) -> Result<PathBuf, String> {
 /// **Downloads, unpacks and checks the new app**, and proves the running one can be replaced. The new
 /// app's path is the answer; nothing outside the update folder has been touched.
 #[cfg(target_os = "macos")]
-fn stage(offer: &Offer, running: &Path) -> Result<PathBuf, String> {
+fn stage(offer: &Offer, running: &Path, progress: &dyn Fn(u64, Option<u64>)) -> Result<PathBuf, String> {
     use std::process::Command;
     let ran = |program: &str, args: &[&std::ffi::OsStr]| {
         Command::new(program).args(args).output().map_err(|e| format!("{program}: {e}"))
@@ -345,7 +430,7 @@ fn stage(offer: &Offer, running: &Path) -> Result<PathBuf, String> {
         std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let zip = fetch_verified(offer, &dir)?;
+    let zip = fetch_verified_reporting(offer, &dir, progress)?;
     let unpacked = dir.join("unpacked");
     // `ditto`, not `unzip`: it keeps the code signature and the stapled ticket intact.
     let out = ran("/usr/bin/ditto", &["-x".as_ref(), "-k".as_ref(), zip.as_os_str(), unpacked.as_os_str()])?;
@@ -384,7 +469,7 @@ fn stage(offer: &Offer, running: &Path) -> Result<PathBuf, String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn stage(_offer: &Offer, _running: &Path) -> Result<PathBuf, String> {
+fn stage(_offer: &Offer, _running: &Path, _progress: &dyn Fn(u64, Option<u64>)) -> Result<PathBuf, String> {
     Err("updates are macOS-only".to_owned())
 }
 
@@ -452,6 +537,97 @@ pub fn update_button(label: String) -> impl bevy::prelude::Bundle {
     (button(label), UpdateButton, bevy::picking::Pickable::default(), observe(on_activate))
 }
 
+/// **The download bar**, shown beside the update button while an update is coming down
+/// (`feedback-1793903311065`: *"Can we make this a download bar whenever you hit Update, then when the
+/// update is finished, switch back to a button"*).
+///
+/// A gooey [`bevy_gooey::Meter`] rather than a bar of this crate's own: it eases its fill, and its
+/// fraction is clamped and never NaN, so a server that states no length leaves it empty rather than
+/// filling it wrongly. Its width is a share of the sidebar's content width, because the bar stands
+/// under the version line.
+#[derive(Component)]
+pub struct UpdateBar;
+
+/// How wide the download bar is, in logical pixels: the sidebar's content width.
+pub const UPDATE_BAR_W: f32 = 216.0;
+/// How tall it is, in logical pixels: two pixels of air above the button's height.
+pub const UPDATE_BAR_H: f32 = 6.0;
+
+/// The bar for `received` of `total`, or nothing when there is no download to show.
+fn bar_for(received: u64, total: Option<u64>) -> impl bevy::prelude::Bundle {
+    let (value, max) = bar_reading(received, total);
+    // **`meter` already carries its own `Node`**, so the size goes beside the meter rather than in a
+    // second one: two `Node`s in one bundle is a duplicate-component panic, not a bigger bar.
+    (bevy_gooey::meter(value, max), UpdateBar, UpdateBarSize)
+}
+
+/// **What the bar's meter says for a download** — the one place that arithmetic lives, so a bar that is
+/// spawned and a bar that is updated cannot disagree.
+///
+/// **With no stated length it says nothing about progress**, rather than carrying a byte count against
+/// a maximum of zero: `meter_fraction` would draw it empty either way, but a value meaning "4,000 of
+/// nothing" is a number a later reader would trust.
+fn bar_reading(received: u64, total: Option<u64>) -> (f32, f32) {
+    let total = total.unwrap_or(0);
+    let value = if total == 0 { 0.0 } else { received.min(total) as f32 };
+    (value, total as f32)
+}
+
+/// **A bar whose node has not been given its size yet.** `meter` spawns the `Node`, so the size is set
+/// on the bar's own entity rather than in a second one; this marks the ones still waiting.
+#[derive(Component)]
+struct UpdateBarSize;
+
+/// **Keeps the download bar in step with the updater**: beside the button while an update is coming
+/// down, gone the moment it is not.
+///
+/// A bar that stayed after the download finished would be the "switch back to a button" the note asks
+/// for, undone. So the bar exists only while [`Updater::state`] is `Downloading`, and its value is the
+/// bytes that have arrived.
+fn show_the_bar(
+    mut commands: Commands,
+    updater: Option<Res<Updater>>,
+    bars: Query<(Entity, &bevy_gooey::Meter, &ChildOf), With<UpdateBar>>,
+    buttons: Query<&ChildOf, With<UpdateButton>>,
+) {
+    let want = match updater.as_deref().map(|u| &u.state) {
+        Some(UpdateState::Downloading { received, total, .. }) => Some((*received, *total)),
+        _ => None,
+    };
+    // **The bar's node is `meter`'s own**, so its size is set on the same entity: a second `Node` in the
+    // bundle is a duplicate component, and a wrapper would put the meter's fill inside a node the meter
+    // does not measure. `size_the_bar` does it once, when the bar is spawned.
+    let placed: Vec<(Entity, f32, f32, Entity)> = bars
+        .iter()
+        .map(|(entity, meter, parent)| (entity, meter.value, meter.max, parent.parent()))
+        .collect();
+    match want {
+        Some((received, total)) => {
+            // **The same arithmetic as the spawn**, so a bar that already exists and a bar that is new
+            // cannot disagree about what "4,000 bytes of no stated length" means.
+            let (value, max) = bar_reading(received, total);
+            if placed.is_empty() {
+                // **Under the button**, in the same column, so the bar is where the person is looking.
+                let Some(parent) = buttons.iter().next().map(|p| p.parent()) else { return };
+                commands.entity(parent).with_children(|column| {
+                    column.spawn(bar_for(received, total));
+                });
+            } else {
+                for (entity, had, had_max, _) in placed {
+                    if had != value || had_max != max {
+                        commands.entity(entity).insert(bevy_gooey::Meter { value, max });
+                    }
+                }
+            }
+        }
+        None => {
+            for (entity, ..) in placed {
+                commands.entity(entity).despawn();
+            }
+        }
+    }
+}
+
 /// Says `text` where the screen shows a refusal: the editor's status, the launcher's problem line.
 fn tell(text: &str, editor: Option<&mut crate::editor::EditorState>, launcher: Option<&mut crate::launcher::Launcher>) {
     if let Some(editor) = editor {
@@ -487,7 +663,7 @@ fn on_activate(
                 updater.begin_download(offer);
             }
         }
-        UpdateState::Checking | UpdateState::Downloading(_) | UpdateState::Installing(_) => {}
+        UpdateState::Checking | UpdateState::Downloading { .. } | UpdateState::Installing(_) => {}
     }
 }
 
@@ -525,9 +701,14 @@ impl Plugin for UpdatePlugin {
             Update,
             (
                 start_the_first_check,
+                // **Progress first, so the bar and the label read this frame's bytes** rather than the
+                // last frame's.
+                progress,
                 poll,
                 place_in_the_chrome_bar.run_if(resource_exists::<crate::chrome::Frame>),
                 relabel,
+                show_the_bar,
+                size_the_bar,
             )
                 .chain(),
         );
@@ -544,6 +725,25 @@ fn start_the_first_check(updater: Option<ResMut<Updater>>, mut done: Local<bool>
     if updater.state == UpdateState::Idle && updater.blocked.is_none() {
         // Nobody pressed for this one, so "nothing newer" is not news. See [`Updater::manual`].
         updater.begin_check(false);
+    }
+}
+
+/// **Writes a download's progress into [`Updater`] every frame**, so a bar can follow it.
+///
+/// A no-op unless a download is in flight: the channel is made in `begin_download` and dropped when
+/// the job answers, and taking from an empty one costs a lock.
+fn progress(updater: Option<ResMut<Updater>>) {
+    let Some(mut updater) = updater else { return };
+    updater.take_progress();
+}
+
+/// Gives a newly spawned bar its size, then drops the mark: the node is `meter`'s own, so nothing else
+/// may own it.
+fn size_the_bar(mut commands: Commands, mut fresh: Query<(Entity, &mut Node), With<UpdateBarSize>>) {
+    for (entity, mut node) in &mut fresh {
+        node.width = Val::Px(UPDATE_BAR_W);
+        node.height = Val::Px(UPDATE_BAR_H);
+        commands.entity(entity).remove::<UpdateBarSize>();
     }
 }
 
@@ -569,6 +769,9 @@ fn poll(
         Err(TryRecvError::Disconnected) => Msg::Staged(Err("the update stopped without an answer".to_owned())),
     };
     updater.rx = None;
+    // The download is over, so its progress channel is too: a later check must not read yesterday's
+    // bytes.
+    updater.progress_rx = None;
     // **The flag belongs to the job that just answered**, and the take below reads it once.
     let asked = updater.manual;
     updater.manual = false;
@@ -625,6 +828,9 @@ fn poll(
                 }
             }
         }
+        // **Progress on this channel cannot happen**, because it is a different one — but a match
+        // that cannot happen still has to be written, and treating it as an answer would end the job.
+        Msg::Progress { .. } => return,
         Msg::Staged(Err(e)) => {
             updater.staging = None;
             updater.state = UpdateState::Failed(e.clone());
