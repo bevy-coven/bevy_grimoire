@@ -39,11 +39,20 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "defects: hard to read, prose bad. The decision-model sentence is the suggested fix, not the kind, and is filed separately",
-      "commit": "",
-      "attempts": []
+      "reason": "hard to read: 118 characters a line, now bounded to ~66 by NEWS_MEASURE_PX. 'the prose are bad' is authoring in CHANGELOG.md, left for a pass that rewrites them all; the decision-model sentence is a suggested fix, not built",
+      "commit": "f11f8f0",
+      "attempts": [
+        {
+          "host": "big",
+          "backend": "Vulkan",
+          "window": "1280x703",
+          "ui_scale": 1.2,
+          "outcome": "reproduced",
+          "saw": "each entry's sentence was given 778 px of prose, about 118 characters a line at this face's advance: past any comfortable measure"
+        }
+      ]
     },
     {
       "stem": "feedback-1793905798698",
