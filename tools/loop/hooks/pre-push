@@ -54,6 +54,7 @@ markers=$(git grep -nE '^(<<<<<<<|>>>>>>>) ' "$target" -- . ':!*.patch' 2>/dev/n
 [ -z "$markers" ] || refuse "conflict markers in the commit: ${markers//$'\n'/; }"
 python3 tools/loop/backlog.py check >/dev/null || refuse "python3 tools/loop/backlog.py check failed"
 python3 tools/changelog/changelog.py check >/dev/null || refuse "python3 tools/changelog/changelog.py check failed"
+python3 tools/loop/version.py check >/dev/null || refuse "python3 tools/loop/version.py check failed: the editor's version or one of its tags is outside the policy (PATCH and MINOR stop at 9; a bump is its own commit and the manifest and Cargo.lock must agree)"
 # The editor's integration tests are modules of one binary (`crates/bevy_cauldron/tests/all.rs`, `autotests = false`):
 # a file missing from `all.rs` is never compiled, so its tests never run, and clippy alone (the clean-merge path) cannot see it.
 all=crates/bevy_cauldron/tests/all.rs

@@ -16,6 +16,23 @@ When one of these seems necessary, stop and ask. Name the exact command, what it
 
 Pinned to **Bevy 0.20.0** (`[workspace.dependencies] bevy`). Read the vendored source and migration guides, not bevy.org (which tracks `main`): `~/.cargo/registry/src/index.crates.io-*/bevy-0.20.0/` with `examples/` and `_release-content/migration-guides/`. `bevy_grimoire_anim` and `bevy_devshot` name `0.20.0` themselves because they need `default-features = false`; bump them by hand with the workspace.
 
+## Versioning: a number that is released, never counted
+
+The editor's version is read off a download page and compared by the updater, so it is not a build
+counter. `python3 tools/loop/version.py` owns the rule, and `version.py check` runs in the pre-push gate:
+
+- **PATCH counts non-breaking releases and stops at 9**; the release after `0.2.9` is `0.3.0`. That roll
+  is what keeps the digits readable — `0.2.278` fails the gate.
+- **MINOR stops at 9.** `0.9.9` is where this line ends: the next release is a `1.0.0`, the owner's
+  decision in a conversation, never a pass's.
+- **A version comes from the previous one alone** — never a date, a build id, a run id or a commit count.
+  `version.py next` prints the one legal answer.
+- **A bump is its own commit**, `release: <version>`, carrying the manifest and `Cargo.lock` and nothing
+  else. No pre-release or build metadata in a release tag: the updater compares tags exactly.
+
+`docs/loop/RUNNING-A-LOOP.md`, "A version is released, not counted", carries the reasoning and the
+release workflow (`.github/workflows/release-macos.yml` on mac_air).
+
 ## Working with consumers
 
 Games depend on these crates by path and the editor runs on a game as its project. The two evolve together:

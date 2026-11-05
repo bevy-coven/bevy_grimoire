@@ -293,6 +293,36 @@ Measured 2026-10-28 with both Ollama accounts at their weekly limit: omp tried t
 - **`wiggum.sh start` printed "started." on a Mac where nothing started, and four more things stand between a committed loop command and its first pass.** Found 2026-10-28 reviewing Sanctuary's `emerge-loop` (`WIGGUM_REPO=/Users/ladvien/sanctuary WIGGUM_COMMAND=emerge-loop`), which was written and never started. (1) `setsid` is util-linux and macOS has none, so the launch failed inside the background subshell, its error went to `driver.log`, and the script still printed "started."; `start` now falls back to `perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV'`, waits up to 10 s for the pidfile, and otherwise prints `FAILED to start` with the log tail and exits 1. That is tested by `tools/loop/test_wiggum_start.sh` (12 checks, run on macOS with bash 3.2); the park suite (57 checks) and the drain suite (23) in the same directory still pass. (2) The compiled-in default model was ollama-cloud, which answered 402 and 429; a start line that names no model would have run every pass against it, so the default is now `claude-sonnet-5-5`. (3) A checkout that people and other agents work in at the same time (Sanctuary's had 34 uncommitted files, six of them untracked `.blend`s, and notes from three agents in its coordination chat that day) must run with `WIGGUM_PARK=0 WIGGUM_CHECKPOINT=0` and a raised `WIGGUM_MAX_DIRTY` (new, default 40): with the defaults the park step commits everyone's unfinished files to a branch and returns the checkout to `main` under them, the checkpoint snapshots them into hidden refs, and the dirty guard aborts every pass above 40 files. A dedicated clone avoids all three, but that command hard-codes the live checkout's path and the agents' coordination file `AGENTS_CHAT.md` is gitignored. (4) The free-space gate: a pass is refused under `WIGGUM_MIN_FREE_GB` (default 150) after the driver prunes what cargo regenerates. The laptop had 11 GB free of 461 GB (98% used; `~/.cargo-target-shared/global` alone is 114 GB) and big_mac 74 GB, so on either the loop would abort every pass and stop itself after five consecutive failures. (5) One loop per repo: the process marker is `wiggum-$USER-<repo name>`, so two loops with different commands on one repo (Sanctuary's `build-loop` and `emerge-loop`) refuse to run together; `WIGGUM_STATE` can be set apart, the marker cannot.
 - **Society's gate was CPU-bound by rayon, not by memory or core count, and folding the test binaries plus nextest took it from over two hours to about one.** Measured 2026-10-28 (PR #36 on `bevy-coven/bevy_society`; the table is in its `docs/loop/test-gate.md`): 74 of 81 test binaries became one, `tests/it`, and the gate is `RAYON_NUM_THREADS=1 cargo nextest run --profile gate`. Default-features tests went from 47.1 to 24.6 minutes and `--no-default-features` tests from 29.5 to 19.2, with clippy, fmt, doctests and rustdoc clean. A cold full sequence took 1 h 25 min; a warm one is estimated at 55 to 60 minutes, which was not measured. The first nextest run had used 7 h 11 min of CPU in 40 minutes of wall (load average above 150 on a 24-core machine shared with the loops): `bevy_stigmergy` runs a rayon pass every tick and rayon starts one worker per core, which cost 494 CPU-seconds against 104 for the same test with one thread, and was no slower. The first diagnosis was wrong: a one-thread Bevy task pool changed nothing, because a Linux thread inherits its creator's name and rayon creates its pool from inside a Bevy compute thread, so its 24 workers showed up as "Compute Task Pool" while `ComputeTaskPool::thread_num()` said 1. What found it was listing the process's threads after three ticks, not asking the pool how wide it was. Memory was never the constraint (eight tests held 197 MB in total), and a process starved of CPU on a loaded box shows almost no ticks per thread, so sample CPU time over a whole run. nextest 0.9.150's wrapper and setup scripts are still experimental, so the variable is on the command line. Lights, grimoire and elements have no rayon in their dependency graphs, so none of this applies to them.
 
+## A version is released, not counted (owner, 2026-11-05)
+
+> "make sure we have persistence guidance on version bumping? I don't want to end up at like our first
+> release and have version 278.2884.12 billion."
+
+A loop releases, so a loop is what turns a version into a counter when nobody stops it. The rule is in
+`tools/loop/version.py`'s own header and `python3 tools/loop/version.py check` enforces it on every push
+(the pre-push gate), so it is not a line in a prompt a pass may skip:
+
+- **PATCH counts non-breaking releases, and stops at 9.** The release after `0.2.9` is **`0.3.0`** —
+  that roll is the whole reason PATCH cannot run away. `0.2.278` is what a counter wearing a version
+  looks like, and it fails the gate.
+- **MINOR stops at 9 too.** `0.9.9` is where a pass stops: the next release is a `1.0.0`, and that is
+  the owner's decision, in a conversation, by name. Past 1.0 the digits grow differently and the policy
+  says so rather than pretending to describe them.
+- **A version comes from nowhere but the previous one.** Never a date, a build number, a CI run id, a
+  commit count, or a lint. `version.py next` prints the one legal answer.
+- **A bump is its own commit**, `release: <version>`, carrying `crates/bevy_cauldron/Cargo.toml` and
+  `Cargo.lock` and nothing else, so the tag's source is exactly what was tested.
+- **No pre-release or build metadata in a release tag**: the updater compares tags exactly, and
+  `0.2.6-rc1` makes two downloads of the same code look different. `version.py check` refuses one.
+- **Only `bevy_emerge_loop` releases** (already the rule in `build-loop.md`); every other worker never
+  bumps, tags or publishes. The check is the same file, so a worker that tries fails at its own push.
+
+The check is offline and deterministic — the manifest, the `Cargo.lock` entry that must agree with it,
+and every local `bevy_cauldron-v*` tag — so it costs a push nothing and cannot flake. The release itself
+is `.github/workflows/release-macos.yml` on mac_air: a `bevy_cauldron-v<version>` tag builds, signs,
+notarizes, drives the fresh app through its own MCP, and publishes the DMG, the update zip and
+`SHA256SUMS` the in-app updater reads.
+
 ## Templates
 
 ### systemd (`~/.config/systemd/user/wiggum@<name>.service`)
