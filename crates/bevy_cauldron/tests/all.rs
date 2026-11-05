@@ -41,6 +41,7 @@ mod a_dead_end_names_its_closest_piece;
 mod capture_feedback_1793905912313;
 mod capture_feedback_1793905798698;
 mod capture_feedback_1793905698793;
+mod capture_feedback_1793901499397;
 mod a_destructible_file_of_another_version_is_refused;
 mod a_destructible_file_that_does_not_read_is_named;
 mod a_door_answer_says_whether_it_waits;

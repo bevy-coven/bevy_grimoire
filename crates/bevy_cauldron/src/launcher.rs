@@ -369,7 +369,7 @@ pub struct LauncherRoot;
 pub struct HomeContent;
 
 #[derive(Component)]
-pub(crate) struct SidebarRoot;
+pub struct SidebarRoot;
 
 /// One page of the home; only the sidebar's choice is shown. `pub` so a test can find the page a capture
 /// is about — the same reason `project_page::PageBody` is.
