@@ -5,6 +5,17 @@
 //! beside each other. Who reads it is not its business: `bevy_grimoire_core::feedback` owns the
 //! record and the folders, and the MCP server owns the two readers.
 //!
+//! # One pick, or several, and the stack under the pointer
+//!
+//! `Shift+click` accumulates: "this label is under the viewport" is a fact about two elements, and a
+//! record that can hold one makes a person file two reports and describe the relationship in prose.
+//! A plain click still collapses to a single pick, which is what a person who means one thing does.
+//!
+//! **The wheel and `Tab` step down the stack *under the point*, not up an ancestor chain.** An
+//! overlapping label is usually a **sibling** of what covers it, so an ancestor walk can never reach
+//! it: there is nowhere on screen where only the label is under the cursor. [`stack_under`] collects
+//! every node the point is in, front-to-back, and `Tab` or the wheel moves within that.
+//!
 //! # Two channels, one path
 //!
 //! `Cmd+D` reports to **the people who make Cauldron**; it works on every screen, the Projects home
@@ -34,12 +45,19 @@
 use std::path::PathBuf;
 
 use bevy::input::ButtonInput;
+use bevy::input_focus::InputFocus;
+// `Tab` is this report's own "step down the stack" gesture, so this module owns a focus home for it:
+// without one, `bevy_input_focus`'s tab navigation reaches the primary window and warns on every
+// press. The reason it is safe — it is focused by `report_overlay`, never by a click — is written out
+// there. The marker is on the line above the import because that is where the rule looks.
+// FOCUS-DECISION-REOPENED: a focus home for the report's `Tab`, focused by code, never by a click.
+use bevy::input_focus::tab_navigation::{TabGroup, TabIndex};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
 use bevy::ui::{CalculatedClip, ComputedNode, UiGlobalTransform, UiStack};
 use bevy_grimoire_core::feedback::{
-    self, Audience, CameraPose, Element, PathStep, Picture, Report, Scene, Subject, WindowRecord,
-    FEEDBACK_VERSION, TEXT_CAP,
+    self, Audience, CameraPose, Element, Pair, PairKind, PathStep, Pick, Picture, Report, Scene,
+    Subject, WindowRecord, FEEDBACK_VERSION, TEXT_CAP,
 };
 use bevy_gooey::{Modifiers, Shortcut};
 
@@ -79,15 +97,31 @@ const OUTLINE_W: u32 = 3;
 const OUTLINE_INNER_W: u32 = 1;
 /// A scene mark's arm length, in picture pixels, going out from the click each way.
 const MARK_ARM_PX: i32 = 24;
+/// **How strong the wash over two picks' shared pixels is**, out of 255. The accent at about a
+/// third: strong enough to find at a glance, weak enough that what is underneath still reads.
+const OVERLAP_ALPHA: u8 = 90;
+/// A pick already taken, drawn on the live overlay: the same arm as the picture's mark, so what a
+/// person sees while pointing matches what is saved.
+const TAKEN_MARK_ARM_PX: f32 = 8.0;
+/// **How strong a taken pick's wash is, as a share of [`chrome::SNIP_WASH`].** Half: it is the record
+/// of a decision already made, not the one being made now, so the live outline stays the loudest thing
+/// on the frozen frame.
+const PICK_TAKEN_SHARE: f32 = 0.5;
 
 /// How many lines of the editor's log a report carries.
 const LOG_TAIL_LINES: usize = 200;
 
 /// What the hint line says while the person is pointing.
 const PICK_HINT: &str =
-    "Click what is wrong · drag a box · wheel changes the pick · Enter = whole screen · Esc cancels";
-/// What it says once a subject is picked and the note is being typed.
+    "Click what is wrong · Tab or wheel steps the stack · Shift+click adds · Enter describes · Esc cancels";
+/// What it says once there is at least one pick and the person may add another.
+const MULTI_HINT: &str = "Shift+click adds another · Enter describes them · Esc cancels";
+/// What it says once the note is being typed.
 const NOTE_HINT: &str = "Type what is wrong, then Save · Esc cancels";
+
+/// **How long the note box's pick line may be**, in characters. Two or three picks is what a person
+/// adds; the cap is what stops a dozen from growing the box a paragraph.
+const PICKS_LINE_CAP: usize = 160;
 
 /// Refusals and receipts, as sentences a person can act on.
 const NO_PROJECT: &str = "no project is open, so nothing was saved. Cmd+D reports to the people who make Cauldron; Cmd+Shift+D reports on the project you have open.";
@@ -148,9 +182,20 @@ impl ReportEdit {
         self.open.as_ref().map(|o| o.audience)
     }
 
-    /// What has been picked, once it has been.
-    pub fn subject(&self) -> Option<&Subject> {
-        self.open.as_ref().and_then(|o| o.subject.as_ref())
+    /// **Every thing that has been picked**, in the order they were picked. Empty while the person
+    /// has not picked anything yet.
+    pub fn picks(&self) -> &[Pick] {
+        self.open.as_ref().map_or(&[], |o| o.picks.as_slice())
+    }
+
+    /// **How each two of the picks sit against each other**, worked out from their rectangles by the
+    /// core's [`feedback::pairs`] — the same function the saved record runs, so what the note box
+    /// says and what an agent reads cannot disagree.
+    pub fn relations(&self) -> Vec<Pair> {
+        let Some(open) = self.open.as_ref() else {
+            return Vec::new();
+        };
+        feedback::pairs(&open.picks, &open.rects(), &open.front)
     }
 
     /// What has been typed so far.
@@ -163,12 +208,19 @@ impl ReportEdit {
         self.open.as_ref().and_then(|o| o.area)
     }
 
-    /// The chain under the pointer and which step of it is picked: what the wheel moves.
+    /// **The stack under the pointer and which entry is picked**: what `Tab` and the wheel move.
     pub fn picked_step(&self) -> Option<(usize, usize)> {
         self.open
             .as_ref()
-            .map(|o| (o.at, o.chain.len()))
+            .map(|o| (o.at, o.stack.len()))
             .filter(|(_, len)| *len > 0)
+    }
+
+    /// The entity of the picked entry of the stack, for a test that asserts which one was stepped to.
+    pub fn picked_entity(&self) -> Option<Entity> {
+        self.open
+            .as_ref()
+            .and_then(|o| o.stack.get(o.at).copied())
     }
 
     /// **A report in the picking phase, for the pointer gate's own test.** Nothing else constructs
@@ -182,14 +234,14 @@ impl ReportEdit {
                 taken_at_ms: 0,
                 frozen: None,
                 whole: None,
-                chain: Vec::new(),
+                stack: Vec::new(),
+                front: Vec::new(),
                 at: 0,
                 hover: None,
                 area: None,
                 from: None,
-                subject: None,
+                picks: Vec::new(),
                 note: String::new(),
-                mark: None,
                 noted_on: 0,
                 screen: "editor".into(),
                 project: None,
@@ -243,21 +295,26 @@ struct Open {
     frozen: Option<Handle<Image>>,
     /// The same pixels, for the two PNGs.
     whole: Option<image::RgbaImage>,
-    /// The chain under the pointer, outermost first.
-    chain: Vec<Entity>,
-    /// Which of the chain is picked. The wheel moves it, so a person can say "the button" rather
-    /// than "the words on the button".
+    /// **Every node the pointer is inside, front-to-back**, so `[0]` is what a click would hit.
+    /// [`stack_under`] fills it; it is a superset of the ancestor chain, which is why the wheel and
+    /// `Tab` can reach a node that is covered rather than containing.
+    stack: Vec<Entity>,
+    /// **Each entry of [`Self::stack`]'s place in the UI's own stack**, lower being further front.
+    /// A pick records its own, so the record can say which of two overlapping elements is on top.
+    front: Vec<usize>,
+    /// Which entry of the stack is picked. `Tab` and the wheel move it, so a person can say "the
+    /// button" rather than "the words on the button", or reach the panel behind the button.
     at: usize,
-    /// The outline, in surface pixels — always `chain[at]`'s rectangle.
+    /// The outline, in surface pixels — always `stack[at]`'s rectangle.
     hover: Option<[f32; 4]>,
     /// The box being dragged, or the one that was dragged.
     area: Option<[f32; 4]>,
     /// Where the drag began.
     from: Option<Vec2>,
-    subject: Option<Subject>,
+    /// **What has been picked so far.** A plain click replaces it with one entry; `Shift+click`
+    /// appends. Enter over an empty list is the whole screen.
+    picks: Vec<Pick>,
     note: String,
-    /// Where the pointer was when the subject was chosen: the scene mark in the second picture.
-    mark: Option<Vec2>,
     /// **The frame the subject was chosen on.** The `Enter` that chose it, or the click's release,
     /// is still in this frame's input: the note box has `AutoFocus`, so without this the same key
     /// arrives as the first newline of the note. Measured live on 2026-11-05 — every report taken
@@ -269,6 +326,57 @@ struct Open {
     map: Option<String>,
     tool: Option<String>,
     window: WindowRecord,
+}
+
+/// **Not in the interface's stack at all**: an area, a whole screen, a point on the map. It is the
+/// largest rank there is, so a pair against an element puts the element in front, which is what a
+/// person sees — the overlay draws over the world and the frozen frame is behind everything.
+pub(crate) const NO_FRONT_RANK: usize = usize::MAX;
+
+impl Open {
+    /// Each pick's rectangle, or `None` where its subject has none — what
+    /// [`feedback::pairs`] compares. The same reading the save writes into the record's `relations`.
+    fn rects(&self) -> Vec<Option<[f32; 4]>> {
+        self.picks.iter().map(rect_of_pick).collect()
+    }
+
+    /// **Take what was just picked**: `Shift` adds to what is there and stays pointing, so a person
+    /// can add a third; a plain click replaces the list and moves on to the note.
+    ///
+    /// `picks` and `ranks` are parallel: a rank is the pick's **front-ness**, `0` being the node a
+    /// click would take and [`NO_FRONT_RANK`] meaning the pick is not a node of the interface.
+    fn take(&mut self, picked: Vec<Pick>, ranks: &[usize], shift: bool, frame: u32) {
+        if !shift {
+            self.picks.clear();
+            self.front.clear();
+        }
+        for (pick, rank) in picked.into_iter().zip(ranks.iter().copied()) {
+            self.picks.push(pick);
+            self.front.push(rank);
+        }
+        self.area = None;
+        self.hover = None;
+        self.from = None;
+        if shift {
+            // Still pointing, so another can be added. The stack is left alone: the pointer has not
+            // moved and `Tab` should keep working from where it was.
+            return;
+        }
+        self.noted_on = frame;
+        self.phase = Phase::Note;
+    }
+}
+
+/// The rectangle a pick answers for, in surface pixels, or `None` for a subject that has none.
+///
+/// A [`Subject::Screen`] has no rectangle; a [`Subject::Scene`] has a point, not a box, so two of them
+/// compare as having nothing in common rather than as one containing the other.
+fn rect_of_pick(pick: &Pick) -> Option<[f32; 4]> {
+    match &pick.subject {
+        Subject::Element(element) => Some(element.rect_px),
+        Subject::Area { rect_px } => Some(*rect_px),
+        Subject::Screen | Subject::Scene(_) => None,
+    }
 }
 
 /// The report's overlay root. Its presence is what makes the keyboard census quiet, so "is a report
@@ -349,14 +457,14 @@ fn report_key(
         taken_at_ms: now_ms(),
         frozen: None,
         whole: None,
-        chain: Vec::new(),
+        stack: Vec::new(),
+        front: Vec::new(),
         at: 0,
         hover: None,
         area: None,
         from: None,
-        subject: None,
+        picks: Vec::new(),
         note: String::new(),
-        mark: None,
         noted_on: 0,
         screen: screen
             .as_deref()
@@ -423,17 +531,23 @@ fn screen_name(screen: Screen) -> String {
     .to_owned()
 }
 
-/// **The topmost UI node under `point`, and its ancestor chain outermost-first.**
+/// **Every UI node the point is inside, back-to-front: `[len - 1]` is what a click would take.**
 ///
-/// The same three checks `bevy_ui`'s own picking backend makes
-/// (`bevy_ui-0.20.0/src/picking_backend.rs:150-230`): a non-zero size, a visible node, and a point
-/// inside its `CalculatedClip`. Nothing else is consulted — in particular not `Hovered`, which
-/// follows the *window's* cursor and which an agent's injected pointer never moves.
+/// The same three checks `bevy_ui`'s own picking backend makes — a non-zero size, a visible node, and
+/// a point inside its `CalculatedClip` — applied to **every** node in the stack rather than stopping
+/// at the first. The walk is the picking backend's own
+/// (`bevy_ui-0.20.0/src/picking_backend.rs:150-230`), front to back, and the result is held **the
+/// other way round on purpose**: outermost-and-back first is the order an ancestor chain already has
+/// (`path` on an [`Element`]), so a chain is just this list cut down to one path. Stepping *down* the
+/// stack is therefore one index lower in both, which is what keeps the wheel's direction true.
 ///
-/// Iterating back-to-front means the first hit is the one drawn on top, which is the one the person
-/// can see.
+/// **Why the ancestor chain is not enough.** A chain walk returns the chain of the *topmost* hit
+/// node, and the wheel used to move within it. An overlapping label is usually a **sibling** of what
+/// covers it, so no ancestor walk can reach it: there is nowhere on screen where only the label is
+/// under the cursor. This list contains the ancestor chain of every node it finds, so it subsumes the
+/// old behaviour rather than replacing it with something narrower.
 #[allow(clippy::type_complexity)]
-pub fn chain_under(
+pub fn stack_under(
     point: Vec2,
     stack: &UiStack,
     nodes: &Query<(
@@ -444,6 +558,7 @@ pub fn chain_under(
         Option<&ChildOf>,
     ), (Without<ReportPart>, Without<bevy_gooey::ToastStack>)>,
 ) -> Vec<Entity> {
+    let mut hits: Vec<Entity> = Vec::new();
     for slice in stack.partition.iter().rev() {
         for entity in stack.uinodes[slice.clone()].iter().rev() {
             let Ok((node, tf, visible, clip, _)) = nodes.get(*entity) else {
@@ -458,18 +573,17 @@ pub fn chain_under(
             if clip.is_some_and(|clip| !clip.contains_point(point)) {
                 continue;
             }
-            let mut chain = vec![*entity];
-            let mut at = *entity;
-            while let Some(parent) = nodes.get(at).ok().and_then(|step| step.4).map(ChildOf::parent)
-            {
-                chain.push(parent);
-                at = parent;
+            // A node is reached twice when a parent and its child both fill the point; the first
+            // sighting is the front-most one, and that is the one that answers.
+            if hits.contains(entity) {
+                continue;
             }
-            chain.reverse();
-            return chain;
+            hits.push(*entity);
         }
     }
-    Vec::new()
+    // Collected front-to-back, held back-to-front: see the note above.
+    hits.reverse();
+    hits
 }
 
 /// The rectangle a laid-out node occupies, in surface pixels.
@@ -551,12 +665,25 @@ pub(crate) struct ReportWorld<'w, 's> {
 }
 
 impl ReportWorld<'_, '_> {
-    /// The chain under the pointer right now, or nothing when there is no pointer or no layout.
-    fn chain(&self) -> Vec<Entity> {
+    /// **Every node the pointer is inside, front-to-back**, which is what `Tab` and the wheel walk.
+    fn stack(&self) -> Vec<Entity> {
         let (Some(point), Some(stack)) = (self.pointer.0, self.stack.as_deref()) else {
             return Vec::new();
         };
-        chain_under(point, stack, &self.nodes)
+        stack_under(point, stack, &self.nodes)
+    }
+
+    /// **The ancestor chain of one node, outermost first** — the `path` a pick records, and the way
+    /// a click still picks a node *and* says what contains it.
+    fn chain_of(&self, entity: Entity) -> Vec<Entity> {
+        let mut chain = vec![entity];
+        let mut at = entity;
+        while let Some(parent) = self.nodes.get(at).ok().and_then(|step| step.4).map(ChildOf::parent) {
+            chain.push(parent);
+            at = parent;
+        }
+        chain.reverse();
+        chain
     }
 
     /// Is `entity` inside a floating layer — a dialog, or a node carrying one of the floating roles?
@@ -618,8 +745,9 @@ impl ReportWorld<'_, '_> {
 /// **Point at it.**
 ///
 /// A press and a release in one place is a click; a press, a move of [`MIN_PICK_PX`] and a release
-/// is a box. Enter with nothing picked is the whole screen. The wheel walks the chain, so a person
-/// can pick the button rather than the words on it.
+/// is a box. `Shift` on either accumulates a second pick instead of replacing the first. `Tab` and the
+/// wheel step **down the stack under the pointer** — the outlined node is what a click will take —
+/// and Enter with nothing picked is the whole screen.
 ///
 /// What a click means, in this order:
 ///
@@ -627,7 +755,8 @@ impl ReportWorld<'_, '_> {
 ///    what the person is pointing at even when it sits over the viewport.
 /// 2. **Else a point inside the map camera's viewport is the scene** — the ground under it, its map
 ///    point, its cell, and the placement the editor's own `pick_at` chose there.
-/// 3. **Else the node chain is the answer.**
+/// 3. **Else the outlined node of the stack is the answer**, which is the front-most one until `Tab`
+///    or the wheel says otherwise.
 fn report_pick(
     mut report: ResMut<ReportEdit>,
     mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
@@ -644,13 +773,20 @@ fn report_pick(
         return;
     }
     let here = world.pointer.0;
+    let shift = shift_held(&keys);
 
     // **Enter takes the whole screen**, the one subject that needs no pointer at all.
     if open.phase == Phase::Picking && keys.just_pressed(KeyCode::Enter) {
-        open.subject = Some(Subject::Screen);
+        if open.picks.is_empty() {
+            open.picks
+                .push(Pick {
+                    subject: Subject::Screen,
+                    at: here.unwrap_or(Vec2::ZERO).to_array(),
+                });
+            open.front.push(NO_FRONT_RANK);
+        }
         open.area = None;
         open.hover = None;
-        open.mark = here;
         open.noted_on = frames.0;
         open.phase = Phase::Note;
         return;
@@ -670,26 +806,34 @@ fn report_pick(
     if world.mouse.just_released(MouseButton::Left) {
         let from = open.from.take();
         if let Some(rect) = open.area.take() {
-            open.subject = Some(Subject::Area {
+            let area = Subject::Area {
                 rect_px: clamp_rect(rect, open.window.physical),
-            });
-            open.hover = None;
-            open.mark = here;
-            open.noted_on = frames.0;
-            open.phase = Phase::Note;
+            };
+            open.take(
+                vec![Pick {
+                    subject: area,
+                    at: here.unwrap_or(Vec2::ZERO).to_array(),
+                }],
+                &[NO_FRONT_RANK],
+                shift,
+                frames.0,
+            );
             return;
         }
         if from.is_some()
             && let Some(at) = here
         {
-            match pick_at_point(at, &world) {
-                Ok(subject) => {
-                    open.subject = Some(subject);
-                    open.area = None;
-                    open.hover = None;
-                    open.mark = Some(at);
-                    open.noted_on = frames.0;
-                    open.phase = Phase::Note;
+            match pick_at_point(at, &world, &open.stack, open.at) {
+                Ok((subject, rank)) => {
+                    open.take(
+                        vec![Pick {
+                            subject,
+                            at: at.to_array(),
+                        }],
+                        &[rank],
+                        shift,
+                        frames.0,
+                    );
                 }
                 Err(why) => {
                     commands.spawn(bevy_gooey::toast_alert(why).sticky());
@@ -699,45 +843,105 @@ fn report_pick(
         }
     }
 
-    // **The chain follows the pointer while nothing is pressed**, and the wheel moves the pick.
+    // **The stack follows the pointer while nothing is pressed**, and `Tab` or the wheel moves the
+    // pick within it.
     if here.is_none() || world.mouse.pressed(MouseButton::Left) {
         return;
     }
-    open.chain = world.chain();
-    if notches != 0.0 && !open.chain.is_empty() {
-        open.at = if notches > 0.0 {
-            open.at.saturating_sub(1)
-        } else {
-            (open.at + 1).min(open.chain.len() - 1)
-        };
-    } else if open.chain.len() != open.at.saturating_add(1) {
-        // A new chain starts at the innermost node, which is the one under the pointer.
-        open.at = open.chain.len().saturating_sub(1);
+    let stack = world.stack();
+    let front_moved = open.stack.first() != stack.first();
+    open.stack = stack;
+    let len = open.stack.len();
+    let steps = steps_from(&keys, notches);
+    if steps != 0 && len > 0 {
+        // A clamp keeps a long scroll from running off either end.
+        open.at = (open.at as i32 + steps).clamp(0, len as i32 - 1) as usize;
+    } else if front_moved || open.at >= len {
+        // A new stack starts at the node a click would take: the last entry.
+        open.at = len.saturating_sub(1);
     }
     open.hover = open
-        .chain
+        .stack
         .get(open.at)
         .and_then(|e| world.nodes.get(*e).ok())
         .and_then(|(node, tf, ..)| rect_of(node, tf));
 }
 
-/// The subject under `at`, or the sentence saying why there is none.
-fn pick_at_point(at: Vec2, world: &ReportWorld) -> Result<Subject, &'static str> {
-    let chain = world.chain();
-    let floating = chain.iter().any(|e| world.floats(*e));
-    if !floating && in_map_viewport(at, world) {
-        return Ok(scene_at(at, world));
+/// **`Tab` is one step down the stack; `Shift+Tab` and a wheel notch step the other way.**
+///
+/// **A negative answer is one step down** — one index *lower* in [`Open::stack`], which is held
+/// back-to-front, so the last entry is the one a click would take and stepping down walks toward
+/// `[0]`. That is the wheel's own direction, pinned by a standing test: a notch up from a button's
+/// words picks the button that holds them.
+///
+/// Both are read here rather than through [`bevy::input_focus`]'s tab navigation, which this module
+/// also has to keep out of the editor's own widgets while a report is pointing — see
+/// [`report_overlay`], which gives the pointing overlay the focus so `Tab` cycles inside it.
+fn steps_from(keys: &ButtonInput<KeyCode>, notches: f32) -> i32 {
+    let mut steps = 0;
+    if keys.just_pressed(KeyCode::Tab) {
+        steps += if shift_held(keys) { 1 } else { -1 };
     }
-    let Some(picked) = chain.last().copied() else {
+    if notches != 0.0 {
+        steps += if notches > 0.0 { -1 } else { 1 };
+    }
+    steps
+}
+
+/// Is either shift key down? A person reaching for one does not choose which.
+fn shift_held(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight)
+}
+
+/// **The subject under `at`, and the stack entry it came from**, or the sentence saying why there is
+/// none.
+///
+/// `stack` is the one the person has been stepping — `entry` says which of it they settled on, so a
+/// click takes what the outline shows rather than always taking the front-most node.
+///
+/// **An empty stack is a click with no hover frame before it** (a press and release in one place, on
+/// the first frame a report is pointing): the hit test is run here instead, and the answer is the
+/// front-most node, because that is what a click would have taken. Reading the caller's `at` there
+/// would answer with whatever index the last look at a *different* stack left behind — measured
+/// 2026-11-05: every click on the Projects home picked the `Screen`, never the button on it.
+fn pick_at_point(
+    at: Vec2,
+    world: &ReportWorld,
+    stack: &[Entity],
+    entry: usize,
+) -> Result<(Subject, usize), &'static str> {
+    let stepped = !stack.is_empty();
+    let stack = if stepped {
+        stack.to_vec()
+    } else {
+        world.stack()
+    };
+    let floating = stack.iter().any(|e| world.floats(*e));
+    if !floating && in_map_viewport(at, world) {
+        return Ok((scene_at(at, world), NO_FRONT_RANK));
+    }
+    let entry = if stepped {
+        entry.min(stack.len().saturating_sub(1))
+    } else {
+        stack.len().saturating_sub(1)
+    };
+    let Some(picked) = stack.get(entry).copied() else {
         return Err(NOTHING_UNDER_POINTER);
     };
     let (node, tf, ..) = world.nodes.get(picked).map_err(|_| NOTHING_UNDER_POINTER)?;
     let rect_px = rect_of(node, tf).ok_or(NOTHING_UNDER_POINTER)?;
-    Ok(Subject::Element(Element {
-        entity: picked.to_bits(),
-        rect_px,
-        path: chain.iter().map(|e| world.step_of(*e)).collect(),
-    }))
+    Ok((
+        Subject::Element(Element {
+            entity: picked.to_bits(),
+            rect_px,
+            path: world
+                .chain_of(picked)
+                .iter()
+                .map(|e| world.step_of(*e))
+                .collect(),
+        }),
+        entry,
+    ))
 }
 
 /// **Is this a `bevy_gooey` role that floats over the world?** A dialog, menu, tooltip, popover,
@@ -836,14 +1040,34 @@ fn report_escape(
     commands.spawn(bevy_gooey::toast(CANCELLED));
 }
 
-/// **Draw the frozen frame with the pick outlined on it.**
+/// **Draw the frozen frame with what is picked outlined on it, and hold the keyboard inside it.**
 ///
 /// One root, despawned and respawned every frame — the shape `snip_overlay` has, and for the same
 /// reason: the frame a report closes, there is nothing stale left to draw.
+///
+/// # The focus home
+///
+/// **`Tab` means "down the stack" here, and Bevy's own tab navigation must not fight it.**
+/// `bevy_input_focus::tab_navigation::handle_tab_navigation` is an observer on
+/// `FocusedInput<KeyboardInput>`; with nothing focused it reaches the primary window, which has no
+/// `TabGroup`, and **warns on every press**. So the pointing root is given a **modal** `TabGroup` and
+/// a `TabIndex`, and focused. `Tab` then cycles inside the report — this root is its only tabbable
+/// node — so the editor's widgets never see it, while `ButtonInput<KeyCode>` still does, and
+/// [`report_pick`] is what actually moves the pick.
+///
+/// **This reopens `the_sweep_is_finished`'s focus decision, deliberately, and the marker says so.**
+/// That test's note assumes a `TabIndex` is how focus traversal creeps in, and its own condition is
+/// "whatever gains focus must be reachable without a click". This one is: **this system focuses it**
+/// (`focus.set` below) the frame the report starts pointing, and nothing else can — the overlay is
+/// `Pickable::IGNORE`, so a click does not land on it at all, and `report_pick` reads the pointer
+/// itself rather than going through `Hovered`. FVS-R-25's broken case is click-to-focus following the
+/// *window's* cursor, which is a path this overlay does not have. When the report closes the root is
+/// despawned and `bevy_input_focus` clears focus with it, so the editor's routing is untouched.
 fn report_overlay(
     mut commands: Commands,
     report: Res<ReportEdit>,
     ui_scale: Res<UiScale>,
+    mut focus: ResMut<InputFocus>,
     old: Query<Entity, With<ReportOpen>>,
 ) {
     for entity in &old {
@@ -856,88 +1080,143 @@ fn report_overlay(
     let (outline, dragged, hint) = match open.phase {
         Phase::Capturing => return,
         Phase::Note => (open.hover, None, NOTE_HINT),
-        Phase::Picking => (open.hover, open.area, PICK_HINT),
+        Phase::Picking if open.picks.is_empty() => (open.hover, open.area, PICK_HINT),
+        Phase::Picking => (open.hover, open.area, MULTI_HINT),
     };
-    commands
-        .spawn((
-            ReportOpen,
-            ReportPart,
-            Node {
-                // PLACES-ITSELF-OK: the whole frozen frame, drawn over the window rather than in any layout.
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                ..default()
-            },
-            GlobalZIndex(REPORT_Z),
-            Pickable::IGNORE,
-        ))
-        .with_children(|root| {
-            if let Some(frozen) = open.frozen.clone() {
-                root.spawn((
-                    ReportPart,
-                    ImageNode::new(frozen),
-                    Node {
-                        // PLACES-ITSELF-OK: the frozen frame is the layer everything else is placed against.
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    Pickable::IGNORE,
-                ));
-            }
-            // **The outline, and the box being dragged**, drawn the same way: what is outlined is
-            // what will be recorded, and a drag is that answer in the making.
-            for (rect, wash) in [(outline, Color::NONE), (dragged, chrome::SNIP_WASH)] {
-                let Some(rect) = rect else { continue };
-                root.spawn((
-                    ReportPart,
-                    Node {
-                        // PLACES-ITSELF-OK: the outline is placed at the pick over the frozen frame, not in a layout.
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(overlay_px(rect[0])),
-                        top: Val::Px(overlay_px(rect[1])),
-                        width: Val::Px(overlay_px((rect[2] - rect[0]).max(0.0))),
-                        height: Val::Px(overlay_px((rect[3] - rect[1]).max(0.0))),
-                        border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
-                        ..default()
-                    },
-                    BorderColor::all(chrome::ACCENT),
-                    BackgroundColor(wash),
-                    Pickable::IGNORE,
-                ));
-            }
+    // **What has already been taken**, so a person adding a second pick can see the first: a box gets
+    // the same border in the quieter wash, and a point on the map gets a small cross.
+    let taken: Vec<[f32; 4]> = open.picks.iter().filter_map(rect_of_pick).collect();
+    let marks: Vec<Vec2> = open
+        .picks
+        .iter()
+        .filter(|pick| matches!(pick.subject, Subject::Scene(_)))
+        .map(|pick| Vec2::from_array(pick.at))
+        .collect();
+    let mut root = commands.spawn((
+        ReportOpen,
+        ReportPart,
+        Node {
+            // PLACES-ITSELF-OK: the whole frozen frame, drawn over the window rather than in any layout.
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        GlobalZIndex(REPORT_Z),
+        Pickable::IGNORE,
+        // The focus home: see this function's note. Only while pointing, so the note box's field
+        // takes the keyboard the moment it is up.
+        TabGroup::modal(),
+        // FOCUS-DECISION-REOPENED: the report's `Tab` needs a focus home; see this function's note.
+        TabIndex(0),
+    ));
+    let root_id = root.id();
+    root.with_children(|root| {
+        if let Some(frozen) = open.frozen.clone() {
             root.spawn((
                 ReportPart,
-                Text::new(hint.to_owned()),
-                chrome::font(chrome::text::LABEL),
-                TextColor(chrome::TEXT),
-                TextLayout::default().with_no_wrap(),
+                ImageNode::new(frozen),
                 Node {
-                    // PLACES-ITSELF-OK: the hint rides the top edge of the frozen frame, not a panel.
+                    // PLACES-ITSELF-OK: the frozen frame is the layer everything else is placed against.
                     position_type: PositionType::Absolute,
-                    top: Val::Px(chrome::GAP_GROUP),
                     left: Val::Px(0.0),
+                    top: Val::Px(0.0),
                     width: Val::Percent(100.0),
-                    justify_content: JustifyContent::Center,
+                    height: Val::Percent(100.0),
                     ..default()
                 },
                 Pickable::IGNORE,
             ));
-        });
+        }
+        // **The picks already taken, the live outline, and the box being dragged**, drawn the same
+        // way: what is outlined is what will be recorded, and a drag is that answer in the making.
+        let boxes = taken
+            .into_iter()
+            .map(|rect| (Some(rect), chrome::wash_at(chrome::SNIP_WASH, PICK_TAKEN_SHARE)))
+            .chain([(outline, Color::NONE), (dragged, chrome::SNIP_WASH)]);
+        for (rect, wash) in boxes {
+            let Some(rect) = rect else { continue };
+            root.spawn((
+                ReportPart,
+                Node {
+                    // PLACES-ITSELF-OK: the outline is placed at the pick over the frozen frame, not in a layout.
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(overlay_px(rect[0])),
+                    top: Val::Px(overlay_px(rect[1])),
+                    width: Val::Px(overlay_px((rect[2] - rect[0]).max(0.0))),
+                    height: Val::Px(overlay_px((rect[3] - rect[1]).max(0.0))),
+                    border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
+                    ..default()
+                },
+                BorderColor::all(chrome::ACCENT),
+                BackgroundColor(wash),
+                Pickable::IGNORE,
+            ));
+        }
+        for at in marks {
+            let arm = overlay_px(TAKEN_MARK_ARM_PX);
+            root.spawn((
+                ReportPart,
+                Node {
+                    // PLACES-ITSELF-OK: a mark sits on its own pixel of the frozen frame.
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(overlay_px(at.x) - arm),
+                    top: Val::Px(overlay_px(at.y) - arm * 0.2),
+                    width: Val::Px(arm * 2.0),
+                    height: Val::Px(arm * 0.4),
+                    ..default()
+                },
+                BackgroundColor(chrome::ACCENT),
+                Pickable::IGNORE,
+            ));
+            root.spawn((
+                ReportPart,
+                Node {
+                    // PLACES-ITSELF-OK: the cross's other arm, on the same pixel.
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(overlay_px(at.x) - arm * 0.2),
+                    top: Val::Px(overlay_px(at.y) - arm),
+                    width: Val::Px(arm * 0.4),
+                    height: Val::Px(arm * 2.0),
+                    ..default()
+                },
+                BackgroundColor(chrome::ACCENT),
+                Pickable::IGNORE,
+            ));
+        }
+        root.spawn((
+            ReportPart,
+            Text::new(hint.to_owned()),
+            chrome::font(chrome::text::LABEL),
+            TextColor(chrome::TEXT),
+            TextLayout::default().with_no_wrap(),
+            Node {
+                // PLACES-ITSELF-OK: the hint rides the top edge of the frozen frame, not a panel.
+                position_type: PositionType::Absolute,
+                top: Val::Px(chrome::GAP_GROUP),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            Pickable::IGNORE,
+        ));
+    });
+    // **Focus the root while pointing**, so `Tab` cycles inside the report rather than warning on the
+    // window and reaching the editor's own widgets.
+    if open.phase == Phase::Picking && focus.get() != Some(root_id) {
+        focus.set(root_id, bevy::input_focus::FocusCause::Navigated);
+    }
 }
 
-/// **What a person is about to report, in one line**, so the note box says what Save will record.
-pub fn subject_line(subject: &Subject) -> String {
+/// **What one pick is, in words**, without the "Picked: " a whole line would repeat.
+fn pick_words(subject: &Subject) -> String {
     match subject {
-        Subject::Screen => "Picked: the whole screen".to_owned(),
+        Subject::Screen => "the whole screen".to_owned(),
         Subject::Area { rect_px } => format!(
-            "Picked: an area {:.0} × {:.0}",
+            "an area {:.0} × {:.0}",
             (rect_px[2] - rect_px[0]).max(0.0),
             (rect_px[3] - rect_px[1]).max(0.0)
         ),
@@ -957,7 +1236,7 @@ pub fn subject_line(subject: &Subject) -> String {
                 .iter()
                 .filter_map(|step| step.role.as_deref().or(step.name.as_deref()))
                 .collect();
-            format!("Picked: {} ({})", what, trail.join(" › "))
+            format!("{} ({})", what, trail.join(" › "))
         }
         Subject::Scene(scene) => {
             let cell = scene
@@ -965,14 +1244,80 @@ pub fn subject_line(subject: &Subject) -> String {
                 .map(|c| format!(", cell ({}, {})", c[0], c[1]))
                 .unwrap_or_default();
             match &scene.placement {
-                Some(id) => format!("Picked: placed piece `{id}`{cell}"),
+                Some(id) => format!("placed piece `{id}`{cell}"),
                 None => format!(
-                    "Picked: the map at {:.1}, {:.1}{cell}",
+                    "the map at {:.1}, {:.1}{cell}",
                     scene.world[0], scene.world[2]
                 ),
             }
         }
     }
+}
+
+/// **What a person is about to report, in one line**, so the note box says what Save will record.
+///
+/// One pick reads `Picked: <what>`. Two read `Picked: <a> + <b>`, which is how a person says the
+/// relation out loud. Three or more read `Picked 3 things: <a>, <b>, <c>`. The whole line is capped
+/// at [`PICKS_LINE_CAP`] characters, so a dozen picks cannot grow the note box a paragraph.
+pub fn picks_line(picks: &[Pick]) -> String {
+    let line = match picks {
+        [] => "Picked: nothing".to_owned(),
+        [one] => format!("Picked: {}", pick_words(&one.subject)),
+        [a, b] => format!(
+            "Picked: {} + {}",
+            pick_words(&a.subject),
+            pick_words(&b.subject)
+        ),
+        many => {
+            let each: Vec<String> = many.iter().map(|p| pick_words(&p.subject)).collect();
+            format!("Picked {} things: {}", many.len(), each.join(", "))
+        }
+    };
+    if line.chars().count() <= PICKS_LINE_CAP {
+        return line;
+    }
+    // Cut on a character boundary and say so, rather than ending mid-word with no sign it happened.
+    let mut cut: String = line.chars().take(PICKS_LINE_CAP.saturating_sub(1)).collect();
+    cut.push('…');
+    cut
+}
+
+/// **How two picks sit against each other, in the words the note box shows** — the relation, which
+/// pick is which, and the number an agent would act on.
+///
+/// Picks are named by their index in the order they were made, counting from 0, which is the same
+/// number the record's `relations` carries.
+pub fn relation_line(pair: &Pair) -> String {
+    let (a, b) = (pair.a, pair.b);
+    match pair.kind {
+        PairKind::Contains => format!("contains: {a} and {b}, one inside the other"),
+        PairKind::Overlaps => {
+            // The one in front is `pair.front`; the other is the one it covers.
+            let behind = if pair.front == a { b } else { a };
+            format!(
+                "overlaps: {} over {behind} by {} px²",
+                pair.front,
+                thousands(pair.overlap_px2)
+            )
+        }
+        PairKind::Touches => format!("touches: {a} and {b} meet at an edge"),
+        PairKind::Apart => format!("apart: {a} and {b} share nothing"),
+    }
+}
+
+/// **`4312.0` as `4 312`**: a count of pixels read at a glance, with the separator a person groups
+/// digits by rather than a machine's. Rounded, because a fraction of a pixel is not a fact.
+fn thousands(area: f32) -> String {
+    let whole = area.round().max(0.0) as u64;
+    let digits = whole.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(' ');
+        }
+        out.push(ch);
+    }
+    out
 }
 
 /// **The note box: a gooey dialog**, so Escape is its `Cancel` and the keyboard is held inside it
@@ -1003,14 +1348,19 @@ fn report_box(
     if !boxes.is_empty() {
         return;
     }
-    let (Some(subject), Some(audience)) = (report.subject(), report.audience()) else {
+    let Some(audience) = report.audience() else {
         return;
     };
+    let picks = report.picks();
+    if picks.is_empty() {
+        return;
+    }
+    let relations = report.relations();
     let heading = match audience {
         Audience::Developers => "Report to those who make Cauldron",
         Audience::Project => "Report about this project",
     };
-    let line = subject_line(subject);
+    let line = picks_line(picks);
     commands
         .spawn((
             // **`dialog()` carries `GlobalZIndex(100)` of its own**, and a bundle with one twice is a
@@ -1042,6 +1392,11 @@ fn report_box(
                 .with_children(|card| {
                     card.spawn(bevy_gooey::heading(heading));
                     card.spawn(bevy_gooey::label(line));
+                    // **The relation, worked out and stated, never asked.** A person's only decision is
+                    // the sentence they type; what the boxes do to each other is geometry.
+                    for pair in &relations {
+                        card.spawn(bevy_gooey::label(relation_line(pair)));
+                    }
                     card.spawn((
                         bevy_gooey::text_area("What is wrong", "", 6),
                         bevy::input_focus::AutoFocus,
@@ -1115,9 +1470,9 @@ fn save(report: &mut ReportEdit, world: &mut World) {
     let Some(open) = report.open.as_ref() else {
         return;
     };
-    let Some(subject) = open.subject.clone() else {
+    if open.picks.is_empty() {
         return;
-    };
+    }
     let dir = match open.audience {
         Audience::Developers => match bevy_grimoire_core::user_dirs::feedback_dir() {
             Some(dir) => dir,
@@ -1135,16 +1490,39 @@ fn save(report: &mut ReportEdit, world: &mut World) {
 
     let stem = feedback::stem(open.taken_at_ms);
     let (w, h) = whole.dimensions();
+    let picks = open.picks.clone();
+    let relations = feedback::pairs(&picks, &open.rects(), &open.front);
     let mut marked = whole.clone();
-    match &subject {
-        Subject::Element(element) => draw_outline(&mut marked, element.rect_px),
-        Subject::Area { rect_px } => draw_outline(&mut marked, *rect_px),
-        Subject::Scene(_) => {
-            if let Some(at) = open.mark {
-                draw_mark(&mut marked, at);
-            }
+    // **The wash first, then the outlines**, so an overlap reads as the place two boxes share rather
+    // than as a border drawn over a tint. This is the thing that makes "the label is under the view"
+    // legible in one glance.
+    for pair in &relations {
+        if pair.kind != PairKind::Overlaps {
+            continue;
         }
-        Subject::Screen => {}
+        let (Some(ra), Some(rb)) = (rect_of_pick(&picks[pair.a]), rect_of_pick(&picks[pair.b]))
+        else {
+            continue;
+        };
+        if let Some(shared) = feedback::overlap_rect(ra, rb) {
+            draw_wash(&mut marked, shared, accent_rgb(), OVERLAP_ALPHA);
+        }
+    }
+    // **The newest pick in the danger colour, every earlier one in the accent**, so a person who
+    // added three can tell which one they just made. A scene pick has no rectangle: its cross sits
+    // where the pointer was.
+    for (i, pick) in picks.iter().enumerate() {
+        let colour = if i + 1 == picks.len() {
+            danger_rgb()
+        } else {
+            accent_rgb()
+        };
+        match &pick.subject {
+            Subject::Element(element) => draw_outline(&mut marked, element.rect_px, colour),
+            Subject::Area { rect_px } => draw_outline(&mut marked, *rect_px, colour),
+            Subject::Scene(_) => draw_mark(&mut marked, Vec2::from_array(pick.at), colour),
+            Subject::Screen => {}
+        }
     }
 
     let mut writes: Vec<(PathBuf, Vec<u8>)> = Vec::new();
@@ -1153,14 +1531,15 @@ fn save(report: &mut ReportEdit, world: &mut World) {
         Err(why) => return refuse(report, world, &why),
     }
     // **A whole-screen report has one picture**, because the second would be the first.
-    let subject_picture = if subject == Subject::Screen {
+    let whole_screen = picks.len() == 1 && picks[0].subject == Subject::Screen;
+    let picks_picture = if whole_screen {
         None
     } else {
         match encode_png(&marked) {
             Ok(bytes) => {
-                writes.push((dir.join(feedback::subject_picture_file(&stem)), bytes));
+                writes.push((dir.join(feedback::picks_picture_file(&stem)), bytes));
                 Some(Picture {
-                    file: feedback::subject_picture_file(&stem),
+                    file: feedback::picks_picture_file(&stem),
                     size: [w, h],
                 })
             }
@@ -1183,13 +1562,14 @@ fn save(report: &mut ReportEdit, world: &mut World) {
         map: open.map.clone(),
         tool: open.tool.clone(),
         window: open.window,
-        subject,
+        picks,
+        relations,
         note: open.note.clone(),
         picture: Picture {
             file: feedback::picture_file(&stem),
             size: [w, h],
         },
-        subject_picture,
+        picks_picture,
         log: log
             .as_ref()
             .and_then(|(path, _)| path.file_name().map(|n| n.to_string_lossy().into_owned())),
@@ -1258,10 +1638,10 @@ fn encode_png(image: &image::RgbaImage) -> Result<Vec<u8>, String> {
     Ok(out.into_inner())
 }
 
-/// **A border round `rect`, in [`chrome::ACCENT`], with a white hairline just inside it** — so the
-/// outline reads on a dark panel and on a light one, and a reader who opens the picture sees the same
-/// rectangle the person was pointing at.
-fn draw_outline(image: &mut image::RgbaImage, rect: [f32; 4]) {
+/// **A border round `rect` in `colour`, with a white hairline just inside it** — so the outline reads
+/// on a dark panel and on a light one, and a reader who opens the picture sees the same rectangle the
+/// person was pointing at.
+fn draw_outline(image: &mut image::RgbaImage, rect: [f32; 4], colour: [u8; 4]) {
     let (w, h) = image.dimensions();
     let clamp_x = |x: f32| x.round().clamp(0.0, w as f32) as u32;
     let clamp_y = |y: f32| y.round().clamp(0.0, h as f32) as u32;
@@ -1269,10 +1649,9 @@ fn draw_outline(image: &mut image::RgbaImage, rect: [f32; 4]) {
     let y0 = clamp_y(rect[1]);
     let x1 = clamp_x(rect[2]).max(x0);
     let y1 = clamp_y(rect[3]).max(y0);
-    let accent = accent_rgb();
     for band in 0..OUTLINE_W + OUTLINE_INNER_W {
         let colour = if band < OUTLINE_W {
-            accent
+            colour
         } else {
             [255, 255, 255, 255]
         };
@@ -1294,13 +1673,12 @@ fn draw_outline(image: &mut image::RgbaImage, rect: [f32; 4]) {
     }
 }
 
-/// A two-armed cross at `at`, in the accent — how a report says "here" about a point in the world,
+/// **A two-armed cross at `at`**, in `colour` — how a report says "here" about a point in the world,
 /// where there is no rectangle to outline.
-fn draw_mark(image: &mut image::RgbaImage, at: Vec2) {
+fn draw_mark(image: &mut image::RgbaImage, at: Vec2, colour: [u8; 4]) {
     let (w, h) = image.dimensions();
     let cx = at.x.round().clamp(0.0, w as f32) as i32;
     let cy = at.y.round().clamp(0.0, h as f32) as i32;
-    let colour = accent_rgb();
     for d in -MARK_ARM_PX..=MARK_ARM_PX {
         put_signed(image, cx + d, cy, colour);
         put_signed(image, cx, cy + d, colour);
@@ -1309,13 +1687,55 @@ fn draw_mark(image: &mut image::RgbaImage, at: Vec2) {
 
 /// The accent as RGBA8, so the picture's outline and the on-screen outline are the same colour.
 fn accent_rgb() -> [u8; 4] {
-    let accent = bevy::color::Srgba::from(chrome::ACCENT);
+    rgba8(chrome::ACCENT)
+}
+
+/// **[`chrome::DANGER`] as RGBA8**, for the newest pick: the same red the interface uses for "wrong",
+/// so a person opening the picture finds the thing they added last.
+fn danger_rgb() -> [u8; 4] {
+    rgba8(chrome::DANGER)
+}
+
+/// A chrome colour as opaque RGBA8.
+fn rgba8(colour: Color) -> [u8; 4] {
+    let colour = bevy::color::Srgba::from(colour);
     [
-        (accent.red * 255.0).round() as u8,
-        (accent.green * 255.0).round() as u8,
-        (accent.blue * 255.0).round() as u8,
+        (colour.red * 255.0).round() as u8,
+        (colour.green * 255.0).round() as u8,
+        (colour.blue * 255.0).round() as u8,
         255,
     ]
+}
+
+/// **A translucent wash over `rect`**, blended over the pixels already there at `alpha` (0–255).
+///
+/// The overlap between two picks is the one thing a single-pick record could never show, so it is
+/// drawn rather than described: where two boxes share pixels, the shared box is tinted.
+fn draw_wash(image: &mut image::RgbaImage, rect: [f32; 4], colour: [u8; 4], alpha: u8) {
+    if alpha == 0 {
+        return;
+    }
+    let (w, h) = image.dimensions();
+    let clamp_x = |x: f32| x.round().clamp(0.0, w as f32) as u32;
+    let clamp_y = |y: f32| y.round().clamp(0.0, h as f32) as u32;
+    let x0 = clamp_x(rect[0]);
+    let y0 = clamp_y(rect[1]);
+    let x1 = clamp_x(rect[2]).max(x0);
+    let y1 = clamp_y(rect[3]).max(y0);
+    let a = f32::from(alpha) / 255.0;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let under = image.get_pixel(x, y).0;
+            let blend = |i: usize| {
+                (f32::from(colour[i]) * a + f32::from(under[i]) * (1.0 - a)).round() as u8
+            };
+            image.put_pixel(
+                x,
+                y,
+                image::Rgba([blend(0), blend(1), blend(2), under[3].max(alpha)]),
+            );
+        }
+    }
 }
 
 fn put(image: &mut image::RgbaImage, x: u32, y: u32, colour: [u8; 4]) {
@@ -1432,18 +1852,29 @@ mod tests {
         );
     }
 
-    /// Every subject says what it is in one line, so the note box names what Save will record.
+    fn pick(subject: Subject) -> Pick {
+        Pick {
+            subject,
+            at: [0.0, 0.0],
+        }
+    }
+
+    /// **A subject says what it is, and several say what they are together**, so the note box names
+    /// what Save will record without a person having to remember what they clicked.
     #[test]
     fn every_subject_reads_as_a_line() {
-        assert_eq!(subject_line(&Subject::Screen), "Picked: the whole screen");
         assert_eq!(
-            subject_line(&Subject::Area {
+            picks_line(&[pick(Subject::Screen)]),
+            "Picked: the whole screen"
+        );
+        assert_eq!(
+            picks_line(&[pick(Subject::Area {
                 rect_px: [0.0, 0.0, 220.0, 140.0]
-            }),
+            })]),
             "Picked: an area 220 × 140"
         );
         assert_eq!(
-            subject_line(&scene_subject()),
+            picks_line(&[pick(scene_subject())]),
             "Picked: placed piece `chair_3`, cell (1, 2)"
         );
         let element = Subject::Element(Element {
@@ -1464,15 +1895,100 @@ mod tests {
                 },
             ],
         });
-        assert_eq!(subject_line(&element), "Picked: Save (Panel › Button)");
+        assert_eq!(
+            picks_line(&[pick(element.clone())]),
+            "Picked: Save (Panel › Button)"
+        );
+        // **Two picks are joined with a `+`**, which is how a person says the relation out loud;
+        // three or more are counted, because a list of a dozen does not fit a box.
+        assert_eq!(
+            picks_line(&[
+                pick(element.clone()),
+                pick(Subject::Area {
+                    rect_px: [0.0, 0.0, 220.0, 140.0]
+                }),
+            ]),
+            "Picked: Save (Panel › Button) + an area 220 × 140"
+        );
+        let three = picks_line(&[
+            pick(element.clone()),
+            pick(element.clone()),
+            pick(Subject::Screen),
+        ]);
+        assert!(three.starts_with("Picked 3 things: "), "{three}");
+        assert!(three.contains("the whole screen"), "{three}");
+        assert!(picks_line(&[]).starts_with("Picked: "), "an empty list still answers");
     }
 
-    /// **The outline lands where the rectangle is, in the accent**, so a reader who opens the second
-    /// picture sees the same box the person was pointing at — and nothing inside it.
+    /// **The line is capped**, so a report of a dozen picks cannot grow the note box a paragraph: the
+    /// cap cuts on a character boundary and leaves a mark that it did.
+    #[test]
+    fn a_picks_line_is_capped() {
+        let many: Vec<Pick> = (0..40)
+            .map(|_| {
+                pick(Subject::Area {
+                    rect_px: [0.0, 0.0, 220.0, 140.0],
+                })
+            })
+            .collect();
+        let line = picks_line(&many);
+        assert_eq!(line.chars().count(), PICKS_LINE_CAP, "{line}");
+        assert!(line.ends_with('…'), "the cut says so: {line}");
+    }
+
+    /// **A relation is stated, not asked**: the note box says which picks and how many pixels, and the
+    /// one in front is named as `over`, so "this label is under the viewport" reads off the box.
+    #[test]
+    fn a_relation_reads_as_a_sentence() {
+        let overlap = Pair {
+            a: 0,
+            b: 1,
+            kind: PairKind::Overlaps,
+            overlap_px2: 4312.0,
+            front: 1,
+        };
+        assert_eq!(relation_line(&overlap), "overlaps: 1 over 0 by 4 312 px²");
+        let contains = Pair {
+            kind: PairKind::Contains,
+            ..overlap
+        };
+        assert_eq!(
+            relation_line(&contains),
+            "contains: 0 and 1, one inside the other"
+        );
+        let touches = Pair {
+            kind: PairKind::Touches,
+            overlap_px2: 0.0,
+            ..overlap
+        };
+        assert_eq!(
+            relation_line(&touches),
+            "touches: 0 and 1 meet at an edge"
+        );
+        let apart = Pair {
+            kind: PairKind::Apart,
+            overlap_px2: 0.0,
+            ..overlap
+        };
+        assert_eq!(relation_line(&apart), "apart: 0 and 1 share nothing");
+    }
+
+    /// A count of pixels is grouped the way a person reads digits, and a fraction is not a fact.
+    #[test]
+    fn an_area_is_grouped_by_thousands() {
+        assert_eq!(thousands(0.0), "0");
+        assert_eq!(thousands(999.4), "999");
+        assert_eq!(thousands(1000.0), "1 000");
+        assert_eq!(thousands(4312.4), "4 312");
+        assert_eq!(thousands(1_234_567.0), "1 234 567");
+    }
+
+    /// **The outline lands where the rectangle is, in the colour asked for**, so a reader who opens
+    /// the picture sees the same box the person was pointing at — and nothing inside it.
     #[test]
     fn the_outline_is_drawn_where_the_rectangle_is() {
         let mut picture = image::RgbaImage::from_pixel(64, 48, image::Rgba([0, 0, 0, 255]));
-        draw_outline(&mut picture, [10.0, 8.0, 40.0, 30.0]);
+        draw_outline(&mut picture, [10.0, 8.0, 40.0, 30.0], accent_rgb());
         let accent = accent_rgb();
         assert_eq!(picture.get_pixel(10, 8).0, accent, "the top-left corner");
         assert_eq!(picture.get_pixel(39, 8).0, accent, "the top edge");
@@ -1484,13 +2000,35 @@ mod tests {
         );
         // The white hairline is the last band, one pixel in from the accent.
         assert_eq!(picture.get_pixel(10 + OUTLINE_W, 8 + OUTLINE_W).0, [255, 255, 255, 255]);
+
+        // **The newest pick is the danger colour**, so a person who added three can find the last.
+        let mut picture = image::RgbaImage::from_pixel(64, 48, image::Rgba([0, 0, 0, 255]));
+        draw_outline(&mut picture, [10.0, 8.0, 40.0, 30.0], danger_rgb());
+        assert_eq!(picture.get_pixel(10, 8).0, danger_rgb());
+        assert_ne!(danger_rgb(), accent_rgb(), "the two read as different colours");
     }
 
-    /// A scene has no rectangle, so its mark is a cross at the point.
+    /// **The wash tints the shared box and nothing outside it**, so the place two picks overlap is
+    /// the one part of the picture that changed.
+    #[test]
+    fn an_overlap_is_washed_where_the_two_share() {
+        let mut picture = image::RgbaImage::from_pixel(32, 32, image::Rgba([0, 0, 0, 255]));
+        draw_wash(&mut picture, [8.0, 8.0, 16.0, 16.0], accent_rgb(), OVERLAP_ALPHA);
+        let washed = picture.get_pixel(10, 10).0;
+        assert_ne!(washed, [0, 0, 0, 255], "the shared box is tinted");
+        assert_eq!(picture.get_pixel(4, 4).0, [0, 0, 0, 255], "outside it is not");
+        assert_eq!(picture.get_pixel(16, 16).0, [0, 0, 0, 255], "the far edge is outside");
+        // A zero alpha is no wash at all, and never a panic.
+        let mut untouched = picture.clone();
+        draw_wash(&mut untouched, [0.0, 0.0, 32.0, 32.0], accent_rgb(), 0);
+        assert_eq!(untouched, picture);
+    }
+
+    /// A scene has no rectangle, so its mark is a cross at the point — in the colour it was given.
     #[test]
     fn a_scene_is_marked_at_the_point() {
         let mut picture = image::RgbaImage::from_pixel(64, 48, image::Rgba([0, 0, 0, 255]));
-        draw_mark(&mut picture, Vec2::new(32.0, 24.0));
+        draw_mark(&mut picture, Vec2::new(32.0, 24.0), accent_rgb());
         let accent = accent_rgb();
         assert_eq!(picture.get_pixel(32, 24).0, accent, "the point");
         assert_eq!(picture.get_pixel(32 - 10, 24).0, accent, "the arm");

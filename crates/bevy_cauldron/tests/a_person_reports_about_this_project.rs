@@ -122,6 +122,18 @@ fn pixel_over(app: &mut App, at: (f32, f32)) -> Vec2 {
         .unwrap_or_else(|e| panic!("the piece is not on screen: {e:?}"))
 }
 
+/// **The subject of the one pick a plain click makes**, which is what every gesture test here is
+/// about. A report that accumulated several would say so by having more than one.
+fn one_pick(report: &ReportEdit) -> Option<Subject> {
+    let picks = report.picks();
+    assert_eq!(
+        picks.len(),
+        1,
+        "a plain click picks one thing, and this test means one: {picks:?}"
+    );
+    picks.first().map(|pick| pick.subject.clone())
+}
+
 /// Press and release in one place.
 fn click_at(app: &mut App, at: Vec2) {
     step(
@@ -167,8 +179,8 @@ fn a_click_on_the_map_picks_the_piece_there() {
     click_at(&mut app, at);
     let report = app.world().resource::<ReportEdit>();
     assert_eq!(report.phase(), Some(Phase::Note), "the click picks a subject");
-    let Some(Subject::Scene(scene)) = report.subject() else {
-        panic!("a click on the map picks the scene, got {:?}", report.subject());
+    let Some(Subject::Scene(scene)) = one_pick(report) else {
+        panic!("a click on the map picks the scene, got {:?}", report.picks());
     };
     let placed = app
         .world()
@@ -222,8 +234,8 @@ fn a_click_on_empty_ground_picks_the_scene_with_no_piece() {
     );
     click_at(&mut app, at);
     let report = app.world().resource::<ReportEdit>();
-    let Some(Subject::Scene(scene)) = report.subject() else {
-        panic!("the map is the scene, got {:?}", report.subject());
+    let Some(Subject::Scene(scene)) = one_pick(report) else {
+        panic!("the map is the scene, got {:?}", report.picks());
     };
     assert!(
         scene.placement.is_none(),
@@ -262,10 +274,10 @@ fn a_dialog_over_the_map_is_interface() {
     );
     click_at(&mut app, at);
     let report = app.world().resource::<ReportEdit>();
-    let Some(Subject::Element(element)) = report.subject() else {
+    let Some(Subject::Element(element)) = one_pick(report) else {
         panic!(
             "a dialog over the map is interface, got {:?}",
-            report.subject()
+            report.picks()
         );
     };
     assert!(

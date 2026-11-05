@@ -201,23 +201,23 @@ A `Fire` standing on a placement draws the crate's flame and the light the pool 
 
 | | |
 |---|---|
-| Where | `target/feedback/`, under the project root. One report is `feedback-<ms>.png` (the whole screen), `feedback-<ms>_subject.png` (the same screen with the thing that was picked outlined), `feedback-<ms>.json` (the record) and, when the editor has a log, `feedback-<ms>.log` (its tail). |
-| What it holds | What a person pointed at and what they said was wrong about it, taken with Cmd+Shift+D. |
+| Where | `target/feedback/`, under the project root. One report is `feedback-<ms>.png` (the whole screen), `feedback-<ms>_picks.png` (the same screen with every pick outlined and every overlap between two washed), `feedback-<ms>.json` (the record) and, when the editor has a log, `feedback-<ms>.log` (its tail). |
+| What it holds | Every thing a person pointed at, the relation between each two of them (contains, overlaps, touches or apart, the overlap in square pixels, and which is drawn in front), and what they said was wrong, taken with Cmd+Shift+D. |
 | Written by | The editor, `create_new`, never overwritten. |
 | Live reload | No. |
 | Read by | `grimoire_project_feedback_list`, which needs `--project`. Nothing in the project. The game does not read it. |
-| Format version | 1, in the record's `version`. |
+| Format version | 2, in the record's `version`. A record from another version is named by the reader, not converted. |
 
 ## Feedback reports about the editor
 
 | | |
 |---|---|
 | Where | `<data_dir>/Grimoire/feedback/`, the same four files under the same names. `~/.local/share/Grimoire/feedback/` on Linux, `~/Library/Application Support/Grimoire/feedback/` on macOS. |
-| What it holds | What a person pointed at and what they said was wrong about Cauldron itself, taken with Cmd+D. |
+| What it holds | Every thing a person pointed at, the relation between each two of them, and what they said was wrong about Cauldron itself, taken with Cmd+D. |
 | Written by | The editor, `create_new`, never overwritten. |
 | Live reload | No. |
 | Read by | `grimoire_feedback_list`, which needs no `--project`. |
-| Format version | 1, in the record's `version`. |
+| Format version | 2, in the record's `version`. A record from another version is named by the reader, not converted. |
 
 ## recent.ron
 

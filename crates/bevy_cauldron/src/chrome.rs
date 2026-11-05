@@ -323,6 +323,19 @@ pub const SNIP_EDGE_W: f32 = 3.0;
 /// reads. At 0.08 it was too faint to find; 0.28 is a clear amber tint without hiding the pieces.
 pub const SNIP_WASH: Color = Color::srgba(0.950, 0.710, 0.300, 0.28);
 
+/// **A wash at `share` of a named colour's own strength**: [`SNIP_WASH`] at `0.5` is the quieter tint
+/// a report draws over a pick it has already taken, so a person adding a second can tell which is the
+/// decision already made and which is the one being made now.
+///
+/// Derived rather than declared, because a second colour constant beside the first is the duplicate
+/// this table already had once (`the_colour_table_only_shrinks` counts them, and it only shrinks).
+pub fn wash_at(colour: Color, share: f32) -> Color {
+    match colour {
+        Color::Srgba(srgba) => Color::srgba(srgba.red, srgba.green, srgba.blue, srgba.alpha * share),
+        other => other,
+    }
+}
+
 /// **A surface-pixel coordinate as the overlay's `Val::Px`.**
 ///
 /// The layout multiplies `Val::Px` by [`UiScale`](bevy::ui::UiScale), so an overlay drawing a

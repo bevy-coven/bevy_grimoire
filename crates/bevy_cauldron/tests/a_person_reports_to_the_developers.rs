@@ -22,7 +22,7 @@ use bevy_cauldron::keys::MOD_KEYS;
 use bevy_cauldron::launcher::LauncherPlugin;
 use bevy_cauldron::report::{Phase, ReportBox, ReportEdit, ReportOpen};
 use bevy_cauldron::screen::Screen;
-use bevy_grimoire_core::feedback::{Audience, Subject};
+use bevy_grimoire_core::feedback::{Audience, PairKind, Subject};
 
 use crate::fixtures;
 
@@ -149,6 +149,17 @@ fn centre_of(app: &mut App, label: &str) -> Vec2 {
     at.translation
 }
 
+/// **The subject of the one pick a plain click makes**, which is all these gesture tests are about.
+fn one_pick(report: &ReportEdit) -> Option<Subject> {
+    let picks = report.picks();
+    assert_eq!(
+        picks.len(),
+        1,
+        "a plain click picks one thing, and this test means one: {picks:?}"
+    );
+    picks.first().map(|pick| pick.subject.clone())
+}
+
 /// Press and release the button in one place: a click, which picks what is under it.
 fn click_at(app: &mut App, at: Vec2) {
     step(
@@ -225,8 +236,8 @@ fn a_click_picks_the_button_under_the_pointer() {
 
     let report = app.world().resource::<ReportEdit>();
     assert_eq!(report.phase(), Some(Phase::Note), "the click picks a subject");
-    let Some(Subject::Element(element)) = report.subject() else {
-        panic!("a click on a button picks a node, got {:?}", report.subject());
+    let Some(Subject::Element(element)) = one_pick(report) else {
+        panic!("a click on a button picks a node, got {:?}", report.picks());
     };
     let last = element.path.last().expect("the chain has a step");
     assert_eq!(
@@ -343,8 +354,8 @@ fn a_drag_picks_an_area_and_enter_takes_the_whole_screen() {
         },
     );
     let report = app.world().resource::<ReportEdit>();
-    let Some(Subject::Area { rect_px }) = report.subject() else {
-        panic!("a drag picks a box, got {:?}", report.subject());
+    let Some(Subject::Area { rect_px }) = one_pick(report) else {
+        panic!("a drag picks a box, got {:?}", report.picks());
     };
     assert!(
         (rect_px[0] - from.x).abs() < 2.0
@@ -365,8 +376,8 @@ fn a_drag_picks_an_area_and_enter_takes_the_whole_screen() {
     press_cmd_d(&mut app, false);
     tap(&mut app, Key::Enter, KeyCode::Enter);
     assert_eq!(
-        app.world().resource::<ReportEdit>().subject(),
-        Some(&Subject::Screen),
+        one_pick(app.world().resource::<ReportEdit>()),
+        Some(Subject::Screen),
         "Enter with nothing picked is the whole screen"
     );
 }
@@ -560,5 +571,265 @@ fn the_report_draws_over_everything() {
     assert_eq!(
         boxes, 0,
         "the note box is not up while the person is pointing"
+    );
+}
+
+/// **`Tab` steps down the stack to the node behind the pointer.**
+///
+/// The bug this exists for: the wheel used to walk the *ancestor chain* of the topmost hit node. An
+/// overlapping label is usually a **sibling** of what covers it, so no ancestor walk can reach it —
+/// there is nowhere on screen where only the label is under the cursor. Two absolutely-positioned
+/// siblings with the same rectangle and different `GlobalZIndex` are that shape in miniature: only the
+/// front one is a click, and only `Tab` can reach the one behind it.
+#[test]
+fn tab_steps_down_the_stack_to_the_node_behind_the_pointer() {
+    let mut app = home("report_stack");
+    let at = centre_of(&mut app, "New project");
+    // Two nodes over the same pixels. The second is in front, so it is what a click takes.
+    //
+    // **Full-window, not a small box at `at`.** `Pointer` and `ComputedNode` are in *physical* surface
+    // pixels while `Val::Px` is logical, and the editor runs at a UI scale of 1.2 — a box placed at
+    // `at.x - 40` lands ~20% away from the pointer and the test then asserts about whatever node
+    // really was under it. A filled layer is under the pointer wherever it is, which is the case this
+    // test is about: two siblings that share their rectangle exactly.
+    let covering = |z: i32, name: &str| {
+        (
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            Name::new(name.to_owned()),
+            GlobalZIndex(z),
+        )
+    };
+    let behind = app.world_mut().spawn(covering(1, "behind")).id();
+    let front = app.world_mut().spawn(covering(2, "in front")).id();
+    for _ in 0..3 {
+        app.update();
+    }
+
+    press_cmd_d(&mut app, false);
+    // Hover first: the stack is built while nothing is pressed.
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(at),
+            ..default()
+        },
+    );
+    let (before, len) = app
+        .world()
+        .resource::<ReportEdit>()
+        .picked_step()
+        .expect("the pointer is over a stack");
+    assert!(len >= 2, "both nodes are under the pointer: {len}");
+    let picked_before = app
+        .world()
+        .resource::<ReportEdit>()
+        .picked_entity()
+        .expect("a stack with an entry has a picked entity");
+    assert_eq!(
+        picked_before, front,
+        "the front-most node is what a click would take"
+    );
+
+    // **The pointer is on the frame the key arrives**, as a hand holds it: `report_pick` answers
+    // about the stack under the pointer, so a frame with no pointer has no stack to step.
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(at),
+            keys: vec![KeyCode::Tab],
+            ..default()
+        },
+    );
+    let (after, len_after) = app
+        .world()
+        .resource::<ReportEdit>()
+        .picked_step()
+        .expect("the stack is still there");
+    assert_eq!(len_after, len, "the same stack");
+    assert!(
+        after < before,
+        "`Tab` steps down the held stack, toward the back: {before} became {after}"
+    );
+    assert_eq!(
+        app.world()
+            .resource::<ReportEdit>()
+            .picked_entity(),
+        Some(behind),
+        "and the outlined node is the one behind"
+    );
+}
+
+/// **A shift-click adds a second pick, and Enter finishes**: the record carries both, and the note
+/// box says how they sit against each other.
+///
+/// This is the whole reason for the feature: "this label is under the viewport" is a fact about two
+/// elements, and a record that holds one makes a person file two reports and describe the relation in
+/// prose.
+#[test]
+fn shift_click_adds_a_second_pick_and_enter_finishes() {
+    let mut app = home("report_multi");
+    let first = centre_of(&mut app, "New project");
+    press_cmd_d(&mut app, false);
+
+    click_at(&mut app, first);
+    assert_eq!(
+        app.world().resource::<ReportEdit>().phase(),
+        Some(Phase::Note),
+        "a plain click finishes the pick, as it always did"
+    );
+    // Back to pointing, so a second can be added.
+    tap(&mut app, Key::Escape, KeyCode::Escape);
+    press_cmd_d(&mut app, false);
+
+    // Shift-click twice, two different elements of the home.
+    let second = centre_of(&mut app, "Open folder…");
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(first),
+            keys: vec![KeyCode::ShiftLeft],
+            ..default()
+        },
+    );
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(first),
+            keys: vec![KeyCode::ShiftLeft],
+            mouse: Some(true),
+        },
+    );
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(first),
+            keys: vec![KeyCode::ShiftLeft],
+            mouse: Some(false),
+        },
+    );
+    let report = app.world().resource::<ReportEdit>();
+    assert_eq!(
+        report.picks().len(),
+        1,
+        "a shift-click takes one thing, and stays pointing: {:?}",
+        report.picks()
+    );
+    assert_eq!(
+        report.phase(),
+        Some(Phase::Picking),
+        "and the report is still pointing, so another can be added"
+    );
+
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(second),
+            keys: vec![KeyCode::ShiftLeft],
+            ..default()
+        },
+    );
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(second),
+            keys: vec![KeyCode::ShiftLeft],
+            mouse: Some(true),
+        },
+    );
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(second),
+            keys: vec![KeyCode::ShiftLeft],
+            mouse: Some(false),
+        },
+    );
+    let report = app.world().resource::<ReportEdit>();
+    assert_eq!(report.picks().len(), 2, "{:?}", report.picks());
+    assert_eq!(report.phase(), Some(Phase::Picking));
+
+    tap(&mut app, Key::Enter, KeyCode::Enter);
+    let report = app.world().resource::<ReportEdit>();
+    assert_eq!(
+        report.phase(),
+        Some(Phase::Note),
+        "Enter finishes what the shift-clicks accumulated"
+    );
+    assert_eq!(report.picks().len(), 2, "and carries both picks");
+    // **The relation is worked out, not asked**: two elements of the home are somewhere against each
+    // other, and the record says which.
+    let relations = report.relations();
+    assert_eq!(relations.len(), 1, "two picks are one pair: {relations:?}");
+    assert_eq!(relations[0].a, 0);
+    assert_eq!(relations[0].b, 1);
+    // The note box is up, one frame later, and it names the relation.
+    app.update();
+    let mut texts = app.world_mut().query::<&Text>();
+    let shown: Vec<String> = texts.iter(app.world()).map(|t| t.0.clone()).collect();
+    let relation_word = match relations[0].kind {
+        PairKind::Contains => "contains",
+        PairKind::Overlaps => "overlaps",
+        PairKind::Touches => "touches",
+        PairKind::Apart => "apart",
+    };
+    assert!(
+        shown.iter().any(|line| line.contains(relation_word)),
+        "the note box states the relation `{relation_word}`, got {shown:?}"
+    );
+}
+
+/// **A plain click after a shift-click collapses back to one pick.** A person who changed their mind
+/// does not have to start the report again, and the record never carries a pick they replaced.
+#[test]
+fn a_plain_click_replaces_the_picks_it_finds() {
+    let mut app = home("report_replace");
+    let first = centre_of(&mut app, "New project");
+    let second = centre_of(&mut app, "Open folder…");
+    press_cmd_d(&mut app, false);
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(first),
+            keys: vec![KeyCode::ShiftLeft],
+            ..default()
+        },
+    );
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(first),
+            keys: vec![KeyCode::ShiftLeft],
+            mouse: Some(true),
+        },
+    );
+    step(
+        &mut app,
+        Frame {
+            pointer: Some(first),
+            keys: vec![KeyCode::ShiftLeft],
+            mouse: Some(false),
+        },
+    );
+    assert_eq!(app.world().resource::<ReportEdit>().picks().len(), 1);
+
+    click_at(&mut app, second);
+    let report = app.world().resource::<ReportEdit>();
+    assert_eq!(report.phase(), Some(Phase::Note));
+    assert_eq!(
+        report.picks().len(),
+        1,
+        "the plain click replaced what was there: {:?}",
+        report.picks()
+    );
+    assert!(
+        report.relations().is_empty(),
+        "one pick has no relation to anything"
     );
 }
