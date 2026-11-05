@@ -90,6 +90,11 @@ jobs:
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: tools/release/macos/build_app.sh
+      # **A release is the app that an agent can drive and that shows a window** (#306, #307): the fresh Cauldron.app is
+      # launched on mac_air with a scratch HOME, driven through its own bundled MCP server, and refused when its window
+      # self-check reads black. Publishing below runs only when every step before it passed.
+      - name: Drive the fresh app through its own MCP
+        run: python3 tools/release/macos/smoke_app.py --app dist/Cauldron.app --out dist/smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -98,6 +103,7 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/SHA256SUMS
+            dist/smoke/**
       - name: Publish the release
         if: github.event_name == 'push' || inputs.publish
         env:
