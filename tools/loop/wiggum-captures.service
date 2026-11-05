@@ -1,0 +1,86 @@
+[Unit]
+Description=bevy_emerge_captures Wiggum loop (one fresh debug-response pass at a time)
+# **Never spin.** A pass that dies instantly, five times running, is a broken machine or a broken
+# checkout, and `Restart=on-failure` alone would retry it forever. Both keys are `[Unit]` keys:
+# systemd ignores them in `[Service]` with only a warning, which is how the first version of
+# `wiggum.service` was silently wrong.
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+Documentation=file:%h/bevy_emerge_captures/.omp/commands/debug-response.md
+# **Runs forever, so it must not be tied to a login.** `loginctl enable-linger` is on for this user.
+After=network-online.target
+Wants=network-online.target
+# **Its own clone, and that is a requirement rather than a preference.** The driver's single-instance
+# marker is `wiggum-$USER-$(basename "$REPO")` (`wiggum.sh:183`), so a second unit on
+# `bevy_emerge_loop` exits `another wiggum driver is already running` instead of working. A clone is
+# also what keeps the two loops' queues apart: this one's ledger is `docs/loop/captures/ledger.json`
+# in its own tree, and a capture's row is written once, by the pass that fixed it.
+# `systemd` finds the other driver by a marker **argument** (`__driver wiggum-<user>-<repo>`), which
+# is the only place `pgrep -f` looks.
+
+[Service]
+Type=simple
+WorkingDirectory=%h/bevy_emerge_captures
+
+# **One fresh `omp -p` per pass; the driver sleeps between them.**
+# **A display exists for the whole life of the service, because reproducing a capture means opening
+# the real editor.** The editor is a windowed Bevy app (`main.rs` always builds a `Window`), so a pass
+# with no display can only read about the defect, not see it.
+# `-ac` is safe here: the server listens on no TCP socket (`-nolisten tcp`) and is reachable only from
+# this machine's own filesystem socket, which is what a private, unauthenticated scratch display needs.
+# **:98, not :99.** `wiggum.service`'s `ExecStartPre`/`ExecStopPost` kill any `Xvfb :99` by pattern, so
+# two loops on one display number reap each other's server (`tools/loop/README-wiggum.md`: one Xvfb per
+# loop). The pattern matches the display number alone, so a stale server from an older invocation is
+# reaped too.
+ExecStartPre=-/usr/bin/pkill -f "Xvfb :98 "
+ExecStartPre=-/bin/sh -c 'sleep 1; rm -f /tmp/.X11-unix/X98'
+ExecStartPre=/bin/sh -c 'sleep 1; /usr/bin/Xvfb :98 -screen 0 1920x1080x24 -nolisten tcp -ac & sleep 2; test -S /tmp/.X11-unix/X98'
+ExecStopPost=-/usr/bin/pkill -f "Xvfb :98 "
+
+ExecStart=%h/bevy_emerge_captures/tools/loop/wiggum.sh __driver
+
+Environment=WIGGUM_REPO=%h/bevy_emerge_captures
+Environment=WIGGUM_COMMAND=debug-response
+Environment=WIGGUM_SLEEP=60
+# The queue ends this loop (`captures.py next` exits 3), never a count.
+Environment=WIGGUM_MAX=0
+Environment=WIGGUM_THINK=medium
+
+# **systemd's default PATH is not a login shell's PATH.** Measured on big: a pass exited `rc=127` with
+# `omp: command not found`, because `omp` lives in `~/.local/bin` and `cargo` in `~/.cargo/bin`.
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+
+Environment=RUSTUP_TOOLCHAIN=1.98.1
+# **Its own target dir, never `~/.cargo-target-shared/global` and never this user's other loop's.**
+# Workspace crates at one version share an artifact hash across checkouts, so a second tree using the
+# same dir makes cargo report this one's units as Fresh and silently run the other tree's code —
+# measured on big on 2026-10-21.
+Environment=CARGO_TARGET_DIR=%h/target/emerge-captures
+# Under the machine's other work: big also builds other crates and serves hs-distill.
+Environment=CARGO_BUILD_JOBS=8
+Environment=RUST_BACKTRACE=1
+
+Environment=DISPLAY=:98
+
+Nice=15
+IOSchedulingClass=idle
+
+# `stop` ends the pass in flight within seconds; `wiggum.sh drain --wait` lets it finish. What a pass
+# had uncommitted is saved by the final snapshot and parked on a branch at the next start.
+KillSignal=SIGTERM
+TimeoutStopSec=300
+
+# **`on-failure`, never `always`** (owner, 2026-11-02): `always` restarts a driver that *chose* to
+# stop, so `drain` can never end a loop. `wiggum.sh` exits 0 for stop/drain/WIGGUM_MAX and 1 for a
+# give-up after five consecutive failed passes.
+Restart=on-failure
+RestartSec=120
+
+# **Log to the journal, not to a file.** An `append:` path fails the whole start with `status=209/STDOUT`
+# when its directory does not exist (measured on big with systemd 262). The driver keeps its own
+# `driver.log` and one log per pass under `~/.local/state/wiggum/<repo>/passes/` regardless.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
