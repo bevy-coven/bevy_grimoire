@@ -1,8 +1,9 @@
 # 2026-11-05 feedback reports: one gesture, two channels, and what running it found
 
 Focus: the owner's brief — press a key, point at anything, say what is wrong — with two audiences
-(the people who make Cauldron, and whoever works the open project). Commit: `225b549`. Machine: big.
-Outcome: shipped, gate pending at the time of writing.
+(the people who make Cauldron, and whoever works the open project). Commits: `225b549`..`909a5ce`.
+Machine: big. Outcome: shipped; the gate passed on `909a5ce` in 217 s, after three refusals that each
+found something real.
 
 ## What it is
 
@@ -34,7 +35,7 @@ with each step's name, gooey role, control id and text), `area` (a dragged box i
 `screen`, or `scene` (the world point under the click, its map point, its cell, the placement
 `pick_at` chose there, and the camera pose).
 
-## Four defects the live run found, none of which a headless test could
+## Six defects the live run found, none of which a headless test could
 
 Each is a test now. This is the part worth keeping: the headless suite was green before every one of
 them, and every one of them made the feature unusable for a person.
@@ -56,9 +57,32 @@ them, and every one of them made the feature unusable for a person.
    subtree, so the path from the home's `Screen` to a `Button` reported `Welcome to Cauldron` seven
    times and named nothing. Fixed by looking only at control-role children (`labels_of`).
 
-Two more were harness facts, not defects: the platform modifier on Linux is Ctrl, not Super
-(`keys::MOD_KEYS`), and `bevy_fairy/input` types text with `{"kind": "Keyboard", "text": …}`, not one
-key tap per character.
+5. **Two gestures wrote `PickingSettings::is_enabled`.** The snip and the report each claimed to be its
+   only writer, so whichever ran last won — the first time both features existed,
+   `a_snip_armed_over_a_button_does_not_press_it` said so. `picking.rs` is now the one writer; each
+   gesture asks (`claims_pointer`, `pointing`) and drops its own presses in flight (B-032). A third
+   gesture adds a term to `picking::claimed`, not a fourth writer.
+6. **gooey's `ToastStack` answered for the whole window.** It is a full-window anchor that exists
+   whether or not a toast is on it, so every report in the editor picked `ToastStack` instead of the
+   control under the pointer. Excluded from the chain; a toast that is up is still picked, because its
+   own node is inside the stack.
+
+Three were harness facts, not defects: the platform modifier on Linux is Ctrl, not Super
+(`keys::MOD_KEYS`); `bevy_fairy/input` types text with `{"kind": "Keyboard", "text": …}`, not one key
+tap per character; and a sticky toast covers what it stands over, so a live script has to let it fade
+before pointing at what was behind it.
+
+## The gate refused twice, and both refusals found something
+
+| refusal | what it found |
+|---|---|
+| 4 tests failed | the two-writer `PickingSettings` collision; `clamp_rect` clamping each corner against an edge it was already past; a test scratch folder named `bevy_grimoire_feedback_…` tripping `engine_free`'s scanner; and `Res<State<Screen>>` panicking in an app with no screens (`the_surface_and_the_camera_agree` builds the plugin set around a hand-made window), now `Option` |
+| clippy | a field assignment after `Default::default()` in the new `picking` test — the crate's own clippy does not see test code, the gate's `--all-targets -- -D warnings` does |
+
+
+**`clamp_rect` was the one defect the gate caught that the live run could not**: a drag off the bottom
+of the window recorded a y of 4000 in a 720-pixel frame, and no picture would have shown it, because
+`draw_outline` clamps when it draws.
 
 ## Proof
 
