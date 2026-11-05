@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **285-notarize-app-first** `874ab19` The app inside the disk image carries its own notarization ticket, so it opens offline (#285) *No clip: release tooling; proved by stapler validate on the app inside the DMG*
 - **285-signed-release** `cc81c61` A release is notarized as the app and then as the disk image, so the app opens offline too (#285) *No clip: release tooling; proved by stapler validate on the app inside the published DMG*
 - **297-new-project-dialog** `f8b9062` The New project form opens centred, with the Name field ready to type in (#297) *No clip: form layout; proved by a_new_project_form_opens_ready_to_type_in*
 - **253-first-tour** `6b5e221` A two-minute tour of a first map, offered once and always in Help (#253) *For you: New here? The editor offers a short tour that has you place, turn and save a piece, and you can take it again from Help.*<br><a href="docs/changelog/media/2026-11-04-253-first-tour.mp4"><img src="docs/changelog/media/2026-11-04-253-first-tour.png" width="320" alt="clip"></a>
