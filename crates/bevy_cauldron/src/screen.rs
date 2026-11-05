@@ -423,6 +423,7 @@ door_state![
     crate::editor::Proposal,
     crate::editor::Rung,
     crate::snip::SnipEdit,
+    crate::report::ReportEdit,
     crate::editor::SizeEdit,
     crate::editor::FamilyEdit,
     crate::editor::DataEdit,
@@ -769,6 +770,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::labels::LabelQueue", Ownership::Door),
     ("bevy_cauldron::filter::Filters", Ownership::Door),
     ("bevy_cauldron::snip::SnipEdit", Ownership::Door),
+    // **A report cannot survive the door change it may be reporting on.** It holds a frozen frame
+    // of the old door and entity ids from its layout, so carrying it across would record the screen
+    // a person has already left.
+    ("bevy_cauldron::report::ReportEdit", Ownership::Door),
     ("bevy_cauldron::notice::Showing", Ownership::Door),
     // **`Door`, because it is what is on screen right now.** A toast is an event's tail — carrying
     // one into the next kit would announce a refusal about a door the author has already left.

@@ -18,6 +18,9 @@ pub const LOG_FILE: &str = "cauldron.log";
 /// The folder under [`data_dir`] a capture goes to when no project is named.
 const CAPTURES_DIR: &str = "captures";
 
+/// The folder under [`data_dir`] the reports about the editor itself go to (`crate::feedback`).
+const FEEDBACK_DIR: &str = "feedback";
+
 /// `<data_dir>/Grimoire`, or `None` on a platform with no data directory.
 pub fn data_dir() -> Option<PathBuf> {
     dirs::data_dir().map(|d| d.join(APP_DIR))
@@ -36,4 +39,13 @@ pub fn log_file() -> Option<PathBuf> {
 /// `<data_dir>/Grimoire/captures`: where a capture goes when the MCP server follows the editor with no project.
 pub fn captures_dir() -> Option<PathBuf> {
     data_dir().map(|d| d.join(CAPTURES_DIR))
+}
+
+/// `<data_dir>/Grimoire/feedback`: the reports the owner files about the editor itself.
+///
+/// **Not inside a project**, because a report about the editor is not about the project that
+/// happened to be open when it was noticed — and because the home screen, where a project is a card
+/// rather than an open thing, must be able to file one.
+pub fn feedback_dir() -> Option<PathBuf> {
+    data_dir().map(|d| d.join(FEEDBACK_DIR))
 }

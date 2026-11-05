@@ -438,7 +438,10 @@ pub fn middle_ellipsis(text: &str, max: usize) -> String {
 }
 
 /// A folder as a person reads it: the home folder is `~`, and a long one loses its middle.
-fn shown_folder(path: &Path) -> String {
+///
+/// `pub(crate)` because a saved feedback report (`report.rs`) says where it went in the same words a
+/// project's card says where the project is: one way of naming a folder, not two.
+pub(crate) fn shown_folder(path: &Path) -> String {
     let full = match dirs::home_dir().and_then(|home| path.strip_prefix(&home).ok().map(Path::to_path_buf)) {
         Some(rest) => format!("~/{}", rest.display()),
         None => path.display().to_string(),

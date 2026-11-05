@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-05
+
+- **feedback-reports** Two chords file a report on what is wrong: Cmd+D to the people who make Cauldron, Cmd+Shift+D about your project *For you: Hold Cmd and press D, point at whatever is wrong, and say what it is; the people who build Cauldron get the screen you saw. Cmd+Shift+D sends the same report about your own project to whoever is helping you build it.* *No clip: a key-driven gesture with no standing demo yet; proved by a_person_reports_to_the_developers and a_person_reports_about_this_project*
+
 ## 2026-11-04
 
 - **307-window-not-black** `0463594` The window shows the editor instead of opening black: the mirror states its size, so a Bevy 0.20 resize race cannot leave it on a dead texture (#307) *For you: Cauldron opens on its Projects home again, instead of a black window.*<br><a href="docs/changelog/media/2026-11-04-307-window-not-black.mp4"><img src="docs/changelog/media/2026-11-04-307-window-not-black.png" width="320" alt="clip"></a>

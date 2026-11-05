@@ -232,10 +232,15 @@ fn the_tool_table_and_its_count_are_the_servers() {
         "the module doc lists {rows} tools and the reference lists {}",
         bevy_cauldron_mcp::docs::TOOLS.len()
     );
+    // **Every count word the sentence could use, past the set's own size.** The list stopped at
+    // `twenty` when twenty tools was beyond imagining; the moment a twenty-first arrived the check
+    // refused to read its own sentence, which is a vocabulary gap and not a count that drifted. The
+    // hyphenated twenties are the words, so they are in it.
     let words = [
         "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
         "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
-        "twenty",
+        "twenty", "twenty-one", "twenty-two", "twenty-three", "twenty-four", "twenty-five",
+        "twenty-six", "twenty-seven", "twenty-eight", "twenty-nine",
     ];
     let said = words
         .iter()

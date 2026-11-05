@@ -8640,6 +8640,10 @@ pub fn sense_context(
     // of [`Fields`] knows about, so "a palette is open" is asked of the palette's marker: without
     // it, typing `undo` in the palette would also press U, N, D and O on the tab behind it.
     palette: Query<(), With<bevy_gooey::CommandPalette>>,
+    // **A report owns the keys while it is open** (`report.rs`). Its overlay root is the state, so
+    // the question has one answer and it is the drawn thing: without this, pointing at a panel to
+    // report on it also pressed every key on the tab behind it.
+    report: Query<(), With<crate::report::ReportOpen>>,
     mut rebinding: Rebinding,
     // **A question that owns the keyboard** (today the trust question only, see [`crate::confirm::Asked::owns_keyboard`]):
     // the key that answers it (`Y`, `P`, `N`) is not also a verb on the tab behind it. Measured 2026-11-02:
@@ -8660,7 +8664,10 @@ pub fn sense_context(
     // below. It used to be a `Context`, which threw the tab away and fired every tab's walk on one
     // arrow — see [`keys::Holder`].
     let filter_typing = filters.typing();
-    let typing = fields.typing() || !palette.is_empty() || confirm.as_deref().is_some_and(|c| c.owns_keyboard());
+    let typing = fields.typing()
+        || !palette.is_empty()
+        || confirm.as_deref().is_some_and(|c| c.owns_keyboard())
+        || !report.is_empty();
     // **What is in hand, asked of the tab that can be holding something.** Two tabs can, and they hold
     // different things: the assembler has a piece taken with `Space`, the map has one picked up in
     // Move or a set captured in Clone. Both answer the same question — *do the arrows move a thing, or
@@ -9574,9 +9581,7 @@ fn drive_run(
     // Held, the platform modifier drops the grid snap — see `map_at`.
     keyboard: Res<ButtonInput<KeyCode>>,
     assets: Res<AssetServer>,
-    over_ui: Res<crate::view::OverUi>,
-    pointer: Res<crate::view::Pointer>,
-    snip: Res<crate::snip::SnipEdit>,
+    claim: Claim,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     mut project: ResMut<Project>,
     mut open: ResMut<OpenMap>,
@@ -9600,10 +9605,9 @@ fn drive_run(
         return;
     };
     let (cam, cam_tf) = *camera;
-    let over_ui = over_ui.0;
-    // A snip owns the pointer while it is armed or being drawn: a press it takes starts no run.
-    let snipping = snip.claims_pointer();
-    let Some(hit) = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !snipping) else {
+    // **A snip or a report owns the pointer while either is open**: a press one takes starts no run.
+    let snipping = claim.snip.claims_pointer() || claim.report.claims_pointer();
+    let Some(hit) = cursor_ground(claim.pointer.0, cam, cam_tf).filter(|_| !snipping) else {
         // **A release ends the drag wherever it happens** — the defect `drive_removal` records.
         if mouse.just_released(MouseButton::Left) {
             drag.from = None;
@@ -9613,7 +9617,7 @@ fn drive_run(
     // **A drag that started on the world owns the pointer until it is let go** — the same rule
     // `drive_place` states, and for the same reason: a fill box dragged across the palette used to
     // tear the gesture in half.
-    if ui_blocks_gesture(over_ui, drag.from.is_some()) {
+    if ui_blocks_gesture(claim.over_ui.0, drag.from.is_some()) {
         return;
     }
 
@@ -9936,6 +9940,7 @@ fn drive_clone(
     over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     snip: Res<crate::snip::SnipEdit>,
+    report: Res<crate::report::ReportEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     mut marker: Query<(&mut Transform, &mut Visibility), With<CloneTile>>,
     mut drag: ResMut<CloneDrag>,
@@ -9962,7 +9967,7 @@ fn drive_clone(
         return;
     };
     let (cam, cam_tf) = *camera;
-    let snipping = snip.claims_pointer();
+    let snipping = snip.claims_pointer() || report.claims_pointer();
     let hit = cursor_ground(pointer.0, cam, cam_tf)
         .filter(|_| !snipping && !over_ui.0);
     let Some(hit) = hit else {
@@ -10511,6 +10516,7 @@ fn drive_removal(
     over_ui: Res<crate::view::OverUi>,
     pointer: Res<crate::view::Pointer>,
     snip: Res<crate::snip::SnipEdit>,
+    report: Res<crate::report::ReportEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     placed: Query<(Entity, &Placement)>,
     mut marker: Query<(&mut Transform, &mut Visibility), With<RemovalTile>>,
@@ -10549,6 +10555,7 @@ fn drive_removal(
     // swept across the palette used to vanish and then discard itself on release.
     // A snip being drawn or typed owns the pointer, and blocks the box the way a panel does.
     let blocked = snip.claims_pointer()
+        || report.claims_pointer()
         || ui_blocks_gesture(over_ui.0, drag.from.is_some());
     let hit = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !blocked);
     let Some(hit) = hit else {
@@ -10884,13 +10891,13 @@ fn drive_place(
     let Some(camera) = camera else {
         return;
     };
-    let PointerClaim { over_ui, pointer, snip } = claim;
+    let PointerClaim { over_ui, pointer, snip, report } = claim;
     let (cam, cam_tf) = *camera;
     // A click on a control is not a click on the world. Without this, arming a piece from the palette
     // also dropped one wherever the panel happened to be over.
     let over_ui = over_ui.0;
     // A snip owns the pointer while it is armed or being drawn: a press it takes places nothing.
-    let snipping = snip.claims_pointer();
+    let snipping = snip.claims_pointer() || report.claims_pointer();
     let Some(hit) = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !snipping) else {
         // **A release ends the drag wherever it happens** — the defect `drive_removal` records: a
         // release over a panel used to leave `from` set, and the box then followed the cursor with no
@@ -15182,6 +15189,21 @@ struct Aim<'w> {
     over_ui: Res<'w, crate::view::OverUi>,
     pointer: Res<'w, crate::view::Pointer>,
     snip: Res<'w, crate::snip::SnipEdit>,
+    /// **A report owns the pointer too** (`report.rs`). A press that picks the subject of a report
+    /// must not also place a piece behind the overlay.
+    report: Res<'w, crate::report::ReportEdit>,
+}
+
+/// **Which of the two capture gestures has claimed the pointer**, if either: a snip (`snip.rs`) or a
+/// feedback report (`report.rs`). One bundle because `drive_run` is at Bevy's parameter limit and the
+/// two are always asked together — a press either gesture took belongs to neither the world nor a
+/// panel.
+#[derive(bevy::ecs::system::SystemParam)]
+struct Claim<'w> {
+    over_ui: Res<'w, crate::view::OverUi>,
+    pointer: Res<'w, crate::view::Pointer>,
+    snip: Res<'w, crate::snip::SnipEdit>,
+    report: Res<'w, crate::report::ReportEdit>,
 }
 
 /// The pointer as the placing and removing drivers read it: where it is, what UI it is over, and
@@ -15191,6 +15213,8 @@ struct PointerClaim<'w> {
     over_ui: Res<'w, crate::view::OverUi>,
     pointer: Res<'w, crate::view::Pointer>,
     snip: Res<'w, crate::snip::SnipEdit>,
+    /// **A report owns the pointer too** (`report.rs`), for the same reason a snip does.
+    report: Res<'w, crate::report::ReportEdit>,
 }
 
 /// What `drive_stamp_ghost` reads to draw the stamp preview.
@@ -15222,7 +15246,7 @@ fn drive_move(
         compose,
         chosen: Chosen { mut lock, mut selection },
     } = input;
-    let Aim { over_ui, pointer, snip } = aim;
+    let Aim { over_ui, pointer, snip, report } = aim;
     let MapWrite {
         mut project,
         mut open,
@@ -15253,7 +15277,7 @@ fn drive_move(
     }
     // A click on a control is not a click on the world.
     // A snip that owns the pointer takes the click too.
-    if over_ui.0 || snip.claims_pointer() {
+    if over_ui.0 || snip.claims_pointer() || report.claims_pointer() {
         return;
     }
     let Some(camera) = camera else {

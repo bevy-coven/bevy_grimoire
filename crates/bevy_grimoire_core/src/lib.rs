@@ -41,6 +41,7 @@ pub mod destructible;
 pub mod descriptor;
 pub mod draw_order;
 pub mod family;
+pub mod feedback;
 pub mod format_version;
 pub mod play;
 pub mod gait;

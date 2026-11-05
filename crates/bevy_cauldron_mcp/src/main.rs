@@ -28,13 +28,15 @@
 //! | `grimoire_present` | put a result in front of the person and take their Keep or Undo all |
 //! | `grimoire_list_pieces` | the library's pieces, a page at a time, with their label provenance |
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
+//! | `grimoire_feedback_list` | the reports the person filed about Cauldron itself, newest first |
+//! | `grimoire_project_feedback_list` | the reports the person filed about the open project, newest first |
 //! | `grimoire_list_rules` | the block rules a layout is generated from, as the project states them |
 //! | `grimoire_run_command` | run a registered editor command by its id, as its shortcut would |
 //! | `grimoire_jobs_stop` | ask a background job, such as the palette's thumbnail bake, to stop |
 //! | `grimoire_read_log` | the editor's own log file, read from disk, so it answers when the editor does not |
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //!
-//! **Nineteen tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-one tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -243,6 +245,81 @@ pub struct ListSnipsParams {
 /// **Five snips, a screenful of metadata.**
 fn five() -> usize {
     5
+}
+
+/// **The parameters of `grimoire_feedback_list` and `grimoire_project_feedback_list`.**
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeedbackListParams {
+    /// **How many reports to list, newest first**, from 1 to 20. The default is 5, a screenful.
+    #[serde(default = "five")]
+    pub limit: usize,
+}
+
+/// **One report, as an agent reads it**: the record, both picture paths, and the log tail's path.
+///
+/// **Both readers answer with the same shape** — the developers' channel and the project's differ in
+/// where the files are, not in what a report is — so an agent that has read one has read both.
+fn list_reports(dir: &std::path::Path, limit: usize) -> CallToolResult {
+    if !(1..=20).contains(&limit) {
+        return refusal(&format!(
+            "limit is {limit}, and it must be from 1 to 20."
+        ));
+    }
+    let (reports, mut problems) = bevy_grimoire_core::feedback::read_reports(dir);
+    let mut content = Vec::new();
+    if let Some(newest) = reports.first() {
+        let path = dir.join(&newest.picture.file);
+        match std::fs::read(&path) {
+            Ok(bytes) => content.push(rmcp::model::ContentBlock::image(
+                base64_encode(&bytes),
+                "image/png",
+            )),
+            // **A picture that cannot be read is named, and the list still answers** — the same rule
+            // `grimoire_list_snips` follows.
+            Err(e) => problems.push(format!(
+                "{}: the picture could not be read: {e}",
+                path.display()
+            )),
+        }
+    }
+    let shown: Vec<Value> = reports
+        .iter()
+        .take(limit)
+        .map(|report| {
+            let mut entry = serde_json::to_value(report).unwrap_or(Value::Null);
+            if let Value::Object(map) = &mut entry {
+                map.insert(
+                    "picture_path".to_string(),
+                    json!(dir.join(&report.picture.file).to_string_lossy()),
+                );
+                if let Some(subject) = &report.subject_picture {
+                    map.insert(
+                        "subject_picture_path".to_string(),
+                        json!(dir.join(&subject.file).to_string_lossy()),
+                    );
+                }
+                if let Some(log) = &report.log {
+                    map.insert(
+                        "log_path".to_string(),
+                        json!(dir.join(log).to_string_lossy()),
+                    );
+                }
+            }
+            entry
+        })
+        .collect();
+    let answer = json!({
+        "dir": dir.to_string_lossy(),
+        "total": reports.len(),
+        "shown": shown.len(),
+        "reports": shown,
+        "not_reports": problems,
+    });
+    content.push(rmcp::model::ContentBlock::text(
+        serde_json::to_string_pretty(&answer).unwrap_or_default(),
+    ));
+    CallToolResult::success(content)
 }
 
 /// **The parameters of `grimoire_capture_sequence`.**
@@ -1187,6 +1264,87 @@ impl Grimoire {
             serde_json::to_string_pretty(&answer).unwrap_or_default(),
         ));
         Ok(CallToolResult::success(content))
+    }
+
+    /// **`grimoire_feedback_list` -- the reports the person filed about Cauldron itself.**
+    ///
+    /// **A read of files the editor wrote**, in the per-user data folder, so it needs **no
+    /// `--project`**: a report about the editor is not about the project that happened to be open
+    /// when the mistake was noticed, and the Projects home — where no project is open — must be able
+    /// to file one.
+    #[tool(
+        name = "grimoire_feedback_list",
+        description = "The reports the person filed about Cauldron itself, newest first: each \
+                       one's name, when it was taken, which screen and which project were up, \
+                       the window's shape, what was pointed at (a node of the interface with its \
+                       chain of roles and text, a dragged area, the whole screen, or a point in the \
+                       map with its cell and the piece there), the note the person typed, and the \
+                       editor's log tail. Each entry names its whole picture and the same picture \
+                       with the subject outlined, and the newest picture comes back as an image. It \
+                       reads files the editor wrote, so it needs no editor running and changes \
+                       nothing. Returns how many reports there are, how many are shown, and each \
+                       .json file in the folder that is not a report or has no picture, with the \
+                       reason.",
+        annotations(
+            title = "List the reports the person filed about Cauldron",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn feedback_list(
+        &self,
+        Parameters(p): Parameters<FeedbackListParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let dir = match bevy_grimoire_core::user_dirs::feedback_dir() {
+            Some(dir) => dir,
+            None => {
+                return Ok(refusal(
+                    "this system has no data directory, so the editor has nowhere to write a report about itself.",
+                ));
+            }
+        };
+        Ok(list_reports(&dir, p.limit))
+    }
+
+    /// **`grimoire_project_feedback_list` -- the reports the person filed about the open project.**
+    ///
+    /// **A read of files the editor wrote inside the project**, so it needs `--project`: a project's
+    /// reports are for whoever works that project, and reading another project's would be reading
+    /// somebody else's notes.
+    #[tool(
+        name = "grimoire_project_feedback_list",
+        description = "The reports the person filed about this project, newest first: each one's \
+                       name, when it was taken, which screen and which project were up, the \
+                       window's shape, what was pointed at (a node of the interface with its chain \
+                       of roles and text, a dragged area, the whole screen, or a point in the map \
+                       with its cell and the piece there), the note the person typed, and the \
+                       editor's log tail. The files are in the project's target/feedback. Each \
+                       entry names its whole picture and the same picture with the subject \
+                       outlined, and the newest picture comes back as an image. It reads files the \
+                       editor wrote, so it needs no editor running and changes nothing. Returns how \
+                       many reports there are, how many are shown, and each .json file in the \
+                       folder that is not a report or has no picture, with the reason.",
+        annotations(
+            title = "List the reports the person filed about this project",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn project_feedback_list(
+        &self,
+        Parameters(p): Parameters<FeedbackListParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let Some(project) = &self.project else {
+            return Ok(refusal(
+                "grimoire_project_feedback_list needs --project: a project's reports are files the editor writes in the project",
+            ));
+        };
+        let dir = project.join(bevy_grimoire_core::feedback::PROJECT_DIR);
+        Ok(list_reports(&dir, p.limit))
     }
 
     /// **`grimoire_list_rules` -- the rules a layout is generated from, as the project states them.**

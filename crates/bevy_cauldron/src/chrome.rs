@@ -323,6 +323,17 @@ pub const SNIP_EDGE_W: f32 = 3.0;
 /// reads. At 0.08 it was too faint to find; 0.28 is a clear amber tint without hiding the pieces.
 pub const SNIP_WASH: Color = Color::srgba(0.950, 0.710, 0.300, 0.28);
 
+/// **A surface-pixel coordinate as the overlay's `Val::Px`.**
+///
+/// The layout multiplies `Val::Px` by [`UiScale`](bevy::ui::UiScale), so an overlay drawing a
+/// rectangle it was handed in surface (physical) pixels divides by it, as `compose.rs` places its own
+/// rectangles. Two things draw such a rectangle — the snip's drag box and a feedback report's
+/// outline — and they had a copy each before this was one function.
+pub fn overlay_px(surface: f32, ui_scale: f32) -> f32 {
+    let s = if ui_scale > 0.0 { ui_scale } else { 1.0 };
+    surface / s
+}
+
 /// A chrome colour scaled toward black, for a quieter sibling of a named colour — so the derived
 /// value cannot drift from its parent the way `compose`'s hand-halved ACCENT could have.
 pub const fn scaled(colour: Color, k: f32) -> Color {

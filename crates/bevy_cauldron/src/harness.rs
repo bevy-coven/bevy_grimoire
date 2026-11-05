@@ -113,6 +113,10 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
             // before the operation and the operation is applied after it.
             crate::sequencer::SequencerPlugin,
             (
+                // **A report about what is wrong on screen** (`report.rs`). In the *shared* list and
+                // not in `EditorPlugin`, because `Cmd+D` has to work on the Projects home too, where
+                // the editor's plugins have not opened a door and none of their systems run.
+                crate::report::ReportPlugin,
                 // **The write-through** (`--live`): every committed change is saved at once, so a game
                 // watching the project reloads it. Inert unless `live::LiveWrite` is inserted.
                 crate::live::LivePlugin,

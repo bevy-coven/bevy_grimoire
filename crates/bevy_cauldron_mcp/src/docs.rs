@@ -284,6 +284,40 @@ pub const TOOLS: &[ToolDoc] = &[
         idempotent: true,
     },
     ToolDoc {
+        name: "grimoire_feedback_list",
+        description: "The reports the person filed about Cauldron itself, newest first: each \
+                      one's name, when it was taken, which screen and which project were up, \
+                      the window's shape, what was pointed at (a node of the interface with its \
+                      chain of roles and text, a dragged area, the whole screen, or a point in the \
+                      map with its cell and the piece there), the note the person typed, and the \
+                      editor's log tail. Each entry names its whole picture and the same picture \
+                      with the subject outlined, and the newest picture comes back as an image. It \
+                      reads files the editor wrote, so it needs no editor running and changes \
+                      nothing. Returns how many reports there are, how many are shown, and each \
+                      .json file in the folder that is not a report or has no picture, with the \
+                      reason.",
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+    },
+    ToolDoc {
+        name: "grimoire_project_feedback_list",
+        description: "The reports the person filed about this project, newest first: each one's \
+                      name, when it was taken, which screen and which project were up, the \
+                      window's shape, what was pointed at (a node of the interface with its chain \
+                      of roles and text, a dragged area, the whole screen, or a point in the map \
+                      with its cell and the piece there), the note the person typed, and the \
+                      editor's log tail. The files are in the project's target/feedback. Each \
+                      entry names its whole picture and the same picture with the subject \
+                      outlined, and the newest picture comes back as an image. It reads files the \
+                      editor wrote, so it needs no editor running and changes nothing. Returns how \
+                      many reports there are, how many are shown, and each .json file in the \
+                      folder that is not a report or has no picture, with the reason.",
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+    },
+    ToolDoc {
         name: "grimoire_list_rules",
         description: "The block rules the project states for generating layouts, read from \
                       assets/grimoire/rules.ron: for each block, the example map its grammar is learned from, the \
@@ -622,6 +656,20 @@ pub fn schemas() -> Value {
             "additionalProperties": false,
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "description": "How many snips to list, newest first. The default is 5."}
+            }
+        },
+        "grimoire_feedback_list": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "description": "How many reports to list, newest first. The default is 5."}
+            }
+        },
+        "grimoire_project_feedback_list": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "description": "How many reports to list, newest first. The default is 5."}
             }
         },
         "grimoire_list_rules": {

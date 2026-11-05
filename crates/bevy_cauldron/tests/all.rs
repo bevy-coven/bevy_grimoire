@@ -84,6 +84,8 @@ mod a_project_opens_in_the_same_process;
 mod a_projects_own_font_applies_when_it_is_opened_in_the_same_process;
 mod a_new_project_opens_something_to_edit;
 mod an_empty_library_leads_to_adding_meshes;
+mod a_person_reports_about_this_project;
+mod a_person_reports_to_the_developers;
 mod a_person_shift_clicks_two_pieces_into_one_note;
 mod a_person_snips_an_area_of_the_editor;
 mod a_person_types_a_terrain_preset;

@@ -197,6 +197,28 @@ A `Fire` standing on a placement draws the crate's flame and the light the pool 
 | Read by | Nothing in the project. The game does not read it. |
 | Format version | None. |
 
+## Feedback reports about the project
+
+| | |
+|---|---|
+| Where | `target/feedback/`, under the project root. One report is `feedback-<ms>.png` (the whole screen), `feedback-<ms>_subject.png` (the same screen with the thing that was picked outlined), `feedback-<ms>.json` (the record) and, when the editor has a log, `feedback-<ms>.log` (its tail). |
+| What it holds | What a person pointed at and what they said was wrong about it, taken with Cmd+Shift+D. |
+| Written by | The editor, `create_new`, never overwritten. |
+| Live reload | No. |
+| Read by | `grimoire_project_feedback_list`, which needs `--project`. Nothing in the project. The game does not read it. |
+| Format version | 1, in the record's `version`. |
+
+## Feedback reports about the editor
+
+| | |
+|---|---|
+| Where | `<data_dir>/Grimoire/feedback/`, the same four files under the same names. `~/.local/share/Grimoire/feedback/` on Linux, `~/Library/Application Support/Grimoire/feedback/` on macOS. |
+| What it holds | What a person pointed at and what they said was wrong about Cauldron itself, taken with Cmd+D. |
+| Written by | The editor, `create_new`, never overwritten. |
+| Live reload | No. |
+| Read by | `grimoire_feedback_list`, which needs no `--project`. |
+| Format version | 1, in the record's `version`. |
+
 ## recent.ron
 
 Not a project file: one per user, so a project folder never carries where an author opened it from.

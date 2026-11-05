@@ -134,6 +134,35 @@ A snip that is confirmed but not yet written is pending. The editor clears pendi
 
 `grimoire_snip` is a different tool. The agent gives it a `label` and a `rect` in window pixels, and it writes one crop of the editor's picture. The crop is not logged and not undoable.
 
+## Reports the person files
+
+Goal: read what the person pointed at and said was wrong, without asking them to describe it again.
+
+A person presses a key while using Cauldron, points at **anything on screen** — a panel, a button, a field, a tooltip, a placed piece, a cell, the empty viewport — and types what is wrong. The frame is the one that was on screen when the key was pressed, so what the agent reads is what the person saw.
+
+There are two channels and they do not mix. **Cmd+D** reports on Cauldron itself, for the people who write the editor: it works on every screen, including the Projects home, and needs no project open. **Cmd+Shift+D** reports on the project you have open, for whoever works that project, and is refused with a sentence where there is none.
+
+| | Developers | Project |
+|---|---|---|
+| chord | Cmd+D (Ctrl+D) | Cmd+Shift+D (Ctrl+Shift+D) |
+| needs a project | no | yes |
+| folder | `<data dir>/Grimoire/feedback/` | `<project>/target/feedback/` |
+| record's `audience` | `"developers"` | `"project"` |
+| tool | `grimoire_feedback_list` | `grimoire_project_feedback_list` |
+
+One report is four files sharing a stem. `feedback-<ms>.png` is the whole frame as it was. `feedback-<ms>_subject.png` is the same frame with the subject outlined in the accent colour: a bordered rectangle round a picked node or a dragged area, a cross where a map point was clicked, and no second picture at all for a whole-screen report. `feedback-<ms>.json` is the record. `feedback-<ms>.log` is the tail of the editor's log, written when the editor has one.
+
+The record's `subject` says what was picked, and its `kind` is what an agent branches on:
+
+- `element` — a node of the interface, with its `rect_px` and its `path`, outermost first. Each step of the path gives the node's `name`, its gooey `role`, its `control` id where a key lives there, and its `text` — the node's own, or the first one below it, so a button is named by the words on it. Point at a button and the last step is its words; wheel one notch and the pick moves out to the button itself.
+- `area` — a dragged box, `rect_px` in surface pixels.
+- `screen` — the whole screen, when the person pressed Enter with nothing picked.
+- `scene` — a point in the map: the `world` point under the click, its `map` point, its `cell`, the `placement` the editor's own pick chose there (absent on empty ground), and the `camera` it was seen from.
+
+Alongside it: `note` (what the person typed), `screen` (`launcher`, `loading`, `project` or `editor`), `project`, `map`, `tool`, `app_version` (the build that was wrong), and `window` (the surface's physical size, the same in logical pixels, the scale factor and the UI scale).
+
+Both tools take a `limit` from 1 to 20, default 5, and return the reports newest first with `picture_path`, `subject_picture_path` and `log_path` beside each one. The newest picture comes back as an image. `grimoire_project_feedback_list` needs `--project`; `grimoire_feedback_list` needs nothing. A `.json` in the folder that is not a report, or a record whose picture is missing, is named in `not_reports` with the reason rather than hidden. A report is not logged, not undoable, and changes nothing.
+
 `grimoire_decide` asks a decision model a typed question and returns a probability for every answer. Give it `check` (a named check: `floating`, `clipping`, `out_of_area`, `blank_frame` or `toast_visible`, from the editor's built-ins with the project's `assets/grimoire/checks.ron` over them, read on every call) or `questions` (ad-hoc `noul`, `choice` and `score` questions), with `images` (project files, at most four), `view: true` for the editor's current picture, and `facts`. A check missing a picture or the facts is refused and names what is missing. A finding is advisory: it changes no map data and never blocks or undoes an operation. The endpoint is one per run, set by `GRIMOIRE_DECIDE_ENDPOINT`, `GRIMOIRE_DECIDE_MODEL` and `GRIMOIRE_DECIDE_KEY`; local clef-flash is the default, and a Cloudflare endpoint sends pictures off the LAN.
 
 `grimoire_decide` can look at the running game as well as the editor. `play` starts the game, which carries `bevy_fairy`. Give `grimoire_decide` `game: {}` and it takes one frame through the game's own `bevy_fairy`, named `game`, on the port in the project's `play.ron` (or `game: {port: 15990}`), and sends it with the question. `game: {state: {method: "world.query", params: {...}}}` also makes one BRP call to the game and puts its answer in the facts under `game`. A named check that asks for the image `game` takes the frame by itself, so `{check: "hud_readable"}` is enough. A game's checks are the game's own: write them in the project's `assets/grimoire/checks.ron` with `images: ["game"]`, and the editor's built-in checks do not change. A game that is not running is refused naming the port, and a check is never answered from less.

@@ -96,12 +96,6 @@ fn under(rect: [f32; 4], at: Vec2) -> bool {
     at.x >= rect[0] && at.x <= rect[2] && at.y >= rect[1] && at.y <= rect[3]
 }
 
-/// A surface-pixel coordinate as the overlay's `Val::Px`. The layout multiplies `Val::Px` by `UiScale`, so the overlay divides by it, as `compose.rs` places its own rectangles.
-fn overlay_px(surface: f32, ui_scale: f32) -> f32 {
-    let s = if ui_scale > 0.0 { ui_scale } else { 1.0 };
-    surface / s
-}
-
 /// A surface rectangle in the window's logical pixels: the surface is the logical size times the scale factor.
 fn logical_px(surface: [f32; 4], scale: f32) -> [f32; 4] {
     surface.map(|v| v / scale)
@@ -461,10 +455,10 @@ pub fn snip_overlay(
             Node {
                 // PLACES-ITSELF-OK: the drag rectangle is placed at the pointer over the whole window, so it is not a panel and has no layout to join.
                 position_type: PositionType::Absolute,
-                left: Val::Px(overlay_px(rect[0], ui_scale.0)),
-                top: Val::Px(overlay_px(rect[1], ui_scale.0)),
-                width: Val::Px(overlay_px(rect[2] - rect[0], ui_scale.0)),
-                height: Val::Px(overlay_px(rect[3] - rect[1], ui_scale.0)),
+                left: Val::Px(chrome::overlay_px(rect[0], ui_scale.0)),
+                top: Val::Px(chrome::overlay_px(rect[1], ui_scale.0)),
+                width: Val::Px(chrome::overlay_px(rect[2] - rect[0], ui_scale.0)),
+                height: Val::Px(chrome::overlay_px(rect[3] - rect[1], ui_scale.0)),
                 border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
                 ..default()
             },
@@ -600,8 +594,8 @@ mod tests {
     /// surface pixel is `1/UiScale` of `Val::Px`, as compose.rs places its rectangles.
     #[test]
     fn the_overlay_is_divided_by_ui_scale() {
-        assert!((overlay_px(440.0, 2.4) - 440.0 / 2.4).abs() < 1e-4);
-        assert_eq!(overlay_px(440.0, 0.0), 440.0);
+        assert!((chrome::overlay_px(440.0, 2.4) - 440.0 / 2.4).abs() < 1e-4);
+        assert_eq!(chrome::overlay_px(440.0, 0.0), 440.0);
     }
 
     /// **The rectangle the record calls a window rectangle is in logical pixels.** A surface rectangle

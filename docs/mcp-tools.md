@@ -147,6 +147,26 @@ The snips the person took in the editor, newest first: each one's name, when it 
 | `destructiveHint` | false |
 | `idempotentHint` | true |
 
+### `grimoire_feedback_list`
+
+The reports the person filed about Cauldron itself, newest first: each one's name, when it was taken, which screen and which project were up, the window's shape, what was pointed at (a node of the interface with its chain of roles and text, a dragged area, the whole screen, or a point in the map with its cell and the piece there), the note the person typed, and the editor's log tail. Each entry names its whole picture and the same picture with the subject outlined, and the newest picture comes back as an image. It reads files the editor wrote, so it needs no editor running and changes nothing. Returns how many reports there are, how many are shown, and each .json file in the folder that is not a report or has no picture, with the reason.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | true |
+| `destructiveHint` | false |
+| `idempotentHint` | true |
+
+### `grimoire_project_feedback_list`
+
+The reports the person filed about this project, newest first: each one's name, when it was taken, which screen and which project were up, the window's shape, what was pointed at (a node of the interface with its chain of roles and text, a dragged area, the whole screen, or a point in the map with its cell and the piece there), the note the person typed, and the editor's log tail. The files are in the project's target/feedback. Each entry names its whole picture and the same picture with the subject outlined, and the newest picture comes back as an image. It reads files the editor wrote, so it needs no editor running and changes nothing. Returns how many reports there are, how many are shown, and each .json file in the folder that is not a report or has no picture, with the reason.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | true |
+| `destructiveHint` | false |
+| `idempotentHint` | true |
+
 ### `grimoire_list_rules`
 
 The block rules the project states for generating layouts, read from assets/grimoire/rules.ron: for each block, the example map its grammar is learned from, the region descriptors that ask for a block, the cell size and block size in cells, the border piece, no_empty, the weight multipliers, the footprint rules, attempts and seed. Returns the blocks and the path of the file read. A project with no rules.ron answers with no blocks, because an absent file means no rules -- not a broken project. A file that is present but does not parse, or states a version this program does not read or a number it cannot generate from (no attempts, a cell that is not a usable step, a footprint under 2x2, a yaw other than 0 or 180), is refused with its path and the reason, and nothing is written. It parses the file but does not check that the descriptor ids it names exist in the project's library -- the editor's own open does that, so a block naming a missing piece is answered here and refused there. It reads a file, so it needs no editor running and changes nothing.
