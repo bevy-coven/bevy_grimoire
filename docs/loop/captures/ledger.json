@@ -54,11 +54,20 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
       "reason": "a defect: the bottom is cut off and unreachable",
-      "commit": "",
-      "attempts": []
+      "commit": "b28ff38",
+      "attempts": [
+        {
+          "host": "big",
+          "backend": "Vulkan",
+          "window": "1280x703",
+          "ui_scale": 1.2,
+          "outcome": "reproduced",
+          "saw": "the What's new page listed ten entries and drew three: no ScrollArea above or inside the page, nothing to bring the rest in"
+        }
+      ]
     }
   ]
 }
