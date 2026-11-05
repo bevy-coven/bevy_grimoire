@@ -363,10 +363,16 @@ fn spawn_surface(world: &mut World) {
     // Scale set by `fit_surface_to_window`: a `Camera2d`'s default projection makes one world unit
     // one *logical* pixel and the target is sized in *physical* ones, so the sprite draws at
     // `1 / scale_factor` to cover exactly the window it mirrors.
+    //
+    // **Its size is stated, and restated on every resize** (`fit_surface_to_window`, #307): see
+    // [`mirror_size`] for why leaving Bevy to read it off the image drew a black window.
     world.spawn((
         SurfaceRig,
         Mirror,
-        Sprite::from_image(handle.clone()),
+        Sprite {
+            custom_size: Some(mirror_size(size)),
+            ..Sprite::from_image(handle.clone())
+        },
         RenderLayers::layer(MIRROR_LAYER),
     ));
 
@@ -442,13 +448,13 @@ const MAX_GROWTH: f32 = 1.25;
 fn fit_surface_to_window(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     surface: Option<Res<Surface>>,
-    mut mirror: Query<&mut Transform, With<Mirror>>,
+    mut mirror: Query<(&mut Transform, &mut Sprite), With<Mirror>>,
     mut ui_scale: ResMut<UiScale>,
     mut images: ResMut<Assets<Image>>,
     mut events: MessageWriter<bevy::asset::AssetEvent<Image>>,
 ) {
     // No window is a headless run: there is nothing to fit to, and the initial 16:9 stands.
-    let (Ok(window), Some(surface), Ok(mut mirror)) =
+    let (Ok(window), Some(surface), Ok((mut mirror, mut mirror_sprite))) =
         (windows.single(), surface, mirror.single_mut())
     else {
         return;
@@ -483,11 +489,14 @@ fn fit_surface_to_window(
     if already != Some((iw, ih))
         && let Some(mut image) = images.get_mut(&surface.image)
     {
-        image.resize(Extent3d {
+        let size = Extent3d {
             width: iw,
             height: ih,
             depth_or_array_layers: 1,
-        });
+        };
+        image.resize(size);
+        // The mirror's size is restated with the image's, in the same frame: see [`mirror_size`].
+        mirror_sprite.custom_size = Some(mirror_size(size));
         // **Announce the resize, in the frame the camera reads it.**
         //
         // This is the whole fix, and it is here for a reason that took reading the engine to see.
@@ -520,6 +529,23 @@ fn fit_surface_to_window(
             id: surface.image.id(),
         });
     }
+}
+
+/// **The mirror's size, stated rather than read off the image** (#307): the surface's own extent, one
+/// world unit per texel, which `fit_surface_to_window`'s `1 / scale_factor` then fits to the window.
+///
+/// Reading it off the image is the same number, and it drew a black window. Since 0.20 Bevy draws a
+/// `Sprite` as a `Mesh2d` with a `SpriteMeshMaterial` it caches by the sprite's fields
+/// (`bevy_sprite_render-0.20.0/src/sprite_mesh/mod.rs`, `SpriteMeshMaterialBucketKey`). An image resized
+/// in place on frame 2 or 3 of a run left the sprite sampling a texture that is never drawn into, for
+/// good: measured 2026-11-04 on a bare Bevy rig under Xvfb (an image camera, a window camera on layer 1,
+/// this sprite), the window held 1 colour after a resize on frame 2 or 3 and 2 after one on frame 1, 5,
+/// 10 or 30; touching the material asset did not bring it back. The editor's surface is resized in
+/// exactly those frames, when the window learns its size (mac_air: 2176x1408, then 2176x1406), so every
+/// 0.2.x release opened black. A size that changes with the image moves the sprite to a new material
+/// in the frame the image changes, and the same rig then drew at every frame tried (1 to 5).
+fn mirror_size(size: Extent3d) -> Vec2 {
+    Vec2::new(size.width as f32, size.height as f32)
 }
 
 /// **Give the map camera the frame's hole, so the viewport is a region rather than the window.**
