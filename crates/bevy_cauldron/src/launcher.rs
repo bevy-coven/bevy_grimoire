@@ -1070,6 +1070,17 @@ fn learn_page(page: &mut ChildSpawnerCommands, launcher: &Launcher) {
 /// How many entries the What's new page lists; the rest are one press away on "See every change".
 pub const NEWS_SHOWN: usize = 10;
 
+/// **How wide an entry's prose column is**, in logical pixels: a readable measure, not the window's
+/// width.
+///
+/// At the capture's own window (1280 logical) the page's rows ran 778 px of prose — about **118
+/// characters** at this face's advance — and the note is *"These boxes like this are hard to read"*
+/// (`feedback-1793905698793`). Bringhurst's comfortable measure for one column is 45–75 characters,
+/// and past that the eye loses its place between one line and the next. At ~6.6 px a character
+/// (FiraMono at 11 px), `MEASURE_CHARS` is 66 characters — inside that range, and fixed, so a wider
+/// window buys page margin rather than a longer line.
+pub const NEWS_MEASURE_PX: f32 = 440.0;
+
 /// The still of an entry's clip, decoded, or `None` when it cannot be had: the changelog's stills are stored in Git LFS and are
 /// beside the source a build came from or in the app's `Resources`, so an install without them lists the entry without its picture.
 fn still_image(rel: &str) -> Option<Image> {
@@ -1109,7 +1120,11 @@ fn news_page(page: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut Art
             if let Some(handle) = picture {
                 entry.spawn((ImageNode::new(handle), thumb_node(), Pickable::IGNORE));
             }
-            entry.spawn(Node { flex_direction: FlexDirection::Column, flex_shrink: 1.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|words| {
+            // **The prose keeps a measure, and it has the room to.** `flex_shrink` alone let the column
+            // take whatever the window gave it — 118 characters a line at the capture's own width —
+            // so it is bounded to `NEWS_MEASURE_PX` and the row's leftover is margin
+            // (`feedback-1793905698793`).
+            entry.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(NEWS_MEASURE_PX), max_width: Val::Px(NEWS_MEASURE_PX), flex_shrink: 1.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|words| {
                 if fresh {
                     words.spawn((Text::new("New"), Role::Label, Pickable::IGNORE));
                 }
