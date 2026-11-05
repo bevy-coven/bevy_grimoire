@@ -63,9 +63,38 @@ else
 fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 
+# **The app is notarized and stapled before it goes into the DMG** (measured 2026-11-04, release 0.2.0: submitting the
+# DMG alone left the app inside it with no ticket — `stapler validate` on the mounted app said "does not have a ticket
+# stapled to it" — so a first launch with no network had to ask Apple). The DMG is then built *around* the stapled app
+# and submitted too: its own ticket is what Gatekeeper reads when the download is opened, and Apple's service answers
+# an already-notarized payload fast. Both submissions go through `notarize`, so there is one wording for a failure.
+notarize() { # <file to submit> <what to staple>
+  [ "$NOTARIZE" = 1 ] || return 0
+  RESULT=$(xcrun notarytool submit "$1" --key "$APPLE_NOTARY_KEY_PATH" --key-id "$APPLE_NOTARY_KEY_ID" \
+    --issuer "$APPLE_NOTARY_ISSUER_ID" --wait --output-format json)
+  echo "$RESULT"
+  read -r STATUS ID < <(python3 -c 'import json, sys; r = json.loads(sys.argv[1]); print(r.get("status", "?"), r.get("id", "?"))' "$RESULT")
+  if [ "$STATUS" != Accepted ]; then
+    echo "build_app.sh: notarization of $1: $STATUS; the log:" >&2
+    xcrun notarytool log "$ID" --key "$APPLE_NOTARY_KEY_PATH" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" >&2 || true
+    exit 1
+  fi
+  xcrun stapler staple "$2"
+  xcrun stapler validate "$2"
+}
+
+# A zip carries the app to the service with its signature and bundle shape intact; `zip` would not.
+if [ "$NOTARIZE" = 1 ]; then
+  ditto -c -k --keepParent "$APP" "dist/$NAME.notarize.zip"
+  notarize "dist/$NAME.notarize.zip" "$APP"
+  rm -f "dist/$NAME.notarize.zip"
+fi
+
 STAGE=dist/dmg-staging
 mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
+# `ditto`, not `cp -R`: the notarization ticket lives in the bundle's metadata, and `cp -R` is not guaranteed to carry it
+# into the staging folder (the DMG is built from that copy, so a dropped ticket is a DMG whose app cannot open offline).
+ditto "$APP" "$STAGE/Cauldron.app"
 ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname Cauldron -srcfolder "$STAGE" -ov -format UDZO "dist/$NAME.dmg"
 rm -rf "$STAGE"
@@ -74,18 +103,7 @@ if [ "$IDENTITY" != - ]; then
 fi
 
 if [ "$NOTARIZE" = 1 ]; then
-  RESULT=$(xcrun notarytool submit "dist/$NAME.dmg" --key "$APPLE_NOTARY_KEY_PATH" --key-id "$APPLE_NOTARY_KEY_ID" \
-    --issuer "$APPLE_NOTARY_ISSUER_ID" --wait --output-format json)
-  echo "$RESULT"
-  read -r STATUS ID < <(python3 -c 'import json, sys; r = json.loads(sys.argv[1]); print(r.get("status", "?"), r.get("id", "?"))' "$RESULT")
-  if [ "$STATUS" != Accepted ]; then
-    echo "build_app.sh: notarization $STATUS; the log:" >&2
-    xcrun notarytool log "$ID" --key "$APPLE_NOTARY_KEY_PATH" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" >&2 || true
-    exit 1
-  fi
-  # One submission covers both: the ticket is looked up by the app's cdhash.
-  xcrun stapler staple "dist/$NAME.dmg"
-  xcrun stapler staple "$APP"
+  notarize "dist/$NAME.dmg" "dist/$NAME.dmg"
 fi
 
 # After stapling, so an update carries the ticket. `ditto` keeps the signature intact; `zip` does not.
