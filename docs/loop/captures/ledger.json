@@ -27,9 +27,9 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "only proposes new behaviour (a download bar on Update); nothing is wrong with the button today",
+      "reason": "needs a progress channel before it can be a bar rather than a picture of one: update::download already reads the bytes chunk by chunk (DOWNLOAD_CHUNK_BYTES) but reports only Staged(Result), the sidebar is filled once on OnEnter(Launcher) so nothing there repaints, and the download is macOS-only so a headless Linux pass cannot exercise the real path. The shape is settled and written down: a second channel drained every frame (poll() returns early on Empty), Updater::progress as (received, total) from the response's content-length, a gooey Meter in the sidebar replacing the button while Downloading, and the button back when Staged lands. It needs the owner's word on one thing the note does not settle: whether the bar replaces the button in place or appears under it",
       "commit": "",
       "attempts": []
     },
