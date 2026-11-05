@@ -6,10 +6,10 @@
       "app_version": "0.2.5",
       "record_version": 1,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
       "reason": "reproduced on mac_air against the installed 0.2.6: one frame where the page body is laid out before the sidebar exists. The earlier 'texture not uploaded' cause was measured wrong (456d8ff caches the picture); this is a fill-order problem, not an asset one",
-      "commit": "",
+      "commit": "d01f0e4",
       "attempts": [
         {
           "host": "mac_air",
