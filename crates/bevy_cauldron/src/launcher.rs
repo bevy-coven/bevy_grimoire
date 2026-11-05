@@ -738,17 +738,22 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
 /// **What Cauldron is, in the sentence a first run has room for.**
 ///
 /// Named: the engine and its version, the two nouns this editor actually works in (pieces, maps), the
-/// folder a game loads, and the one capability that is not in Unity, Tiled or an art tool — an agent that
-/// edits the same map, through the same operations, beside the person. The old sentence named a *grimoire*
-/// and defined nothing, and the screen never said *Bevy*.
-const WELCOME_PITCH: &str = "A level editor for Bevy 0.20. Put your own meshes on a map; Cauldron saves \
-it to assets/grimoire/, and your game loads that folder. An AI agent can edit the same map beside you.";
+/// engine, and the one capability that is not in Unity, Tiled or an art tool — an agent that edits the same
+/// map, through the same operations, beside the person. The old sentence named a *grimoire* and defined
+/// nothing, and the screen never said *Bevy*.
+///
+/// **The folder's path is deliberately not here.** The first draft of this sentence named `assets/grimoire`
+/// and `no_internal_words_on_screen` refused it: a path under `assets/` is a word only the editor's makers
+/// know, and a person never types it. What they need to know is that there is **no export step**, which is
+/// the property; where the file lands is the editor's business.
+const WELCOME_PITCH: &str = "A level editor for Bevy 0.20. Put your own meshes on a map and Cauldron \
+saves it in a form your game reads directly — no export step. An AI agent can edit the same map beside you.";
 
 /// **What happens after the first click**, which the old screen never said. Three steps, in order.
 const WELCOME_STEPS: [&str; 3] = [
     "Open the example — it is copied to your own folder, so nothing you do is lost.",
     "Place pieces from the library, or add your own .glb meshes.",
-    "Save the map; your game reads it straight out of assets/grimoire/.",
+    "Save the map; your game reads it directly, with nothing to export.",
 ];
 
 /// The welcome column's measure, in logical px. Wide enough for the pitch on two comfortable lines,

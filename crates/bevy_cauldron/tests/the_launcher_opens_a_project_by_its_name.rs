@@ -201,7 +201,11 @@ fn a_first_run_is_a_welcome_with_one_accent_button_that_opens_the_example() {
     // sentence named a grimoire and defined nothing, the screen never said *Bevy*, and the tour that
     // would teach a first-timer lived two clicks away under `Learn`.
     assert!(said.contains("Bevy"), "the engine is named: {said:?}");
-    assert!(said.contains("assets/grimoire"), "the folder a game loads is named: {said:?}");
+    // **No path.** A first draft said `assets/grimoire` and `no_internal_words_on_screen` refused it —
+    // correctly: a path under `assets/` is the editor's word, not the person's. The *property* a first
+    // run needs is that there is nothing to export.
+    assert!(!said.contains("assets/"), "no path on the first screen: {said:?}");
+    assert!(said.contains("no export step"), "the property is named: {said:?}");
     assert!(!said.contains("hand your game a grimoire it can load"), "the sentence that defined nothing is gone: {said:?}");
     assert!(said.contains("1. Open the example"), "the first step is spelled out: {said:?}");
     // The footnote had no referent — nothing on the home is a setting — so it is now the one thing a
