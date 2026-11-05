@@ -31,8 +31,10 @@
 //! | `grimoire_list_rules` | the block rules a layout is generated from, as the project states them |
 //! | `grimoire_run_command` | run a registered editor command by its id, as its shortcut would |
 //! | `grimoire_jobs_stop` | ask a background job, such as the palette's thumbnail bake, to stop |
+//! | `grimoire_read_log` | the editor's own log file, read from disk, so it answers when the editor does not |
+//! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //!
-//! **Seventeen tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Nineteen tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -44,8 +46,12 @@
 //! and stdout, and it reaches the editor over BRP — which is the editor's own transport, and the
 //! editor is a separate process that owns the world.
 //!
-//! **Every path is confined to the project directory.** The server takes `--project` and refuses
-//! anything outside it; the editor writes the files and the server never touches the disk.
+//! **With `--project`, every path is confined to the project directory.** The server refuses a
+//! change made while the editor has another project open, and the editor writes the project's files.
+//! **Without it the server follows the editor**: whatever it has open, including none (the Projects
+//! home). Captures then go to the per-user data folder (`bevy_grimoire_core::user_dirs`), and the tools
+//! that read project files from disk (`grimoire_decide`, `grimoire_list_rules`, `grimoire_list_snips`)
+//! refuse and ask for `--project`.
 
 use std::path::PathBuf;
 
@@ -182,6 +188,36 @@ pub struct RectArg {
 pub struct StillParams {
     /// **A name for the capture**, in snake_case. It names the file it is written under.
     pub label: String,
+    /// **What to capture**: `surface` (the default), the image the editor draws into, or `window`,
+    /// what the window itself shows (its swapchain). On macOS an unfocused window reads as one flat
+    /// colour.
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+/// **The parameters of `grimoire_read_log`.**
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EditorLogParams {
+    /// **How many of the newest lines**, from 1 to 2000. The default is 200.
+    #[serde(default)]
+    pub lines: Option<u32>,
+}
+
+/// **The newest lines `grimoire_read_log` returns when not told.**
+const LOG_LINES_DEFAULT: u32 = 200;
+/// **The most lines `grimoire_read_log` returns.** A larger ask is clamped to this.
+const LOG_LINES_MAX: u32 = 2000;
+
+/// **The parameters of `grimoire_open_project`.**
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OpenProjectParams {
+    /// **The project folder**, one with an `assets/grimoire` folder, as a path on the editor's machine.
+    pub root: String,
+    /// **A map to open it on.** Without one, the project's own first screen.
+    #[serde(default)]
+    pub map: Option<String>,
 }
 
 /// **The parameters of `grimoire_snip`.**
@@ -359,15 +395,16 @@ fn fifty() -> usize {
 pub struct Grimoire {
     /// **The editor's BRP endpoint.**
     editor: Brp,
-    /// **The project directory, and the only place the server may point at.**
-    project: PathBuf,
+    /// **The project directory, and the only place the server may point at**, when one was named.
+    /// `None` follows whatever the editor has open.
+    project: Option<PathBuf>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl Grimoire {
-    /// **A server for the editor at `editor`, rooted at `project`.**
-    pub fn new(editor: Brp, project: PathBuf) -> Self {
+    /// **A server for the editor at `editor`, rooted at `project`, or following the editor when `None`.**
+    pub fn new(editor: Brp, project: Option<PathBuf>) -> Self {
         let tool_router = Self::tool_router();
         Grimoire {
             editor,
@@ -376,16 +413,17 @@ impl Grimoire {
         }
     }
 
-    /// **The project's root, for a tool that names a file.**
-    pub fn project(&self) -> &std::path::Path {
-        &self.project
+    /// **The project's root, for a tool that names a file**, when the server was given one.
+    pub fn project(&self) -> Option<&std::path::Path> {
+        self.project.as_deref()
     }
 
     /// **Grab a picture of the editor, as base64 PNG**, through `bevy_fairy/screenshot` and
-    /// `bevy_fairy/capture` (`Brp::screenshot`), from the surface the editor draws into.
-    async fn grab(&self) -> Result<String, String> {
+    /// `bevy_fairy/capture` (`Brp::screenshot`). `source` is bevy_fairy's: `offscreen`, the surface
+    /// the editor draws into, or `window`, the window's swapchain.
+    async fn grab(&self, source: &str) -> Result<String, String> {
         self.editor
-            .screenshot(json!({"source": "offscreen"}))
+            .screenshot(json!({"source": source}))
             .await
             .map_err(|e| format!("the editor's {e}"))
     }
@@ -395,7 +433,8 @@ impl Grimoire {
     /// **Under the project, in a directory the brief calls working files.** The brief says raw
     /// captures go under `target/loop/<date>-<sha>/`, and **the project directory is where the
     /// editor's own data lives** — so a capture is written beside the project, under `target`,
-    /// and never into the project's own data.
+    /// and never into the project's own data. **Without `--project`**, under the per-user data
+    /// folder's `captures` (`bevy_grimoire_core::user_dirs::captures_dir`).
     ///
     /// **The label is checked first, because it is joined into the path.** A label with `..`, a
     /// leading `/`, or an empty part would put the picture outside `captures`, or replace the
@@ -407,12 +446,13 @@ impl Grimoire {
                  between the parts; no empty part, `.` or `..`."
             ));
         }
-        Ok(self
-            .project
-            .join("target")
-            .join("loop")
-            .join("captures")
-            .join(label))
+        let base = match &self.project {
+            Some(project) => project.join("target").join("loop").join("captures"),
+            None => bevy_grimoire_core::user_dirs::captures_dir().ok_or(
+                "this system has no data directory, so a capture has nowhere to go; pass --project",
+            )?,
+        };
+        Ok(base.join(label))
     }
 
     /// **A name for a capture, unique enough that two do not collide.**
@@ -429,12 +469,13 @@ impl Grimoire {
     /// **The one thing the two processes have to agree on**, and the server cannot know it by
     /// itself: the editor is the one that knows which project it has open. **So the server asks
     /// the editor for its project root and compares**, and a mismatch is a refusal with a sentence
-    /// rather than a change to somebody else's map.
+    /// rather than a change to somebody else's map. **A server told no project follows the editor**,
+    /// so there is nothing to compare.
     pub async fn check_project(&self) -> Result<(), String> {
-        let told = self
-            .project
-            .canonicalize()
-            .unwrap_or_else(|_| self.project.clone());
+        let Some(project) = &self.project else {
+            return Ok(());
+        };
+        let told = project.canonicalize().unwrap_or_else(|_| project.clone());
         let answer = self.editor.call("grimoire/project_root", json!({})).await?;
         let editor_root = answer
             .get("project_root")
@@ -809,7 +850,9 @@ impl Grimoire {
                        bytes: two stills with the same fingerprint are the same picture, so compare \
                        fingerprints rather than file paths to tell whether the screen changed. Use \
                        this after a change to see what it did, or before one to see what it was \
-                       like.",
+                       like. Pass source \"window\" to capture what the window itself shows (its \
+                       swapchain) instead of what the editor drew; on macOS an unfocused window \
+                       reads as one flat colour.",
         annotations(
             title = "Capture a still of the editor",
             read_only_hint = false,
@@ -822,7 +865,13 @@ impl Grimoire {
         &self,
         Parameters(p): Parameters<StillParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        // **The label first**: a refused label is answered before the editor is asked anything.
+        // **The source first, then the label**: a refused argument is answered before the editor is
+        // asked anything.
+        let (source, fairy_source) = match p.source.as_deref() {
+            None | Some("surface") => ("surface", "offscreen"),
+            Some("window") => ("window", "window"),
+            Some(_) => return Ok(refusal("source is surface or window")),
+        };
         let dir = match self.capture_dir(&p.label) {
             Ok(dir) => dir,
             Err(e) => return Ok(refusal(&e)),
@@ -834,7 +883,7 @@ impl Grimoire {
             .call("grimoire/state", json!({}))
             .await
             .unwrap_or(Value::Null);
-        let png = match self.grab().await {
+        let png = match self.grab(fairy_source).await {
             Ok(png) => png,
             Err(e) => return Ok(refusal(&e)),
         };
@@ -853,6 +902,7 @@ impl Grimoire {
         }
         let answer = json!({
             "path": path.to_string_lossy(),
+            "source": source,
             "bytes": bytes.len(),
             // **What the picture IS, so two stills can be compared without opening them (E-062).**
             //
@@ -910,7 +960,7 @@ impl Grimoire {
             .call("grimoire/state", json!({}))
             .await
             .unwrap_or(Value::Null);
-        let png = match self.grab().await {
+        let png = match self.grab("offscreen").await {
             Ok(png) => png,
             Err(e) => return Ok(refusal(&e)),
         };
@@ -981,12 +1031,15 @@ impl Grimoire {
         &self,
         Parameters(p): Parameters<bevy_cauldron_mcp::decide::DecideParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let checks = match bevy_cauldron_mcp::decide::load_checks(&self.project) {
+        let Some(project) = self.project.clone() else {
+            return Ok(refusal("grimoire_decide needs --project: its checks live in the project"));
+        };
+        let checks = match bevy_cauldron_mcp::decide::load_checks(&project) {
             Ok(c) => c,
             Err(e) => return Ok(refusal(&e)),
         };
         let view = if bevy_cauldron_mcp::decide::needs_view(&p, &checks) {
-            match self.grab().await {
+            match self.grab("offscreen").await {
                 Ok(png) => Some(png),
                 Err(e) => return Ok(refusal(&e)),
             }
@@ -995,14 +1048,13 @@ impl Grimoire {
         };
         let game = if bevy_cauldron_mcp::decide::needs_game(&p, &checks) {
             let asked = p.game.clone().unwrap_or_default();
-            match bevy_cauldron_mcp::decide::fetch_game(&self.project, &asked).await {
+            match bevy_cauldron_mcp::decide::fetch_game(&project, &asked).await {
                 Ok(g) => Some(g),
                 Err(e) => return Ok(refusal(&e)),
             }
         } else {
             None
         };
-        let project = self.project.clone();
         let answer = tokio::task::spawn_blocking(move || {
             let http = bevy_oracle::Http::new(bevy_oracle::Config::from_env());
             bevy_cauldron_mcp::decide::decide_with(&p, &project, view.as_deref(), game.as_ref(), &http)
@@ -1048,6 +1100,11 @@ impl Grimoire {
                 "limit is {}, and it must be from 1 to 20.",
                 p.limit
             )));
+        }
+        if self.project.is_none() {
+            return Ok(refusal(
+                "grimoire_list_snips needs --project: the snips are files the editor writes in the project",
+            ));
         }
         let dir = match self.capture_dir("snips") {
             Ok(dir) => dir,
@@ -1170,8 +1227,12 @@ impl Grimoire {
     async fn list_rules(&self) -> Result<CallToolResult, ErrorData> {
         // **The file the editor's own `Project::open` reads**, computed the same way, so the two
         // cannot disagree about where rules live.
-        let path = self
-            .project
+        let Some(project) = &self.project else {
+            return Ok(refusal(
+                "grimoire_list_rules needs --project: it reads the project's rules.ron from disk",
+            ));
+        };
+        let path = project
             .join("assets")
             .join("grimoire")
             .join(bevy_grimoire_core::rules::FILE);
@@ -1553,6 +1614,106 @@ impl Grimoire {
             Err(e) => Ok(refusal(&e)),
         }
     }
+
+    /// **`grimoire_read_log` — the editor's own log, read from the file it writes** (#306).
+    ///
+    /// **Read from disk, never asked of the editor**, so it answers when the editor is hung, dead or
+    /// was never reachable: the log is how a black window or a crash on a machine with no terminal
+    /// says what happened. The path is `bevy_grimoire_core::user_dirs::log_file`, the one the editor's
+    /// `log_file` module writes.
+    #[tool(
+        name = "grimoire_read_log",
+        description = "The running editor's own log, read from the file it writes on this machine: \
+                       startup stages, the window self-check, warnings, errors and panics. Works even \
+                       when the editor is not answering. Pass lines (default 200, at most 2000) for \
+                       the newest lines.",
+        annotations(
+            title = "Read the editor's log",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn read_log(
+        &self,
+        Parameters(p): Parameters<EditorLogParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let Some(path) = bevy_grimoire_core::user_dirs::log_file() else {
+            return Ok(refusal(
+                "this system has no data directory, so the editor keeps no log on it",
+            ));
+        };
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(refusal(&format!(
+                    "no editor log at {}: this Cauldron has not run as this user since it began \
+                     logging (0.2.2)",
+                    path.display()
+                )));
+            }
+            Err(e) => return Ok(refusal(&format!("{}: {e}", path.display()))),
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let all: Vec<&str> = text.lines().collect();
+        let want = p.lines.unwrap_or(LOG_LINES_DEFAULT).clamp(1, LOG_LINES_MAX) as usize;
+        let newest = &all[all.len().saturating_sub(want)..];
+        let mut previous = path.as_os_str().to_owned();
+        previous.push(".1");
+        let previous = PathBuf::from(previous);
+        Ok(CallToolResult::structured(json!({
+            "path": path.to_string_lossy(),
+            "lines": newest,
+            "total_lines": all.len(),
+            "previous": previous.exists().then(|| previous.to_string_lossy().into_owned()),
+        })))
+    }
+
+    /// **`grimoire_open_project` — open a project in the running editor, from any screen** (#306).
+    ///
+    /// The editor checks the folder and opens it the way its command line and launcher do; the
+    /// open itself runs on its next frame. A server started with `--project` opens only that one,
+    /// because it would refuse every change made in another.
+    #[tool(
+        name = "grimoire_open_project",
+        description = "Open a project folder in the running editor, from any screen including the \
+                       Projects home, optionally on a named map. The open runs on the editor's next \
+                       frame: call grimoire_state afterwards to see it.",
+        annotations(
+            title = "Open a project in the editor",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn open_project(
+        &self,
+        Parameters(p): Parameters<OpenProjectParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        if let Some(told) = &self.project {
+            let told = told.canonicalize().unwrap_or_else(|_| told.clone());
+            let asked = PathBuf::from(&p.root);
+            let asked = asked.canonicalize().unwrap_or(asked);
+            if asked != told {
+                return Ok(refusal(&format!(
+                    "this server was started with --project `{}`, so it opens only that project, \
+                     and `{}` is another one. Start it without --project to follow the editor.",
+                    told.display(),
+                    asked.display()
+                )));
+            }
+        }
+        match self
+            .editor
+            .call("grimoire/project_open", json!({"root": p.root, "map": p.map}))
+            .await
+        {
+            Ok(v) => Ok(CallToolResult::structured(v)),
+            Err(e) => Ok(refusal(&e)),
+        }
+    }
 }
 
 /// **A refusal, as a tool result an agent can read.**
@@ -1638,9 +1799,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "bevy_cauldron_mcp — the bevy_grimoire editor over the Model Context Protocol.\n\n\
                      USAGE:\n    bevy_cauldron_mcp [--project <dir>]\n\n\
-                     --project <dir>   the project directory the editor is working on. The server \
-                     never writes to it itself; the editor does. Defaults to the current \
-                     directory.\n\n\
+                     --project <dir>   the project the editor is working on; the server refuses a \
+                     change made while the editor has another one open. Without it the server \
+                     follows whatever the editor has open, including none (the Projects home).\n\n\
                      The editor's BRP endpoint comes from BEVY_BRP_PORT (default 15702), which is \
                      the same variable the editor reads."
                 );
@@ -1653,7 +1814,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    let project = project.unwrap_or_else(|| PathBuf::from("."));
     let server = Grimoire::new(Brp::from_env(), project);
     // **The project is checked when a tool is called, not when the server starts.**
     //

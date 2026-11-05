@@ -30,6 +30,27 @@ What you see: ask the agent to call `grimoire_state`. It answers with the open m
 
 If it goes wrong: a refusal that says no editor answered means the editor is not running, or it is on another port. Check that both sides use the same `BEVY_BRP_PORT`.
 
+## Attach to an installed Cauldron
+
+Goal: drive the Cauldron app installed on a Mac, from any machine that can ssh to it, from the moment it opens.
+
+The app carries its own MCP server, `Cauldron.app/Contents/MacOS/bevy_cauldron_mcp`. Run it over ssh with no `--project`, and it follows whatever the app has open, the Projects home included:
+
+```json
+{
+  "mcpServers": {
+    "cauldron-mac": {
+      "command": "ssh",
+      "args": ["-o", "BatchMode=yes", "<mac>", "/Applications/Cauldron.app/Contents/MacOS/bevy_cauldron_mcp"]
+    }
+  }
+}
+```
+
+What you see: `grimoire_state` answers on the Projects home, and `grimoire_open_project` with `root` opens a project folder on that Mac. `grimoire_read_log` reads the app's own log, `~/Library/Application Support/Grimoire/cauldron.log`, and answers even when the app does not. `grimoire_capture_still` with `"source": "window"` shows what the window itself shows.
+
+If it goes wrong: read the log first. Its first line names the version and where the app runs from; a `window self-check` line says how many colours the window showed, and `the window is black` means the editor draws but nothing reaches the window. Without `--project`, `grimoire_decide`, `grimoire_list_rules` and `grimoire_list_snips` refuse, because they read project files from disk.
+
 ## A worked session
 
 Goal: remove a piece that is in the way, and undo the removal if you change your mind.

@@ -24,8 +24,23 @@ cargo run -p bevy_cauldron_mcp -- --project <project>
 ```
 
 `BEVY_BRP_PORT` defaults to **15702** on both sides, so one variable points both ends at the same
-socket. Running the editor and the server against different projects is the one mistake that
-produces a confusing answer, and `--project` says which project the server *thinks* it is on.
+socket. With `--project`, the server refuses a change made while the editor has another project
+open. **Without it the server follows the editor**: whatever it has open, including none (the
+Projects home), and `grimoire_open_project` opens one.
+
+## An installed Cauldron
+
+Every macOS release carries this server beside the editor, signed with it:
+`Cauldron.app/Contents/MacOS/bevy_cauldron_mcp`. An agent on another machine attaches over ssh with
+no `--project`, so it follows the installed app from its first frame:
+
+```sh
+ssh <mac> /Applications/Cauldron.app/Contents/MacOS/bevy_cauldron_mcp
+```
+
+`grimoire_read_log` reads the editor's own log (`~/Library/Application Support/Grimoire/cauldron.log`)
+from disk, so it answers when the editor does not, and `grimoire_capture_still` with
+`"source": "window"` shows what the window itself shows rather than what the editor drew.
 
 ## The tools
 

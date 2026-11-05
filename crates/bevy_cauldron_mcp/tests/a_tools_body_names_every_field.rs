@@ -43,6 +43,7 @@ const FORWARDING: &[(&str, &str)] = &[
     ("grimoire/oplog_read", "LogParams"),
     ("grimoire/frame_view", "FrameParams"),
     ("grimoire/run_command", "RunCommandParams"),
+    ("grimoire/project_open", "ProjectOpenParams"),
 ];
 
 /// **The field names of a struct's body**, as the source text spells them.

@@ -51,9 +51,16 @@ impl Server {
     /// developer's machine has on it: on 2026-10-23 an ssh tunnel to another Mac held it, the
     /// snip tool reached a remote editor, and the test failed on a PNG where it wanted a refusal.
     fn start_with(args: &[&str]) -> Server {
+        Server::start_with_env(args, &[])
+    }
+
+    /// **The same, with extra environment**, such as a `HOME` of the test's own so the per-user
+    /// data folder (`bevy_grimoire_core::user_dirs`) is a scratch directory and not the developer's.
+    fn start_with_env(args: &[&str], env: &[(&str, &str)]) -> Server {
         let mut child = Command::new(env!("CARGO_BIN_EXE_bevy_cauldron_mcp"))
             .args(args)
             .env("BEVY_BRP_PORT", closed_port().to_string())
+            .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1263,4 +1270,92 @@ fn a_broken_rules_file_is_refused_by_name() {
         dir.join("rules.ron").is_file(),
         "the refused file must be left exactly as it was"
     );
+}
+
+/// **A scratch home whose per-user data folder is known**, as `(home, <data_dir>/Grimoire)`.
+///
+/// `dirs::data_dir` is `$XDG_DATA_HOME` on Linux and `$HOME/Library/Application Support` on macOS;
+/// the server is started with both pointed here, so the editor log it reads is the one this test wrote.
+fn scratch_home(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    let home = std::env::temp_dir().join(format!("cauldron-mcp-home-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(&home).expect("a scratch home");
+    let data = if cfg!(target_os = "macos") {
+        home.join("Library").join("Application Support")
+    } else {
+        home.clone()
+    };
+    (home, data.join("Grimoire"))
+}
+
+/// The environment that points the server's per-user data folder at `home`.
+fn home_env(home: &std::path::Path) -> Vec<(&'static str, String)> {
+    let home = home.to_str().expect("a UTF-8 path").to_owned();
+    vec![("HOME", home.clone()), ("XDG_DATA_HOME", home)]
+}
+
+/// **`grimoire_read_log` gives the newest lines of the editor's log file and how many it holds**,
+/// read from disk with no editor running.
+#[test]
+fn the_log_tool_reads_the_newest_lines_of_the_editors_log() {
+    let (home, grimoire) = scratch_home("tail");
+    std::fs::create_dir_all(&grimoire).expect("the data folder");
+    std::fs::write(grimoire.join("cauldron.log"), "a\nb\nc\n").expect("a log");
+    let env = home_env(&home);
+    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+    let mut server = Server::start_with_env(&[], &env);
+    let answer = server.call("grimoire_read_log", json!({"lines": 2}));
+    assert!(
+        answer["result"]["isError"].as_bool() != Some(true),
+        "a log that exists is read, not refused: {answer}"
+    );
+    let body = &answer["result"]["structuredContent"];
+    assert_eq!(body["lines"], json!(["b", "c"]), "the newest two lines, oldest first: {body}");
+    assert_eq!(body["total_lines"], 3, "{body}");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// **A machine whose editor never logged is told so**, naming the file it looked for.
+#[test]
+fn the_log_tool_refuses_when_there_is_no_log() {
+    let (home, _) = scratch_home("missing");
+    let env = home_env(&home);
+    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+    let mut server = Server::start_with_env(&[], &env);
+    let answer = server.call("grimoire_read_log", json!({}));
+    assert_eq!(answer["result"]["isError"], true, "a missing log is a refusal: {answer}");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(text.contains("cauldron.log"), "the refusal names the file it looked for: {text}");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// **Without `--project` the server follows the editor**: a change is sent straight to the editor
+/// rather than refused for a project mismatch, so the refusal here is the editor not answering the
+/// command itself, not the project check that runs before it.
+#[test]
+fn without_a_project_a_command_goes_straight_to_the_editor() {
+    let mut server = Server::start();
+    let answer = server.call("grimoire_run_command", json!({"id": "file.save"}));
+    assert_eq!(answer["result"]["isError"], true, "no editor is listening: {answer}");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        text.contains("grimoire/run_command"),
+        "the refusal should be the editor not answering the command: {text}"
+    );
+    assert!(
+        !text.contains("grimoire/project_root") && !text.contains("this server was told"),
+        "a server told no project must not check one: {text}"
+    );
+}
+
+/// **A capture source other than the two there are is refused before the editor is asked.**
+#[test]
+fn a_capture_from_an_unknown_source_is_refused() {
+    let mut server = Server::start();
+    let answer = server.call("grimoire_capture_still", json!({"label": "x", "source": "screen"}));
+    assert_eq!(answer["result"]["isError"], true, "{answer}");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(text.contains("source is surface or window"), "{text}");
 }

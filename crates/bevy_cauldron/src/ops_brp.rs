@@ -411,6 +411,36 @@ fn project_root(
     }))
 }
 
+/// **The parameters of `grimoire/project_open`.** The MCP server's `grimoire_open_project` forwards exactly these
+/// (`a_tools_body_names_every_field`).
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectOpenParams {
+    /// The project folder: one with an `assets/grimoire` folder.
+    pub root: String,
+    /// A map to open it on; without one, the project's own first screen.
+    #[serde(default)]
+    pub map: Option<String>,
+}
+
+/// **`grimoire/project_open` — open a project from any screen, the Projects home included** (#306).
+///
+/// The same way in as the command line and the launcher (`project_assets::open_project`), queued for the end of this
+/// frame because it changes the screen. The folder is checked here, so a folder that is not a project is refused with
+/// the launcher's own sentence before anything moves.
+fn project_open(In(params): In<Value>, mut commands: Commands) -> Result<Value, String> {
+    let p: ProjectOpenParams = serde_json::from_value(params).map_err(|e| format!("pass root (a project folder) and, optionally, map: {e}"))?;
+    let root = crate::launcher::check_project(std::path::Path::new(&p.root))?;
+    let answer = json!({"opening": root.to_string_lossy(), "map": p.map});
+    let map = p.map;
+    commands.queue(move |world: &mut World| {
+        if let Err(e) = crate::project_assets::open_project(world, &root, map.as_deref()) {
+            error!("cannot open {}: {e}", root.display());
+        }
+    });
+    Ok(answer)
+}
+
 /// **The editor's own frame clock (E-011).** `frame_time` is wall time between frames, so a loaded
 /// machine inflates it; `busy_ms` is the time the main schedules spent working inside one frame
 /// (`First` to `Last`), which waiting on the present does not lengthen. Read both: a high frame
@@ -2284,6 +2314,17 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({})),
             project_root,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/project_open",
+                "Open a project folder from any screen, the Projects home included, optionally on a named \
+                 map. The folder is checked first and a folder that is not a project is refused; the open \
+                 itself runs at the end of this frame, so read grimoire/state afterwards to see it.",
+            )
+            .example(json!({"root": "/path/to/project", "map": "town"})),
+            project_open,
         );
 
         app.add_debug_command(

@@ -109,7 +109,7 @@ The library's pieces, a page at a time. Each row carries the piece's id, the mes
 
 ### `grimoire_capture_still`
 
-A picture of the editor as it is now -- the world and the interface, because the editor draws both into one image -- plus a state summary of the same moment. The picture is returned as an image and written to a file whose path is in the answer. The answer also carries a fingerprint of the picture's bytes: two stills with the same fingerprint are the same picture, so compare fingerprints rather than file paths to tell whether the screen changed. Use this after a change to see what it did, or before one to see what it was like.
+A picture of the editor as it is now -- the world and the interface, because the editor draws both into one image -- plus a state summary of the same moment. The picture is returned as an image and written to a file whose path is in the answer. The answer also carries a fingerprint of the picture's bytes: two stills with the same fingerprint are the same picture, so compare fingerprints rather than file paths to tell whether the screen changed. Use this after a change to see what it did, or before one to see what it was like. Pass source "window" to capture what the window itself shows (its swapchain) instead of what the editor drew; on macOS an unfocused window reads as one flat colour.
 
 | annotation | value |
 |---|---|
@@ -195,6 +195,26 @@ Run one of the editor's registered commands by id, exactly as its keyboard short
 |---|---|
 | `readOnlyHint` | false |
 | `destructiveHint` | true |
+| `idempotentHint` | false |
+
+### `grimoire_read_log`
+
+The running editor's own log, read from the file it writes on this machine: startup stages, the window self-check, warnings, errors and panics. Works even when the editor is not answering. Pass lines (default 200, at most 2000) for the newest lines.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | true |
+| `destructiveHint` | false |
+| `idempotentHint` | true |
+
+### `grimoire_open_project`
+
+Open a project folder in the running editor, from any screen including the Projects home, optionally on a named map. The open runs on the editor's next frame: call grimoire_state afterwards to see it.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | false |
+| `destructiveHint` | false |
 | `idempotentHint` | false |
 
 ## How the two paths converge

@@ -222,7 +222,9 @@ pub const TOOLS: &[ToolDoc] = &[
                       bytes: two stills with the same fingerprint are the same picture, so compare \
                       fingerprints rather than file paths to tell whether the screen changed. Use \
                       this after a change to see what it did, or before one to see what it was \
-                      like.",
+                      like. Pass source \"window\" to capture what the window itself shows (its \
+                      swapchain) instead of what the editor drew; on macOS an unfocused window \
+                      reads as one flat colour.",
         read_only: false,
         destructive: false,
         idempotent: false,
@@ -350,6 +352,25 @@ pub const TOOLS: &[ToolDoc] = &[
                       grimoire_apply_operation, which names its effect and logs it.",
         read_only: false,
         destructive: true,
+        idempotent: false,
+    },
+    ToolDoc {
+        name: "grimoire_read_log",
+        description: "The running editor's own log, read from the file it writes on this machine: \
+                      startup stages, the window self-check, warnings, errors and panics. Works even \
+                      when the editor is not answering. Pass lines (default 200, at most 2000) for \
+                      the newest lines.",
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+    },
+    ToolDoc {
+        name: "grimoire_open_project",
+        description: "Open a project folder in the running editor, from any screen including the \
+                      Projects home, optionally on a named map. The open runs on the editor's next \
+                      frame: call grimoire_state afterwards to see it.",
+        read_only: false,
+        destructive: false,
         idempotent: false,
     },
 ];
@@ -541,7 +562,8 @@ pub fn schemas() -> Value {
             "additionalProperties": false,
             "required": ["label"],
             "properties": {
-                "label": {"type": "string", "description": "A snake_case name for the capture."}
+                "label": {"type": "string", "description": "A snake_case name for the capture."},
+                "source": {"type": "string", "enum": ["surface", "window"], "default": "surface", "description": "surface: the image the editor draws into. window: what the window itself shows (its swapchain)."}
             }
         },
         "grimoire_capture_sequence": {
@@ -637,6 +659,22 @@ pub fn schemas() -> Value {
             "required": ["id"],
             "properties": {
                 "id": {"type": "string", "description": "The command's id, `<category>.<verb>`, such as `edit.undo`."},
+            },
+        },
+        "grimoire_read_log": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "lines": {"type": "integer", "minimum": 1, "maximum": 2000, "default": 200, "description": "How many of the newest lines."},
+            },
+        },
+        "grimoire_open_project": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["root"],
+            "properties": {
+                "root": {"type": "string", "description": "The project folder, a path on the editor's machine."},
+                "map": {"type": ["string", "null"], "default": null, "description": "A map to open it on."},
             },
         },
     })
