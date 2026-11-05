@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **307-window-not-black** `0463594` The window shows the editor instead of opening black: the mirror states its size, so a Bevy 0.20 resize race cannot leave it on a dead texture (#307) *For you: Cauldron opens on its Projects home again, instead of a black window.*<br><a href="docs/changelog/media/2026-11-04-307-window-not-black.mp4"><img src="docs/changelog/media/2026-11-04-307-window-not-black.png" width="320" alt="clip"></a>
 - **306-release-smoke** `cdaa856` A release is published only after its own MCP server, driving the fresh app on mac_air, finds a window that is not black (#306, #307) *No clip: release tooling; proved by the release-macos run's smoke step*
 - **306-bundled-mcp** `3ec3f46` Every macOS release carries its own MCP server, signed and notarized with the app (#306) *No clip: release packaging; proved by codesign --verify --deep --strict in build_app.sh*
 - **306-mcp-follow** `0b62a4e` The MCP server follows the editor from its first frame, reads its log, opens a project and captures the window itself (#306) *No clip: agent tools; proved by an_agent_calls_the_server and docs_are_current*
