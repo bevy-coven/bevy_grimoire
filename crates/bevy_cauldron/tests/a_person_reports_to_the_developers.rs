@@ -248,6 +248,18 @@ fn a_click_picks_the_button_under_the_pointer() {
         "the record carries the node's rectangle: {:?}",
         element.rect_px
     );
+    // **Not a toast's stack.** gooey's `ToastStack` is a full-window anchor present whether or not a
+    // toast is on it, so a hit test that took the topmost node blindly picked `ToastStack` for
+    // everything — measured live on 2026-11-05, pointing at the toolbar. It is excluded; a toast that
+    // is actually up is still picked, because its own node is inside the stack and is not.
+    assert!(
+        !element
+            .path
+            .iter()
+            .any(|step| step.role.as_deref() == Some("ToastStack")),
+        "a toast's empty stack must not answer for the window: {:?}",
+        element.path
+    );
 }
 
 /// **The wheel picks the button instead of its words.**

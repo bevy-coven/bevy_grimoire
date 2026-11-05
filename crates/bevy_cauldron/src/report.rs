@@ -442,7 +442,7 @@ pub fn chain_under(
         &InheritedVisibility,
         Option<&CalculatedClip>,
         Option<&ChildOf>,
-    ), Without<ReportPart>>,
+    ), (Without<ReportPart>, Without<bevy_gooey::ToastStack>)>,
 ) -> Vec<Entity> {
     for slice in stack.partition.iter().rev() {
         for entity in stack.uinodes[slice.clone()].iter().rev() {
@@ -525,7 +525,15 @@ pub(crate) struct ReportWorld<'w, 's> {
             Option<&'static CalculatedClip>,
             Option<&'static ChildOf>,
         ),
-        Without<ReportPart>,
+        // **Not the report's own layer, and not a toast's stack.** The frozen picture covers the whole
+        // window, so the report's overlay would answer every click; and gooey's `ToastStack` is a
+        // full-window anchor that holds a toast when there is one — measured live on 2026-11-05, a
+        // report pointing at the toolbar picked `ToastStack` with no toast on screen at all. A toast
+        // that *is* up still wins, because its own node is inside the stack and is not excluded.
+        (
+            Without<ReportPart>,
+            Without<bevy_gooey::ToastStack>,
+        ),
     >,
     /// What a node is called, for the record's path: never a type name, always what a reader acts on.
     described: Query<
