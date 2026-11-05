@@ -81,8 +81,10 @@ mod tests {
         let idle = (SnipEdit::default(), ReportEdit::default());
         assert!(!claimed(&idle.0, &idle.1), "nothing is going on");
 
-        let mut snip = SnipEdit::default();
-        snip.armed = true;
+        let snip = SnipEdit {
+            armed: true,
+            ..Default::default()
+        };
         assert!(claimed(&snip, &idle.1), "the snip is armed");
 
         let report = ReportEdit::pointing_for_test();
