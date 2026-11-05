@@ -4,6 +4,12 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-04
 
+- **306-release-smoke** `cdaa856` A release is published only after its own MCP server, driving the fresh app on mac_air, finds a window that is not black (#306, #307) *No clip: release tooling; proved by the release-macos run's smoke step*
+- **306-bundled-mcp** `3ec3f46` Every macOS release carries its own MCP server, signed and notarized with the app (#306) *No clip: release packaging; proved by codesign --verify --deep --strict in build_app.sh*
+- **306-mcp-follow** `0b62a4e` The MCP server follows the editor from its first frame, reads its log, opens a project and captures the window itself (#306) *No clip: agent tools; proved by an_agent_calls_the_server and docs_are_current*
+- **306-startup-probe** `e39bf3e` Startup logs the window surface, every camera, a frame pulse, and a self-check of what the window itself shows (#306, #307) *No clip: log lines only; proved by startup_probe's sampled_colours tests and an Xvfb run*
+- **306-log-file** `599a41a` The editor writes its log to ~/Library/Application Support/Grimoire/cauldron.log, panics included, so a launch from Finder leaves evidence (#306) *No clip: a log file; proved by log_file's unit tests and an Xvfb run whose file starts --- Cauldron 0.2.2*
+- **306-user-dirs** `c5e939f` The editor and its MCP server name the per-user data folder in one place (#306) *No clip: a refactor; proved by engine_free and the recent/settings/trusted paths unchanged*
 - **285-notarize-app-first** `874ab19` The app inside the disk image carries its own notarization ticket, so it opens offline (#285) *No clip: release tooling; proved by stapler validate on the app inside the DMG*
 - **285-signed-release** `cc81c61` A release is notarized as the app and then as the disk image, so the app opens offline too (#285) *No clip: release tooling; proved by stapler validate on the app inside the published DMG*
 - **297-new-project-dialog** `f8b9062` The New project form opens centred, with the Name field ready to type in (#297) *No clip: form layout; proved by a_new_project_form_opens_ready_to_type_in*
