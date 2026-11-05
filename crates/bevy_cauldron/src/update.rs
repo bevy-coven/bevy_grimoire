@@ -224,6 +224,15 @@ pub struct Updater {
     /// Why this app cannot update where it is, said instead of starting.
     pub blocked: Option<String>,
     pub state: UpdateState,
+    /// **Did a person press the button for the job in flight?**
+    ///
+    /// The launch check runs on its own ([`start_the_first_check`]). It used to answer into the
+    /// launcher's problem line exactly as a pressed one does, so every launch opened with a sticky
+    /// *"Cauldron v0.2.4 is the newest release"* in the danger skin — measured in the shipped 0.2.4
+    /// screenshot on 2026-11-05, and it was the first thing on a first-run screen. **A check nobody
+    /// asked for has nothing to report when it finds nothing**: the button's own label already says
+    /// `Up to date — v…`. An update that *is* available, and a failure, speak either way.
+    manual: bool,
     /// The offer being downloaded, so a refusal at the last step can offer it again.
     staging: Option<Offer>,
     /// The answer of the job in flight, if one is.
@@ -232,7 +241,7 @@ pub struct Updater {
 
 impl Updater {
     pub fn new(feed: String, bundle: PathBuf) -> Self {
-        Self { feed, bundle, blocked: None, state: UpdateState::Idle, staging: None, rx: None }
+        Self { feed, bundle, blocked: None, state: UpdateState::Idle, manual: false, staging: None, rx: None }
     }
 
     /// **What the button reads, including the answer.**
@@ -257,22 +266,37 @@ impl Updater {
         }
     }
 
-    /// Whether the editor's chrome bar shows the button: only when there is an update to take, one in
-    /// progress, or one that failed. Nothing to offer leaves the bar as it was.
+    /// **Is there anything for a person to do about updating?**
     ///
-    /// **`UpToDate` is deliberately not here.** An up-to-date answer is not something to act on, and
-    /// the bar is the editor's working surface — a button that says "nothing to do" would sit over a
-    /// map being authored. The answer is on the row that was pressed, the home's own button, which is
-    /// always on screen and whose label changes the same frame ([`Updater::label`]).
-    pub fn in_chrome(&self) -> bool {
+    /// The home's sidebar used to show [`Self::label`] as a button always, so on a first run it read
+    /// `Up to date — v0.2.4` in the same skin as `Projects`, `Learn` and `Settings` — a status readout
+    /// dressed as a page tab, inviting a press that does nothing, and printing the version a second
+    /// time two lines under `Version 0.2.4` (design review, 2026-11-05). The sidebar now shows a quiet
+    /// version line and **this button only when it is true**: there is an update, one is downloading,
+    /// or one failed.
+    pub fn actionable(&self) -> bool {
         matches!(
             self.state,
             UpdateState::Available(_) | UpdateState::Downloading(_) | UpdateState::Installing(_) | UpdateState::Failed(_)
         )
     }
 
-    fn begin_check(&mut self) {
+    /// Whether the editor's chrome bar shows the button: only when there is an update to take, one in
+    /// progress, or one that failed. Nothing to offer leaves the bar as it was.
+    ///
+    /// **`UpToDate` is deliberately not here.** An up-to-date answer is not something to act on, and
+    /// the bar is the editor's working surface — a button that says "nothing to do" would sit over a
+    /// map being authored. On the home the answer is one quiet line, and a button only when
+    /// [`Self::actionable`].
+    pub fn in_chrome(&self) -> bool {
+        self.actionable()
+    }
+
+    /// Start a check. `manual` says a person pressed for it, which is what decides whether an
+    /// answer of "nothing newer" is worth saying — see [`Self::manual`].
+    fn begin_check(&mut self, manual: bool) {
         self.state = UpdateState::Checking;
+        self.manual = manual;
         let feed = self.feed.clone();
         self.spawn(move || Msg::Checked(check(&feed)));
     }
@@ -455,7 +479,7 @@ fn on_activate(
         return;
     }
     match updater.state.clone() {
-        UpdateState::Idle | UpdateState::UpToDate | UpdateState::Failed(_) => updater.begin_check(),
+        UpdateState::Idle | UpdateState::UpToDate | UpdateState::Failed(_) => updater.begin_check(true),
         UpdateState::Available(offer) => {
             if dirty(open_map.as_deref()) {
                 tell(SAVE_FIRST, editor.as_deref_mut(), launcher.as_deref_mut());
@@ -518,7 +542,8 @@ fn start_the_first_check(updater: Option<ResMut<Updater>>, mut done: Local<bool>
     }
     *done = true;
     if updater.state == UpdateState::Idle && updater.blocked.is_none() {
-        updater.begin_check();
+        // Nobody pressed for this one, so "nothing newer" is not news. See [`Updater::manual`].
+        updater.begin_check(false);
     }
 }
 
@@ -544,22 +569,30 @@ fn poll(
         Err(TryRecvError::Disconnected) => Msg::Staged(Err("the update stopped without an answer".to_owned())),
     };
     updater.rx = None;
+    // **The flag belongs to the job that just answered**, and the take below reads it once.
+    let asked = updater.manual;
+    updater.manual = false;
     let failed = match msg {
         Msg::Checked(Ok(Some(offer))) => {
             updater.state = UpdateState::Available(offer);
             None
         }
         Msg::Checked(Ok(None)) => {
-            // **An answer with no words reads as a press that did nothing.** The label changes to
-            // `Up to date — v…` the same frame (see `Updater::label`), and this line is what a person
-            // sees on the row they pressed, in the same place a failure would appear.
+            // **An answer with no words reads as a press that did nothing** — so a check a person
+            // pressed for says which version is newest. **A check nobody pressed for says nothing**:
+            // it is the label's job (`Up to date — v…`), and a sticky toast on every launch is a
+            // receipt in the danger skin sitting where a real refusal would appear.
             updater.state = UpdateState::UpToDate;
-            Some(format!(
-                "Cauldron v{} is the newest release.",
-                env!("CARGO_PKG_VERSION")
-            ))
+            asked.then(|| {
+                format!(
+                    "Cauldron v{} is the newest release.",
+                    env!("CARGO_PKG_VERSION")
+                )
+            })
         }
         Msg::Checked(Err(e)) => {
+            // **A failure speaks whoever asked for it**: a launch that cannot reach the feed is a
+            // fact the person needs, and it names itself (`Update failed — try again`).
             warn!("update check failed: {e}");
             updater.state = UpdateState::Failed(e);
             None

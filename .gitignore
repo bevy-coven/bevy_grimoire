@@ -9,3 +9,6 @@ __pycache__/
 # seconds. What is committed is the manifest (`clip_samples.ron`) and the measurement
 # (`clip_calibration.ron`).
 crates/bevy_oracle/fixtures/clips/
+
+# Impeccable design-critique archive: a run own bookkeeping, not source.
+.impeccable/

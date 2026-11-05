@@ -195,9 +195,23 @@ fn a_first_run_is_a_welcome_with_one_accent_button_that_opens_the_example() {
     let mut texts_q = app.world_mut().query::<(&Role, &Text)>();
     let label = found[0].0.iter().find_map(|k| texts_q.get(app.world(), *k).ok().map(|(_, t)| t.0.clone()));
     assert_eq!(label.as_deref(), Some("Open the example"));
-    let said = all_text(&mut app);
-    assert!(said.iter().any(|t| t == "Welcome to Cauldron"), "{said:?}");
-    assert!(said.iter().any(|t| t == "Everything here can be changed later in Settings."), "{said:?}");
+    let said = all_text(&mut app).join("\n");
+    assert!(said.contains("Welcome to Cauldron"), "{said:?}");
+    // **The first run says what this thing is, and how it works** (design review, 2026-11-05). The old
+    // sentence named a grimoire and defined nothing, the screen never said *Bevy*, and the tour that
+    // would teach a first-timer lived two clicks away under `Learn`.
+    assert!(said.contains("Bevy"), "the engine is named: {said:?}");
+    assert!(said.contains("assets/grimoire"), "the folder a game loads is named: {said:?}");
+    assert!(!said.contains("hand your game a grimoire it can load"), "the sentence that defined nothing is gone: {said:?}");
+    assert!(said.contains("1. Open the example"), "the first step is spelled out: {said:?}");
+    // The footnote had no referent — nothing on the home is a setting — so it is now the one thing a
+    // person with a folder on disk needs to know before pressing Open folder….
+    assert!(said.contains("Nothing on disk changes until you save"), "{said:?}");
+    assert!(!said.contains("Everything here can be changed later in Settings"), "the referentless footnote is gone: {said:?}");
+    // **`Take the tour` is on this page as well as under `Learn`**, which is the point of the finding:
+    // the onboarding used to be reachable only from the second tab. Two buttons say it now, by design,
+    // so this asserts it is here rather than that it is unique.
+    assert!(all_text(&mut app).iter().any(|t| t == "Take the tour"), "the tour is offered on the first screen");
     button(&mut app, "New project");
     button(&mut app, "Open folder…");
 }

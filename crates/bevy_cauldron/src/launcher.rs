@@ -564,6 +564,11 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
                 }),
             ));
             if tab == launcher.tab {
+                // **Selection is a shape, not a shade.** `ROW_SELECTED` (L* 25.0) against `ROW_BG`
+                // (15.9) is a few ramp steps, and in the shipped screenshot the selected tab was not
+                // tellable from its neighbours. `ui::paint_marked_buttons` gives a `Selected` button
+                // the accent rail down its leading edge (`crate::chrome::SELECT_RAIL_W`), the same vocabulary
+                // the kit's rows use — so the tab strip and a kit's list say "this one" the same way.
                 nav.insert(Selected);
             }
         }
@@ -574,8 +579,16 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
                 out.write(crate::settings_screen::OpenSettings);
             }),
         ));
-        side.spawn(label(format!("Version {}", env!("CARGO_PKG_VERSION"))));
-        if let Some(updater) = updater {
+        // **One version line, and a button only when there is something to do** (design review,
+        // 2026-11-05). It used to be `Version 0.2.4` *and* an always-present `Up to date — v0.2.4`
+        // button: the same fact twice, the second dressed in a page tab's skin and inviting a press
+        // that does nothing. `actionable` is the one question that decides — an update to take, one in
+        // flight, or one that failed — so a first run ends on a quiet line and no dead action.
+        let version = env!("CARGO_PKG_VERSION");
+        let up_to_date = updater.is_some_and(|u| !u.actionable() && u.blocked.is_none());
+        let line = if up_to_date { format!("v{version} · up to date") } else { format!("v{version}") };
+        side.spawn(quiet(line));
+        if let Some(updater) = updater.filter(|u| u.actionable()) {
             side.spawn(crate::update::update_button(updater.label()));
         }
     });
@@ -658,9 +671,28 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     });
 }
 
-/// The first run: the splash, what this is, and **Open the example** as the one accent button.
+/// The first run: what this is, what it does, the one accent action, and how it works in three steps.
+///
+/// # Why it is shaped this way (design review, 2026-11-05)
+///
+/// The shipped 0.2.4 screen was a centred block whose loudest element was the splash and whose title was
+/// **the same 10 px as the sentence under it** (`chrome::text::HEADING` and `LABEL` are both 10), while the
+/// sidebar's own nav buttons were 13. FiraMono ships one weight, so size is the only lever a title has — and
+/// it was not being used. Four changes, each a finding:
+///
+/// - **The type was already sane, and the review's first pass said otherwise.** A whole-line band made the
+///   title and the prose look identical; a single glyph against a known baseline (`editor_skin.ron`'s
+///   `text_size: 11.0`) measures them at 15 and 11, and the sidebar at 11. So the title and prose stay on
+///   gooey's own `heading`/`label` builders, and the claim is withdrawn rather than "fixed" by a no-op.
+/// - **The copy says what Cauldron is for.** The old sentence named a grimoire without defining it, and the
+///   screen never said *Bevy* — the one fact that tells a person whether their engine is supported.
+/// - **The column is a column**: 560 px, top-aligned rather than centred in 1160, so the space above the
+///   splash is a margin rather than 102 logical px of void, and the prose has a measure instead of one
+///   508-px line.
+/// - **The three steps answer "then what?"** in the space the centring left empty, and **Take the tour** —
+///   the actual onboarding, which was two clicks away under Learn — is on the screen a first-timer lands on.
 fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
-    body.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, justify_content: JustifyContent::Center, flex_grow: 1.0, row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|card| {
+    body.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexStart, row_gap: Val::Px(crate::chrome::GAP_GROUP), max_width: Val::Px(WELCOME_COLUMN_PX), ..default() }).with_children(|card| {
         if let Some((handle, size)) = art.splash.as_ref() {
             card.spawn((
                 ImageNode::new(handle.clone()),
@@ -669,7 +701,7 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
             ));
         }
         card.spawn(heading("Welcome to Cauldron"));
-        card.spawn(label("Build levels from your own pieces, and hand your game a grimoire it can load."));
+        card.spawn((label(WELCOME_PITCH), TextLayout::new(Justify::Left, LineBreak::WordBoundary)));
         card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|actions| {
             let example = launcher.example.is_some();
             if example {
@@ -683,9 +715,46 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
             }
             actions.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
         });
-        card.spawn(quiet("Everything here can be changed later in Settings."));
+        card.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_ROW), ..default() }).with_children(|steps| {
+            for (number, step) in WELCOME_STEPS.iter().enumerate() {
+                steps.spawn((
+                    Text::new(format!("{}. {step}", number + 1)),
+                    crate::chrome::font(crate::chrome::text::LABEL),
+                    TextColor(quiet_ink(None)),
+                    TextLayout::new(Justify::Left, LineBreak::WordBoundary),
+                ));
+            }
+        });
+        if launcher.example.is_some() {
+            card.spawn((button("Take the tour"), observe(|activate: On<Activate>, launcher: ResMut<Launcher>, out: MessageWriter<OpenMapRequest>, plain: MessageWriter<OpenRequest>, mut commands: Commands| {
+                commands.insert_resource(TourRequested);
+                open_the_example(activate, launcher, out, plain);
+            })));
+        }
+        card.spawn(quiet("Open folder… reads an existing project. Nothing on disk changes until you save."));
     });
 }
+
+/// **What Cauldron is, in the sentence a first run has room for.**
+///
+/// Named: the engine and its version, the two nouns this editor actually works in (pieces, maps), the
+/// folder a game loads, and the one capability that is not in Unity, Tiled or an art tool — an agent that
+/// edits the same map, through the same operations, beside the person. The old sentence named a *grimoire*
+/// and defined nothing, and the screen never said *Bevy*.
+const WELCOME_PITCH: &str = "A level editor for Bevy 0.20. Put your own meshes on a map; Cauldron saves \
+it to assets/grimoire/, and your game loads that folder. An AI agent can edit the same map beside you.";
+
+/// **What happens after the first click**, which the old screen never said. Three steps, in order.
+const WELCOME_STEPS: [&str; 3] = [
+    "Open the example — it is copied to your own folder, so nothing you do is lost.",
+    "Place pieces from the library, or add your own .glb meshes.",
+    "Save the map; your game reads it straight out of assets/grimoire/.",
+];
+
+/// The welcome column's measure, in logical px. Wide enough for the pitch on two comfortable lines,
+/// narrow enough that it reads as a column rather than as a page-wide bar — the shipped screen set one
+/// 508 px line in a 1160 px page.
+const WELCOME_COLUMN_PX: f32 = 560.0;
 
 /// Opens the example project on its map: the one beside the source, the person's own copy, or the app's copy made theirs first.
 fn open_the_example(_: On<Activate>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenMapRequest>, mut plain: MessageWriter<OpenRequest>) {

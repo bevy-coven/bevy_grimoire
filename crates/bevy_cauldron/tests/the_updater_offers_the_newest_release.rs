@@ -200,13 +200,20 @@ fn an_up_to_date_check_says_the_version_is_the_newest() {
         .set(Screen::Launcher);
     updates(&mut app, 8);
 
-    let want = format!("Up to date — v{}", env!("CARGO_PKG_VERSION"));
+    // **The answer is the label, and the sidebar shows it as a quiet line rather than an always-on
+    // button** (design review, 2026-11-05): the shipped screen printed the version twice, once as
+    // `Version 0.2.4` and once as a button reading `Up to date — v0.2.4` in a page tab's skin.
+    let want = format!("v{} · up to date", env!("CARGO_PKG_VERSION"));
     bevy_gooey::testing::find_by_label(&mut app, &want).unwrap_or_else(|e| {
-        panic!("the row names the version it checked: wanted `{want}`: {e:?}")
+        panic!("the sidebar names the version it checked: wanted `{want}`: {e:?}")
     });
     assert!(
-        bevy_gooey::testing::find_by_label(&mut app, "Check for updates").is_err(),
-        "an up-to-date check must not read as an idle one — that is the press that looked dropped"
+        bevy_gooey::testing::find_by_label(&mut app, "Version 0.2.4").is_err(),
+        "one version line, not two"
+    );
+    assert!(
+        !app.world().resource::<Updater>().actionable(),
+        "an up-to-date check has nothing to press: no update button on the sidebar"
     );
 }
 
@@ -221,6 +228,42 @@ fn the_up_to_date_answer_is_said_not_only_labelled() {
         "an unchanged label reads as a press that did nothing"
     );
     assert_ne!(updater.label(), "Check for updates", "Idle and UpToDate are different answers");
+}
+
+/// **The launch check that finds nothing says nothing, and a pressed one says so.**
+///
+/// The shipped 0.2.4 opened on a sticky coral `Cauldron v0.2.4 is the newest release.` before the
+/// product's own name, on every launch, because the automatic check answered into the launcher's
+/// problem line exactly as a pressed one does. Measured in that release's own screenshot on
+/// 2026-11-05. The button's label already carries the answer; the toast is only worth the space when
+/// a person asked for it.
+#[test]
+fn an_automatic_check_that_finds_nothing_raises_no_problem() {
+    use bevy_cauldron::launcher::LauncherPlugin;
+    use bevy_cauldron::screen::Screen;
+
+    let mut app = editor("updater-automatic-silent");
+    app.add_plugins(LauncherPlugin);
+    // **A feed that cannot answer** is the sharpest case: a failure *does* speak, so the absence of
+    // a problem line here would be for the wrong reason if the check had not run at all. Instead the
+    // check is made to answer "nothing newer" by pointing it at an empty release list.
+    let mut updater = Updater::new("http://127.0.0.1:9/none".into(), "/nonexistent/Cauldron.app".into());
+    updater.state = UpdateState::UpToDate;
+    app.insert_resource(updater);
+    app.world_mut()
+        .resource_mut::<NextState<Screen>>()
+        .set(Screen::Launcher);
+    updates(&mut app, 6);
+    assert!(
+        app.world().resource::<bevy_cauldron::launcher::Launcher>().problem.is_none(),
+        "an automatic up-to-date answer must not enter the problem line: {:?}",
+        app.world().resource::<bevy_cauldron::launcher::Launcher>().problem
+    );
+    // And the label is where the answer lives.
+    assert_eq!(
+        app.world().resource::<Updater>().label(),
+        format!("Up to date — v{}", env!("CARGO_PKG_VERSION"))
+    );
 }
 
 #[test]

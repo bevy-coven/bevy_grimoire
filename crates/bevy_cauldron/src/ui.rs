@@ -109,18 +109,29 @@ const ACCENT_HOVER_MIX: f32 = 0.18;
 const ACCENT_PRESS_MIX: f32 = 0.2;
 
 /// Repaints an [`AccentButton`] (accent fill, accent text) and a [`bevy::ui::Selected`] button (a card or a navigation row that
-/// is the chosen one: the skin's hovered fill). It runs after gooey's restyle, which does not restyle on a colour change, so the
-/// two never fight; a pressed selected button keeps gooey's own pressed fill.
+/// is the chosen one: the skin's hovered fill, plus a [`SelectedRail`]). It runs after gooey's restyle, which does not restyle on
+/// a colour change, so the two never fight; a pressed selected button keeps gooey's own pressed fill.
+///
+/// **The rail is why this exists at all now.** A fill a few ramp steps lighter is not a selected state a person can see:
+/// measured in the shipped 0.2.4 screenshot on 2026-11-05, `Projects` — the selected tab — was not tellable from `Learn`. A
+/// shape can be, and the palette already has one (`crate::chrome::SELECT_RAIL_W`), so a selected button gains a strip down its
+/// leading edge. It is inserted by this system rather than by each caller: every `Selected` button already means "this one",
+/// so every one of them should say it the same way.
+#[derive(Component)]
+struct SelectedRail;
+
 #[allow(clippy::type_complexity)]
 fn paint_marked_buttons(
     skin: Res<bevy_gooey::GooeySkin>,
     mut buttons: Query<
-        (&mut BackgroundColor, Has<AccentButton>, Option<&bevy::picking::hover::Hovered>, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
+        (Entity, &mut BackgroundColor, Has<AccentButton>, Has<bevy::ui::Selected>, Option<&bevy::picking::hover::Hovered>, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
         (With<bevy_gooey::Role>, Or<(With<AccentButton>, With<bevy::ui::Selected>)>),
     >,
-    mut texts: Query<(&bevy_gooey::Role, &mut TextColor)>,
+    rails: Query<(), With<SelectedRail>>,
+    mut texts: Query<(&bevy_gooey::Role, &mut TextColor, Option<&SelectedRail>)>,
+    mut commands: Commands,
 ) {
-    for (mut fill, accent, hovered, pressed, disabled, children) in &mut buttons {
+    for (entity, mut fill, accent, selected, hovered, pressed, disabled, children) in &mut buttons {
         let want = if disabled {
             skin.surface
         } else if accent {
@@ -142,13 +153,43 @@ fn paint_marked_buttons(
         }
         if accent && !disabled {
             for child in children.into_iter().flat_map(|c| c.iter()) {
-                if let Ok((role, mut ink)) = texts.get_mut(child)
+                if let Ok((role, mut ink, _)) = texts.get_mut(child)
                     && *role == bevy_gooey::Role::ButtonText
                     && ink.0 != skin.accent_text
                 {
                     ink.0 = skin.accent_text;
                 }
             }
+        }
+        // **The rail, for a button that is the chosen one and is not already the accent colour.**
+        let wants = selected && !accent && !disabled;
+        let has = children.is_some_and(|c| c.iter().any(|child| rails.get(child).is_ok()));
+        match (wants, has) {
+            (true, false) => {
+                commands.entity(entity).with_child((
+                    SelectedRail,
+                    Node {
+                        // PLACES-ITSELF-OK: a rail pinned to its own button's leading edge, the way
+                        // `crate::chrome::SELECT_RAIL_W` is drawn on a kit's row — it is not a panel.
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Px(crate::chrome::SELECT_RAIL_W),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(skin.accent),
+                    bevy::picking::Pickable::IGNORE,
+                ));
+            }
+            (false, true) => {
+                for child in children.into_iter().flat_map(|c| c.iter()) {
+                    if rails.get(child).is_ok() {
+                        commands.entity(child).despawn();
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
