@@ -39,6 +39,7 @@ mod a_damaged_oplog_line_is_named_and_the_rest_still_reads;
 mod an_oplog_line_of_another_version_is_refused;
 mod a_dead_end_names_its_closest_piece;
 mod capture_feedback_1793905912313;
+mod capture_feedback_1793905798698;
 mod a_destructible_file_of_another_version_is_refused;
 mod a_destructible_file_that_does_not_read_is_named;
 mod a_door_answer_says_whether_it_waits;

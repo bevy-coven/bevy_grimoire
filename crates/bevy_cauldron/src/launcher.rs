@@ -309,8 +309,16 @@ pub const CHANGELOG_URL: &str = "https://github.com/bevy-coven/bevy_grimoire/blo
 
 /// The sidebar's width, in logical pixels.
 const SIDEBAR_PX: f32 = 240.0;
-/// The splash in the sidebar: the art is 256 x 80, drawn at the sidebar's width.
-const SIDEBAR_SPLASH: Vec2 = Vec2::new(SIDEBAR_PX, 75.0);
+/// **The sidebar's content width**: its width less the `chrome::PAD` it pads every side by.
+///
+/// The splash is drawn into the sidebar's padded content box, so a width taken from [`SIDEBAR_PX`]
+/// alone ran `2 * PAD` wider than the box and pushed its right edge out of the sidebar — reported as
+/// "This has no margin on the right side, but the rest of the sides do"
+/// (`feedback-1793905798698`). One number for the content width, so the splash and everything else in
+/// the sidebar that wants the full width agree.
+const SIDEBAR_CONTENT_W: f32 = SIDEBAR_PX - 2.0 * crate::chrome::PAD;
+/// The splash in the sidebar: the art is 256 x 80, drawn at the sidebar's content width.
+const SIDEBAR_SPLASH: Vec2 = Vec2::new(SIDEBAR_CONTENT_W, SIDEBAR_CONTENT_W * 80.0 / 256.0);
 /// The least the page beside the sidebar may be.
 const PAGE_MIN_PX: f32 = 480.0;
 /// The welcome card's splash is drawn at this many logical pixels per art pixel.
@@ -576,7 +584,13 @@ pub(crate) fn spawn_shell(commands: &mut Commands, screen_of: Screen) -> Entity 
 pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &Launcher, splash: &SplashArt, updater: Option<&crate::update::Updater>) {
     commands.entity(sidebar).with_children(|side| {
         if let Some((handle, _)) = splash.0.as_ref() {
-            side.spawn((ImageNode::new(handle.clone()), Node { width: Val::Px(SIDEBAR_SPLASH.x), height: Val::Px(SIDEBAR_SPLASH.y), ..default() }, Name::new("sidebar splash")));
+            // **The box is the sidebar's content width**, not its outer width, and the height follows
+            // the art's own 256 x 80 so the picture is never stretched (`feedback-1793905798698`).
+            side.spawn((
+                ImageNode::new(handle.clone()),
+                Node { width: Val::Px(SIDEBAR_SPLASH.x), height: Val::Px(SIDEBAR_SPLASH.y), ..default() },
+                Name::new("sidebar splash"),
+            ));
         }
         for tab in HomeTab::ALL {
             let badge = if tab == HomeTab::WhatsNew && !launcher.whats_new.is_empty() { format!(" ({})", launcher.whats_new.len()) } else { String::new() };
