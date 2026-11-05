@@ -43,8 +43,6 @@ pub const SETTINGS_VERSION: u32 = 1;
 /// The id of the reload-contract kind both layers' verdicts carry.
 pub const KIND: &str = "editor_settings";
 
-/// The directory under the platform's config directory that holds the editor's own files.
-const APP_DIR: &str = "Grimoire";
 const USER_FILE: &str = "settings.ron";
 /// The project's file, under the project directory (`assets/grimoire`).
 pub const PROJECT_FILE: &str = "editor.ron";
@@ -58,7 +56,7 @@ pub const SCALE_RANGE: (f32, f32) = (0.5, 3.0);
 
 /// Where the user's settings live, or `None` on a platform with no config directory.
 pub fn user_file() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join(APP_DIR).join(USER_FILE))
+    bevy_grimoire_core::user_dirs::config_dir().map(|d| d.join(USER_FILE))
 }
 
 /// The look of the editor's chrome.

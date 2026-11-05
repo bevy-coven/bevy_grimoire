@@ -73,6 +73,11 @@ use std::path::{Path, PathBuf};
 /// which ron does only for a missing field. It depends on `serde` and `itoa` alone, holds no engine
 /// type, and its one user is `reload_check.rs`, which reads a file a second time only after refusing
 /// it. Added as an assumed owner exception (a new row, nothing loosened).
+///
+/// **`dirs`** (#306) names the per-user data and config folders (`user_dirs.rs`), which the editor and its
+/// MCP server must agree on: core is the one crate both depend on. It reads environment variables and the
+/// platform's folder API, holds no engine type, and pulls only `dirs-sys` and `option-ext`. Added with the
+/// approved plan for #306 (a new row, nothing loosened).
 const ALLOWED_DEPS: &[&str] = &[
     "serde",
     "serde_json",
@@ -82,6 +87,7 @@ const ALLOWED_DEPS: &[&str] = &[
     "bevy_grimoire_rng",
     "bevy_grimoire_solver",
     "serde_path_to_error",
+    "dirs",
 ];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so

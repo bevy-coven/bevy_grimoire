@@ -1223,6 +1223,7 @@ version = "0.8.0"
 dependencies = [
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",
+ "dirs",
  "rand",
  "rand_chacha",
  "ron",

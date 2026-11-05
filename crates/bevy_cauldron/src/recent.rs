@@ -23,13 +23,11 @@ use serde::{Deserialize, Serialize};
 
 pub const RECENT_VERSION: u32 = 1;
 
-/// The directory under the platform's data directory that holds the editor's own files.
-const APP_DIR: &str = "Grimoire";
 const FILE: &str = "recent.ron";
 
 /// Where the recent list lives for this user, or `None` on a platform with no data directory.
 pub fn user_file() -> Option<PathBuf> {
-    dirs::data_dir().map(|d| d.join(APP_DIR).join(FILE))
+    bevy_grimoire_core::user_dirs::data_dir().map(|d| d.join(FILE))
 }
 
 /// Names the file the editor records openings in. Inserted by `main`; absent in a test.

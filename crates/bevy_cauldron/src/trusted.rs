@@ -23,8 +23,6 @@ use std::path::{Path, PathBuf};
 use crate::confirm::{Asked, Choice, Confirm};
 use crate::editor::EditorState;
 
-const APP_DIR: &str = "Grimoire";
-
 /// **A command waiting for a person's answer.**
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrustRequest {
@@ -49,8 +47,8 @@ pub struct TrustState {
 pub fn store_path(over: Option<&Path>) -> Result<PathBuf, String> {
     match over {
         Some(p) => Ok(p.to_path_buf()),
-        None => dirs::data_dir()
-            .map(|d| d.join(APP_DIR).join(STORE_FILE))
+        None => bevy_grimoire_core::user_dirs::data_dir()
+            .map(|d| d.join(STORE_FILE))
             .ok_or_else(|| "this machine has no user data directory, so there is nowhere to keep what you trust".to_owned()),
     }
 }

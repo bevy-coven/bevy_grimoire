@@ -88,6 +88,7 @@ pub mod smart;
 pub mod stack;
 pub mod standards;
 pub mod trust;
+pub mod user_dirs;
 pub mod vocab;
 pub mod wfc;
 pub mod volume;
