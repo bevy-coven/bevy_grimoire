@@ -63,6 +63,21 @@ const ALLOWED: &[Allowed] = &[
         needle: "let mut file = std::fs::File::create(to)",
         why: "the updater streams a ~100 MB release zip into its own cache folder, hashing it as it lands; no project or game reads it, and a zip whose sha256 does not match is deleted",
     },
+    Allowed {
+        file: "bevy_cauldron/src/log_file.rs",
+        needle: "use std::fs::{File, OpenOptions};",
+        why: "the editor's own log (#306) lives in the per-user data folder, not in a project, and is appended to",
+    },
+    Allowed {
+        file: "bevy_cauldron/src/log_file.rs",
+        needle: "OpenOptions::new().create(true).append(true).open(path)",
+        why: "the editor's log is an append (`append(true)`), so it cannot lose an earlier line by being rewritten; no project or game reads it",
+    },
+    Allowed {
+        file: "bevy_cauldron/src/log_file.rs",
+        needle: "std::fs::rename(path, PathBuf::from(previous))",
+        why: "rotating the editor's log to cauldron.log.1 at startup moves a whole closed file in the user's data folder; it writes no bytes",
+    },
 ];
 
 fn workspace_root() -> PathBuf {
