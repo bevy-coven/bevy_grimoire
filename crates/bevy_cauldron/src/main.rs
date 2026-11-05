@@ -127,6 +127,9 @@ fn main() -> AppExit {
     app.insert_state(first);
     // The state both halves are gated by, and the two transitions that load and unload a door.
     app.add_plugins(screen::ScreenPlugin);
+    // **What drawing works, into the same log** (`startup_probe`): the surface, the cameras, a self-check of what the
+    // window itself shows, then a pulse of frames, so a black window says which part of it failed (#306, #307).
+    app.add_plugins(bevy_cauldron::startup_probe::StartupProbePlugin);
     app.add_plugins((bevy_cauldron::launcher::LauncherPlugin, bevy_cauldron::loading::LoadingPlugin, bevy_cauldron::window_frame::WindowFramePlugin));
     // **Every opening is recorded in the user's recent-projects list** (`recent.rs`, UI-11). Only the
     // binary names the file: a test's editor has none, so no test writes to the real data directory.
