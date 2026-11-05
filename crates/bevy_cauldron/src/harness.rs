@@ -112,6 +112,9 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
             // **The capture sequencer** -- the editor takes the frames, so frame 0 is the state
             // before the operation and the operation is applied after it.
             crate::sequencer::SequencerPlugin,
+            // **The one writer of `PickingSettings::is_enabled`** — both gestures that own the pointer
+            // ask it, and neither writes it. See `picking.rs` for the collision this ended.
+            crate::picking::PickingPlugin,
             (
                 // **A report about what is wrong on screen** (`report.rs`). In the *shared* list and
                 // not in `EditorPlugin`, because `Cmd+D` has to work on the Projects home too, where

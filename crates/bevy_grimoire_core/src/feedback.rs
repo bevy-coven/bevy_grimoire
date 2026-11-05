@@ -375,7 +375,7 @@ mod tests {
 
     fn fresh_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("bevy_grimoire_feedback_{}_{name}", std::process::id()));
+            std::env::temp_dir().join(format!("grimoire_feedback_{}_{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

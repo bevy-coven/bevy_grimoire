@@ -91,6 +91,7 @@ pub mod labels;
 pub mod new_project;
 pub mod add_meshes;
 pub mod picker;
+pub mod picking;
 pub mod notice;
 pub mod jobs;
 pub mod live;

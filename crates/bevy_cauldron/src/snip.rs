@@ -485,7 +485,8 @@ pub fn snip_overlay(
 
 /// **While the snip is armed, no button sees the pointer.** Bevy fires a button's `Activate` on a click,
 /// so a drag that starts and ends on a button would press it. Picking is off while the snip is armed and
-/// back on once it is done. The check is on the armed flag only, so the note field stays clickable.
+/// back on once it is done — [`crate::picking`] is the one writer of that setting, and this system only
+/// drops the presses already in flight.
 ///
 /// **Turning picking off is not enough on its own** — B-032. `button_on_pointer_click`
 /// (`bevy_ui_widgets-0.20.0/src/button.rs:60-72`) activates a button that carries [`Pressed`] when a
@@ -496,7 +497,6 @@ pub fn snip_overlay(
 /// The press the person abandoned is the press they abandoned.
 fn snip_gates_picking(
     snip: Res<SnipEdit>,
-    settings: Option<ResMut<bevy::picking::PickingSettings>>,
     mut in_flight: Query<Entity, With<Pressed>>,
     mut commands: Commands,
 ) {
@@ -504,17 +504,11 @@ fn snip_gates_picking(
     // the arming written this frame arrives; sweeping every frame would instead keep clearing
     // presses the button layer makes later, and a press started on a *disarmed* editor would never
     // finish. One clear at the transition is exactly the press the person abandoned.
+    //
+    // **The setting itself is `crate::picking`'s**, and that is not a detail: this system and the
+    // report's both wrote `PickingSettings::is_enabled` until 2026-11-05, and whichever ran last won.
     if snip.is_changed() && snip.armed {
-        for entity in &mut in_flight {
-            commands.entity(entity).remove::<Pressed>();
-        }
-    }
-    let Some(mut settings) = settings else {
-        return;
-    };
-    let wanted = !snip.armed;
-    if settings.is_enabled != wanted {
-        settings.is_enabled = wanted;
+        crate::picking::drop_presses(&mut in_flight, &mut commands);
     }
 }
 

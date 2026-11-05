@@ -171,6 +171,41 @@ impl ReportEdit {
             .filter(|(_, len)| *len > 0)
     }
 
+    /// **A report in the picking phase, for the pointer gate's own test.** Nothing else constructs
+    /// one: a real report needs a frame and a window, which is what the integration tests drive.
+    #[cfg(test)]
+    pub(crate) fn pointing_for_test() -> Self {
+        ReportEdit {
+            open: Some(Open {
+                audience: Audience::Developers,
+                phase: Phase::Picking,
+                taken_at_ms: 0,
+                frozen: None,
+                whole: None,
+                chain: Vec::new(),
+                at: 0,
+                hover: None,
+                area: None,
+                from: None,
+                subject: None,
+                note: String::new(),
+                mark: None,
+                noted_on: 0,
+                screen: "editor".into(),
+                project: None,
+                map: None,
+                tool: None,
+                window: WindowRecord {
+                    physical: [1280, 720],
+                    logical: [1280.0, 720.0],
+                    scale_factor: 1.0,
+                    ui_scale: 1.2,
+                },
+            }),
+            save_asked: false,
+        }
+    }
+
     /// Is a save waiting to be done?
     pub fn save_asked(&self) -> bool {
         self.save_asked
@@ -264,7 +299,11 @@ pub struct ReportPart;
 #[allow(clippy::too_many_arguments)]
 fn report_key(
     keys: Res<ButtonInput<KeyCode>>,
-    screen: Res<State<Screen>>,
+    // **`Option`, because the report is in the shared plugin list and an app may have no screens at
+    // all.** `the_surface_and_the_camera_agree` builds the editor's plugin set around a hand-made
+    // window and no `Screen` state, and a bare `Res<State<Screen>>` panics its system there — measured
+    // 2026-11-05. A report still works without a screen; the record says so with an empty `screen`.
+    screen: Option<Res<State<Screen>>>,
     project: Option<Res<crate::project::Project>>,
     open_map: Option<Res<crate::project::OpenMap>>,
     state: Option<Res<crate::editor::EditorState>>,
@@ -319,7 +358,10 @@ fn report_key(
         note: String::new(),
         mark: None,
         noted_on: 0,
-        screen: screen_name(*screen.get()),
+        screen: screen
+            .as_deref()
+            .map(|state| screen_name(*state.get()))
+            .unwrap_or_default(),
         project: project.as_deref().map(|p| p.root.display().to_string()),
         map: open_map.as_deref().map(|o| o.map.name.clone()),
         tool: state.as_deref().map(|s| format!("{:?}", s.tool)),
@@ -760,10 +802,10 @@ fn rect_between(a: Vec2, b: Vec2) -> [f32; 4] {
 fn clamp_rect(rect: [f32; 4], size: [u32; 2]) -> [f32; 4] {
     let (w, h) = (size[0] as f32, size[1] as f32);
     [
-        rect[0].clamp(0.0, w.max(rect[0])),
-        rect[1].clamp(0.0, h.max(rect[1])),
-        rect[2].clamp(rect[0].clamp(0.0, w), w.max(rect[2])),
-        rect[3].clamp(rect[1].clamp(0.0, h), h.max(rect[3])),
+        rect[0].clamp(0.0, w),
+        rect[1].clamp(0.0, h),
+        rect[2].clamp(0.0, w),
+        rect[3].clamp(0.0, h),
     ]
 }
 
@@ -1280,29 +1322,27 @@ fn put_signed(image: &mut image::RgbaImage, x: i32, y: i32, colour: [u8; 4]) {
     }
 }
 
-/// **While a report is open, no button sees the pointer.** Bevy fires a button's `Activate` on a
-/// click, so the press that picks a button as the report's subject would also press it.
-///
-/// Copied from `snip_gates_picking`, B-032 and all: turning picking off stops *new* presses, so the
-/// transition also **drops every `Pressed`**, because the press that set one may have begun before
-/// the report opened and its release would otherwise still activate the button.
-fn report_gates_picking(
+// **`PickingSettings` has exactly one writer, and it used to have two.**
+//
+// The snip turns picking off while it is armed (`snip::snip_gates_picking`) and a report turns it off
+// while it is pointing. Two systems each saying "I write `is_enabled`, and I am the only one" is the
+// second-census failure this crate refuses everywhere else: whichever ran last won, and
+// `a_snip_armed_over_a_button_does_not_press_it` said so — measured 2026-11-05, the first time both
+// features existed. `bevy_cauldron::picking` is the one writer; each gesture only *asks*.
+//
+// The rule each gesture states is its own, and they are not the same question: a snip is armed, a
+// report is pointing.
+
+/// **A report that starts pointing drops the presses already in flight.** See
+/// [`snip::snip_gates_picking`](crate::snip) for the same rule and the measurement behind it: picking
+/// off cannot stop a release from completing a press that began before the overlay arrived.
+fn report_drops_presses(
     report: Res<ReportEdit>,
-    settings: Option<ResMut<bevy::picking::PickingSettings>>,
     mut in_flight: Query<Entity, With<bevy::ui::Pressed>>,
     mut commands: Commands,
 ) {
     if report.is_changed() && report.pointing() {
-        for entity in &mut in_flight {
-            commands.entity(entity).remove::<bevy::ui::Pressed>();
-        }
-    }
-    let Some(mut settings) = settings else {
-        return;
-    };
-    let wanted = !report.pointing();
-    if settings.is_enabled != wanted {
-        settings.is_enabled = wanted;
+        crate::picking::drop_presses(&mut in_flight, &mut commands);
     }
 }
 
@@ -1333,7 +1373,10 @@ impl Plugin for ReportPlugin {
             // **The save is exclusive**, so it is its own system: an observer cannot be one, and
             // the box's two buttons and the field's final change all reach it by asking.
             .add_systems(Update, report_save.after(report_box))
-            .add_systems(Update, report_gates_picking);
+            // **A report that starts pointing drops every press already in flight.** B-032: turning
+            // picking off stops *new* presses, and the press that set `Pressed` may have begun before
+            // the report opened, so its release would still activate the button under the overlay.
+            .add_systems(Update, report_drops_presses);
     }
 }
 
