@@ -451,3 +451,4 @@ mod the_terminal_paints_grounds_and_the_selection;
 mod the_terminal_rows_fit_the_pane_at_the_editors_scale;
 mod capture_feedback_1793968919654;
 mod the_terminal_speaks_to_programs_in_their_modes;
+mod the_terminal_is_on_every_screen;

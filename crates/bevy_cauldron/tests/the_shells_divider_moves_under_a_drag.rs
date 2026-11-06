@@ -87,9 +87,24 @@ fn the_editor_spawns_a_laid_out_split_divider() {
         "the shell is a gooey dock, so it must have a divider; none was found"
     );
     let (_, rect) = found[0];
+    // **A channel the shell's full height** (owner, 2026-11-06, #314). It was `height > 500` px, the
+    // shell's height when the shell had the window to itself; the terminal is now docked under it on
+    // every screen, so the shell is shorter and the claim is the one the number stood for: the divider
+    // runs from the top of the shell's body to its bottom, and that body is itself a real one.
+    let world = app.world_mut();
+    let body = world.resource::<bevy_cauldron::chrome::Frame>().body;
+    let (node, at) = world
+        .query::<(&ComputedNode, &UiGlobalTransform)>()
+        .get(world, body)
+        .expect("the frame has a laid-out body");
+    let scale = node.inverse_scale_factor();
+    let body = Rect::from_center_size(at.translation * scale, node.size() * scale);
     assert!(
-        rect.width() > 1.0 && rect.height() > 500.0,
-        "the divider must be a channel down the shell, not a sliver: {rect:?}"
+        rect.width() > 1.0
+            && body.height() > 250.0
+            && rect.min.y <= body.min.y + 1.0
+            && rect.max.y >= body.max.y - 1.0,
+        "the divider must be a channel down the shell, not a sliver: {rect:?} in a body of {body:?}"
     );
 }
 

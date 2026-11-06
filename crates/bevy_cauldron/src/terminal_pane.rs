@@ -48,6 +48,22 @@ use crate::terminal_view::CellMetrics;
 /// five lines of context around it. A person's drag replaces it for the session.
 pub const TERMINAL_DEFAULT_H: f32 = 320.0;
 
+/// **How much of the screen a pane opens at** until the person drags it (#314): a third, clamped to
+/// `[TERMINAL_MIN_H, TERMINAL_DEFAULT_H]`, about VS Code's opening share for its panel. With the
+/// terminal open on every screen, a fixed 320 px took more than half of a 1280 x 720 window at the
+/// editor's `UiScale` (600 px of UI): a third is 200 px there, seven rows of the shipped face's 24 px,
+/// and 320 px from a 960 px tall screen up. A quarter was measured first and gave four rows, under
+/// the five a terminal is refused below (`measured_cells`).
+pub const TERMINAL_WINDOW_SHARE: f32 = 1.0 / 3.0;
+
+/// The window's height in the UI's own pixels — what a `Val::Px` is measured in — for
+/// [`Terminal::opening_height`].
+fn window_ui_height(windows: &Query<&Window, With<bevy::window::PrimaryWindow>>, ui_scale: &UiScale) -> Option<f32> {
+    let window = windows.iter().next()?;
+    let h = window.resolution.height() / ui_scale.0.max(f32::EPSILON);
+    (h > 0.0).then_some(h)
+}
+
 /// **The floor**: about eight rows. Below this a prompt plus one line of output does not fit, and a
 /// terminal showing a truncated prompt is worse than one that stops shrinking.
 pub const TERMINAL_MIN_H: f32 = 96.0;
@@ -106,6 +122,15 @@ pub struct TerminalRow(pub usize);
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct TerminalCaret;
+
+/// **A screen root the terminal docks across the bottom of** (#314): the projects home, the project
+/// page and the loading screen put this on their root, and the pane is built as its last child the
+/// moment the root is spawned. The editor's frame is not one: it docks the pane above its status band
+/// ([`spawn_the_pane`]). One marker rather than a spawn call in each screen, so a screen added later
+/// gets the terminal by naming this, and a screen that forgets it has no half-built pane.
+#[derive(Component, Default, Reflect)]
+#[reflect(Component, Default)]
+pub struct TerminalDock;
 
 /// The grip, dragged to resize the pane.
 #[derive(Component, Reflect)]
@@ -227,12 +252,22 @@ impl Plugin for TerminalPanePlugin {
             .register_type::<TerminalBody>()
             .register_type::<TerminalCaret>()
             .register_type::<TerminalGrip>()
-            // **The frame is the editor's alone** (`chrome::spawn_frame` runs `OnEnter(Editor)`); the
-            // launcher and the project page build their own roots, so there is no body to dock into
-            // there and nothing to spawn against.
+            .register_type::<TerminalDock>()
+            // **The editor's frame docks it above the status band** (`chrome::spawn_frame` runs
+            // `OnEnter(Editor)`); every other screen names [`TerminalDock`] on its root and
+            // [`dock_on_every_screen`] builds it there (#314).
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
                 spawn_the_pane.after(chrome::FrameSystems),
+            )
+            .add_observer(dock_on_every_screen)
+            // **Between Bevy's input and its focused-input dispatch**, so this frame's presses and this
+            // frame's dispatch already know the shell has the keyboard (#316).
+            .add_systems(
+                PreUpdate,
+                hold_the_keyboard
+                    .after(bevy::input::InputSystems)
+                    .before(bevy::input_focus::InputFocusSystems::Dispatch),
             )
             // **The keyboard goes back when the door closes.** A focus flag that outlived its pane
             // would leave every editor binding refused with no shell on screen to explain it — the
@@ -240,7 +275,8 @@ impl Plugin for TerminalPanePlugin {
             .add_systems(OnExit(crate::screen::Screen::Editor), give_the_keyboard_back)
             .add_systems(
                 Update,
-                (blink_the_caret,).run_if(the_pane_is_up),
+                (blink_the_caret, fit_the_pane_to_the_window, step_aside_for_the_key_overlay)
+                    .run_if(the_pane_is_up),
             )
             // The two chords that are the pane's own. Read from `ButtonInput` here rather than
             // through `keys::BINDINGS`: the census is the table of what a *tab* does, and a chord
@@ -248,7 +284,7 @@ impl Plugin for TerminalPanePlugin {
             // precedent for. `no_context_gains_a_key` is therefore untouched.
             .add_systems(
                 Update,
-                (toggle_on_the_chord, close_the_tab_on_its_chord)
+                (toggle_on_the_chord, collapse_on_the_chord, close_the_tab_on_its_chord)
                     .in_set(crate::terminal_view::TerminalChordSet),
             )
             .add_observer(a_click_takes_the_keyboard)
@@ -285,6 +321,8 @@ fn spawn_the_pane(
     frame_children: Query<&Children>,
     terminal: Res<Terminal>,
     mut focus: ResMut<TerminalFocus>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
 ) {
     let Some(frame) = frame else {
         return;
@@ -300,10 +338,10 @@ fn spawn_the_pane(
     // already stacks the chrome bar, the door strip, the body and the status band, so a bottom dock is
     // a row between `body` and `status` — which is what this inserts.
     //
-    // **It arrives lowered.** The pane is a dock a person raises, not something that takes a fifth of
-    // the window the first time they open a project — so the node exists from the door's first frame
-    // and `Ctrl+\`` is what shows it. That is also why the shells are not touched here: a shell that
-    // was running when the door closed is still running, and raising the pane draws its scrollback.
+    // **It arrives raised**, unless the person collapsed it (#314, #315): the terminal is the work's
+    // centerpiece, open on every screen from the application's first frame, and [`Terminal`] carries
+    // a collapse from one screen to the next. The shells are not touched here: a shell that was running
+    // when the screen changed is still running, and the new pane draws its scrollback.
     // **The status band's index**, so the pane lands between the body and the band. Found by asking the
     // frame's own children rather than assuming "last but one": a frame that gained a row would
     // otherwise put the terminal in the wrong place, silently.
@@ -315,13 +353,32 @@ fn spawn_the_pane(
                 .unwrap_or(usize::MAX)
         })
         .unwrap_or(usize::MAX);
-    build_the_pane(&mut commands, frame.root, terminal.height(), &terminal, band_at);
+    let height = terminal.opening_height(window_ui_height(&windows, &ui_scale));
+    build_the_pane(&mut commands, frame.root, height, &terminal, band_at);
     // A door that opens never has the terminal's keys: a lowered pane that still owned the keyboard
     // would be a dead editor with nothing on screen saying why.
     focus.release();
 }
 
-/// Build the pane under `body`, returning its root. **The one place a pane is made**, lowered.
+/// **The pane on a screen that is not the editor**, as the [`TerminalDock`] root's last child: under
+/// the projects home, the project page and the loading card (#314). Like a door, a screen that opens
+/// does not have the terminal's keys: the screen's own keyboard works until the person clicks into
+/// the shell or presses the chord.
+fn dock_on_every_screen(
+    dock: On<Add<TerminalDock>>,
+    mut commands: Commands,
+    terminal: Res<Terminal>,
+    mut focus: ResMut<TerminalFocus>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
+) {
+    let height = terminal.opening_height(window_ui_height(&windows, &ui_scale));
+    build_the_pane(&mut commands, dock.entity, height, &terminal, usize::MAX);
+    focus.release();
+}
+
+/// Build the pane under `parent`, returning its root. **The one place a pane is made**, raised unless
+/// the person collapsed it.
 fn build_the_pane(
     commands: &mut Commands,
     parent: Entity,
@@ -341,10 +398,10 @@ fn build_the_pane(
                 // a remembered 320 px into whatever the docks left over.
                 flex_shrink: 0.0,
                 border: UiRect::top(Val::Px(chrome::EDGE_W)),
-                // **Lowered until the chord raises it.** `Display::None` rather than `Visibility`,
-                // because a hidden-but-laid-out pane would still take its height out of the body and
-                // the map would be 320 px shorter for a terminal nobody has asked for.
-                display: Display::None,
+                // **Collapsed is `Display::None`** rather than `Visibility`, because a hidden-but-laid-
+                // out pane would still take its height out of the screen, and the person collapsed it
+                // to get that room back.
+                display: if terminal.is_collapsed() { Display::None } else { Display::Flex },
                 ..default()
             },
             BackgroundColor(chrome::PANEL_BG),
@@ -415,6 +472,15 @@ fn build_the_pane(
             // machinery, so this is the same widget every other menu uses.
             bevy_gooey::ContextMenu(menu),
             Pickable::default(),
+            // **A key the shell is reading goes no further** (#316): with the keyboard in the shell,
+            // [`hold_the_keyboard`] puts the screen's input focus on this body, and this stops every
+            // focused key here, so Bevy's Tab navigation (an observer on the window) and a field's own
+            // key handling never see it.
+            bevy_gooey::observe(
+                |mut key: On<bevy::input_focus::FocusedInput<bevy::input::keyboard::KeyboardInput>>| {
+                    key.propagate(false);
+                },
+            ),
             Name::new("terminal body"),
         ))
         .id();
@@ -605,12 +671,14 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
 /// - **raised and unfocused** — take the keys, which is how you get back into a shell you clicked away
 ///   from without reaching for the mouse again.
 ///
-/// One pane per door, always spawned and always a child of the frame's body; raising is
-/// `Display::Flex`, so there is no second spawn path and nothing to keep in step.
+/// One pane per screen, always spawned; raising is `Display::Flex`, so there is no second spawn path
+/// and nothing to keep in step. The collapse is written to [`Terminal`] too, so the next screen's pane
+/// is built the way this one was left (#315).
 fn toggle_on_the_chord(
     keys: Res<ButtonInput<KeyCode>>,
     mut panes: Query<&mut Node, With<TerminalPaneRoot>>,
     mut focus: ResMut<TerminalFocus>,
+    mut terminal: ResMut<Terminal>,
 ) {
     let chord = bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY, KeyCode::Backquote);
     if !chord.just_pressed(&keys) {
@@ -621,17 +689,55 @@ fn toggle_on_the_chord(
     };
     let lowered = node.display == Display::None;
     if lowered {
-        node.display = Display::Flex;
+        show(&mut node, &mut terminal, false);
         focus.take();
         return;
     }
     if focus.holds() {
-        node.display = Display::None;
+        show(&mut node, &mut terminal, true);
         focus.release();
         return;
     }
     // Raised but unfocused: the press means "put me back in the shell", not "hide it".
     focus.take();
+}
+
+/// **The chord that collapses the terminal**: the platform's primary modifier and J — Command+J on a
+/// mac, Ctrl+J elsewhere — the owner's chord (2026-11-06) and VS Code's Toggle Panel (#315).
+pub const COLLAPSE_CHORD: bevy_gooey::Shortcut =
+    bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY, KeyCode::KeyJ);
+
+/// **Primary+J collapses the pane, or restores it**, on every screen (#315).
+///
+/// Two cases, VS Code's: a raised pane collapses and gives the screen its keys back, wherever the keys
+/// were; a collapsed one comes back with the keyboard in the shell, because a person who restores the
+/// terminal means to type in it. The shell never hears the chord ([`crate::terminal_view`]'s key path
+/// swallows it), which matters on Linux, where Ctrl+J is also a newline.
+fn collapse_on_the_chord(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut panes: Query<&mut Node, With<TerminalPaneRoot>>,
+    mut focus: ResMut<TerminalFocus>,
+    mut terminal: ResMut<Terminal>,
+) {
+    if !COLLAPSE_CHORD.just_pressed(&keys) {
+        return;
+    }
+    let Some(mut node) = panes.iter_mut().next() else {
+        return;
+    };
+    let collapse = node.display != Display::None;
+    show(&mut node, &mut terminal, collapse);
+    if collapse {
+        focus.release();
+    } else {
+        focus.take();
+    }
+}
+
+/// Collapse the pane or restore it, on this screen and, through [`Terminal`], on every one after it.
+fn show(node: &mut Node, terminal: &mut Terminal, collapsed: bool) {
+    node.display = if collapsed { Display::None } else { Display::Flex };
+    terminal.set_collapsed(collapsed);
 }
 
 /// **`Ctrl+Shift+\`` closes the tab**, leaving the pane up — which is what a person wants after
@@ -696,6 +802,67 @@ fn a_click_elsewhere_gives_it_back(
         || ancestors.iter_ancestors(click.entity).any(|up| roots.contains(up));
     if !inside {
         focus.release();
+    }
+}
+
+/// **The keys a terminal owns that the screen's keyboard navigation also reads** (#316): Tab and the
+/// arrows move bevy_gooey's focus, Enter and Space press the focused widget, Escape cancels, Page Up and
+/// Down page a list, F6 cycles regions, and F10 or an Alt tap open the menu bar. Every one of them means
+/// something to a shell (completion, history, a word back with Alt), so while the shell has the
+/// keyboard none of them is also the screen's.
+const TERMINAL_KEYS: [KeyCode; 19] = [
+    KeyCode::ArrowUp,
+    KeyCode::ArrowDown,
+    KeyCode::ArrowLeft,
+    KeyCode::ArrowRight,
+    KeyCode::Tab,
+    KeyCode::Enter,
+    KeyCode::NumpadEnter,
+    KeyCode::Space,
+    KeyCode::Escape,
+    KeyCode::Home,
+    KeyCode::End,
+    KeyCode::PageUp,
+    KeyCode::PageDown,
+    KeyCode::Backspace,
+    KeyCode::Delete,
+    KeyCode::F6,
+    KeyCode::F10,
+    KeyCode::AltLeft,
+    KeyCode::AltRight,
+];
+
+/// **While the shell has the keyboard, the screen does not also act on it** (#316).
+///
+/// The shell reads `KeyboardInput`; the editor's bindings stand down on `Context::Typing`. bevy_gooey's
+/// navigation reads `ButtonInput<KeyCode>`, and Bevy's Tab navigation and a field's typing read keys
+/// dispatched to the input focus, and nothing told either of them — so on the projects home an Up
+/// then an Enter into the shell landed focus on the home's first button and pressed it. Two halves, in
+/// `PreUpdate` between Bevy's input and its focused-input dispatch: the [`TERMINAL_KEYS`] are taken
+/// out of this frame's presses (their held state stays, so the shell's modifiers still read), and the
+/// input focus is put on the terminal's body, whose observer stops every focused key there. When the
+/// keyboard comes back the focus is let go, so the screen starts from nothing focused, as it did.
+fn hold_the_keyboard(
+    focus: Res<TerminalFocus>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    input_focus: Option<ResMut<bevy::input_focus::InputFocus>>,
+    bodies: Query<Entity, With<TerminalBody>>,
+) {
+    let body = bodies.iter().next();
+    let Some(mut input_focus) = input_focus else {
+        return;
+    };
+    if focus.holds() {
+        for key in TERMINAL_KEYS {
+            keys.clear_just_pressed(key);
+        }
+        if let Some(body) = body
+            && input_focus.get() != Some(body)
+        {
+            input_focus.set(body, bevy::input_focus::FocusCause::Navigated);
+        }
+    } else if body.is_some() && input_focus.get() == body {
+        input_focus.clear();
     }
 }
 
@@ -971,22 +1138,78 @@ fn the_wheel_scrolls_the_scrollback(
     }
 }
 
+/// **A pane the person has not sized follows its screen** (#314): it opens at
+/// [`TERMINAL_WINDOW_SHARE`] of the screen it is docked in and keeps that share as the window changes,
+/// until a drag on the grip gives it a height of the person's own. The screen's own laid-out height is
+/// the measure, not the window's: the editor draws into its surface image, and a pane built before a
+/// window exists (the headless editor, a door built on the first frame) is corrected here on the first
+/// frame its screen has a size.
+fn fit_the_pane_to_the_window(
+    terminal: Res<Terminal>,
+    mut panes: Query<(&mut Node, &ChildOf), With<TerminalPaneRoot>>,
+    screens: Query<&ComputedNode>,
+) {
+    if terminal.chosen_height().is_some() {
+        return;
+    }
+    for (mut node, parent) in &mut panes {
+        let Ok(screen) = screens.get(parent.parent()) else {
+            continue;
+        };
+        let screen_h = screen.size().y * screen.inverse_scale_factor();
+        if screen_h <= 0.0 {
+            continue;
+        }
+        let want = Val::Px(terminal.opening_height(Some(screen_h)));
+        if node.height != want {
+            node.height = want;
+        }
+    }
+}
+
+/// **The terminal steps aside while the key overlay is up** (#314).
+///
+/// Holding K lays every key the editor answers to over the controls it drives
+/// ([`crate::badges`]), and its legend alone is most of a 720 px window tall. The terminal holds none of
+/// those controls, and with it open on every screen the overlay had a third less room: measured, the
+/// Meshes door's legend came down 162 px over the shell's prompt and the Anim door's leaders crossed.
+/// So for as long as the overlay is up the pane is out of the layout, and it comes back as the person
+/// left it when the key goes up. The person's collapse ([`Terminal::is_collapsed`]) is not touched:
+/// this is the overlay borrowing the room, not a choice about the terminal.
+fn step_aside_for_the_key_overlay(
+    terminal: Res<Terminal>,
+    overlays: Query<&Node, (With<crate::badges::BadgeLayer>, Without<TerminalPaneRoot>)>,
+    mut panes: Query<&mut Node, With<TerminalPaneRoot>>,
+) {
+    let overlay_up = overlays.iter().any(|node| node.display != Display::None);
+    let want = if overlay_up || terminal.is_collapsed() { Display::None } else { Display::Flex };
+    for mut node in &mut panes {
+        if node.display != want {
+            node.display = want;
+        }
+    }
+}
+
 /// **Drag the grip to resize**, clamped to a terminal's range. The height is remembered on the
 /// resource, so the next door's pane opens where this one was left.
 fn the_grip_resizes(
     drag: On<bevy::picking::events::PointerDrag>,
     grip: Query<(), With<TerminalGrip>>,
-    mut panes: Query<&mut Node, With<TerminalPaneRoot>>,
+    mut panes: Query<(&mut Node, &ComputedNode), With<TerminalPaneRoot>>,
     mut terminal: ResMut<Terminal>,
 ) {
     if !grip.contains(drag.entity) || drag.delta.y == 0.0 {
         return;
     }
+    // **From the height it is drawn at**, until the person has chosen one: a pane opens at a share of the
+    // window (#314), so a drag that started from the 320 px default would jump it on the first move.
+    let drawn = panes.iter().next().map(|(_, computed)| computed.size().y * computed.inverse_scale_factor());
+    let from = terminal.chosen_height().or(drawn).unwrap_or_else(|| terminal.height());
     // Dragging **up** makes the pane taller, so the delta is subtracted: y grows downward.
-    let want = terminal.height() - drag.delta.y;
+    let want = from - drag.delta.y;
     terminal.set_height(want);
     let height = terminal.height();
-    for mut node in &mut panes {
+    for (mut node, _) in &mut panes {
         node.height = Val::Px(height);
     }
 }

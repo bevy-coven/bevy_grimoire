@@ -187,27 +187,41 @@ fn start_the_load(mut commands: Commands, request: Option<Res<LoadRequest>>, del
 
 fn build_the_screen(mut commands: Commands) {
     let hidden = |flex_direction| Node { display: Display::None, flex_direction, ..default() };
+    // **The card is centred in what the terminal leaves** (#314): the screen's root is a column whose last row is
+    // the docked terminal (`TerminalDock`), so the card sits in a growing cell above it rather than being centred
+    // together with a 320 px pane, which would put the terminal mid-window.
+    let cell = Node {
+        width: Val::Percent(100.0),
+        flex_grow: 1.0,
+        min_height: Val::Px(0.0),
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        ..default()
+    };
     commands.spawn((screen(), DespawnOnExit(Screen::Loading), LoadingRoot, Name::new("loading"))).with_children(|root| {
         // `insert` after the widget's own `Node`: a bundle cannot carry two.
-        root.spawn((panel(), LoadingPanel)).insert(hidden(FlexDirection::Column)).with_children(|card| {
-            card.spawn(heading("Opening the project"));
-            card.spawn((label(""), StageLine));
-            card.spawn((spinner(), SpinnerRow)).insert(hidden(FlexDirection::Row));
-            card.spawn((progress(0.0), ProgressRow)).insert(hidden(FlexDirection::Column));
-            card.spawn((
-                button("Cancel"),
-                observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, job: Option<Res<LoadJob>>, mut next: ResMut<NextState<Screen>>| {
-                    if let Some(job) = job {
-                        job.cancel.store(true, Ordering::Relaxed);
-                    }
-                    commands.remove_resource::<LoadJob>();
-                    // An answer already taken this frame left the opened project waiting as `Chosen`; cancelling lets it go.
-                    commands.remove_resource::<crate::screen::Chosen>();
-                    next.set(Screen::Launcher);
-                }),
-            ));
+        root.spawn((cell, Pickable::IGNORE)).with_children(|cell| {
+            cell.spawn((panel(), LoadingPanel)).insert(hidden(FlexDirection::Column)).with_children(|card| {
+                card.spawn(heading("Opening the project"));
+                card.spawn((label(""), StageLine));
+                card.spawn((spinner(), SpinnerRow)).insert(hidden(FlexDirection::Row));
+                card.spawn((progress(0.0), ProgressRow)).insert(hidden(FlexDirection::Column));
+                card.spawn((
+                    button("Cancel"),
+                    observe(|_: On<bevy_gooey::Activate>, mut commands: Commands, job: Option<Res<LoadJob>>, mut next: ResMut<NextState<Screen>>| {
+                        if let Some(job) = job {
+                            job.cancel.store(true, Ordering::Relaxed);
+                        }
+                        commands.remove_resource::<LoadJob>();
+                        // An answer already taken this frame left the opened project waiting as `Chosen`; cancelling lets it go.
+                        commands.remove_resource::<crate::screen::Chosen>();
+                        next.set(Screen::Launcher);
+                    }),
+                ));
+            });
         });
-    });
+    }).insert(crate::terminal_pane::TerminalDock);
 }
 
 /// Takes the answer when the thread has one: into the editor on a door, or onto the screen as the reason.

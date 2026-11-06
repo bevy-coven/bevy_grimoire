@@ -296,6 +296,13 @@ fn draw_the_terminal(
     let caret = screen.cursor();
     let problem = tab.problem();
     let drawn = &mut *drawn;
+    // **A new screen is a new body**, and what was drawn into the old one went with it. The terminal is on
+    // every screen (#314), so the home's pane, the loader's and the editor's are three bodies in a minute:
+    // the rows `Drawn` kept are despawned entities, and a stamp that matches would leave the new pane empty
+    // while the shell is full. Forget them, and the new body is drawn from scratch on this frame.
+    if drawn.body != Some(body) {
+        *drawn = Drawn { body: Some(body), ..Drawn::default() };
+    }
 
     // **The rows are created once and then only repainted.**
     //
@@ -458,6 +465,8 @@ pub struct Drawn {
     /// The row entities, kept because a `Commands` spawn is invisible to this system's own query for
     /// the rest of the frame — see [`draw_the_terminal`].
     row_entities: Vec<(Entity, usize)>,
+    /// The body these rows were drawn into: a screen's own pane, rebuilt on every screen (#314).
+    body: Option<Entity>,
 }
 
 /// One run of same-coloured characters in a row.
@@ -547,9 +556,10 @@ fn type_keys(
                 _ => {}
             }
         }
-        if closes.just_pressed(&keys) {
-            // The pane's own chord: `toggle_on_the_chord` reads the same `ButtonInput` this frame, so
-            // this system's job is only to **not** forward it to the shell.
+        if closes.just_pressed(&keys) || crate::terminal_pane::COLLAPSE_CHORD.just_pressed(&keys) {
+            // The pane's own chords: `toggle_on_the_chord` and `collapse_on_the_chord` read the same
+            // `ButtonInput` this frame, so this system's job is only to **not** forward them to the
+            // shell — on Linux Ctrl+J is also a newline, and collapsing the pane must not run a line.
             continue;
         }
         if pastes.just_pressed(&keys) {

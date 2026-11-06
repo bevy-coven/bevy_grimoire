@@ -247,11 +247,24 @@ fn a_terminal_runs_a_shell_inside_the_editor() {
     let _shell = use_posix_shell();
     let mut app = editor("terminal_runs_a_shell");
 
-    // **Nothing is open before the chord.** A terminal that spawned itself at startup would be a shell
-    // for every person who never asked for one.
+    // **The terminal is open before any chord** (the owner, 2026-11-06: "It should be on every screen
+    // from the moment you open the application", #314). It was "nothing is open before the chord"; the
+    // claim now is three: the pane is raised, a shell is running in it, and it has not taken the
+    // editor's keyboard, which is what lets a door open with its own keys working.
     assert!(
-        app.world().resource::<Terminal>().is_empty(),
-        "a shell must not start until somebody asks for a terminal"
+        app.world_mut()
+            .query_filtered::<&Node, With<TerminalPaneRoot>>()
+            .iter(app.world())
+            .any(|node| node.display != Display::None),
+        "the terminal must be raised when the editor opens, not waiting for a chord"
+    );
+    assert!(
+        !app.world().resource::<Terminal>().is_empty(),
+        "the terminal is raised but no shell was started: it must be running from the first frame"
+    );
+    assert!(
+        !app.world().resource::<TerminalFocus>().holds(),
+        "the editor opens with its own keyboard: the terminal takes the keys only when asked"
     );
 
     chord(&mut app, &[KeyCode::ControlLeft, KeyCode::Backquote]);

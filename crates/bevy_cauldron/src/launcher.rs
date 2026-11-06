@@ -558,9 +558,9 @@ fn build_launcher(
     spawn_shell(&mut commands, Screen::Launcher);
 }
 
-/// **The window the home and the project page share**: a split of a fixed sidebar and a page. `SplitMin` holds the sidebar at its width
-/// and the divider is not drawn ([`hide_the_divider`]): the sidebar is not a thing to resize. Everything on `screen` is despawned when it
-/// is left.
+/// **The window the home and the project page share**: a split of a fixed sidebar and a page, with the terminal docked across the
+/// bottom (#314). `SplitMin` holds the sidebar at its width and the divider is not drawn ([`hide_the_divider`]): the sidebar is not a
+/// thing to resize. Everything on `screen` is despawned when it is left; the terminal's shells are not (`terminal::Terminal`).
 pub(crate) fn spawn_shell(commands: &mut Commands, screen_of: Screen) -> Entity {
     commands
         .spawn((screen(), DespawnOnExit(screen_of), LauncherRoot, Name::new("projects home")))
@@ -574,8 +574,20 @@ pub(crate) fn spawn_shell(commands: &mut Commands, screen_of: Screen) -> Entity 
                 ),
                 SplitFraction(0.0),
                 SplitMin::new(SIDEBAR_PX, PAGE_MIN_PX),
-            ));
+            ))
+            // **The split takes what the terminal leaves**, not the whole window: gooey's split is 100% tall, and beside a
+            // docked pane that would push the pane off the bottom. Its own `Node` with a growing basis instead, the way
+            // `loading.rs` inserts after a widget's `Node`.
+            .insert(Node {
+                flex_direction: FlexDirection::Row,
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                flex_basis: Val::Px(0.0),
+                min_height: Val::Px(0.0),
+                ..default()
+            });
         })
+        .insert(crate::terminal_pane::TerminalDock)
         .id()
 }
 

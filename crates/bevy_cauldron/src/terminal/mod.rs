@@ -74,6 +74,12 @@ pub struct Terminal {
     height: f32,
     /// Where the *next* shell starts. Set from the open project and from a `cd` chip.
     next_cwd: Option<PathBuf>,
+    /// **The person collapsed the pane** (Primary+J, or the chord that lowers it), and every screen's
+    /// pane is built and kept collapsed until they restore it (#315). `false` at launch: the terminal is
+    /// open on every screen from the application's first frame (#314, the owner's ask of 2026-11-06).
+    /// Kept here, on the session's one resource, because a pane is rebuilt on every screen and the
+    /// person's choice must outlive it.
+    collapsed: bool,
 }
 
 /// One shell, its screen, and what is drawn about it.
@@ -212,17 +218,43 @@ impl Terminal {
         self.problem = None;
     }
 
-    /// The pane's height, logical pixels.
+    /// The pane's height, logical pixels: the person's, or [`crate::terminal_pane::TERMINAL_DEFAULT_H`].
     pub fn height(&self) -> f32 {
-        if self.height <= 0.0 {
-            return crate::terminal_pane::TERMINAL_DEFAULT_H;
-        }
-        self.height
+        self.chosen_height().unwrap_or(crate::terminal_pane::TERMINAL_DEFAULT_H)
+    }
+
+    /// **The height the person dragged the pane to**, if they have; `None` until they do.
+    pub fn chosen_height(&self) -> Option<f32> {
+        (self.height > 0.0).then_some(self.height)
+    }
+
+    /// **The height a pane opens at in a window `window_h` logical pixels tall** (#314): the person's, or
+    /// [`crate::terminal_pane::TERMINAL_WINDOW_SHARE`] of the window clamped to the terminal's range.
+    ///
+    /// A share and not a fixed number because the terminal is now open on every screen from the first
+    /// frame: the fixed 320 px it opened at took more than half of a 1280 x 720 window at the editor's
+    /// `UiScale`, and measured in the editor's own tests, that put the home's New project button under the
+    /// terminal, shrank the Place palette to 189 px and drew the map's legend over the shell's prompt.
+    pub fn opening_height(&self, window_h: Option<f32>) -> f32 {
+        use crate::terminal_pane::{TERMINAL_DEFAULT_H, TERMINAL_MIN_H, TERMINAL_WINDOW_SHARE};
+        self.chosen_height().unwrap_or_else(|| {
+            window_h.map_or(TERMINAL_DEFAULT_H, |h| (h * TERMINAL_WINDOW_SHARE).clamp(TERMINAL_MIN_H, TERMINAL_DEFAULT_H))
+        })
     }
 
     /// Set the pane's height, clamped to what a terminal can be drawn in.
     pub fn set_height(&mut self, px: f32) {
         self.height = px.clamp(crate::terminal_pane::TERMINAL_MIN_H, crate::terminal_pane::TERMINAL_MAX_H);
+    }
+
+    /// Has the person collapsed the pane? Every screen's pane is drawn collapsed while this holds.
+    pub fn is_collapsed(&self) -> bool {
+        self.collapsed
+    }
+
+    /// Collapse the pane, or restore it, for this screen and every one after it.
+    pub fn set_collapsed(&mut self, collapsed: bool) {
+        self.collapsed = collapsed;
     }
 
     /// Where the next shell starts: the open project, or the home directory.
