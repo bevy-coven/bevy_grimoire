@@ -42,6 +42,9 @@ mod pty;
 #[cfg(test)]
 mod tests;
 
+#[cfg(all(test, unix))]
+mod flow_tests;
+
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;

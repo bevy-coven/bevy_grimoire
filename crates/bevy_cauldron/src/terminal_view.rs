@@ -268,9 +268,9 @@ fn pump_the_terminal(
 
 /// **Rebuild the drawn rows, but only when the screen changed.**
 ///
-/// Every frame: one `bool` read per tab, and one `Vec` comparison per drawn row. On a change: one
-/// `Text` per **run of same-coloured cells**, per row. A typical compiler line is three to six runs; a
-/// settled prompt is two entities.
+/// Every frame: one `bool` read and one stamp comparison. On a new build of the screen: one `Vec`
+/// comparison per drawn row, and one `Text` per **run of same-coloured cells** for each row that
+/// differs. A typical compiler line is three to six runs; a settled prompt is two entities.
 ///
 /// # The rows are kept, not rebuilt
 ///
@@ -290,16 +290,23 @@ fn draw_the_terminal(
     let Ok(body) = bodies.single() else {
         return;
     };
-    // **`lines()` is `&mut self` and rebuilds only when the emulator is dirty.** The clone is the row
-    // list itself — a few hundred `Cell`s — and it is cloned because the drawn rows have to be
-    // compared against what is already on screen, which needs both at once. Cloning the *grid* would
-    // be the mistake; this is the trimmed, already-built rows.
+    // **A still frame copies nothing.** `lines()` rebuilds only when the emulator is dirty; the rows
+    // are then read in place, beside `drawn` (another resource, so the two borrows are disjoint), and
+    // [`Drawn::stamp`] says whether they are the very build already on screen. An earlier version
+    // cloned every row twice a frame to compare them, shell idle or not (#308).
     let Some(tab) = terminal.tab_mut() else {
         return;
     };
-    let lines: Vec<crate::terminal::Line> = tab.screen_mut().lines().to_vec();
-    let caret = tab.screen().cursor();
-    let problem = tab.problem().map(str::to_owned);
+    tab.screen_mut().lines();
+    let Some(tab) = terminal.tab() else {
+        return;
+    };
+    let screen = tab.screen();
+    let lines = screen.built_lines();
+    let stamp = screen.stamp();
+    let caret = screen.cursor();
+    let problem = tab.problem();
+    let drawn = &mut *drawn;
 
     // **The rows are created once and then only repainted.**
     //
@@ -360,8 +367,9 @@ fn draw_the_terminal(
         }
     }
 
-    // **Only the rows whose cells changed are repainted.** `Drawn` holds what is on screen, so a
-    // settled terminal costs this comparison and nothing else.
+    // **Only a new build of the screen is looked at, and only its changed rows are repainted.** A
+    // frame whose stamp is the one on screen compares nothing and copies nothing; a new build compares
+    // each row with what `Drawn` holds and repaints only those that differ.
     //
     // **One `Text` per row with a `TextSpan` per colour run**, not one node per run. A row of four
     // differently-coloured runs as four sibling nodes is four flex items whose widths are guesses at
@@ -370,35 +378,38 @@ fn draw_the_terminal(
     // uses. `TextSpan` is Bevy's own answer: one layout, one advance, colours per span. `TextLayout` is
     // no-wrap, so a long row is clipped by the body's `Overflow::clip` and never re-flowed by the
     // layout engine.
-    for (entity, index) in &drawn.row_entities {
-        let Some(line) = lines.get(*index) else {
-            continue;
-        };
-        if drawn.rows.get(*index) == Some(line) {
-            continue;
+    if drawn.stamp != stamp {
+        for (entity, index) in &drawn.row_entities {
+            let Some(line) = lines.get(*index) else {
+                continue;
+            };
+            if drawn.rows.get(*index) == Some(line) {
+                continue;
+            }
+            commands.entity(*entity).despawn_children();
+            let runs = colour_runs(line);
+            commands
+                .entity(*entity)
+                .insert((
+                    Text::new(String::new()),
+                    TextLayout::no_wrap(),
+                    TextColor(chrome::TEXT),
+                    chrome::font(chrome::text::LABEL),
+                    Pickable::IGNORE,
+                ))
+                .with_children(|row| {
+                    for run in &runs {
+                        row.spawn((
+                            TextSpan::new(run.text.clone()),
+                            TextColor(run.ink),
+                            Pickable::IGNORE,
+                        ));
+                    }
+                });
         }
-        commands.entity(*entity).despawn_children();
-        let runs = colour_runs(line);
-        commands
-            .entity(*entity)
-            .insert((
-                Text::new(String::new()),
-                TextLayout::no_wrap(),
-                TextColor(chrome::TEXT),
-                chrome::font(chrome::text::LABEL),
-                Pickable::IGNORE,
-            ))
-            .with_children(|row| {
-                for run in &runs {
-                    row.spawn((
-                        TextSpan::new(run.text.clone()),
-                        TextColor(run.ink),
-                        Pickable::IGNORE,
-                    ));
-                }
-            });
+        lines.clone_into(&mut drawn.rows);
+        drawn.stamp = stamp;
     }
-    drawn.rows = lines.clone();
 
     // **The caret sits where the shell's cursor is**, in cells from the body's top-left.
     let caret_visible = caret.visible && caret.row < lines.len();
@@ -429,7 +440,7 @@ fn draw_the_terminal(
     {
         commands.entity(*first).despawn_children();
         commands.entity(*first).with_child((
-            Text::new(problem),
+            Text::new(problem.to_owned()),
             TextColor(chrome::DANGER),
             chrome::font(chrome::text::LABEL),
             TextLayout::no_wrap(),
@@ -442,6 +453,9 @@ fn draw_the_terminal(
 #[derive(Resource, Default)]
 pub struct Drawn {
     rows: Vec<crate::terminal::Line>,
+    /// The screen's stamp for the build in `rows`, so a frame whose screen did not rebuild skips the
+    /// row comparison and the copy altogether.
+    stamp: u64,
     /// The row entities, kept because a `Commands` spawn is invisible to this system's own query for
     /// the rest of the frame — see [`draw_the_terminal`].
     row_entities: Vec<(Entity, usize)>,

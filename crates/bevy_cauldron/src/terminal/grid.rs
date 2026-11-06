@@ -140,6 +140,9 @@ pub struct TerminalScreen {
     /// What [`lines`](Self::lines) last built, so a rebuild happens once per change rather than once
     /// per frame — and so a caller can hold a row across frames without re-asking.
     rows: Vec<Line>,
+    /// **Which build of `rows` this is**, unique across every screen in the process — see
+    /// [`stamp`](Self::stamp).
+    stamp: u64,
     /// The caret's place, cached beside `rows` for the same reason.
     caret: Cursor,
     cols: u16,
@@ -168,6 +171,7 @@ impl TerminalScreen {
             listener,
             dirty: true,
             rows: Vec::new(),
+            stamp: 0,
             caret: Cursor { row: 0, column: 0, visible: true },
             cols,
             rows_count: rows,
@@ -188,20 +192,16 @@ impl TerminalScreen {
     ///
     /// The only path into the grid: a caller that fed `term` directly would skip the parser and draw
     /// the escape sequences as text.
+    ///
+    /// **The parser drives the grid in place.** `parser` and `term` are two fields, so borrowing both
+    /// at once is allowed; an earlier version swapped `term` out for a freshly built `Term` around the
+    /// call, which allocated a whole grid per feed — measured 2026-11-06 on big at 35 µs a feed on a
+    /// 200 × 50 pane, a hundred times the cost of the one echoed byte a keystroke feeds (#308).
     pub fn feed(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
-        let mut term = std::mem::replace(
-            &mut self.term,
-            Term::new(
-                Config { scrolling_history: 0, ..Default::default() },
-                &Size { cols: self.cols as usize, rows: self.rows_count as usize },
-                self.listener.clone(),
-            ),
-        );
-        self.parser.advance(&mut term, bytes);
-        self.term = term;
+        self.parser.advance(&mut self.term, bytes);
         self.dirty = true;
     }
 
@@ -255,6 +255,21 @@ impl TerminalScreen {
             self.rebuild();
         }
         &self.rows
+    }
+
+    /// **The rows as [`lines`](Self::lines) last built them**, without rebuilding — for a reader that
+    /// already asked `lines` this frame and needs the rows beside other borrows of the screen.
+    pub fn built_lines(&self) -> &[Line] {
+        &self.rows
+    }
+
+    /// **Which build of the rows [`built_lines`](Self::built_lines) holds.**
+    ///
+    /// A new number on every rebuild, and never the same number on two screens, so a view that
+    /// remembers the stamp it drew knows — with one comparison, and across a switch of tabs — that the
+    /// rows have not changed and that there is nothing to copy or compare (#308).
+    pub fn stamp(&self) -> u64 {
+        self.stamp
     }
 
     /// The caret, in the same terms as [`lines`](Self::lines).
@@ -408,8 +423,13 @@ impl TerminalScreen {
             visible: content.cursor.shape != alacritty_terminal::vte::ansi::CursorShape::Hidden,
         };
         self.rows = rows;
+        self.stamp = NEXT_STAMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
+
+/// The next build's [`TerminalScreen::stamp`]. Starts at 1, so a view that has drawn nothing (stamp 0)
+/// never matches a built screen.
+static NEXT_STAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 /// Trim the trailing blanks off one row.
 fn finish_row(mut cells: Vec<Cell>, wraps: bool) -> Line {
