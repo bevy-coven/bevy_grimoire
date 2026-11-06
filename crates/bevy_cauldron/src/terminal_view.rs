@@ -47,8 +47,12 @@ pub const TERMINAL_CELL_W: f32 = chrome::text::LABEL.px() * 0.6;
 /// same rule [`chrome::BODY_LINE_H`] states.
 pub const TERMINAL_CELL_H: f32 = chrome::text::LABEL.px() * 1.2;
 
-/// Padding inside the body, so a row's baseline does not sit on the pane's edge.
-const BODY_PAD: f32 = 2.0;
+/// **The body's inset, and one number for both sides of the boundary.**
+///
+/// The pane writes it as padding and this file subtracts it before dividing by a cell, so the two have
+/// to be the same number or every column count is off by a fraction of a cell. Written once, here,
+/// because the pane already imports the cell metrics from this file.
+pub(crate) const BODY_PAD: f32 = 2.0;
 
 /// **The chord set**, so the pane's own chords can be ordered after the key swallow rather than racing
 /// it. The swallow consumes a `Ctrl+\`` press by *not* forwarding it (it is the close chord), and the

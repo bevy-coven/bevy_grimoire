@@ -347,7 +347,7 @@ fn build_the_pane(commands: &mut Commands, body: Entity, height: f32, terminal: 
                 // shell's history lives in the grid, which is two answers to one question. `clip`
                 // is what stops a row painting over the status band.
                 overflow: Overflow::clip(),
-                padding: UiRect::axes(Val::Px(chrome::MARGIN), Val::Px(2.0)),
+                padding: UiRect::axes(Val::Px(chrome::MARGIN), Val::Px(crate::terminal_view::BODY_PAD)),
                 ..default()
             },
             BackgroundColor(chrome::PANEL_BG),
@@ -364,6 +364,9 @@ fn build_the_pane(commands: &mut Commands, body: Entity, height: f32, terminal: 
     let caret = commands
         .spawn((
             Node {
+                // The caret is not a panel: it marks one cell of the shell's grid, exactly as a
+                // list's scrollbar overlay sits on its viewport, and `draw_the_terminal` moves it.
+                // PLACES-ITSELF-OK: a caret over one cell is not a panel `chrome::Frame` places.
                 position_type: PositionType::Absolute,
                 left: Val::Px(0.0),
                 top: Val::Px(0.0),
@@ -475,80 +478,44 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             flex_grow: 1.0,
             ..default()
         });
+        // **A chip per session, and the two controls through the same builder.** `chrome::chip`
+        // carries `RowRest`, so rest / hover / pressed are painted by `style_list_rows` without this
+        // pane knowing what hover looks like — the fourth shape a hand-rolled `Button` would be,
+        // and `chrome_census::a_clickable_is_one_of_the_three_shapes` fails the build on exactly that.
         for (index, tab) in terminal.tabs().iter().enumerate() {
             let active = index == terminal.active();
             let ink = if active { chrome::ACCENT } else { chrome::TEXT };
             let fill = if active { chrome::ROW_SELECTED } else { chrome::BAR_BG };
-            bar.spawn((
-                bevy::ui_widgets::Button,
-                bevy::picking::hover::Hovered::default(),
-                chrome::RowRest(fill),
-                Node {
-                    padding: chrome::CHIP_PAD,
-                    border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                    border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_ROW)),
-                    flex_shrink: 0.0,
-                    ..default()
-                },
-                BorderColor::all(chrome::PANEL_EDGE),
-                BackgroundColor(fill),
-                Pickable::default(),
+            chrome::chip(
+                bar,
                 TerminalTabChip(index),
-                Name::new(format!("terminal tab {index}")),
-            ))
-            .with_child((
-                Text::new(tab.title().to_owned()),
-                TextColor(ink),
-                chrome::font(chrome::text::CONTROL),
-            ));
+                tab.title(),
+                chrome::text::CONTROL,
+                ink,
+                fill,
+                chrome::PANEL_EDGE,
+            );
         }
-        bar.spawn((
-            bevy::ui_widgets::Button,
-            bevy::picking::hover::Hovered::default(),
-            chrome::RowRest(chrome::BAR_BG),
-            Node {
-                padding: chrome::CHIP_PAD,
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_ROW)),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            BorderColor::all(chrome::PANEL_EDGE),
-            BackgroundColor(chrome::BAR_BG),
-            Pickable::default(),
+        chrome::chip(
+            bar,
             TerminalNewTab,
-            Name::new("terminal new tab"),
-        ))
-        .with_child((
-            Text::new("+"),
-            TextColor(chrome::TEXT),
-            chrome::font(chrome::text::CONTROL),
-        ));
-        bar.spawn((
-            bevy::ui_widgets::Button,
-            bevy::picking::hover::Hovered::default(),
-            chrome::RowRest(chrome::BAR_BG),
-            Node {
-                padding: chrome::CHIP_PAD,
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                border_radius: BorderRadius::all(Val::Px(chrome::RADIUS_ROW)),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            BorderColor::all(chrome::PANEL_EDGE),
-            BackgroundColor(chrome::BAR_BG),
-            Pickable::default(),
+            "+",
+            chrome::text::CONTROL,
+            chrome::TEXT,
+            chrome::BAR_BG,
+            chrome::PANEL_EDGE,
+        );
+        chrome::chip(
+            bar,
             TerminalCloseTab,
-            Name::new("terminal close tab"),
-        ))
-        .with_child((
-            Text::new("×"),
-            TextColor(chrome::DANGER),
-            chrome::font(chrome::text::CONTROL),
-        ));
+            "x",
+            chrome::text::CONTROL,
+            chrome::DANGER,
+            chrome::BAR_BG,
+            chrome::PANEL_EDGE,
+        );
     });
 }
-
 /// **`Ctrl+\`` raises the pane, or lowers it when it already has the keys.**
 ///
 /// Three cases, and each is what a person means:
