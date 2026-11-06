@@ -1,0 +1,44 @@
+{
+  "name": "terminal_settings",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 5
+    },
+    {
+      "seconds": 4
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "a prompt's icons, drawn in the terminal's Nerd Font"
+    },
+    {
+      "at": 0.6,
+      "key": "Backquote",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 1.0,
+      "type": "printf '\\ue0b0 \\uf115 src \\ue7a8 main \\uf418 dev\\n'"
+    },
+    {
+      "at": 3.0,
+      "key": "Enter"
+    },
+    {
+      "at": 4.6,
+      "caption": "this project's editor.ron asks for a steady bar cursor (terminal_cursor: Bar, terminal_cursor_blink: false)"
+    },
+    {
+      "at": 7.4,
+      "caption": "the caret is a bar that does not blink, and the settings screen's Terminal tab sets the same keys"
+    }
+  ]
+}
