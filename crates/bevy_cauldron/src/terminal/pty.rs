@@ -103,7 +103,6 @@ impl TerminalSession {
             ]
             .into_iter()
             .collect(),
-            ..Default::default()
         };
 
         let size = WindowSize {

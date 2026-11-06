@@ -102,10 +102,10 @@ pub struct TerminalListener {
 
 impl EventListener for TerminalListener {
     fn send_event(&self, event: Event) {
-        if let Event::PtyWrite(text) = event {
-            if let Ok(mut replies) = self.replies.lock() {
-                replies.extend_from_slice(text.as_bytes());
-            }
+        if let Event::PtyWrite(text) = event
+            && let Ok(mut replies) = self.replies.lock()
+        {
+            replies.extend_from_slice(text.as_bytes());
         }
     }
 }

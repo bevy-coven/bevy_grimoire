@@ -52,6 +52,10 @@ Opens the repository's own project on its `furniture` kit (`site` and `scp` are 
 
   ![The Map door's 3D view of the bedroom map: a sofa is armed from the PLACE list, R turns it a quarter turn, a click places it, X and a click remove it, and Ctrl+Z puts it back](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/media/build-a-map.gif)
 
+- **Run a shell without leaving the window**: Cmd+` opens a terminal across the bottom of the editor, already in your project's directory — `cargo`, `git`, your agent — and it keeps running while you cross to another door. Keys go to the shell while it holds them, so typing a `d` does not move the camera.
+
+  ![The terminal docked across the bottom of the editor: a prompt in the ts8 project, a printf in green and bold red, and an ls listing the map files, with the map and the PLACE panel still usable above it](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/changelog/media/2026-11-05-terminal-in-the-editor.png)
+
 - **Find any command**: the menu bar at the top of the window lists every command exactly once, under File, Edit, View, Map, Meshes, Tiles, Compose, Rigs, Tools and Help, each with the key it answers to; a row that cannot run greys out and says why.
 - **Work with the Familiar**: an agent turns, removes, labels, frames and captures through the same operations you use, and one Cmd+Z takes back its turn: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
 - **Show the agent what you mean**: Cmd+\ snips a rectangle of the editor with a note the agent can read and see: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).

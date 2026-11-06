@@ -237,10 +237,10 @@ impl Terminal {
             return;
         };
         tab.screen.resize(cols, rows);
-        if let Some(session) = tab.session.as_mut() {
-            if let Err(why) = session.resize(cols, rows) {
-                self.problem = Some(why);
-            }
+        if let Some(session) = tab.session.as_mut()
+            && let Err(why) = session.resize(cols, rows)
+        {
+            self.problem = Some(why);
         }
     }
 

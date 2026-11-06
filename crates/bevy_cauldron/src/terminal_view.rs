@@ -56,6 +56,11 @@ const BODY_PAD: f32 = 2.0;
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TerminalChordSet;
 
+/// **The caret's query filter**, named because Clippy is right that it is more than a signature
+/// should carry inline — and because a `Without<TerminalRow>` beside a `With<TerminalCaret>` is a
+/// claim about two markers not overlapping, which deserves a name.
+type CaretFilter = (With<TerminalCaret>, Without<TerminalRow>);
+
 /// Registers the terminal's drawing and key systems.
 pub struct TerminalViewPlugin;
 
@@ -275,7 +280,7 @@ fn draw_the_terminal(
     mut drawn: ResMut<Drawn>,
     bodies: Query<Entity, With<TerminalBody>>,
     mut rows: Query<(Entity, &TerminalRow, &mut Node, &mut Visibility)>,
-    carets: Query<(&mut Node, &mut Visibility), (With<TerminalCaret>, Without<TerminalRow>)>,
+    carets: Query<(&mut Node, &mut Visibility), CaretFilter>,
     mut commands: Commands,
 ) {
     let Ok(body) = bodies.single() else {
@@ -542,12 +547,11 @@ fn type_keys(
             continue;
         }
         if copies.just_pressed(&keys) {
-            if let Some(tab) = terminal.tab() {
-                if let Some(text) = tab.screen().selection_text() {
-                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                        let _ = clipboard.set_text(text);
-                    }
-                }
+            if let Some(tab) = terminal.tab()
+                && let Some(text) = tab.screen().selection_text()
+                && let Ok(mut clipboard) = arboard::Clipboard::new()
+            {
+                let _ = clipboard.set_text(text);
             }
             continue;
         }
