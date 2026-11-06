@@ -446,3 +446,4 @@ mod the_project_page;
 mod the_menus_offer_the_app_verbs;
 mod a_new_project_form_opens_ready_to_type_in;
 mod the_first_map_tour;
+mod the_terminal_paints_grounds_and_the_selection;

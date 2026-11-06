@@ -76,6 +76,13 @@ pub fn default_bg() -> Color {
     chrome::PANEL_BG
 }
 
+/// **The selection's ground**, under the selected cells' own ink (#309). [`chrome::ROW_SELECTED`],
+/// the editor's one word for "selected", so a terminal selection reads like a chosen row anywhere
+/// else in the window and the cells keep their colours (a red error stays red).
+pub fn selection_bg() -> Color {
+    chrome::ROW_SELECTED
+}
+
 /// **Index 16–231: the 6×6×6 cube.** `0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff` are the xterm levels —
 /// not 0/51/102/153/204/255, which is the same idea computed with the wrong step and is why two
 /// terminals disagree about what `ESC[38;5;100m` looks like.

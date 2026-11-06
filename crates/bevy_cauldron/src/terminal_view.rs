@@ -399,11 +399,17 @@ fn draw_the_terminal(
                 ))
                 .with_children(|row| {
                     for run in &runs {
-                        row.spawn((
+                        let mut span = row.spawn((
                             TextSpan::new(run.text.clone()),
                             TextColor(run.ink),
                             Pickable::IGNORE,
                         ));
+                        // **A ground only where the cells paint one** (#309): an inverse run, a
+                        // coloured background, the selection. The pane is already its default ground,
+                        // so a plain run carries none and costs no extra quad.
+                        if let Some(ground) = run.ground {
+                            span.insert(bevy::text::TextBackgroundColor(ground));
+                        }
                     }
                 });
         }
@@ -465,21 +471,27 @@ pub struct Drawn {
 struct Run {
     text: String,
     ink: Color,
+    /// The run's own background, or `None` on the pane's default ground.
+    ground: Option<Color>,
 }
 
 /// **Split a row into runs of one colour.** The reason a 200-column pane is a handful of entities
 /// rather than two hundred.
 ///
-/// A run is a maximal span of one ink; the text is what the shaper lays out, so no width is computed
-/// here at all — an advance guessed at this level is the bug `TextSpan` exists to avoid.
+/// A run is a maximal span of one ink **on one ground**; the text is what the shaper lays out, so no
+/// width is computed here at all — an advance guessed at this level is the bug `TextSpan` exists to
+/// avoid. The ground splits runs too, because Bevy draws a span's `TextBackgroundColor` behind that
+/// span's glyphs and nothing else: an inverse word inside a plain line is its own run (#309).
 fn colour_runs(line: &crate::terminal::Line) -> Vec<Run> {
     let mut runs: Vec<Run> = Vec::new();
     for cell in &line.cells {
+        let ground = cell.has_ground().then_some(cell.bg);
         match runs.last_mut() {
-            Some(run) if run.ink == cell.fg => run.text.push(cell.ch),
+            Some(run) if run.ink == cell.fg && run.ground == ground => run.text.push(cell.ch),
             _ => runs.push(Run {
                 text: cell.ch.to_string(),
                 ink: cell.fg,
+                ground,
             }),
         }
     }

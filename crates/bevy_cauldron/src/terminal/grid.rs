@@ -72,6 +72,13 @@ impl Cell {
     fn is_default_blank(&self) -> bool {
         self.ch == ' ' && self.bg == palette::default_bg() && self.fg == palette::default_fg()
     }
+
+    /// **Does this cell paint a ground of its own?** False for the pane's default background, which
+    /// the pane itself already is; true for a coloured background, an inverse cell and a selected one
+    /// — the cells the view must draw a ground behind (#309).
+    pub fn has_ground(&self) -> bool {
+        self.bg != palette::default_bg()
+    }
 }
 
 /// Where the caret is, in the pane's own row/column terms.
@@ -368,6 +375,11 @@ impl TerminalScreen {
         let mut wrapped = false;
         let mut open_line = i32::MIN;
 
+        // **The selection, in the grid's own points**, so a selected cell is known in the same walk.
+        // A selection is drawn as its cells' ground ([`palette::selection_bg`]) over their own ink —
+        // the drag already set it on `term`, and Copy already reads it; until #309 the screen never
+        // showed it, so a person selected blind.
+        let selection = self.term.selection.as_ref().and_then(|s| s.to_range(&self.term));
         // **One pass over the visible grid**, which is what `display_iter` is for: it starts at the
         // top-left cell of the viewport and walks to its bottom-right, skipping the scrollback.
         for indexed in self.term.grid().display_iter() {
@@ -401,6 +413,9 @@ impl TerminalScreen {
             }
             if cell.flags.contains(Flags::INVERSE) {
                 std::mem::swap(&mut fg, &mut bg);
+            }
+            if selection.as_ref().is_some_and(|range| range.contains(indexed.point)) {
+                bg = palette::selection_bg();
             }
             row.push(Cell { ch: cell.c, fg, bg });
         }
