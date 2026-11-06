@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Cauldron capture history</title>
+<style>
+:root{--bg:#15171a;--fg:#e6e6e6;--muted:#9aa0a6;--line:#2c3035;--c1:#5b9dd9;--c2:#d98b5b;--c3:#7fb069;--c4:#c25b7a}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,sans-serif}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:28px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.sub{color:var(--muted);margin:0 0 8px}
+table{border-collapse:collapse;font-size:13px}
+th,td{padding:3px 10px 3px 0;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:14px;background:var(--c1);display:inline-block;vertical-align:middle;border-radius:2px}
+.bar.fix{background:var(--c3)}.bar.blk{background:var(--c2)}
+.grid td{text-align:center;font-variant-numeric:tabular-nums}
+.grid td.z{color:#3a3f45}
+.chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;background:var(--line)}
+ul{margin:6px 0;padding-left:20px}
+</style>
+<h1>Cauldron capture history</h1>
+<p class="sub" id="meta"></p>
+<h2>Cases per week, by outcome</h2>
+<table id="weekly"></table>
+<h2>Symptom &times; cause</h2>
+<table class="grid" id="grid"></table>
+<h2>Hotspots &mdash; files in two or more fixed cases</h2>
+<table id="hot"></table>
+<h2>Configuration skew &mdash; cases against every capture in the ledger</h2>
+<table id="skew"></table>
+<h2>Regressions</h2>
+<ul id="regs"></ul>
+<h2>Open <code>other:</code> proposals</h2>
+<ul id="oth"></ul>
+<script type="application/json" id="cases">
+{"v":1,"stem":"feedback-1793905912313","closed_at":"2026-11-05T14:15:50-06:00","pass":403,"kind":"bug","outcome":"fixed","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1406","ui_scale":2.4,"app_version":"0.2.6"},"screen":"launcher","symptom":"clipped","cause":"clip-scroll","oracle":"containment","note":"the What's new page listed ten entries and drew three with no ScrollArea; the page now scrolls to its last entry","files":["crates/bevy_cauldron/src/launcher.rs"],"commit":"b28ff38","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793905798698","closed_at":"2026-11-05T14:39:08-06:00","pass":403,"kind":"bug","outcome":"fixed","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1406","ui_scale":2.4,"app_version":"0.2.6"},"screen":"launcher","symptom":"layout","cause":"layout-rule","oracle":"window-invariance","note":"the splash was sized from the sidebar's outer width and drawn into its padded box, running 2*PAD past the right edge","files":["crates/bevy_cauldron/src/launcher.rs"],"commit":"9d6bdd9","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793905698793","closed_at":"2026-11-05T14:49:46-06:00","pass":403,"kind":"bug","outcome":"fixed","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1406","ui_scale":2.4,"app_version":"0.2.6"},"screen":"launcher","symptom":"illegible","cause":"text-measure","oracle":"window-invariance","note":"the What's new prose was set 778 px wide, about 118 characters a line; bounded to ~66 by NEWS_MEASURE_PX","files":["crates/bevy_cauldron/src/launcher.rs"],"commit":"f11f8f0","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793901499397","closed_at":"2026-11-05T15:51:11-06:00","pass":403,"kind":"bug","outcome":"fixed","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1406","ui_scale":2.4,"app_version":"0.2.5"},"screen":"launcher","symptom":"flash","cause":"init-order","oracle":"first-frame","note":"the project page's first frame drew the body before the sidebar existed; the fill order, not the texture, was the cause","files":["crates/bevy_cauldron/src/launcher.rs"],"commit":"d01f0e4","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793903311065","closed_at":"2026-11-05T16:05:07-06:00","pass":403,"kind":"enhancement","outcome":"fixed","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1406","ui_scale":2.4,"app_version":"0.2.6"},"screen":"launcher","symptom":"request","cause":"missing","oracle":"spec","note":"Update now becomes a download bar: the button carries the percentage and a meter appears until the download lands","files":["crates/bevy_cauldron/src/update.rs"],"commit":"2cf44b2","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793927671762","closed_at":"2026-11-06T06:35:27-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.6"},"screen":"editor","symptom":"layout","cause":"upstream","oracle":null,"note":"the keycap's letter sits off centre because gooey's Role::PromptKey arm sets min_width but never centres; bevy_gooey#44","files":[],"commit":"25ef676","upstream":"bevy_gooey#44","regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793927698061","closed_at":"2026-11-06T06:58:41-06:00","pass":403,"kind":"bug","outcome":"fixed","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.6"},"screen":"editor","symptom":"layout","cause":"layout-rule","oracle":"other:size-class-invariance","note":"Fill was spawned in the icon loop though it carries a word: 107 px among 65-66 px pictures; it stands with the worded tools","files":["crates/bevy_cauldron/src/toolbar.rs"],"commit":"c91b218","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793927744511","closed_at":"2026-11-06T07:09:00-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.6"},"screen":"editor","symptom":"illegible","cause":"upstream","oracle":null,"note":"shortcut_label emits Mac glyphs the host face need not carry and this repo's FiraMono lacks 7 of 13; bevy_gooey#45","files":[],"commit":"726e270","upstream":"bevy_gooey#45","regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793927950267","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.7"},"screen":"launcher","symptom":"unresponsive","cause":"input-routing","oracle":null,"note":"the injected pointer does take logical coordinates; pass 391's 'never establishes a pick' was a coordinate-space error, so the row is unprov","files":[],"commit":"","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793928006124","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.7"},"screen":"editor","symptom":"layout","cause":"layout-rule","oracle":null,"note":"the WhereYouAre label is spawned into the door strip band, so the Kit door draws a bare 'Map' reading as a fourth tab at chrome.rs:3864","files":[],"commit":"","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793928048623","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.7"},"screen":"editor","symptom":"layout","cause":"layout-rule","oracle":null,"note":"the panel's text runs off it with no spatial hierarchy; the earlier pointer explanation was a coordinate-space error, so the row is unproven","files":[],"commit":"","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793928091805","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.7"},"screen":"editor","symptom":"layout","cause":"upstream","oracle":null,"note":"the ? is gooey#45's tofu and the ragged column follows from tofu widths, not gooey's alignment; blocked until a menu can be opened over BRP","files":[],"commit":"","upstream":"bevy_gooey#45","regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793928159971","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.7"},"screen":"editor","symptom":"wrong-state","cause":"input-routing","oracle":null,"note":"the hover band centres 77 physical px below the recorded pointer, but the harness drives no Hovered, so it is seen and not testable","files":[],"commit":"","upstream":null,"regression_of":null,"related":[],"attempts":1,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793968919654","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"enhancement","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.9"},"screen":"editor","symptom":"request","cause":"missing","oracle":null,"note":"the kit packs should default to collapsed: scan opens every pack the kit draws from, the opposite of the ask; one line plus its expectation","files":[],"commit":"","upstream":null,"regression_of":null,"related":[],"attempts":0,"minutes":0,"backfilled":true}
+{"v":1,"stem":"feedback-1793969010186","closed_at":"2026-11-06T08:04:59-06:00","pass":403,"kind":"bug","outcome":"blocked","platform":{"os":"macOS 26.6.2 Tahoe","backend":"metal","scale_factor":2.0,"window":"2560x1604","ui_scale":2.4,"app_version":"0.2.9"},"screen":"editor","symptom":"unresponsive","cause":"input-routing","oracle":null,"note":"a real picking click on the sidebar's Settings leaves the dialog closed while OpenSettings opens it: the press does not reach the button","files":[],"commit":"","upstream":null,"regression_of":null,"related":[],"attempts":0,"minutes":0,"backfilled":true}
+</script>
+<script>
+const raw = document.getElementById("cases").textContent.trim().split("\n").filter(Boolean).map(JSON.parse);
+// correction lines replace the field they name
+for (const c of raw) if (c.correct) {
+  const t = raw.find(x => !x.correct && x.stem === c.correct);
+  if (t) t[c.field] = c.value;
+}
+const cases = raw.filter(c => !c.correct);
+const $ = id => document.getElementById(id);
+$("meta").textContent = `${cases.length} cases \u00b7 ` +
+  ["fixed","blocked","unreproduced","declined"].map(o =>
+    `${cases.filter(c=>c.outcome===o).length} ${o}`).join(" \u00b7 ");
+
+// 1. per week by outcome
+const week = {};
+for (const c of cases) {
+  const d = new Date(c.closed_at);
+  const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - ((d.getUTCDay()+6)%7));
+  const k = mon.toISOString().slice(0,10);
+  week[k] = week[k] || {};
+  week[k][c.outcome] = (week[k][c.outcome]||0)+1;
+}
+const outcomes = ["fixed","blocked","unreproduced","declined"];
+let wh = "<tr><th>week of</th>" + outcomes.map(o=>`<th>${o}</th>`).join("") + "<th>total</th></tr>";
+for (const k of Object.keys(week).sort()) {
+  const r = week[k], tot = outcomes.reduce((a,o)=>a+(r[o]||0),0);
+  wh += `<tr><td>${k}</td>` + outcomes.map((o,i)=>
+    `<td class="n"><span class="bar ${o==="fixed"?"fix":o==="blocked"?"blk":""}" style="width:${
+      (r[o]||0)/tot*90}px"></span> ${r[o]||0}</td>`).join("") + `<td class="n">${tot}</td></tr>`;
+}
+$("weekly").innerHTML = wh;
+
+// 2. symptom x cause grid
+const syms = [...new Set(cases.map(c=>c.symptom))].sort();
+const causes = [...new Set(cases.map(c=>c.cause).filter(Boolean))].sort();
+const cell = (s,k) => cases.filter(c=>c.symptom===s&&c.cause===k);
+let gh = "<tr><th></th>" + causes.map(k=>`<th>${k}</th>`).join("") + "</tr>";
+for (const s of syms) {
+  gh += `<tr><th style="text-align:left">${s}</th>`;
+  for (const k of causes) {
+    const n = cell(s,k).length;
+    const max = Math.max(1,...syms.flatMap(x=>causes.map(y=>cell(x,y).length)));
+    const a = n/max*0.85;
+    gh += `<td class="${n?"":"z"}" style="${n?`background:rgba(91,157,217,${a})`:""}">${n||"\u00b7"}</td>`;
+  }
+  gh += "</tr>";
+}
+$("grid").innerHTML = gh;
+
+// 3. hotspots
+const files = {};
+for (const c of cases) if (c.outcome==="fixed") for (const f of c.files) files[f]=(files[f]||0)+1;
+const hot = Object.entries(files).filter(([,n])=>n>=2).sort((a,b)=>b[1]-a[1]);
+$("hot").innerHTML = hot.length
+  ? "<tr><th>file</th><th>fixed cases</th><th>stems</th></tr>" + hot.map(([f,n])=>
+      `<tr><td><code>${f}</code></td><td class="n">${n}</td><td>${
+        cases.filter(c=>c.files.includes(f)).map(c=>c.stem).join(", ")}</td></tr>`).join("")
+  : "<tr><td>none yet</td></tr>";
+
+// 4. config skew: cases vs all ledger captures is only possible with case data here;
+//    report the case shares and label the bias.
+const skew = [];
+for (const f of ["scale_factor","ui_scale","window","backend"]) {
+  const m = {};
+  for (const c of cases) { const v = String(c.platform[f]); m[v]=(m[v]||0)+1; }
+  for (const [v,n] of Object.entries(m))
+    skew.push(`<tr><td>${f}</td><td><code>${v}</code></td><td class="n">${n}</td>
+      <td class="n">${(n/cases.length*100).toFixed(0)}%</td></tr>`);
+}
+$("skew").innerHTML = "<tr><th>field</th><th>value</th><th>cases</th><th>share</th></tr>" +
+  skew.join("") + `<tr><td colspan="4" style="color:var(--muted)">
+  All captures in the ledger come from one host at one scale, so these shares describe what the loop has
+  looked at, not what breeds defects.</td></tr>`;
+
+// 5. regressions
+const regs = cases.filter(c=>c.regression_of);
+const twice = Object.entries(cases.reduce((a,c)=>(a[c.stem]=(a[c.stem]||0)+1,a),{})).filter(([,n])=>n>1);
+$("regs").innerHTML = (regs.length?regs.map(c=>`<li>${c.stem} is a regression of ${c.regression_of}</li>`).join(""):"<li>none recorded</li>")
+  + (twice.length?twice.map(([s,n])=>`<li>${s} closed ${n} times</li>`).join(""):"<li>no stem closed twice</li>");
+
+// 6. other: values
+const oth = {};
+for (const c of cases) for (const f of ["symptom","cause","oracle"])
+  if (String(c[f]||"").startsWith("other:")) { oth[c[f]]=oth[c[f]]||[]; oth[c[f]].push(c.stem); }
+$("oth").innerHTML = Object.keys(oth).length
+  ? Object.entries(oth).map(([v,s])=>`<li><code>${v}</code> <span class="chip">${s.length}</span> ${s.join(", ")}</li>`).join("")
+  : "<li>none</li>";
+</script>
