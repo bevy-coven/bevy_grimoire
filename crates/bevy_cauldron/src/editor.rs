@@ -8650,6 +8650,13 @@ pub fn sense_context(
     // `N` to decline opened the map-rename field and `Y` tipped the brush, because nothing here knew a
     // question was up. `Option`, because the menu screen has no editor state of its own.
     confirm: Option<Res<crate::confirm::Confirm>>,
+    // **The terminal owns the keys while it has them** (`terminal_pane::TerminalFocus`). Folded into
+    // the same `typing` answer a text field gives, deliberately rather than given a clause of its own:
+    // `Live(Context::Typing, ..)` is the one gate every binding already respects, and a second swallow
+    // beside it would be two answers to "who gets this key" — the failure `keys.rs`'s header refuses.
+    // A shell that typed `d` and moved the camera would be unusable, and this one line is the whole
+    // defence against it.
+    terminal: Option<Res<crate::terminal_pane::TerminalFocus>>,
 ) {
     let InHand {
         move_drag,
@@ -8667,7 +8674,11 @@ pub fn sense_context(
     let typing = fields.typing()
         || !palette.is_empty()
         || confirm.as_deref().is_some_and(|c| c.owns_keyboard())
-        || !report.is_empty();
+        || !report.is_empty()
+        // **The terminal is a text field as far as the census is concerned.** It takes raw keys the
+        // way a filter box does, and it is the one field whose whole purpose is that a command
+        // typed into it is not also a command in the editor.
+        || terminal.as_deref().is_some_and(crate::terminal_pane::TerminalFocus::holds);
     // **What is in hand, asked of the tab that can be holding something.** Two tabs can, and they hold
     // different things: the assembler has a piece taken with `Space`, the map has one picked up in
     // Move or a set captured in Clone. Both answer the same question — *do the arrows move a thing, or

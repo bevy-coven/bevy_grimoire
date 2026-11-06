@@ -155,6 +155,11 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
     // element: the list above is one element away from Bevy's fifteen-plugin cap, and a plugin that
     // owns one question and one system does not need to be in that list.
     app.add_plugins(crate::present::PresentPlugin);
+    // **The terminal** (a shell in the editor's own window). In the shared list rather than the
+    // binary's: a headless test presses `Ctrl+\`` and types into a real shell, which is what proves
+    // the feature end to end, and a plugin the harness lacks would make that test prove the harness.
+    // `terminal_pane::TerminalPanePlugin` and `terminal_view::TerminalViewPlugin` come with it.
+    app.add_plugins(crate::terminal::TerminalPlugin);
     app
 }
 

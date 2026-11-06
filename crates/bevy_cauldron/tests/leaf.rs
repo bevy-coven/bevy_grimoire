@@ -134,6 +134,18 @@ const ALLOWED: &[(&str, &str)] = &[
         "bevy_stigmergy",
         "the owner's decaying trail fields, hosted by the family layer (#107) — OPTIONAL, reached only by `--features bevy_stigmergy` and pinned by git rev, so an ordinary build pays nothing",
     ),
+    (
+        "alacritty_terminal",
+        "the terminal's VTE parser, grid and PTY (`terminal/`) — Apache-2.0, no engine and no window: it \
+         turns a shell's bytes into cells, which is the one part of a terminal worth not writing, and it \
+         reaches nothing outside the terminal module",
+    ),
+    (
+        "rustix",
+        "`tcsetwinsize`, the one ioctl that tells a shell its pane changed size (`terminal/pty.rs`) — the \
+         same crate `alacritty_terminal` opens its PTY with, one version in the graph, and used instead of \
+         its `on_resize` because that one `exit(1)`s on failure",
+    ),
 ];
 
 fn declared_dependencies(manifest: &str) -> BTreeSet<String> {

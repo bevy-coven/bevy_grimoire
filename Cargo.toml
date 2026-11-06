@@ -20,6 +20,20 @@ ron = "0.12.2"
 serde_path_to_error = "0.1"
 rand = "0.10"
 rand_chacha = "0.10"
+# **The terminal's engine, and the only new crate the in-editor terminal costs.** A pure-Rust VTE
+# parser plus the grid that holds what the parser wrote — the part of a terminal that is hard, taken
+# whole rather than re-derived. Its `tty` module also owns the PTY (fork, `setsid`, `TIOCSCTTY`,
+# `TIOCSWINSZ`), so there is no second PTY layer beside it: `portable-pty` would be exactly the
+# two-paths arrangement `AGENTS.md` forbids, and it is not a dependency here for that reason.
+#
+# Apache-2.0, which is compatible with this workspace's MIT OR Apache-2.0. `libghostty-vt` is the
+# better engine and is rejected on its own project's statement that it is "not yet a stable API and
+# has not been released as a standalone, stable library" (ghostty.org, read 2026-11-05) — a decision
+# that gets revisited when that sentence goes away, not on a hunch that it might be fine.
+#
+# Its Unix half is behind `cfg(unix)`; `terminal/pty.rs` refuses on any other target with a reason
+# rather than pretending a shell started.
+alacritty_terminal = { version = "0.26.0", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Same dev profile as Sanctuary: Bevy runs fast in debug without slowing rebuilds of these crates.

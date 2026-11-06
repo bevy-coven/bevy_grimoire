@@ -875,6 +875,45 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
         "bevy_cauldron::compose::picker::Picker",
         Ownership::Session,
     ),
+    // **The terminal's shells, and this is the one resource the whole feature turns on.**
+    //
+    // `Session`, and it is the reason the terminal survives a door at all: a person starts
+    // `cargo build` on the Map door, crosses to Kit, and the build is still running with its
+    // scrollback intact. `Door` here would kill the child (`TerminalSession`'s `Drop` hangs it up), and
+    // the cost of that is somebody's twenty-minute build.
+    //
+    // It is also *not* a `Node`, so [`scene_roots`]' sweep cannot reach it — a fact this table states
+    // rather than leaves to be discovered by a `cargo build` that vanished.
+    ("bevy_cauldron::terminal::Terminal", Ownership::Session),
+    // **`Session`, because it says who is at the keyboard.** A door change does not change who is
+    // sitting there; and a `Door` classification would clear the flag on the way out, which is exactly
+    // what `OnExit(Editor)` already does deliberately (`give_the_keyboard_back`). Two things resetting
+    // it is not a bug, but the second one is the one that means something.
+    (
+        "bevy_cauldron::terminal_pane::TerminalFocus",
+        Ownership::Session,
+    ),
+    // **`Session`: the cell count the pane last asked for, the caret's blink, a drag in progress.**
+    // Not `Door`, because none of it is per-project and all of it is re-derived: the resize system
+    // recomputes the cells from the body's layout on the first frame of the next door, and a stale
+    // count is one frame that asks the shell for the size it already has — which `resize` refuses.
+    (
+        "bevy_cauldron::terminal_pane::TerminalPane",
+        Ownership::Session,
+    ),
+    // **`Session`: the measured advance of one glyph in the shipped face.** It is a fact about the
+    // font, not about a door, and re-measuring it costs a frame of `TextLayoutInfo`.
+    (
+        "bevy_cauldron::terminal_view::CellMetrics",
+        Ownership::Session,
+    ),
+    // **`Session`, and the reason is that this is a drawing cache rather than a value.**
+    //
+    // `Door` would mean `reset_door_state` removes and re-initialises it — one more type in a
+    // forty-type macro whose list and table are compared by a ratchet, for a `Vec` that the draw
+    // system overwrites the first time it finds a row whose cells differ. What the row *says* is that
+    // the cache is not a fact about a project, which is the question the table asks.
+    ("bevy_cauldron::terminal_view::Drawn", Ownership::Session),
 ];
 
 /// What a door change does to this resource, or `None` if nobody has said.

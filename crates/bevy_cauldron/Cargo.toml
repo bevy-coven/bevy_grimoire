@@ -156,6 +156,16 @@ arboard = { version = "3", default-features = false }
 # release's `SHA256SUMS` before the running app is swapped for it.
 semver = "1"
 sha2 = "0.10"
+# **The in-editor terminal** (`terminal/`): a login shell in a PTY, parsed by `alacritty_terminal`
+# and drawn in the dock. Not a feature: it is the editor's own capability, like `rfd` or `arboard`,
+# not a family-crate integration — and it is what lets the owner run `cargo` without leaving the
+# window, so a build without it would be a build nobody uses.
+alacritty_terminal.workspace = true
+# **`TIOCSWINSZ`, and nothing else.** `alacritty_terminal`'s own `Pty::on_resize` does the ioctl, but
+# its failure branch is `std::process::exit(1)` — a library that kills the editor over a resize is
+# not one to route a system through. `rustix` is the same crate the PTY is opened with, one version
+# in the graph, and `tcsetwinsize` returns a `Result` the pane can report.
+rustix = { version = "1", default-features = false, features = ["std", "termios", "process"] }
 # The debugger's companion plugin. **Optional**, so it is absent from the resolved dependency graph
 # of an ordinary build — `cargo tree -i bevy_debugger_bevy` finds no package without the feature, and
 # neither does `bevy_remote`. A git dependency on `bevy-coven/bevy_fairy`, the successor of

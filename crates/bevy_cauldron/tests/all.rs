@@ -17,6 +17,7 @@
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;
+mod a_terminal_runs_a_shell_inside_the_editor;
 mod a_page_line_draws_in_the_skins_ink;
 mod a_filter_box_draws_in_the_skins_ink;
 mod a_palette_row_reports_a_clickable_position;
