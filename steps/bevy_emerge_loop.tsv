@@ -45494,3 +45494,43 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 410	41	ship	model	model		2026-11-06T15:40:11Z	1.1	
 410	42	ship	tool	loop tools	bash	2026-11-06T15:40:13Z	0.1	git status -sb | head -3; python3 tools/loop/captures.py check
 410	43	ship	model	model		2026-11-06T15:40:13Z	4.6	
+413	1	orient	model	model		2026-11-06T15:41:28Z	3.6	
+413	2	orient	tool	phase mark	bash	2026-11-06T15:41:32Z	0.4	date +%s; python3 tools/loop/steps.py begin; python3 tools/loop/steps.py mark orient; git status --short; git status -sb | head -3; python3 tools/loop/captures.
+413	3	orient	model	model		2026-11-06T15:41:32Z	3.8	
+413	4	orient	tool	loop tools	bash	2026-11-06T15:41:36Z	0.5	python3 - <<'EOF' import glob, os, re p = "docs/loop/captures/cases.jsonl" n = sum(1 for _ in open(p)) if os.path.exists(p) else 0 reviews = sorted(glob.glob("d
+413	5	orient	model	model		2026-11-06T15:41:36Z	2.8	
+413	6	orient	tool	loop tools	bash	2026-11-06T15:41:39Z	0.1	python3 - <<'EOF' import json l=json.load(open("docs/loop/captures/ledger.json"))["items"] cases={json.loads(x).get("stem") for x in open("docs/loop/captures/ca
+413	7	orient	model	model		2026-11-06T15:41:39Z	2.7	
+413	8	orient	tool	shell	bash	2026-11-06T15:41:42Z	0.2	grep -n "1793968919654" docs/loop/log.md | cut -c1-900; ls docs/loop/iterations | grep 1793968919654; git log --oneline -8; cat docs/loop/captures/feedback-1793
+413	9	orient	model	model		2026-11-06T15:41:42Z	2.9	
+413	10	orient	tool	git	bash	2026-11-06T15:41:45Z	0.0	git log --format='%h %ci %s' -6 -- docs/loop/captures/ledger.json; sed -n 2255,2262p docs/loop/log.md | cut -c1-700; grep -c 1793968919654 docs/loop/captures/ca
+413	11	orient	model	model		2026-11-06T15:41:45Z	3.6	
+413	12	orient	tool	loop tools	bash	2026-11-06T15:41:49Z	0.9	git show --stat dc2adea | tail -5; git status --short; python3 tools/loop/captures.py next; echo rc=$?; git fetch -q; git status -sb|head -2
+413	13	orient	model	model		2026-11-06T15:41:50Z	4.7	
+412	1	orient	model	model		2026-11-06T15:41:28Z	3.6	
+412	2	orient	tool	phase mark	bash	2026-11-06T15:41:32Z	0.4	date +%s; python3 tools/loop/steps.py begin; python3 tools/loop/steps.py mark orient; git status --short; git status -sb | head -3; python3 tools/loop/captures.
+412	3	orient	model	model		2026-11-06T15:41:32Z	3.8	
+412	4	orient	tool	loop tools	bash	2026-11-06T15:41:36Z	0.5	python3 - <<'EOF' import glob, os, re p = "docs/loop/captures/cases.jsonl" n = sum(1 for _ in open(p)) if os.path.exists(p) else 0 reviews = sorted(glob.glob("d
+412	5	orient	model	model		2026-11-06T15:41:36Z	2.8	
+412	6	orient	tool	loop tools	bash	2026-11-06T15:41:39Z	0.1	python3 - <<'EOF' import json l=json.load(open("docs/loop/captures/ledger.json"))["items"] cases={json.loads(x).get("stem") for x in open("docs/loop/captures/ca
+412	7	orient	model	model		2026-11-06T15:41:39Z	2.7	
+412	8	orient	tool	shell	bash	2026-11-06T15:41:42Z	0.2	grep -n "1793968919654" docs/loop/log.md | cut -c1-900; ls docs/loop/iterations | grep 1793968919654; git log --oneline -8; cat docs/loop/captures/feedback-1793
+412	9	orient	model	model		2026-11-06T15:41:42Z	2.9	
+412	10	orient	tool	git	bash	2026-11-06T15:41:45Z	0.0	git log --format='%h %ci %s' -6 -- docs/loop/captures/ledger.json; sed -n 2255,2262p docs/loop/log.md | cut -c1-700; grep -c 1793968919654 docs/loop/captures/ca
+412	11	orient	model	model		2026-11-06T15:41:45Z	3.6	
+412	12	orient	tool	loop tools	bash	2026-11-06T15:41:49Z	0.9	git show --stat dc2adea | tail -5; git status --short; python3 tools/loop/captures.py next; echo rc=$?; git fetch -q; git status -sb|head -2
+412	13	orient	model	model		2026-11-06T15:41:50Z	4.7	
+412	14	orient	tool	push gate	bash	2026-11-06T15:41:54Z	0.8	python3 tools/loop/captures.py set feedback-1793968919654 --status fixed --commit c893709 --reason "$(python3 -c " import json for l in open('docs/loop/captures
+412	15	orient	model	model		2026-11-06T15:41:55Z	3.5	
+412	16	orient	tool	loop tools	bash	2026-11-06T15:41:59Z	0.2	grep -n -B8 -A3 "with no attempt that reproduced" tools/loop/captures.py | head -40; git log -3 --format=%h\ %s -S"1793968919654" -- docs/loop/captures/ledger.j
+412	17	orient	model	model		2026-11-06T15:41:59Z	3.8	
+412	18	orient	tool	loop tools	bash	2026-11-06T15:42:03Z	0.2	python3 tools/loop/captures.py show feedback-1793968919654 | grep -i attempt; python3 -c " import json for r in json.load(open('docs/loop/captures/ledger.json')
+412	19	orient	model	model		2026-11-06T15:42:03Z	2.1	
+412	20	orient	tool	shell	bash	2026-11-06T15:42:05Z	0.0	python3 -c " import json for r in json.load(open('docs/loop/captures/ledger.json'))['items']: print(r['stem'],r['status'],r['kind'],len(r.get('attempts') or [])
+412	21	orient	model	model		2026-11-06T15:42:05Z	3.3	
+412	22	orient	tool	shell	bash	2026-11-06T15:42:08Z	0.0	python3 -c " import json for r in json.load(open('docs/loop/captures/ledger.json'))['items']: if r['stem']=='feedback-1793903311065': print(r['attempts'])"
+412	23	orient	model	model		2026-11-06T15:42:08Z	3.9	
+412	24	orient	tool	push gate	bash	2026-11-06T15:42:12Z	10.6	python3 tools/loop/captures.py attempt feedback-1793968919654 --host big --backend vulkan --window 1280x802 --ui-scale 2.4 --outcome reproduced --saw "before c8
+412	25	orient	model	model		2026-11-06T15:42:23Z	2.7	
+412	26	orient	tool	push gate	bash	2026-11-06T15:42:26Z	9.9	echo "- 2026-11-06 **pass 413** — floor repair, no capture answered: \`feedback-1793968919654\` was fixed by pass 411 (c893709, case line written) but its ledge
+412	27	orient	model	model		2026-11-06T15:42:36Z	3.5	
