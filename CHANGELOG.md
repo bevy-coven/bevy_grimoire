@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-06
 
+- **release-0.3.4** `9ea50db` Cauldron 0.3.4: a click puts the keyboard in the terminal, and Ctrl+D is the shell's *For you: A new build where clicking the terminal lets you type into it at once, and Ctrl+D ends a program in the shell instead of opening a bug report.* *No clip: a version bump and nothing else; the changes it carries have their own lines above*
 - **terminal-ctrl-chords** `561cf1c` Ctrl+D in the terminal ends what is running there instead of also opening a report *For you: In the terminal, Ctrl+D ends a program or the shell as it should, without a report window popping up over it.* *No clip: keyboard routing, nothing drawn; proved by the_shell_keeps_its_ctrl_chords*
 - **terminal-click-focus** `d89a8d5` A click on the terminal puts the keyboard in the shell, and a click elsewhere gives it back *For you: Click the terminal to type into it; click anywhere else to give the keys back to the screen.* *No clip: keyboard focus, nothing new is drawn; proved by a_click_puts_the_keyboard_in_the_terminal*
 - **release-0.3.3** Cauldron 0.3.3: the terminal is on every screen, and Cmd+J or Ctrl+J tucks it away *For you: A new build where the terminal is open under every screen from the start; Cmd+J on a Mac, or Ctrl+J elsewhere, collapses it and brings it back.* *No clip: a version bump and nothing else; the changes it carries have their own lines above, and the terminal's clip is terminal-every-screen*
