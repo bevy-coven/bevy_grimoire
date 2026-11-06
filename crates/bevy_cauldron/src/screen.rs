@@ -901,6 +901,14 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
         "bevy_cauldron::terminal_pane::TerminalPane",
         Ownership::Session,
     ),
+    // **`Session`, like the focus it refines** (#321): it says whether the terminal's find box is open
+    // and has the keys. The box is a child of the pane's body, so the door's sweep takes it, and
+    // `forget_a_find_box_that_went` closes the flag on the next frame; a `Door` reset would be a second
+    // thing closing it.
+    (
+        "bevy_cauldron::terminal_pane::TerminalFind",
+        Ownership::Session,
+    ),
     // **`Session`: the measured advance of one glyph in the shipped face.** It is a fact about the
     // font, not about a door, and re-measuring it costs a frame of `TextLayoutInfo`.
     (

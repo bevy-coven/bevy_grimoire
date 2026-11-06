@@ -53,7 +53,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 
-pub use grid::{Cell, Cursor, Line, SCROLLBACK};
+pub use grid::{CaretShape, Cell, Cursor, FindStatus, Line, SCROLLBACK, TerminalScreen};
 pub use pty::TerminalSession;
 
 /// **Every shell the editor is running, and which one the pane is looking at.**
@@ -291,6 +291,15 @@ impl Terminal {
         tab.screen.scroll_to_bottom();
         if let Err(why) = session.write(bytes) {
             self.problem = Some(why);
+        }
+    }
+
+    /// **Close every session's search**, which is what closing the find box means (#321): a search left
+    /// open on a tab the person switched away from would light matches nobody asked for when they
+    /// came back.
+    pub fn clear_searches(&mut self) {
+        for tab in &mut self.open {
+            tab.screen.find_clear();
         }
     }
 

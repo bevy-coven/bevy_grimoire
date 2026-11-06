@@ -36,7 +36,7 @@
 //! cell outside its rect: a clipped terminal loses the right-hand end of every error message with no
 //! way to scroll to it.
 
-use bevy::input::keyboard::KeyCode;
+use bevy::input::keyboard::{KeyCode, KeyboardInput};
 use bevy::prelude::*;
 use bevy::ui::ComputedNode;
 
@@ -89,9 +89,18 @@ const TERMINAL_GRIP_H: f32 = 4.0;
 /// How long the caret stays lit, in seconds — half a second each way, the platform convention.
 const CARET_PERIOD: f32 = 1.0;
 
-/// The caret's width, logical px. Two, because one pixel on a HiDPI surface is invisible and three is
-/// a letter.
-const CARET_W: f32 = 2.0;
+/// The caret's width as a bar, logical px. Two, because one pixel on a HiDPI surface is invisible and
+/// three is a letter.
+pub(crate) const CARET_W: f32 = 2.0;
+
+/// An underline caret's height, logical px: the bar's stroke, laid flat.
+pub(crate) const CARET_UNDERLINE_H: f32 = CARET_W;
+
+/// The outline of a caret while the keyboard is elsewhere, logical px.
+pub(crate) const CARET_OUTLINE_W: f32 = 1.0;
+
+/// The find box's width, logical px: room for a query of a few words, its count and its close button.
+const FIND_BOX_W: f32 = 300.0;
 
 /// **The pane's root.** The one marker every query here keys on.
 ///
@@ -122,6 +131,72 @@ pub struct TerminalRow(pub usize);
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct TerminalCaret;
+
+/// **The character a solid block caret covers**, drawn on the block in the pane's ground so the word
+/// under the caret stays readable (#320), the way VS Code's terminal draws its block. Empty for every
+/// other caret.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct TerminalCaretGlyph;
+
+/// **The find box** over the terminal's body (#321): the row of the query field. The field is
+/// bevy_gooey's `text_input`, so its value is the row's `TextInputValue`.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct TerminalFindBox;
+
+/// The find box's frame, which holds the field, the count and the close button.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct TerminalFindFrame;
+
+/// The find box's `n of m`.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct TerminalFindCount;
+
+/// **Find, open or not, and whether its box has the keys** (#321).
+///
+/// The terminal keeps the keyboard while the box is open ([`TerminalFocus`] holds), so the editor's
+/// bindings stay quiet for a query as they do for the shell; inside the terminal the keys go to the box
+/// or to the shell, and this says which. A click in the body gives them to the shell and leaves the
+/// matches lit; a click in the box or Primary+F gives them back to the box.
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource, Default)]
+pub struct TerminalFind {
+    open: bool,
+    in_box: bool,
+    /// **The Escape that closed find this frame**, which is the box's and must reach nobody else:
+    /// not a screen behind (gooey reads Escape in a field as "back"), and not the shell, where
+    /// readline would join it to the next key typed as Meta.
+    #[reflect(ignore)]
+    closed_this_frame: bool,
+}
+
+impl TerminalFind {
+    /// Did an Escape in the box close find this frame? `terminal_view::type_keys` drops that frame's
+    /// keys rather than send the Escape on to the shell.
+    pub fn closed_this_frame(&self) -> bool {
+        self.closed_this_frame
+    }
+}
+
+impl TerminalFind {
+    /// Is the find box open?
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// Does the find box have the keys, rather than the shell?
+    pub fn has_the_keys(&self) -> bool {
+        self.open && self.in_box
+    }
+}
+
+/// **The chord that opens find in the terminal**: the platform's primary modifier and F, Command+F on
+/// a mac and Ctrl+F elsewhere, as in VS Code's terminal. It is the pane's chord while the shell has the
+/// keys, so a shell never sees Ctrl+F (forward a character, in readline) from this pane.
+pub const FIND_CHORD: bevy_gooey::Shortcut = bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY, KeyCode::KeyF);
 
 /// **A screen root the terminal docks across the bottom of** (#314): the projects home, the project
 /// page and the loading screen put this on their root, and the pane is built as its last child the
@@ -252,6 +327,7 @@ impl Plugin for TerminalPanePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TerminalFocus>()
             .init_resource::<TerminalPane>()
+            .init_resource::<TerminalFind>()
             // **Registered, so BRP can name them.** `world.list_resources` and `world.get_resources`
             // only see types the app has reflected, and an agent reading this editor's state is the
             // reason `bevy_fairy` exists. A `Terminal` nothing can read is a shell an agent can start
@@ -265,6 +341,11 @@ impl Plugin for TerminalPanePlugin {
             .register_type::<TerminalCaret>()
             .register_type::<TerminalGrip>()
             .register_type::<TerminalDock>()
+            .register_type::<TerminalCaretGlyph>()
+            .register_type::<TerminalFind>()
+            .register_type::<TerminalFindBox>()
+            .register_type::<TerminalFindFrame>()
+            .register_type::<TerminalFindCount>()
             // **The editor's frame docks it above the status band** (`chrome::spawn_frame` runs
             // `OnEnter(Editor)`); every other screen names [`TerminalDock`] on its root and
             // [`dock_on_every_screen`] builds it there (#314).
@@ -277,7 +358,8 @@ impl Plugin for TerminalPanePlugin {
             // frame's dispatch already know the shell has the keyboard (#316).
             .add_systems(
                 PreUpdate,
-                hold_the_keyboard
+                (forget_a_find_box_that_went, the_find_box_keys, hold_the_keyboard)
+                    .chain()
                     .after(bevy::input::InputSystems)
                     .before(bevy::input_focus::InputFocusSystems::Dispatch),
             )
@@ -287,7 +369,12 @@ impl Plugin for TerminalPanePlugin {
             .add_systems(OnExit(crate::screen::Screen::Editor), give_the_keyboard_back)
             .add_systems(
                 Update,
-                (blink_the_caret, fit_the_pane_to_the_window, step_aside_for_the_key_overlay)
+                (
+                    blink_the_caret,
+                    fit_the_pane_to_the_window,
+                    step_aside_for_the_key_overlay,
+                    count_the_matches,
+                )
                     .run_if(the_pane_is_up),
             )
             // The two chords that are the pane's own. Read from `ButtonInput` here rather than
@@ -296,7 +383,7 @@ impl Plugin for TerminalPanePlugin {
             // precedent for. `no_context_gains_a_key` is therefore untouched.
             .add_systems(
                 Update,
-                (toggle_on_the_chord, collapse_on_the_chord, close_the_tab_on_its_chord)
+                (toggle_on_the_chord, collapse_on_the_chord, close_the_tab_on_its_chord, open_find_on_its_chord)
                     .in_set(crate::terminal_view::TerminalChordSet),
             )
             .add_observer(a_click_takes_the_keyboard)
@@ -511,9 +598,23 @@ fn build_the_pane(
                 ..default()
             },
             BackgroundColor(chrome::ACCENT),
+            BorderColor::all(chrome::ACCENT),
+            // **Above the rows, its siblings** (#320): a solid block is drawn over its cell with the
+            // cell's character on it ([`TerminalCaretGlyph`]); under the row's text it would be a
+            // block of accent with the shell's light ink on top, which does not read.
+            ZIndex(1),
             TerminalCaret,
             Pickable::IGNORE,
             Name::new("terminal caret"),
+            children![(
+                Text::new(String::new()),
+                TextColor(chrome::PANEL_BG),
+                TextLayout::no_wrap(),
+                crate::terminal_view::terminal_font(),
+                TerminalCaretGlyph,
+                Pickable::IGNORE,
+                Name::new("terminal caret glyph"),
+            )],
         ))
         .id();
 
@@ -772,6 +873,204 @@ fn close_the_tab_on_its_chord(
     redraw_the_bar(&mut commands, &bar, &terminal);
 }
 
+/// **Primary+F, with the shell holding the keys, opens find** (#321), or gives the keys back to a box
+/// already open. The chord is the pane's: `terminal_view::type_keys` never sends it to the shell.
+fn open_find_on_its_chord(
+    keys: Res<ButtonInput<KeyCode>>,
+    focus: Res<TerminalFocus>,
+    mut find: ResMut<TerminalFind>,
+    bodies: Query<Entity, With<TerminalBody>>,
+    mut commands: Commands,
+) {
+    if !focus.holds() || !FIND_CHORD.just_pressed(&keys) {
+        return;
+    }
+    let Some(body) = bodies.iter().next() else {
+        return;
+    };
+    if !find.open {
+        spawn_the_find_box(&mut commands, body);
+    }
+    find.open = true;
+    find.in_box = true;
+}
+
+/// **The find box**: a query field, its `n of m` and a close button, over the top right of the body,
+/// where VS Code's terminal puts its find widget. It covers the newest output's right-hand end only
+/// while it is open, and the matches it finds are scrolled into view below it.
+fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
+    let frame = commands
+        .spawn((
+            Node {
+                // PLACES-ITSELF-OK: the find box floats over the scrollback it searches, as VS Code's
+                // terminal find does; it is not a panel `chrome::Frame` places.
+                position_type: PositionType::Absolute,
+                top: Val::Px(crate::terminal_view::BODY_PAD),
+                right: Val::Px(chrome::MARGIN),
+                width: Val::Px(FIND_BOX_W),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(chrome::GAP_TIGHT),
+                padding: UiRect::all(Val::Px(chrome::GAP_TIGHT)),
+                border: UiRect::all(Val::Px(chrome::EDGE_W)),
+                ..default()
+            },
+            BackgroundColor(chrome::BAR_BG),
+            BorderColor::all(chrome::PANEL_EDGE),
+            // Above the rows and the caret, which are its siblings.
+            ZIndex(2),
+            TerminalFindFrame,
+            Pickable::default(),
+            Name::new("terminal find"),
+            children![
+                (
+                    bevy_gooey::text_input("", ""),
+                    bevy_gooey::TextHint("Find".into()),
+                    TerminalFindBox,
+                    bevy_gooey::observe(the_query_changed),
+                ),
+                (
+                    Text::new(String::new()),
+                    TextColor(chrome::MUTED),
+                    TextLayout::no_wrap(),
+                    chrome::font(chrome::text::LABEL),
+                    TerminalFindCount,
+                    Pickable::IGNORE,
+                    Name::new("terminal find count"),
+                ),
+                (bevy_gooey::button("×"), bevy_gooey::observe(close_find_on_click)),
+            ],
+        ))
+        .id();
+    commands.entity(body).add_child(frame);
+}
+
+/// **A query typed into the box searches the active shell's scrollback**, as it is typed.
+///
+/// A final change is not a search: gooey sends one for Enter, which [`the_find_box_keys`] reads as
+/// "the next match", and one when the box loses the keys, which must move nothing.
+fn the_query_changed(change: On<bevy_gooey::ValueChange<String>>, mut terminal: ResMut<Terminal>) {
+    if change.is_final {
+        return;
+    }
+    if let Some(tab) = terminal.tab_mut() {
+        tab.screen_mut().find(&change.value);
+    }
+}
+
+/// The box's close button.
+fn close_find_on_click(
+    _click: On<bevy_gooey::Activate>,
+    mut find: ResMut<TerminalFind>,
+    frames: Query<Entity, With<TerminalFindFrame>>,
+    mut terminal: ResMut<Terminal>,
+    mut commands: Commands,
+) {
+    close_find(&mut commands, &mut find, &frames, &mut terminal);
+}
+
+/// **Close find**: the box goes, every search is cleared, and the keys stay in the terminal — the
+/// shell has them again, as it did before Primary+F.
+fn close_find(
+    commands: &mut Commands,
+    find: &mut TerminalFind,
+    frames: &Query<Entity, With<TerminalFindFrame>>,
+    terminal: &mut Terminal,
+) {
+    for frame in frames {
+        commands.entity(frame).despawn();
+    }
+    find.open = false;
+    find.in_box = false;
+    terminal.clear_searches();
+}
+
+/// **Enter and Escape in the find box** (#321): Enter walks to the next match up, in older output, and
+/// Shift+Enter down; Escape closes find.
+///
+/// **Decided in `PreUpdate`, before Bevy dispatches keys to the input focus**, because the focus is the
+/// box's text field, and gooey reads Escape in a field as "end the edit, then back" — which reached the
+/// screen behind the terminal. Closing here means [`hold_the_keyboard`], next in the chain, puts the
+/// focus back on the body before the dispatch, so the body's observer stops the Escape as it stops every
+/// key the shell holds.
+fn the_find_box_keys(
+    mut events: MessageReader<KeyboardInput>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut find: ResMut<TerminalFind>,
+    frames: Query<Entity, With<TerminalFindFrame>>,
+    mut terminal: ResMut<Terminal>,
+    mut commands: Commands,
+) {
+    if find.closed_this_frame {
+        find.closed_this_frame = false;
+    }
+    if !find.has_the_keys() {
+        events.clear();
+        return;
+    }
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    for event in events.read() {
+        if event.state != bevy::input::ButtonState::Pressed {
+            continue;
+        }
+        match event.key_code {
+            KeyCode::Escape => {
+                close_find(&mut commands, &mut find, &frames, &mut terminal);
+                find.closed_this_frame = true;
+                return;
+            }
+            KeyCode::Enter | KeyCode::NumpadEnter => {
+                if let Some(tab) = terminal.tab_mut() {
+                    tab.screen_mut().find_next(!shift);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// **The box says `n of m`**, `n of m+` past [`crate::terminal::FIND_MATCH_CAP`], `No results`, or
+/// nothing while the query is empty. Written only when it changed.
+fn count_the_matches(
+    find: Res<TerminalFind>,
+    terminal: Res<Terminal>,
+    boxes: Query<&bevy_gooey::TextInputValue, With<TerminalFindBox>>,
+    mut counts: Query<&mut Text, With<TerminalFindCount>>,
+) {
+    if !find.is_open() {
+        return;
+    }
+    let empty = boxes.iter().next().is_none_or(|query| query.0.is_empty());
+    let status = terminal.tab().and_then(|tab| tab.screen().find_status());
+    let said = match status {
+        _ if empty => String::new(),
+        Some(crate::terminal::FindStatus { total, current, capped }) if total > 0 => {
+            format!("{current} of {total}{}", if capped { "+" } else { "" })
+        }
+        _ => "No results".to_owned(),
+    };
+    for mut count in &mut counts {
+        if count.0 != said {
+            count.0.clone_from(&said);
+        }
+    }
+}
+
+/// **A find box that went with its pane closes find.** The box is a child of the body, so a door
+/// change or a closed pane takes it; the flag and the searches would otherwise outlive it, and the next
+/// pane's shell would never get its keys.
+fn forget_a_find_box_that_went(
+    mut find: ResMut<TerminalFind>,
+    frames: Query<(), With<TerminalFindFrame>>,
+    mut terminal: ResMut<Terminal>,
+) {
+    if find.open && frames.is_empty() {
+        find.open = false;
+        find.in_box = false;
+        terminal.clear_searches();
+    }
+}
+
 /// Give the keyboard back when the door closes.
 fn give_the_keyboard_back(mut focus: ResMut<TerminalFocus>) {
     focus.release();
@@ -793,14 +1092,23 @@ fn redraw_the_bar(commands: &mut Commands, bar: &Query<Entity, With<TerminalBar>
 /// keyboard on its first hop and gave it back on the third, at the frame root above the pane, which is
 /// "outside" it — measured: the click left `TerminalFocus` false and the chord was the only way in.
 /// Both now act once, on the first hop, and ask where the click *landed*.
+///
+/// **With find open, the click also says who in the terminal has the keys** (#321): a click in the
+/// find box gives them to its query, a click anywhere else in the pane to the shell, and the matches
+/// stay lit either way — VS Code's terminal find behaves so.
 fn a_click_takes_the_keyboard(
     click: On<bevy::picking::events::PointerClick>,
     ancestors: Query<&ChildOf>,
     roots: Query<(), With<TerminalPaneRoot>>,
+    frames: Query<(), With<TerminalFindFrame>>,
     mut focus: ResMut<TerminalFocus>,
+    mut find: ResMut<TerminalFind>,
 ) {
     if click.entity == click.original_event_target() && landed_in_the_pane(click.entity, &ancestors, &roots) {
         focus.take();
+        if find.open {
+            find.in_box = frames.contains(click.entity) || ancestors.iter_ancestors(click.entity).any(|up| frames.contains(up));
+        }
     }
 }
 
@@ -867,13 +1175,23 @@ const TERMINAL_KEYS: [KeyCode; 19] = [
 /// out of this frame's presses (their held state stays, so the shell's modifiers still read), and the
 /// input focus is put on the terminal's body, whose observer stops every focused key there. When the
 /// keyboard comes back the focus is let go, so the screen starts from nothing focused, as it did.
+///
+/// **With the find box holding the keys, the input focus is its field rather than the body** (#321),
+/// so what is typed is the query; the body's stop is then not in the keys' way.
 fn hold_the_keyboard(
     focus: Res<TerminalFocus>,
+    find: Res<TerminalFind>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     input_focus: Option<ResMut<bevy::input_focus::InputFocus>>,
     bodies: Query<Entity, With<TerminalBody>>,
+    boxes: Query<Entity, With<TerminalFindBox>>,
+    fields: Query<(Entity, &bevy_gooey::TextInputOf)>,
 ) {
     let body = bodies.iter().next();
+    let field = boxes
+        .iter()
+        .next()
+        .and_then(|row| fields.iter().find(|(_, of)| of.0 == row).map(|(field, _)| field));
     let Some(mut input_focus) = input_focus else {
         return;
     };
@@ -881,12 +1199,13 @@ fn hold_the_keyboard(
         for key in TERMINAL_KEYS {
             keys.clear_just_pressed(key);
         }
-        if let Some(body) = body
-            && input_focus.get() != Some(body)
+        let target = if find.has_the_keys() { field.or(body) } else { body };
+        if let Some(target) = target
+            && input_focus.get() != Some(target)
         {
-            input_focus.set(body, bevy::input_focus::FocusCause::Navigated);
+            input_focus.set(target, bevy::input_focus::FocusCause::Navigated);
         }
-    } else if body.is_some() && input_focus.get() == body {
+    } else if input_focus.get().is_some_and(|held| Some(held) == body || Some(held) == field) {
         input_focus.clear();
     }
 }

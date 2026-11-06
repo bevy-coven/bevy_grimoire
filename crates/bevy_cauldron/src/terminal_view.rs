@@ -32,9 +32,9 @@ use bevy::prelude::*;
 use bevy::ui::ComputedNode;
 
 use crate::chrome;
-use crate::terminal::{Terminal, SCROLLBACK};
+use crate::terminal::{CaretShape, Terminal, SCROLLBACK};
 use crate::terminal_pane::{
-    TerminalBody, TerminalCaret, TerminalFocus, TerminalPane, TerminalRow,
+    TerminalBody, TerminalCaret, TerminalFind, TerminalFocus, TerminalPane, TerminalRow, FIND_CHORD,
 };
 
 /// **One cell's advance**, logical px: the shipped face is `FiraMono`, whose advance is `0.6 em` — the
@@ -54,6 +54,32 @@ pub const TERMINAL_CELL_H: f32 = chrome::text::LABEL.px() * 1.2;
 /// because the pane already imports the cell metrics from this file.
 pub(crate) const BODY_PAD: f32 = 2.0;
 
+/// **The terminal's face** (#323): FiraMono Nerd Font Mono, the Nerd Fonts patch of the face the editor
+/// ships (SIL OFL 1.1; the licence and the release note sit beside it in `assets/fonts/`). Prompts
+/// (starship, powerlevel10k), `eza --icons` and `lazygit` draw Nerd Font icons from the Private Use
+/// Area, which plain FiraMono has none of, so they drew as boxes. The `Mono` variant keeps every icon
+/// one cell wide, so the grid the shell was told about is the grid drawn; and the Latin glyphs are
+/// FiraMono's own, so the terminal reads like the rest of the window.
+pub const TERMINAL_FONT: Handle<Font> = bevy::asset::uuid_handle!("6b9f3f0e-2d47-4a8c-b1e5-3c0d9a7e5f21");
+
+/// The face's bytes, compiled in: a project carries no terminal font of its own.
+const TERMINAL_FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/FiraMonoNerdFontMono-Regular.otf");
+
+/// **A `TextFont` in the terminal's face**, at the size every terminal row is drawn at.
+pub fn terminal_font() -> TextFont {
+    TextFont {
+        font: TERMINAL_FONT.into(),
+        ..chrome::font(chrome::text::LABEL)
+    }
+}
+
+/// Put the terminal's face in the font assets under [`TERMINAL_FONT`], before anything draws a row.
+fn install_the_terminal_face(mut fonts: ResMut<Assets<Font>>) {
+    if let Err(why) = fonts.insert(TERMINAL_FONT.id(), Font::from_bytes(TERMINAL_FONT_BYTES.to_vec())) {
+        error!("the terminal's face could not be installed, so its rows draw in no face: {why}");
+    }
+}
+
 /// **The chord set**, so the pane's own chords can be ordered after the key swallow rather than racing
 /// it. The swallow consumes a `Ctrl+\`` press by *not* forwarding it (it is the close chord), and the
 /// toggle reads the same `ButtonInput`; the order below is what makes one press one act.
@@ -72,6 +98,7 @@ impl Plugin for TerminalViewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CellMetrics>()
             .init_resource::<Drawn>()
+            .add_systems(Startup, install_the_terminal_face)
             // **The swallow is last in `Phase::Text`**, after the editor's own fields have read what
             // they are going to read: a field that is open has the `Typing` flag, so the terminal's
             // keys are already refused by then, and a shell's are the only ones left.
@@ -273,7 +300,9 @@ fn draw_the_terminal(
     mut drawn: ResMut<Drawn>,
     bodies: Query<Entity, With<TerminalBody>>,
     mut rows: Query<(Entity, &TerminalRow, &mut Node, &mut Visibility)>,
-    carets: Query<(&mut Node, &mut Visibility), CaretFilter>,
+    carets: Query<(&mut Node, &mut Visibility, &mut BackgroundColor), CaretFilter>,
+    mut glyphs: Query<&mut Text, With<crate::terminal_pane::TerminalCaretGlyph>>,
+    focus: Res<TerminalFocus>,
     mut commands: Commands,
 ) {
     let Ok(body) = bodies.single() else {
@@ -394,7 +423,7 @@ fn draw_the_terminal(
                     Text::new(String::new()),
                     TextLayout::no_wrap(),
                     TextColor(chrome::TEXT),
-                    chrome::font(chrome::text::LABEL),
+                    terminal_font(),
                     Pickable::IGNORE,
                 ))
                 .with_children(|row| {
@@ -417,9 +446,30 @@ fn draw_the_terminal(
         drawn.stamp = stamp;
     }
 
-    // **The caret sits where the shell's cursor is**, in cells from the body's top-left.
+    // **The caret sits where the shell's cursor is**, in cells from the body's top-left, in the shape
+    // the program asked for (#320). Without the keyboard it is an outline of its cell whatever its
+    // shape, VS Code's `cursorStyleInactive` default, so a glance says the keys are elsewhere. A solid
+    // block carries the character it covers, in the pane's ground, so the word stays readable.
     let caret_visible = caret.visible && caret.row < lines.len();
-    for (mut node, mut visibility) in carets {
+    let (cell_w, cell_h) = (metrics.width(), metrics.height());
+    let held = focus.holds();
+    let (width, height, drop) = match (held, caret.shape) {
+        (true, CaretShape::Bar) => (crate::terminal_pane::CARET_W, cell_h, 0.0),
+        (true, CaretShape::Underline) => (
+            cell_w,
+            crate::terminal_pane::CARET_UNDERLINE_H,
+            cell_h - crate::terminal_pane::CARET_UNDERLINE_H,
+        ),
+        (true, CaretShape::Block) | (false, _) => (cell_w, cell_h, 0.0),
+    };
+    let solid_block = held && caret.shape == CaretShape::Block;
+    let border = if held {
+        UiRect::ZERO
+    } else {
+        UiRect::all(Val::Px(crate::terminal_pane::CARET_OUTLINE_W))
+    };
+    let ground = if held { chrome::ACCENT } else { Color::NONE };
+    for (mut node, mut visibility, mut fill) in carets {
         let want = if caret_visible {
             Visibility::Inherited
         } else {
@@ -428,13 +478,43 @@ fn draw_the_terminal(
         if *visibility != want {
             *visibility = want;
         }
-        let left = Val::Px(BODY_PAD + caret.column as f32 * metrics.width());
-        let top = Val::Px(BODY_PAD + caret.row as f32 * metrics.height());
+        let left = Val::Px(BODY_PAD + caret.column as f32 * cell_w);
+        let top = Val::Px(BODY_PAD + caret.row as f32 * cell_h + drop);
         if node.left != left {
             node.left = left;
         }
         if node.top != top {
             node.top = top;
+        }
+        if node.width != Val::Px(width) {
+            node.width = Val::Px(width);
+        }
+        if node.height != Val::Px(height) {
+            node.height = Val::Px(height);
+        }
+        if node.border != border {
+            node.border = border;
+        }
+        if fill.0 != ground {
+            fill.0 = ground;
+        }
+    }
+    // The character under a solid block: the row's cell at the caret's column. A row is trimmed of its
+    // trailing blanks, so a caret past the end covers a space, which is drawn as nothing.
+    let covered = if solid_block {
+        lines
+            .get(caret.row)
+            .and_then(|line| line.cells.get(caret.column))
+            .map(|cell| cell.ch)
+            .filter(|ch| *ch != ' ')
+            .map(String::from)
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    for mut glyph in &mut glyphs {
+        if glyph.0 != covered {
+            glyph.0.clone_from(&covered);
         }
     }
 
@@ -514,8 +594,17 @@ fn type_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut terminal: ResMut<Terminal>,
     focus: Res<TerminalFocus>,
+    find: Res<TerminalFind>,
 ) {
     if !focus.holds() {
+        return;
+    }
+    // **The find box has the keys** (#321): they are its query, and none of them is the shell's. Read
+    // and dropped rather than left, or the shell would be sent them the frame the box closed. The frame
+    // an Escape closed the box is the box's too: an Escape sent on would make readline read the next
+    // key as Meta.
+    if find.has_the_keys() || find.closed_this_frame() {
+        events.clear();
         return;
     }
     // **The close chord is the pane's**, and it is read from `ButtonInput` by `toggle_on_the_chord`
@@ -556,7 +645,10 @@ fn type_keys(
                 _ => {}
             }
         }
-        if closes.just_pressed(&keys) || crate::terminal_pane::COLLAPSE_CHORD.just_pressed(&keys) {
+        if closes.just_pressed(&keys)
+            || crate::terminal_pane::COLLAPSE_CHORD.just_pressed(&keys)
+            || FIND_CHORD.just_pressed(&keys)
+        {
             // The pane's own chords: `toggle_on_the_chord` and `collapse_on_the_chord` read the same
             // `ButtonInput` this frame, so this system's job is only to **not** forward them to the
             // shell — on Linux Ctrl+J is also a newline, and collapsing the pane must not run a line.

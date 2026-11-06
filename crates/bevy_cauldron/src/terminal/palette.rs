@@ -83,6 +83,25 @@ pub fn selection_bg() -> Color {
     chrome::ROW_SELECTED
 }
 
+/// **A find match's ground** (#321): the accent, faint, so every match on screen is lit without
+/// drowning the text, and the current one ([`find_current_bg`]) stands out among them. Mixed from the
+/// pane's ground toward [`chrome::ACCENT`] rather than a new hue, so the terminal keeps the editor's one
+/// accent.
+pub fn find_bg() -> Color {
+    chrome::PANEL_BG.mix(&chrome::ACCENT, FIND_MIX)
+}
+
+/// **The current find match's ground**: the same accent, stronger.
+pub fn find_current_bg() -> Color {
+    chrome::PANEL_BG.mix(&chrome::ACCENT, FIND_CURRENT_MIX)
+}
+
+/// How far toward the accent a match's ground is mixed.
+const FIND_MIX: f32 = 0.3;
+
+/// How far toward the accent the current match's ground is mixed.
+const FIND_CURRENT_MIX: f32 = 0.65;
+
 /// **Index 16–231: the 6×6×6 cube.** `0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff` are the xterm levels —
 /// not 0/51/102/153/204/255, which is the same idea computed with the wrong step and is why two
 /// terminals disagree about what `ESC[38;5;100m` looks like.

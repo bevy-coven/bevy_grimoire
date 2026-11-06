@@ -455,3 +455,6 @@ mod the_terminal_is_on_every_screen;
 mod a_click_puts_the_keyboard_in_the_terminal;
 mod the_shell_keeps_its_ctrl_chords;
 mod typing_brings_the_terminal_back_to_its_prompt;
+mod the_caret_takes_the_shape_a_program_asks_for;
+mod the_terminal_finds_in_its_scrollback;
+mod the_terminal_draws_in_a_nerd_font;

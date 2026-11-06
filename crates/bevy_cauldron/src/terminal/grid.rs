@@ -29,10 +29,11 @@
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line as TermLine, Point};
+use alacritty_terminal::index::{Column, Direction, Line as TermLine, Point};
+use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Processor};
+use alacritty_terminal::vte::ansi::{Color as AnsiColor, CursorShape as AnsiCursorShape, NamedColor, Processor};
 use bevy::prelude::*;
 
 use super::input::{MouseEncoding, MouseTracking, WheelTarget};
@@ -40,6 +41,38 @@ use super::palette;
 
 /// How many lines of history a session keeps above its viewport.
 pub const SCROLLBACK: usize = 5_000;
+
+/// **The most matches a search keeps: the newest this many** (#321). VS Code's terminal stops counting
+/// at a thousand too. Past that, `n of 1000+` is the honest answer, and a ground on every `e` in five
+/// thousand lines is noise rather than help.
+pub const FIND_MATCH_CAP: usize = 1_000;
+
+/// **What a search says about itself**, for the find box's `n of m`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FindStatus {
+    /// The current match, counted from the oldest and from 1; 0 when nothing matched.
+    pub current: usize,
+    /// How many matches are kept: all of them, or the newest [`FIND_MATCH_CAP`].
+    pub total: usize,
+    /// More matched than [`FIND_MATCH_CAP`], so the oldest are not counted.
+    pub capped: bool,
+}
+
+/// **An open search** over the whole grid, scrollback and screen.
+///
+/// Matches are the grid's own points, and a point names a line by its distance from the top of the
+/// screen, so output that scrolls the screen moves every match by a line. Rather than patch them,
+/// new output marks the search `stale` and the next rebuild searches again — one pass of
+/// alacritty's DFA over the grid, and only while a search is open.
+struct Search {
+    /// `None` when the query could not be made a pattern, which was said when it happened.
+    regex: Option<RegexSearch>,
+    /// Oldest first.
+    matches: Vec<Match>,
+    capped: bool,
+    current: Option<usize>,
+    stale: bool,
+}
 
 /// One row of the screen, as the pane draws it.
 #[derive(Clone, Debug, PartialEq)]
@@ -90,6 +123,20 @@ pub struct Cursor {
     pub column: usize,
     /// The child hid the caret (`ESC[?25l`), which a full-screen program does while it paints.
     pub visible: bool,
+    /// The shape the child asked for (#320).
+    pub shape: CaretShape,
+}
+
+/// **The caret's shape**, as a program asks for it with DECSCUSR (`ESC[<n> q`): 1 and 2 a block, 3 and
+/// 4 an underline, 5 and 6 a bar; 0 the terminal's default, which is a block, as VS Code's and xterm's
+/// are (#320). vim asks for a block in normal mode and a bar in insert mode, which is how its user
+/// knows which mode they are in. Whether the shape blinks is not carried: the pane blinks every caret.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CaretShape {
+    #[default]
+    Block,
+    Underline,
+    Bar,
 }
 
 /// **What the child wrote to the terminal**, collected rather than acted on here.
@@ -155,6 +202,8 @@ pub struct TerminalScreen {
     caret: Cursor,
     cols: u16,
     rows_count: u16,
+    /// The search the find box has open, if any (#321).
+    search: Option<Search>,
 }
 
 impl TerminalScreen {
@@ -180,9 +229,10 @@ impl TerminalScreen {
             dirty: true,
             rows: Vec::new(),
             stamp: 0,
-            caret: Cursor { row: 0, column: 0, visible: true },
+            caret: Cursor { row: 0, column: 0, visible: true, shape: CaretShape::Block },
             cols,
             rows_count: rows,
+            search: None,
         }
     }
 
@@ -211,6 +261,7 @@ impl TerminalScreen {
         }
         self.parser.advance(&mut self.term, bytes);
         self.dirty = true;
+        self.search_again();
     }
 
     /// **Tell the emulator the pane changed size.**
@@ -229,6 +280,7 @@ impl TerminalScreen {
         self.rows_count = rows;
         self.term.resize(Size { cols: cols as usize, rows: rows as usize });
         self.dirty = true;
+        self.search_again();
     }
 
     /// Move the viewport through the scrollback. Positive `delta` scrolls up (toward older lines).
@@ -260,6 +312,122 @@ impl TerminalScreen {
         if self.term.grid().display_offset() != 0 {
             self.term.scroll_display(Scroll::Bottom);
             self.dirty = true;
+        }
+    }
+
+    /// **Search the whole grid for `query`, as plain text** (#321), make the newest match current and
+    /// scroll it into view, which is where VS Code's terminal starts: what is wanted is usually the
+    /// last error, not the first.
+    ///
+    /// Plain text, because a person typing `a.b` or `f(x` is looking for those characters: every
+    /// pattern character is escaped before alacritty's regex search sees it. **Smart case** comes with
+    /// that search: a query in lower case matches either case, one with a capital only its own. An
+    /// empty query closes the search.
+    pub fn find(&mut self, query: &str) {
+        if query.is_empty() {
+            self.find_clear();
+            return;
+        }
+        let regex = match RegexSearch::new(&literal_pattern(query)) {
+            Ok(regex) => Some(regex),
+            Err(why) => {
+                warn!("the terminal cannot search for {query:?}: {why}");
+                None
+            }
+        };
+        self.search = Some(Search { regex, matches: Vec::new(), capped: false, current: None, stale: true });
+        self.research();
+        if let Some(search) = self.search.as_mut() {
+            search.current = search.matches.len().checked_sub(1);
+        }
+        self.reveal_current();
+        self.dirty = true;
+    }
+
+    /// **The next match**: `older` walks up into older output (Enter in the find box), otherwise down
+    /// (Shift+Enter). Past the last match either way it wraps round, as VS Code's find does.
+    pub fn find_next(&mut self, older: bool) {
+        if self.search.as_ref().is_some_and(|search| search.stale) {
+            self.research();
+        }
+        let Some(search) = self.search.as_mut() else {
+            return;
+        };
+        let total = search.matches.len();
+        if total == 0 {
+            return;
+        }
+        let at = search.current.unwrap_or(total - 1);
+        search.current = Some(if older { (at + total - 1) % total } else { (at + 1) % total });
+        self.reveal_current();
+        self.dirty = true;
+    }
+
+    /// Close the search: no match is drawn and nothing is counted.
+    pub fn find_clear(&mut self) {
+        if self.search.take().is_some() {
+            self.dirty = true;
+        }
+    }
+
+    /// Which match is current and how many there are, or `None` with no search open.
+    pub fn find_status(&self) -> Option<FindStatus> {
+        let search = self.search.as_ref()?;
+        Some(FindStatus {
+            current: search.current.map_or(0, |at| at + 1),
+            total: search.matches.len(),
+            capped: search.capped,
+        })
+    }
+
+    /// Output arrived or the grid re-wrapped: the matches' points no longer name their text.
+    fn search_again(&mut self) {
+        if let Some(search) = self.search.as_mut() {
+            search.stale = true;
+        }
+    }
+
+    /// **Find every match again**, oldest first, keeping the newest [`FIND_MATCH_CAP`]. The current
+    /// match keeps its place in the list, which is the same text while output only adds lines below.
+    fn research(&mut self) {
+        let Some(search) = self.search.as_mut() else {
+            return;
+        };
+        search.stale = false;
+        search.matches.clear();
+        search.capped = false;
+        let Some(regex) = search.regex.as_mut() else {
+            search.current = None;
+            return;
+        };
+        let start = Point::new(self.term.topmost_line(), Column(0));
+        let end = Point::new(self.term.bottommost_line(), self.term.last_column());
+        for found in RegexIter::new(start, end, Direction::Right, &self.term, regex) {
+            search.matches.push(found);
+            // Dropped a block at a time rather than one per match, so a query that matches every line
+            // of a full scrollback does not shift the list five thousand times.
+            if search.matches.len() == 2 * FIND_MATCH_CAP {
+                search.matches.drain(..FIND_MATCH_CAP);
+                search.capped = true;
+            }
+        }
+        if search.matches.len() > FIND_MATCH_CAP {
+            let over = search.matches.len() - FIND_MATCH_CAP;
+            search.matches.drain(..over);
+            search.capped = true;
+        }
+        search.current = search.current.and_then(|at| search.matches.len().checked_sub(1).map(|last| at.min(last)));
+    }
+
+    /// Scroll the current match into view.
+    fn reveal_current(&mut self) {
+        let point = self
+            .search
+            .as_ref()
+            .and_then(|search| search.current.and_then(|at| search.matches.get(at)))
+            .map(|found| *found.start());
+        if let Some(point) = point {
+            self.term.scroll_to_point(point);
         }
     }
 
@@ -347,6 +515,7 @@ impl TerminalScreen {
         self.term.grid_mut().update_history(0);
         self.term.grid_mut().update_history(SCROLLBACK);
         self.dirty = true;
+        self.search_again();
     }
 
     /// **How many lines of history the session is holding above its viewport.**
@@ -423,6 +592,9 @@ impl TerminalScreen {
 
     /// Rebuild `rows` and `caret` from the grid.
     fn rebuild(&mut self) {
+        if self.search.as_ref().is_some_and(|search| search.stale) {
+            self.research();
+        }
         let offset = self.term.grid().display_offset() as i32;
         let cols = self.cols as usize;
         let fg_default = palette::default_fg();
@@ -438,6 +610,23 @@ impl TerminalScreen {
         // the drag already set it on `term`, and Copy already reads it; until #309 the screen never
         // showed it, so a person selected blind.
         let selection = self.term.selection.as_ref().and_then(|s| s.to_range(&self.term));
+        // **The search's matches that touch the viewport**, and which one is current (#321). A few at
+        // most, so each cell asks a short list; with no search open this is an empty `Vec`, which does
+        // not allocate.
+        let (top, bottom) = (-offset, self.rows_count as i32 - 1 - offset);
+        let found: Vec<(Match, bool)> = self
+            .search
+            .as_ref()
+            .map(|search| {
+                search
+                    .matches
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, m)| m.end().line.0 >= top && m.start().line.0 <= bottom)
+                    .map(|(at, m)| (m.clone(), search.current == Some(at)))
+                    .collect()
+            })
+            .unwrap_or_default();
         // **One pass over the visible grid**, which is what `display_iter` is for: it starts at the
         // top-left cell of the viewport and walks to its bottom-right, skipping the scrollback.
         for indexed in self.term.grid().display_iter() {
@@ -472,6 +661,9 @@ impl TerminalScreen {
             if cell.flags.contains(Flags::INVERSE) {
                 std::mem::swap(&mut fg, &mut bg);
             }
+            if let Some((_, current)) = found.iter().find(|(m, _)| m.contains(&indexed.point)) {
+                bg = if *current { palette::find_current_bg() } else { palette::find_bg() };
+            }
             if selection.as_ref().is_some_and(|range| range.contains(indexed.point)) {
                 bg = palette::selection_bg();
             }
@@ -490,10 +682,18 @@ impl TerminalScreen {
         let content = self.term.renderable_content();
         let point = content.cursor.point;
         let row = (point.line.0 + offset).clamp(0, self.rows_count as i32 - 1) as usize;
+        // **The shape is the style the program asked for**, read apart from visibility: a program
+        // that hides the caret while it paints keeps the shape it chose for when it shows it again.
+        let shape = match self.term.cursor_style().shape {
+            AnsiCursorShape::Underline => CaretShape::Underline,
+            AnsiCursorShape::Beam => CaretShape::Bar,
+            AnsiCursorShape::Block | AnsiCursorShape::HollowBlock | AnsiCursorShape::Hidden => CaretShape::Block,
+        };
         self.caret = Cursor {
             row,
             column: point.column.0.min(cols.saturating_sub(1)),
-            visible: content.cursor.shape != alacritty_terminal::vte::ansi::CursorShape::Hidden,
+            visible: content.cursor.shape != AnsiCursorShape::Hidden,
+            shape,
         };
         self.rows = rows;
         self.stamp = NEXT_STAMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -503,6 +703,23 @@ impl TerminalScreen {
 /// The next build's [`TerminalScreen::stamp`]. Starts at 1, so a view that has drawn nothing (stamp 0)
 /// never matches a built screen.
 static NEXT_STAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// **A query as a pattern that matches only its own characters.** Every character regex syntax gives a
+/// meaning is escaped — the set `regex_syntax::is_meta_character` names, which is also every escape
+/// that syntax accepts — so `a.b` finds a dot and `f(x` an unbalanced bracket rather than an error.
+fn literal_pattern(query: &str) -> String {
+    let mut pattern = String::with_capacity(query.len() * 2);
+    for c in query.chars() {
+        if matches!(
+            c,
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$' | '#' | '&' | '-' | '~'
+        ) {
+            pattern.push('\\');
+        }
+        pattern.push(c);
+    }
+    pattern
+}
 
 /// Trim the trailing blanks off one row.
 fn finish_row(mut cells: Vec<Cell>, wraps: bool) -> Line {

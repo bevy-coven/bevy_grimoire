@@ -180,6 +180,9 @@ bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-co
 # the editor itself ships none of it.
 [dev-dependencies]
 bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "1cc4c7da2b3e21d0e9c1c50a7d2d3b1f6e3ddf05", features = ["serde", "reflect", "testing"] }
+# Reads a face's own character map, so a test can say the terminal's face has the icons a prompt draws
+# (#323). Already in the lock through Bevy's text stack; a test dependency only.
+ttf-parser = "0.25"
 
 [[test]]
 name = "editor"
