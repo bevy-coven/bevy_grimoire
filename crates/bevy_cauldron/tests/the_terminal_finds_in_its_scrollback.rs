@@ -185,8 +185,10 @@ fn primary_f_in_the_shell_opens_the_find_box_with_the_keys_and_escape_gives_them
     ctrl_f(&mut app);
     let row = find_box(&mut app).expect("Primary+F with the shell holding the keys opens the find box");
     let world = app.world_mut();
+    // **The text field itself**, where Bevy's `TextInput` is: gooey puts `TextInputOf` on the field's
+    // hint too, and focus on the hint takes no keys.
     let field = world
-        .query::<(Entity, &TextInputOf)>()
+        .query_filtered::<(Entity, &TextInputOf), With<bevy::ui_widgets::TextInput>>()
         .iter(world)
         .find(|(_, of)| of.0 == row)
         .map(|(field, _)| field)

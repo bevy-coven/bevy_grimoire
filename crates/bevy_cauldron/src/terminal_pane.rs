@@ -1185,7 +1185,9 @@ fn hold_the_keyboard(
     input_focus: Option<ResMut<bevy::input_focus::InputFocus>>,
     bodies: Query<Entity, With<TerminalBody>>,
     boxes: Query<Entity, With<TerminalFindBox>>,
-    fields: Query<(Entity, &bevy_gooey::TextInputOf)>,
+    // **The field, not its hint**: gooey puts `TextInputOf` on both, and a focused hint takes no keys
+    // (measured live: the query typed into the box went nowhere). Bevy's `TextInput` is on the field.
+    fields: Query<(Entity, &bevy_gooey::TextInputOf), With<bevy::ui_widgets::TextInput>>,
 ) {
     let body = bodies.iter().next();
     let field = boxes
