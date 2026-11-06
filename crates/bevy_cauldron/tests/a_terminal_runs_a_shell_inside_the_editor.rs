@@ -567,3 +567,105 @@ fn the_cd_chip_moves_a_running_shell_to_the_open_project() {
         "the chip must not offer a move the shell has already been told to make"
     );
 }
+
+/// **The terminal's right-click menu is gooey's, it offers Copy / Paste / Clear, and Clear really
+/// clears.**
+///
+/// A shell with no way to take its output out is a toy, and `bevy_ui` has no selectable text, so the
+/// menu is the only route. It is gooey's `context_menu` rather than a second menu implementation — the
+/// same widget the launcher's project card uses — so this asserts it is *named* by the body and that
+/// its items are wired to handlers that do something.
+///
+/// The proof of "do something" is the one that cannot be faked: the screen's scrollback is bounded and
+/// its drawn rows are a countable fact, so `Clear` is measured by the rows it takes away.
+#[test]
+fn the_terminal_menu_offers_copy_paste_and_clear_and_clear_clears() {
+    let _shell = use_posix_shell();
+    let mut app = editor("terminal_menu");
+    chord(&mut app, &[KeyCode::ControlLeft, KeyCode::Backquote]);
+    settle(&mut app, 6);
+
+    // **The body names the menu**, which is what makes a right-click over the scrollback open it. The
+    // menu is found *through the body*: the editor has several context menus (the palette's piece menu
+    // holds Place / Mount / Remove), so asking for "a menu" answers for whichever spawned first.
+    let menu = {
+        let world = app.world_mut();
+        let body = world
+            .query_filtered::<Entity, With<TerminalBody>>()
+            .single(world)
+            .expect("the pane has one body");
+        world
+            .get::<bevy_gooey::ContextMenu>(body)
+            .map(|m| m.0)
+            .expect("the terminal body must name a context menu, or a right-click offers nothing")
+    };
+    // **Its three items, by their own words** — a menu that exists but holds nothing is the same
+    // failure as no menu, with more entities.
+    let items: Vec<String> = {
+        let world = app.world_mut();
+        let mut rows = world.query::<(Entity, &Children)>();
+        let mut texts = world.query::<&Text>();
+        rows.iter(world)
+            .filter(|(e, _)| world.get::<ChildOf>(*e).is_some_and(|p| p.parent() == menu))
+            .flat_map(|(_, kids)| kids.iter().filter_map(|k| texts.get(world, k).ok().map(|t| t.0.clone())).collect::<Vec<_>>())
+            .collect()
+    };
+    for want in ["Copy", "Paste", "Clear"] {
+        assert!(
+            items.iter().any(|i| i == want),
+            "the terminal's menu has no `{want}` item; it holds {items:?}"
+        );
+    }
+
+    // **Fill the scrollback**, so clearing it is measurable: one command per line, well past the pane's
+    // own row count.
+    for i in 0..40 {
+        app.world_mut()
+            .resource_mut::<Terminal>()
+            .write(format!("echo line-{i}\n").as_bytes());
+    }
+    let mut filled = 0;
+    for _ in 0..80 {
+        settle(&mut app, 2);
+        filled = app
+            .world()
+            .resource::<Terminal>()
+            .tab()
+            .map_or(0, |tab| tab.screen().scrolled_lines());
+        if filled > 5 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(
+        filled > 5,
+        "the scrollback never filled ({filled} lines held), so clearing it would prove nothing"
+    );
+
+    // Take the menu's Clear, as a person would: trigger the item's `Activate`.
+    let clear = {
+        let world = app.world_mut();
+        let mut rows = world.query::<(Entity, &Children)>();
+        let mut texts = world.query::<&Text>();
+        rows.iter(world)
+            .filter(|(e, _)| world.get::<ChildOf>(*e).is_some_and(|p| p.parent() == menu))
+            .find(|(_, kids)| {
+                kids.iter()
+                    .any(|k| texts.get(world, k).is_ok_and(|t| t.0 == "Clear"))
+            })
+            .map(|(e, _)| e)
+            .expect("the Clear item")
+    };
+    app.world_mut().commands().trigger(bevy_gooey::Activate { entity: clear });
+    settle(&mut app, 3);
+
+    let held = app
+        .world()
+        .resource::<Terminal>()
+        .tab()
+        .map_or(0, |tab| tab.screen().scrolled_lines());
+    assert!(
+        held < filled,
+        "Clear left {held} of {filled} lines: the item is wired to nothing"
+    );
+}

@@ -313,6 +313,15 @@ impl TerminalScreen {
         self.dirty = true;
     }
 
+    /// **How many lines of history the session is holding above its viewport.**
+    ///
+    /// The measurable fact that a scrollback exists and how much of it there is — used by the menu's
+    /// Clear to prove it cleared something, and by nothing else. Zero on the alternate screen, which
+    /// has no history.
+    pub fn scrolled_lines(&self) -> usize {
+        self.term.grid().history_size()
+    }
+
     /// **Did the child ask for bracketed paste?** (`ESC[?2004h`.)
     ///
     /// Read by the paste path: a multi-line paste wrapped in `ESC[200~`/`ESC[201~` is an insertion, an
