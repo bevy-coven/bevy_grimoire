@@ -110,10 +110,10 @@
       "taken_at_ms": 1793927671762,
       "app_version": "0.2.6",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "\"The X is not actually centered\" is indicative: the glyph sits 4.5 physical px (2.25 logical) left of its keycap's centre, measured from the recorded frame",
       "commit": "",
       "attempts": []
     },
