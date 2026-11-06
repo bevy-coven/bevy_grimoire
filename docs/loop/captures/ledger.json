@@ -278,10 +278,10 @@
       "taken_at_ms": 1793968919654,
       "app_version": "0.2.9",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "enhancement",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "every clause is optative \u2014 \"should be collapsable\", \"should have a shortcut key\", \"should default to collapsed\" \u2014 so this proposes behaviour rather than reporting a defect. Note for the spec: collapsing and a toggle key already exist (folded_packs, Space toggles a focused pack with a status note), so the live gap is the DEFAULT (packs_the_kit_draws_from opens the kit's packs and folds the rest), not the mechanism",
       "commit": "",
       "attempts": []
     },
