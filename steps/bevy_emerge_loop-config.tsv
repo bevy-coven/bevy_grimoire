@@ -101,5 +101,7 @@ pass	at	host	seconds	model	think	build_jobs	test_threads
 414	2026-11-06T15:45Z	big	41	claude-sonnet-5-5	medium	-	-
 417	2026-11-06T15:49Z	big	11	claude-sonnet-5-5	medium	-	-
 416	2026-11-06T15:50Z	big	47	claude-sonnet-5-5	medium	-	-
-419	2026-11-06T15:59Z	big	24	claude-sonnet-5-5	medium	-	-
 418	2026-11-06T15:59Z	big	36	claude-sonnet-5-5	medium	-	-
+419	2026-11-06T16:09Z	big	0	-	-	-	-
+422	2026-11-06T16:15Z	big	20	claude-sonnet-5-5	medium	-	-
+421	2026-11-06T16:15Z	big	31	claude-sonnet-5-5	medium	-	-
