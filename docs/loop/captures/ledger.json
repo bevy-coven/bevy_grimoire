@@ -132,10 +132,10 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
       "reason": "\"it looks out of place\" is indicative, and it measures true: Fill is 107 physical px wide in a run of icon-only buttons that are 65-66, because it is the only labelled button outside the labelled group",
-      "commit": "",
+      "commit": "c91b218",
       "attempts": [
         {
           "host": "mac_air",
