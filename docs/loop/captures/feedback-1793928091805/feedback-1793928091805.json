@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "stem": "feedback-1793928091805",
+  "taken_at_ms": 1793928091805,
+  "audience": "developers",
+  "app_version": "0.2.7",
+  "screen": "editor",
+  "project": "/Users/ladvien/actions-runner-bevy_grimoire/_work/bevy_grimoire/bevy_grimoire",
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1604
+    ],
+    "logical": [
+      1280.0,
+      802.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 25769800572,
+        "rect_px": [
+          118.0,
+          68.0,
+          555.0,
+          326.0
+        ],
+        "path": [
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "MenuBar",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "MenuTitle",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "MenuPanel",
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        395.5625,
+        106.49219
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "TheThe shortcuts have a \"?\" in the middle, not sure what's up with that? But they also don't look aligned vertically.",
+  "picture": {
+    "file": "feedback-1793928091805.png",
+    "size": [
+      2560,
+      1604
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1793928091805_picks.png",
+    "size": [
+      2560,
+      1604
+    ]
+  },
+  "log": "feedback-1793928091805.log"
+}

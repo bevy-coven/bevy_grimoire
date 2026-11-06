@@ -104,6 +104,102 @@
           "saw": "the What's new page listed ten entries and drew three: no ScrollArea above or inside the page, nothing to bring the rest in"
         }
       ]
+    },
+    {
+      "stem": "feedback-1793927671762",
+      "taken_at_ms": 1793927671762,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793927698061",
+      "taken_at_ms": 1793927698061,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793927744511",
+      "taken_at_ms": 1793927744511,
+      "app_version": "0.2.6",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793927950267",
+      "taken_at_ms": 1793927950267,
+      "app_version": "0.2.7",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793928006124",
+      "taken_at_ms": 1793928006124,
+      "app_version": "0.2.7",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793928048623",
+      "taken_at_ms": 1793928048623,
+      "app_version": "0.2.7",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793928091805",
+      "taken_at_ms": 1793928091805,
+      "app_version": "0.2.7",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1793928159971",
+      "taken_at_ms": 1793928159971,
+      "app_version": "0.2.7",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
     }
   ]
 }

@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "stem": "feedback-1793928048623",
+  "taken_at_ms": 1793928048623,
+  "audience": "developers",
+  "app_version": "0.2.7",
+  "screen": "editor",
+  "project": "/Users/ladvien/actions-runner-bevy_grimoire/_work/bevy_grimoire/bevy_grimoire",
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1604
+    ],
+    "logical": [
+      1280.0,
+      802.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 249108101815,
+        "rect_px": [
+          2151.0,
+          333.0,
+          2531.0,
+          1513.0
+        ],
+        "path": [
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        2414.3438,
+        392.03125
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "This whole panel has text running off of it, and looks squished and jumbled.  Like there's no clear heirarchy or spatial communication of function.",
+  "picture": {
+    "file": "feedback-1793928048623.png",
+    "size": [
+      2560,
+      1604
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1793928048623_picks.png",
+    "size": [
+      2560,
+      1604
+    ]
+  },
+  "log": "feedback-1793928048623.log"
+}
