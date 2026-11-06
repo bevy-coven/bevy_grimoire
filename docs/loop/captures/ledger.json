@@ -236,10 +236,10 @@
       "taken_at_ms": 1793928091805,
       "app_version": "0.2.7",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "\"don't look aligned vertically\" and \"a ? in the middle\" both report how the menu IS; the ? is the gooey#45 tofu, the alignment is measured as 55 physical px of drift in the shortcut column's right edge (489..599)",
       "commit": "",
       "attempts": []
     },
