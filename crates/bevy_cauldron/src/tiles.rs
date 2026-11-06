@@ -4265,6 +4265,13 @@ fn spawn_tab_strip(
             // is never aimed at it there.
             .observe(cross_on_click)
             .with_children(|m| {
+                // **The verb, so the word after it is a destination and not a fourth tab**
+                // (`feedback-1793928006124`: a bare `Map` on the tab row's baseline read as a tab).
+                m.spawn((
+                    Text::new(SWITCH_TO),
+                    TextColor(MUTED),
+                    crate::chrome::font(crate::chrome::text::BODY),
+                ));
                 m.spawn((
                     // Written every frame by [`name_the_other_door`], which says the other workspace's name.
                     Text::new(String::new()),
@@ -4307,6 +4314,18 @@ pub struct OtherDoorMark;
 #[derive(Component)]
 pub struct OtherDoorLabel;
 
+/// The verb the door cue opens with, in a node of its own so the destination keeps its exact name.
+const SWITCH_TO: &str = "Switch to";
+
+/// The door the cue leads to: the Map and Kit doors lead to each other, and the Rigs door leads nowhere.
+pub fn other_door(door: Door) -> Option<Door> {
+    match door {
+        Door::Map => Some(Door::Kit),
+        Door::Kit => Some(Door::Map),
+        Door::Rigs => None,
+    }
+}
+
 /// **Name the other door**, so the cue says which way is other.
 ///
 /// **The Rigs door is not a door the author crosses to.** It is the rig bench — a character asset
@@ -4319,11 +4338,7 @@ fn name_the_other_door(
     mut marks: Query<&mut Node, With<OtherDoorMark>>,
 ) {
     let Some(door) = door else { return };
-    let other = match *door {
-        Door::Map => Some(Door::Kit),
-        Door::Kit => Some(Door::Map),
-        Door::Rigs => None,
-    };
+    let other = other_door(*door);
     for mut label in &mut labels {
         let text = match other {
             // **The workspace's own name** (#302): the tab says `Map` or `Kit`, as the title of the
@@ -5468,23 +5483,16 @@ pub(crate) fn scan(project: &Project, state: &mut ImportState) {
     // kit's own.
     match import::scan(&root, &root, &project.measured) {
         Ok(found) => {
-            // **On the first look, only the packs THIS MAP builds from are open.**
-            //
-            // This keyed off library membership, which is the wrong question by one step: a kit can
-            // be fully imported and have nothing to do with the map open in front of you. The site
-            // kit and the furniture kit are both in `library.ron`; a session spent on `site_67` wants
-            // the one it is placing from, and a dozen open packs is an alphabet to scroll past on the
-            // way to the work in progress.
+            // **On the first look, every pack is folded** — reported as `feedback-1793968919654`:
+            // *"They should default to collapsed."* The rule before it opened every pack the kit draws
+            // from, which on the Kits door is most of the shelf, so the first look was the whole list.
+            // The one pack the default selection lands in is opened below, because a tab must never
+            // open with its selection hidden.
             //
             // Only the FIRST scan seeds this — a rescan mid-session must not stomp the folds the
             // author has since toggled by hand.
             if !state.scanned {
-                let used = packs_the_kit_draws_from(project);
-                state.folded_packs = packs(&found)
-                    .into_iter()
-                    .map(|(pack, _)| pack)
-                    .filter(|pack| !used.contains(pack.as_str()))
-                    .collect();
+                state.folded_packs = packs(&found).into_iter().map(|(pack, _)| pack).collect();
             }
             let blocked = found.iter().filter(|c| c.blocked()).count();
             let warned = found
@@ -5513,12 +5521,14 @@ pub(crate) fn scan(project: &Project, state: &mut ImportState) {
             {
                 Some((_, members)) => state.selected = members.first().copied().unwrap_or(0),
                 None => {
-                    // Nothing is showing. Open the first pack this kit actually uses — never an
-                    // excluded one, which the author took out on purpose and which cannot be
-                    // imported anyway.
+                    // Nothing is showing. Open the first pack this kit draws from, else the first
+                    // pack — never an excluded one, which the author took out on purpose and which
+                    // cannot be imported anyway.
+                    let used = packs_the_kit_draws_from(project);
                     if let Some((pack, members)) = grouped
                         .iter()
-                        .find(|(pack, _)| !project.policy.excludes(pack))
+                        .find(|(pack, _)| used.contains(pack.as_str()) && !project.policy.excludes(pack))
+                        .or_else(|| grouped.iter().find(|(pack, _)| !project.policy.excludes(pack)))
                         .or_else(|| grouped.first())
                     {
                         state.folded_packs.remove(pack);
@@ -11717,5 +11727,18 @@ mod write_library_tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod other_door_tests {
+    use super::*;
+
+    /// The cue is a way across: Map and Kit lead to each other, never to themselves, and Rigs leads nowhere.
+    #[test]
+    fn the_cue_leads_across_and_never_to_itself() {
+        assert_eq!(other_door(Door::Map), Some(Door::Kit));
+        assert_eq!(other_door(Door::Kit), Some(Door::Map));
+        assert_eq!(other_door(Door::Rigs), None);
     }
 }
