@@ -294,6 +294,9 @@ fn pump_the_terminal(
 /// when that row's cells actually differ from what was drawn. That is what makes a `cargo build`
 /// scrolling past cost one entity-tree edit per changed row rather than one per frame for the whole
 /// pane — and it is why [`Drawn`] keeps a copy of the rows the pane is showing.
+// A Bevy system's parameters are what it reads and writes; the caret's shape and focus (#320) are two
+// more of them, and bundling them into a `SystemParam` would hide which resources this one touches.
+#[allow(clippy::too_many_arguments)]
 fn draw_the_terminal(
     metrics: Res<CellMetrics>,
     mut terminal: ResMut<Terminal>,
