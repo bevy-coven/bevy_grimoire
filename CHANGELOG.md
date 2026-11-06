@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-06
+
+- **capture-1793927671762** A prompt keycap is filed with the failing test that proves its letter is not centred *No clip: no visible change — the cause is in bevy_gooey (bevy-coven/bevy_gooey#44) and this repo must not patch or vendor it; proved by the_remove_mode_keycap_centres_its_letter, which measures -5.0 logical px off centre on the current pin and is ignored until the fix lands*
+
 ## 2026-11-05
 
 - **release-0.2.9** Cauldron 0.2.9: the terminal docked where it belongs *For you: A new build with the terminal across the bottom of the window, with the map still usable above it.* *No clip: a version bump and nothing else; the change it carries has its own line above*

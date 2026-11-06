@@ -111,11 +111,20 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "\"The X is not actually centered\" is indicative: the glyph sits 4.5 physical px (2.25 logical) left of its keycap's centre, measured from the recorded frame",
+      "reason": "the cause is in bevy_gooey: the Role::PromptKey layout arm sets min_width on the cap but never centres its content, so the slack lands on the right; filed as bevy-coven/bevy_gooey#44, and this repo must not patch, wrap or vendor it",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "the X cap's glyph ink centre sits 4.5 physical px (2.25 logical) left of the cap's box centre; y is dead centre, so only the row axis is wrong"
+        }
+      ]
     },
     {
       "stem": "feedback-1793927698061",
