@@ -187,6 +187,18 @@ impl TerminalFocus {
     pub fn holds(&self) -> bool {
         self.0
     }
+
+    /// **Is `chord` the shell's this frame, and not the window's?** (#318)
+    ///
+    /// While the shell has the keyboard, a chord on **Ctrl** is a control code it reads — Ctrl+D is
+    /// end-of-file, Ctrl+K kills to the end of the line, Ctrl+R searches history — so a window chord
+    /// spelled on Ctrl (every primary chord off a mac) is the shell's, the way VS Code sends chords to
+    /// its terminal unless they are on its short skip list. A chord on **Command** never reaches a
+    /// shell on a mac, so it stays the window's there. The pane's own chords (Primary+`, Primary+J,
+    /// Primary+Shift+C and V) do not ask: they are read before the shell sees anything.
+    pub fn owns(&self, chord: &bevy_gooey::Shortcut) -> bool {
+        self.0 && chord.modifiers.ctrl
+    }
 }
 
 /// The pane's own working state: the size it last asked for, and the caret's blink.
@@ -774,35 +786,48 @@ fn redraw_the_bar(commands: &mut Commands, bar: &Query<Entity, With<TerminalBar>
 
 /// **A click anywhere in the pane puts the keyboard in the shell** — including the bar, because a
 /// person who clicked the chip to switch sessions means to type into the one they picked.
+///
+/// **One click, one answer, decided where it landed** (#317). A `PointerClick` bubbles: it is triggered
+/// on the node under the pointer and then on each of its ancestors, and a global observer runs on every
+/// hop. These two observers read the hop's own entity, so a click on the terminal's body took the
+/// keyboard on its first hop and gave it back on the third, at the frame root above the pane, which is
+/// "outside" it — measured: the click left `TerminalFocus` false and the chord was the only way in.
+/// Both now act once, on the first hop, and ask where the click *landed*.
 fn a_click_takes_the_keyboard(
     click: On<bevy::picking::events::PointerClick>,
     ancestors: Query<&ChildOf>,
     roots: Query<(), With<TerminalPaneRoot>>,
     mut focus: ResMut<TerminalFocus>,
 ) {
-    if roots.contains(click.entity)
-        || ancestors.iter_ancestors(click.entity).any(|up| roots.contains(up))
-    {
+    if click.entity == click.original_event_target() && landed_in_the_pane(click.entity, &ancestors, &roots) {
         focus.take();
     }
 }
 
 /// **A click anywhere outside it gives the keys back**, or the editor would be dead to the keyboard
-/// with nothing on screen saying why.
+/// with nothing on screen saying why. Decided on the click's first hop, like
+/// [`a_click_takes_the_keyboard`].
 fn a_click_elsewhere_gives_it_back(
     click: On<bevy::picking::events::PointerClick>,
     ancestors: Query<&ChildOf>,
     roots: Query<(), With<TerminalPaneRoot>>,
     mut focus: ResMut<TerminalFocus>,
 ) {
-    if !focus.holds() {
+    if !focus.holds() || click.entity != click.original_event_target() {
         return;
     }
-    let inside = roots.contains(click.entity)
-        || ancestors.iter_ancestors(click.entity).any(|up| roots.contains(up));
-    if !inside {
+    if !landed_in_the_pane(click.entity, &ancestors, &roots) {
         focus.release();
     }
+}
+
+/// Is `entity` the terminal's pane, or inside it?
+fn landed_in_the_pane(
+    entity: Entity,
+    ancestors: &Query<&ChildOf>,
+    roots: &Query<(), With<TerminalPaneRoot>>,
+) -> bool {
+    roots.contains(entity) || ancestors.iter_ancestors(entity).any(|up| roots.contains(up))
 }
 
 /// **The keys a terminal owns that the screen's keyboard navigation also reads** (#316): Tab and the
