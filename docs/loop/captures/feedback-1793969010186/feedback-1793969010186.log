@@ -1,0 +1,200 @@
+2026-11-06T03:48:37.061404Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:48:47.058978Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:48:57.127254Z  INFO cauldron::startup: 589 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:49:07.127517Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:49:17.144164Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:49:27.160806Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:49:37.177815Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:49:47.177393Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:49:57.177346Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:50:07.185454Z  INFO cauldron::startup: 584 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:50:17.211560Z  INFO cauldron::startup: 248 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:50:27.215656Z  INFO cauldron::startup: 485 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:50:37.256254Z  INFO cauldron::startup: 192 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:50:47.280876Z  INFO cauldron::startup: 507 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:50:57.287587Z  INFO cauldron::startup: 598 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:51:07.288388Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:51:17.287943Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:51:27.288205Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:51:37.305354Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:51:47.305001Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:51:57.321543Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:52:07.337221Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:52:17.337217Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:52:27.353591Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:52:37.369513Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:52:47.369337Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:52:57.387194Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:53:07.386025Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:53:17.403043Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:53:27.390563Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:53:37.391306Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:53:47.407862Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:53:57.407942Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:54:07.408434Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T03:54:17.424913Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+--- Cauldron 0.2.9 on macos aarch64 starting: exe "/Applications/Cauldron.app/Contents/MacOS/bevy_cauldron", argv [".", "bedroom"], unix time 1793937296
+2026-11-06T03:54:56.654290Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "macOS 26.6.2 Tahoe", kernel: "25.6.0", cpu: "Apple M5", core_count: "10", memory: "32.0 GiB" }
+2026-11-06T03:54:56.655160Z  INFO bevy_app::terminal_ctrl_c_handler: Skipping installing `Ctrl+C` handler as one was already installed. Please call `TerminalCtrlCHandlerPlugin::gracefully_exit` in your own `Ctrl+C` handler if you want Bevy to gracefully exit on `Ctrl+C`.
+2026-11-06T03:54:56.717224Z  INFO bevy_render::renderer: AdapterInfo { name: "Apple M5", vendor: 0, device: 0, device_type: IntegratedGpu, device_pci_bus_id: "", driver: "", driver_info: "", backend: Metal, subgroup_min_size: 4, subgroup_max_size: 64, transient_saves_memory: Some(true), limit_bucket: None }
+2026-11-06T03:54:56.818064Z  INFO cauldron::startup: plugins added; first screen Loading
+2026-11-06T03:54:56.818401Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-11-06T03:54:56.818435Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-11-06T03:54:56.840545Z  INFO bevy_winit::system: Creating new window Cauldron (70v0)
+2026-11-06T03:54:56.920555Z  INFO bevy_cauldron::project: 1 library row(s) had derived effects out of step with their kind
+2026-11-06T03:54:56.920717Z  INFO bevy_cauldron::project: project: /private/tmp/term-check — 90 descriptor(s), 1 composition(s), 2 bound kit(s)
+2026-11-06T03:54:56.937780Z  INFO bevy_cauldron::project: map: /private/tmp/term-check/assets/grimoire/maps/bedroom.map.ron — 12 placement(s), 0 stamp(s) standing for 0 row(s)
+2026-11-06T03:54:56.978838Z  INFO cauldron::startup: window surface 2560x1604 physical, scale 2, mode Windowed
+2026-11-06T03:54:57.757961Z  INFO cauldron::startup: camera 581v0: order -1, active true, target Image, layers []
+2026-11-06T03:54:57.758017Z  INFO cauldron::startup: camera 582v0: order 0, active true, target Window, layers [1]
+2026-11-06T03:54:57.758027Z  INFO cauldron::startup: camera 580v0: order -3, active true, target Image, layers []
+2026-11-06T03:54:57.758035Z  INFO cauldron::startup: camera 1163v0: order -2, active true, target Image, layers [0]
+2026-11-06T03:54:59.312017Z  INFO cauldron::startup: window self-check: 300 colours, brightest channel 255
+2026-11-06T03:55:06.957704Z  INFO cauldron::startup: 582 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T03:55:16.974256Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T03:55:26.990688Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T03:55:36.991676Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T03:55:47.008106Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+--- Cauldron 0.2.9 on macos aarch64 starting: exe "/Applications/Cauldron.app/Contents/MacOS/bevy_cauldron", argv [], unix time 1793967784
+2026-11-06T12:23:04.085895Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "macOS 26.6.2 Tahoe", kernel: "25.6.0", cpu: "Apple M5", core_count: "10", memory: "32.0 GiB" }
+2026-11-06T12:23:04.132856Z  INFO bevy_render::renderer: AdapterInfo { name: "Apple M5", vendor: 0, device: 0, device_type: IntegratedGpu, device_pci_bus_id: "", driver: "", driver_info: "", backend: Metal, subgroup_min_size: 4, subgroup_max_size: 64, transient_saves_memory: Some(true), limit_bucket: None }
+2026-11-06T12:23:04.260905Z  INFO cauldron::startup: plugins added; first screen Launcher
+2026-11-06T12:23:04.261281Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-11-06T12:23:04.261314Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-11-06T12:23:04.295636Z  INFO bevy_winit::system: Creating new window Cauldron (70v0)
+2026-11-06T12:23:04.401734Z  INFO cauldron::startup: window surface 2560x1604 physical, scale 2, mode Windowed
+2026-11-06T12:23:05.066862Z  INFO cauldron::startup: camera 580v0: order -3, active true, target Image, layers []
+2026-11-06T12:23:05.066918Z  INFO cauldron::startup: camera 582v0: order 0, active true, target Window, layers [1]
+2026-11-06T12:23:05.066928Z  INFO cauldron::startup: camera 581v0: order -1, active true, target Image, layers []
+2026-11-06T12:23:06.637761Z  INFO cauldron::startup: window self-check: 82 colours, brightest channel 254
+2026-11-06T12:23:14.070034Z  INFO bevy_cauldron::project: 1 library row(s) had derived effects out of step with their kind
+2026-11-06T12:23:14.070215Z  INFO bevy_cauldron::project: project: /private/tmp/term-check — 90 descriptor(s), 1 composition(s), 2 bound kit(s)
+2026-11-06T12:23:14.096013Z  INFO bevy_cauldron::project: map: /private/tmp/term-check/assets/grimoire/maps/bedroom.map.ron — 12 placement(s), 0 stamp(s) standing for 0 row(s)
+2026-11-06T12:23:14.383820Z  INFO cauldron::startup: 581 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:23:24.422571Z  INFO cauldron::startup: 586 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:23:34.439793Z  INFO cauldron::startup: 602 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:23:44.415321Z  INFO cauldron::startup: 599 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:23:54.452149Z  INFO cauldron::startup: 590 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:24:04.468044Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:24:14.453112Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:24:24.465909Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:24:34.480885Z  INFO cauldron::startup: 598 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:24:44.482211Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:24:54.496700Z  INFO cauldron::startup: 594 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:25:04.498776Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:25:14.514834Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:25:24.540496Z  INFO cauldron::startup: 589 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:25:34.531264Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:25:44.547833Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:25:54.564590Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:26:04.564380Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:26:14.601134Z  INFO cauldron::startup: 591 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:26:24.601644Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:26:34.617922Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:26:44.638685Z  INFO cauldron::startup: 591 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:26:54.638691Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:27:04.654868Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:27:14.654614Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:27:24.671053Z  INFO cauldron::startup: 590 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:27:34.687657Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:27:44.704672Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:27:54.704691Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:28:04.704461Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:28:14.702539Z  INFO cauldron::startup: 602 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:28:24.713160Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:28:34.729180Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:28:44.746213Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:28:54.781832Z  INFO cauldron::startup: 590 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:29:04.781798Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:29:14.798609Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:29:24.817865Z  INFO cauldron::startup: 589 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:29:34.834492Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:29:44.850895Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:29:54.851168Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:30:04.857580Z  INFO cauldron::startup: 589 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:30:14.873956Z  INFO cauldron::startup: 602 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:30:24.890302Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:30:34.890212Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:30:44.906879Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:30:54.923404Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:31:04.940186Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:31:14.939777Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:31:24.956562Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:31:34.972944Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:31:44.972802Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:31:54.989336Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:32:05.006125Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:32:15.022802Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:32:25.039304Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:32:35.056890Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:32:45.055528Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:32:55.055402Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:33:05.072131Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:33:15.088584Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:33:25.105038Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:33:35.121589Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:33:45.138224Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:33:55.151188Z  INFO cauldron::startup: 589 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:34:05.167585Z  INFO cauldron::startup: 602 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:34:15.184271Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:34:25.184310Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:34:35.184246Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:34:45.200622Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:34:55.200813Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:35:05.217333Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:35:15.217387Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:35:25.217140Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:35:35.233582Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:35:45.233482Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:35:55.233560Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:36:05.250042Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:36:15.266936Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:36:25.282535Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:36:35.294506Z  INFO cauldron::startup: 591 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:36:45.311042Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:36:55.327475Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:37:05.314806Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:37:15.324212Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:37:25.340636Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:37:35.357373Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:37:45.358270Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:37:55.373309Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:38:05.389886Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:38:15.406756Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:38:25.406772Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:38:35.415398Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:38:45.415886Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:38:55.432853Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:39:05.439831Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:39:15.456283Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:39:25.471578Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:39:35.479076Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:39:45.515110Z  INFO cauldron::startup: 589 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:39:55.531738Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:40:05.531141Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:40:15.547998Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:40:25.559114Z  INFO cauldron::startup: 590 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:40:35.536480Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:40:37.257448Z  INFO bevy_cauldron::project: 1 library row(s) had derived effects out of step with their kind
+2026-11-06T12:40:37.257590Z  INFO bevy_cauldron::project: project: /Users/ladvien/actions-runner-bevy_grimoire/_work/bevy_grimoire/bevy_grimoire — 90 descriptor(s), 1 composition(s), 2 bound kit(s)
+2026-11-06T12:40:37.277496Z  INFO bevy_cauldron::project: map: /Users/ladvien/actions-runner-bevy_grimoire/_work/bevy_grimoire/bevy_grimoire/assets/grimoire/maps/bedroom.map.ron — 12 placement(s), 0 stamp(s) standing for 0 row(s)
+2026-11-06T12:40:44.821862Z  WARN bevy_gltf::loader: Unknown vertex attribute COLOR_1
+2026-11-06T12:40:45.537916Z  INFO cauldron::startup: 596 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:40:53.670843Z  INFO bevy_cauldron::thumbs: baked 90 palette thumbnail(s); booth torn down
+2026-11-06T12:40:55.553852Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:41:05.570714Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:41:15.586946Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:41:25.602627Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:41:35.603796Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:41:45.619514Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:41:55.636096Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:42:05.636337Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:42:15.652633Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:42:25.669770Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:42:35.685966Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:42:45.686370Z  INFO cauldron::startup: 600 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:42:55.702173Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:43:05.731990Z  INFO cauldron::startup: 590 frames in the last 10 s, surface 2560x1604, focused false
+2026-11-06T12:43:15.718407Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:43:25.735137Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
+2026-11-06T12:43:35.751371Z  INFO cauldron::startup: 601 frames in the last 10 s, surface 2560x1604, focused true
