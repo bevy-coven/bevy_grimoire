@@ -45412,3 +45412,85 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 408	70	ship	model	model		2026-11-06T15:22:51Z	1.5	
 408	71	ship	tool	loop tools	bash	2026-11-06T15:22:53Z	0.7	python3 tools/loop/steps.py end; git status --short; git status -sb | head -2
 408	72	ship	model	model		2026-11-06T15:22:54Z	5.6	
+411	1	orient	model	model		2026-11-06T15:24:11Z	2.1	
+411	2	orient	tool	phase mark	bash	2026-11-06T15:24:13Z	0.5	date +%s; python3 tools/loop/steps.py begin; python3 tools/loop/steps.py mark orient; git status --short; git status -sb | head -3; python3 tools/loop/captures.
+411	3	orient	model	model		2026-11-06T15:24:14Z	2.5	
+411	4	orient	tool	loop tools	bash	2026-11-06T15:24:16Z	0.5	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json")) rows=L if isinstance(L,list) else L.get("captures",L) if isinstance(rows,dict)
+411	5	orient	model	model		2026-11-06T15:24:17Z	1.3	
+411	6	orient	tool	shell	bash	2026-11-06T15:24:18Z	0.0	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json")) print(type(L), list(L)[:3] if isinstance(L,dict) else L[:1]) EOF
+411	7	orient	model	model		2026-11-06T15:24:18Z	1.6	
+411	8	orient	tool	loop tools	bash	2026-11-06T15:24:20Z	0.1	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json"))["items"] rows=L if isinstance(L,list) else [dict(v,stem=k) for k,v in L.items(
+411	9	orient	model	model		2026-11-06T15:24:20Z	1.4	
+411	10	orient	tool	shell	bash	2026-11-06T15:24:21Z	0.0	grep -n "1793968919654" docs/loop/log.md docs/loop/captures/cases.jsonl | cut -c1-700; ls docs/loop/iterations | grep 1793968919654
+411	11	orient	model	model		2026-11-06T15:24:21Z	1.2	
+411	12	orient	tool	shell	bash	2026-11-06T15:24:23Z	0.0	sed -n 2244p docs/loop/log.md; cat docs/loop/iterations/2026-11-06-debug-feedback-1793968919654-f55b690.md | cut -c1-1500; grep -rn "folded_packs" crates --incl
+411	13	orient	model	model		2026-11-06T15:24:23Z	1.7	
+411	14	repro	tool	phase mark	bash	2026-11-06T15:24:24Z	0.1	python3 tools/loop/steps.py mark repro; sed -n 5470,5560p crates/bevy_cauldron/src/tiles.rs; sed -n 1120,1200p crates/bevy_cauldron/tests/headless.rs
+411	15	repro	model	model		2026-11-06T15:24:24Z	4.7	
+411	16	repro	tool	shell	bash	2026-11-06T15:24:29Z	0.0	cd crates/bevy_cauldron; grep -rn "packs_the_kit_draws_from" . | cut -c1-160; grep -n "mod pack_fold\|fn kit_holding" src/tiles.rs
+411	17	repro	model	model		2026-11-06T15:24:29Z	4.6	
+411	18	repro	tool	shell	bash	2026-11-06T15:24:34Z	0.0	cd crates/bevy_cauldron; sed -n 4965,5000p src/tiles.rs; sed -n 5100,5180p src/tiles.rs; sed -n 5435,5470p src/tiles.rs; grep -n "^mod\|^pub mod" tests/all.rs |
+411	19	repro	model	model		2026-11-06T15:24:34Z	2.7	
+411	20	repro	tool	shell	bash	2026-11-06T15:24:36Z	0.0	cd crates/bevy_cauldron/tests; sed -n 1,80p capture_feedback_1793905698793.rs; sed -n 1085,1120p headless.rs
+411	21	repro	model	model		2026-11-06T15:24:36Z	3.7	
+411	22	repro	tool	shell	bash	2026-11-06T15:24:40Z	0.0	cd crates/bevy_cauldron/tests; grep -n "pub fn \|fn descriptor\|fn pack" fixtures.rs | head -40
+411	23	repro	model	model		2026-11-06T15:24:40Z	1.0	
+411	24	repro	tool	shell	bash	2026-11-06T15:24:41Z	0.0	cd crates/bevy_cauldron/tests; ls fixtures* ; grep -rn "pub fn descriptor\|pub fn pack\|pub fn build" fixtures/ | head
+411	25	repro	model	model		2026-11-06T15:24:41Z	0.8	
+411	26	repro	tool	shell	bash	2026-11-06T15:24:42Z	0.0	cd crates/bevy_cauldron/tests; sed -n 630,700p fixtures/mod.rs
+411	27	repro	model	model		2026-11-06T15:24:42Z	9.2	
+411	28	build	tool	phase mark	bash	2026-11-06T15:24:51Z	60.0	[launched bg_1] cd crates/bevy_cauldron/tests; cat > capture_feedback_1793968919654.rs <<'EOF' //! **Every pack on the Kits door starts folded** (`feedback-1793968919654`, file
+411	29	build	model	model		2026-11-06T15:25:51Z	1.8	
+411	30	build	tool	wait: other	wait	2026-11-06T15:25:53Z	41.0	{}
+411	31	build	model	model		2026-11-06T15:26:34Z	6.2	
+411	32	prove	tool	phase mark	bash	2026-11-06T15:26:40Z	60.0	[launched bg_2] cd crates/bevy_cauldron && python3 - <<'EOF' p="src/tiles.rs" s=open(p).read() old=s[s.index(" // **On the first look, only the packs THIS MAP builds from are o
+411	33	prove	model	model		2026-11-06T15:27:40Z	0.8	
+411	34	prove	tool	wait: other	wait	2026-11-06T15:27:41Z	125.0	{}
+411	35	prove	model	model		2026-11-06T15:29:46Z	2.6	
+411	36	gate	tool	phase mark	bash	2026-11-06T15:29:49Z	60.0	[launched bg_3] python3 tools/changelog/changelog.py add --id feedback-1793968919654 --sha HEAD --title "Kit packs on the Kits door start collapsed; only the pack holding the s
+411	37	gate	model	model		2026-11-06T15:30:49Z	1.3	
+411	38	gate	tool	wait: other	wait	2026-11-06T15:30:50Z	540.8	{}
+411	39	gate	model	model		2026-11-06T15:39:51Z	9.6	
+410	1	orient	model	model		2026-11-06T15:24:11Z	2.1	
+410	2	orient	tool	phase mark	bash	2026-11-06T15:24:13Z	0.5	date +%s; python3 tools/loop/steps.py begin; python3 tools/loop/steps.py mark orient; git status --short; git status -sb | head -3; python3 tools/loop/captures.
+410	3	orient	model	model		2026-11-06T15:24:14Z	2.5	
+410	4	orient	tool	loop tools	bash	2026-11-06T15:24:16Z	0.5	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json")) rows=L if isinstance(L,list) else L.get("captures",L) if isinstance(rows,dict)
+410	5	orient	model	model		2026-11-06T15:24:17Z	1.3	
+410	6	orient	tool	shell	bash	2026-11-06T15:24:18Z	0.0	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json")) print(type(L), list(L)[:3] if isinstance(L,dict) else L[:1]) EOF
+410	7	orient	model	model		2026-11-06T15:24:18Z	1.6	
+410	8	orient	tool	loop tools	bash	2026-11-06T15:24:20Z	0.1	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json"))["items"] rows=L if isinstance(L,list) else [dict(v,stem=k) for k,v in L.items(
+410	9	orient	model	model		2026-11-06T15:24:20Z	1.4	
+410	10	orient	tool	shell	bash	2026-11-06T15:24:21Z	0.0	grep -n "1793968919654" docs/loop/log.md docs/loop/captures/cases.jsonl | cut -c1-700; ls docs/loop/iterations | grep 1793968919654
+410	11	orient	model	model		2026-11-06T15:24:21Z	1.2	
+410	12	orient	tool	shell	bash	2026-11-06T15:24:23Z	0.0	sed -n 2244p docs/loop/log.md; cat docs/loop/iterations/2026-11-06-debug-feedback-1793968919654-f55b690.md | cut -c1-1500; grep -rn "folded_packs" crates --incl
+410	13	orient	model	model		2026-11-06T15:24:23Z	1.7	
+410	14	repro	tool	phase mark	bash	2026-11-06T15:24:24Z	0.1	python3 tools/loop/steps.py mark repro; sed -n 5470,5560p crates/bevy_cauldron/src/tiles.rs; sed -n 1120,1200p crates/bevy_cauldron/tests/headless.rs
+410	15	repro	model	model		2026-11-06T15:24:24Z	4.7	
+410	16	repro	tool	shell	bash	2026-11-06T15:24:29Z	0.0	cd crates/bevy_cauldron; grep -rn "packs_the_kit_draws_from" . | cut -c1-160; grep -n "mod pack_fold\|fn kit_holding" src/tiles.rs
+410	17	repro	model	model		2026-11-06T15:24:29Z	4.6	
+410	18	repro	tool	shell	bash	2026-11-06T15:24:34Z	0.0	cd crates/bevy_cauldron; sed -n 4965,5000p src/tiles.rs; sed -n 5100,5180p src/tiles.rs; sed -n 5435,5470p src/tiles.rs; grep -n "^mod\|^pub mod" tests/all.rs |
+410	19	repro	model	model		2026-11-06T15:24:34Z	2.7	
+410	20	repro	tool	shell	bash	2026-11-06T15:24:36Z	0.0	cd crates/bevy_cauldron/tests; sed -n 1,80p capture_feedback_1793905698793.rs; sed -n 1085,1120p headless.rs
+410	21	repro	model	model		2026-11-06T15:24:36Z	3.7	
+410	22	repro	tool	shell	bash	2026-11-06T15:24:40Z	0.0	cd crates/bevy_cauldron/tests; grep -n "pub fn \|fn descriptor\|fn pack" fixtures.rs | head -40
+410	23	repro	model	model		2026-11-06T15:24:40Z	1.0	
+410	24	repro	tool	shell	bash	2026-11-06T15:24:41Z	0.0	cd crates/bevy_cauldron/tests; ls fixtures* ; grep -rn "pub fn descriptor\|pub fn pack\|pub fn build" fixtures/ | head
+410	25	repro	model	model		2026-11-06T15:24:41Z	0.8	
+410	26	repro	tool	shell	bash	2026-11-06T15:24:42Z	0.0	cd crates/bevy_cauldron/tests; sed -n 630,700p fixtures/mod.rs
+410	27	repro	model	model		2026-11-06T15:24:42Z	9.2	
+410	28	build	tool	phase mark	bash	2026-11-06T15:24:51Z	60.0	[launched bg_1] cd crates/bevy_cauldron/tests; cat > capture_feedback_1793968919654.rs <<'EOF' //! **Every pack on the Kits door starts folded** (`feedback-1793968919654`, file
+410	29	build	model	model		2026-11-06T15:25:51Z	1.8	
+410	30	build	tool	wait: other	wait	2026-11-06T15:25:53Z	41.0	{}
+410	31	build	model	model		2026-11-06T15:26:34Z	6.2	
+410	32	prove	tool	phase mark	bash	2026-11-06T15:26:40Z	60.0	[launched bg_2] cd crates/bevy_cauldron && python3 - <<'EOF' p="src/tiles.rs" s=open(p).read() old=s[s.index(" // **On the first look, only the packs THIS MAP builds from are o
+410	33	prove	model	model		2026-11-06T15:27:40Z	0.8	
+410	34	prove	tool	wait: other	wait	2026-11-06T15:27:41Z	125.0	{}
+410	35	prove	model	model		2026-11-06T15:29:46Z	2.6	
+410	36	gate	tool	phase mark	bash	2026-11-06T15:29:49Z	60.0	[launched bg_3] python3 tools/changelog/changelog.py add --id feedback-1793968919654 --sha HEAD --title "Kit packs on the Kits door start collapsed; only the pack holding the s
+410	37	gate	model	model		2026-11-06T15:30:49Z	1.3	
+410	38	gate	tool	wait: other	wait	2026-11-06T15:30:50Z	540.8	{}
+410	39	gate	model	model		2026-11-06T15:39:51Z	9.6	
+410	40	ship	tool	phase mark	bash	2026-11-06T15:40:00Z	11.0	python3 tools/loop/steps.py mark ship sed -i 's/`HEAD` Kit packs on the Kits door/`c893709` Kit packs on the Kits door/' CHANGELOG.md python3 tools/loop/capture
+410	41	ship	model	model		2026-11-06T15:40:11Z	1.1	
+410	42	ship	tool	loop tools	bash	2026-11-06T15:40:13Z	0.1	git status -sb | head -3; python3 tools/loop/captures.py check
+410	43	ship	model	model		2026-11-06T15:40:13Z	4.6	
