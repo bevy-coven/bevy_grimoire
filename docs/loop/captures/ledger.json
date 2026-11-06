@@ -211,10 +211,10 @@
       "app_version": "0.2.7",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "requeued by owner 2026-11-06: cause located at chrome.rs:3864, the failing test is the next step",
-      "commit": "",
+      "reason": "the door cue was a bare 'Map'/'Kit' on the tab row's baseline, read as a fourth tab; it now reads 'Switch to Map/Kit'",
+      "commit": "5e2f033",
       "attempts": [
         {
           "host": "mac_air",
