@@ -257,10 +257,10 @@
       "taken_at_ms": 1793928159971,
       "app_version": "0.2.7",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "a hover highlighting the wrong row describes how the screen IS; measured from the frame, the highlight band centres at physical y 772 while the recorded cursor is at 694.7 \u2014 77 physical px (38.5 logical) below the pointer",
       "commit": "",
       "attempts": []
     },
