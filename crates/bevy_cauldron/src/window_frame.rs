@@ -7,13 +7,16 @@
 //!   size, capped at [`MAX_FIT`], floored at [`MIN_SIZE`], and is centred ([`fit`]);
 //! * the frame it had when a project last opened, or the editor last closed, is kept in the recent-projects file
 //!   ([`crate::recent::Recent::window`]) and used instead of the fit, **when it still lies within a monitor**
-//!   ([`choose`]): a monitor that was unplugged leaves a saved frame nobody can see, and that is ignored.
+//!   ([`choose`]): a monitor that was unplugged leaves a saved frame nobody can see, and that is ignored;
+//! * the window then **takes the size the system gave it** ([`take_the_given_size`]), which is not always the one
+//!   asked for: macOS will not open a window taller than the room between the menu bar and the Dock.
 //!
 //! The decision is two pure functions over [`MonitorArea`]s; the systems only gather monitors and apply the answer.
 //! A window in fullscreen (`GRIMOIRE_FULLSCREEN`, for automated checks) is left alone.
 
+use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
-use bevy::window::{Monitor, PrimaryMonitor, PrimaryWindow, WindowMode, WindowPosition};
+use bevy::window::{Monitor, PrimaryMonitor, PrimaryWindow, WindowEvent, WindowMode, WindowPosition, WindowResized};
 
 use crate::recent::{self, RecentProjects, WindowFrame};
 use crate::screen::Screen;
@@ -95,17 +98,28 @@ pub struct WindowFramePlugin;
 impl Plugin for WindowFramePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LastFrame>()
+            .init_resource::<FrameAsked>()
+            // Written by `take_the_given_size`. `WindowPlugin` registers both; registering is idempotent, and an app
+            // without it (a test's `MinimalPlugins`) still runs the plugin.
+            .add_message::<WindowResized>()
+            .add_message::<WindowEvent>()
+            .add_systems(First, take_the_given_size)
             .add_systems(Update, (fit_the_window, watch_the_window).chain())
             .add_systems(OnEnter(Screen::Editor), save_the_window)
             .add_systems(Last, save_the_window.run_if(on_message::<AppExit>));
     }
 }
 
+/// Set when [`fit_the_window`] has asked the system for a frame, until [`take_the_given_size`] has read what it got.
+#[derive(Resource, Default, Debug)]
+struct FrameAsked(bool);
+
 /// Places the window once, on the first frame a monitor is known: the saved frame if it is still on screen, else the fit.
 fn fit_the_window(
     monitors: Query<(&Monitor, Has<PrimaryMonitor>)>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     recents: Option<Res<RecentProjects>>,
+    mut asked: ResMut<FrameAsked>,
     mut placed: Local<bool>,
 ) {
     if *placed {
@@ -129,6 +143,58 @@ fn fit_the_window(
     let frame = choose(saved, &all, primary);
     window.resolution.set(frame.w as f32, frame.h as f32);
     window.position = WindowPosition::At(IVec2::new(frame.x, frame.y));
+    asked.0 = true;
+}
+
+/// **The window is the size the system gave it, not the size it was asked to be.**
+///
+/// [`fit_the_window`] asks for a frame by writing `Window::resolution`. `bevy_winit` passes the request on in `Last`
+/// and waits for the system's `Resized` to say what it got ("In `None` case, the request will be handled by
+/// winit::event::WindowEvent::Resized", `bevy_winit-0.20.0/src/system.rs:405`). A system that refuses the request
+/// *without changing the window* sends no `Resized`, because nothing was resized, so `Window::resolution` keeps the
+/// refused size for the rest of the run.
+///
+/// macOS does exactly that with a window taller than the room between the menu bar and the Dock, and a frame saved
+/// in full screen is one. Measured on mac_air on 2026-11-06, a 1280x828 screen with 735 points free: the saved
+/// frame asked for 1280x802, the window had already been held to 1280x703 when it opened, so asking for more
+/// changed nothing, and `Window::resolution` said 802 for the whole session. The surface and the pointer are both
+/// sized from that number (`crate::surface`, `crate::view::sense_pointer`), so the picture was squeezed into 703
+/// points while the cursor was read against 802: every hover and click landed below the button it was aimed at,
+/// further below the lower the button.
+///
+/// So in the frame after the request was applied, the window's own inner size is read from winit and, when it
+/// differs, becomes `Window::resolution`, announced with the two messages `bevy_winit` writes for a `Resized`
+/// (`react_to_resize`), so the cameras refit as they would for any resize. The request is answered by then
+/// wherever a refusal is silent: macOS applies `setContentSize` before returning, and the instrumented launch read
+/// the held size in the very next frame. A run with no winit window (headless) has nothing to read; a window winit
+/// has not created yet reports its real size through `Resized` when it is.
+fn take_the_given_size(
+    mut asked: ResMut<FrameAsked>,
+    mut windows: Query<(Entity, &mut Window), With<PrimaryWindow>>,
+    mut resized: MessageWriter<WindowResized>,
+    mut window_events: MessageWriter<WindowEvent>,
+    _winit_is_on_the_main_thread: NonSendMarker,
+) {
+    if !std::mem::take(&mut asked.0) {
+        return;
+    }
+    let Ok((entity, mut window)) = windows.single_mut() else { return };
+    let Some(given) = bevy::winit::WINIT_WINDOWS.with_borrow(|w| w.get_window(entity).map(|w| w.inner_size())) else {
+        return;
+    };
+    let asked_for = (window.resolution.physical_width(), window.resolution.physical_height());
+    if (given.width, given.height) == asked_for {
+        return;
+    }
+    info!(
+        target: "cauldron::startup",
+        "the window was given {}x{} physical, not the {}x{} asked for: the system held it to the room it has",
+        given.width, given.height, asked_for.0, asked_for.1
+    );
+    window.resolution.set_physical_resolution(given.width, given.height);
+    let event = WindowResized { window: entity, width: window.width(), height: window.height() };
+    resized.write(event.clone());
+    window_events.write(event.into());
 }
 
 fn watch_the_window(windows: Query<&Window, (With<PrimaryWindow>, Changed<Window>)>, mut last: ResMut<LastFrame>) {
