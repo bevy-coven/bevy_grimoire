@@ -215,12 +215,21 @@
       "taken_at_ms": 1793928048623,
       "app_version": "0.2.7",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "",
+      "reason": "the note describes how the panel IS (text past its edge, rows sharing a band), so a bug; but it is not closable this pass: the headless rebuild passes on the base commit (containment and non-overlap both hold there), and the live reproduction could not reach the Pieces panel at all \u2014 the installed 0.2.9 opens on the MAP door and neither clicking the Meshes tab nor the door_open operation left it (both left door=MAP mode=MAP). See feedback-1793927950267 for the same click-not-reaching symptom, which may be one cause",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "not_reproduced",
+          "saw": "the app opened on the MAP door with the Inspector panel; the Meshes tab could not be reached (clicking it and the door_open operation both left door=MAP mode=MAP), so the Pieces panel the capture shows was never on screen"
+        }
+      ]
     },
     {
       "stem": "feedback-1793928091805",
