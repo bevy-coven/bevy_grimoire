@@ -83,6 +83,9 @@ pub struct Terminal {
     /// **The caret a shell gets when its program asks for none** (#324): the person's
     /// `terminal_cursor` setting, given to every open screen and to each one spawned after.
     default_caret: CaretShape,
+    /// **The history each shell keeps** (#324), the person's `terminal_scrollback`; `None` until a setting
+    /// names one, which is [`SCROLLBACK`].
+    scrollback: Option<usize>,
 }
 
 /// One shell, its screen, and what is drawn about it.
@@ -130,6 +133,7 @@ impl Terminal {
                 let mut screen = grid::TerminalScreen::new(cols, rows);
                 screen.resize(cols, rows);
                 screen.set_default_caret(self.default_caret);
+                screen.set_scrollback(self.scrollback.unwrap_or(SCROLLBACK));
                 self.open.push(TerminalTab {
                     title,
                     cd_offered: None,
@@ -156,6 +160,14 @@ impl Terminal {
         self.default_caret = shape;
         for tab in &mut self.open {
             tab.screen.set_default_caret(shape);
+        }
+    }
+
+    /// **The history every shell keeps** (#324), now and for each shell opened after.
+    pub fn set_scrollback(&mut self, lines: usize) {
+        self.scrollback = Some(lines);
+        for tab in &mut self.open {
+            tab.screen.set_scrollback(lines);
         }
     }
 

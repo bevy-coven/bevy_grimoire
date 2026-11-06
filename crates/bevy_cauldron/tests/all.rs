@@ -461,3 +461,5 @@ mod the_shell_knows_it_runs_in_cauldron;
 mod the_terminal_draws_in_a_nerd_font;
 mod every_terminal_run_is_drawn_in_the_nerd_font;
 mod the_terminal_takes_its_settings;
+mod the_terminal_keeps_the_scrollback_it_is_set_to;
+mod command_k_clears_the_terminal;

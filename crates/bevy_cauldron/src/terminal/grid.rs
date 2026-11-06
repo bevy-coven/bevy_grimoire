@@ -206,6 +206,8 @@ pub struct TerminalScreen {
     search: Option<Search>,
     /// The caret the person's setting gives when the program asks for none (#324).
     default_caret: CaretShape,
+    /// How many lines of history this screen keeps: [`SCROLLBACK`] unless the person set another.
+    scrollback: usize,
 }
 
 impl TerminalScreen {
@@ -219,7 +221,7 @@ impl TerminalScreen {
         let cols = cols.max(2);
         let rows = rows.max(1);
         let listener = TerminalListener::default();
-        let config = screen_config(CaretShape::Block);
+        let config = screen_config(CaretShape::Block, SCROLLBACK);
         let term = Term::new(config, &Size { cols: cols as usize, rows: rows as usize }, listener.clone());
         TerminalScreen {
             term,
@@ -233,6 +235,7 @@ impl TerminalScreen {
             rows_count: rows,
             search: None,
             default_caret: CaretShape::Block,
+            scrollback: SCROLLBACK,
         }
     }
 
@@ -244,8 +247,25 @@ impl TerminalScreen {
             return;
         }
         self.default_caret = shape;
-        self.term.set_options(screen_config(shape));
+        self.term.set_options(screen_config(shape, self.scrollback));
         self.dirty = true;
+    }
+
+    /// **How many lines of history this screen keeps** (#324, the person's `terminal_scrollback`). Fewer
+    /// than it holds drops the oldest at once; more keeps everything and grows from here.
+    pub fn set_scrollback(&mut self, lines: usize) {
+        if self.scrollback == lines {
+            return;
+        }
+        self.scrollback = lines;
+        self.term.set_options(screen_config(self.default_caret, lines));
+        self.dirty = true;
+        self.search_again();
+    }
+
+    /// How many lines of history this screen keeps at most.
+    pub fn scrollback(&self) -> usize {
+        self.scrollback
     }
 
     /// The emulator's current width in cells.
@@ -525,9 +545,26 @@ impl TerminalScreen {
         // the Clear menu item would quietly turn into a setting. The second call raises the ceiling
         // and shrinks nothing, because there is nothing left to shrink.
         self.term.grid_mut().update_history(0);
-        self.term.grid_mut().update_history(SCROLLBACK);
+        self.term.grid_mut().update_history(self.scrollback);
         self.dirty = true;
         self.search_again();
+    }
+
+    /// **Clear the terminal, keeping the prompt** (#326): what xterm.js's `clear()` does for VS Code's
+    /// Cmd+K. The cursor's line, where the shell's prompt is, becomes the first line, and every line
+    /// above it, on screen or in the scrollback, goes. Done in the emulator rather than by asking the
+    /// shell: a shell asked to clear (Ctrl+L) clears with `ESC[2J`, which alacritty, like every terminal
+    /// that keeps history, moves into the scrollback it was meant to empty.
+    pub fn clear_keeping_prompt(&mut self) {
+        self.scroll_to_bottom();
+        let row = self.term.grid().cursor.point.line.0;
+        if row > 0 {
+            // Scroll the screen up by the cursor's row and move the cursor with it: the prompt's line
+            // is the top one and the cursor is still on it.
+            let keep_prompt = format!("\x1b[{row}S\x1b[{row}A");
+            self.parser.advance(&mut self.term, keep_prompt.as_bytes());
+        }
+        self.clear_scrollback();
     }
 
     /// **How many lines of history the session is holding above its viewport.**
@@ -718,14 +755,14 @@ static NEXT_STAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::
 
 /// **The emulator's settings for one screen**: the bounded scrollback, and the caret it draws when the
 /// program asks for none (#324). One place, so a screen built and a screen re-set agree.
-fn screen_config(caret: CaretShape) -> Config {
+fn screen_config(caret: CaretShape, scrollback: usize) -> Config {
     let shape = match caret {
         CaretShape::Block => AnsiCursorShape::Block,
         CaretShape::Underline => AnsiCursorShape::Underline,
         CaretShape::Bar => AnsiCursorShape::Beam,
     };
     Config {
-        scrolling_history: SCROLLBACK,
+        scrolling_history: scrollback,
         default_cursor_style: CursorStyle { shape, blinking: false },
         ..Default::default()
     }

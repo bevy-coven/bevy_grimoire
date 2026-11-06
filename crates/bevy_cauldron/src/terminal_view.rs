@@ -202,6 +202,7 @@ fn take_the_terminal_settings(
         return;
     }
     terminal.set_default_caret(settings.terminal_cursor.shape());
+    terminal.set_scrollback(settings.terminal_scrollback);
     if metrics.text_scale != settings.terminal_text_scale {
         metrics.text_scale = settings.terminal_text_scale;
         metrics.measured = false;
@@ -705,6 +706,7 @@ fn type_keys(
         if closes.just_pressed(&keys)
             || crate::terminal_pane::COLLAPSE_CHORD.just_pressed(&keys)
             || FIND_CHORD.just_pressed(&keys)
+            || crate::terminal_pane::CLEAR_CHORD.just_pressed(&keys)
         {
             // The pane's own chords: `toggle_on_the_chord` and `collapse_on_the_chord` read the same
             // `ButtonInput` this frame, so this system's job is only to **not** forward them to the

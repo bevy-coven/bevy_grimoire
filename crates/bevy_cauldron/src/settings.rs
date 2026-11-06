@@ -117,6 +117,9 @@ pub struct EditorSettings {
     pub terminal_cursor: TerminalCursor,
     /// The terminal's caret blinks. On by default, as it has been since the terminal shipped.
     pub terminal_cursor_blink: bool,
+    /// How many lines of output each terminal keeps above its screen (#324): VS Code's
+    /// `terminal.integrated.scrollback`.
+    pub terminal_scrollback: usize,
 }
 
 impl Default for EditorSettings {
@@ -133,9 +136,15 @@ impl Default for EditorSettings {
             terminal_text_scale: 1.0,
             terminal_cursor: TerminalCursor::default(),
             terminal_cursor_blink: true,
+            terminal_scrollback: crate::terminal::SCROLLBACK,
         }
     }
 }
+
+/// **The fewest and the most lines of history a terminal may keep** (#324): under the first, a build's
+/// error is gone before it can be scrolled to; over the second, a long day's output is a slow leak in
+/// the editor's memory (each line is a row of cells).
+pub const SCROLLBACK_RANGE: (usize, usize) = (100, 100_000);
 
 /// The faintest and fullest the grid may be drawn: below the first it cannot be seen.
 pub const GRID_STRENGTH_RANGE: (f32, f32) = (0.1, 1.0);
@@ -169,6 +178,8 @@ pub struct SettingsLayer {
     pub terminal_cursor: Option<TerminalCursor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_cursor_blink: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_scrollback: Option<usize>,
 }
 
 impl Default for SettingsLayer {
@@ -186,6 +197,7 @@ impl Default for SettingsLayer {
             terminal_text_scale: None,
             terminal_cursor: None,
             terminal_cursor_blink: None,
+            terminal_scrollback: None,
         }
     }
 }
@@ -212,6 +224,11 @@ impl SettingsLayer {
             {
                 return Err(refuse(field, format!("{v} is outside {} to {}", SCALE_RANGE.0, SCALE_RANGE.1)));
             }
+        }
+        if let Some(v) = layer.terminal_scrollback
+            && !(SCROLLBACK_RANGE.0..=SCROLLBACK_RANGE.1).contains(&v)
+        {
+            return Err(refuse("terminal_scrollback", format!("{v} lines is outside {} to {}", SCROLLBACK_RANGE.0, SCROLLBACK_RANGE.1)));
         }
         if let Some(v) = layer.grid_strength
             && !(GRID_STRENGTH_RANGE.0..=GRID_STRENGTH_RANGE.1).contains(&v)
@@ -248,6 +265,7 @@ impl EditorSettings {
             out.terminal_text_scale = layer.terminal_text_scale.unwrap_or(out.terminal_text_scale);
             out.terminal_cursor = layer.terminal_cursor.unwrap_or(out.terminal_cursor);
             out.terminal_cursor_blink = layer.terminal_cursor_blink.unwrap_or(out.terminal_cursor_blink);
+            out.terminal_scrollback = layer.terminal_scrollback.unwrap_or(out.terminal_scrollback);
         }
         out
     }

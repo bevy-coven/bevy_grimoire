@@ -198,6 +198,11 @@ impl TerminalFind {
 /// keys, so a shell never sees Ctrl+F (forward a character, in readline) from this pane.
 pub const FIND_CHORD: bevy_gooey::Shortcut = bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY, KeyCode::KeyF);
 
+/// **The chord that clears the terminal** (#326): Command+K, VS Code's `workbench.action.terminal.clear`
+/// on a mac. On the Command key rather than the primary one, so off a mac Ctrl+K stays the shell's
+/// kill-line, as VS Code leaves it; there the chord is Super+K, which a desktop rarely gives an app.
+pub const CLEAR_CHORD: bevy_gooey::Shortcut = bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::META, KeyCode::KeyK);
+
 /// **A screen root the terminal docks across the bottom of** (#314): the projects home, the project
 /// page and the loading screen put this on their root, and the pane is built as its last child the
 /// moment the root is spawned. The editor's frame is not one: it docks the pane above its status band
@@ -383,7 +388,13 @@ impl Plugin for TerminalPanePlugin {
             // precedent for. `no_context_gains_a_key` is therefore untouched.
             .add_systems(
                 Update,
-                (toggle_on_the_chord, collapse_on_the_chord, close_the_tab_on_its_chord, open_find_on_its_chord)
+                (
+                    toggle_on_the_chord,
+                    collapse_on_the_chord,
+                    close_the_tab_on_its_chord,
+                    open_find_on_its_chord,
+                    clear_on_its_chord,
+                )
                     .in_set(crate::terminal_view::TerminalChordSet),
             )
             .add_observer(a_click_takes_the_keyboard)
@@ -871,6 +882,19 @@ fn close_the_tab_on_its_chord(
     let mut terminal = terminal;
     terminal.close_active();
     redraw_the_bar(&mut commands, &bar, &terminal);
+}
+
+/// **Command+K, with the shell holding the keys, clears the terminal** (#326): the prompt's line becomes
+/// the first line and everything above it goes, scrollback and screen
+/// ([`crate::terminal::TerminalScreen::clear_keeping_prompt`]). Nothing reaches the shell, neither the
+/// chord (`terminal_view::type_keys` never forwards it) nor a request to clear.
+fn clear_on_its_chord(keys: Res<ButtonInput<KeyCode>>, focus: Res<TerminalFocus>, mut terminal: ResMut<Terminal>) {
+    if !focus.holds() || !CLEAR_CHORD.just_pressed(&keys) {
+        return;
+    }
+    if let Some(tab) = terminal.tab_mut() {
+        tab.screen_mut().clear_keeping_prompt();
+    }
 }
 
 /// **Primary+F, with the shell holding the keys, opens find** (#321), or gives the keys back to a box

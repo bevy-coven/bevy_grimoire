@@ -68,6 +68,11 @@ pub const THEMES: &[&str] = &["Tool dark", "Parchment", "High contrast"];
 /// The names of [`TerminalCursor`]'s variants, in declaration order.
 pub const TERMINAL_CURSORS: &[&str] = &["Block", "Underline", "Bar"];
 
+/// **The scrollback lengths the screen offers** (#324), and their words. A file may set any length
+/// [`crate::settings::SCROLLBACK_RANGE`] allows; the screen shows the nearest of these for one between.
+pub const SCROLLBACK_CHOICES: &[usize] = &[1_000, 5_000, 10_000, 50_000];
+pub const SCROLLBACK_NAMES: &[&str] = &["1,000 lines", "5,000 lines", "10,000 lines", "50,000 lines"];
+
 /// **Every key a settings file may set.** The order is the order within a category.
 pub const CATALOGUE: &[Setting] = &[
     Setting {
@@ -140,6 +145,13 @@ pub const CATALOGUE: &[Setting] = &[
         description: "The terminal's cursor blinks; off, it stays lit.",
         kind: Kind::Switch,
     },
+    Setting {
+        key: "terminal_scrollback",
+        label: "Terminal scrollback",
+        category: "Terminal",
+        description: "How many lines of output each terminal keeps to scroll back through and to find in.",
+        kind: Kind::Options(SCROLLBACK_NAMES),
+    },
 ];
 
 /// The setting with this key.
@@ -188,6 +200,19 @@ fn cursor_at(index: usize) -> TerminalCursor {
     }
 }
 
+/// The offered scrollback length nearest `lines`.
+fn scrollback_index(lines: usize) -> usize {
+    SCROLLBACK_CHOICES
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, choice)| choice.abs_diff(lines))
+        .map_or(0, |(at, _)| at)
+}
+
+fn scrollback_at(index: usize) -> usize {
+    SCROLLBACK_CHOICES.get(index).copied().unwrap_or(crate::terminal::SCROLLBACK)
+}
+
 fn theme_at(index: usize) -> Theme {
     match index {
         1 => Theme::Parchment,
@@ -210,6 +235,7 @@ impl EditorSettings {
             "terminal_text_scale" => Value::Number(self.terminal_text_scale),
             "terminal_cursor" => Value::Option(cursor_index(self.terminal_cursor)),
             "terminal_cursor_blink" => Value::On(self.terminal_cursor_blink),
+            "terminal_scrollback" => Value::Option(scrollback_index(self.terminal_scrollback)),
             _ => return None,
         })
     }
@@ -244,6 +270,7 @@ impl SettingsLayer {
             "terminal_text_scale" => self.terminal_text_scale.map(Value::Number),
             "terminal_cursor" => self.terminal_cursor.map(|c| Value::Option(cursor_index(c))),
             "terminal_cursor_blink" => self.terminal_cursor_blink.map(Value::On),
+            "terminal_scrollback" => self.terminal_scrollback.map(|lines| Value::Option(scrollback_index(lines))),
             _ => None,
         }
     }
@@ -261,6 +288,7 @@ impl SettingsLayer {
             ("terminal_text_scale", Value::Number(n)) => self.terminal_text_scale = Some(n),
             ("terminal_cursor", Value::Option(i)) => self.terminal_cursor = Some(cursor_at(i)),
             ("terminal_cursor_blink", Value::On(on)) => self.terminal_cursor_blink = Some(on),
+            ("terminal_scrollback", Value::Option(i)) => self.terminal_scrollback = Some(scrollback_at(i)),
             _ => return false,
         }
         true
@@ -279,6 +307,7 @@ impl SettingsLayer {
             "terminal_text_scale" => self.terminal_text_scale = None,
             "terminal_cursor" => self.terminal_cursor = None,
             "terminal_cursor_blink" => self.terminal_cursor_blink = None,
+            "terminal_scrollback" => self.terminal_scrollback = None,
             _ => {}
         }
     }
