@@ -176,7 +176,7 @@
       "kind": "bug",
       "status": "blocked",
       "host": "mac_air",
-      "reason": "CORRECTED by pass 391: this row blamed a product 'click not reaching the button'. Measured on 0.2.9, the fault is the HARNESS \u2014 the injected pointer never establishes a pick (10 MenuTitles, all Hovered=false, while the frame shows one lit), and keyboard injection works from the same call (Cmd+O moved editor->project). So 'the click does nothing' was my instrument, not the editor. What still stands from this capture: a synthetic Activate on the NavTab DOES switch the page, so the handler is correct. Re-reproduce with a real mouse before believing any defect here",
+      "reason": "SUPERSEDED IN PART by pass 392: the claim that the injected pointer never establishes a pick was wrong \u2014 measured on 0.2.9, injecting LOGICAL 41.25,87.5 hovers the control whose ComputedNode centre is PHYSICAL 82.5,175. The earlier misses were a coordinate-space error (ComputedNode/UiGlobalTransform are physical, the injected cursor is logical), not a product fault. What still stands: the capture's own observation, and for 950267 that a synthetic Activate on the NavTab does switch the page. Re-reproduce live with logical coordinates before believing any defect on this row",
       "commit": "",
       "attempts": [
         {
@@ -218,7 +218,7 @@
       "kind": "bug",
       "status": "blocked",
       "host": "mac_air",
-      "reason": "CORRECTED by pass 391: the 'clicks do not land' half of this row's reason was my harness, not the product \u2014 the injected pointer never establishes a pick on 0.2.9 (measured: every MenuTitle Hovered=false while the frame shows one lit; keyboard injection works). What stands: the capture's frame genuinely shows the Pieces panel overflowing (text past the right edge, rows overlapping, the drill hint off the edge), and the headless containment test passes on the base commit. So this is 'seen, not testable' \u2014 reproduce with a real mouse, or find a headless route to the Meshes tab",
+      "reason": "SUPERSEDED IN PART by pass 392: the claim that the injected pointer never establishes a pick was wrong \u2014 measured on 0.2.9, injecting LOGICAL 41.25,87.5 hovers the control whose ComputedNode centre is PHYSICAL 82.5,175. The earlier misses were a coordinate-space error (ComputedNode/UiGlobalTransform are physical, the injected cursor is logical), not a product fault. What still stands: the capture's own observation, and for 950267 that a synthetic Activate on the NavTab does switch the page. Re-reproduce live with logical coordinates before believing any defect on this row",
       "commit": "",
       "attempts": [
         {
@@ -239,7 +239,7 @@
       "kind": "bug",
       "status": "blocked",
       "host": "mac_air",
-      "reason": "CORRECTED: the earlier note on this row blamed the product. The real limit is the harness: on the installed 0.2.9 the injected pointer never establishes a pick, so no MenuTitle is ever Hovered (measured: 10 titles, all false, while the screenshot shows one lit) and a menu cannot be opened over BRP. Keyboard injection does work (Cmd+O moved editor->project), which isolates it to the pointer path. The alignment claim in the note is also likely a consequence of gooey#45's tofu widths, not a layout fault: gooey right-aligns by construction (MenuText flex_grow=1, MenuShortcut flex_shrink=0). Reproduce by real mouse or by opening a menu in a test if gooey exposes one",
+      "reason": "SUPERSEDED by pass 392's measurement: pass 391 recorded that the injected pointer never establishes a pick, and that was WRONG. Measured on 0.2.9 this pass: injecting LOGICAL 41.25,87.5 hovers the control whose ComputedNode centre is PHYSICAL 82.5,175 \u2014 so hover works, and the earlier misses were a coordinate-space error (ComputedNode/UiGlobalTransform report physical; the injected cursor takes logical). What still stands for this capture: the ? is gooey#45's tofu, and the ragged column follows from tofu widths rather than from gooey's alignment (MenuText flex_grow=1, MenuShortcut flex_shrink=0). Still blocked because a menu could not be opened over BRP to measure the column",
       "commit": "",
       "attempts": [
         {
@@ -258,11 +258,20 @@
       "app_version": "0.2.7",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "a hover highlighting the wrong row describes how the screen IS; measured from the frame, the highlight band centres at physical y 772 while the recorded cursor is at 694.7 \u2014 77 physical px (38.5 logical) below the pointer",
+      "reason": "reproduced from the record \u2014 the menu's hover band centres at physical y 772 while the recorded pointer is at 694.7, i.e. 77 physical px (38.5 logical) below the cursor \u2014 but seen, not testable in this harness. Two attempts at the whole-application test both failed for harness reasons, and both are worth recording: (1) writing bevy_debugger_bevy::DebugCursor does nothing headless because view::sense_pointer returns None without a PrimaryWindow (it needs a window to convert into surface space), so the pointer never moved and one node stayed hovered across every iteration; (2) even with a window, Hovered is not driven in the harness the way it is live \u2014 an_injected_pointer_over_a_dock_is_pickable asserts on PointerLocation for a divider, not on Hovered for a row. Next pass: reproduce live on mac_air instead, where hover demonstrably works (measured this pass: injecting logical 41.25,87.5 hovers the control whose ComputedNode centre is physical 82.5,175), and bisect from there",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "the menu's hover band centres at physical y 772 while the recorded pointer is at 694.7: the highlight sits 77 physical px (38.5 logical) below where the mouse is, matching the note exactly"
+        }
+      ]
     },
     {
       "stem": "feedback-1793968919654",
