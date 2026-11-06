@@ -1,0 +1,20 @@
+{
+  "name": "terminal_grounds",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [{"seconds": 8}, {"seconds": 8}],
+  "steps": [
+    {"at": 0.3, "caption": "Ctrl+` opens the terminal"},
+    {"at": 0.8, "key": "Backquote", "mods": ["ControlLeft"]},
+    {"at": 2.2, "type": "seq 1 14"},
+    {"at": 3.0, "key": "Enter"},
+    {"at": 3.6, "caption": "a screenful of output, and the prompt stays on screen"},
+    {"at": 5.0, "type": "printf '\\033[7m inverse \\033[0m plain \\033[41m red ground \\033[0m\\n'"},
+    {"at": 6.6, "key": "Enter"},
+    {"at": 7.2, "caption": "inverse text and coloured grounds are drawn"},
+    {"at": 10.0, "caption": "a drag shows what it selects"},
+    {"at": 10.6, "drag": [20, 543, 420, 543], "secs": 1.6}
+  ]
+}
