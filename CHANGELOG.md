@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-06
 
+- **feedback-1793968919654** `HEAD` Kit packs on the Kits door start collapsed; only the pack holding the selected mesh is open *No clip: a default state of an existing list; proved by capture_feedback_1793968919654*
 - **terminal-output-path** `f89e1df` The terminal parses a shell's output in place and draws nothing on a frame where the screen did not change *No clip: a performance change on the terminal's output path; 1000 one-byte feeds 35 ms -> 21 us measured on big; proved by terminal::flow_tests (a_screen_is_restamped_on_a_change_and_only_then, a_flood_never_holds_one_drain, ctrl_c_stops_a_flood_and_the_shell_goes_quiet)*
 - **feedback-1793928006124** The strip's cue to the other door reads 'Switch to Map' instead of a bare 'Map' that looked like a fourth tab *For you: The door cue beside the tabs now says "Switch to Map" (or Kit), so it no longer looks like another tab.* *No clip: a one-word label change; proved by capture_feedback_1793928006124_switch*
 - **feedback-1793927950267-rail** `f89e1df` Choosing a sidebar tab on the home moves the selection rail with it, instead of leaving the old tab railed too *No clip: a one-frame visual in the launcher sidebar; proved by capture_feedback_1793927950267_rail*

@@ -5483,23 +5483,16 @@ pub(crate) fn scan(project: &Project, state: &mut ImportState) {
     // kit's own.
     match import::scan(&root, &root, &project.measured) {
         Ok(found) => {
-            // **On the first look, only the packs THIS MAP builds from are open.**
-            //
-            // This keyed off library membership, which is the wrong question by one step: a kit can
-            // be fully imported and have nothing to do with the map open in front of you. The site
-            // kit and the furniture kit are both in `library.ron`; a session spent on `site_67` wants
-            // the one it is placing from, and a dozen open packs is an alphabet to scroll past on the
-            // way to the work in progress.
+            // **On the first look, every pack is folded** — reported as `feedback-1793968919654`:
+            // *"They should default to collapsed."* The rule before it opened every pack the kit draws
+            // from, which on the Kits door is most of the shelf, so the first look was the whole list.
+            // The one pack the default selection lands in is opened below, because a tab must never
+            // open with its selection hidden.
             //
             // Only the FIRST scan seeds this — a rescan mid-session must not stomp the folds the
             // author has since toggled by hand.
             if !state.scanned {
-                let used = packs_the_kit_draws_from(project);
-                state.folded_packs = packs(&found)
-                    .into_iter()
-                    .map(|(pack, _)| pack)
-                    .filter(|pack| !used.contains(pack.as_str()))
-                    .collect();
+                state.folded_packs = packs(&found).into_iter().map(|(pack, _)| pack).collect();
             }
             let blocked = found.iter().filter(|c| c.blocked()).count();
             let warned = found
@@ -5528,12 +5521,14 @@ pub(crate) fn scan(project: &Project, state: &mut ImportState) {
             {
                 Some((_, members)) => state.selected = members.first().copied().unwrap_or(0),
                 None => {
-                    // Nothing is showing. Open the first pack this kit actually uses — never an
-                    // excluded one, which the author took out on purpose and which cannot be
-                    // imported anyway.
+                    // Nothing is showing. Open the first pack this kit draws from, else the first
+                    // pack — never an excluded one, which the author took out on purpose and which
+                    // cannot be imported anyway.
+                    let used = packs_the_kit_draws_from(project);
                     if let Some((pack, members)) = grouped
                         .iter()
-                        .find(|(pack, _)| !project.policy.excludes(pack))
+                        .find(|(pack, _)| used.contains(pack.as_str()) && !project.policy.excludes(pack))
+                        .or_else(|| grouped.iter().find(|(pack, _)| !project.policy.excludes(pack)))
                         .or_else(|| grouped.first())
                     {
                         state.folded_packs.remove(pack);
