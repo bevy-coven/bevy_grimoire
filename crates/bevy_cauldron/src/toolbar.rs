@@ -242,11 +242,34 @@ pub fn spawn_toolbar(
                 if let Some(mut node) = modes.get_mut::<Node>() {
                     node.margin.left = Val::Px(edge);
                 }
+                // **The one labelled button that is not a mode stands with the modes**, before the
+                // separator: `LABELLED_BUTTON`'s own doc says Fill is "which the brush's own row of
+                // tools stands beside". Spawning it in the command loop below put a 46.7-px worded
+                // button in a run of 30.8-px pictures — `feedback-1793927698061`, *"Why is the fill
+                // button larger here? It looks out of place."* — because that loop is where the
+                // pictures live and Fill is not one of them.
+                //
+                // It stays a one-shot command and not a group option: `toolbar.rs`'s header says Fill
+                // is "a one-shot flood from the cursor, not a mode", and a lit Fill would claim a mode
+                // the editor does not have.
+                if let Some(command) = commands::by_id(LABELLED_BUTTON.0)
+                    && let Some(index) = icons::index(command.id)
+                {
+                    parent.spawn((
+                        ToolbarCommand(command.id),
+                        bevy_gooey::icon_button(
+                            bevy_gooey::IconSource::Atlas { image: image.clone(), layout: layout.clone(), index },
+                            bevy_gooey::Tooltip::new(command.title).with_shortcut(command.shortcut),
+                        ),
+                    ));
+                }
                 parent.spawn(bevy_gooey::toolbar_separator());
                 // **Everything else is a one-shot command**, so it is a button and never a member of a
                 // group: a lit "Undo" would be lying about what `Ctrl+Z` did.
                 for command in shown() {
-                    if tools().iter().any(|(id, _)| *id == command.id) {
+                    // The modes are the group above, and Fill is the labelled button above it: this loop
+                    // is the pictures, and neither belongs in it.
+                    if tools().iter().any(|(id, _)| *id == command.id) || command.id == LABELLED_BUTTON.0 {
                         continue;
                     }
                     let Some(index) = icons::index(command.id) else {
