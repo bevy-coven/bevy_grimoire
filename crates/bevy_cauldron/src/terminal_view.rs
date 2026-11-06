@@ -431,9 +431,15 @@ fn draw_the_terminal(
                 ))
                 .with_children(|row| {
                     for run in &runs {
+                        // **Every span names the terminal's face** (#323). A `TextSpan` is a node of its
+                        // own with its own `TextFont` (bevy_text's `TextSpan` requires one), so a span
+                        // without it is drawn in the editor's face whatever the row's root says — and the
+                        // spans are where all of a row's text is. Measured live: the icons a prompt
+                        // prints drew as boxes while only the empty root named the Nerd Font.
                         let mut span = row.spawn((
                             TextSpan::new(run.text.clone()),
                             TextColor(run.ink),
+                            terminal_font(),
                             Pickable::IGNORE,
                         ));
                         // **A ground only where the cells paint one** (#309): an inverse run, a
