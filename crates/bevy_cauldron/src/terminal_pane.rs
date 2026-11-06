@@ -187,6 +187,18 @@ impl TerminalFocus {
     pub fn holds(&self) -> bool {
         self.0
     }
+
+    /// **Is `chord` the shell's this frame, and not the window's?** (#318)
+    ///
+    /// While the shell has the keyboard, a chord on **Ctrl** is a control code it reads — Ctrl+D is
+    /// end-of-file, Ctrl+K kills to the end of the line, Ctrl+R searches history — so a window chord
+    /// spelled on Ctrl (every primary chord off a mac) is the shell's, the way VS Code sends chords to
+    /// its terminal unless they are on its short skip list. A chord on **Command** never reaches a
+    /// shell on a mac, so it stays the window's there. The pane's own chords (Primary+`, Primary+J,
+    /// Primary+Shift+C and V) do not ask: they are read before the shell sees anything.
+    pub fn owns(&self, chord: &bevy_gooey::Shortcut) -> bool {
+        self.0 && chord.modifiers.ctrl
+    }
 }
 
 /// The pane's own working state: the size it last asked for, and the caret's blink.

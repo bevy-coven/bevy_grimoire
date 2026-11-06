@@ -420,18 +420,26 @@ fn report_key(
     window: Option<Single<&Window, With<bevy::window::PrimaryWindow>>>,
     ui_scale: Res<UiScale>,
     mut report: ResMut<ReportEdit>,
+    terminal: Option<Res<crate::terminal_pane::TerminalFocus>>,
     mut commands: Commands,
 ) {
     if report.open.is_some() {
         return;
     }
-    let audience = if project_chord().just_pressed(&keys) {
-        Audience::Project
+    let (chord, audience) = if project_chord().just_pressed(&keys) {
+        (project_chord(), Audience::Project)
     } else if developers_chord().just_pressed(&keys) {
-        Audience::Developers
+        (developers_chord(), Audience::Developers)
     } else {
         return;
     };
+    // **Ctrl+D is the shell's while it has the keyboard** (#318): end-of-file, the way most people leave
+    // a shell or end a `cat`. Off a mac the report's chord is that very press, and it used to open a
+    // report over the shell while the shell exited. Cmd+D on a mac never reaches a shell, so it still
+    // opens a report from anywhere.
+    if terminal.as_deref().is_some_and(|focus| focus.owns(&chord)) {
+        return;
+    }
     if audience == Audience::Project && project.is_none() {
         commands.spawn(bevy_gooey::toast_alert(NO_PROJECT).sticky());
         return;
