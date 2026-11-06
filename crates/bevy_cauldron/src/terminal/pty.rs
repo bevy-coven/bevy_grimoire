@@ -97,12 +97,12 @@ impl TerminalSession {
             // palette above is never asked; `COLORTERM=truecolor` is what makes a program emit
             // 24-bit sequences rather than rounding to the 256 slots. Set here rather than inherited,
             // because the editor may itself have been launched from a `.desktop` file with neither.
-            env: [
-                ("TERM".to_owned(), "xterm-256color".to_owned()),
-                ("COLORTERM".to_owned(), "truecolor".to_owned()),
-            ]
-            .into_iter()
-            .collect(),
+            //
+            // **And the ones that say where it runs** (#324), as VS Code's integrated terminal says
+            // `TERM_PROGRAM=vscode`: a prompt or a tool can tell it is in Cauldron, and which one.
+            // A locale is given only when the inherited one cannot carry UTF-8, or every `—`, box
+            // line and prompt icon arrives as `?`.
+            env: session_env(std::env::var("LC_ALL").ok(), std::env::var("LANG").ok()).into_iter().collect(),
         };
 
         let size = WindowSize {
@@ -235,4 +235,36 @@ impl std::fmt::Debug for TerminalSession {
             .field("rows", &self.size.1)
             .finish()
     }
+}
+
+/// The name a program reads in `TERM_PROGRAM` to know it runs in this editor's terminal (#324).
+pub const TERM_PROGRAM: &str = "Cauldron";
+
+/// **The UTF-8 locale a shell is given when its own cannot carry UTF-8.** `C.UTF-8` is built into
+/// glibc and musl on Linux; macOS has no `C.UTF-8`, and `en_US.UTF-8` is the locale every mac has.
+#[cfg(target_os = "macos")]
+const UTF8_LOCALE: &str = "en_US.UTF-8";
+#[cfg(not(target_os = "macos"))]
+const UTF8_LOCALE: &str = "C.UTF-8";
+
+/// **The environment a shell starts with, beyond the editor's own** (#324), from the inherited
+/// `LC_ALL` and `LANG`.
+///
+/// `TERM` and `COLORTERM` make colour work; `TERM_PROGRAM` and `TERM_PROGRAM_VERSION` say the terminal
+/// is Cauldron's and which release, as VS Code says `vscode`. `LANG` is set to a UTF-8 locale only when
+/// nothing inherited names one — no `LC_ALL`, and a `LANG` that is unset, `C` or `POSIX` — so a person's
+/// own locale is never overridden.
+pub fn session_env(lc_all: Option<String>, lang: Option<String>) -> Vec<(String, String)> {
+    let mut env = vec![
+        ("TERM".to_owned(), "xterm-256color".to_owned()),
+        ("COLORTERM".to_owned(), "truecolor".to_owned()),
+        ("TERM_PROGRAM".to_owned(), TERM_PROGRAM.to_owned()),
+        ("TERM_PROGRAM_VERSION".to_owned(), env!("CARGO_PKG_VERSION").to_owned()),
+    ];
+    let names_a_locale = |value: &Option<String>| value.as_deref().is_some_and(|v| !v.is_empty());
+    let lang_is_plain = lang.as_deref().is_none_or(|v| v.is_empty() || v == "C" || v == "POSIX");
+    if !names_a_locale(&lc_all) && lang_is_plain {
+        env.push(("LANG".to_owned(), UTF8_LOCALE.to_owned()));
+    }
+    env
 }

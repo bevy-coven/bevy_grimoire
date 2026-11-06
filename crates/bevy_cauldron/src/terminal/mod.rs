@@ -54,7 +54,7 @@ use std::path::{Path, PathBuf};
 use bevy::prelude::*;
 
 pub use grid::{CaretShape, Cell, Cursor, FindStatus, Line, SCROLLBACK, TerminalScreen};
-pub use pty::TerminalSession;
+pub use pty::{TERM_PROGRAM, TerminalSession, session_env};
 
 /// **Every shell the editor is running, and which one the pane is looking at.**
 ///
