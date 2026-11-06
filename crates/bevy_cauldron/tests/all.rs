@@ -22,6 +22,7 @@ mod capture_feedback_1793927744511;
 mod capture_feedback_1793927950267;
 mod capture_feedback_1793927950267_rail;
 mod capture_feedback_1793928006124;
+mod capture_feedback_1793928006124_switch;
 mod capture_feedback_1793927671762;
 mod a_terminal_runs_a_shell_inside_the_editor;
 mod a_page_line_draws_in_the_skins_ink;

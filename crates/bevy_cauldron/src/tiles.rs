@@ -4265,6 +4265,13 @@ fn spawn_tab_strip(
             // is never aimed at it there.
             .observe(cross_on_click)
             .with_children(|m| {
+                // **The verb, so the word after it is a destination and not a fourth tab**
+                // (`feedback-1793928006124`: a bare `Map` on the tab row's baseline read as a tab).
+                m.spawn((
+                    Text::new(SWITCH_TO),
+                    TextColor(MUTED),
+                    crate::chrome::font(crate::chrome::text::BODY),
+                ));
                 m.spawn((
                     // Written every frame by [`name_the_other_door`], which says the other workspace's name.
                     Text::new(String::new()),
@@ -4307,6 +4314,18 @@ pub struct OtherDoorMark;
 #[derive(Component)]
 pub struct OtherDoorLabel;
 
+/// The verb the door cue opens with, in a node of its own so the destination keeps its exact name.
+const SWITCH_TO: &str = "Switch to";
+
+/// The door the cue leads to: the Map and Kit doors lead to each other, and the Rigs door leads nowhere.
+pub fn other_door(door: Door) -> Option<Door> {
+    match door {
+        Door::Map => Some(Door::Kit),
+        Door::Kit => Some(Door::Map),
+        Door::Rigs => None,
+    }
+}
+
 /// **Name the other door**, so the cue says which way is other.
 ///
 /// **The Rigs door is not a door the author crosses to.** It is the rig bench — a character asset
@@ -4319,11 +4338,7 @@ fn name_the_other_door(
     mut marks: Query<&mut Node, With<OtherDoorMark>>,
 ) {
     let Some(door) = door else { return };
-    let other = match *door {
-        Door::Map => Some(Door::Kit),
-        Door::Kit => Some(Door::Map),
-        Door::Rigs => None,
-    };
+    let other = other_door(*door);
     for mut label in &mut labels {
         let text = match other {
             // **The workspace's own name** (#302): the tab says `Map` or `Kit`, as the title of the
@@ -11717,5 +11732,18 @@ mod write_library_tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod other_door_tests {
+    use super::*;
+
+    /// The cue is a way across: Map and Kit lead to each other, never to themselves, and Rigs leads nowhere.
+    #[test]
+    fn the_cue_leads_across_and_never_to_itself() {
+        assert_eq!(other_door(Door::Map), Some(Door::Kit));
+        assert_eq!(other_door(Door::Kit), Some(Door::Map));
+        assert_eq!(other_door(Door::Rigs), None);
     }
 }
