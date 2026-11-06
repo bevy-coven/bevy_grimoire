@@ -1,24 +1,33 @@
 ---
-description: One debug-response pass on bevy_grimoire. Takes the next capture from docs/loop/captures/, triages it if unread, reproduces it where it was recorded (bugs) or specifies it (enhancements), fixes it behind a test that fails before and passes after, ships it, records it in the ledger, then stops. Bugs before enhancements. Run headless in a Wiggum loop, one fresh context per pass.
+description: One debug-response pass on bevy_grimoire. Takes the next capture from docs/loop/captures/, triages it if unread, reproduces it where it was recorded (bugs) or specifies it (enhancements), fixes it behind a test that fails before and passes after, ships it, records the case in the history, then stops. Every five closed cases it reviews the history for patterns instead. Bugs before enhancements. Run headless in a Wiggum loop, one fresh context per pass.
 argument-hint: "[optional capture stem, e.g. feedback-1793905912313]"
 disable-model-invocation: true
 ---
 
 # One debug-response pass
 
-You are one pass of a **Wiggum loop**: a driver reruns this prompt in the background, one fresh context per pass, with **no memory between passes**. The repository is the only memory: the queue at `docs/loop/captures/ledger.json`, the history at `docs/loop/captures/cases.jsonl`, the captures beside them, the reports under `docs/loop/iterations/`, `docs/loop/log.md`, and git history.
+You are one pass of a **Wiggum loop**: a driver reruns this prompt in the background, one fresh context per pass, with **no memory between passes**. The repository is the only memory:
 
-**Captures are permanent.** Never move, rename or delete a capture's files; the history and its pattern reports depend on them.
+- the queue at `docs/loop/captures/ledger.json`;
+- the history at `docs/loop/captures/cases.jsonl`;
+- the captures themselves, beside those two files;
+- the reports under `docs/loop/iterations/`, and pattern reviews under `docs/loop/patterns/`;
+- `docs/loop/log.md`, and git history.
 
 A pass that stops early and cleanly costs one cycle. A pass that leaves a half-diff costs several, because the next pass has to work out what it meant before it can work. Leave the tree clean, pushed and green.
 
-**One pass works exactly one capture.** Whatever the outcome (`fixed`, `unreproduced`, `blocked`, or parked unfinished), the pass ends there. The loop will run again.
+**A pass does one of two things:**
+
+- **Most passes answer exactly one capture.** Whatever the outcome (`fixed`, `unreproduced`, `blocked`, or parked unfinished), the pass ends there.
+- **When a review is due (§2), the pass reviews the history instead,** following "Review pass" near the end of this file, and answers no capture.
+
+**Captures are permanent.** Never move, rename or delete a capture's files. The history and its reviews depend on them.
 
 ## Hosts
 
 |name|what it is|use it for|
 |---|---|---|
-|`big`|the Linux loop host; the clone you are in|builds, tests, both pushes, Linux reproduction, any changelog clip|
+|`big`|the Linux loop host; the clone you are in|builds, tests, pushes, Linux reproduction, any changelog clip|
 |`mac_air`|macOS, over `ssh`|reproducing macOS captures against the installed `/Applications/Cauldron.app`; PNG stills|
 |`big_mac`|old macOS machine, nearly full|**never**|
 
@@ -33,15 +42,15 @@ python3 tools/loop/steps.py mark <phase>   # as each phase starts
 python3 tools/loop/steps.py end            # last command (see "Stop")
 ```
 
-|phase|covers|
-|---|---|
-|`orient`|the floor, `sync`, `next`, reading and triaging the capture|
-|`repro`|the reproduction matrix (bug) or reading current behaviour (enhancement)|
-|`build`|both tests, then the fix|
-|`prove`|targeted test runs and clippy|
-|`gate`|the first push|
-|`ship`|the platform proof, the report, the log line|
-|`log`|the second push and `end`|
+|phase|in a capture pass|in a review pass|
+|---|---|---|
+|`orient`|the floor, `sync`, `next`, reading and triaging the capture|the floor, the due check, any backfill|
+|`repro`|the reproduction matrix (bug) or reading current behaviour (enhancement)|—|
+|`build`|both tests, then the fix|—|
+|`prove`|targeted test runs and clippy|confirming candidate patterns|
+|`gate`|the first push|—|
+|`ship`|platform proof, closing the case, the report, the log line|writing the review and the dashboard|
+|`log`|the second push and `end`|the push and `end`|
 
 A pass that skips the marks has its whole time recorded under `orient`.
 
@@ -56,12 +65,33 @@ Before any capture is read, these must hold. Fixing them is the pass's first job
    ```
 
 2. **Nothing is unpushed.** If `git status -sb` shows `main` ahead of `origin/main`, a previous pass died between commit and push. Push it and let the gate judge. If the gate refuses, move those commits aside with `git branch parked/pass-<N>` and then `git reset --hard origin/main`, log it, and continue.
-3. **The ledger and history are valid.** `python3 tools/loop/captures.py check` exits 0. It validates the ledger, `cases.jsonl` and the presence of every capture's files. If a ledger row is wrong, repair it with `captures.py set`. Never edit an existing line of `cases.jsonl`. If you cannot repair it, log why and stop.
-4. **`main` builds and the gate runs.** If `main` does not build, fix exactly that first. If the push gate itself is broken, repair it under the rule in "The protected evaluator". Then continue with the capture. Neither counts as the pass's capture.
+3. **The ledger and history are valid.** `python3 tools/loop/captures.py check` exits 0, and the history check in "The history" passes. If a ledger row is wrong, repair it with `captures.py set`. Never edit an existing line of `cases.jsonl`. If you cannot repair either, log why and stop.
+4. **`main` builds and the gate runs.** If `main` does not build, fix exactly that first. If the push gate itself is broken, repair it under the rule in "The protected evaluator". Then continue. Neither counts as the pass's capture.
 
-## 2. Take the capture
+## 2. Review or capture?
 
-**A review comes first when one is due.** Run `python3 tools/loop/captures.py patterns --due`. If it exits 0, five or more cases have closed since the last review, and this pass is a review pass: follow `.omp/commands/pattern-review.md` instead of the rest of this file, then stop. If it exits 1, carry on.
+**Check whether a review is due first.** Run this, then read the ledger:
+
+```sh
+python3 - <<'EOF'
+import glob, os, re
+p = "docs/loop/captures/cases.jsonl"
+n = sum(1 for _ in open(p)) if os.path.exists(p) else 0
+reviews = sorted(glob.glob("docs/loop/patterns/*-review.md"))
+last = 0
+if reviews:
+    m = re.search(r"^cases_through:\s*(\d+)", open(reviews[-1]).read(), re.M)
+    last = int(m.group(1)) if m else 0
+print(f"cases={n} last_review_through={last} new={n - last}")
+EOF
+```
+
+A review is due when **either** of these holds:
+
+- `new` is 5 or more;
+- some ledger row has a terminal status (`fixed`, `unreproduced`, `blocked`, `declined`) but no line in `cases.jsonl`. These rows were closed before the history existed, and the review backfills them.
+
+If a review is due, go to "Review pass" and do not take a capture. Otherwise, take one:
 
 ```sh
 python3 tools/loop/captures.py sync   # idempotent; copies new captures from mac_air
@@ -138,20 +168,13 @@ python3 tools/loop/captures.py attempt <stem> --host <big|mac_air> --backend <me
 
 **Drive the editor with what exists; write no second client.** Use `tools/demo/record.py` (`Injector`, `brp`, `widget_centre`, `McpClient`) and `tools/loop/common.py` (`binary`, `free_port`, `make_scratch`, `Editor`). Click at the pick's `at` in logical units (see §3), or at `widget_centre(port, "<the pick's text>")` when the pick names words. Never click a guessed pixel.
 
-**If no row shows the defect, that is an answer, not a failure.** Run every applicable row, then:
-
-```sh
-python3 tools/loop/captures.py close <stem> --outcome unreproduced --symptom <slug> \
-    --note "<what the attempts ruled out>"
-```
-
-Commit the ledger and `cases.jsonl`, write the report and the log line, push, and stop. Never fix a symptom nobody saw. If `close` or `check` refuses the `unreproduced` outcome (it requires enough distinct configurations), close it as `blocked` with the note `matrix exhausted; check refused unreproduced` instead. **Never invent a configuration, or repeat one under a different spelling, to make the count.**
+**If no row shows the defect, that is an answer, not a failure.** Run every applicable row, then close the case as `unreproduced` (see "Closing a case"), with a note on what the attempts ruled out. Never fix a symptom nobody saw. If `check` refuses the `unreproduced` status (it requires enough distinct configurations), close it as `blocked` with the note `matrix exhausted; check refused unreproduced` instead. **Never invent a configuration, or repeat one under a different spelling, to make the count.**
 
 ## 5b. Specify (enhancements)
 
 Enhancements get no matrix. Work out the current behaviour from the capture's picture and the code; the spec test in §6 takes the place of reproduction.
 
-If the request is unclear, or looks wrong, do not decline it. Close it as `blocked` with the question in `--note`, and stop. Only a person closes a capture as `declined`.
+If the request is unclear, or looks wrong, do not decline it. Close it as `blocked` with the question in the note, and stop. Only a person closes a capture as `declined`.
 
 ## 6. Tests first
 
@@ -190,7 +213,7 @@ If the cause is in a family crate (`bevy_gooey`, `bevy_elements`, …), **do not
 
 1. Search that repository's open issues first, for example `gh issue list -R <owner>/<crate> --label consumer:bevy_grimoire`.
 2. If an issue already describes the cause, comment on it with the stem. Otherwise, file one labelled `bug` or `enhancement`, `consumer` and `consumer:bevy_grimoire`.
-3. Close the capture as `blocked` with `--cause upstream --upstream <crate>#<n>`. Commit the ledger and `cases.jsonl`, write the report and log line, push, and stop.
+3. Close the capture as `blocked`, with cause `upstream` and `"upstream": "<crate>#<n>"`. Write the report and log line, push, and stop.
 
 ## 8. Prove it locally
 
@@ -205,25 +228,133 @@ If the cause is in a family crate (`bevy_gooey`, `bevy_elements`, …), **do not
 
 **Never run `cargo test --workspace` by hand.** The push is the gate.
 
-## Closing a case
+## The history
 
-Every terminal outcome is written with `captures.py close`, never with `set --status`. It appends one line to the history (`cases.jsonl`) and updates the ledger row in the same step. Parked captures are not closed: they stay `triaged`.
+`docs/loop/captures/cases.jsonl` is the permanent record of every closed capture, kept so a person (and the review pass) can find recurring causes, hot files, regressions and risky configurations. **It is append-only:** each closure adds one line, and no existing line is ever edited, reordered or removed. If a person requeues a capture and it closes again, that is a second line; the pair is how recurrences are seen. Create the file if it does not exist.
 
-```sh
-python3 tools/loop/captures.py close <stem> --outcome <fixed|unreproduced|blocked> \
-    --symptom <slug> --note "<one line, ≤140 chars>" \
-    [--oracle <slug>] [--cause <slug>] [--commit <sha>] [--files <a,b>] \
-    [--upstream <crate>#<n>] [--regression-of <stem|sha> | --no-regression "<why>"] [--related <stems>]
+### Taxonomy
+
+Every case is labelled from these lists. **When nothing fits, write `other:<slug>`** (lowercase letters, digits, hyphens). Never stretch a category to fit. Only a person edits these tables, and when they do they update `SLUGS` in the history check to match.
+
+|symptom (what the person saw)|meaning|
+|---|---|
+|`flash`|drawn wrong for a moment, then corrects|
+|`clipped`|content cut off by its container or the window|
+|`layout`|misplaced, misaligned, or a margin/padding missing|
+|`illegible`|text hard to read: contrast, size, weight|
+|`wrong-state`|shows stale or incorrect data|
+|`unresponsive`|input does nothing, or the wrong thing|
+|`crash`|panic, hang or exit|
+|`slow`|visible lag or stutter|
+|`request`|enhancement: new behaviour asked for|
+
+|cause (what the fix changed)|meaning|
+|---|---|
+|`scale-factor`|logical/physical pixels mixed, or scale factor not applied|
+|`layout-rule`|a flex/size/margin constraint was wrong|
+|`clip-scroll`|clip ancestor or scroll range was wrong|
+|`skin-token`|a skin colour/size/spacing value was wrong|
+|`init-order`|first-frame state or system ordering|
+|`state-sync`|ECS state not propagated to the UI|
+|`text-measure`|font metrics, wrapping or glyph layout|
+|`input-routing`|focus, hit-testing or event dispatch|
+|`upstream`|cause is in a family crate|
+|`platform`|OS, driver or backend behaviour|
+|`missing`|enhancement: the behaviour did not exist|
+
+The oracles are the five slugs in §6.
+
+**Renames and corrections.** A person who renames a category, or decides a case was mislabelled, appends a correction line rather than editing history: `{"v":1,"correct":"<stem>","field":"cause","value":"<slug>","by":"person","why":"…"}`. Readers apply corrections in file order. A pass never writes one.
+
+### The case line
+
+```json
+{"v":1,"stem":"<stem>","closed_at":"<UTC ISO-8601>","pass":<N>,"kind":"bug|enhancement","outcome":"fixed|unreproduced|blocked","platform":{"os":"<from .log>","backend":"metal|vulkan|lavapipe","scale_factor":<f>,"window":"<WxH>","ui_scale":<f>,"app_version":"<from record>"},"screen":"<page or panel>","symptom":"<slug>","cause":"<slug>|null","oracle":"<slug>|null","note":"<one line, ≤140 chars>","files":["<product files the fix changed>"],"commit":"<sha>|null","upstream":"<crate>#<n>|null","regression_of":"<stem>|null","related":[],"attempts":<n>,"minutes":<n>,"backfilled":false}
 ```
 
-`close` fills in the platform, attempts, fix stats and timing itself. You supply the judgement:
+|field|rule|
+|---|---|
+|`symptom`|always; taken from the note, not the code|
+|`cause`|required for `fixed`, and `upstream` for an upstream block; otherwise `null`|
+|`oracle`|required for `fixed`; otherwise `null`|
+|`files`|product files changed by the fix commit; leave out `tests/`, `docs/` and `CHANGELOG.md`|
+|`note`|the same text as the ledger's `reason`|
+|`minutes`|minutes since `begin`|
 
-- **`--symptom`** is what the person saw, taken from the note, not from the code. Use a key from `docs/loop/captures/taxonomy.toml`'s `[symptom]` table.
-- **`--cause`** is what the fix changed, taken from the diff, not from the note. Use a key from `[cause]`. It is required for `fixed`; for an upstream block it is `upstream`.
-- **`--oracle`** is the slug from §6. It is required for `fixed`.
-- **When nothing in the taxonomy fits,** write `other:<slug>` (lowercase, hyphens). Never stretch a category to fit, and never edit the taxonomy; a person reviews proposals.
-- **Regression candidates.** If `close` prints earlier fixed cases with the same cause in the same files and exits 2, open those cases' fix commits and decide. If the earlier fix was undone or incomplete, pass `--regression-of <stem>`. If the overlap is coincidence, pass `--no-regression "<why>"`. Never pick one without reading them.
-- **`--related`** names other stems that share the cause without being regressions of each other, when you noticed them.
+## Closing a case
+
+Every terminal outcome is written the same way. Parked captures are not closed: they stay `triaged` and get no case line.
+
+1. **Set the ledger:**
+
+   ```sh
+   python3 tools/loop/captures.py set <stem> --status <fixed|unreproduced|blocked> [--commit <sha>] --reason "<note>"
+   ```
+
+   For `fixed`, `--commit` names the fix commit, which must already exist.
+2. **Look for a regression** (for `fixed` only). Search the history for earlier fixes with the same cause in the same files:
+
+   ```sh
+   python3 - <<'EOF'
+   import json
+   cause, files = "<cause>", {"<file>", "<file>"}
+   for line in open("docs/loop/captures/cases.jsonl"):
+       c = json.loads(line)
+       if c.get("outcome") == "fixed" and c.get("cause") == cause and files & set(c.get("files") or []):
+           print(c["stem"], c["commit"], c["note"])
+   EOF
+   ```
+
+   For each hit, read its fix commit. If the earlier fix was undone, incomplete or bypassed, set `regression_of` to that stem. If the overlap is coincidence, leave it `null` and say why in the report. Never decide without reading. Put stems that share the cause without being regressions in `related`.
+3. **Append the case line** with Python, so the JSON is valid:
+
+   ```sh
+   python3 - <<'EOF'
+   import json
+   case = { ... }   # every field from "The case line"
+   with open("docs/loop/captures/cases.jsonl", "a") as f:
+       f.write(json.dumps(case, separators=(",", ":")) + "\n")
+   EOF
+   ```
+
+4. **Run the history check, then `captures.py check`,** and commit both files together:
+
+   ```sh
+   git commit -m "case: <stem> <outcome>" -- docs/loop/captures/ledger.json docs/loop/captures/cases.jsonl
+   ```
+
+### History check
+
+```sh
+python3 - <<'EOF'
+import json, re, subprocess
+SLUGS = {  # keep in step with the taxonomy tables
+    "symptom": {"flash","clipped","layout","illegible","wrong-state","unresponsive","crash","slow","request"},
+    "cause": {"scale-factor","layout-rule","clip-scroll","skin-token","init-order","state-sync","text-measure","input-routing","upstream","platform","missing"},
+    "oracle": {"first-frame","window-invariance","containment","contrast","spec"},
+}
+p = "docs/loop/captures/cases.jsonl"
+try:
+    lines = open(p).read().splitlines()
+except FileNotFoundError:
+    lines = []
+r = subprocess.run(["git", "show", f"HEAD:{p}"], capture_output=True, text=True)
+old = r.stdout.splitlines() if r.returncode == 0 else []
+assert lines[:len(old)] == old, "an existing line of cases.jsonl was changed or removed"
+for i, line in enumerate(lines, 1):
+    c = json.loads(line)
+    if "correct" in c:
+        continue
+    for field, allowed in SLUGS.items():
+        v = c.get(field)
+        if v is None and field != "symptom":
+            continue
+        assert v in allowed or re.fullmatch(r"other:[a-z0-9-]{2,32}", str(v)), f"line {i}: bad {field} {v!r}"
+    if c["outcome"] == "fixed":
+        assert c.get("commit") and c.get("cause") and c.get("oracle"), f"line {i}: fixed case missing commit/cause/oracle"
+print(f"history ok: {len(lines)} lines, {len(lines) - len(old)} new")
+EOF
+```
 
 ## 9. Ship it
 
@@ -233,21 +364,13 @@ In this order:
    - Default to `--no-clip "<why>; proved by <test>"`.
    - A clip is optional and has limits: at most 20 s, 2 MB and 960 px, stored under `docs/changelog/media/`. It can only be rendered on big. It **must be in the same push as the line that shows it**, because `changelog.py check` fails a clip with no line and a line with no clip.
    - Never put a capture under `docs/changelog/media/`.
-2. **Close the case,** which comes after the fix commit because `close` refuses a `fixed` outcome whose commit is not an ancestor of `HEAD`:
-
-   ```sh
-   python3 tools/loop/captures.py close <stem> --outcome fixed --commit <sha> \
-       --symptom <slug> --cause <slug> --oracle <slug> --note "<the cause, one line>"
-   python3 tools/loop/captures.py check
-   git commit -m "case: <stem> fixed in <short-sha>" -- docs/loop/captures/ledger.json docs/loop/captures/cases.jsonl
-   ```
-
+2. **Close the case** as `fixed`, with the fix's sha (see "Closing a case"). This comes after the fix commit, because `check` refuses a `fixed` row whose commit is not an ancestor of `HEAD`.
 3. **The first push.** This is the full gate (`tools/loop/hooks/pre-push`): clippy over every target, `cargo nextest run --workspace`, `cargo test --workspace --doc`, and the backlog, changelog and version checks. It usually takes 3–5 minutes, up to about 9 on a cold build; use a 15-minute timeout. If the gate is red, fix the cause and push again. **Never use `--no-verify`.**
 4. **Proof on the capture's platform.** For a macOS capture, re-check on mac_air with a still of the fixed screen, but only if a build containing `<sha>` exists there. mac_air normally has only the released `/Applications/Cauldron.app`. When no such build exists, or mac_air is unreachable, the report says `mac_air proof: pending — <reason>` and the whole-application test stands as the proof.
 
-## 10. Report, log, second push
+## 10. Report, log, push
 
-Every pass that took a capture does this, whatever the outcome:
+Every capture pass that took a capture does this, whatever the outcome:
 
 1. **Write the report** at `docs/loop/iterations/<YYYY-MM-DD>-debug-<stem>-<short-sha>.md`, using the fix's sha, or `HEAD`'s if there is no fix. It covers:
    - the note and the kind;
@@ -259,7 +382,7 @@ Every pass that took a capture does this, whatever the outcome:
    - the fix and the gate result;
    - the still paths, or why the platform proof is pending.
 2. **Append one line** to `docs/loop/log.md`, in the format of the existing lines. It holds the date, pass N, the stem, `named` if the stem was given, the kind, the symptom, the cause, the oracle, the short sha, and the outcome: `fixed`, `unreproduced`, `blocked: <why>`, or `parked`. Never edit another pass's line.
-3. **Commit both and push.** A push that touches only `docs/` takes the hook's fast path and finishes in seconds.
+3. **Commit and push.** For a `fixed` capture this is the second push. A push that touches only `docs/` takes the hook's fast path and finishes in seconds.
 
 ## 11. Stop
 
@@ -271,8 +394,8 @@ git status --short    # if `end` wrote tracked files, commit and push them
 Check each item before you yield:
 
 - the tree is clean, and `git status -sb` shows nothing ahead of `origin/main`;
-- the ledger and `cases.jsonl` are committed, and `captures.py check` exits 0;
-- every capture you took is closed (with a case) or parked (still `triaged`), never left in between;
+- the ledger and `cases.jsonl` are committed, and both `captures.py check` and the history check pass;
+- every capture you took is either closed (with a case line) or parked (still `triaged`), never left in between;
 - no protected file was edited beyond its allowance (below);
 - nothing was published, tagged or yanked.
 
@@ -284,16 +407,87 @@ Check each item before you yield:
 |reproduce or specify|15|20|
 |tests and fix|20|40|
 |prove and first push|8|48|
-|platform proof, report, second push|7|55|
+|platform proof, close, report, second push|7|55|
 |slack|5|60|
 
-Each rule below means the same thing: park any product edits (`git stash push -u -m "parked by pass <N>: <stem>"`), write the report with the hypothesis and evidence, log the outcome as `parked` (or `blocked`, if the retry limit in §2 applies), commit and push the ledger and docs, and stop.
+Each rule below means the same thing: park any product edits (`git stash push -u -m "parked by pass <N>: <stem>"`), write the report with the hypothesis and evidence, log the outcome as `parked` (or close the case as `blocked`, if the retry limit in §2 applies), commit and push the docs, and stop.
 
 - **At 30 minutes with no failing test:** stop building.
 - **At 45 minutes with the fix not yet proven:** do not push it.
 - **Two failures at the same step:** stop there.
 
-A capture that needs more than the matrix, or more than one budget, becomes `blocked` with a note of what it needs. It does not get a longer pass.
+A capture that needs more than the matrix, or more than one budget, is closed as `blocked` with a note of what it needs. It does not get a longer pass.
+
+A review pass has 20 minutes, including any backfill.
+
+## Review pass
+
+Do this instead of a capture when §2 says a review is due. **A review pass writes no product code, no tests, and no ledger rows.** Its only case lines are backfills. It proposes; a person decides.
+
+### R1. Backfill
+
+For each ledger row with a terminal status but no line in `cases.jsonl`, reconstruct a case line from that row's report in `docs/loop/iterations/`, its fix commit and its capture's `.log`:
+
+- set `closed_at` to the fix commit's date, or the date of the row's last ledger commit;
+- set `"backfilled": true` and `"pass"` to this pass's number;
+- do not change the ledger.
+
+Append the lines in order of `closed_at`, run the history check, and commit with the message `history: backfill <n> cases`.
+
+### R2. Count
+
+With a short Python script over `cases.jsonl`, apply the correction lines and compute, all-time and since the last review:
+
+1. **Totals:** cases by outcome and by kind, the unreproduced rate, and the median `minutes`.
+2. **Symptom × cause** counts.
+3. **Hotspots:** files named in two or more `fixed` cases.
+4. **Cause clusters:** causes with three or more cases.
+5. **Regressions:** `regression_of` chains, and stems closed more than once.
+6. **Configuration skew:** shares of cases by `scale_factor`, `ui_scale`, window and backend, set beside the same shares across **all** captures in the ledger (including open ones), so that "most bugs are at 2.0" can be told apart from "most captures are at 2.0".
+7. **Upstream:** count by crate.
+8. **Proposals:** every `other:` value, with its count.
+
+**Small numbers.** With fewer than 10 cases in a group, report counts and stems, never percentages. A group of 2–3 is a **lead**; a group of 4 or more, confirmed in R3, is a **pattern**. Never present a lead as a trend.
+
+### R3. Confirm against the fixes
+
+A shared label is a lead, not a pattern. For each cluster, hotspot, regression, skew or upstream group, open the cases' reports and fix commits (`git show <sha>`). It is a pattern only if the fixes changed the same kind of thing for the same reason. If a fix shows a case was mislabelled, do not count it under the wrong label: list it under "Suggested corrections" for a person.
+
+### R4. Propose
+
+For each confirmed pattern, write:
+
+1. **Hypothesis:** the single underlying cause, in one or two sentences.
+2. **Evidence:** the stems, commits and files, with one line on what each fix changed.
+3. **Structural fix:** the change that removes the class of defect rather than one more instance (for example, one conversion helper that every caller uses).
+4. **Guard:** a test that would catch the whole class, written as a property over every screen or widget (for example, "containment holds for every scrollable node on every page fixture").
+5. **Size:** small (one pass), medium (a few passes) or large (needs design).
+
+Leads get one line each. For every `other:` value, write its count, its stems, and a suggestion: promote it, map it to an existing slug, or leave it as noise.
+
+### R5. Write
+
+1. **The review,** at `docs/loop/patterns/<YYYY-MM-DD>-review.md`, with this front matter:
+
+   ```yaml
+   ---
+   cases_through: <number of lines in cases.jsonl now>
+   since: <date of the previous review, or "start">
+   ---
+   ```
+
+   Then these sections, in order: **Summary** (at most five lines), **Patterns**, **Leads**, **Changed since the last review** (new, persisting and resolved findings), **Suggested corrections**, **Taxonomy proposals**, and **Numbers** (the R2 output).
+2. **The dashboard,** at `docs/loop/patterns/index.html`: one self-contained page with no network access. It embeds the full contents of `cases.jsonl` in `<script type="application/json" id="cases">` and computes everything in the browser. Its panels:
+   - cases per week by outcome;
+   - a symptom × cause grid;
+   - a hotspot table;
+   - configuration skew bars;
+   - a list of regressions;
+   - open `other:` proposals.
+
+   The first review builds the page. Later reviews **only replace the contents of the `id="cases"` block**; change the page's code only if it fails to load.
+3. **One line** in `docs/loop/log.md`: the date, pass N, `review`, `cases_through`, the number of patterns and leads, and the review's path.
+4. **Commit and push.** The push touches only `docs/`, so it takes the fast path. Then stop.
 
 ## The protected evaluator
 
@@ -305,18 +499,19 @@ A capture that needs more than the matrix, or more than one budget, becomes `blo
 - existing test functions inside `#[cfg(test)]` modules (adding new ones is allowed);
 - `tools/loop/*.py` and `tools/changelog/**`;
 - every capture's files under `docs/loop/captures/` (record, frame, `.log`);
-- `docs/loop/captures/taxonomy.toml`, and every existing line of `docs/loop/captures/cases.jsonl` (new lines come only from `close`);
-- this command file (`.omp/commands/debug-response.md`), `.omp/commands/pattern-review.md` and `.omp/wiggum/**`;
-- earlier lines of `CHANGELOG.md` and of `docs/loop/log.md`, and existing files under `docs/loop/iterations/`.
+- every existing line of `docs/loop/captures/cases.jsonl` (new lines are appended only as "Closing a case" and R1 describe);
+- this command file (`.omp/commands/debug-response.md`), including its taxonomy, and `.omp/wiggum/**`;
+- earlier lines of `CHANGELOG.md` and of `docs/loop/log.md`, and existing files under `docs/loop/iterations/` and `docs/loop/patterns/` (except the data block in `index.html`).
 
-**Repair-only: `tools/loop/hooks/**`.** When the gate is *broken*, meaning it errors or cannot run (as opposed to rejecting bad code), a pass may fix the hook in its own commit, titled `gate: repair <what>`. That diff must not remove, skip, loosen or short-circuit any check. If the only fix you can see would, stop: set the capture `blocked` if one is in hand, or log it, and stop.
+**Repair-only: `tools/loop/hooks/**`.** When the gate is *broken*, meaning it errors or cannot run (as opposed to rejecting bad code), a pass may fix the hook in its own commit, titled `gate: repair <what>`. That diff must not remove, skip, loosen or short-circuit any check. If the only fix you can see would, stop: close the capture as `blocked` if one is in hand, or log it, and stop.
 
 **Writable:**
 
 - product code;
-- the ledger's `kind` and `attempts` (through `captures.py set` and `attempt`), and terminal outcomes (through `captures.py close`, which appends to `cases.jsonl`);
-- new files under `docs/loop/iterations/`;
+- the ledger's `status`, `kind`, `reason`, `commit` and `attempts` fields, through `captures.py`;
+- new lines appended to `cases.jsonl`;
+- new files under `docs/loop/iterations/` and `docs/loop/patterns/`;
 - a new `capture_<stem>.rs` and its one `mod` line;
 - new test functions.
 
-A change outside these that looks necessary means `blocked`, with the question in the report. The pass stops there; it does not reason its way to a weakening.
+A change outside these that looks necessary means closing the capture as `blocked`, with the question in the note and the report. The pass stops there; it does not reason its way to a weakening.
