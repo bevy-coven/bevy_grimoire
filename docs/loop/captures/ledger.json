@@ -156,7 +156,7 @@
       "status": "blocked",
       "host": "mac_air",
       "reason": "the cause is in bevy_gooey: shortcut_label emits a Mac spelling (\u2318\u2303\u2325\u21a9\u238b\u21e5) that the host's face need not contain, and this repo's FiraMono lacks 7 of the 13; there is no API by which a host can ask for a drawable spelling. Filed as bevy-coven/bevy_gooey#45, and this repo must not patch, wrap or vendor it",
-      "commit": "",
+      "commit": "726e270",
       "attempts": [
         {
           "host": "mac_air",
