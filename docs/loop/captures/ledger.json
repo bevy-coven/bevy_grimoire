@@ -152,10 +152,10 @@
       "taken_at_ms": 1793927744511,
       "app_version": "0.2.6",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "\"Why is there a \\\"?\\\" here?\" reports a defect: the shipped FiraMono has no U+2318, so gooey's Mac chord label \\\"\u2318Z\\\" draws as a tofu box with a question mark",
       "commit": "",
       "attempts": []
     },
