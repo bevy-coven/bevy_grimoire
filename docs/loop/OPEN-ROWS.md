@@ -10,7 +10,11 @@ support, gathered in one place.
 ## A. Waiting on a pin bump — 2 rows, no work here
 
 Both are in `bevy_gooey`, both already filed, both with an in-tree `#[ignore]`d test named after the issue.
-They close when this repo moves its `bevy_gooey` rev.
+
+**This is not a forgotten bump — checked by pass 400.** This repo's `bevy_gooey` pin is
+`1cc4c7da2b3e21d0e9c1c50a7d2d3b1f6e3ddf05`, and `git ls-remote` says that *is* gooey's `main` today. Both
+issues are still `OPEN` on that repository. So these two rows wait on upstream work that has not been done
+yet, not on a pin this repo failed to move; the fix lands in `bevy_gooey` first, and this repo's rev follows.
 
 | stem | issue | what |
 |---|---|---|
