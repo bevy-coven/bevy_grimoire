@@ -1,0 +1,24 @@
+{
+  "name": "terminal_programs",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [{"seconds": 6}, {"seconds": 6}, {"seconds": 6}],
+  "steps": [
+    {"at": 0.3, "caption": "less has no scrollback: the wheel now scrolls it"},
+    {"at": 0.6, "key": "Backquote", "mods": ["ControlLeft"]},
+    {"at": 1.6, "type": "seq 1 400 | less"},
+    {"at": 2.4, "key": "Enter"},
+    {"at": 3.4, "wheel": {"y": -1, "n": 3, "at": [500, 430]}},
+    {"at": 4.8, "wheel": {"y": -1, "n": 3, "at": [500, 430]}},
+    {"at": 6.6, "type": "q"},
+    {"at": 7.0, "caption": "htop asked for the mouse: a click on its header sorts by PRI"},
+    {"at": 7.4, "type": "htop"},
+    {"at": 8.0, "key": "Enter"},
+    {"at": 10.5, "click": [300, 470]},
+    {"at": 12.5, "click": [300, 530]},
+    {"at": 14.5, "wheel": {"y": -1, "n": 2, "at": [500, 500]}},
+    {"at": 16.6, "type": "q"}
+  ]
+}
