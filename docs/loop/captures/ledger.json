@@ -174,10 +174,10 @@
       "app_version": "0.2.7",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "requeued by owner 2026-11-06: re-reproduce with logical coordinates since pass 392 corrected the pointer theory",
-      "commit": "",
+      "reason": "the click does switch the page; the tab left behind kept its selection rail (paint_marked_buttons never visited a button that lost Selected), so two tabs read as chosen",
+      "commit": "f89e1df",
       "attempts": [
         {
           "host": "big",
@@ -186,6 +186,22 @@
           "ui_scale": 1.2,
           "outcome": "reproduced",
           "saw": "on the Projects home, clicking the sidebar's What's new tab leaves the page on Projects: the heading still reads Projects, the Projects tab keeps its selection rail, and nothing changes"
+        },
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "installed 0.3.0: clicking What's new switches the page, but Projects keeps its selection rail so two tabs read as chosen"
+        },
+        {
+          "host": "big",
+          "backend": "vulkan",
+          "window": "1280x720",
+          "ui_scale": 1.2,
+          "outcome": "not_reproduced",
+          "saw": "click at logical widget centre switches the page to What's new; the old tab's rail is stale here too"
         }
       ]
     },
