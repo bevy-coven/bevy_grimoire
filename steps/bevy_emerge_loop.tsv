@@ -45270,3 +45270,145 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 406	94	ship	model	model		2026-11-06T14:55:22Z	3.8	
 406	95	ship	tool	loop tools	bash	2026-11-06T14:55:25Z	3.9	cd /home/ladvien/bevy_emerge_loop; grep 'ui.rs' docs/loop/captures/cases.jsonl | python3 -c " import sys,json for l in sys.stdin: c=json.loads(l); print(c['stem
 406	96	ship	model	model		2026-11-06T14:55:29Z	5.0	
+409	1	orient	model	model		2026-11-06T14:56:47Z	2.4	
+409	2	orient	tool	phase mark	bash	2026-11-06T14:56:50Z	0.4	date +%s; python3 tools/loop/steps.py begin && python3 tools/loop/steps.py mark orient; git status --short; git status -sb | head -3; python3 tools/loop/capture
+409	3	orient	model	model		2026-11-06T14:56:50Z	2.2	
+409	4	orient	tool	loop tools	bash	2026-11-06T14:56:52Z	0.4	python3 - <<'EOF' import glob, os, re, json p = "docs/loop/captures/cases.jsonl" n = sum(1 for _ in open(p)) if os.path.exists(p) else 0 reviews = sorted(glob.g
+409	5	orient	model	model		2026-11-06T14:56:53Z	2.3	
+409	6	orient	tool	loop tools	bash	2026-11-06T14:56:55Z	0.2	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json")) rows=L if isinstance(L,list) else L.get("captures",L) cases={json.loads(l).get
+409	7	orient	model	model		2026-11-06T14:56:55Z	2.4	
+409	8	orient	tool	shell	bash	2026-11-06T14:56:57Z	0.1	python3 - <<'EOF' import json rows=json.load(open("docs/loop/captures/ledger.json")) cases={json.loads(l).get("stem") for l in open("docs/loop/captures/cases.js
+409	9	orient	model	model		2026-11-06T14:56:57Z	1.9	
+409	10	orient	tool	shell	bash	2026-11-06T14:56:59Z	0.0	sed -n 2240p docs/loop/log.md | cut -c600-3500; grep -n "feedback-1793928006124" docs/loop/log.md | cut -c1-80; ls docs/loop/iterations | grep 1793928006124
+409	11	orient	model	model		2026-11-06T14:56:59Z	2.1	
+409	12	repro	tool	phase mark	bash	2026-11-06T14:57:02Z	0.1	python3 tools/loop/steps.py mark repro; grep -n "WhereYouAre\|fn spawn_chrome_bar\|fn subject" -r crates/bevy_cauldron/src | head -30; sed -n 3770,3830p crates/
+409	13	repro	model	model		2026-11-06T14:57:02Z	3.5	
+409	14	repro	tool	shell	bash	2026-11-06T14:57:05Z	0.0	cat docs/loop/iterations/2026-11-06-debug-feedback-1793928006124-blocked.md | cut -c1-1500; ls crates/bevy_cauldron/tests | grep capture_ | head; grep -n "chrom
+409	15	repro	model	model		2026-11-06T14:57:05Z	3.9	
+409	16	repro	tool	shell	bash	2026-11-06T14:57:09Z	0.0	cd crates/bevy_cauldron/src; sed -n 1170,1215p chrome.rs; sed -n 2860,2935p editor.rs; grep -n "door_strip" *.rs | head -20
+409	17	repro	model	model		2026-11-06T14:57:09Z	4.0	
+409	18	repro	tool	shell	bash	2026-11-06T14:57:13Z	0.3	cd crates/bevy_cauldron; cat tests/capture_feedback_1793928006124.rs 2>/dev/null | head -80; git status --short; git log --oneline -3 -- tests/capture_feedback_
+409	19	repro	model	model		2026-11-06T14:57:13Z	3.4	
+409	20	repro	tool	shell	bash	2026-11-06T14:57:17Z	0.0	cd crates/bevy_cauldron/src; sed -n 120,160p menu_bar.rs; sed -n 274,330p menu_bar.rs; sed -n 4090,4160p tiles.rs
+409	21	repro	model	model		2026-11-06T14:57:17Z	3.9	
+409	22	repro	tool	shell	bash	2026-11-06T14:57:21Z	0.1	cd docs/loop/captures/feedback-1793928006124; cp feedback-1793928006124.png /tmp/p409_full.png; python3 -c " from PIL import Image im=Image.open('/tmp/p409_full
+409	23	repro	tool	read files	read	2026-11-06T14:57:21Z	0.1	/tmp/p409_crop.png
+409	24	repro	model	model		2026-11-06T14:57:21Z	1.5	
+409	25	repro	tool	shell	bash	2026-11-06T14:57:22Z	0.1	cd /tmp; python3 -c " from PIL import Image im=Image.open('/tmp/p409_full.png') im.crop((0,0,1400,330)).save('/tmp/p409_crop.png')"; ls -la /tmp/p409*
+409	26	repro	model	model		2026-11-06T14:57:22Z	1.3	
+409	27	repro	tool	read files	read	2026-11-06T14:57:24Z	0.0	/tmp/p409_crop.png
+409	28	repro	model	model		2026-11-06T14:57:24Z	5.3	
+409	29	repro	tool	shell	bash	2026-11-06T14:57:29Z	0.0	cd crates/bevy_cauldron/src; sed -n 4160,4260p tiles.rs; grep -n "fn tabs" -A25 tiles.rs | head -50
+409	30	repro	model	model		2026-11-06T14:57:29Z	1.8	
+409	31	repro	tool	shell	bash	2026-11-06T14:57:31Z	0.0	cd crates/bevy_cauldron/src; sed -n 4260,4330p tiles.rs; grep -n "OtherDoor" *.rs | head -20
+409	32	repro	model	model		2026-11-06T14:57:31Z	1.6	
+409	33	repro	tool	shell	bash	2026-11-06T14:57:33Z	0.0	cd crates/bevy_cauldron/src; sed -n 4226,4262p tiles.rs; sed -n 4330,4370p tiles.rs; grep -n "fn fonts\|pub const BODY\|pub const TAB\|pub const LABEL" chrome.r
+409	34	repro	model	model		2026-11-06T14:57:33Z	4.3	
+409	35	repro	tool	shell	bash	2026-11-06T14:57:37Z	0.3	cd crates/bevy_cauldron; grep -rn "OtherDoorLabel\|OtherDoorMark\|name_the_other_door" src tests --include=*.rs | grep -v "^src/tiles.rs:4[23]" | head -20; git 
+409	36	repro	model	model		2026-11-06T14:57:37Z	1.8	
+409	37	repro	tool	shell	bash	2026-11-06T14:57:39Z	0.0	cd crates/bevy_cauldron; sed -n 1,120p tests/a_click_on_the_other_door_crosses_to_it.rs; grep -rn '"Kit"\|"Map"' tests | head; ls tests/capture_feedback_1793927
+409	38	repro	model	model		2026-11-06T14:57:39Z	8.2	
+409	39	build	tool	phase mark	bash	2026-11-06T14:57:47Z	0.2	cd crates/bevy_cauldron; python3 ../../tools/loop/steps.py mark build; grep -n "cfg(test)" src/tiles.rs; grep -n "capture_feedback_1793928006124\|mod capture_fe
+409	40	build	model	model		2026-11-06T14:57:48Z	12.2	
+409	41	prove	tool	phase mark	bash	2026-11-06T14:58:00Z	1.1	cd crates/bevy_cauldron; cat > tests/capture_feedback_1793928006124_switch.rs <<'EOF' //! **The strip's door cue reads as a switch, not as another tab** — `feed
+409	42	prove	model	model		2026-11-06T14:58:01Z	1.8	
+409	43	prove	tool	cargo test	bash	2026-11-06T14:58:03Z	35.9	cd crates/bevy_cauldron; flock $HOME/.cargo-target-shared/cauldron-wt.lock env CARGO_TARGET_DIR=$HOME/.cargo-target-shared/global cargo nextest run -p bevy_caul
+409	44	prove	model	model		2026-11-06T14:58:39Z	5.5	
+409	45	prove	tool	shell	bash	2026-11-06T14:58:44Z	0.0	cd crates/bevy_cauldron/src; python3 - <<'EOF' s=open('tiles.rs').read() # spawn: add "Switch to" text before OtherDoorLabel old=""" .with_children(|m| { m.spaw
+409	46	prove	model	model		2026-11-06T14:58:44Z	2.8	
+409	47	prove	tool	loop tools	bash	2026-11-06T14:58:47Z	0.1	cd crates/bevy_cauldron/src; cat >> tiles.rs <<'EOF' #[cfg(test)] mod other_door_tests { use super::*; /// The cue is a way across: Map and Kit lead to each oth
+409	48	prove	model	model		2026-11-06T14:58:47Z	2.6	
+409	49	prove	tool	cargo test	bash	2026-11-06T14:58:50Z	60.0	[launched bg_1] cd crates/bevy_cauldron; export CARGO_TARGET_DIR=$HOME/.cargo-target-shared/global; flock $HOME/.cargo-target-shared/cauldron-wt.lock sh -c "cargo nextest run -
+409	50	prove	model	model		2026-11-06T14:59:50Z	1.6	
+409	51	prove	tool	wait: other	wait	2026-11-06T14:59:51Z	341.4	{}
+409	52	prove	model	model		2026-11-06T15:05:33Z	4.8	
+409	53	prove	tool	loop tools	bash	2026-11-06T15:05:38Z	0.2	python3 tools/changelog/changelog.py add --id feedback-1793928006124 --title "The strip's cue to the other door reads 'Switch to Map' instead of a bare 'Map' th
+409	54	prove	model	model		2026-11-06T15:05:38Z	2.0	
+409	55	gate	tool	phase mark	bash	2026-11-06T15:05:40Z	1.2	python3 tools/loop/steps.py mark gate; git status --short | head; git push origin HEAD:main 2>&1 | tail -15
+409	56	gate	model	model		2026-11-06T15:05:41Z	2.2	
+409	57	gate	tool	push gate	bash	2026-11-06T15:05:43Z	2.0	git pull --rebase origin main 2>&1 | tail -3; git push origin HEAD:main 2>&1 | tail -15
+409	58	gate	model	model		2026-11-06T15:05:45Z	1.8	
+409	59	gate	tool	git	bash	2026-11-06T15:05:47Z	0.0	git status --short | head; git diff --name-only --diff-filter=U
+409	60	gate	model	model		2026-11-06T15:05:47Z	1.5	
+409	61	gate	tool	shell	bash	2026-11-06T15:05:48Z	0.0	grep -n "^<<<<<<<\|^=======\|^>>>>>>>" CHANGELOG.md
+409	62	gate	model	model		2026-11-06T15:05:48Z	2.2	
+409	63	gate	tool	loop tools	bash	2026-11-06T15:05:51Z	4.9	sed -i -e '/^<<<<<<< HEAD$/d' -e '/^=======$/d' -e '/^>>>>>>> 3360228/d' CHANGELOG.md; sed -n 5,12p CHANGELOG.md | cut -c1-90; git add CHANGELOG.md; GIT_EDITOR=
+409	64	gate	model	model		2026-11-06T15:05:56Z	4.7	
+409	65	gate	tool	loop tools	bash	2026-11-06T15:06:00Z	1.5	S=feedback-1793928006124; python3 tools/loop/captures.py set $S --status fixed --commit 5e2f033 --reason "the door cue was a bare 'Map'/'Kit' on the tab row's b
+409	66	gate	model	model		2026-11-06T15:06:02Z	8.6	
+409	67	ship	tool	phase mark	bash	2026-11-06T15:06:10Z	60.1	[launched bg_2] cat > docs/loop/iterations/2026-11-06-debug-feedback-1793928006124-5e2f033.md <<'EOF' # feedback-1793928006124 — the door cue reads as a fourth tab (fixed) **Ki
+409	68	ship	model	model		2026-11-06T15:07:10Z	1.6	
+409	69	ship	tool	wait: other	wait	2026-11-06T15:07:12Z	939.2	{}
+409	70	ship	model	model		2026-11-06T15:22:51Z	1.5	
+408	1	orient	model	model		2026-11-06T14:56:47Z	2.4	
+408	2	orient	tool	phase mark	bash	2026-11-06T14:56:50Z	0.4	date +%s; python3 tools/loop/steps.py begin && python3 tools/loop/steps.py mark orient; git status --short; git status -sb | head -3; python3 tools/loop/capture
+408	3	orient	model	model		2026-11-06T14:56:50Z	2.2	
+408	4	orient	tool	loop tools	bash	2026-11-06T14:56:52Z	0.4	python3 - <<'EOF' import glob, os, re, json p = "docs/loop/captures/cases.jsonl" n = sum(1 for _ in open(p)) if os.path.exists(p) else 0 reviews = sorted(glob.g
+408	5	orient	model	model		2026-11-06T14:56:53Z	2.3	
+408	6	orient	tool	loop tools	bash	2026-11-06T14:56:55Z	0.2	python3 - <<'EOF' import json L=json.load(open("docs/loop/captures/ledger.json")) rows=L if isinstance(L,list) else L.get("captures",L) cases={json.loads(l).get
+408	7	orient	model	model		2026-11-06T14:56:55Z	2.4	
+408	8	orient	tool	shell	bash	2026-11-06T14:56:57Z	0.1	python3 - <<'EOF' import json rows=json.load(open("docs/loop/captures/ledger.json")) cases={json.loads(l).get("stem") for l in open("docs/loop/captures/cases.js
+408	9	orient	model	model		2026-11-06T14:56:57Z	1.9	
+408	10	orient	tool	shell	bash	2026-11-06T14:56:59Z	0.0	sed -n 2240p docs/loop/log.md | cut -c600-3500; grep -n "feedback-1793928006124" docs/loop/log.md | cut -c1-80; ls docs/loop/iterations | grep 1793928006124
+408	11	orient	model	model		2026-11-06T14:56:59Z	2.1	
+408	12	repro	tool	phase mark	bash	2026-11-06T14:57:02Z	0.1	python3 tools/loop/steps.py mark repro; grep -n "WhereYouAre\|fn spawn_chrome_bar\|fn subject" -r crates/bevy_cauldron/src | head -30; sed -n 3770,3830p crates/
+408	13	repro	model	model		2026-11-06T14:57:02Z	3.5	
+408	14	repro	tool	shell	bash	2026-11-06T14:57:05Z	0.0	cat docs/loop/iterations/2026-11-06-debug-feedback-1793928006124-blocked.md | cut -c1-1500; ls crates/bevy_cauldron/tests | grep capture_ | head; grep -n "chrom
+408	15	repro	model	model		2026-11-06T14:57:05Z	3.9	
+408	16	repro	tool	shell	bash	2026-11-06T14:57:09Z	0.0	cd crates/bevy_cauldron/src; sed -n 1170,1215p chrome.rs; sed -n 2860,2935p editor.rs; grep -n "door_strip" *.rs | head -20
+408	17	repro	model	model		2026-11-06T14:57:09Z	4.0	
+408	18	repro	tool	shell	bash	2026-11-06T14:57:13Z	0.3	cd crates/bevy_cauldron; cat tests/capture_feedback_1793928006124.rs 2>/dev/null | head -80; git status --short; git log --oneline -3 -- tests/capture_feedback_
+408	19	repro	model	model		2026-11-06T14:57:13Z	3.4	
+408	20	repro	tool	shell	bash	2026-11-06T14:57:17Z	0.0	cd crates/bevy_cauldron/src; sed -n 120,160p menu_bar.rs; sed -n 274,330p menu_bar.rs; sed -n 4090,4160p tiles.rs
+408	21	repro	model	model		2026-11-06T14:57:17Z	3.9	
+408	22	repro	tool	shell	bash	2026-11-06T14:57:21Z	0.1	cd docs/loop/captures/feedback-1793928006124; cp feedback-1793928006124.png /tmp/p409_full.png; python3 -c " from PIL import Image im=Image.open('/tmp/p409_full
+408	23	repro	tool	read files	read	2026-11-06T14:57:21Z	0.1	/tmp/p409_crop.png
+408	24	repro	model	model		2026-11-06T14:57:21Z	1.5	
+408	25	repro	tool	shell	bash	2026-11-06T14:57:22Z	0.1	cd /tmp; python3 -c " from PIL import Image im=Image.open('/tmp/p409_full.png') im.crop((0,0,1400,330)).save('/tmp/p409_crop.png')"; ls -la /tmp/p409*
+408	26	repro	model	model		2026-11-06T14:57:22Z	1.3	
+408	27	repro	tool	read files	read	2026-11-06T14:57:24Z	0.0	/tmp/p409_crop.png
+408	28	repro	model	model		2026-11-06T14:57:24Z	5.3	
+408	29	repro	tool	shell	bash	2026-11-06T14:57:29Z	0.0	cd crates/bevy_cauldron/src; sed -n 4160,4260p tiles.rs; grep -n "fn tabs" -A25 tiles.rs | head -50
+408	30	repro	model	model		2026-11-06T14:57:29Z	1.8	
+408	31	repro	tool	shell	bash	2026-11-06T14:57:31Z	0.0	cd crates/bevy_cauldron/src; sed -n 4260,4330p tiles.rs; grep -n "OtherDoor" *.rs | head -20
+408	32	repro	model	model		2026-11-06T14:57:31Z	1.6	
+408	33	repro	tool	shell	bash	2026-11-06T14:57:33Z	0.0	cd crates/bevy_cauldron/src; sed -n 4226,4262p tiles.rs; sed -n 4330,4370p tiles.rs; grep -n "fn fonts\|pub const BODY\|pub const TAB\|pub const LABEL" chrome.r
+408	34	repro	model	model		2026-11-06T14:57:33Z	4.3	
+408	35	repro	tool	shell	bash	2026-11-06T14:57:37Z	0.3	cd crates/bevy_cauldron; grep -rn "OtherDoorLabel\|OtherDoorMark\|name_the_other_door" src tests --include=*.rs | grep -v "^src/tiles.rs:4[23]" | head -20; git 
+408	36	repro	model	model		2026-11-06T14:57:37Z	1.8	
+408	37	repro	tool	shell	bash	2026-11-06T14:57:39Z	0.0	cd crates/bevy_cauldron; sed -n 1,120p tests/a_click_on_the_other_door_crosses_to_it.rs; grep -rn '"Kit"\|"Map"' tests | head; ls tests/capture_feedback_1793927
+408	38	repro	model	model		2026-11-06T14:57:39Z	8.2	
+408	39	build	tool	phase mark	bash	2026-11-06T14:57:47Z	0.2	cd crates/bevy_cauldron; python3 ../../tools/loop/steps.py mark build; grep -n "cfg(test)" src/tiles.rs; grep -n "capture_feedback_1793928006124\|mod capture_fe
+408	40	build	model	model		2026-11-06T14:57:48Z	12.2	
+408	41	prove	tool	phase mark	bash	2026-11-06T14:58:00Z	1.1	cd crates/bevy_cauldron; cat > tests/capture_feedback_1793928006124_switch.rs <<'EOF' //! **The strip's door cue reads as a switch, not as another tab** — `feed
+408	42	prove	model	model		2026-11-06T14:58:01Z	1.8	
+408	43	prove	tool	cargo test	bash	2026-11-06T14:58:03Z	35.9	cd crates/bevy_cauldron; flock $HOME/.cargo-target-shared/cauldron-wt.lock env CARGO_TARGET_DIR=$HOME/.cargo-target-shared/global cargo nextest run -p bevy_caul
+408	44	prove	model	model		2026-11-06T14:58:39Z	5.5	
+408	45	prove	tool	shell	bash	2026-11-06T14:58:44Z	0.0	cd crates/bevy_cauldron/src; python3 - <<'EOF' s=open('tiles.rs').read() # spawn: add "Switch to" text before OtherDoorLabel old=""" .with_children(|m| { m.spaw
+408	46	prove	model	model		2026-11-06T14:58:44Z	2.8	
+408	47	prove	tool	loop tools	bash	2026-11-06T14:58:47Z	0.1	cd crates/bevy_cauldron/src; cat >> tiles.rs <<'EOF' #[cfg(test)] mod other_door_tests { use super::*; /// The cue is a way across: Map and Kit lead to each oth
+408	48	prove	model	model		2026-11-06T14:58:47Z	2.6	
+408	49	prove	tool	cargo test	bash	2026-11-06T14:58:50Z	60.0	[launched bg_1] cd crates/bevy_cauldron; export CARGO_TARGET_DIR=$HOME/.cargo-target-shared/global; flock $HOME/.cargo-target-shared/cauldron-wt.lock sh -c "cargo nextest run -
+408	50	prove	model	model		2026-11-06T14:59:50Z	1.6	
+408	51	prove	tool	wait: other	wait	2026-11-06T14:59:51Z	341.4	{}
+408	52	prove	model	model		2026-11-06T15:05:33Z	4.8	
+408	53	prove	tool	loop tools	bash	2026-11-06T15:05:38Z	0.2	python3 tools/changelog/changelog.py add --id feedback-1793928006124 --title "The strip's cue to the other door reads 'Switch to Map' instead of a bare 'Map' th
+408	54	prove	model	model		2026-11-06T15:05:38Z	2.0	
+408	55	gate	tool	phase mark	bash	2026-11-06T15:05:40Z	1.2	python3 tools/loop/steps.py mark gate; git status --short | head; git push origin HEAD:main 2>&1 | tail -15
+408	56	gate	model	model		2026-11-06T15:05:41Z	2.2	
+408	57	gate	tool	push gate	bash	2026-11-06T15:05:43Z	2.0	git pull --rebase origin main 2>&1 | tail -3; git push origin HEAD:main 2>&1 | tail -15
+408	58	gate	model	model		2026-11-06T15:05:45Z	1.8	
+408	59	gate	tool	git	bash	2026-11-06T15:05:47Z	0.0	git status --short | head; git diff --name-only --diff-filter=U
+408	60	gate	model	model		2026-11-06T15:05:47Z	1.5	
+408	61	gate	tool	shell	bash	2026-11-06T15:05:48Z	0.0	grep -n "^<<<<<<<\|^=======\|^>>>>>>>" CHANGELOG.md
+408	62	gate	model	model		2026-11-06T15:05:48Z	2.2	
+408	63	gate	tool	loop tools	bash	2026-11-06T15:05:51Z	4.9	sed -i -e '/^<<<<<<< HEAD$/d' -e '/^=======$/d' -e '/^>>>>>>> 3360228/d' CHANGELOG.md; sed -n 5,12p CHANGELOG.md | cut -c1-90; git add CHANGELOG.md; GIT_EDITOR=
+408	64	gate	model	model		2026-11-06T15:05:56Z	4.7	
+408	65	gate	tool	loop tools	bash	2026-11-06T15:06:00Z	1.5	S=feedback-1793928006124; python3 tools/loop/captures.py set $S --status fixed --commit 5e2f033 --reason "the door cue was a bare 'Map'/'Kit' on the tab row's b
+408	66	gate	model	model		2026-11-06T15:06:02Z	8.6	
+408	67	ship	tool	phase mark	bash	2026-11-06T15:06:10Z	60.1	[launched bg_2] cat > docs/loop/iterations/2026-11-06-debug-feedback-1793928006124-5e2f033.md <<'EOF' # feedback-1793928006124 — the door cue reads as a fourth tab (fixed) **Ki
+408	68	ship	model	model		2026-11-06T15:07:10Z	1.6	
+408	69	ship	tool	wait: other	wait	2026-11-06T15:07:12Z	939.2	{}
+408	70	ship	model	model		2026-11-06T15:22:51Z	1.5	
+408	71	ship	tool	loop tools	bash	2026-11-06T15:22:53Z	0.7	python3 tools/loop/steps.py end; git status --short; git status -sb | head -2
+408	72	ship	model	model		2026-11-06T15:22:54Z	5.6	
