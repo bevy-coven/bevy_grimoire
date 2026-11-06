@@ -131,12 +131,21 @@
       "taken_at_ms": 1793927698061,
       "app_version": "0.2.6",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "\"it looks out of place\" is indicative, and it measures true: Fill is 107 physical px wide in a run of icon-only buttons that are 65-66, because it is the only labelled button outside the labelled group",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "the Fill button is 107 physical px wide and 145 tall in a row whose icon-only buttons are 65-66 wide: it is the only button after the separator carrying a word under its icon, so it stands out of the run it sits in"
+        }
+      ]
     },
     {
       "stem": "feedback-1793927744511",
