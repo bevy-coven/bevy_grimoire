@@ -45584,3 +45584,19 @@ pass	seq	phase	kind	category	tool	start	seconds	detail
 416	11	orient	model	model		2026-11-06T15:49:55Z	1.4	
 416	12	orient	tool	push gate	bash	2026-11-06T15:49:56Z	24.5	echo "- 2026-11-06 **pass 417** — nothing left to answer (queue empty; 3 new cases since review, none due)." >> docs/loop/log.md; python3 tools/loop/steps.py en
 416	13	orient	model	model		2026-11-06T15:50:20Z	1.8	
+419	1	orient	model	model		2026-11-06T15:58:37Z	4.5	
+419	2	orient	tool	phase mark	bash	2026-11-06T15:58:42Z	0.4	date +%s; python3 tools/loop/steps.py begin; python3 tools/loop/steps.py mark orient; git status -sb | head; python3 tools/loop/captures.py check; echo rc=$?
+419	3	orient	model	model		2026-11-06T15:58:42Z	3.7	
+419	4	orient	tool	loop tools	bash	2026-11-06T15:58:46Z	0.4	python3 - <<'EOF' import glob, os, re p = "docs/loop/captures/cases.jsonl" n = sum(1 for _ in open(p)) if os.path.exists(p) else 0 reviews = sorted(glob.glob("d
+419	5	orient	model	model		2026-11-06T15:58:46Z	3.2	
+419	6	orient	tool	shell	bash	2026-11-06T15:58:50Z	0.0	python3 - <<'EOF' import json l=json.load(open("docs/loop/captures/ledger.json")) rows=l["captures"] if "captures" in l else l cases={json.loads(x).get("stem") 
+419	7	orient	model	model		2026-11-06T15:58:50Z	5.0	
+418	1	orient	model	model		2026-11-06T15:58:37Z	4.5	
+418	2	orient	tool	phase mark	bash	2026-11-06T15:58:42Z	0.4	date +%s; python3 tools/loop/steps.py begin; python3 tools/loop/steps.py mark orient; git status -sb | head; python3 tools/loop/captures.py check; echo rc=$?
+418	3	orient	model	model		2026-11-06T15:58:42Z	3.7	
+418	4	orient	tool	loop tools	bash	2026-11-06T15:58:46Z	0.4	python3 - <<'EOF' import glob, os, re p = "docs/loop/captures/cases.jsonl" n = sum(1 for _ in open(p)) if os.path.exists(p) else 0 reviews = sorted(glob.glob("d
+418	5	orient	model	model		2026-11-06T15:58:46Z	3.2	
+418	6	orient	tool	shell	bash	2026-11-06T15:58:50Z	0.0	python3 - <<'EOF' import json l=json.load(open("docs/loop/captures/ledger.json")) rows=l["captures"] if "captures" in l else l cases={json.loads(x).get("stem") 
+418	7	orient	model	model		2026-11-06T15:58:50Z	5.0	
+418	8	orient	tool	push gate	bash	2026-11-06T15:58:55Z	11.6	python3 - <<'EOF' p="docs/loop/log.md" s=open(p).read().splitlines() s[-1]="- 2026-11-06 **pass 419** — nothing left to answer (queue empty; 3 new cases since r
+418	9	orient	model	model		2026-11-06T15:59:06Z	4.1	
