@@ -9,7 +9,7 @@
   1020,
   664
  ],
- "setup": [
+ "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}, 
   {
    "mcp": "grimoire_frame_view",
    "args": {

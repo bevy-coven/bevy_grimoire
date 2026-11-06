@@ -18,7 +18,8 @@ the editor's capture folder, named in events.json.
 Storyboard format (JSON):
   {
     "name": "undo_place", "fps": 15,
-    "setup": [{"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-150, -110, 150, 110]}}}],
+    "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]},   a chord before the capture (here: collapse the terminal)
+              {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-150, -110, 150, 110]}}}],
     "chunks": [ {"seconds": 6}, {"seconds": 4, "operation": {"name": "...", "parameters": {...}}} ],
     "steps": [
       {"at": 0.5, "cursor": [x, y]},            logical px
@@ -595,12 +596,25 @@ def main():
     out_dir = os.path.join(args.project, "target/loop/demo", sb["name"])
     os.makedirs(out_dir, exist_ok=True)
 
-    timeline = Timeline(len(sb["chunks"]))
     inj = Injector(args.port)
     agent = McpClient(args.server, args.project, args.port, f"{sb['name']}_agent")
     errors = []
     for call in sb.get("setup", []):
+        # **A chord before the capture starts**, so a demo can begin from a state the person reaches with a
+        # key (the terminal collapsed with Ctrl+J, say) without a frame of the change in the clip.
+        if "key" in call:
+            mods = call.get("mods", [])
+            for mod in mods:
+                inj.press(mod)
+            inj.tap(call["key"])
+            for mod in reversed(mods):
+                inj.release(mod)
+            time.sleep(call.get("settle", 1.0))
+            continue
         agent.json_call(call["mcp"], call.get("args", {}))
+    # **The clock starts after the setup**, so a setup that takes time (a chord and its settle, an MCP call)
+    # is not a frozen first frame at the head of the clip: every frame and step is timed from here.
+    timeline = Timeline(len(sb["chunks"]))
     capture = threading.Thread(target=run_chunks,
                                args=(sb, args.server, args.project, args.port, timeline, errors))
     capture.start()

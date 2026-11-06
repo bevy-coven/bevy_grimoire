@@ -3,13 +3,8 @@
   "fps": 15,
   "scale": 1,
   "width": 600,
-  "crop": [
-    430,
-    150,
-    1030,
-    700
-  ],
-  "setup": [
+  "crop": [420, 240, 810, 575],
+  "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}, 
     {
       "mcp": "grimoire_frame_view",
       "args": {

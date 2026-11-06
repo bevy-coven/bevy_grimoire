@@ -9,7 +9,7 @@
     830,
     690
   ],
-  "setup": [
+  "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}, 
     {
       "mcp": "grimoire_frame_view",
       "args": {
@@ -44,7 +44,7 @@
     {
       "at": 0.5,
       "click_label": "filter",
-      "within": [1043, 170, 1265, 230]
+      "within": [840, 150, 1280, 230]
     },
     {
       "at": 0.7,
@@ -60,7 +60,7 @@
     {
       "at": 1.55,
       "click_label": "Sofa",
-      "within": [1043, 215, 1265, 300]
+      "within": [840, 215, 1280, 330]
     },
     {
       "at": 2.05,

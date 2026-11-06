@@ -9,7 +9,7 @@
   1280,
   703
  ],
- "setup": [],
+ "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}],
  "chunks": [
   {
    "seconds": 6.5
