@@ -65,11 +65,12 @@ pub const TERMINAL_FONT: Handle<Font> = bevy::asset::uuid_handle!("6b9f3f0e-2d47
 /// The face's bytes, compiled in: a project carries no terminal font of its own.
 const TERMINAL_FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/FiraMonoNerdFontMono-Regular.otf");
 
-/// **A `TextFont` in the terminal's face**, at the size every terminal row is drawn at.
-pub fn terminal_font() -> TextFont {
+/// **A `TextFont` in the terminal's face**, at the size every terminal row is drawn at: the label role
+/// times the person's terminal text size (#324, `CellMetrics::text_scale`).
+pub fn terminal_font(scale: f32) -> TextFont {
     TextFont {
         font: TERMINAL_FONT.into(),
-        ..chrome::font(chrome::text::LABEL)
+        ..chrome::font_scaled(chrome::text::LABEL, scale)
     }
 }
 
@@ -109,6 +110,9 @@ impl Plugin for TerminalViewPlugin {
             .add_systems(
                 Update,
                 (
+                    // The person's settings first (#324): a new text size invalidates the measurement
+                    // below, and a new default caret is the screens' before they are drawn.
+                    take_the_terminal_settings,
                     // The measurement first, so the column count this frame uses a real advance.
                     measure_the_cell,
                     resize_the_terminal.after(measure_the_cell),
@@ -133,6 +137,9 @@ pub struct CellMetrics {
     /// Physical pixels per logical pixel, as the text pipeline laid the glyphs out.
     scale: f32,
     measured: bool,
+    /// **The person's terminal text size** (#324), a multiple of the shipped size. A change of it
+    /// repaints every row at the new size and measures the cell again.
+    text_scale: f32,
 }
 
 impl Default for CellMetrics {
@@ -142,6 +149,7 @@ impl Default for CellMetrics {
             height: TERMINAL_CELL_H,
             scale: 1.0,
             measured: false,
+            text_scale: 1.0,
         }
     }
 }
@@ -168,6 +176,38 @@ impl CellMetrics {
     pub fn is_measured(&self) -> bool {
         self.measured
     }
+
+    /// The terminal's text size, a multiple of the shipped size (#324).
+    pub fn text_scale(&self) -> f32 {
+        self.text_scale
+    }
+}
+
+/// **The person's terminal settings, given to the terminal when they change** (#324).
+///
+/// `EditorSettings` changes only when a settings file resolves to something new (`settings::sync_settings`),
+/// so this does its work once per edit. The default caret goes to every screen and to every shell opened
+/// later; a new text size repaints every row at that size and measures the cell again, and the column
+/// and row count that follows is told to the shell by [`resize_the_terminal`].
+fn take_the_terminal_settings(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut terminal: ResMut<Terminal>,
+    mut metrics: ResMut<CellMetrics>,
+    mut drawn: ResMut<Drawn>,
+) {
+    let Some(settings) = settings else {
+        return;
+    };
+    if !settings.is_changed() {
+        return;
+    }
+    terminal.set_default_caret(settings.terminal_cursor.shape());
+    if metrics.text_scale != settings.terminal_text_scale {
+        metrics.text_scale = settings.terminal_text_scale;
+        metrics.measured = false;
+        drawn.rows.clear();
+        drawn.stamp = 0;
+    }
 }
 
 /// **Measure one glyph, once.**
@@ -181,12 +221,15 @@ impl CellMetrics {
 /// replaced the moment there is a glyph to measure, so it can never be the answer for long.
 fn measure_the_cell(
     mut metrics: ResMut<CellMetrics>,
-    rows: Query<&bevy::text::TextLayoutInfo, With<TerminalRow>>,
+    rows: Query<(&bevy::text::TextLayoutInfo, &TextFont), With<TerminalRow>>,
 ) {
     if metrics.measured {
         return;
     }
-    let Some(layout) = rows.iter().find(|l| !l.glyphs.is_empty()) else {
+    // **Only a row already drawn at the current size is a measurement** (#324): after the text size
+    // changes, a row still laid out at the old one would be measured and kept for good.
+    let size = terminal_font(metrics.text_scale).font_size;
+    let Some((layout, _)) = rows.iter().find(|(l, font)| !l.glyphs.is_empty() && font.font_size == size) else {
         return;
     };
     // **Two glyphs' positions are the advance between them**, which is the only honest measurement:
@@ -304,7 +347,7 @@ fn draw_the_terminal(
     bodies: Query<Entity, With<TerminalBody>>,
     mut rows: Query<(Entity, &TerminalRow, &mut Node, &mut Visibility)>,
     carets: Query<(&mut Node, &mut Visibility, &mut BackgroundColor), CaretFilter>,
-    mut glyphs: Query<&mut Text, With<crate::terminal_pane::TerminalCaretGlyph>>,
+    mut glyphs: Query<(&mut Text, &mut TextFont), With<crate::terminal_pane::TerminalCaretGlyph>>,
     focus: Res<TerminalFocus>,
     mut commands: Commands,
 ) {
@@ -426,7 +469,7 @@ fn draw_the_terminal(
                     Text::new(String::new()),
                     TextLayout::no_wrap(),
                     TextColor(chrome::TEXT),
-                    terminal_font(),
+                    terminal_font(metrics.text_scale()),
                     Pickable::IGNORE,
                 ))
                 .with_children(|row| {
@@ -439,7 +482,7 @@ fn draw_the_terminal(
                         let mut span = row.spawn((
                             TextSpan::new(run.text.clone()),
                             TextColor(run.ink),
-                            terminal_font(),
+                            terminal_font(metrics.text_scale()),
                             Pickable::IGNORE,
                         ));
                         // **A ground only where the cells paint one** (#309): an inverse run, a
@@ -521,9 +564,14 @@ fn draw_the_terminal(
     } else {
         String::new()
     };
-    for mut glyph in &mut glyphs {
+    // The glyph is drawn at the rows' size, so a block over a large cell holds a large character.
+    let glyph_font = terminal_font(metrics.text_scale());
+    for (mut glyph, mut font) in &mut glyphs {
         if glyph.0 != covered {
             glyph.0.clone_from(&covered);
+        }
+        if font.font_size != glyph_font.font_size {
+            font.font_size = glyph_font.font_size;
         }
     }
 

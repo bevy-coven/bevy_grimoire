@@ -68,6 +68,27 @@ pub enum Theme {
     HighContrast,
 }
 
+/// **The terminal's caret when a program asks for none** (#324): VS Code's
+/// `terminal.integrated.cursorStyle`. A program that asks for a shape (vim's DECSCUSR) still gets it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TerminalCursor {
+    #[default]
+    Block,
+    Underline,
+    Bar,
+}
+
+impl TerminalCursor {
+    /// The shape the terminal draws for this setting.
+    pub fn shape(self) -> crate::terminal::CaretShape {
+        match self {
+            TerminalCursor::Block => crate::terminal::CaretShape::Block,
+            TerminalCursor::Underline => crate::terminal::CaretShape::Underline,
+            TerminalCursor::Bar => crate::terminal::CaretShape::Bar,
+        }
+    }
+}
+
 /// **What the running editor uses**: the defaults with the user's file and then the project's laid over
 /// them, key by key.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -89,6 +110,13 @@ pub struct EditorSettings {
     /// The rebound commands of every layer, by command id: what the keymap screen shows against each
     /// command's default chord.
     pub keymap: BTreeMap<String, Shortcut>,
+    /// The terminal's text size as a multiple of the shipped size (#324): VS Code's
+    /// `terminal.integrated.fontSize`, as a scale so it reads like the editor's own text size.
+    pub terminal_text_scale: f32,
+    /// The terminal's caret when a program asks for none.
+    pub terminal_cursor: TerminalCursor,
+    /// The terminal's caret blinks. On by default, as it has been since the terminal shipped.
+    pub terminal_cursor_blink: bool,
 }
 
 impl Default for EditorSettings {
@@ -102,6 +130,9 @@ impl Default for EditorSettings {
             grid_strength: 1.0,
             show_statistics: false,
             keymap: BTreeMap::new(),
+            terminal_text_scale: 1.0,
+            terminal_cursor: TerminalCursor::default(),
+            terminal_cursor_blink: true,
         }
     }
 }
@@ -132,6 +163,12 @@ pub struct SettingsLayer {
     /// now runs it. A command the file leaves out keeps its default chord (UI-72, #250).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub keymap: BTreeMap<String, Shortcut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_text_scale: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_cursor: Option<TerminalCursor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_cursor_blink: Option<bool>,
 }
 
 impl Default for SettingsLayer {
@@ -146,6 +183,9 @@ impl Default for SettingsLayer {
             grid_strength: None,
             show_statistics: None,
             keymap: BTreeMap::new(),
+            terminal_text_scale: None,
+            terminal_cursor: None,
+            terminal_cursor_blink: None,
         }
     }
 }
@@ -162,7 +202,11 @@ impl SettingsLayer {
                 format!("version {} is not the {SETTINGS_VERSION} this build reads", layer.version),
             ));
         }
-        for (field, value) in [("text_scale", layer.text_scale), ("interface_scale", layer.interface_scale)] {
+        for (field, value) in [
+            ("text_scale", layer.text_scale),
+            ("interface_scale", layer.interface_scale),
+            ("terminal_text_scale", layer.terminal_text_scale),
+        ] {
             if let Some(v) = value
                 && !(SCALE_RANGE.0..=SCALE_RANGE.1).contains(&v)
             {
@@ -201,6 +245,9 @@ impl EditorSettings {
             out.show_statistics = layer.show_statistics.unwrap_or(out.show_statistics);
             // Per command: a later layer's binding replaces the earlier one's for that command alone.
             out.keymap.extend(layer.keymap.iter().map(|(id, chord)| (id.clone(), *chord)));
+            out.terminal_text_scale = layer.terminal_text_scale.unwrap_or(out.terminal_text_scale);
+            out.terminal_cursor = layer.terminal_cursor.unwrap_or(out.terminal_cursor);
+            out.terminal_cursor_blink = layer.terminal_cursor_blink.unwrap_or(out.terminal_cursor_blink);
         }
         out
     }

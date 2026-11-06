@@ -80,6 +80,9 @@ pub struct Terminal {
     /// Kept here, on the session's one resource, because a pane is rebuilt on every screen and the
     /// person's choice must outlive it.
     collapsed: bool,
+    /// **The caret a shell gets when its program asks for none** (#324): the person's
+    /// `terminal_cursor` setting, given to every open screen and to each one spawned after.
+    default_caret: CaretShape,
 }
 
 /// One shell, its screen, and what is drawn about it.
@@ -126,6 +129,7 @@ impl Terminal {
                 let title = shell_title(cwd);
                 let mut screen = grid::TerminalScreen::new(cols, rows);
                 screen.resize(cols, rows);
+                screen.set_default_caret(self.default_caret);
                 self.open.push(TerminalTab {
                     title,
                     cd_offered: None,
@@ -143,6 +147,15 @@ impl Terminal {
                 self.problem = Some(why);
                 self.active
             }
+        }
+    }
+
+    /// **The caret every shell gets when its program asks for none** (#324), now and for each shell
+    /// opened after. A program that asked for a shape keeps it.
+    pub fn set_default_caret(&mut self, shape: CaretShape) {
+        self.default_caret = shape;
+        for tab in &mut self.open {
+            tab.screen.set_default_caret(shape);
         }
     }
 

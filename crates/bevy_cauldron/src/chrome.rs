@@ -640,6 +640,12 @@ pub fn font(role: text::Role) -> TextFont {
     TextFont::from_font_size(role.px())
 }
 
+/// **A role's size times a person's scale** (#324): the terminal's text size setting multiplies the
+/// role, so the size still comes from the type scale and a setting cannot name a bare number.
+pub fn font_scaled(role: text::Role, scale: f32) -> TextFont {
+    TextFont::from_font_size(role.px() * scale)
+}
+
 /// **One glyph's advance at [`text::BODY`], logical pixels.** The shipped face is
 /// `FiraMono-Regular.ttf` — monospace — so `chars * BODY_CHAR_W` is exact, not an estimate, and a
 /// string can be measured without a text-layout round trip. Stated once, beside the scale it

@@ -16,7 +16,7 @@
 
 use std::path::Path;
 
-use crate::settings::{EditorSettings, GRID_STRENGTH_RANGE, KIND, SettingsLayer, Theme};
+use crate::settings::{EditorSettings, GRID_STRENGTH_RANGE, KIND, SettingsLayer, TerminalCursor, Theme};
 
 /// One key's value: what a control shows and what a write carries.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -60,10 +60,13 @@ pub const SIZE_SLIDER: (f32, f32) = (0.75, 2.0);
 pub const SCALE_STEP: f32 = 0.05;
 
 /// The categories, in the order the screen's tabs show them.
-pub const CATEGORIES: &[&str] = &["Appearance", "Accessibility", "Map"];
+pub const CATEGORIES: &[&str] = &["Appearance", "Accessibility", "Map", "Terminal"];
 
 /// The names of [`Theme`]'s variants, in declaration order.
 pub const THEMES: &[&str] = &["Tool dark", "Parchment", "High contrast"];
+
+/// The names of [`TerminalCursor`]'s variants, in declaration order.
+pub const TERMINAL_CURSORS: &[&str] = &["Block", "Underline", "Bar"];
 
 /// **Every key a settings file may set.** The order is the order within a category.
 pub const CATALOGUE: &[Setting] = &[
@@ -116,6 +119,27 @@ pub const CATALOGUE: &[Setting] = &[
         description: "How strongly the grid is drawn; less is fainter.",
         kind: Kind::Scale { min: GRID_STRENGTH_RANGE.0, max: GRID_STRENGTH_RANGE.1 },
     },
+    Setting {
+        key: "terminal_text_scale",
+        label: "Terminal text size",
+        category: "Terminal",
+        description: "How large the terminal's text is. 100% is the size it ships at; the shell is told the new rows and columns.",
+        kind: Kind::Scale { min: SIZE_SLIDER.0, max: SIZE_SLIDER.1 },
+    },
+    Setting {
+        key: "terminal_cursor",
+        label: "Terminal cursor",
+        category: "Terminal",
+        description: "The terminal's cursor when a program asks for none: a block over the character, an underline or a bar.",
+        kind: Kind::Options(TERMINAL_CURSORS),
+    },
+    Setting {
+        key: "terminal_cursor_blink",
+        label: "Terminal cursor blinks",
+        category: "Terminal",
+        description: "The terminal's cursor blinks; off, it stays lit.",
+        kind: Kind::Switch,
+    },
 ];
 
 /// The setting with this key.
@@ -148,6 +172,22 @@ fn theme_index(theme: Theme) -> usize {
     }
 }
 
+fn cursor_index(cursor: TerminalCursor) -> usize {
+    match cursor {
+        TerminalCursor::Block => 0,
+        TerminalCursor::Underline => 1,
+        TerminalCursor::Bar => 2,
+    }
+}
+
+fn cursor_at(index: usize) -> TerminalCursor {
+    match index {
+        1 => TerminalCursor::Underline,
+        2 => TerminalCursor::Bar,
+        _ => TerminalCursor::Block,
+    }
+}
+
 fn theme_at(index: usize) -> Theme {
     match index {
         1 => Theme::Parchment,
@@ -167,6 +207,9 @@ impl EditorSettings {
             "show_grid" => Value::On(self.show_grid),
             "grid_strength" => Value::Number(self.grid_strength),
             "show_statistics" => Value::On(self.show_statistics),
+            "terminal_text_scale" => Value::Number(self.terminal_text_scale),
+            "terminal_cursor" => Value::Option(cursor_index(self.terminal_cursor)),
+            "terminal_cursor_blink" => Value::On(self.terminal_cursor_blink),
             _ => return None,
         })
     }
@@ -198,6 +241,9 @@ impl SettingsLayer {
             "show_grid" => self.show_grid.map(Value::On),
             "grid_strength" => self.grid_strength.map(Value::Number),
             "show_statistics" => self.show_statistics.map(Value::On),
+            "terminal_text_scale" => self.terminal_text_scale.map(Value::Number),
+            "terminal_cursor" => self.terminal_cursor.map(|c| Value::Option(cursor_index(c))),
+            "terminal_cursor_blink" => self.terminal_cursor_blink.map(Value::On),
             _ => None,
         }
     }
@@ -212,6 +258,9 @@ impl SettingsLayer {
             ("show_grid", Value::On(on)) => self.show_grid = Some(on),
             ("grid_strength", Value::Number(n)) => self.grid_strength = Some(n),
             ("show_statistics", Value::On(on)) => self.show_statistics = Some(on),
+            ("terminal_text_scale", Value::Number(n)) => self.terminal_text_scale = Some(n),
+            ("terminal_cursor", Value::Option(i)) => self.terminal_cursor = Some(cursor_at(i)),
+            ("terminal_cursor_blink", Value::On(on)) => self.terminal_cursor_blink = Some(on),
             _ => return false,
         }
         true
@@ -227,6 +276,9 @@ impl SettingsLayer {
             "show_grid" => self.show_grid = None,
             "grid_strength" => self.grid_strength = None,
             "show_statistics" => self.show_statistics = None,
+            "terminal_text_scale" => self.terminal_text_scale = None,
+            "terminal_cursor" => self.terminal_cursor = None,
+            "terminal_cursor_blink" => self.terminal_cursor_blink = None,
             _ => {}
         }
     }

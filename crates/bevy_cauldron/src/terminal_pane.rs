@@ -610,7 +610,7 @@ fn build_the_pane(
                 Text::new(String::new()),
                 TextColor(chrome::PANEL_BG),
                 TextLayout::no_wrap(),
-                crate::terminal_view::terminal_font(),
+                crate::terminal_view::terminal_font(1.0),
                 TerminalCaretGlyph,
                 Pickable::IGNORE,
                 Name::new("terminal caret glyph"),
@@ -1673,10 +1673,13 @@ fn a_chip_closes_a_tab(
 fn blink_the_caret(
     time: Res<Time<Real>>,
     mut pane: ResMut<TerminalPane>,
+    settings: Option<Res<crate::settings::EditorSettings>>,
     carets: Query<&mut Node, With<TerminalCaret>>,
 ) {
     pane.blink = (pane.blink + time.delta_secs()) % CARET_PERIOD;
-    let on = pane.blink < CARET_PERIOD * 0.5;
+    // **A caret that does not blink is always lit** (#324, the person's `terminal_cursor_blink`).
+    let blinks = settings.as_deref().is_none_or(|settings| settings.terminal_cursor_blink);
+    let on = !blinks || pane.blink < CARET_PERIOD * 0.5;
     let want = if on { Display::Flex } else { Display::None };
     for mut node in carets {
         if node.display != want {

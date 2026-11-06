@@ -33,7 +33,7 @@ use alacritty_terminal::index::{Column, Direction, Line as TermLine, Point};
 use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color as AnsiColor, CursorShape as AnsiCursorShape, NamedColor, Processor};
+use alacritty_terminal::vte::ansi::{Color as AnsiColor, CursorShape as AnsiCursorShape, CursorStyle, NamedColor, Processor};
 use bevy::prelude::*;
 
 use super::input::{MouseEncoding, MouseTracking, WheelTarget};
@@ -204,6 +204,8 @@ pub struct TerminalScreen {
     rows_count: u16,
     /// The search the find box has open, if any (#321).
     search: Option<Search>,
+    /// The caret the person's setting gives when the program asks for none (#324).
+    default_caret: CaretShape,
 }
 
 impl TerminalScreen {
@@ -217,10 +219,7 @@ impl TerminalScreen {
         let cols = cols.max(2);
         let rows = rows.max(1);
         let listener = TerminalListener::default();
-        let config = Config {
-            scrolling_history: SCROLLBACK,
-            ..Default::default()
-        };
+        let config = screen_config(CaretShape::Block);
         let term = Term::new(config, &Size { cols: cols as usize, rows: rows as usize }, listener.clone());
         TerminalScreen {
             term,
@@ -233,7 +232,20 @@ impl TerminalScreen {
             cols,
             rows_count: rows,
             search: None,
+            default_caret: CaretShape::Block,
         }
+    }
+
+    /// **The caret when the program asks for none** (#324): the person's setting, handed to the
+    /// emulator as its default style, so `ESC[0 q` (a program putting the default back) is this too.
+    /// A shape a program asked for is the program's and stays.
+    pub fn set_default_caret(&mut self, shape: CaretShape) {
+        if self.default_caret == shape {
+            return;
+        }
+        self.default_caret = shape;
+        self.term.set_options(screen_config(shape));
+        self.dirty = true;
     }
 
     /// The emulator's current width in cells.
@@ -703,6 +715,21 @@ impl TerminalScreen {
 /// The next build's [`TerminalScreen::stamp`]. Starts at 1, so a view that has drawn nothing (stamp 0)
 /// never matches a built screen.
 static NEXT_STAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// **The emulator's settings for one screen**: the bounded scrollback, and the caret it draws when the
+/// program asks for none (#324). One place, so a screen built and a screen re-set agree.
+fn screen_config(caret: CaretShape) -> Config {
+    let shape = match caret {
+        CaretShape::Block => AnsiCursorShape::Block,
+        CaretShape::Underline => AnsiCursorShape::Underline,
+        CaretShape::Bar => AnsiCursorShape::Beam,
+    };
+    Config {
+        scrolling_history: SCROLLBACK,
+        default_cursor_style: CursorStyle { shape, blinking: false },
+        ..Default::default()
+    }
+}
 
 /// **A query as a pattern that matches only its own characters.** Every character regex syntax gives a
 /// meaning is escaped — the set `regex_syntax::is_meta_character` names, which is also every escape
