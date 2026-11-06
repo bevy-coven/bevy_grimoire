@@ -279,9 +279,9 @@
       "app_version": "0.2.9",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "every clause is optative \u2014 \"should be collapsable\", \"should have a shortcut key\", \"should default to collapsed\" \u2014 so this proposes behaviour rather than reporting a defect. Note for the spec: collapsing and a toggle key already exist (folded_packs, Space toggles a focused pack with a status note), so the live gap is the DEFAULT (packs_the_kit_draws_from opens the kit's packs and folds the rest), not the mechanism",
+      "reason": "enhancement, specified but not implemented \u2014 the pass reached 30 minutes with no test that fails, so per budget it stopped rather than half-build the feature. What the spec settles: two of the three clauses already exist (folded_packs + a chevron that reflects it; Space toggles a focused pack, same key as VSCode's explorer), so the ONE gap is clause 3, the default. scan's first look does folded_packs = packs .filter(|p| !packs_the_kit_draws_from(project).contains(p)) \u2014 i.e. every pack the kit DRAWS FROM starts OPEN, the opposite of \"should default to collapsed\"; the capture shows FURNITURE-APPLIANCE (9 rows) and FURNITURE-BED (6) both expanded. The change is one line plus its expectation in tiles.rs's pack_fold_tests, with the exception that the selected row's pack must stay open or the first look has nothing selectable",
       "commit": "",
       "attempts": []
     },
