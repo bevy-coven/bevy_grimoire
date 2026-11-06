@@ -263,25 +263,57 @@ fn the_pane_is_up(panes: Query<(), With<TerminalPaneRoot>>) -> bool {
 /// and the viewport, so "docked across the bottom" is one child appended to it. A `GlobalZIndex`
 /// layer would paint over the status band and the docks' scrollbars, and z-order is the dialogs' — see
 /// [`chrome::MODAL_Z`].
-fn spawn_the_pane(mut commands: Commands, frame: Option<Res<chrome::Frame>>, terminal: Res<Terminal>, mut focus: ResMut<TerminalFocus>) {
+fn spawn_the_pane(
+    mut commands: Commands,
+    frame: Option<Res<chrome::Frame>>,
+    frame_children: Query<&Children>,
+    terminal: Res<Terminal>,
+    mut focus: ResMut<TerminalFocus>,
+) {
     let Some(frame) = frame else {
         return;
     };
     // **A pane belongs to a screen.** The door sweep takes the old root; this spawns the new one, and
     // the shells in `Terminal` are untouched — that is the whole of what "survives the door" means.
     //
+    // **It is parented to the frame's ROOT, not its body, and that is not a detail.**
+    // `chrome::Frame::body` is the `flex_direction: Row` that holds the two docks and the viewport, so a
+    // child of it is a *row sibling*: the pane was laid out 2560 px wide and pushed off the right edge
+    // of a 2560 px window, over the inspector and the map. Measured on the released 0.2.8 build on
+    // `mac_air`: size 2560 x 768, centre x 1718, spanning 438..2998. The root is the `Column` that
+    // already stacks the chrome bar, the door strip, the body and the status band, so a bottom dock is
+    // a row between `body` and `status` — which is what this inserts.
+    //
     // **It arrives lowered.** The pane is a dock a person raises, not something that takes a fifth of
     // the window the first time they open a project — so the node exists from the door's first frame
     // and `Ctrl+\`` is what shows it. That is also why the shells are not touched here: a shell that
     // was running when the door closed is still running, and raising the pane draws its scrollback.
-    build_the_pane(&mut commands, frame.body, terminal.height(), &terminal);
+    // **The status band's index**, so the pane lands between the body and the band. Found by asking the
+    // frame's own children rather than assuming "last but one": a frame that gained a row would
+    // otherwise put the terminal in the wrong place, silently.
+    let band_at = frame_children
+        .get(frame.root)
+        .map(|kids| {
+            kids.iter()
+                .position(|child| child == frame.status)
+                .unwrap_or(usize::MAX)
+        })
+        .unwrap_or(usize::MAX);
+    build_the_pane(&mut commands, frame.root, terminal.height(), &terminal, band_at);
     // A door that opens never has the terminal's keys: a lowered pane that still owned the keyboard
     // would be a dead editor with nothing on screen saying why.
     focus.release();
 }
 
 /// Build the pane under `body`, returning its root. **The one place a pane is made**, lowered.
-fn build_the_pane(commands: &mut Commands, body: Entity, height: f32, terminal: &Terminal) -> Entity {
+fn build_the_pane(
+    commands: &mut Commands,
+    parent: Entity,
+    height: f32,
+    terminal: &Terminal,
+    // The index in `parent`'s children the pane goes at — the status band's, so the band stays last.
+    before: usize,
+) -> Entity {
     let root = commands
         .spawn((
             Node {
@@ -393,7 +425,10 @@ fn build_the_pane(commands: &mut Commands, body: Entity, height: f32, terminal: 
 
     commands.entity(body_node).add_child(caret);
     commands.entity(root).add_children(&[grip, bar, body_node]);
-    commands.entity(body).add_child(root);
+    // **Above the status band, below the body.** `insert_children` at the band's index keeps the band
+    // at the foot of the window, where it has been since the frame was written; an `add_child` would
+    // put the terminal under it. `insert_children` clamps the index, so `usize::MAX` is "last".
+    commands.entity(parent).insert_children(before, &[root]);
     fill_the_bar(commands, bar, terminal);
     root
 }

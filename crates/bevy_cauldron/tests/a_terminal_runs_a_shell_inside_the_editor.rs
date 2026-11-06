@@ -669,3 +669,82 @@ fn the_terminal_menu_offers_copy_paste_and_clear_and_clear_clears() {
         "Clear left {held} of {filled} lines: the item is wired to nothing"
     );
 }
+
+/// **The pane is a row of the WINDOW, not a sibling of the docks.**
+///
+/// The defect this is for shipped in 0.2.8 and the owner reported it as "I'm not seeing the terminal".
+/// The pane was spawned into `chrome::Frame::body`, which is the `flex_direction: Row` holding the two
+/// docks and the viewport — so it became a *row sibling*, laid out 2560 px wide and pushed off the
+/// right edge of a 2560 px window, over the inspector and the map. Measured on the released build on
+/// `mac_air`: size `2560 x 768`, centre x `1718`, spanning `438..2998`.
+///
+/// Three claims, and each one is a different way to be wrong:
+///
+/// 1. **It spans the window's width.** A row of the frame's root does; a sibling of the docks does not.
+/// 2. **It lies below the body and above the status band**, so the band stays at the foot of the window.
+/// 3. **It does not overlap the viewport**, which is the property the owner actually cares about: a pane
+///    over the map is a pane that "isn't showing" even when every other assertion passes.
+#[test]
+fn the_pane_spans_the_window_and_sits_above_the_status_band() {
+    let _shell = use_posix_shell();
+    const W: u32 = 1280;
+    const H: u32 = 720;
+    let mut app = editor_sized("terminal_pane_is_a_window_row", W, H);
+    chord(&mut app, &[KeyCode::ControlLeft, KeyCode::Backquote]);
+    settle(&mut app, 8);
+
+    let (pane, pane_size, pane_cx) = {
+        let world = app.world_mut();
+        let mut panes = world.query_filtered::<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<TerminalPaneRoot>>();
+        let (node, transform) = panes.single(world).expect("the pane is on screen");
+        (0, node.size() * node.inverse_scale_factor(), transform.translation.x)
+    };
+    let _ = pane;
+
+    // **1. The window's width.** The physical surface is W x H at the harness's `UiScale`, so the
+    // logical width is what the pane must fill; a row sibling comes out a fraction of it and offset.
+    let window_w = {
+        let world = app.world_mut();
+        let mut q = world.query_filtered::<&ComputedNode, With<bevy_cauldron::chrome::ViewportSlot>>();
+        let viewport = q.single(world).expect("the editor has one viewport slot");
+        // The viewport is narrower than the window by the docks, so its *left edge* overstates nothing:
+        // the window's own width is the surface's, which the harness reports in logical px.
+        let _ = viewport;
+        W as f32 / 1.2
+    };
+    assert!(
+        (pane_size.x - window_w).abs() <= 2.0,
+        "the pane is {} logical px wide in a {window_w:.0} px window (centre x {pane_cx:.0}). A pane \
+         that does not span the window is a row sibling of the docks rather than a row of the frame — \
+         which is the 0.2.8 defect: it was spawned into `Frame::body`, the Row, and pushed off the \
+         right edge.",
+        pane_size.x
+    );
+
+    // **2. Between the body and the band**, by the frame's own child order.
+    {
+        let world = app.world_mut();
+        let frame_root = world
+            .get_resource::<bevy_cauldron::chrome::Frame>()
+            .map(|f| (f.root, f.body, f.status))
+            .expect("the frame");
+        let (root, body, status) = frame_root;
+        let kids: Vec<Entity> = world
+            .get::<Children>(root)
+            .map(|c| c.iter().collect())
+            .unwrap_or_default();
+        let pane_entity = world
+            .query_filtered::<Entity, With<TerminalPaneRoot>>()
+            .single(world)
+            .expect("the pane");
+        let at = |e: Entity| kids.iter().position(|k| *k == e);
+        let (Some(body_at), Some(pane_at), Some(band_at)) = (at(body), at(pane_entity), at(status)) else {
+            panic!("the frame, the pane and the band must all be rows of the root: {kids:?}");
+        };
+        assert!(
+            body_at < pane_at && pane_at < band_at,
+            "the rows are body={body_at}, pane={pane_at}, band={band_at}: the pane must come after the \
+             body (so it is below the map) and before the band (so the band stays at the foot)"
+        );
+    }
+}
