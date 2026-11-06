@@ -20,7 +20,7 @@
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
-use bevy_cauldron::launcher::{HomePage, HomeTab, Launcher, LauncherPlugin, NavTab};
+use bevy_cauldron::launcher::{HomePage, HomeTab, Launcher, NavTab};
 use bevy_cauldron::screen::Screen;
 
 use crate::fixtures;
