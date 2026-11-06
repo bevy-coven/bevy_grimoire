@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-06
 
+- **capture-1793927744511** A chord glyph the font cannot draw is filed with the test that names it *No clip: no visible change yet: the Mac spelling is bevy_gooey's choice (bevy-coven/bevy_gooey#45) and this repo must not patch or vendor it; proved by the_installed_face_covers_every_chord_glyph, which reads the installed font's cmap and names the six glyphs it lacks*
 - **capture-1793927698061** Fill stands beside the other named tools instead of among the bare icons *For you: Fill is the same height and shape as Place and Move now, instead of standing a head taller than the undo and save icons it sat between.* *No clip: a one-line spawn order in the toolbar; proved by a_labelled_button_is_never_the_odd_one_in_a_run_of_pictures, which prints Fill at 46.7 logical px among 30.8 px pictures before the change and a uniform run after*
 - **capture-1793927671762** A prompt keycap is filed with the failing test that proves its letter is not centred *No clip: no visible change — the cause is in bevy_gooey (bevy-coven/bevy_gooey#44) and this repo must not patch or vendor it; proved by the_remove_mode_keycap_centres_its_letter, which measures -5.0 logical px off centre on the current pin and is ignored until the fix lands*
 

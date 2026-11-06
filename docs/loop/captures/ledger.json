@@ -153,11 +153,20 @@
       "app_version": "0.2.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "\"Why is there a \\\"?\\\" here?\" reports a defect: the shipped FiraMono has no U+2318, so gooey's Mac chord label \\\"\u2318Z\\\" draws as a tofu box with a question mark",
+      "reason": "the cause is in bevy_gooey: shortcut_label emits a Mac spelling (\u2318\u2303\u2325\u21a9\u238b\u21e5) that the host's face need not contain, and this repo's FiraMono lacks 7 of the 13; there is no API by which a host can ask for a drawable spelling. Filed as bevy-coven/bevy_gooey#45, and this repo must not patch, wrap or vendor it",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "the Undo tooltip's keycap draws a tofu box with a question mark then Z, where its accessibility text says Cmd-Z: the shipped FiraMono has no U+2318"
+        }
+      ]
     },
     {
       "stem": "feedback-1793927950267",
