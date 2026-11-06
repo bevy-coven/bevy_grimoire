@@ -5,8 +5,11 @@
 //! selection showed nothing. This file reads the drawn spans of a real editor: a run's ground is a
 //! `TextBackgroundColor` on its `TextSpan`, so a test that sees the span sees what Bevy paints.
 //!
-//! The bytes are fed to the open tab's screen directly, after the shell has drawn its prompt, so the
-//! assertion is about the drawing and not about which shell printed them.
+//! The bytes are fed to the open tab's screen directly, after the shell has drawn its prompt **and
+//! gone quiet**, so the assertion is about the drawing and not about which shell printed what when.
+//! The shell is a POSIX `sh` (the gate's `$SHELL` may be `fish`, which redraws its prompt with cursor
+//! movements) and the feed waits for quiet, so a prompt that arrives late cannot move what the test
+//! placed.
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -25,12 +28,32 @@ const DRAW_FRAMES: usize = 4;
 /// How many times the test waits for the shell's first prompt before feeding.
 const PROMPT_TRIES: usize = 60;
 
+/// How many checks in a row the screen must not change for the shell to count as quiet.
+const QUIET_CHECKS: usize = 6;
+
+/// The pause between two checks for the prompt or for quiet.
+const CHECK_GAP: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// **`SHELL` is process-wide**, so the editor tests that set it take turns; the guard lives in the
+/// `App` (a non-send resource), so it is held exactly as long as the editor whose shell it chose.
+static SHELL_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+struct PosixShell(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+
+/// The drawn screen's build number, which moves whenever the shell writes something.
+fn stamp(app: &App) -> u64 {
+    app.world().resource::<Terminal>().tab().map_or(0, |tab| tab.screen().stamp())
+}
+
 /// The editor with a window, the terminal raised and its shell started.
 pub(crate) fn editor_with_terminal(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
         .sized_descriptor("fence", "alpha", 2.064, 0.12)
         .build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    let guard = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    unsafe { std::env::set_var("SHELL", "/bin/sh") };
+    app.insert_non_send(PosixShell(guard));
     let window = app
         .world_mut()
         .spawn((
@@ -60,9 +83,20 @@ pub(crate) fn editor_with_terminal(tag: &str) -> App {
         if !spans(&mut app).is_empty() {
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(CHECK_GAP);
     }
     assert!(!app.world().resource::<Terminal>().is_empty(), "Ctrl+` started no shell");
+    let mut quiet = 0;
+    for _ in 0..PROMPT_TRIES {
+        let before = stamp(&app);
+        std::thread::sleep(CHECK_GAP);
+        settle(&mut app, 2);
+        quiet = if stamp(&app) == before { quiet + 1 } else { 0 };
+        if quiet >= QUIET_CHECKS {
+            break;
+        }
+    }
+    assert!(quiet >= QUIET_CHECKS, "the shell never stopped writing after its prompt");
     app
 }
 

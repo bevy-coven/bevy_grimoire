@@ -18,6 +18,9 @@ use crate::the_terminal_paints_grounds_and_the_selection::{editor_with_terminal,
 /// Frames for a feed to be rebuilt, spawned and laid out.
 const LAYOUT_FRAMES: usize = 6;
 
+/// How many frames, 50 ms apart, the caret test waits for the caret's lit half of its blink.
+const CARET_TRIES: usize = 60;
+
 /// A laid-out node's top and bottom, in the surface's pixels.
 fn span_y(node: &ComputedNode, transform: &UiGlobalTransform) -> (f32, f32) {
     let centre = transform.translation.y;
@@ -77,13 +80,26 @@ fn every_row_the_shell_was_told_about_lies_inside_the_body() {
 fn the_caret_sits_on_the_cursors_row() {
     let (mut app, rows) = cursor_on_the_last_row("terminal_caret_row");
     let (top, bottom) = row_span(&mut app, rows - 1);
-    let world = app.world_mut();
-    let (caret_top, caret_bottom) = world
-        .query_filtered::<(&ComputedNode, &UiGlobalTransform), With<TerminalCaret>>()
-        .iter(world)
-        .next()
-        .map(|(node, transform)| span_y(node, transform))
-        .expect("the pane has a caret");
+    // **The caret blinks by `Display`**, so in its dark half it is laid out as a zero-height box at the
+    // body's top. On a loaded machine the frames above take long enough of real time to land there
+    // (measured: `y 340..340 px`); the claim is about where the caret is drawn when it is drawn.
+    let mut caret = (0.0, 0.0);
+    for _ in 0..CARET_TRIES {
+        let world = app.world_mut();
+        caret = world
+            .query_filtered::<(&ComputedNode, &UiGlobalTransform), With<TerminalCaret>>()
+            .iter(world)
+            .next()
+            .map(|(node, transform)| span_y(node, transform))
+            .expect("the pane has a caret");
+        if caret.1 > caret.0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        settle(&mut app, 1);
+    }
+    let (caret_top, caret_bottom) = caret;
+    assert!(caret_bottom > caret_top, "the caret was never lit in {CARET_TRIES} tries");
     let middle = (caret_top + caret_bottom) / 2.0;
     assert!(
         (top..=bottom).contains(&middle),
