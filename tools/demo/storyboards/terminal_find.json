@@ -1,0 +1,67 @@
+{
+  "name": "terminal_find",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 7
+    },
+    {
+      "seconds": 7
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "an error, then three hundred lines of output over it"
+    },
+    {
+      "at": 0.6,
+      "key": "Backquote",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 1.0,
+      "type": "echo error E0308: mismatched types; seq 1 300"
+    },
+    {
+      "at": 3.0,
+      "key": "Enter"
+    },
+    {
+      "at": 5.0,
+      "caption": "Ctrl+F finds it in the scrollback (Cmd+F on a Mac)"
+    },
+    {
+      "at": 5.5,
+      "key": "KeyF",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 6.1,
+      "type": "E0308"
+    },
+    {
+      "at": 8.6,
+      "caption": "Escape gives the keys back; typing returns to the prompt, at a block caret"
+    },
+    {
+      "at": 9.4,
+      "key": "Escape"
+    },
+    {
+      "at": 10.2,
+      "type": "echo found it"
+    },
+    {
+      "at": 11.8,
+      "key": "Enter"
+    }
+  ]
+}
