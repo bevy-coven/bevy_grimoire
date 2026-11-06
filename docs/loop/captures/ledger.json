@@ -173,12 +173,21 @@
       "taken_at_ms": 1793927950267,
       "app_version": "0.2.7",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "",
+      "reason": "reproduced by pixels on big (clicking the What's new tab leaves the page on Projects), and narrowed past the obvious suspect: a synthetic Activate on the same tab DOES switch the page, so the handler is correct and the pointer click is not reaching the button. The pass ran out of budget before isolating whether a node above the tab swallows the hit; bevy_cauldron::launcher::NavTab, Launcher and the root markers are also not Reflect, so BRP cannot read which entity was hit and the next pass needs that instrumented first",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "big",
+          "backend": "vulkan",
+          "window": "1280x720",
+          "ui_scale": 1.2,
+          "outcome": "reproduced",
+          "saw": "on the Projects home, clicking the sidebar's What's new tab leaves the page on Projects: the heading still reads Projects, the Projects tab keeps its selection rail, and nothing changes"
+        }
+      ]
     },
     {
       "stem": "feedback-1793928006124",

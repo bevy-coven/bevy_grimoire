@@ -19,6 +19,7 @@ mod fixtures;
 mod a_badge_draws_in_the_skins_ink;
 mod capture_feedback_1793927698061;
 mod capture_feedback_1793927744511;
+mod capture_feedback_1793927950267;
 mod capture_feedback_1793927671762;
 mod a_terminal_runs_a_shell_inside_the_editor;
 mod a_page_line_draws_in_the_skins_ink;
