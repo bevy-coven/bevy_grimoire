@@ -578,7 +578,8 @@ fn type_keys(
             }
             continue;
         }
-        out.extend_from_slice(&key_bytes(event, &keys));
+        let app_cursor = terminal.tab().is_some_and(|tab| tab.screen().app_cursor());
+        out.extend_from_slice(&key_bytes(event, &keys, app_cursor));
     }
     if !out.is_empty() {
         terminal.write(&out);
@@ -605,10 +606,12 @@ fn bracketed_paste(terminal: &Terminal) -> bool {
 /// Every sequence here is what `xterm-256color`'s terminfo declares, which is the `TERM` the session
 /// is opened with ([`crate::terminal::pty`]) — so what a program is told and what actually arrives
 /// cannot disagree.
-fn key_bytes(event: &KeyboardInput, keys: &ButtonInput<KeyCode>) -> Vec<u8> {
+fn key_bytes(event: &KeyboardInput, keys: &ButtonInput<KeyCode>, app_cursor: bool) -> Vec<u8> {
+    use crate::terminal::input::{CursorKey, Mods, cursor_key};
     let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
     let alt = keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight);
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let mods = Mods { shift, alt, ctrl };
     let mut out = Vec::new();
 
     match &event.logical_key {
@@ -617,13 +620,15 @@ fn key_bytes(event: &KeyboardInput, keys: &ButtonInput<KeyCode>) -> Vec<u8> {
         Key::Space => out.push(b' '),
         Key::Backspace => out.push(0x7f),
         Key::Escape => out.push(0x1b),
-        // A shell in raw mode reads these; `vim`, `less` and `fzf` are what they are for.
-        Key::ArrowUp => out.extend_from_slice(b"\x1b[A"),
-        Key::ArrowDown => out.extend_from_slice(b"\x1b[B"),
-        Key::ArrowRight => out.extend_from_slice(b"\x1b[C"),
-        Key::ArrowLeft => out.extend_from_slice(b"\x1b[D"),
-        Key::Home => out.extend_from_slice(b"\x1b[H"),
-        Key::End => out.extend_from_slice(b"\x1b[F"),
+        // A shell in raw mode reads these; `vim`, `less` and `fzf` are what they are for. **Spelled
+        // for the mode the program set** (#311): an ncurses program in keypad mode reads `ESC [ A` as
+        // Escape and `[`, and a modifier is a parameter (`ESC [ 1 ; 5 C` is Ctrl+Right, a word right).
+        Key::ArrowUp => out.extend(cursor_key(CursorKey::Up, mods, app_cursor)),
+        Key::ArrowDown => out.extend(cursor_key(CursorKey::Down, mods, app_cursor)),
+        Key::ArrowRight => out.extend(cursor_key(CursorKey::Right, mods, app_cursor)),
+        Key::ArrowLeft => out.extend(cursor_key(CursorKey::Left, mods, app_cursor)),
+        Key::Home => out.extend(cursor_key(CursorKey::Home, mods, app_cursor)),
+        Key::End => out.extend(cursor_key(CursorKey::End, mods, app_cursor)),
         // **`PageUp`/`PageDown` page the pane's own scrollback**, which is what a terminal does; a
         // full-screen program that wants the sequence gets it with `Shift`, so `less` still pages
         // itself. `key_bytes` cannot scroll (it returns bytes), so the caller recognises these two

@@ -36,6 +36,7 @@
 //! with no window at all ([`tests`]).
 
 mod grid;
+pub mod input;
 mod palette;
 mod pty;
 
@@ -44,6 +45,9 @@ mod tests;
 
 #[cfg(all(test, unix))]
 mod flow_tests;
+
+#[cfg(test)]
+mod input_tests;
 
 use std::path::{Path, PathBuf};
 

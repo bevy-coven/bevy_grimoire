@@ -174,6 +174,20 @@ pub struct TerminalPane {
     blink: f32,
     /// Where a drag began, in the body's cell coordinates, while a selection is being made.
     drag_from: Option<(usize, usize)>,
+    /// **A button held down that the program was told about** (#313): while it holds, a drag is the
+    /// program's motion and not a selection, and the release goes to the program too.
+    #[reflect(ignore)]
+    mouse_down: Option<MouseDown>,
+}
+
+/// One reported press, followed until its release.
+#[derive(Clone, Copy, Debug, Default)]
+struct MouseDown {
+    button: Option<crate::terminal::input::MouseButton>,
+    /// The cell the press was reported at; a drag is measured from it.
+    from: (usize, usize),
+    /// The cell the last report named, so motion inside one cell is not reported twice.
+    last: (usize, usize),
 }
 
 impl TerminalPane {
@@ -242,6 +256,8 @@ impl Plugin for TerminalPanePlugin {
             .add_observer(a_drag_begins)
             .add_observer(a_drag_extends)
             .add_observer(a_drag_ends)
+            .add_observer(a_press_reaches_the_program)
+            .add_observer(a_release_reaches_the_program)
             .add_observer(the_wheel_scrolls_the_scrollback)
             .add_observer(the_grip_resizes)
             .add_observer(a_chip_selects_its_tab)
@@ -701,6 +717,10 @@ fn a_drag_begins(
     if start.button != bevy::picking::pointer::PointerButton::Primary {
         return;
     }
+    // A press the program was told about is the program's drag, not the person's selection (#313).
+    if pane.mouse_down.is_some() {
+        return;
+    }
     let Ok((node, _)) = body.get(start.entity) else {
         return;
     };
@@ -718,15 +738,10 @@ fn a_drag_extends(
     drag: On<bevy::picking::events::PointerDrag>,
     body: Query<(), With<TerminalBody>>,
     metrics: Res<CellMetrics>,
-    pane: Res<TerminalPane>,
+    keys: Res<ButtonInput<KeyCode>>,
+    pane: ResMut<TerminalPane>,
     mut terminal: ResMut<Terminal>,
 ) {
-    if drag.button != bevy::picking::pointer::PointerButton::Primary {
-        return;
-    }
-    let Some(from) = pane.drag_from else {
-        return;
-    };
     if body.get(drag.entity).is_err() {
         return;
     }
@@ -739,12 +754,137 @@ fn a_drag_extends(
         (drag.distance.y / (metrics.height() * scale)).round() as i32,
         (drag.distance.x / (metrics.width() * scale)).round() as i32,
     );
-    let to = (
-        (from.0 as i32 + rows).max(0) as usize,
-        (from.1 as i32 + cols).max(0) as usize,
-    );
+    let moved = |from: (usize, usize)| {
+        (
+            (from.0 as i32 + rows).max(0) as usize,
+            (from.1 as i32 + cols).max(0) as usize,
+        )
+    };
+    if let Some(down) = pane.mouse_down {
+        if reported_button(drag.button) == down.button {
+            report_drag(down, moved(down.from), pane, &keys, &mut terminal);
+        }
+        return;
+    }
+    if drag.button != bevy::picking::pointer::PointerButton::Primary {
+        return;
+    }
+    let Some(from) = pane.drag_from else {
+        return;
+    };
+    let to = moved(from);
     if let Some(tab) = terminal.tab_mut() {
         tab.screen_mut().select(from, to);
+    }
+}
+
+/// **Motion with a reported button held**, under modes 1002 and 1003, once per cell entered.
+fn report_drag(
+    down: MouseDown,
+    at: (usize, usize),
+    mut pane: ResMut<TerminalPane>,
+    keys: &ButtonInput<KeyCode>,
+    terminal: &mut Terminal,
+) {
+    use crate::terminal::input::{MouseAction, mouse_report};
+    if at == down.last {
+        return;
+    }
+    let Some((tracking, encoding)) = terminal.tab().and_then(|tab| tab.screen().mouse_reporting()) else {
+        return;
+    };
+    if !tracking.reports_drag() {
+        return;
+    }
+    let Some(button) = down.button else {
+        return;
+    };
+    if let Some(bytes) = mouse_report(button, MouseAction::Drag, at, mods_held(keys), encoding) {
+        terminal.write(&bytes);
+    }
+    pane.mouse_down = Some(MouseDown { last: at, ..down });
+}
+
+/// The modifiers held now, in the terminal's terms.
+fn mods_held(keys: &ButtonInput<KeyCode>) -> crate::terminal::input::Mods {
+    crate::terminal::input::Mods {
+        shift: keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]),
+        alt: keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]),
+        ctrl: keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]),
+    }
+}
+
+/// The terminal's name for a picking button. The right button is not one: it opens the pane's own
+/// menu (Copy, Paste, Clear), the editor's one way to those three (assumed decision on #313).
+fn reported_button(button: bevy::picking::pointer::PointerButton) -> Option<crate::terminal::input::MouseButton> {
+    use crate::terminal::input::MouseButton;
+    match button {
+        bevy::picking::pointer::PointerButton::Primary => Some(MouseButton::Left),
+        bevy::picking::pointer::PointerButton::Middle => Some(MouseButton::Middle),
+        bevy::picking::pointer::PointerButton::Secondary => None,
+    }
+}
+
+/// **A press over the body reaches a program that asked for the mouse** (#313), at the cell under the
+/// pointer — unless Shift is held, which keeps the mouse for selecting, as in xterm and VS Code.
+fn a_press_reaches_the_program(
+    press: On<bevy::picking::events::PointerPress>,
+    body: Query<&ComputedNode, With<TerminalBody>>,
+    metrics: Res<CellMetrics>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut pane: ResMut<TerminalPane>,
+    mut terminal: ResMut<Terminal>,
+) {
+    use crate::terminal::input::{MouseAction, mouse_report};
+    let Ok(node) = body.get(press.entity) else {
+        return;
+    };
+    let mods = mods_held(&keys);
+    let Some((_, encoding)) = terminal.tab().and_then(|tab| tab.screen().mouse_reporting()) else {
+        return;
+    };
+    if mods.shift {
+        return;
+    }
+    let (Some(button), Some(at)) = (reported_button(press.button), cell_under(&press.hit, node, &metrics)) else {
+        return;
+    };
+    if let Some(bytes) = mouse_report(button, MouseAction::Press, at, mods, encoding) {
+        terminal.write(&bytes);
+    }
+    pane.mouse_down = Some(MouseDown { button: Some(button), from: at, last: at });
+}
+
+/// **The release of a reported press reaches the program**, wherever the pointer is let go: over the
+/// body at its cell, elsewhere at the last cell reported, so a program never sees a button stuck down.
+fn a_release_reaches_the_program(
+    release: On<bevy::picking::events::PointerRelease>,
+    body: Query<&ComputedNode, With<TerminalBody>>,
+    metrics: Res<CellMetrics>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut pane: ResMut<TerminalPane>,
+    mut terminal: ResMut<Terminal>,
+) {
+    use crate::terminal::input::{MouseAction, mouse_report};
+    let Some(down) = pane.mouse_down else {
+        return;
+    };
+    if reported_button(release.button) != down.button {
+        return;
+    }
+    pane.mouse_down = None;
+    let at = body
+        .get(release.entity)
+        .ok()
+        .and_then(|node| cell_under(&release.hit, node, &metrics))
+        .unwrap_or(down.last);
+    let (Some(button), Some((_, encoding))) =
+        (down.button, terminal.tab().and_then(|tab| tab.screen().mouse_reporting()))
+    else {
+        return;
+    };
+    if let Some(bytes) = mouse_report(button, MouseAction::Release, at, mods_held(&keys), encoding) {
+        terminal.write(&bytes);
     }
 }
 
@@ -771,13 +911,20 @@ fn cell_under(
     ))
 }
 
-/// **The wheel scrolls the scrollback**, three lines a notch — the same cadence the editor's lists use.
+/// **A wheel notch goes where the screen says** (#312, #313): the pane's scrollback on the normal
+/// screen; Up and Down to a full-screen program on the alternate screen, which has no scrollback; a
+/// wheel report to a program that asked for the mouse. Three lines a notch, wherever it goes.
 fn the_wheel_scrolls_the_scrollback(
     mut scroll: On<bevy::picking::events::PointerScroll>,
     ancestors: Query<&ChildOf>,
-    bodies: Query<(), With<TerminalBody>>,
+    bodies: Query<&ComputedNode, With<TerminalBody>>,
+    metrics: Res<CellMetrics>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut terminal: ResMut<Terminal>,
 ) {
+    use crate::terminal::input::{
+        CursorKey, LINES_PER_NOTCH, MouseAction, MouseButton, Mods, WheelTarget, cursor_key, mouse_report,
+    };
     let over = bodies.contains(scroll.entity)
         || ancestors.iter_ancestors(scroll.entity).any(|up| bodies.contains(up));
     if !over {
@@ -785,9 +932,42 @@ fn the_wheel_scrolls_the_scrollback(
     }
     // Consumed: the pane is a terminal, and its scrollback is not the docks'.
     scroll.propagate(false);
-    let lines = (scroll.y.round() as i32) * 3;
-    if let Some(tab) = terminal.tab_mut() {
-        tab.screen_mut().scroll(lines);
+    let notches = scroll.y.round() as i32;
+    if notches == 0 {
+        return;
+    }
+    let Some(tab) = terminal.tab_mut() else {
+        return;
+    };
+    let up = notches > 0;
+    let mut out = Vec::new();
+    match tab.screen().wheel_target() {
+        WheelTarget::Scrollback => {
+            tab.screen_mut().scroll(notches * LINES_PER_NOTCH);
+            return;
+        }
+        WheelTarget::Arrows => {
+            let key = if up { CursorKey::Up } else { CursorKey::Down };
+            let bytes = cursor_key(key, Mods::default(), tab.screen().app_cursor());
+            for _ in 0..notches.abs() * LINES_PER_NOTCH {
+                out.extend_from_slice(&bytes);
+            }
+        }
+        WheelTarget::Report(encoding) => {
+            let Some(at) = bodies.get(scroll.entity).ok().and_then(|node| cell_under(&scroll.hit, node, &metrics))
+            else {
+                return;
+            };
+            let button = if up { MouseButton::WheelUp } else { MouseButton::WheelDown };
+            for _ in 0..notches.abs() {
+                if let Some(bytes) = mouse_report(button, MouseAction::Press, at, mods_held(&keys), encoding) {
+                    out.extend_from_slice(&bytes);
+                }
+            }
+        }
+    }
+    if !out.is_empty() {
+        terminal.write(&out);
     }
 }
 

@@ -31,10 +31,11 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line as TermLine, Point};
 use alacritty_terminal::term::cell::Flags;
-use alacritty_terminal::term::{Config, Term};
+use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Processor};
 use bevy::prelude::*;
 
+use super::input::{MouseEncoding, MouseTracking, WheelTarget};
 use super::palette;
 
 /// How many lines of history a session keeps above its viewport.
@@ -352,6 +353,50 @@ impl TerminalScreen {
         self.term
             .mode()
             .contains(alacritty_terminal::term::TermMode::BRACKETED_PASTE)
+    }
+
+    /// **Did the child ask for application cursor keys?** (DECCKM, `ESC[?1h`; ncurses' `keypad()`.)
+    /// The key path spells Up as `ESC O A` while it holds (#311).
+    pub fn app_cursor(&self) -> bool {
+        self.term.mode().contains(TermMode::APP_CURSOR)
+    }
+
+    /// **Which mouse events the child asked for, and in what encoding**, or `None` when it asked for
+    /// none — the pane then keeps the mouse for selecting and scrolling (#313).
+    pub fn mouse_reporting(&self) -> Option<(MouseTracking, MouseEncoding)> {
+        let mode = self.term.mode();
+        let tracking = if mode.contains(TermMode::MOUSE_MOTION) {
+            MouseTracking::Motion
+        } else if mode.contains(TermMode::MOUSE_DRAG) {
+            MouseTracking::Drag
+        } else if mode.contains(TermMode::MOUSE_REPORT_CLICK) {
+            MouseTracking::Click
+        } else {
+            return None;
+        };
+        let encoding = if mode.contains(TermMode::SGR_MOUSE) {
+            MouseEncoding::Sgr
+        } else if mode.contains(TermMode::UTF8_MOUSE) {
+            MouseEncoding::Utf8
+        } else {
+            MouseEncoding::Legacy
+        };
+        Some((tracking, encoding))
+    }
+
+    /// **Where a wheel notch over this screen goes** (#312, #313): to the child as a mouse report if
+    /// it asked for the mouse; as cursor keys on the alternate screen, which has no scrollback, while
+    /// alternate scroll (mode 1007, on by default) holds; else to the pane's own scrollback.
+    pub fn wheel_target(&self) -> WheelTarget {
+        if let Some((_, encoding)) = self.mouse_reporting() {
+            return WheelTarget::Report(encoding);
+        }
+        let mode = self.term.mode();
+        if mode.contains(TermMode::ALT_SCREEN) && mode.contains(TermMode::ALTERNATE_SCROLL) {
+            WheelTarget::Arrows
+        } else {
+            WheelTarget::Scrollback
+        }
     }
 
     /// Viewport cell coordinates to an absolute grid point.
