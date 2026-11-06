@@ -250,6 +250,19 @@ impl TerminalScreen {
         self.dirty = true;
     }
 
+    /// **Back to the prompt**: the viewport at the foot of the scrollback, where the shell is writing.
+    ///
+    /// Called before input reaches the shell (#319), because a person scrolled up to read who then
+    /// types is typing at a prompt they cannot see. VS Code does the same
+    /// (`terminal.integrated.scrollOnUserInput`). A view already at the foot is left alone and not
+    /// marked dirty, so typing costs no rebuild of its own.
+    pub fn scroll_to_bottom(&mut self) {
+        if self.term.grid().display_offset() != 0 {
+            self.term.scroll_display(Scroll::Bottom);
+            self.dirty = true;
+        }
+    }
+
     /// Was anything drawn since the last time the pane asked?
     pub fn take_dirty(&mut self) -> bool {
         std::mem::replace(&mut self.dirty, false)

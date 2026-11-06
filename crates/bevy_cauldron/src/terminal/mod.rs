@@ -272,14 +272,23 @@ impl Terminal {
         })
     }
 
-    /// **Keystrokes to the active shell.**
+    /// **Keystrokes to the active shell**, and the view back to its prompt first (#319).
+    ///
+    /// Everything a person sends goes through here — a key, a paste, a mouse report, the `cd` chip —
+    /// and none of it should land at a prompt scrolled out of sight. The answers the emulator owes a
+    /// program (`Terminal::pump`) are not input and do not come this way, so a `tput` question never
+    /// moves the view; nor do the pane's own paging keys, which scroll and send nothing.
     pub fn write(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
         let Some(tab) = self.tab_mut() else {
             return;
         };
         let Some(session) = tab.session.as_mut() else {
             return;
         };
+        tab.screen.scroll_to_bottom();
         if let Err(why) = session.write(bytes) {
             self.problem = Some(why);
         }
