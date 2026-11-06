@@ -89,7 +89,7 @@ impl Plugin for EditorUiPlugin {
                 .after(crate::family_host::Reloaded)
                 .before(bevy_gooey::GooeySystems::Style),
         );
-        app.add_systems(Update, paint_marked_buttons.after(bevy_gooey::GooeySystems::Style));
+        app.add_systems(Update, (paint_marked_buttons, clear_stale_rails).chain().after(bevy_gooey::GooeySystems::Style));
     }
 }
 
@@ -194,6 +194,17 @@ fn paint_marked_buttons(
     }
 }
 
+/// **Takes the rail off a button that is no longer `Selected`.** [`paint_marked_buttons`] only visits buttons that still carry
+/// `Selected`, so the rail of a button that has just lost it was never removed: choosing the next sidebar tab left the old one
+/// railed too (`feedback-1793927950267`).
+fn clear_stale_rails(rails: Query<(Entity, &ChildOf), With<SelectedRail>>, selected: Query<(), With<bevy::ui::Selected>>, mut commands: Commands) {
+    for (rail, parent) in &rails {
+        if selected.get(parent.parent()).is_err() {
+            commands.entity(rail).despawn();
+        }
+    }
+}
+
 /// **The regions of the shell, as `bevy_gooey` panels** (UI-30, #224).
 ///
 /// Each is registered with the id a dock layout names. A `Dock` shows what the registry holds when it
@@ -232,4 +243,25 @@ pub fn shell_layout() -> bevy_gooey::DockLayout {
             DockLayout::group(["place"]),
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **A rail on a button that is not `Selected` is despawned; one on a `Selected` button stays.**
+    #[test]
+    fn a_rail_outlives_its_selection_never() {
+        let mut app = App::new();
+        app.add_systems(Update, clear_stale_rails);
+        let kept = app.world_mut().spawn(bevy::ui::Selected).with_child(SelectedRail).id();
+        let stale = app.world_mut().spawn_empty().with_child(SelectedRail).id();
+        app.update();
+        let rails = |app: &mut App, parent: Entity| {
+            let world = app.world_mut();
+            world.get::<Children>(parent).map_or(0, |c| c.iter().filter(|k| world.get::<SelectedRail>(*k).is_some()).count())
+        };
+        assert_eq!(rails(&mut app, kept), 1);
+        assert_eq!(rails(&mut app, stale), 0);
+    }
 }

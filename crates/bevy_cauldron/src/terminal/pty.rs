@@ -26,6 +26,13 @@ use std::path::{Path, PathBuf};
 use alacritty_terminal::event::WindowSize;
 use alacritty_terminal::tty::{self, Options, Shell};
 
+/// **The most one frame reads from one shell**, in bytes (#308).
+///
+/// Alacritty's own event loop reads at most this much (`READ_BUFFER_SIZE`, 1 MiB) before it renders.
+/// At 60 frames a second it is 60 MiB/s per shell — more than any program a person is reading — and
+/// it keeps the parse a few milliseconds of the frame.
+pub const READ_BUDGET: usize = 1 << 20;
+
 /// **The shell this session runs.** `$SHELL`, or `/bin/sh` when the environment does not say.
 ///
 /// `$SHELL` first because a person's shell is their environment — `fish`, `zsh` and `bash` differ in
