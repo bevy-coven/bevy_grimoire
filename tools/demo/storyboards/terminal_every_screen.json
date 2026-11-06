@@ -1,0 +1,76 @@
+{
+  "name": "terminal_every_screen",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 6
+    },
+    {
+      "seconds": 6
+    },
+    {
+      "seconds": 6
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "the terminal is open from the start, under the map; Ctrl+` puts the keys in it"
+    },
+    {
+      "at": 1.0,
+      "key": "Backquote",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 1.6,
+      "type": "echo the terminal is the centerpiece"
+    },
+    {
+      "at": 2.6,
+      "key": "Enter"
+    },
+    {
+      "at": 4.0,
+      "caption": "Ctrl+J collapses it (Cmd+J on a Mac)"
+    },
+    {
+      "at": 4.6,
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 7.0,
+      "caption": "and brings it back, keys in the shell"
+    },
+    {
+      "at": 7.6,
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 10.0,
+      "caption": "on the project page too, with the same scrollback"
+    },
+    {
+      "at": 10.6,
+      "click_label": "INSPECTOR"
+    },
+    {
+      "at": 11.2,
+      "key": "KeyO",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ]
+}
