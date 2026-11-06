@@ -290,10 +290,10 @@
       "taken_at_ms": 1793969010186,
       "app_version": "0.2.9",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "",
+      "reason": "reproduced: a real picking click (bevy_gooey::testing::click) on the sidebar's Settings button leaves SettingsDialog closed, while write_message(OpenSettings) opens it \u2014 so the handler and the dialog are fine and the PRESS does not reach the button. Ruled out: the chip is laid out (260x28 at centre 144,657 physical, scale 0.833), its ancestors are plain (no Pickable, no overlay), and marking its Text child Pickable::IGNORE does not fix it. Also ruled out: find_by_label returns the Text (no TabIndex ancestor), so a test must walk to the Button ancestor \u2014 the first version of this test clicked the label, which is a flaw in the test and is recorded here so the next pass starts past it. NOT fixed: the pass hit 40 minutes with the fix unproven, and an unproven click-path change is not pushed. Next: instrument which entity bevy_picking reports as the hover/hit target for that centre (Pointer hits / Hovered per entity), which is the one measurement not yet taken",
       "commit": "",
       "attempts": []
     }
