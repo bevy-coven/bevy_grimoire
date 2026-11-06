@@ -114,7 +114,7 @@
       "status": "blocked",
       "host": "mac_air",
       "reason": "the cause is in bevy_gooey: the Role::PromptKey layout arm sets min_width on the cap but never centres its content, so the slack lands on the right; filed as bevy-coven/bevy_gooey#44, and this repo must not patch, wrap or vendor it",
-      "commit": "",
+      "commit": "25ef676",
       "attempts": [
         {
           "host": "mac_air",
