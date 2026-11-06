@@ -42,3 +42,23 @@ issue rather than waiting again.
 **Change.** When an injected click changes nothing, the first two steps are `world.get_resources` for `HoverMap` (then `world.get_components` for the hit entity's size and `UiGlobalTransform`), and reading the vendored `bevy_picking`/`bevy_ui` source for the rule a theory rests on. A theory that cannot name which entity the picker did hit is not yet a theory.
 
 **Watch.** No issue about an unresponsive control is carried across more than one pass; and a log line that blames a picking rule names the vendored file and line it rests on.
+
+## Tuning 4 — the shared target ran another tree's binaries as fresh (pass 425)
+
+**Measured.** Pass 425 ran in a private worktree on the shared `CARGO_TARGET_DIR`. Twice a run used
+artifacts another tree had built: a test run executed `main`'s editor binary (1,427 tests, without
+the pass's new module) after 0.3 s of "compiling", and the push gate was refused by five
+`bevy_grimoire_core` tests whose `CARGO_MANIFEST_DIR` named a deleted worktree
+(`/home/ladvien/coven-wt/grimoire-279/...: No such file or directory`). Cargo's dep-info stores paths
+relative to the package, so it checks *this* tree's files against the *other* tree's fingerprint, and
+files older than that fingerprint read as fresh. Each cost a full cycle: about 8 minutes for the test
+run and 10 for the refused gate.
+
+**Change.** In a worktree on the shared target, `touch` every file the worktree changed before each
+cargo run (`git status --short | awk '{print $2}' | xargs touch`), and before the push also every
+source of a crate whose tests read files from their own tree (`find crates/bevy_grimoire_core -name
+'*.rs' -exec touch {} +`). A gate refusal whose message names another tree's path is this, not the
+pass's code: touch and push again.
+
+**Watch.** No test run whose count is the base's while the pass has added tests, and no push refused
+for a path outside the pass's own tree.
