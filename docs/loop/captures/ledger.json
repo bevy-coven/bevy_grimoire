@@ -176,7 +176,7 @@
       "kind": "bug",
       "status": "blocked",
       "host": "mac_air",
-      "reason": "reproduced by pixels on big (clicking the What's new tab leaves the page on Projects), and narrowed past the obvious suspect: a synthetic Activate on the same tab DOES switch the page, so the handler is correct and the pointer click is not reaching the button. The pass ran out of budget before isolating whether a node above the tab swallows the hit; bevy_cauldron::launcher::NavTab, Launcher and the root markers are also not Reflect, so BRP cannot read which entity was hit and the next pass needs that instrumented first",
+      "reason": "CORRECTED by pass 391: this row blamed a product 'click not reaching the button'. Measured on 0.2.9, the fault is the HARNESS \u2014 the injected pointer never establishes a pick (10 MenuTitles, all Hovered=false, while the frame shows one lit), and keyboard injection works from the same call (Cmd+O moved editor->project). So 'the click does nothing' was my instrument, not the editor. What still stands from this capture: a synthetic Activate on the NavTab DOES switch the page, so the handler is correct. Re-reproduce with a real mouse before believing any defect here",
       "commit": "",
       "attempts": [
         {
@@ -218,7 +218,7 @@
       "kind": "bug",
       "status": "blocked",
       "host": "mac_air",
-      "reason": "the note describes how the panel IS (text past its edge, rows sharing a band), so a bug; but it is not closable this pass: the headless rebuild passes on the base commit (containment and non-overlap both hold there), and the live reproduction could not reach the Pieces panel at all \u2014 the installed 0.2.9 opens on the MAP door and neither clicking the Meshes tab nor the door_open operation left it (both left door=MAP mode=MAP). See feedback-1793927950267 for the same click-not-reaching symptom, which may be one cause",
+      "reason": "CORRECTED by pass 391: the 'clicks do not land' half of this row's reason was my harness, not the product \u2014 the injected pointer never establishes a pick on 0.2.9 (measured: every MenuTitle Hovered=false while the frame shows one lit; keyboard injection works). What stands: the capture's frame genuinely shows the Pieces panel overflowing (text past the right edge, rows overlapping, the drill hint off the edge), and the headless containment test passes on the base commit. So this is 'seen, not testable' \u2014 reproduce with a real mouse, or find a headless route to the Meshes tab",
       "commit": "",
       "attempts": [
         {
@@ -237,11 +237,20 @@
       "app_version": "0.2.7",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "\"don't look aligned vertically\" and \"a ? in the middle\" both report how the menu IS; the ? is the gooey#45 tofu, the alignment is measured as 55 physical px of drift in the shortcut column's right edge (489..599)",
+      "reason": "CORRECTED: the earlier note on this row blamed the product. The real limit is the harness: on the installed 0.2.9 the injected pointer never establishes a pick, so no MenuTitle is ever Hovered (measured: 10 titles, all false, while the screenshot shows one lit) and a menu cannot be opened over BRP. Keyboard injection does work (Cmd+O moved editor->project), which isolates it to the pointer path. The alignment claim in the note is also likely a consequence of gooey#45's tofu widths, not a layout fault: gooey right-aligns by construction (MenuText flex_grow=1, MenuShortcut flex_shrink=0). Reproduce by real mouse or by opening a menu in a test if gooey exposes one",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1604",
+          "ui_scale": 2.4,
+          "outcome": "not_reproduced",
+          "saw": "clicking the Edit menu title at logical 83.5,16.5 left every MenuPanel display=None: the menu never opened, so the shortcut column could not be measured. Third capture in a row where a pointer click on a chrome/door control does not fire"
+        }
+      ]
     },
     {
       "stem": "feedback-1793928159971",
