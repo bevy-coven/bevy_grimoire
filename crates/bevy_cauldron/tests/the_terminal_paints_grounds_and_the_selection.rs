@@ -26,7 +26,7 @@ const DRAW_FRAMES: usize = 4;
 const PROMPT_TRIES: usize = 60;
 
 /// The editor with a window, the terminal raised and its shell started.
-fn editor_with_terminal(tag: &str) -> App {
+pub(crate) fn editor_with_terminal(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
         .sized_descriptor("fence", "alpha", 2.064, 0.12)
         .build("m");
@@ -66,7 +66,7 @@ fn editor_with_terminal(tag: &str) -> App {
     app
 }
 
-fn settle(app: &mut App, frames: usize) {
+pub(crate) fn settle(app: &mut App, frames: usize) {
     for _ in 0..frames {
         app.update();
     }
@@ -114,7 +114,7 @@ fn span_with<'a>(spans: &'a [Span], text: &str) -> &'a Span {
         .unwrap_or_else(|| panic!("no drawn span holds {text:?}; the pane draws {spans:#?}"))
 }
 
-fn feed(app: &mut App, bytes: &[u8]) {
+pub(crate) fn feed(app: &mut App, bytes: &[u8]) {
     let mut terminal = app.world_mut().resource_mut::<Terminal>();
     terminal.tab_mut().expect("the raised pane has a tab").screen_mut().feed(bytes);
 }

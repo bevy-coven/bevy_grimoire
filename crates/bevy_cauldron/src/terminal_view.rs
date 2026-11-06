@@ -105,10 +105,6 @@ pub struct CellMetrics {
     height: f32,
     /// Physical pixels per logical pixel, as the text pipeline laid the glyphs out.
     scale: f32,
-    /// The row's height in **physical** pixels, which is the unit a `Node`'s height is in on this
-    /// surface. `height` above is logical: a cell count comes from a logical width, so the two are
-    /// kept apart rather than converted at each call site.
-    physical_height: f32,
     measured: bool,
 }
 
@@ -118,7 +114,6 @@ impl Default for CellMetrics {
             width: TERMINAL_CELL_W,
             height: TERMINAL_CELL_H,
             scale: 1.0,
-            physical_height: TERMINAL_CELL_H,
             measured: false,
         }
     }
@@ -140,11 +135,6 @@ impl CellMetrics {
     /// One cell's height, logical pixels.
     pub fn height(&self) -> f32 {
         self.height
-    }
-
-    /// One cell's height in **physical** pixels — what a `Node`'s `height` is measured in.
-    pub fn physical_height(&self) -> f32 {
-        self.physical_height
     }
 
     /// Has a real glyph been measured, or is this still the ratio?
@@ -194,7 +184,6 @@ fn measure_the_cell(
     metrics.width = width;
     metrics.height = height;
     metrics.scale = scale;
-    metrics.physical_height = layout.size.y.max(1.0);
     metrics.measured = true;
 }
 
@@ -332,10 +321,14 @@ fn draw_the_terminal(
             .spawn((
                 Node {
                     width: Val::Percent(100.0),
-                    // **Physical**: a `Node`'s height is in the surface's own pixels, and the row's
-                    // text is laid out at `metrics.height()` logical — the two are one cell, spelled
-                    // in the two units the two systems measure in.
-                    height: Val::Px(metrics.physical_height()),
+                    // **Logical, like every `Val::Px`**: Bevy multiplies it by the target's scale
+                    // factor and `UiScale`, exactly as it does the row's text, so `metrics.height()`
+                    // here is one text line on screen. The glyph line's *physical* height was used
+                    // once, on the belief that a `Node`'s height is in surface pixels; at the
+                    // editor's `UiScale` of 1.2 that drew every row 20 % taller than the cell the
+                    // shell was sized for, so the prompt fell below the pane and the caret drifted
+                    // above the cursor (#310).
+                    height: Val::Px(metrics.height()),
                     flex_direction: FlexDirection::Row,
                     flex_shrink: 0.0,
                     ..default()
@@ -362,8 +355,8 @@ fn draw_the_terminal(
         if *visibility != want {
             *visibility = want;
         }
-        if node.height != Val::Px(metrics.physical_height()) {
-            node.height = Val::Px(metrics.physical_height());
+        if node.height != Val::Px(metrics.height()) {
+            node.height = Val::Px(metrics.height());
         }
     }
 
