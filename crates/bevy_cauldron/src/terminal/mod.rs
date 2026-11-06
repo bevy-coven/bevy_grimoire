@@ -73,6 +73,14 @@ pub struct Terminal {
 pub struct TerminalTab {
     /// The title a program asked for (`OSC 2`), or the shell's own name. The bar shows it.
     title: String,
+    /// **The directory this tab's shell has been told to move to**, when the `cd` chip was taken.
+    ///
+    /// A terminal cannot know where a shell *is*: `cd` is the shell's own state, and reading it back
+    /// means OSC 7 (which a shell only emits if it is configured to) or `/proc/<pid>/cwd` (Linux only,
+    /// and a second source of truth beside the shell's). So the pane records what it *told* the shell
+    /// and offers the chip again only when the project moves somewhere it has not been told about.
+    /// `None` means nothing has been offered for this tab yet.
+    cd_offered: Option<PathBuf>,
     session: Option<TerminalSession>,
     screen: grid::TerminalScreen,
     /// Why this tab has no shell, when it has none: the pane draws it in red and keeps the tab
@@ -86,6 +94,7 @@ impl TerminalTab {
     fn refused(cols: u16, rows: u16, why: String) -> TerminalTab {
         TerminalTab {
             title: "terminal".to_owned(),
+            cd_offered: None,
             session: None,
             screen: grid::TerminalScreen::new(cols, rows),
             problem: Some(why),
@@ -104,7 +113,13 @@ impl Terminal {
                 let title = shell_title(cwd);
                 let mut screen = grid::TerminalScreen::new(cols, rows);
                 screen.resize(cols, rows);
-                self.open.push(TerminalTab { title, session: Some(session), screen, problem: None });
+                self.open.push(TerminalTab {
+                    title,
+                    cd_offered: None,
+                    session: Some(session),
+                    screen,
+                    problem: None,
+                });
                 self.active = self.open.len() - 1;
                 self.problem = None;
                 self.active
@@ -303,9 +318,22 @@ impl TerminalTab {
         self.session.is_some()
     }
 
-    /// The directory this shell is in.
+    /// The directory this shell was started in — **not** where it is now, which only the shell knows.
     pub fn cwd(&self) -> Option<&Path> {
         self.session.as_ref().map(TerminalSession::cwd)
+    }
+
+    /// **Should the bar offer to `cd` this shell to `want`?**
+    ///
+    /// True when the shell was started somewhere else and has not already been told to move there —
+    /// what the pane knows for certain, rather than a guess at the shell's current directory.
+    pub fn wants_cd_to(&self, want: &Path) -> bool {
+        self.is_live() && self.cwd() != Some(want) && self.cd_offered.as_deref() != Some(want)
+    }
+
+    /// Record that this tab has been told to move to `to`, so the chip goes away.
+    pub fn offered_cd(&mut self, to: PathBuf) {
+        self.cd_offered = Some(to);
     }
 }
 

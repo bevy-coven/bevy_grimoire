@@ -120,6 +120,15 @@ pub struct TerminalTabChip(pub usize);
 #[derive(Component)]
 pub struct TerminalNewTab;
 
+/// **The `cd` chip: move the drawn shell to the project the editor is pointed at now.**
+///
+/// The shell is *not* moved when a project opens — a running `cargo build` belongs to the project it
+/// was started in, and yanking its working directory would break it. So the pane offers the move
+/// instead: it types `cd '<root>'` into the shell, which is a keystroke the person could type
+/// themselves, and the shell's own history records it.
+#[derive(Component)]
+pub struct TerminalCdChip;
+
 /// The `×` chip: close the tab being drawn, and with it its shell.
 #[derive(Component)]
 pub struct TerminalCloseTab;
@@ -237,6 +246,7 @@ impl Plugin for TerminalPanePlugin {
             .add_observer(the_grip_resizes)
             .add_observer(a_chip_selects_its_tab)
             .add_observer(a_chip_adds_a_tab)
+            .add_observer(a_chip_moves_the_shell)
             .add_observer(a_chip_closes_a_tab);
     }
 }
@@ -493,6 +503,25 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 chrome::text::CONTROL,
                 ink,
                 fill,
+                chrome::PANEL_EDGE,
+            );
+        }
+        // **`cd` only when it would do something.** The chip names the directory it would move to, so a
+        // person reads where it goes rather than trusting a verb; with no open project, or a shell
+        // already in it, there is nothing to offer and no chip.
+        let want = terminal.next_cwd();
+        if terminal.tab().is_some_and(|tab| tab.wants_cd_to(&want)) {
+            let name = want
+                .file_name()
+                .map(|n| format!("cd {}", n.to_string_lossy()))
+                .unwrap_or_else(|| "cd".to_owned());
+            chrome::chip(
+                bar,
+                TerminalCdChip,
+                &name,
+                chrome::text::CONTROL,
+                chrome::ACCENT,
+                chrome::BAR_BG,
                 chrome::PANEL_EDGE,
             );
         }
@@ -812,6 +841,32 @@ pub(crate) fn measured_cells(pane: &TerminalPane) -> (u16, u16) {
 /// number: it is the default every terminfo entry declares and every program is tested against.
 const FALLBACK_COLS: u16 = 80;
 const FALLBACK_ROWS: u16 = 24;
+
+/// **`cd <project>` in the drawn shell**, as a keystroke.
+///
+/// Quoted with single quotes, which POSIX shells take literally, and with any embedded quote escaped the
+/// POSIX way (`'\''`) — a project directory with a space or an apostrophe in it is ordinary, and a chip
+/// that broke on one would be a chip nobody trusts. The newline is what runs it.
+fn a_chip_moves_the_shell(
+    mut click: On<bevy::picking::events::PointerClick>,
+    cd: Query<(), With<TerminalCdChip>>,
+    mut terminal: ResMut<Terminal>,
+    bar: Query<Entity, With<TerminalBar>>,
+    mut commands: Commands,
+) {
+    if !cd.contains(click.entity) {
+        return;
+    }
+    click.propagate(false);
+    let root = terminal.next_cwd();
+    let quoted = root.to_string_lossy().replace('\'', "'\\''");
+    terminal.write(format!("cd '{quoted}'\n").as_bytes());
+    // **The pane records what it told the shell**, because only the shell knows where it went.
+    if let Some(tab) = terminal.tab_mut() {
+        tab.offered_cd(root);
+    }
+    redraw_the_bar(&mut commands, &bar, &terminal);
+}
 
 /// **`×` closes the session being drawn**, and with it the shell (`Drop` hangs the child up).
 fn a_chip_closes_a_tab(

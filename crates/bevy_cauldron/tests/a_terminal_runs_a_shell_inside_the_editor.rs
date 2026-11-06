@@ -499,3 +499,71 @@ fn a_shell_is_never_started_at_a_size_too_small_to_be_a_terminal() {
          zero-sized layout clamps to. A measure below a usable minimum must be refused, not used."
     );
 }
+
+/// **The `cd` chip moves a running shell to the project the editor is pointed at now, and the shell
+/// says so.**
+///
+/// The rule the feature has to keep is that opening another project does **not** kill a shell — the
+/// `cargo build` in it belongs to the project it was started in. So the move is a keystroke
+/// (`cd '<root>'`) the person takes, and the shell's own `pwd` is what proves it landed. Reading it back
+/// from the shell rather than from the resource is the point: the pane cannot know where a shell is, so
+/// the only honest witness is the shell.
+#[test]
+fn the_cd_chip_moves_a_running_shell_to_the_open_project() {
+    let _shell = use_posix_shell();
+    let mut app = editor("terminal_cd_chip");
+    chord(&mut app, &[KeyCode::ControlLeft, KeyCode::Backquote]);
+    settle(&mut app, 6);
+
+    // **Start the shell somewhere else**, the way a door crossing leaves it: the next project is a
+    // different temporary directory, which is what `follow_the_project` writes.
+    let other = std::env::temp_dir().join(format!("grimoire-terminal-cd-{}", std::process::id()));
+    std::fs::create_dir_all(&other).expect("a scratch project directory");
+    app.world_mut()
+        .resource_mut::<Terminal>()
+        .set_next_cwd(Some(other.clone()));
+
+    let Some(tab) = app.world().resource::<Terminal>().tab() else {
+        panic!("no terminal tab to move");
+    };
+    assert!(
+        tab.wants_cd_to(&other),
+        "a shell started in another directory must offer the move: the chip is what a person takes \
+         instead of losing the shell's scrollback"
+    );
+
+    // Take the chip.
+    app.world_mut()
+        .resource_mut::<Terminal>()
+        .write(format!("cd '{}'\n", other.display()).as_bytes());
+    if let Some(tab) = app.world_mut().resource_mut::<Terminal>().tab_mut() {
+        tab.offered_cd(other.clone());
+    }
+
+    // **Ask the shell where it is.** `pwd` is the shell's own answer, which is the only one that
+    // counts: the pane's record of what it typed is not evidence that the shell moved.
+    app.world_mut()
+        .resource_mut::<Terminal>()
+        .write(b"pwd\n");
+    let mut seen = String::new();
+    for _ in 0..60 {
+        settle(&mut app, 2);
+        seen = drawn_text(&mut app);
+        if seen.contains(&other.display().to_string()) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let _ = std::fs::remove_dir_all(&other);
+    assert!(
+        seen.contains(&other.display().to_string()),
+        "`pwd` never printed the new directory. The pane shows: {seen:?}"
+    );
+
+    // And the offer is spent: the chip does not come back for a move that already happened.
+    let tab = app.world().resource::<Terminal>().tab().expect("the tab is still there");
+    assert!(
+        !tab.wants_cd_to(&other),
+        "the chip must not offer a move the shell has already been told to make"
+    );
+}
