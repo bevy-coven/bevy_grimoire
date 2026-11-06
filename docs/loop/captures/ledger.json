@@ -174,9 +174,9 @@
       "app_version": "0.2.7",
       "record_version": 2,
       "kind": "bug",
-      "status": "blocked",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "SUPERSEDED IN PART by pass 392: the claim that the injected pointer never establishes a pick was wrong \u2014 measured on 0.2.9, injecting LOGICAL 41.25,87.5 hovers the control whose ComputedNode centre is PHYSICAL 82.5,175. The earlier misses were a coordinate-space error (ComputedNode/UiGlobalTransform are physical, the injected cursor is logical), not a product fault. What still stands: the capture's own observation, and for 950267 that a synthetic Activate on the NavTab does switch the page. Re-reproduce live with logical coordinates before believing any defect on this row",
+      "reason": "requeued by owner 2026-11-06: re-reproduce with logical coordinates since pass 392 corrected the pointer theory",
       "commit": "",
       "attempts": [
         {
@@ -195,9 +195,9 @@
       "app_version": "0.2.7",
       "record_version": 2,
       "kind": "bug",
-      "status": "blocked",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "reproduced on mac_air with coordinates. CAUSE LOCATED: chrome.rs:3864-3867 spawns the WhereYouAre label (ControlId::Title, Text::new(here), DIM) into the door strip band, where here is door.label() from chrome.rs:3899 \u2014 so the Kit door draws a bare 'Map' at x=376 flush between the menu bar (x 58-275) and the door's own tabs Meshes/Tiles/Compose (x 492-765) at y=33, with no separator, reading as a fourth tab. NOT fixed: the pass hit its budget before writing a test that fails \u2014 the headless rebuild shows the strip's Tab entities correct, so the failing test must assert on the WhereYouAre label's placement/adjacency in the band rather than on Door::tabs. The next pass starts here: write that test (containment/separation between the Title label and the first tab), then move or separate the label",
+      "reason": "requeued by owner 2026-11-06: cause located at chrome.rs:3864, the failing test is the next step",
       "commit": "",
       "attempts": [
         {
@@ -279,9 +279,9 @@
       "app_version": "0.2.9",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "blocked",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "enhancement, specified but not implemented \u2014 the pass reached 30 minutes with no test that fails, so per budget it stopped rather than half-build the feature. What the spec settles: two of the three clauses already exist (folded_packs + a chevron that reflects it; Space toggles a focused pack, same key as VSCode's explorer), so the ONE gap is clause 3, the default. scan's first look does folded_packs = packs .filter(|p| !packs_the_kit_draws_from(project).contains(p)) \u2014 i.e. every pack the kit DRAWS FROM starts OPEN, the opposite of \"should default to collapsed\"; the capture shows FURNITURE-APPLIANCE (9 rows) and FURNITURE-BED (6) both expanded. The change is one line plus its expectation in tiles.rs's pack_fold_tests, with the exception that the selected row's pack must stay open or the first look has nothing selectable",
+      "reason": "requeued by owner 2026-11-06: spec settled, clause 3 of the fold default is the work",
       "commit": "",
       "attempts": []
     },
