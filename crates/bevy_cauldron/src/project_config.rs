@@ -162,7 +162,7 @@ fn open(
     commands
         .spawn((dialog(), Name::new("project configuration"), ProjectConfigDialog::default(), Built::default()))
         .observe(|cancel: On<Cancel>, mut commands: Commands| {
-            commands.entity(cancel.entity).despawn();
+            commands.entity(cancel.entity).insert(bevy_gooey::Leave);
         })
         .with_children(|dialog| {
             dialog
@@ -176,7 +176,7 @@ fn open(
                             button("Close"),
                             observe(|_: On<Activate>, dialogs: Query<Entity, With<ProjectConfigDialog>>, mut commands: Commands| {
                                 for dialog in &dialogs {
-                                    commands.entity(dialog).despawn();
+                                    commands.entity(dialog).insert(bevy_gooey::Leave);
                                 }
                             }),
                         ));

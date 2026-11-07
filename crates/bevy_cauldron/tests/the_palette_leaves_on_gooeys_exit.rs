@@ -28,6 +28,8 @@ fn editor(tag: &str, settings: Option<&str>) -> (App, std::path::PathBuf) {
     }
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.world_mut().spawn((Window::default(), PrimaryWindow));
+    // **The headless editor runs with motion off** (`harness::build_headless_at`); this file is about the motion.
+    app.insert_resource(MotionSettings::default());
     app.world_mut().resource_mut::<Time<Virtual>>().set_max_delta(FRAME);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(FRAME));
     for _ in 0..8 {

@@ -453,6 +453,12 @@ pub fn build_headless_at(
     // The same knob the binary sets, by the same name — a literal here would be the second
     // definition the constant exists to prevent, and headless is where a drift goes unseen.
     .insert_resource(UiScale(crate::chrome::EDITOR_UI_SCALE));
+    // **Motion is off in the headless editor** (bevy_gooey#76's assumed decision, applied here for #331).
+    // A card that leaves is drawn for a few frames of the *real* clock before it is gone, and the
+    // editor's tests read "gone" a few frames after a close: on a loaded machine that is a race, and with
+    // the motion off it is the frame it was asked, as before. A test of the motion itself puts
+    // `MotionSettings::default()` back and steps the clock (`the_palette_leaves_on_gooeys_exit`).
+    app.insert_resource(bevy_gooey::MotionSettings::off());
 
     // **Despawning a light or a mesh must not panic in here.** `backends: None` registers every
     // render type but skips the render world — and with it `SyncWorldPlugin`, whose

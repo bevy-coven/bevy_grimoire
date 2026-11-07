@@ -370,7 +370,7 @@ fn open_about(
         .observe(|cancel: On<Cancel>, mut keyboard: ResMut<ButtonInput<KeyCode>>, mut commands: Commands| {
             // The `Esc` that closes this is this dialog's alone.
             crate::confirm::take(&mut keyboard, KeyCode::Escape);
-            commands.entity(cancel.entity).despawn();
+            commands.entity(cancel.entity).insert(bevy_gooey::Leave);
         })
         .with_children(|scrim| {
             scrim.spawn((panel(), bevy::picking::hover::Hovered::default())).with_children(|card| {
@@ -391,7 +391,7 @@ fn open_about(
                         AutoFocus,
                         bevy_gooey::observe(|_: On<Activate>, dialogs: Query<Entity, With<AboutDialog>>, mut commands: Commands| {
                             for dialog in &dialogs {
-                                commands.entity(dialog).despawn();
+                                commands.entity(dialog).insert(bevy_gooey::Leave);
                             }
                         }),
                     ));

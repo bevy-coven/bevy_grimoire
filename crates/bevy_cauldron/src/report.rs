@@ -974,6 +974,18 @@ fn in_map_viewport(at: Vec2, world: &ReportWorld) -> bool {
         .is_some_and(|r| r.contains(at))
 }
 
+/// **How far short of a cell's lower edge a ground point still belongs to that cell**, metres. A ground
+/// point comes from a ray through a pixel, so a click aimed at an edge (a piece at (3, 0) is on one) lands
+/// a hair either side of it: 2.9999 or 3.0001 depending on the layout's sub-pixels, which floored to a
+/// different cell each way (#322). A millimetre is far under a pixel at any zoom the editor has and far
+/// over float noise at the map's size.
+const CELL_EDGE_TOLERANCE_M: f32 = 0.001;
+
+/// The cell a coordinate is in, an edge belonging to the cell it begins (see [`CELL_EDGE_TOLERANCE_M`]).
+fn cell_index(v: f32) -> i32 {
+    ((v + CELL_EDGE_TOLERANCE_M) / bevy_grimoire_core::grid::TILE).floor() as i32
+}
+
 /// The scene under `at`: the ground point, the map point, the cell, and the placement there.
 fn scene_at(at: Vec2, world: &ReportWorld) -> Subject {
     let Some((cam, cam_tf)) = world.camera.as_deref() else {
@@ -1003,8 +1015,8 @@ fn scene_at(at: Vec2, world: &ReportWorld) -> Subject {
         let map_point = open_map.map.to_map_space((ground.x, ground.z));
         scene.map = Some([map_point.0, map_point.1]);
         scene.cell = Some([
-            (map_point.0 / bevy_grimoire_core::grid::TILE).floor() as i32,
-            (map_point.1 / bevy_grimoire_core::grid::TILE).floor() as i32,
+            cell_index(map_point.0),
+            cell_index(map_point.1),
         ]);
         scene.placement = crate::editor::pick_at(project, open_map, map_point)
             .and_then(|i| open_map.map.placements.get(i))
