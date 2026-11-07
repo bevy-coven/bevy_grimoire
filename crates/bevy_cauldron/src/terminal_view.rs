@@ -697,15 +697,52 @@ fn colour_runs(line: &crate::terminal::Line) -> Vec<Run> {
     runs
 }
 
+/// **A clipboard gesture in the terminal**, which is the pane's and never the shell's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipboardChord {
+    Paste,
+    Copy,
+    SelectAll,
+}
+
+/// **The chords for each gesture** (feedback-1794024642593). Command+V, Command+C and Command+A first,
+/// which is what every Mac terminal answers to; Command is `bevy_gooey::Modifiers::META`, the Super key off
+/// a Mac, which a desktop rarely gives an app (the precedent is `terminal_pane::CLEAR_CHORD`). Then the
+/// primary modifier with Shift, the Linux terminals' Ctrl+Shift+V, Ctrl+Shift+C and (GNOME's)
+/// Ctrl+Shift+A, because Ctrl+V, Ctrl+C and Ctrl+A are the shell's own.
+const CLIPBOARD_CHORDS: [(ClipboardChord, KeyCode); 3] = [
+    (ClipboardChord::Paste, KeyCode::KeyV),
+    (ClipboardChord::Copy, KeyCode::KeyC),
+    (ClipboardChord::SelectAll, KeyCode::KeyA),
+];
+
+/// **The clipboard gesture the press of `key` makes**, if it makes one. Keyed to the event's key so one
+/// press acts once, when Command arrives in the same frame as the letter.
+pub fn clipboard_chord(keys: &ButtonInput<KeyCode>, key: KeyCode) -> Option<ClipboardChord> {
+    use bevy_gooey::{Modifiers, Shortcut};
+    let &(chord, _) = CLIPBOARD_CHORDS.iter().find(|(_, chord_key)| *chord_key == key)?;
+    let command = Shortcut::new(Modifiers::META, key);
+    let primary_shift = Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, key);
+    (command.just_pressed(keys) || primary_shift.just_pressed(keys)).then_some(chord)
+}
+
+/// **Is Command held?** A key pressed under it is a chord, and never the shell's letter: a Mac keyboard
+/// reports Command+Z as `z`, and no Mac terminal sends it on. On a Mac this is also the primary modifier,
+/// whose own chords (`Cmd+\``, `Cmd+J`, `Cmd+F`, `Cmd+K`) are read before it.
+pub fn command_held(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)
+}
+
 /// **The keys, and the swallow.**
 ///
 /// While [`TerminalFocus`] holds, every keystroke becomes the bytes a terminal sends, and the editor
 /// sees none of them — the gate is [`crate::editor::sense_context`]'s `Typing` flag, which is the one
 /// every binding already respects.
 ///
-/// **The two chords the pane keeps for itself are checked first**, because they are the pane's and not
-/// the shell's: `Ctrl+\`` closes, `Ctrl+Shift+V` pastes, `Ctrl+Shift+C` copies. Everything else — every
-/// letter, `Ctrl+C`, the arrows, `Tab` — goes to the child unchanged.
+/// **The chords the pane keeps for itself are checked first**, because they are the pane's and not the
+/// shell's: `Ctrl+\`` closes, and the clipboard's ([`clipboard_chord`]) paste, copy and select all. A key
+/// pressed with Command held goes no further ([`command_held`]). Everything else — every letter, `Ctrl+C`,
+/// the arrows, `Tab` — goes to the child unchanged.
 fn type_keys(
     mut events: MessageReader<KeyboardInput>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -728,14 +765,6 @@ fn type_keys(
     // (which runs in `TerminalChordSet`, after this system). Forwarding it to the shell as well would
     // send a `\x1c`-ish byte every time somebody lowered the pane.
     let closes = bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY, KeyCode::Backquote);
-    let pastes = bevy_gooey::Shortcut::new(
-        bevy_gooey::Modifiers::PRIMARY | bevy_gooey::Modifiers::SHIFT,
-        KeyCode::KeyV,
-    );
-    let copies = bevy_gooey::Shortcut::new(
-        bevy_gooey::Modifiers::PRIMARY | bevy_gooey::Modifiers::SHIFT,
-        KeyCode::KeyC,
-    );
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let mut out: Vec<u8> = Vec::new();
     for event in events.read() {
@@ -772,30 +801,42 @@ fn type_keys(
             // shell — on Linux Ctrl+J is also a newline, and collapsing the pane must not run a line.
             continue;
         }
-        if pastes.just_pressed(&keys) {
-            if let Ok(mut clipboard) = arboard::Clipboard::new()
-                && let Ok(text) = clipboard.get_text()
-            {
-                // **A paste is bracketed when the child asked for it** (`ESC[?2004h`), which is how a
-                // shell tells a multi-line insertion apart from a person typing `Enter` between lines.
-                // Sending it unbracketed would run the second line before the person read the first.
-                if bracketed_paste(&terminal) {
-                    out.extend_from_slice(b"\x1b[200~");
-                    out.extend_from_slice(text.as_bytes());
-                    out.extend_from_slice(b"\x1b[201~");
-                } else {
-                    out.extend_from_slice(text.as_bytes());
+        match clipboard_chord(&keys, event.key_code) {
+            Some(ClipboardChord::Paste) => {
+                if let Ok(mut clipboard) = arboard::Clipboard::new()
+                    && let Ok(text) = clipboard.get_text()
+                {
+                    // **A paste is bracketed when the child asked for it** (`ESC[?2004h`), which is how a
+                    // shell tells a multi-line insertion apart from a person typing `Enter` between lines.
+                    // Sending it unbracketed would run the second line before the person read the first.
+                    if bracketed_paste(&terminal) {
+                        out.extend_from_slice(b"\x1b[200~");
+                        out.extend_from_slice(text.as_bytes());
+                        out.extend_from_slice(b"\x1b[201~");
+                    } else {
+                        out.extend_from_slice(text.as_bytes());
+                    }
                 }
+                continue;
             }
-            continue;
+            Some(ClipboardChord::Copy) => {
+                if let Some(tab) = terminal.tab()
+                    && let Some(text) = tab.screen().selection_text()
+                    && let Ok(mut clipboard) = arboard::Clipboard::new()
+                {
+                    let _ = clipboard.set_text(text);
+                }
+                continue;
+            }
+            Some(ClipboardChord::SelectAll) => {
+                if let Some(tab) = terminal.tab_mut() {
+                    tab.screen_mut().select_all();
+                }
+                continue;
+            }
+            None => {}
         }
-        if copies.just_pressed(&keys) {
-            if let Some(tab) = terminal.tab()
-                && let Some(text) = tab.screen().selection_text()
-                && let Ok(mut clipboard) = arboard::Clipboard::new()
-            {
-                let _ = clipboard.set_text(text);
-            }
+        if command_held(&keys) {
             continue;
         }
         let app_cursor = terminal.tab().is_some_and(|tab| tab.screen().app_cursor());
@@ -959,5 +1000,49 @@ mod tests {
             ADVANCE_PX / SCALE,
             metrics.width()
         );
+    }
+
+    /// `keys` with `held` down and `key` pressed this frame.
+    fn pressed(held: &[KeyCode], key: KeyCode) -> ButtonInput<KeyCode> {
+        let mut keys = ButtonInput::<KeyCode>::default();
+        for k in held {
+            keys.press(*k);
+        }
+        keys.press(key);
+        keys
+    }
+
+    /// feedback-1794024642593: a Mac terminal pastes with Cmd+V, copies with Cmd+C and selects all with Cmd+A.
+    #[test]
+    fn command_v_pastes_command_c_copies_and_command_a_selects_all() {
+        for (key, chord) in [
+            (KeyCode::KeyV, ClipboardChord::Paste),
+            (KeyCode::KeyC, ClipboardChord::Copy),
+            (KeyCode::KeyA, ClipboardChord::SelectAll),
+        ] {
+            let keys = pressed(&[KeyCode::SuperLeft], key);
+            assert_eq!(clipboard_chord(&keys, key), Some(chord), "Command+{key:?}");
+            assert!(command_held(&keys), "Command+{key:?} is a chord, never a letter for the shell");
+        }
+    }
+
+    /// The platform's primary modifier with Shift keeps the chords it had: Ctrl+Shift+V and Ctrl+Shift+C off a Mac.
+    #[test]
+    fn primary_shift_still_pastes_and_copies() {
+        let primary = crate::keys::MOD_KEYS[0];
+        assert_eq!(clipboard_chord(&pressed(&[primary, KeyCode::ShiftLeft], KeyCode::KeyV), KeyCode::KeyV), Some(ClipboardChord::Paste));
+        assert_eq!(clipboard_chord(&pressed(&[primary, KeyCode::ShiftLeft], KeyCode::KeyC), KeyCode::KeyC), Some(ClipboardChord::Copy));
+    }
+
+    /// A letter, and Ctrl with a letter, are the shell's: Ctrl+V is readline's quoted insert, Ctrl+C an interrupt.
+    #[test]
+    fn a_letter_and_a_control_letter_stay_the_shells() {
+        for held in [&[][..], &[KeyCode::ControlLeft][..]] {
+            for key in [KeyCode::KeyV, KeyCode::KeyC, KeyCode::KeyA] {
+                let keys = pressed(held, key);
+                assert_eq!(clipboard_chord(&keys, key), None, "{held:?} + {key:?}");
+                assert!(!command_held(&keys), "{held:?} + {key:?}");
+            }
+        }
     }
 }

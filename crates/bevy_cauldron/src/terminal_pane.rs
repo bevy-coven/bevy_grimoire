@@ -270,8 +270,9 @@ const AGENT_CARD_W: f32 = 320.0;
 /// the single gate the whole census already respects; a second swallow written here would be the
 /// two-paths failure this crate spends its refusals on.
 ///
-/// Two chords survive, checked in [`crate::terminal_view::type_keys`] *before* the swallow because
-/// they are read there rather than through the census: `Ctrl+\`` closes, `Ctrl+Shift+V` pastes.
+/// Some chords survive, checked in [`crate::terminal_view::type_keys`] *before* the swallow because
+/// they are read there rather than through the census: `Ctrl+\`` closes, and Cmd+V, Cmd+C and Cmd+A (or
+/// Ctrl+Shift+V, C and A) paste, copy and select all ([`crate::terminal_view::clipboard_chord`]).
 #[derive(Resource, Default, Reflect)]
 #[reflect(Resource, Default)]
 pub struct TerminalFocus(pub bool);

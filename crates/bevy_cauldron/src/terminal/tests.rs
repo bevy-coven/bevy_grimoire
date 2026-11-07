@@ -201,3 +201,16 @@ fn alive(pid: u32) -> bool {
     )
     .is_ok()
 }
+
+/// **Select all is every line the shell drew, and no blank row under them** (feedback-1794024642593): Cmd+A in
+/// the terminal, then Cmd+C, copies the session without a tail of empty lines.
+#[test]
+fn select_all_takes_every_drawn_line_and_no_blank_tail() {
+    let mut screen = TerminalScreen::new(20, 6);
+    assert_eq!(screen.selection_text(), None);
+    screen.select_all();
+    assert_eq!(screen.selection_text(), None, "a blank terminal has nothing to select");
+    screen.feed(b"one\r\ntwo\r\nthree");
+    screen.select_all();
+    assert_eq!(screen.selection_text().as_deref(), Some("one\ntwo\nthree"));
+}

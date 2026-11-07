@@ -147,7 +147,7 @@ pub enum CaretShape {
 /// them and [`TerminalScreen::take_replies`] hands them to whoever owns the write end.
 ///
 /// `Event::ClipboardLoad` carries a closure this type deliberately never calls: a paste request from
-/// the shell would need the pane's clipboard, and the pane's paste is the person's `Ctrl+Shift+V`.
+/// the shell would need the pane's clipboard, and the pane's paste is the person's Cmd+V (Ctrl+Shift+V).
 /// Leaving the closure uncalled means the shell is told nothing, which is the honest answer for a
 /// terminal that does not offer the shell its clipboard.
 #[derive(Clone, Default)]
@@ -517,6 +517,29 @@ impl TerminalScreen {
         let mut selection = Selection::new(SelectionType::Simple, anchor, Side::Left);
         selection.update(self.point_of(end.0, end.1), Side::Right);
         self.term.selection = Some(selection);
+        self.dirty = true;
+    }
+
+    /// **Select everything the shell drew** (feedback-1794024642593): every line of the scrollback and the
+    /// screen, from the first down to the last one that holds anything, which is what Cmd+A selects in a
+    /// Mac terminal. The blank rows under the prompt are left out, so a copy has no tail of empty lines. A
+    /// blank terminal has nothing to select.
+    pub fn select_all(&mut self) {
+        use alacritty_terminal::index::Side;
+        use alacritty_terminal::selection::{Selection, SelectionType};
+        let grid = self.term.grid();
+        let top = grid.topmost_line();
+        let mut bottom = grid.bottommost_line();
+        while bottom > top && grid[bottom].is_clear() {
+            bottom = TermLine(bottom.0 - 1);
+        }
+        let last_column = grid.last_column();
+        let selection = (!grid[bottom].is_clear()).then(|| {
+            let mut selection = Selection::new(SelectionType::Simple, Point::new(top, Column(0)), Side::Left);
+            selection.update(Point::new(bottom, last_column), Side::Right);
+            selection
+        });
+        self.term.selection = selection;
         self.dirty = true;
     }
 
