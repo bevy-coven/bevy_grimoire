@@ -82,6 +82,27 @@ pub struct AgentSetup {
     pub files: PathBuf,
 }
 
+/// The folder under the per-user data folder an agent launch writes its configs to.
+const AGENTS_DIR: &str = "agents";
+
+/// **The running binary's [`AgentSetup`]**: the remote protocol's port, the MCP server beside this
+/// executable, and `<data_dir>/agents`. Called by `main` only, as `update::insert_for_the_running_app`
+/// is, so no test hands an agent the real data folder. Nothing is inserted when the executable or the
+/// data folder cannot be found, and an agent tab then says so on its card.
+pub fn insert_for_the_running_binary(app: &mut App) {
+    let Some(exe_dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) else {
+        return;
+    };
+    let Some(data) = bevy_grimoire_core::user_dirs::data_dir() else {
+        return;
+    };
+    #[cfg(feature = "debugger")]
+    let port = Some(crate::harness::brp_port());
+    #[cfg(not(feature = "debugger"))]
+    let port = None;
+    app.insert_resource(AgentSetup { port, server: exe_dir.join(MCP_BINARY), files: data.join(AGENTS_DIR) });
+}
+
 /// One check's state.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CheckStatus {
@@ -364,12 +385,13 @@ pub fn plan(
         writes.push((omp_dir.join(OMP_EXTENSION_ENTRY), OMP_EXTENSION_SOURCE.to_owned()));
     }
     // **Written on every launch**: a harness reads its config when it starts, so the newest token is
-    // the one the starting agent needs.
+    // the one the starting agent needs. Atomically, so a harness starting in another tab never reads
+    // half a config.
     for (path, text) in &writes {
         let written = path
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| std::fs::write(path, text));
+            .and_then(|()| bevy_grimoire_core::atomic_file::write(path, text));
         if let Err(e) = written {
             return nothing(post, format!("{}: {e}", path.display()));
         }

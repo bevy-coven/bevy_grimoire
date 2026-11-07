@@ -143,19 +143,7 @@ fn main() -> AppExit {
     // **What an agent tab needs** (`terminal_agent.rs`): the remote protocol's port, the MCP server beside
     // this binary, and a folder for the configs a launch writes. Only the binary names them, as with the
     // settings file, so no test hands an agent the real data directory.
-    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
-        && let Some(data) = bevy_grimoire_core::user_dirs::data_dir()
-    {
-        #[cfg(feature = "debugger")]
-        let port = Some(harness::brp_port());
-        #[cfg(not(feature = "debugger"))]
-        let port = None;
-        app.insert_resource(bevy_cauldron::terminal_agent::AgentSetup {
-            port,
-            server: exe_dir.join(bevy_cauldron::terminal_agent::MCP_BINARY),
-            files: data.join("agents"),
-        });
-    }
+    bevy_cauldron::terminal_agent::insert_for_the_running_binary(&mut app);
     // **The installed app's own update** (`update.rs`): only inside a `.app`, so `cargo run` never replaces itself.
     bevy_cauldron::update::insert_for_the_running_app(&mut app);
 
