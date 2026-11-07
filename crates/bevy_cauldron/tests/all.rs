@@ -466,3 +466,4 @@ mod command_k_clears_the_terminal;
 mod the_home_shows_an_update_found_after_it_opened;
 mod capture_feedback_1794011769640;
 mod the_block_caret_lets_its_cell_show_through;
+mod the_caret_follows_wide_characters;

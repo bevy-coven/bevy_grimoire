@@ -693,11 +693,14 @@ impl TerminalScreen {
             if cell.flags.contains(Flags::WRAPLINE) {
                 wrapped = true;
             }
-            // A wide character's second cell is a spacer: drawing it would push the rest of the row
-            // one column right, so it is skipped rather than drawn as a blank.
-            if cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER) {
-                continue;
-            }
+            // **A wide character's second column is a cell too, drawn blank.** The terminal's face is
+            // monospace and holds no glyph wider than one cell (a CJK character or an emoji draws as its
+            // one-cell missing-glyph box), so the blank is what fills the character's two columns. Leaving
+            // it out drew everything after a wide character one cell left of its column, so the caret and
+            // a press stood one cell off per wide character (terminal screenshots on mac_air, 2026-11-06).
+            // The blank takes the cell's own colours below, so an inverse or selected wide character is
+            // grounded across both of its columns.
+            let spacer = cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER);
             let (mut fg, mut bg) = (colour_of(cell.fg, fg_default), colour_of(cell.bg, bg_default));
             if cell.flags.contains(Flags::BOLD) {
                 // The standard's rule for a bold named colour: it becomes the bright slot. This is
@@ -716,7 +719,7 @@ impl TerminalScreen {
             if selection.as_ref().is_some_and(|range| range.contains(indexed.point)) {
                 bg = palette::selection_bg();
             }
-            row.push(Cell { ch: cell.c, fg, bg });
+            row.push(Cell { ch: if spacer { ' ' } else { cell.c }, fg, bg });
         }
         if !row.is_empty() || !rows.is_empty() {
             rows.push(finish_row(row, wrapped));
@@ -894,6 +897,21 @@ mod tests {
         let mut screen = TerminalScreen::new(80, 2);
         screen.feed(b"hi");
         assert_eq!(screen.lines()[0].cells.len(), 2);
+    }
+
+    /// **A row holds one cell per column, wide characters included** (terminal screenshots, 2026-11-06).
+    /// `日` takes two columns in the grid, and its second is a spacer. The terminal's face has no glyph for
+    /// it, so it draws one cell wide; leaving the spacer out drew everything after it one cell left of its
+    /// column, and the caret after `日本語 テスト 🎉 end` stood seven cells right of the text.
+    #[test]
+    fn a_wide_character_keeps_its_second_column() {
+        let mut screen = TerminalScreen::new(40, 2);
+        screen.feed("日本 ok".as_bytes());
+        let row = &screen.lines()[0];
+        let text: String = row.cells.iter().map(|c| c.ch).collect();
+        assert_eq!(text, "日 本  ok", "two wide characters are four columns, then a space and `ok`: {text:?}");
+        assert_eq!(row.cells[5].ch, 'o', "the `o` is in column 5, where the shell's cursor arithmetic put it");
+        assert_eq!(screen.cursor().column, 7, "and the cursor is after the `k`, in column 7");
     }
 
     /// A program that asks the terminal a question gets an answer, or it waits forever.
