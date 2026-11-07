@@ -328,11 +328,20 @@
       "app_version": "0.3.8",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "running omp in the terminal widens the whole layout past the window, without end",
-      "commit": "",
-      "attempts": []
+      "reason": "terminal cell math used a 2 px inset while rows sit 12 px in: 4 extra columns let omp's rule widen the pane without end",
+      "commit": "9cb98fa",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "installed 0.3.8, a shell redrawing a rule tput-cols wide: the terminal body grew from 2560 to 3774 px in a 2560 px window over 17 s and the shell's columns climbed 177 to 267, pushing the status bar's end and the terminal's close button off the window"
+        }
+      ]
     }
   ]
 }
