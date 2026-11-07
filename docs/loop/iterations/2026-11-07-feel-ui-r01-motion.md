@@ -52,7 +52,7 @@ The fixes were not re-reviewed.
 New `tests/the_editor_moves_on_springs.rs` and its `mod` line in `tests/all.rs`. No existing test changed.
 
 ## Release
-See the log line.
+bevy_cauldron **0.4.2** (`version.py next`), its own commit `release: 0.4.2` (6a649451) and tag `bevy_cauldron-v0.4.2`, pushed; the tag starts the macOS build on mac_air (`release-macos.yml`). The crate is `publish = false`, so there is no crates.io URL. Assumed decision: the steer to publish after each issue is read as the editor's own release when the editor changed; bevy_gooey was not changed this pass, so it was not released.
 
 ## Next focus
 UI-R02 #332: the editor's skin from three seeds, on the Desk preset. Needs G-47..G-49 and G-52, which are built and in v0.40.1.
