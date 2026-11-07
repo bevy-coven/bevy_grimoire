@@ -363,6 +363,18 @@
           "saw": "with PASTE-429 on the clipboard and the shell at 'echo ', Cmd+V pasted nothing and Cmd+Shift+V pasted it; after Enter, Cmd+A selected nothing in the terminal"
         }
       ]
+    },
+    {
+      "stem": "feedback-1794024825941",
+      "taken_at_ms": 1794024825941,
+      "app_version": "0.4.1",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
     }
   ]
 }
