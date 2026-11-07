@@ -234,23 +234,20 @@ fn measure_the_cell(
     // **Only a row already drawn at the current size is a measurement** (#324): after the text size
     // changes, a row still laid out at the old one would be measured and kept for good.
     let size = terminal_font(metrics.text_scale).font_size;
-    let Some((layout, _)) = rows.iter().find(|(l, font)| !l.glyphs.is_empty() && font.font_size == size) else {
+    let Some((layout, advance)) = rows
+        .iter()
+        .filter(|(_, font)| font.font_size == size)
+        .find_map(|(layout, _)| advance_of(layout).map(|advance| (layout, advance)))
+    else {
         return;
     };
-    // **Two glyphs' positions are the advance between them**, which is the only honest measurement:
-    // `TextLayoutInfo.size` is the whole run's box (and a run may be a whole row), while the distance
-    // between the first two glyphs' origins *is* one cell. Physical pixels in, logical out, which is
-    // what `scale_factor` is for.
-    let mut glyphs = layout.glyphs.iter();
-    let (Some(first), Some(second)) = (glyphs.next(), glyphs.next()) else {
-        return;
-    };
+    // Physical pixels in, logical out, which is what `scale_factor` is for.
     let scale = if layout.scale_factor > 0.0 {
         layout.scale_factor
     } else {
         1.0
     };
-    let width = ((second.position.x - first.position.x) / scale).max(1.0);
+    let width = (advance / scale).max(1.0);
     let height = (layout.size.y / scale).max(1.0);
     if (width - metrics.width).abs() < 0.01 && (height - metrics.height).abs() < 0.01 {
         metrics.measured = true;
@@ -260,6 +257,33 @@ fn measure_the_cell(
     metrics.height = height;
     metrics.scale = scale;
     metrics.measured = true;
+}
+
+/// A step between two neighbouring pens shorter than this, physical px, is a mark drawn over the cell
+/// before it (a combining accent), not a cell of its own.
+const PEN_STEP_MIN_PX: f32 = 0.5;
+
+/// **One cell's advance in a laid-out row, physical px**: the shortest step between two neighbouring
+/// glyphs' pens, or `None` for a row with no such pair.
+///
+/// **The pen, not the ink.** A glyph's `position` is the centre of its ink, `size / 2 + pen + offset`
+/// (`bevy_text-0.20.0/src/pipeline.rs:430`), so the distance between two centres is the advance plus the
+/// difference in the two letters' ink. Measured that way the cell came out as wide as the first two
+/// letters of the row it read said: 6.0 logical px from `ladvien@` (an `l` and an `a`), 6.42 from `sh-5.3$`
+/// (an `s` and an `h`), whose pens are 7.2 physical px apart at scale 1.2, which is 6.0. A cell 7 % wide put
+/// the caret further right of its column the further along the row it was. Taking each glyph's half-width
+/// and bearing back off gives its pen. **The shortest step** because in a monospace face every step is a
+/// whole number of cells.
+fn advance_of(layout: &bevy::text::TextLayoutInfo) -> Option<f32> {
+    let pen = |glyph: &bevy::text::PositionedGlyph| {
+        glyph.position.x - glyph.atlas_info.rect.width() / 2.0 - glyph.atlas_info.offset.x
+    };
+    layout
+        .glyphs
+        .windows(2)
+        .map(|pair| pen(&pair[1]) - pen(&pair[0]))
+        .filter(|step| *step >= PEN_STEP_MIN_PX)
+        .min_by(f32::total_cmp)
 }
 
 /// **The pane's size → a cell count → `TIOCSWINSZ`, only when it changed.**
@@ -861,3 +885,55 @@ fn key_bytes(event: &KeyboardInput, keys: &ButtonInput<KeyCode>, app_cursor: boo
 /// **The scrollback is bounded, and the bound is stated.** A `cargo build -v` produces megabytes; a
 /// terminal that kept them all would leak in a program meant to run for a working day.
 const _: usize = SCROLLBACK;
+
+#[cfg(test)]
+mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::text::{GlyphAtlasInfo, PositionedGlyph, TextLayoutInfo};
+
+    use super::*;
+
+    /// A laid-out glyph whose pen is at `pen` and whose ink is `ink` wide, `bearing` right of the pen:
+    /// `bevy_text-0.20.0/src/pipeline.rs:430` gives the ink's centre, `size / 2 + pen + offset`.
+    fn glyph(pen: f32, ink: f32, bearing: f32) -> PositionedGlyph {
+        PositionedGlyph {
+            position: Vec2::new(ink / 2.0 + pen + bearing, 0.0),
+            atlas_info: GlyphAtlasInfo {
+                texture: AssetId::default(),
+                rect: Rect::new(0.0, 0.0, ink, 1.0),
+                offset: Vec2::new(bearing, 0.0),
+                is_alpha_mask: true,
+            },
+            section_index: 0,
+            line_index: 0,
+        }
+    }
+
+    /// **The cell is the pens' advance, whichever letters the measured row starts with.** The numbers are
+    /// `sh-5.3$`'s first two glyphs as Bevy laid them out at scale 1.2: an `s` of 6 px ink from its pen, an
+    /// `h` of 5 px ink 1 px right of its pen, the pens 7.2 px apart. Their ink centres are 7.7 px apart, which
+    /// was taken for a cell of 6.42 logical px.
+    #[test]
+    fn a_cell_is_the_advance_between_two_pens_not_between_two_inks() {
+        const SCALE: f32 = 1.2;
+        const ADVANCE_PX: f32 = 7.2;
+        let mut world = World::new();
+        world.init_resource::<CellMetrics>();
+        let layout = TextLayoutInfo {
+            scale_factor: SCALE,
+            glyphs: vec![glyph(0.0, 6.0, 0.0), glyph(ADVANCE_PX, 5.0, 1.0)],
+            size: Vec2::new(2.0 * ADVANCE_PX, 15.0),
+            ..default()
+        };
+        world.spawn((TerminalRow(0), terminal_font(1.0), layout));
+        world.run_system_once(measure_the_cell).unwrap_or_else(|e| panic!("{e}"));
+        let metrics = world.resource::<CellMetrics>();
+        assert!(metrics.is_measured(), "a laid-out row is a measurement");
+        assert!(
+            (metrics.width() - ADVANCE_PX / SCALE).abs() < 1e-4,
+            "one cell is {} logical px (the pens' advance), and was measured as {}",
+            ADVANCE_PX / SCALE,
+            metrics.width()
+        );
+    }
+}
