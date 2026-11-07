@@ -369,10 +369,10 @@
       "taken_at_ms": 1794024825941,
       "app_version": "0.4.1",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "What's new cards' prose is hard to read and 'reads like a terminal' (the one monospace face); asks to make it look better",
       "commit": "",
       "attempts": []
     }
