@@ -118,7 +118,7 @@ pub struct EditorSettings {
     pub text_scale: f32,
     /// Interface size (spacing and targets) as a multiple of the skin's.
     pub interface_scale: f32,
-    /// Animation is skipped: a change lands without easing.
+    /// Reduced motion (gooey's `MotionSettings::reduced`): what travels lands at once, fades and colours still ease.
     pub reduced_motion: bool,
     /// The map's grid is drawn in the viewport.
     pub show_grid: bool,

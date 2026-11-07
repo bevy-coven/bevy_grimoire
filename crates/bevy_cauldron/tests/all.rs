@@ -469,6 +469,7 @@ mod the_home_shows_an_update_found_after_it_opened;
 mod capture_feedback_1794011769640;
 mod the_block_caret_lets_its_cell_show_through;
 mod the_caret_follows_wide_characters;
+mod the_editor_moves_on_springs;
 mod the_terminal_agent_is_a_setting;
 mod an_agent_tab_runs_its_self_test;
 mod capture_feedback_1794024642593;

@@ -388,6 +388,12 @@ pub fn build_headless_at(
     // door knows which map to open. See `Project::open_map_name`.
     project.open_map_name = Some(open_map.map.name.clone());
     let mut app = App::new();
+    // **No motion in a headless editor.** A test steps frames, not seconds: gooey's dialogs, menus and
+    // colours move on the real clock, so a dialog that has been asked to close would still be on screen a
+    // few frames later and every colour would be a frame behind its skin. Off lands every motion in the
+    // frame it is seen (the setting the player has as Reduced, but stronger: fades land too). A test of
+    // the motion itself puts `MotionSettings::default()` back and steps a manual clock.
+    app.insert_resource(bevy_gooey::MotionSettings::off());
 
     // **The injected-pointer resource, without the plugin that owns it.**
     //

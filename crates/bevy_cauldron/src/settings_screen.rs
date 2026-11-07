@@ -216,7 +216,7 @@ fn chord(
         return;
     }
     if let Some(dialog) = open_now.iter().next() {
-        commands.entity(dialog).despawn();
+        commands.entity(dialog).insert(bevy_gooey::Leave);
     } else if editing.is_empty() {
         asks.write(OpenSettings);
     }
@@ -250,7 +250,7 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
             // **The `Esc` that closes this is this dialog's alone** (#286): taken, so the editor's
             // own `Esc` (back out, ask to leave) does not also read it in the same frame.
             crate::confirm::take(&mut keyboard, KeyCode::Escape);
-            commands.entity(cancel.entity).despawn();
+            commands.entity(cancel.entity).insert(bevy_gooey::Leave);
         })
         .with_children(|dialog| {
             dialog
@@ -328,7 +328,7 @@ fn open(mut asks: MessageReader<OpenSettings>, existing: Query<(), With<Settings
                             button("Close"),
                             observe(|_: On<Activate>, dialogs: Query<Entity, With<SettingsDialog>>, mut commands: Commands| {
                                 for dialog in &dialogs {
-                                    commands.entity(dialog).despawn();
+                                    commands.entity(dialog).insert(bevy_gooey::Leave);
                                 }
                             }),
                         ));

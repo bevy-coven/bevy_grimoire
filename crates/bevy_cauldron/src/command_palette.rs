@@ -71,15 +71,20 @@ fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     live: Res<Live>,
     confirm: Res<crate::confirm::Confirm>,
-    open: Query<Entity, With<CommandPalette>>,
+    open: Query<(Entity, Option<&bevy_gooey::Leaving>), With<CommandPalette>>,
     mut commands_list: ResMut<CommandList>,
     mut commands: Commands,
 ) {
     if !chords().iter().any(|chord| chord.just_pressed(&keys)) {
         return;
     }
-    if let Some(palette) = open.iter().next() {
-        commands.entity(palette).despawn();
+    if let Some((palette, leaving)) = open.iter().next() {
+        // It leaves on gooey's presence (a fade, then despawned), not in one frame; asked again while it
+        // is leaving, it comes back from where it is drawn.
+        match leaving {
+            Some(leaving) if !leaving.returning() => commands.entity(palette).insert(bevy_gooey::Stay),
+            _ => commands.entity(palette).insert(bevy_gooey::Leave),
+        };
         return;
     }
     // Not over a text field, a filter box or the journal (each takes the keys on its own terms), and
@@ -93,7 +98,7 @@ fn toggle(
 }
 
 /// **A chosen command runs through its chord**, the way an agent's `run_command` does. The palette is
-/// already gone and focus is back, so the dispatcher sees the tab's own context when the chord lands.
+/// leaving (it has given the keys back, see `editor::palette_is_open`) and focus is back, so the dispatcher sees the tab's own context when the chord lands.
 fn run(
     chosen: On<RunCommand>,
     mut chords: ResMut<Chords>,

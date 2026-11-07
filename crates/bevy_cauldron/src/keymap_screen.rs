@@ -215,7 +215,7 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
             // **The `Esc` that closes this is this dialog's alone** (#286): taken, so the editor's
             // own `Esc` (back out, ask to leave) does not also read it in the same frame.
             crate::confirm::take(&mut keyboard, KeyCode::Escape);
-            commands.entity(cancel.entity).despawn();
+            commands.entity(cancel.entity).insert(bevy_gooey::Leave);
         })
         .with_children(|dialog| {
             dialog
@@ -255,7 +255,7 @@ fn open(mut asks: MessageReader<OpenKeymap>, existing: Query<(), With<KeymapDial
                             button("Close"),
                             observe(|_: On<Activate>, dialogs: Query<Entity, With<KeymapDialog>>, mut commands: Commands| {
                                 for dialog in &dialogs {
-                                    commands.entity(dialog).despawn();
+                                    commands.entity(dialog).insert(bevy_gooey::Leave);
                                 }
                             }),
                         ));
