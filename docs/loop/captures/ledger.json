@@ -342,6 +342,18 @@
           "saw": "installed 0.3.8, a shell redrawing a rule tput-cols wide: the terminal body grew from 2560 to 3774 px in a 2560 px window over 17 s and the shell's columns climbed 177 to 267, pushing the status bar's end and the terminal's close button off the window"
         }
       ]
+    },
+    {
+      "stem": "feedback-1794024642593",
+      "taken_at_ms": 1794024642593,
+      "app_version": "0.4.1",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
     }
   ]
 }
