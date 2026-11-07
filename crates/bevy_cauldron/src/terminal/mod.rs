@@ -37,6 +37,7 @@
 
 mod grid;
 pub mod input;
+mod links;
 mod palette;
 mod pty;
 
@@ -60,6 +61,9 @@ use bevy::prelude::*;
 pub use grid::{CaretShape, Cell, Cursor, FindStatus, Line, SCROLLBACK, TerminalScreen};
 pub use pty::{ShellChoice, TERM_PROGRAM, TerminalSession, session_env};
 
+/// **The variable that names the open project to a shell** (#324): its root, as the editor holds it.
+pub const PROJECT_ENV: &str = "CAULDRON_PROJECT";
+
 /// **Every shell the editor is running, and which one the pane is looking at.**
 ///
 /// A `Resource` and not a set of entities: a terminal that the door sweep despawned (a `Node` root,
@@ -78,6 +82,9 @@ pub struct Terminal {
     height: f32,
     /// Where the *next* shell starts. Set from the open project and from a `cd` chip.
     next_cwd: Option<PathBuf>,
+    /// **The open project's root** (#324): `CAULDRON_PROJECT` in every shell opened while a project is open, so
+    /// a script or an agent run in the terminal knows which project the editor holds. `None` is no project.
+    project_root: Option<PathBuf>,
     /// **The person collapsed the pane** (Primary+J, or the chord that lowers it), and every screen's
     /// pane is built and kept collapsed until they restore it (#315). `false` at launch: the terminal is
     /// open on every screen from the application's first frame (#314, the owner's ask of 2026-11-06).
@@ -190,7 +197,11 @@ impl Terminal {
     /// The one place a tab is opened: a shell with `env` laid over the session's own, titled `title`
     /// or after its directory.
     fn open_tab(&mut self, cols: u16, rows: u16, cwd: &Path, env: &[(String, String)], title: Option<String>) -> usize {
-        match TerminalSession::spawn_with(cols, rows, cwd, env, self.shell.as_ref()) {
+        let mut env = env.to_vec();
+        if let Some(root) = &self.project_root {
+            env.push((PROJECT_ENV.to_owned(), root.to_string_lossy().into_owned()));
+        }
+        match TerminalSession::spawn_with(cols, rows, cwd, &env, self.shell.as_ref()) {
             Ok(session) => {
                 let title = title.unwrap_or_else(|| shell_title(cwd));
                 let mut screen = grid::TerminalScreen::new(cols, rows);
@@ -402,6 +413,16 @@ impl Terminal {
         self.collapsed = collapsed;
     }
 
+    /// **The project the editor holds** (#324): `CAULDRON_PROJECT` in each shell opened from now on.
+    pub fn set_project_root(&mut self, root: Option<PathBuf>) {
+        self.project_root = root;
+    }
+
+    /// The project the editor holds, when one is open.
+    pub fn project_root(&self) -> Option<&Path> {
+        self.project_root.as_deref()
+    }
+
     /// Where the next shell starts: the open project, or the home directory.
     ///
     /// Re-read every time a tab is added rather than captured once, because a person who opens
@@ -605,6 +626,7 @@ fn follow_the_project(
         return;
     }
     let root = pointed.root.clone();
+    terminal.set_project_root(Some(root.clone()));
     terminal.set_next_cwd(Some(root));
 }
 
@@ -637,6 +659,7 @@ impl Plugin for TerminalPlugin {
 /// directory the game's assets live in and would have looked right by accident.
 fn seat_the_terminals_cwd(mut terminal: ResMut<Terminal>, root: Option<Res<crate::project_assets::ProjectRoot>>) {
     if let Some(root) = root.as_ref().and_then(|r| r.current()) {
+        terminal.set_project_root(Some(root.clone()));
         terminal.set_next_cwd(Some(root));
     }
 }
