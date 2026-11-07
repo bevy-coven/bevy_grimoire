@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-07
 
+- **305-toast-below-bar** `f4697da2` A toast stands under the menu bar instead of over its titles *For you: A toast no longer covers the menu bar: the tour offer and every refusal now appear just below it.* *No clip: a toast moved 28 px down; proved by a_toast_never_stands_over_the_menu_bar and chrome::keep_toasts_under_the_menu_bar*
 - **feedback-1794062374181** The terminal draws the gap a tab leaves as blank columns, not a missing-glyph box after every name `ls` lines up *For you: In the terminal, ls and other column output no longer shows a "?" box in the gaps between names.* *No clip: a tab's cell drawn as a space, the same columns as before; proved by capture_feedback_1794062374181 and terminal::grid::tests*
 
 ## 2026-11-06

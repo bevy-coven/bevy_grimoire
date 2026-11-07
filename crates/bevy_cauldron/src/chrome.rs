@@ -1850,6 +1850,36 @@ pub fn problem_toast(mut commands: Commands, frame: Res<Frame>) {
 /// dialog's button did must be readable over it.
 const TOAST_Z: i32 = 150;
 
+/// **Gooey's toast stack keeps clear of the menu bar** (#305).
+///
+/// A toast is `TopCenter` at the window's top, and the bar is the first 28 px of it, so the tour's
+/// offer covered the Compose/Rigs/Tools/Help titles — photographed by the first-run walk at
+/// 1088x640 and 1024x640. The editor's **own** host ([`problem_toast`]) hangs inside the viewport,
+/// which already starts under the bar, so a refusal was fine; gooey spawns its own stack at the
+/// window's root whenever a toast is raised with no host (the tour's offer, raised as a project
+/// opens), and nothing told that stack about the bar.
+///
+/// The height is read from the bar's own laid-out node rather than from a constant: `menu_bar`'s
+/// height comes from the skin's type size and padding, so a bigger text scale or a skin change
+/// moves it, and `ToastInset` is logical px scaled by `UiScale` — the same units the bar's
+/// `ComputedNode` reports through `inverse_scale_factor`. Written only when it differs, so a
+/// settled editor costs a comparison.
+///
+/// **Ungated by screen**: the tour's offer is raised on `OnEnter(Screen::Editor)` before this pass's
+/// first `Update`, and a toast can be raised on any screen.
+pub fn keep_toasts_under_the_menu_bar(
+    mut settings: ResMut<bevy_gooey::ToastSettings>,
+    bars: Query<&ComputedNode, With<crate::menu_bar::EditorMenuBar>>,
+) {
+    let Some(bar) = bars.iter().next().filter(|bar| bar.size().y > 0.0) else { return };
+    // Physical in, logical out: `ComputedNode::size` is surface pixels and `UiScale` multiplies
+    // every `Val::Px`, so this is the height the bar's own `Val::Px` adds up to.
+    let want = bevy_gooey::ToastInset::top(bar.size().y * bar.inverse_scale_factor());
+    if settings.inset != want {
+        settings.inset = want;
+    }
+}
+
 /// **The strip the toast stands in.** Its `Display` is what shows and hides the toasts; gooey's stack
 /// inside carries them. See [`problem_toast`].
 #[derive(Component)]
@@ -3415,7 +3445,12 @@ impl Plugin for ChromePlugin {
             .add_systems(Update,
                 (light_the_back_button, stand_down_the_back_chord, dim_the_ground)
                     .run_if(in_state(crate::screen::Screen::Editor)),
-            );
+            )
+            // **Gooey's own toast stack stands under the menu bar** (#305). Ungated by screen: a
+            // toast can be raised before the editor's frame exists (the tour's offer) and on a
+            // screen with no frame at all, and gooey puts its stack at the window's root every
+            // time. See `keep_toasts_under_the_menu_bar`.
+            .add_systems(Update, keep_toasts_under_the_menu_bar.after(FrameSystems));
     }
 }
 

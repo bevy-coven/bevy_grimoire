@@ -453,6 +453,7 @@ mod capture_feedback_1793968919654;
 mod the_terminal_speaks_to_programs_in_their_modes;
 mod the_terminal_is_on_every_screen;
 mod a_click_puts_the_keyboard_in_the_terminal;
+mod a_toast_never_stands_over_the_menu_bar;
 mod the_shell_keeps_its_ctrl_chords;
 mod typing_brings_the_terminal_back_to_its_prompt;
 mod the_caret_takes_the_shape_a_program_asks_for;
