@@ -104,12 +104,18 @@ fn body(app: &mut App) -> (Entity, Vec2) {
         .expect("the pane has a body")
 }
 
-/// A hit at the centre of `cell` (row, column), normalized to the body as bevy_ui's backend reports it.
+/// A hit at the centre of `cell` (row, column), normalized to the body as bevy_ui's backend reports it: the
+/// cell's centre as the rows draw it, past the body's resolved padding (feedback-1794011769640: this counted
+/// from the body's corner, as the pane did, which is two cells left of where the rows begin).
 fn hit_at(app: &mut App, cell: (usize, usize)) -> (Entity, HitData) {
     let (entity, size) = body(app);
+    let inset = {
+        let node = app.world().get::<ComputedNode>(entity).expect("the body is laid out");
+        node.padding.min_inset * node.inverse_scale_factor()
+    };
     let metrics = *app.world().resource::<CellMetrics>();
-    let x = (cell.1 as f32 + 0.5) * metrics.width() / size.x - 0.5;
-    let y = (cell.0 as f32 + 0.5) * metrics.height() / size.y - 0.5;
+    let x = (inset.x + (cell.1 as f32 + 0.5) * metrics.width()) / size.x - 0.5;
+    let y = (inset.y + (cell.0 as f32 + 0.5) * metrics.height()) / size.y - 0.5;
     (entity, HitData::new(Entity::PLACEHOLDER, 0.0, Some(Vec3::new(x, y, 0.0)), None))
 }
 

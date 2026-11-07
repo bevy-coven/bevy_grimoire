@@ -412,12 +412,18 @@ fn the_terminal_takes_its_column_count_from_its_own_width() {
 fn columns_and_body(mut app: App) -> (u16, f32) {
     chord(&mut app, &[KeyCode::ControlLeft, KeyCode::Backquote]);
     settle(&mut app, 8);
-    let body = {
+    // The body's width, and its resolved padding left and right: the rows are drawn inside the padding, so
+    // the padding is no part of a row (feedback-1794011769640: this read `body.x - 4.0`, the 2 px a side the
+    // pane's arithmetic assumed, while the pane padded its sides by 12).
+    let (body, padding_x) = {
         let mut q = app.world_mut().query_filtered::<&ComputedNode, With<TerminalBody>>();
         let node = q
             .single(app.world())
             .unwrap_or_else(|e| panic!("the pane has one body: {e:?}"));
-        node.size() * node.inverse_scale_factor()
+        (
+            node.size() * node.inverse_scale_factor(),
+            (node.padding.min_inset.x + node.padding.max_inset.x) * node.inverse_scale_factor(),
+        )
     };
     let terminal = app.world().resource::<Terminal>();
     let Some(tab) = terminal.tab() else {
@@ -429,7 +435,7 @@ fn columns_and_body(mut app: App) -> (u16, f32) {
     // this line divided by the 6 px fallback and failed against a pane correctly using its real 11.5 px
     // advance, which is precisely the mistake of testing a claim with a second copy of its arithmetic.
     let cell = app.world().resource::<bevy_cauldron::terminal_view::CellMetrics>().width();
-    let expected = ((body.x - 4.0) / cell).floor();
+    let expected = ((body.x - padding_x) / cell).floor();
     assert!(
         (cols as f32 - expected).abs() <= 1.0,
         "the terminal says {cols} columns for a {}-px body; the layout supports {expected}. The count \
