@@ -16,6 +16,9 @@ Gate: green on `main` at start (pass 469's push). Load 17 to 35 (CI containers),
 - **#236**: the multi-selection's mixed value needs a gooey change; filed **bevy-coven/bevy_gooey#77** (G-67).
 - **Skipped:** #333 to #336 (gooey Needs open); #237 to #260 (integration, see Summary and the comment on #208); #113 (the remaining step, removing `vlm.rs`, is blocked by the protected evaluator, as pass 369 found); #129 (stalled behind the protected `Camera` list).
 
+## Demos
+hero re-recorded (118 frames, check.py PASS) after pass 469's clip made it stale; place-and-undo is owed: three takes under load 28 each failed one change moment of `check.py` (3.5 to 3.8 % against 5 %), the click's event stamp landing after the frame it changed. The pass-467 GIF stays.
+
 ## Test diffs
 Two new files, `a_link_in_the_terminal_opens_on_a_primary_click` and `the_shell_knows_the_project_it_runs_beside`, one `mod` line each in `all.rs` (the owner's exception for a new editor test file; the first commit's message says both lines are in it, but they are in the second). `BODY_INSET` became `pub` so a test can aim at a cell.
 
