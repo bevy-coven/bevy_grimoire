@@ -1,6 +1,6 @@
 [package]
 name = "bevy_cauldron"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2024"
 description = "A standalone world-building editor: author maps from an asset library, save what a game can load."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
