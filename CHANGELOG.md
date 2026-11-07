@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-07
+
+- **feedback-1794062374181** The terminal draws the gap a tab leaves as blank columns, not a missing-glyph box after every name `ls` lines up *For you: In the terminal, ls and other column output no longer shows a "?" box in the gaps between names.* *No clip: a tab's cell drawn as a space, the same columns as before; proved by capture_feedback_1794062374181 and terminal::grid::tests*
+
 ## 2026-11-06
 
 - **feedback-1794024642593** In the terminal, Cmd+V pastes, Cmd+C copies and Cmd+A selects everything, and a Command chord never reaches the shell as a letter *For you: In the terminal, Cmd+V, Cmd+C and Cmd+A now paste, copy and select all, as in any Mac terminal.* *No clip: keyboard chords with no new screen of their own; proved by capture_feedback_1794024642593 and terminal_view::tests*

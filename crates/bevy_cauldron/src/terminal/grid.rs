@@ -742,7 +742,13 @@ impl TerminalScreen {
             if selection.as_ref().is_some_and(|range| range.contains(indexed.point)) {
                 bg = palette::selection_bg();
             }
-            row.push(Cell { ch: if spacer { ' ' } else { cell.c }, fg, bg });
+            // **A tab's cell is drawn blank** (feedback-1794062374181). The emulator writes the tab character
+            // itself into the cell a tab starts from (`alacritty_terminal`'s `put_tab`), so that a copy keeps
+            // the tab. The face has no glyph for it, so drawn as it is it was a missing-glyph box after every
+            // name `ls` lined up with tabs. Alacritty's own renderer draws that cell as a space for the same
+            // reason (alacritty/alacritty#991). The grid keeps the tab, so a copy still holds it.
+            let blank = spacer || cell.c == '\t';
+            row.push(Cell { ch: if blank { ' ' } else { cell.c }, fg, bg });
         }
         if !row.is_empty() || !rows.is_empty() {
             rows.push(finish_row(row, wrapped));
@@ -935,6 +941,20 @@ mod tests {
         assert_eq!(text, "日 本  ok", "two wide characters are four columns, then a space and `ok`: {text:?}");
         assert_eq!(row.cells[5].ch, 'o', "the `o` is in column 5, where the shell's cursor arithmetic put it");
         assert_eq!(screen.cursor().column, 7, "and the cursor is after the `k`, in column 7");
+    }
+
+    /// **A tab's gap is blank** (feedback-1794062374181). The emulator writes the tab character itself into the
+    /// cell a tab starts from, so that a copy keeps the tab; drawn, that character is the face's missing-glyph
+    /// box, which put a `?` after every name `ls` lined up with tabs. The drawn row holds blanks there, and a
+    /// copy of it still holds the tabs the program wrote.
+    #[test]
+    fn a_tab_draws_blank_columns_and_copies_as_a_tab() {
+        let mut screen = TerminalScreen::new(40, 2);
+        screen.feed(b"a\tb\tc|");
+        let text: String = screen.lines()[0].cells.iter().map(|c| c.ch).collect();
+        assert_eq!(text, "a       b       c|", "`b` stands at the tab stop in column 8 and `c` at 16, blanks between: {text:?}");
+        screen.select((0, 0), (0, 17));
+        assert_eq!(screen.selection_text().as_deref(), Some("a\tb\tc|"), "a copy keeps the tabs the program wrote");
     }
 
     /// A program that asks the terminal a question gets an answer, or it waits forever.

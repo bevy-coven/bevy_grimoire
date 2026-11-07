@@ -470,3 +470,4 @@ mod the_caret_follows_wide_characters;
 mod the_terminal_agent_is_a_setting;
 mod an_agent_tab_runs_its_self_test;
 mod capture_feedback_1794024642593;
+mod capture_feedback_1794062374181;
