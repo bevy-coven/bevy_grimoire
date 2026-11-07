@@ -384,6 +384,18 @@
           "saw": "the What's new page on the installed 0.4.1 draws every card's sentence in the same monospace face as the terminal, light grey on a dark grey card, as in the capture"
         }
       ]
+    },
+    {
+      "stem": "feedback-1794062374181",
+      "taken_at_ms": 1794062374181,
+      "app_version": "0.4.1",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
     }
   ]
 }
