@@ -64,10 +64,6 @@ impl Plugin for EditorUiPlugin {
             Update,
             follow_the_saved_layout.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
-        app.add_systems(
-            Update,
-            follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
-        );
         // **The shell's regions as gooey panels** (UI-30, #224). A `Dock` shows only what a
         // `PanelRegistry` names, so the regions the editor draws are registered here — the one place
         // that owns the UI library — and the dock that arranges them is spawned in
@@ -100,7 +96,17 @@ impl Plugin for EditorUiPlugin {
                 .after(crate::family_host::Reloaded)
                 .before(bevy_gooey::GooeySystems::Style),
         );
-        app.add_systems(Update, (paint_marked_buttons, clear_stale_rails).chain().after(bevy_gooey::GooeySystems::Style));
+        // **The player's Reduced motion reaches gooey** (UI-R01): travel lands, colours and fades still ease.
+        app.add_systems(
+            Update,
+            follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
+        );
+        // Before gooey's colour motion, which leads every colour to the last one written: a button this paints
+        // is that colour's target, and colours it writes after the motion would be a frame ahead of it.
+        app.add_systems(
+            Update,
+            (paint_marked_buttons, clear_stale_rails).chain().after(bevy_gooey::GooeySystems::Style).before(bevy_gooey::update_color_motion),
+        );
     }
 }
 
@@ -138,11 +144,29 @@ fn paint_marked_buttons(
         (Entity, &mut BackgroundColor, Has<AccentButton>, Has<bevy::ui::Selected>, Option<&bevy::picking::hover::Hovered>, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
         (With<bevy_gooey::Role>, Or<(With<AccentButton>, With<bevy::ui::Selected>)>),
     >,
-    rails: Query<(), With<SelectedRail>>,
+    mut rails: Query<&mut BackgroundColor, (With<SelectedRail>, Without<bevy_gooey::Role>)>,
     mut texts: Query<(&bevy_gooey::Role, &mut TextColor, Option<&SelectedRail>)>,
+    parents: Query<&ChildOf>,
+    opacities: Query<&bevy_gooey::Opacity>,
     mut commands: Commands,
 ) {
     for (entity, mut fill, accent, selected, hovered, pressed, disabled, children) in &mut buttons {
+        // **A button in a dialog that is fading out fades with it.** gooey multiplies the colours it writes by
+        // the `Opacity` at and above a node; these are written after it, so they take the same factor, or the
+        // chosen tab would stand solid in a card that is going.
+        let faded = {
+            let (mut factor, mut at) = (1.0_f32, entity);
+            loop {
+                if let Ok(opacity) = opacities.get(at) {
+                    factor *= opacity.factor();
+                }
+                match parents.get(at) {
+                    Ok(parent) => at = parent.parent(),
+                    Err(_) => break factor,
+                }
+            }
+        };
+        let with_opacity = |color: Color| if faded < 1.0 { color.with_alpha(color.alpha() * faded) } else { color };
         let want = if disabled {
             skin.surface
         } else if accent {
@@ -159,6 +183,7 @@ fn paint_marked_buttons(
         } else {
             skin.hovered()
         };
+        let want = with_opacity(want);
         if fill.0 != want {
             fill.0 = want;
         }
@@ -166,15 +191,24 @@ fn paint_marked_buttons(
             for child in children.into_iter().flat_map(|c| c.iter()) {
                 if let Ok((role, mut ink, _)) = texts.get_mut(child)
                     && *role == bevy_gooey::Role::ButtonText
-                    && ink.0 != skin.accent_text
+                    && ink.0 != with_opacity(skin.accent_text)
                 {
-                    ink.0 = skin.accent_text;
+                    ink.0 = with_opacity(skin.accent_text);
                 }
             }
         }
         // **The rail, for a button that is the chosen one and is not already the accent colour.**
         let wants = selected && !accent && !disabled;
         let has = children.is_some_and(|c| c.iter().any(|child| rails.get(child).is_ok()));
+        if wants && has {
+            for child in children.into_iter().flat_map(|c| c.iter()) {
+                if let Ok(mut rail) = rails.get_mut(child)
+                    && rail.0 != with_opacity(skin.accent)
+                {
+                    rail.0 = with_opacity(skin.accent);
+                }
+            }
+        }
         match (wants, has) {
             (true, false) => {
                 commands.entity(entity).with_child((
@@ -189,7 +223,7 @@ fn paint_marked_buttons(
                         height: Val::Percent(100.0),
                         ..default()
                     },
-                    BackgroundColor(skin.accent),
+                    BackgroundColor(with_opacity(skin.accent)),
                     bevy::picking::Pickable::IGNORE,
                 ));
             }
@@ -290,16 +324,11 @@ pub fn follow_the_saved_layout(
     }
 }
 
-/// **The person's "Reduced motion" is gooey's [`MotionSettings::reduced`](bevy_gooey::MotionSettings)** (#331).
-///
-/// Reduced stops everything that travels, scales or turns and keeps the fades (WCAG 2.2 SC 2.3.3). Only
-/// `reduced` is written: the length scale is gooey's own, so a host or a test that has set it (a test
-/// app's `MotionSettings::off()`) keeps it. Compared before writing, so a settled editor costs one
-/// comparison.
-pub fn follow_the_motion_setting(
-    settings: Option<Res<crate::settings::EditorSettings>>,
-    mut motion: ResMut<bevy_gooey::MotionSettings>,
-) {
+/// **Reduced motion is the player's setting, and gooey's `MotionSettings::reduced` is how it is kept**: with it on,
+/// what travels (a dialog's rise, a panel's slide, a widget moved by layout) lands at once and colours and fades
+/// still ease, which is what WCAG 2.3.3 asks and what keeps a theme switch from popping. Only the one flag is
+/// written, so `duration_scale` stays whatever the host set; compared first, so a settled editor writes nothing.
+pub fn follow_the_motion_setting(settings: Option<Res<crate::settings::EditorSettings>>, mut motion: ResMut<bevy_gooey::MotionSettings>) {
     let Some(settings) = settings else { return };
     if motion.reduced != settings.reduced_motion {
         motion.reduced = settings.reduced_motion;

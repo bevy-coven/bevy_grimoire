@@ -110,7 +110,7 @@ pub const CATALOGUE: &[Setting] = &[
         key: "reduced_motion",
         label: "Reduced motion",
         category: "Accessibility",
-        description: "Menus, dialogs and panels stop sliding, scaling and turning into place; fades stay.",
+        description: "Dialogs, menus and panels stop sliding and growing and fade in place instead; colours still ease.",
         kind: Kind::Switch,
     },
     Setting {

@@ -974,17 +974,9 @@ fn in_map_viewport(at: Vec2, world: &ReportWorld) -> bool {
         .is_some_and(|r| r.contains(at))
 }
 
-/// **How far short of a cell's lower edge a ground point still belongs to that cell**, metres. A ground
-/// point comes from a ray through a pixel, so a click aimed at an edge (a piece at (3, 0) is on one) lands
-/// a hair either side of it: 2.9999 or 3.0001 depending on the layout's sub-pixels, which floored to a
-/// different cell each way (#322). A millimetre is far under a pixel at any zoom the editor has and far
-/// over float noise at the map's size.
-const CELL_EDGE_TOLERANCE_M: f32 = 0.001;
-
-/// The cell a coordinate is in, an edge belonging to the cell it begins (see [`CELL_EDGE_TOLERANCE_M`]).
-fn cell_index(v: f32) -> i32 {
-    ((v + CELL_EDGE_TOLERANCE_M) / bevy_grimoire_core::grid::TILE).floor() as i32
-}
+/// How far short of a cell's edge, in cells, a point still counts as on it: a ten-thousandth, a tenth of a
+/// millimetre on a metre-wide cell, well above the f32 noise of a pixel round trip and far below a pixel.
+const CELL_EDGE_SNAP: f32 = 1.0e-4;
 
 /// The scene under `at`: the ground point, the map point, the cell, and the placement there.
 fn scene_at(at: Vec2, world: &ReportWorld) -> Subject {
@@ -1014,9 +1006,13 @@ fn scene_at(at: Vec2, world: &ReportWorld) -> Subject {
     if let (Some(project), Some(open_map)) = (world.project.as_deref(), world.open_map.as_deref()) {
         let map_point = open_map.map.to_map_space((ground.x, ground.z));
         scene.map = Some([map_point.0, map_point.1]);
+        // **A point a hair short of an edge is on the edge.** The ground point is a pixel put back through the
+        // camera, which carries f32 noise (`2.999999` for a piece standing at exactly 3), and a move of the
+        // viewport by a fraction of a pixel (a UI library's text sizing) is enough to tip a click on an edge into
+        // the cell beside it. `scene.map` keeps the point as it came; only the cell label is snapped.
         scene.cell = Some([
-            cell_index(map_point.0),
-            cell_index(map_point.1),
+            (map_point.0 / bevy_grimoire_core::grid::TILE + CELL_EDGE_SNAP).floor() as i32,
+            (map_point.1 / bevy_grimoire_core::grid::TILE + CELL_EDGE_SNAP).floor() as i32,
         ]);
         scene.placement = crate::editor::pick_at(project, open_map, map_point)
             .and_then(|i| open_map.map.placements.get(i))

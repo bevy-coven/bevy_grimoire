@@ -8595,13 +8595,21 @@ impl Fields<'_> {
 /// this same plugin — but every condition in a `.run_if(..)` chain IS evaluated in Bevy 0.19, so a
 /// condition reading a resource some *other* plugin owns must take the option. Worth stating next to
 /// the one place that legitimately does not.
+/// **Whether a command palette holds the keys**: one that is open, or coming back. A palette on its way out
+/// (gooey's `Leaving`, its card fading) has given them back, so the command it ran is not refused as
+/// "typing" and the keys pressed during its fade reach the tab. The component outlives the close by the
+/// length of the exit, which is why the marker alone is not the answer.
+fn palette_is_open(palette: &Query<Option<&bevy_gooey::Leaving>, With<bevy_gooey::CommandPalette>>) -> bool {
+    palette.iter().any(|leaving| leaving.is_none_or(bevy_gooey::Leaving::returning))
+}
+
 pub fn not_typing(
     fields: Fields,
     filters: Res<crate::filter::Filters>,
     // The command palette's field is gooey's own, so it is asked of its marker (see `sense_context`).
-    palette: Query<(), With<bevy_gooey::CommandPalette>>,
+    palette: Query<Option<&bevy_gooey::Leaving>, With<bevy_gooey::CommandPalette>>,
 ) -> bool {
-    !fields.typing() && !filters.typing() && palette.is_empty()
+    !fields.typing() && !filters.typing() && !palette_is_open(&palette)
 }
 
 /// **The Note tool's mouse guard** (#173): [`not_typing`], except that the note box does not count.
@@ -8639,7 +8647,7 @@ pub fn sense_context(
     // **The command palette's field takes the keys** (UI-32). It is gooey's own text field, which none
     // of [`Fields`] knows about, so "a palette is open" is asked of the palette's marker: without
     // it, typing `undo` in the palette would also press U, N, D and O on the tab behind it.
-    palette: Query<(), With<bevy_gooey::CommandPalette>>,
+    palette: Query<Option<&bevy_gooey::Leaving>, With<bevy_gooey::CommandPalette>>,
     // **A report owns the keys while it is open** (`report.rs`). Its overlay root is the state, so
     // the question has one answer and it is the drawn thing: without this, pointing at a panel to
     // report on it also pressed every key on the tab behind it.
@@ -8672,7 +8680,7 @@ pub fn sense_context(
     // arrow — see [`keys::Holder`].
     let filter_typing = filters.typing();
     let typing = fields.typing()
-        || !palette.is_empty()
+        || palette_is_open(&palette)
         || confirm.as_deref().is_some_and(|c| c.owns_keyboard())
         || !report.is_empty()
         // **The terminal is a text field as far as the census is concerned.** It takes raw keys the

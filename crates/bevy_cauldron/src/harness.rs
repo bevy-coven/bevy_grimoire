@@ -388,6 +388,12 @@ pub fn build_headless_at(
     // door knows which map to open. See `Project::open_map_name`.
     project.open_map_name = Some(open_map.map.name.clone());
     let mut app = App::new();
+    // **No motion in a headless editor.** A test steps frames, not seconds: gooey's dialogs, menus and
+    // colours move on the real clock, so a dialog that has been asked to close would still be on screen a
+    // few frames later and every colour would be a frame behind its skin. Off lands every motion in the
+    // frame it is seen (the setting the player has as Reduced, but stronger: fades land too). A test of
+    // the motion itself puts `MotionSettings::default()` back and steps a manual clock.
+    app.insert_resource(bevy_gooey::MotionSettings::off());
 
     // **The injected-pointer resource, without the plugin that owns it.**
     //
@@ -453,12 +459,6 @@ pub fn build_headless_at(
     // The same knob the binary sets, by the same name — a literal here would be the second
     // definition the constant exists to prevent, and headless is where a drift goes unseen.
     .insert_resource(UiScale(crate::chrome::EDITOR_UI_SCALE));
-    // **Motion is off in the headless editor** (bevy_gooey#76's assumed decision, applied here for #331).
-    // A card that leaves is drawn for a few frames of the *real* clock before it is gone, and the
-    // editor's tests read "gone" a few frames after a close: on a loaded machine that is a race, and with
-    // the motion off it is the frame it was asked, as before. A test of the motion itself puts
-    // `MotionSettings::default()` back and steps the clock (`the_palette_leaves_on_gooeys_exit`).
-    app.insert_resource(bevy_gooey::MotionSettings::off());
 
     // **Despawning a light or a mesh must not panic in here.** `backends: None` registers every
     // render type but skips the render world — and with it `SyncWorldPlugin`, whose
