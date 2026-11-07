@@ -370,9 +370,9 @@
       "app_version": "0.4.1",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "What's new cards' prose is hard to read and 'reads like a terminal' (the one monospace face); asks to make it look better",
+      "reason": "seen, not testable: What's new prose is 10.93:1 (WCAG AA holds); the ask is a non-monospace prose face, an owner's choice (only FiraMono)",
       "commit": "",
       "attempts": [
         {
