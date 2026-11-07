@@ -65,6 +65,9 @@ pub enum AppVerb {
     ReportProblem,
     /// Show the About dialog.
     About,
+    /// **Put the shell back on its default arrangement** (UI-33, #227): Window ▸ Reset layout, undoing
+    /// every divider drag and panel move this door has had.
+    ResetLayout,
 }
 
 impl AppVerb {
@@ -83,6 +86,7 @@ impl AppVerb {
             AppVerb::WhatsNew => "What's new".to_owned(),
             AppVerb::ReportProblem => "Report a problem".to_owned(),
             AppVerb::About => "About Cauldron".to_owned(),
+            AppVerb::ResetLayout => "Reset layout".to_owned(),
         }
     }
 
@@ -157,6 +161,34 @@ pub fn run(world: &mut World, verb: AppVerb) {
         AppVerb::About => {
             world.write_message(OpenAbout);
         }
+        AppVerb::ResetLayout => reset_the_layout(world),
+    }
+}
+
+/// **Window ▸ Reset layout**: the default arrangement back, and the person's file made to agree with it.
+///
+/// Two writes, one intent. The running `Dock` is set to `ui::shell_layout` so the change is on screen
+/// this frame; the user's file loses its `shell_layout` key, which is what the default *is* (a person
+/// who has never moved a panel has no key). Writing the file is what makes it survive a restart; the
+/// key goes rather than being written out as the default's RON, because a saved copy of the default
+/// would stop tracking a change to it.
+fn reset_the_layout(world: &mut World) {
+    let default = crate::ui::shell_layout();
+    let mut docks = world.query_filtered::<&mut bevy_gooey::Dock, ()>();
+    for mut dock in docks.iter_mut(world) {
+        if dock.0 != default {
+            dock.0 = default.clone();
+        }
+    }
+    if let Some(settings) = world.get_resource_mut::<crate::settings::EditorSettings>() {
+        settings.into_inner().shell_layout = None;
+    }
+    let Some(file) = world.get_resource::<crate::settings::UserSettingsFile>().map(|f| f.0.clone()) else { return };
+    if let Err(why) = crate::setting_catalogue::edit_layer(&file, |layer| {
+        layer.shell_layout = None;
+        Ok(())
+    }) {
+        world.resource_mut::<EditorState>().status.problem(format!("cannot reset the layout: {why}"));
     }
 }
 

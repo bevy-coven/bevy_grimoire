@@ -187,6 +187,8 @@ enum Slot {
     Recent(Vec<PathBuf>),
     Separator,
     Statistics,
+    /// Window ▸ Reset layout (UI-33, #227).
+    ResetLayout,
 }
 
 /// **The Map menu, in the groups its keys fall into**: choosing and tools, turning and tipping, filling, and the map itself.
@@ -265,6 +267,8 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
     if category == "view" {
         slots.push(Slot::Separator);
         slots.push(Slot::Statistics);
+        slots.push(Slot::Separator);
+        slots.push(Slot::ResetLayout);
     }
     slots
 }
@@ -326,6 +330,9 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
         }
         Slot::Separator => {
             menu.spawn(bevy_gooey::separator());
+        }
+        Slot::ResetLayout => {
+            menu.spawn((AppVerb::ResetLayout, bevy_gooey::menu_item(AppVerb::ResetLayout.title())));
         }
         Slot::Statistics => {
             menu.spawn((

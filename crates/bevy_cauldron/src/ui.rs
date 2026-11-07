@@ -57,6 +57,13 @@ impl Plugin for EditorUiPlugin {
         // **The settings screen** (UI-71, #249): Cmd/Ctrl+, over any screen.
         app.add_plugins((crate::settings_screen::SettingsScreenPlugin, crate::project_config::ProjectConfigPlugin, crate::keymap_screen::KeymapScreenPlugin));
         app.insert_resource(editor_skin());
+        // **A person's arrangement, kept and restored** (UI-33, #227). The observer saves each change
+        // gooey reports; the system is what a file edit or Reset reaches the dock through.
+        app.add_observer(save_the_layout);
+        app.add_systems(
+            Update,
+            follow_the_saved_layout.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
+        );
         // **The shell's regions as gooey panels** (UI-30, #224). A `Dock` shows only what a
         // `PanelRegistry` names, so the regions the editor draws are registered here — the one place
         // that owns the UI library — and the dock that arranges them is spawned in
@@ -230,6 +237,55 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
 ///
 /// A left dock, the viewport in the middle with the most room, and a right dock — the shape the
 /// hand-built frame has had since 2026-08-17, now data that gooey keeps and a person edits.
+/// **A person moved a divider or a tab: their arrangement is saved** (UI-33, #227).
+///
+/// `bevy_gooey` reports every change a person makes to a `Dock` with `DockLayoutChanged`, carrying the
+/// layout it now shows. Writing it to the user's file is what makes the arrangement survive a restart;
+/// the editor reads it back through `SettingsLayer::shell_layout` on the next start.
+///
+/// **Nothing is written to a test or to a run with no file**: no `UserSettingsFile` means no place the
+/// person asked the editor to keep anything, so the event is taken and dropped, and a headless test
+/// that drags a divider does not write the real config.
+pub fn save_the_layout(
+    changed: On<bevy_gooey::DockLayoutChanged>,
+    file: Option<Res<crate::settings::UserSettingsFile>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    let Some(file) = file else { return };
+    // **`edit_layer`, not `write_key`.** `write_key` speaks the Settings screen's value vocabulary
+    // (a switch, a number, a named choice), and a layout is none of those; `edit_layer` is the same
+    // primitive underneath it — the file is read as the editor reads it, refused if it does not
+    // read, checked to read back, and written atomically — with the layer itself in hand.
+    let layout = changed.layout.clone();
+    if let Err(why) = crate::setting_catalogue::edit_layer(&file.0, move |layer| {
+        layer.shell_layout = Some(layout);
+        Ok(())
+    }) && let Some(state) = state.as_deref_mut()
+    {
+        state.status.problem(format!("the layout was not saved: {why}"));
+    }
+}
+
+/// **A settings read reaches the dock**: a layout written by hand, or Reset's write, is what the shell
+/// shows, the same way an edit of `text_scale` reaches the text.
+///
+/// It reads the resolved settings, not the `DockLayoutChanged` event, because there are two ways a
+/// layout changes — a person dragging it (saved by [`save_the_layout`], which the dock already shows)
+/// and a file a person edited (which only this can apply). Compared before writing, so a settled
+/// editor costs one comparison.
+pub fn follow_the_saved_layout(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut docks: Query<&mut bevy_gooey::Dock>,
+) {
+    let Some(settings) = settings else { return };
+    let want = settings.shell_layout.clone().unwrap_or_else(shell_layout);
+    for mut dock in &mut docks {
+        if dock.0 != want {
+            dock.0 = want.clone();
+        }
+    }
+}
+
 pub fn shell_layout() -> bevy_gooey::DockLayout {
     use bevy_gooey::{DockLayout, SplitAxis};
     DockLayout::split(

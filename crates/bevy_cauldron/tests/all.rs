@@ -14,6 +14,7 @@
 //! **Tests now share a process**, with tests from other files running beside them: a scratch path
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
+mod a_saved_arrangement_is_the_one_the_editor_shows;
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;

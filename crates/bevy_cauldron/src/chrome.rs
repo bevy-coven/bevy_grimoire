@@ -1174,7 +1174,7 @@ const BAR_H: f32 = 26.0;
 /// The `Frame` resource is how [`panel_root`] finds the dock to put a panel in; BSN-style name
 /// lookup does not exist here and a marker query would need a flush between the frame and the first
 /// panel. Ordering is [`FrameSystems`], which every panel spawner runs `after`.
-pub fn spawn_frame(mut commands: Commands) {
+pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings::EditorSettings>>) {
     let bar = |extra: Node| -> Node {
         Node {
             width: Val::Percent(100.0),
@@ -1376,7 +1376,9 @@ pub fn spawn_frame(mut commands: Commands) {
     // dragged. Moving the two docks onto gooey's `Dock` as well is the rest of this issue.
     let dock = commands
         .spawn((
-            bevy_gooey::Dock(crate::ui::shell_layout()),
+            // **The person's arrangement, else the default** (UI-33, #227). `sync_settings` has read
+            // the files by the time a frame is built, so this is the layout the editor opens on.
+            bevy_gooey::Dock(settings.and_then(|s| s.shell_layout.clone()).unwrap_or_else(crate::ui::shell_layout)),
             Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
         ))
         .id();

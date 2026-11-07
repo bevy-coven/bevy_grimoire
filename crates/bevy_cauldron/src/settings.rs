@@ -146,6 +146,11 @@ pub struct EditorSettings {
     /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
     /// Settings screen has no text control (#324), so this key is set in the file only.
     pub terminal_agent_command: Option<String>,
+    /// **The shell's arrangement, as a person left it** (UI-33, #227): a `bevy_gooey` `DockLayout` of
+    /// this door's panels, written by the editor when a divider or a tab is moved and read back on
+    /// the next start. `None` is `ui::shell_layout` — the default, so a person who has never moved
+    /// anything has no key in their file.
+    pub shell_layout: Option<bevy_gooey::DockLayout>,
 }
 
 impl Default for EditorSettings {
@@ -165,6 +170,7 @@ impl Default for EditorSettings {
             terminal_scrollback: crate::terminal::SCROLLBACK,
             terminal_agent: TerminalAgent::default(),
             terminal_agent_command: None,
+            shell_layout: None,
         }
     }
 }
@@ -212,6 +218,10 @@ pub struct SettingsLayer {
     pub terminal_agent: Option<TerminalAgent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_agent_command: Option<String>,
+    /// The shell's arrangement (UI-33, #227). Not in the settings catalogue: it is a thing a person
+    /// drags, not one they type, and Window ▸ Reset layout is the way back to the default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell_layout: Option<bevy_gooey::DockLayout>,
 }
 
 impl Default for SettingsLayer {
@@ -232,6 +242,7 @@ impl Default for SettingsLayer {
             terminal_scrollback: None,
             terminal_agent: None,
             terminal_agent_command: None,
+            shell_layout: None,
         }
     }
 }
@@ -308,6 +319,11 @@ impl EditorSettings {
             out.terminal_agent = layer.terminal_agent.unwrap_or(out.terminal_agent);
             if let Some(command) = &layer.terminal_agent_command {
                 out.terminal_agent_command = Some(command.clone());
+            }
+            // **The whole arrangement, not a key of it**: a layout is one value, and a later layer
+            // that states one replaces the earlier's (the same rule as `theme`).
+            if let Some(layout) = &layer.shell_layout {
+                out.shell_layout = Some(layout.clone());
             }
         }
         out
