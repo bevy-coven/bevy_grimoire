@@ -1,0 +1,52 @@
+{
+  "name": "palette_motion",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -6,
+            -4,
+            6,
+            4
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "caption": "the editor at rest"
+    },
+    {
+      "at": 0.8,
+      "key": "KeyK",
+      "mods": [
+        "ControlLeft"
+      ],
+      "caption": "person: Ctrl+K opens the command palette"
+    },
+    {
+      "at": 2.8,
+      "key": "KeyK",
+      "mods": [
+        "ControlLeft"
+      ],
+      "caption": "person: Ctrl+K again, and it fades out over a tenth of a second instead of vanishing"
+    },
+    {
+      "at": 4.4,
+      "caption": "the palette is gone once the fade has run"
+    }
+  ]
+}

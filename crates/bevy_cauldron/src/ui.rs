@@ -64,6 +64,10 @@ impl Plugin for EditorUiPlugin {
             Update,
             follow_the_saved_layout.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
+        app.add_systems(
+            Update,
+            follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
+        );
         // **The shell's regions as gooey panels** (UI-30, #224). A `Dock` shows only what a
         // `PanelRegistry` names, so the regions the editor draws are registered here — the one place
         // that owns the UI library — and the dock that arranges them is spawned in
@@ -283,6 +287,22 @@ pub fn follow_the_saved_layout(
         if dock.0 != want {
             dock.0 = want.clone();
         }
+    }
+}
+
+/// **The person's "Reduced motion" is gooey's [`MotionSettings::reduced`](bevy_gooey::MotionSettings)** (#331).
+///
+/// Reduced stops everything that travels, scales or turns and keeps the fades (WCAG 2.2 SC 2.3.3). Only
+/// `reduced` is written: the length scale is gooey's own, so a host or a test that has set it (a test
+/// app's `MotionSettings::off()`) keeps it. Compared before writing, so a settled editor costs one
+/// comparison.
+pub fn follow_the_motion_setting(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut motion: ResMut<bevy_gooey::MotionSettings>,
+) {
+    let Some(settings) = settings else { return };
+    if motion.reduced != settings.reduced_motion {
+        motion.reduced = settings.reduced_motion;
     }
 }
 

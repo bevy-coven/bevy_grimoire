@@ -72,6 +72,7 @@ fn toggle(
     live: Res<Live>,
     confirm: Res<crate::confirm::Confirm>,
     open: Query<Entity, With<CommandPalette>>,
+    leaving: Query<(), With<bevy_gooey::Leaving>>,
     mut commands_list: ResMut<CommandList>,
     mut commands: Commands,
 ) {
@@ -79,7 +80,14 @@ fn toggle(
         return;
     }
     if let Some(palette) = open.iter().next() {
-        commands.entity(palette).despawn();
+        // **It leaves on gooey's exit, it is not despawned** (#331): a palette the person saw arrive fades
+        // out on the skin's motion and goes the frame it has settled. The chord again during that exit
+        // brings it back, where a second `Leave` would change nothing.
+        if leaving.contains(palette) {
+            commands.entity(palette).insert(bevy_gooey::Stay);
+        } else {
+            commands.entity(palette).insert(bevy_gooey::Leave);
+        }
         return;
     }
     // Not over a text field, a filter box or the journal (each takes the keys on its own terms), and
