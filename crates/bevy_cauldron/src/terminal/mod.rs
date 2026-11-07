@@ -58,7 +58,7 @@ use crate::terminal_agent::{AgentLaunch, AgentPost, LAUNCH_CAP_MS, LAUNCH_QUIET_
 use bevy::prelude::*;
 
 pub use grid::{CaretShape, Cell, Cursor, FindStatus, Line, SCROLLBACK, TerminalScreen};
-pub use pty::{TERM_PROGRAM, TerminalSession, session_env};
+pub use pty::{ShellChoice, TERM_PROGRAM, TerminalSession, session_env};
 
 /// **Every shell the editor is running, and which one the pane is looking at.**
 ///
@@ -94,6 +94,8 @@ pub struct Terminal {
     /// the person's settings, given by `terminal_view::take_the_terminal_settings`.
     agent: TerminalAgent,
     agent_command: Option<String>,
+    /// **The shell new tabs run**, the person's `terminal_shell` and its arguments; `None` is `$SHELL`.
+    shell: Option<ShellChoice>,
     /// An agent tab was opened in this process, so the settings start no other by themselves.
     agent_opened: bool,
     /// **The settings have been given at least once.** No shell opens before: a first tab that opened
@@ -188,7 +190,7 @@ impl Terminal {
     /// The one place a tab is opened: a shell with `env` laid over the session's own, titled `title`
     /// or after its directory.
     fn open_tab(&mut self, cols: u16, rows: u16, cwd: &Path, env: &[(String, String)], title: Option<String>) -> usize {
-        match TerminalSession::spawn(cols, rows, cwd, env) {
+        match TerminalSession::spawn_with(cols, rows, cwd, env, self.shell.as_ref()) {
             Ok(session) => {
                 let title = title.unwrap_or_else(|| shell_title(cwd));
                 let mut screen = grid::TerminalScreen::new(cols, rows);
@@ -219,6 +221,17 @@ impl Terminal {
                 self.active
             }
         }
+    }
+
+    /// **The shell every tab opened from now on runs** (`terminal_shell`, `terminal_shell_args`, #324):
+    /// `None` is the environment's. A tab already open keeps the shell it started with.
+    pub fn set_shell(&mut self, shell: Option<ShellChoice>) {
+        self.shell = shell;
+    }
+
+    /// The shell the settings choose, when they choose one.
+    pub fn shell(&self) -> Option<&ShellChoice> {
+        self.shell.as_ref()
     }
 
     /// **The person's agent settings** (`terminal_agent`, `terminal_agent_command`), which also

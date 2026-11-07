@@ -474,3 +474,5 @@ mod the_terminal_agent_is_a_setting;
 mod an_agent_tab_runs_its_self_test;
 mod capture_feedback_1794024642593;
 mod capture_feedback_1794062374181;
+mod a_settings_edit_during_a_capture_reaches_the_terminal;
+mod the_terminal_runs_the_shell_it_is_set_to;

@@ -46,6 +46,22 @@ fn shell_of_environment() -> Result<Shell, String> {
     Ok(Shell::new(program, Vec::new()))
 }
 
+/// **A shell the person chose** (`terminal_shell` and `terminal_shell_args`, #324): VS Code's default
+/// profile. Without one a session runs [`shell_of_environment`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShellChoice {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+/// **The shell a session runs**: the person's choice when they made one, else the environment's.
+fn shell_to_run(choice: Option<&ShellChoice>) -> Result<Shell, String> {
+    match choice {
+        Some(choice) => Ok(Shell::new(choice.program.clone(), choice.args.clone())),
+        None => shell_of_environment(),
+    }
+}
+
 /// **One running shell, and the master side of its terminal.**
 ///
 /// Dropped = closed: [`Drop`] hangs the child up and reaps it, which is what stops a closed pane
@@ -59,13 +75,20 @@ pub struct TerminalSession {
     cwd: PathBuf,
 }
 
+/// **Start a shell the environment names.** The same as [`TerminalSession::spawn_with`] with no choice.
+impl TerminalSession {
+    pub fn spawn(cols: u16, rows: u16, cwd: &Path, extra_env: &[(String, String)]) -> Result<TerminalSession, String> {
+        TerminalSession::spawn_with(cols, rows, cwd, extra_env, None)
+    }
+}
+
 impl TerminalSession {
     /// **Start a shell.** `cols` and `rows` are the pane's cell count, which the child is told before
     /// it ever draws a prompt — a shell that starts at 80×24 and is then resized prints `cargo`'s
     /// progress bar twice. `extra_env` is laid over [`session_env`]: an agent tab's MCP port, token and
     /// config path (`crate::terminal_agent::AgentLaunch::env`); a plain shell passes none.
     #[cfg(unix)]
-    pub fn spawn(cols: u16, rows: u16, cwd: &Path, extra_env: &[(String, String)]) -> Result<TerminalSession, String> {
+    pub fn spawn_with(cols: u16, rows: u16, cwd: &Path, extra_env: &[(String, String)], shell: Option<&ShellChoice>) -> Result<TerminalSession, String> {
         // **Zero cells is refused rather than clamped silently.** A zero-width terminal makes
         // `alacritty_terminal` divide by zero when it lays out a wide character, and a zero-height
         // one has nowhere to put a cursor; both are reachable from a pane dragged to nothing, and
@@ -88,7 +111,7 @@ impl TerminalSession {
         };
 
         let options = Options {
-            shell: Some(shell_of_environment()?),
+            shell: Some(shell_to_run(shell)?),
             working_directory: Some(cwd.clone()),
             // **`drain_on_exit: false`** — a shell that has exited has nothing left worth waiting
             // for, and waiting would block the frame that noticed.
@@ -133,7 +156,7 @@ impl TerminalSession {
     /// macOS and on `big`, both Unix; a Windows build that silently drew nothing would be a lie
     /// discovered at the worst moment.
     #[cfg(not(unix))]
-    pub fn spawn(_cols: u16, _rows: u16, _cwd: &Path, _extra_env: &[(String, String)]) -> Result<TerminalSession, String> {
+    pub fn spawn_with(_cols: u16, _rows: u16, _cwd: &Path, _extra_env: &[(String, String)], _shell: Option<&ShellChoice>) -> Result<TerminalSession, String> {
         Err("the terminal is Unix-only in this build: it needs a PTY, which this target has no \
              implementation for"
             .to_owned())
