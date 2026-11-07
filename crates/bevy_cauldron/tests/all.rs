@@ -477,3 +477,5 @@ mod capture_feedback_1794024642593;
 mod capture_feedback_1794062374181;
 mod a_settings_edit_during_a_capture_reaches_the_terminal;
 mod the_terminal_runs_the_shell_it_is_set_to;
+mod a_link_in_the_terminal_opens_on_a_primary_click;
+mod the_shell_knows_the_project_it_runs_beside;

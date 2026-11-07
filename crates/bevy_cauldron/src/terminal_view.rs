@@ -56,7 +56,7 @@ pub const TERMINAL_CELL_H: f32 = chrome::text::LABEL.px() * 1.2;
 /// cost three things on mac_air (feedback-1794011769640): the shell was told of 4 more columns than a row
 /// holds, so omp's full-width rule widened the pane without end; the caret stood 1.7 cells left of the
 /// cursor; and a press selected the character two cells right of the one under it.
-pub(crate) const BODY_INSET: Vec2 = Vec2::new(chrome::MARGIN, 2.0);
+pub const BODY_INSET: Vec2 = Vec2::new(chrome::MARGIN, 2.0);
 
 /// **The terminal's face** (#323): FiraMono Nerd Font Mono, the Nerd Fonts patch of the face the editor
 /// ships (SIL OFL 1.1; the licence and the release note sit beside it in `assets/fonts/`). Prompts

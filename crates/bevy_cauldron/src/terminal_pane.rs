@@ -428,6 +428,7 @@ impl Plugin for TerminalPanePlugin {
             .add_observer(a_drag_begins)
             .add_observer(a_drag_extends)
             .add_observer(a_drag_ends)
+            .add_observer(a_primary_click_opens_a_link)
             .add_observer(a_press_reaches_the_program)
             .add_observer(a_release_reaches_the_program)
             .add_observer(the_wheel_scrolls_the_scrollback)
@@ -1483,6 +1484,41 @@ fn report_drag(
     pane.mouse_down = Some(MouseDown { last: at, ..down });
 }
 
+/// Whether the platform's primary modifier is held: Cmd on a mac, Ctrl elsewhere (the chord that follows a link).
+fn primary_held(keys: &ButtonInput<KeyCode>) -> bool {
+    if cfg!(target_os = "macos") {
+        keys.any_pressed([KeyCode::SuperLeft, KeyCode::SuperRight])
+    } else {
+        keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight])
+    }
+}
+
+/// **Primary+click on an `http://` or `https://` address in the output opens it** (#325), with the
+/// platform's opener ([`crate::app_verbs::open_link`], which raises a toast when it cannot). A plain click
+/// is untouched: it takes the keyboard, selects by dragging, and reaches a program that asked for the mouse.
+fn a_primary_click_opens_a_link(
+    press: On<bevy::picking::events::PointerPress>,
+    body: Query<&ComputedNode, With<TerminalBody>>,
+    metrics: Res<CellMetrics>,
+    keys: Res<ButtonInput<KeyCode>>,
+    terminal: Res<Terminal>,
+    mut commands: Commands,
+) {
+    if press.button != bevy::picking::pointer::PointerButton::Primary || !primary_held(&keys) {
+        return;
+    }
+    let Ok(node) = body.get(press.entity) else {
+        return;
+    };
+    let Some((row, col)) = cell_under(&press.hit, node, &metrics) else {
+        return;
+    };
+    let Some(url) = terminal.tab().and_then(|tab| tab.screen().link_at(row, col)) else {
+        return;
+    };
+    commands.queue(move |world: &mut World| crate::app_verbs::open_link(world, &url));
+}
+
 /// The modifiers held now, in the terminal's terms.
 fn mods_held(keys: &ButtonInput<KeyCode>) -> crate::terminal::input::Mods {
     crate::terminal::input::Mods {
@@ -1527,6 +1563,10 @@ fn a_press_reaches_the_program(
     let (Some(button), Some(at)) = (reported_button(press.button), cell_under(&press.hit, node, &metrics)) else {
         return;
     };
+    // **Primary+click on a link is the link's, never the program's** (#325): the program keeps the plain click.
+    if primary_held(&keys) && terminal.tab().is_some_and(|tab| tab.screen().link_at(at.0, at.1).is_some()) {
+        return;
+    }
     if let Some(bytes) = mouse_report(button, MouseAction::Press, at, mods, encoding) {
         terminal.write(&bytes);
     }

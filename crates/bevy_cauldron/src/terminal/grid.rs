@@ -543,6 +543,11 @@ impl TerminalScreen {
         self.dirty = true;
     }
 
+    /// **The address under a cell** of the rows the pane draws (#325), or `None`.
+    pub fn link_at(&self, row: usize, col: usize) -> Option<String> {
+        super::links::link_at(&self.rows, self.cols as usize, row, col)
+    }
+
     /// **The selected text**, or `None` when nothing is selected.
     ///
     /// Trailing blank columns trimmed per line, so copying a block out of a terminal does not paste
