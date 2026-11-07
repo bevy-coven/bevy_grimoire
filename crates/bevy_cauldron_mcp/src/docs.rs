@@ -413,6 +413,17 @@ pub const TOOLS: &[ToolDoc] = &[
         destructive: false,
         idempotent: false,
     },
+    ToolDoc {
+        name: "grimoire_self_test",
+        description: "Cauldron's power-on self test, for an agent started in Cauldron's terminal: \
+                      reads the editor's state, counts its operations and takes one picture of the \
+                      editor, tells the editor how each went (it shows them to the person), and \
+                      returns the picture and the results. Call it once when asked to run the self \
+                      test; it changes nothing.",
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+    },
 ];
 
 /// **How any agent works a note** (#94). The fenced `json` block is one operation per line; the
@@ -730,6 +741,11 @@ pub fn schemas() -> Value {
                 "root": {"type": "string", "description": "The project folder, a path on the editor's machine."},
                 "map": {"type": ["string", "null"], "default": null, "description": "A map to open it on."},
             },
+        },
+        "grimoire_self_test": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {},
         },
     })
 }

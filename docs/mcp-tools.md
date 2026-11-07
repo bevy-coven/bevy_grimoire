@@ -237,6 +237,16 @@ Open a project folder in the running editor, from any screen including the Proje
 | `destructiveHint` | false |
 | `idempotentHint` | false |
 
+### `grimoire_self_test`
+
+Cauldron's power-on self test, for an agent started in Cauldron's terminal: reads the editor's state, counts its operations and takes one picture of the editor, tells the editor how each went (it shows them to the person), and returns the picture and the results. Call it once when asked to run the self test; it changes nothing.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | true |
+| `destructiveHint` | false |
+| `idempotentHint` | true |
+
 ## How the two paths converge
 
 Every operation writes the data file, and the editor watches that file. So:

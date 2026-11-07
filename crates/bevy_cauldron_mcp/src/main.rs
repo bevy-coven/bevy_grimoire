@@ -35,8 +35,9 @@
 //! | `grimoire_jobs_stop` | ask a background job, such as the palette's thumbnail bake, to stop |
 //! | `grimoire_read_log` | the editor's own log file, read from disk, so it answers when the editor does not |
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
+//! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-one tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-two tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -79,6 +80,11 @@ pub struct ListParams {
     #[serde(default)]
     pub query: Option<String>,
 }
+
+/// **The parameters of `grimoire_self_test`**: none. The test is the same every time.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SelfTestParams {}
 
 /// **The parameters of `grimoire_preview_operation` and `grimoire_apply_operation`.**
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -1878,6 +1884,90 @@ impl Grimoire {
             Err(e) => Ok(refusal(&e)),
         }
     }
+
+    /// **`grimoire_self_test` — Cauldron's power-on self test.**
+    ///
+    /// An agent that Cauldron's terminal started is asked to call this once. It reads the state,
+    /// counts the operations and takes one picture, then tells the editor how each went so the
+    /// terminal's self-test card can show it. **A failed check is part of the answer, not a
+    /// refusal**: the agent then says what broke, and the card already shows it.
+    #[tool(
+        name = "grimoire_self_test",
+        description = "Cauldron's power-on self test, for an agent started in Cauldron's terminal: \
+                       reads the editor's state, counts its operations and takes one picture of the \
+                       editor, tells the editor how each went (it shows them to the person), and \
+                       returns the picture and the results. Call it once when asked to run the self \
+                       test; it changes nothing.",
+        annotations(
+            title = "Run Cauldron's power-on self test",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn self_test(
+        &self,
+        Parameters(_): Parameters<SelfTestParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let state = match self.editor.call("grimoire/state", json!({})).await {
+            Ok(answer) => (
+                true,
+                format!(
+                    "the editor is on {}",
+                    answer["screen"].as_str().unwrap_or("a screen it did not name")
+                ),
+            ),
+            Err(e) => (false, e),
+        };
+        let operations = match self.editor.call("grimoire/operation_list", json!({})).await {
+            Ok(answer) => match answer["operations"].as_array() {
+                Some(list) => (true, format!("{} operations", list.len())),
+                None => (false, "the editor's operation list carries no operations".to_owned()),
+            },
+            Err(e) => (false, e),
+        };
+        let mut png = None;
+        let picture = match self.grab("offscreen").await {
+            Ok(encoded) => {
+                let size = base64_decode(&encoded).as_deref().and_then(png_size);
+                match size {
+                    Some((w, h)) => {
+                        png = Some(encoded);
+                        (true, format!("a {w}x{h} picture"))
+                    }
+                    None => (false, "the editor's picture is not a PNG".to_owned()),
+                }
+            }
+            Err(e) => (false, e),
+        };
+        let checks = vec![
+            self_test_check("state", state),
+            self_test_check("operations", operations),
+            self_test_check("picture", picture),
+        ];
+        let told_the_editor = self
+            .editor
+            .call(
+                "grimoire/self_test_result",
+                json!({"token": agent_token(), "checks": checks}),
+            )
+            .await
+            .is_ok();
+        let answer = json!({
+            "checks": checks,
+            "told_the_editor": told_the_editor,
+            "next": "Say in one short paragraph what you see in the picture and that you are ready.",
+        });
+        let mut blocks = Vec::new();
+        if let Some(png) = png {
+            blocks.push(rmcp::model::ContentBlock::image(png, "image/png"));
+        }
+        blocks.push(rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&answer).unwrap_or_default(),
+        ));
+        Ok(CallToolResult::success(blocks))
+    }
 }
 
 /// **A refusal, as a tool result an agent can read.**
@@ -1900,6 +1990,29 @@ fn is_capture_label(label: &str) -> bool {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
         })
+}
+
+/// **The token Cauldron's terminal gave this server's agent**, from `CAULDRON_AGENT_TOKEN`, or
+/// `None` for a server nobody started from a terminal tab. The editor matches it to the tab whose
+/// self-test card it belongs to.
+fn agent_token() -> Option<String> {
+    std::env::var("CAULDRON_AGENT_TOKEN").ok().filter(|t| !t.is_empty())
+}
+
+/// **One self-test check, as the editor and the agent read it.**
+fn self_test_check(name: &str, (ok, detail): (bool, String)) -> Value {
+    json!({"name": name, "ok": ok, "detail": detail})
+}
+
+/// **A PNG's width and height**, from its IHDR chunk: the signature (8 bytes), the chunk's length
+/// and type (8), then the width and the height as big-endian u32s. `None` for anything else.
+fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+    if bytes.len() < 24 || !bytes.starts_with(SIGNATURE) || &bytes[12..16] != b"IHDR" {
+        return None;
+    }
+    let word = |at: usize| u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+    Some((word(16), word(20)))
 }
 
 #[tool_handler]
@@ -1932,6 +2045,27 @@ impl rmcp::ServerHandler for Grimoire {
         // the router is called here.
         let tcc = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
         self.tool_router.call(tcc).await
+    }
+
+    /// **Tell the editor an agent connected**, for the self-test card of the terminal tab that
+    /// started it: the token that tab gave, the client's name and version, and how many tools it is
+    /// offered. **A failed call never fails the session**: the server starts with no editor present,
+    /// so this is said on stderr and the session goes on.
+    async fn on_initialized(
+        &self,
+        context: rmcp::service::NotificationContext<rmcp::service::RoleServer>,
+    ) {
+        let client = context.peer.peer_info().map(|p| {
+            json!({"name": p.client_info.name, "version": p.client_info.version})
+        });
+        let hello = json!({
+            "token": agent_token(),
+            "client": client,
+            "tools": self.tool_router.list_all().len(),
+        });
+        if let Err(e) = self.editor.call("grimoire/agent_hello", hello).await {
+            eprintln!("bevy_cauldron_mcp: could not tell the editor an agent connected: {e}");
+        }
     }
 
     fn get_info(&self) -> ServerInfo {

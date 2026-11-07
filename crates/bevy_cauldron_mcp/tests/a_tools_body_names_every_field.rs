@@ -190,6 +190,10 @@ fn every_forwarded_brp_method_is_checked() {
         "grimoire/state",
         "grimoire/capture_sequence_start",
         "grimoire/capture_sequence_status",
+        // Built from the environment's token and the handshake, and from the checks the self test
+        // ran: no tool parameter reaches either body.
+        "grimoire/agent_hello",
+        "grimoire/self_test_result",
     ];
     let mut missing = Vec::new();
     for (at, _) in server.match_indices("self.editor.call(\"grimoire/") {
