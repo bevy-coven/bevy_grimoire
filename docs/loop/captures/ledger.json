@@ -395,7 +395,16 @@
       "host": "mac_air",
       "reason": "bug: ls's tab gaps draw as missing-glyph boxes; alacritty stores a tab as a '\\t' cell and the view draws it as a glyph. Cmd+A/Cmd+C already fixed by b7d5e79 (after 0.4.1)",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "installed 0.4.1 on the projects home: ls in a folder of 40 names draws a missing-glyph box at every tab stop it jumped, and printf 'a\\tb\\tc|' draws a box after a and after b; Cmd+A selected nothing (the 0.4.1 build predates b7d5e79)"
+        }
+      ]
     }
   ]
 }
