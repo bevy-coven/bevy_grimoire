@@ -89,6 +89,26 @@ impl TerminalCursor {
     }
 }
 
+/// **The agent the terminal's first tab starts**, connected to the editor's MCP server and proved with
+/// a power-on self test (`terminal_agent`). `Custom` runs `terminal_agent_command` from the file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TerminalAgent {
+    #[default]
+    Off,
+    OhMyPi,
+    Custom,
+}
+
+impl TerminalAgent {
+    /// The word chips and messages call this agent by.
+    pub fn name(self) -> &'static str {
+        match self {
+            TerminalAgent::OhMyPi => "omp",
+            TerminalAgent::Off | TerminalAgent::Custom => "agent",
+        }
+    }
+}
+
 /// **What the running editor uses**: the defaults with the user's file and then the project's laid over
 /// them, key by key.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -120,6 +140,12 @@ pub struct EditorSettings {
     /// How many lines of output each terminal keeps above its screen (#324): VS Code's
     /// `terminal.integrated.scrollback`.
     pub terminal_scrollback: usize,
+    /// The agent the terminal's first tab starts, connected to the editor's tools. Off by default: a
+    /// shell is what a terminal opens until the person picks an agent.
+    pub terminal_agent: TerminalAgent,
+    /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
+    /// Settings screen has no text control (#324), so this key is set in the file only.
+    pub terminal_agent_command: Option<String>,
 }
 
 impl Default for EditorSettings {
@@ -137,6 +163,8 @@ impl Default for EditorSettings {
             terminal_cursor: TerminalCursor::default(),
             terminal_cursor_blink: true,
             terminal_scrollback: crate::terminal::SCROLLBACK,
+            terminal_agent: TerminalAgent::default(),
+            terminal_agent_command: None,
         }
     }
 }
@@ -180,6 +208,10 @@ pub struct SettingsLayer {
     pub terminal_cursor_blink: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_scrollback: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_agent: Option<TerminalAgent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_agent_command: Option<String>,
 }
 
 impl Default for SettingsLayer {
@@ -198,6 +230,8 @@ impl Default for SettingsLayer {
             terminal_cursor: None,
             terminal_cursor_blink: None,
             terminal_scrollback: None,
+            terminal_agent: None,
+            terminal_agent_command: None,
         }
     }
 }
@@ -235,6 +269,11 @@ impl SettingsLayer {
         {
             return Err(refuse("grid_strength", format!("{v} is outside {} to {}", GRID_STRENGTH_RANGE.0, GRID_STRENGTH_RANGE.1)));
         }
+        if let Some(command) = &layer.terminal_agent_command
+            && command.trim().is_empty()
+        {
+            return Err(refuse("terminal_agent_command", "an empty command runs nothing: leave the key out or name a program".to_owned()));
+        }
         for (id, chord) in &layer.keymap {
             let field = format!("keymap.{id}");
             if crate::commands::by_id(id).is_none() {
@@ -266,6 +305,10 @@ impl EditorSettings {
             out.terminal_cursor = layer.terminal_cursor.unwrap_or(out.terminal_cursor);
             out.terminal_cursor_blink = layer.terminal_cursor_blink.unwrap_or(out.terminal_cursor_blink);
             out.terminal_scrollback = layer.terminal_scrollback.unwrap_or(out.terminal_scrollback);
+            out.terminal_agent = layer.terminal_agent.unwrap_or(out.terminal_agent);
+            if let Some(command) = &layer.terminal_agent_command {
+                out.terminal_agent_command = Some(command.clone());
+            }
         }
         out
     }

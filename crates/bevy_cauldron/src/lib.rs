@@ -180,8 +180,10 @@ pub mod stages;
 pub mod surface;
 // **A shell in the editor's own window** (`Ctrl+\``): a PTY, a VTE parser and a compact dock.
 // `terminal/` is the engine (no Bevy in `pty.rs`/`grid.rs` beyond a `Color`), `terminal_pane.rs` is the
-// dock and `terminal_view.rs` is what draws it and swallows its keys. See `terminal/mod.rs`.
+// dock and `terminal_view.rs` is what draws it and swallows its keys; `terminal_agent.rs` is the agent a
+// tab starts and its self test. See `terminal/mod.rs`.
 pub mod terminal;
+pub mod terminal_agent;
 pub mod terminal_pane;
 pub mod terminal_view;
 pub mod thumbs;

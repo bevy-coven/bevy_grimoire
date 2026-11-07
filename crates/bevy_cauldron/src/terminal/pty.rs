@@ -62,9 +62,10 @@ pub struct TerminalSession {
 impl TerminalSession {
     /// **Start a shell.** `cols` and `rows` are the pane's cell count, which the child is told before
     /// it ever draws a prompt — a shell that starts at 80×24 and is then resized prints `cargo`'s
-    /// progress bar twice.
+    /// progress bar twice. `extra_env` is laid over [`session_env`]: an agent tab's MCP port, token and
+    /// config path (`crate::terminal_agent::AgentLaunch::env`); a plain shell passes none.
     #[cfg(unix)]
-    pub fn spawn(cols: u16, rows: u16, cwd: &Path) -> Result<TerminalSession, String> {
+    pub fn spawn(cols: u16, rows: u16, cwd: &Path, extra_env: &[(String, String)]) -> Result<TerminalSession, String> {
         // **Zero cells is refused rather than clamped silently.** A zero-width terminal makes
         // `alacritty_terminal` divide by zero when it lays out a wide character, and a zero-height
         // one has nowhere to put a cursor; both are reachable from a pane dragged to nothing, and
@@ -102,7 +103,10 @@ impl TerminalSession {
             // `TERM_PROGRAM=vscode`: a prompt or a tool can tell it is in Cauldron, and which one.
             // A locale is given only when the inherited one cannot carry UTF-8, or every `—`, box
             // line and prompt icon arrives as `?`.
-            env: session_env(std::env::var("LC_ALL").ok(), std::env::var("LANG").ok()).into_iter().collect(),
+            env: session_env(std::env::var("LC_ALL").ok(), std::env::var("LANG").ok())
+                .into_iter()
+                .chain(extra_env.iter().cloned())
+                .collect(),
         };
 
         let size = WindowSize {
@@ -129,7 +133,7 @@ impl TerminalSession {
     /// macOS and on `big`, both Unix; a Windows build that silently drew nothing would be a lie
     /// discovered at the worst moment.
     #[cfg(not(unix))]
-    pub fn spawn(_cols: u16, _rows: u16, _cwd: &Path) -> Result<TerminalSession, String> {
+    pub fn spawn(_cols: u16, _rows: u16, _cwd: &Path, _extra_env: &[(String, String)]) -> Result<TerminalSession, String> {
         Err("the terminal is Unix-only in this build: it needs a PTY, which this target has no \
              implementation for"
             .to_owned())

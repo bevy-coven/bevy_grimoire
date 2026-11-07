@@ -182,10 +182,7 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
 /// vocabulary.
 #[cfg(feature = "debugger")]
 pub fn add_debugger_plugins(app: &mut App) -> &mut App {
-    let port = std::env::var("BEVY_BRP_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(bevy::remote::http::DEFAULT_PORT);
+    let port = brp_port();
     app.add_plugins((
         bevy_debugger_bevy::DebuggerPlugin::default(),
         bevy::remote::http::RemoteHttpPlugin::default().with_port(port),
@@ -203,6 +200,17 @@ pub fn add_debugger_plugins(app: &mut App) -> &mut App {
         // handlers call — so an agent and a person are doing one thing, not two.
         crate::ops_brp::OpsBridgePlugin,
     ))
+}
+
+/// **The port the editor's remote protocol listens on**: `BEVY_BRP_PORT`, or Bevy's default. The one
+/// definition both [`add_debugger_plugins`] and an agent tab's MCP config read
+/// (`crate::terminal_agent::AgentSetup::port`).
+#[cfg(feature = "debugger")]
+pub fn brp_port() -> u16 {
+    std::env::var("BEVY_BRP_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(bevy::remote::http::DEFAULT_PORT)
 }
 
 /// **Resize the headless surface**, for a test that needs a window shape the default is not.

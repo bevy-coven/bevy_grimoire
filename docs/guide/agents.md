@@ -30,6 +30,18 @@ What you see: ask the agent to call `grimoire_state`. It answers with the open m
 
 If it goes wrong: a refusal that says no editor answered means the editor is not running, or it is on another port. Check that both sides use the same `BEVY_BRP_PORT`.
 
+## Start an agent in Cauldron's terminal
+
+Goal: have the terminal start your agent already connected to the editor, and see that the whole chain works before you ask it anything.
+
+1. Open Settings (Terminal tab) and set **Terminal agent** to **Oh My Pi**. `omp` must be on your login shell's `PATH`.
+2. The first terminal tab of the editor's run types `omp -e <folder> '<prompt>'` at the shell's prompt; when only a project's settings choose the agent, its tab opens beside the plain shell once that project is open. Either way it happens once per run. The folder is an empty omp extension whose `.mcp.json` names the editor's MCP server (the `bevy_cauldron_mcp` beside the editor binary) on the editor's port; the prompt asks omp to call `grimoire_self_test` once.
+3. For any other harness choose **Custom command** and set the line in `settings.ron`, which the Settings screen has no text field for: `terminal_agent_command: Some("claude --mcp-config $CAULDRON_MCP_CONFIG \"$CAULDRON_SELF_TEST_PROMPT\"")`. The tab's shell has `CAULDRON_MCP` (the server binary), `CAULDRON_MCP_CONFIG` (a `mcpServers` file for it), `CAULDRON_AGENT_TOKEN`, `CAULDRON_SELF_TEST_PROMPT` and `BEVY_BRP_PORT`.
+
+What you see: a card at the terminal's top right lists four checks and marks each `OK` as it passes: **Tools server** (the server binary is there and its config was written), **Agent started** (the line was typed), **Agent connected** (the client finished the MCP handshake: its name, its version and how many tools it was offered) and **Agent self test** (the agent read the state, counted the operations and took a picture). A few seconds after the last one the card gives way to a chip in the bar, `omp connected · 22 tools`. The **Agent** chip in the bar opens another agent tab; `+` still opens a plain shell.
+
+If it goes wrong: the check that failed says why, in red, and the chip reads `omp: self test failed`. `Agent connected` fails after 60 s when the harness never started (look in the terminal for `command not found`); `Agent self test` fails after 180 s when the agent did not call the tool, often because it is waiting for you to approve the call. Answer it in the terminal, then click the chip: the card comes back and omp is asked again. A custom command that does not pass `$CAULDRON_SELF_TEST_PROMPT` to its agent gets `SKIP` on the self test, not a failure.
+
 ## Attach to an installed Cauldron
 
 Goal: drive the Cauldron app installed on a Mac, from any machine that can ssh to it, from the moment it opens.

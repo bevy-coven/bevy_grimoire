@@ -115,8 +115,9 @@ impl Plugin for TerminalViewPlugin {
                 Update,
                 (
                     // The person's settings first (#324): a new text size invalidates the measurement
-                    // below, and a new default caret is the screens' before they are drawn.
-                    take_the_terminal_settings,
+                    // below, and a new default caret is the screens' before they are drawn. After the
+                    // settings are read, so the first frame's agent choice is the file's, not the default.
+                    take_the_terminal_settings.after(crate::settings::sync_settings),
                     // The measurement first, so the column count this frame uses a real advance.
                     measure_the_cell,
                     resize_the_terminal.after(measure_the_cell),
@@ -192,7 +193,8 @@ impl CellMetrics {
 /// `EditorSettings` changes only when a settings file resolves to something new (`settings::sync_settings`),
 /// so this does its work once per edit. The default caret goes to every screen and to every shell opened
 /// later; a new text size repaints every row at that size and measures the cell again, and the column
-/// and row count that follows is told to the shell by [`resize_the_terminal`].
+/// and row count that follows is told to the shell by [`resize_the_terminal`]. The agent choice is the
+/// pane's ([`pump_the_terminal`]), and no shell opens until this has run once.
 fn take_the_terminal_settings(
     settings: Option<Res<crate::settings::EditorSettings>>,
     mut terminal: ResMut<Terminal>,
@@ -200,6 +202,10 @@ fn take_the_terminal_settings(
     mut drawn: ResMut<Drawn>,
 ) {
     let Some(settings) = settings else {
+        // An app with no settings has none to wait for: its terminal opens plain shells.
+        if !terminal.settings_taken() {
+            terminal.set_agent(crate::settings::TerminalAgent::Off, None);
+        }
         return;
     };
     if !settings.is_changed() {
@@ -207,6 +213,7 @@ fn take_the_terminal_settings(
     }
     terminal.set_default_caret(settings.terminal_cursor.shape());
     terminal.set_scrollback(settings.terminal_scrollback);
+    terminal.set_agent(settings.terminal_agent, settings.terminal_agent_command.clone());
     if metrics.text_scale != settings.terminal_text_scale {
         metrics.text_scale = settings.terminal_text_scale;
         metrics.measured = false;
@@ -338,15 +345,32 @@ fn pump_the_terminal(
     mut terminal: ResMut<Terminal>,
     panes: Query<&Node, With<crate::terminal_pane::TerminalPaneRoot>>,
     pane: Res<TerminalPane>,
+    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
+    root: Option<Res<crate::project_assets::ProjectRoot>>,
+    time: Res<Time<Real>>,
 ) {
     let raised = panes.iter().any(|node| node.display != Display::None);
 
-    if raised && terminal.is_empty() {
+    // **Not before the settings are read**, or a person who chose an agent gets a plain first shell.
+    if raised && terminal.settings_taken() {
         // The cells the pane is drawing, so the shell's first prompt is wrapped for the width it will
         // actually be shown at rather than for a guessed 80 and then resized a frame later.
         let (cols, rows) = crate::terminal_pane::measured_cells(&pane);
-        let cwd = terminal.next_cwd();
-        terminal.spawn(cols.max(2), rows.max(1), &cwd);
+        // **The agent tab**, once per process, as soon as the settings choose one: the first tab, or
+        // the next one when a project's settings turn it on after a plain shell opened.
+        if terminal.wants_first_agent() {
+            crate::terminal_agent::open_agent_tab(
+                &mut terminal,
+                cols,
+                rows,
+                setup.as_deref(),
+                root.as_deref(),
+                time.elapsed_secs_f64(),
+            );
+        } else if terminal.is_empty() {
+            let cwd = terminal.next_cwd();
+            terminal.spawn(cols.max(2), rows.max(1), &cwd);
+        }
     }
     if terminal.is_empty() {
         return;

@@ -16,7 +16,7 @@
 
 use std::path::Path;
 
-use crate::settings::{EditorSettings, GRID_STRENGTH_RANGE, KIND, SettingsLayer, TerminalCursor, Theme};
+use crate::settings::{EditorSettings, GRID_STRENGTH_RANGE, KIND, SettingsLayer, TerminalAgent, TerminalCursor, Theme};
 
 /// One key's value: what a control shows and what a write carries.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -67,6 +67,9 @@ pub const THEMES: &[&str] = &["Tool dark", "Parchment", "High contrast"];
 
 /// The names of [`TerminalCursor`]'s variants, in declaration order.
 pub const TERMINAL_CURSORS: &[&str] = &["Block", "Underline", "Bar"];
+
+/// The names of [`TerminalAgent`]'s variants, in declaration order.
+pub const TERMINAL_AGENTS: &[&str] = &["Off", "Oh My Pi", "Custom command"];
 
 /// **The scrollback lengths the screen offers** (#324), and their words. A file may set any length
 /// [`crate::settings::SCROLLBACK_RANGE`] allows; the screen shows the nearest of these for one between.
@@ -152,6 +155,13 @@ pub const CATALOGUE: &[Setting] = &[
         description: "How many lines of output each terminal keeps to scroll back through and to find in.",
         kind: Kind::Options(SCROLLBACK_NAMES),
     },
+    Setting {
+        key: "terminal_agent",
+        label: "Terminal agent",
+        category: "Terminal",
+        description: "The agent the first terminal opens, connected to the editor's tools and checked with a self test. Custom command runs terminal_agent_command from settings.ron.",
+        kind: Kind::Options(TERMINAL_AGENTS),
+    },
 ];
 
 /// The setting with this key.
@@ -200,6 +210,22 @@ fn cursor_at(index: usize) -> TerminalCursor {
     }
 }
 
+fn agent_index(agent: TerminalAgent) -> usize {
+    match agent {
+        TerminalAgent::Off => 0,
+        TerminalAgent::OhMyPi => 1,
+        TerminalAgent::Custom => 2,
+    }
+}
+
+fn agent_at(index: usize) -> TerminalAgent {
+    match index {
+        1 => TerminalAgent::OhMyPi,
+        2 => TerminalAgent::Custom,
+        _ => TerminalAgent::Off,
+    }
+}
+
 /// The offered scrollback length nearest `lines`.
 fn scrollback_index(lines: usize) -> usize {
     SCROLLBACK_CHOICES
@@ -236,6 +262,7 @@ impl EditorSettings {
             "terminal_cursor" => Value::Option(cursor_index(self.terminal_cursor)),
             "terminal_cursor_blink" => Value::On(self.terminal_cursor_blink),
             "terminal_scrollback" => Value::Option(scrollback_index(self.terminal_scrollback)),
+            "terminal_agent" => Value::Option(agent_index(self.terminal_agent)),
             _ => return None,
         })
     }
@@ -271,6 +298,7 @@ impl SettingsLayer {
             "terminal_cursor" => self.terminal_cursor.map(|c| Value::Option(cursor_index(c))),
             "terminal_cursor_blink" => self.terminal_cursor_blink.map(Value::On),
             "terminal_scrollback" => self.terminal_scrollback.map(|lines| Value::Option(scrollback_index(lines))),
+            "terminal_agent" => self.terminal_agent.map(|a| Value::Option(agent_index(a))),
             _ => None,
         }
     }
@@ -289,6 +317,7 @@ impl SettingsLayer {
             ("terminal_cursor", Value::Option(i)) => self.terminal_cursor = Some(cursor_at(i)),
             ("terminal_cursor_blink", Value::On(on)) => self.terminal_cursor_blink = Some(on),
             ("terminal_scrollback", Value::Option(i)) => self.terminal_scrollback = Some(scrollback_at(i)),
+            ("terminal_agent", Value::Option(i)) => self.terminal_agent = Some(agent_at(i)),
             _ => return false,
         }
         true
@@ -308,6 +337,7 @@ impl SettingsLayer {
             "terminal_cursor" => self.terminal_cursor = None,
             "terminal_cursor_blink" => self.terminal_cursor_blink = None,
             "terminal_scrollback" => self.terminal_scrollback = None,
+            "terminal_agent" => self.terminal_agent = None,
             _ => {}
         }
     }

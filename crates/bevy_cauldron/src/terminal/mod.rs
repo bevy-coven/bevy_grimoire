@@ -50,6 +50,10 @@ mod flow_tests;
 mod input_tests;
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use crate::settings::TerminalAgent;
+use crate::terminal_agent::{AgentLaunch, AgentPost, LAUNCH_CAP_MS, LAUNCH_QUIET_MS};
 
 use bevy::prelude::*;
 
@@ -86,6 +90,15 @@ pub struct Terminal {
     /// **The history each shell keeps** (#324), the person's `terminal_scrollback`; `None` until a setting
     /// names one, which is [`SCROLLBACK`].
     scrollback: Option<usize>,
+    /// **The agent the first tab starts** (`terminal_agent`), and a custom harness's command line:
+    /// the person's settings, given by `terminal_view::take_the_terminal_settings`.
+    agent: TerminalAgent,
+    agent_command: Option<String>,
+    /// An agent tab was opened in this process, so the settings start no other by themselves.
+    agent_opened: bool,
+    /// **The settings have been given at least once.** No shell opens before: a first tab that opened
+    /// a frame before the settings were read would be a plain shell for a person who chose an agent.
+    settings_taken: bool,
 }
 
 /// One shell, its screen, and what is drawn about it.
@@ -106,6 +119,10 @@ pub struct TerminalTab {
     /// usable for a second attempt, which is what makes a missing `/bin/sh` a message rather than a
     /// dead panel.
     problem: Option<String>,
+    /// **This tab's agent and its self test**, when it was opened as an agent tab.
+    agent: Option<AgentPost>,
+    /// The launch line, typed once the shell has gone quiet at its prompt.
+    launch: Option<PendingLaunch>,
 }
 
 impl TerminalTab {
@@ -117,7 +134,26 @@ impl TerminalTab {
             session: None,
             screen: grid::TerminalScreen::new(cols, rows),
             problem: Some(why),
+            agent: None,
+            launch: None,
         }
+    }
+}
+
+/// **An agent tab's launch line, waiting for its shell's prompt.** Typed once the shell printed
+/// something and then nothing for [`LAUNCH_QUIET_MS`], or [`LAUNCH_CAP_MS`] after the tab opened
+/// whatever it printed: a login shell that loads a slow rc file is still read from when it is ready,
+/// because the typed bytes wait in the PTY.
+struct PendingLaunch {
+    bytes: Vec<u8>,
+    opened: Instant,
+    last_output: Option<Instant>,
+}
+
+impl PendingLaunch {
+    fn is_due(&self, now: Instant) -> bool {
+        now.duration_since(self.opened) >= Duration::from_millis(LAUNCH_CAP_MS)
+            || self.last_output.is_some_and(|at| now.duration_since(at) >= Duration::from_millis(LAUNCH_QUIET_MS))
     }
 }
 
@@ -127,9 +163,34 @@ impl Terminal {
     /// The cwd is the open project's directory when there is one — [`crate::project_assets::ProjectRoot`]
     /// is what the asset server reads, so the shell and the editor are looking at the same files.
     pub fn spawn(&mut self, cols: u16, rows: u16, cwd: &Path) -> usize {
-        match TerminalSession::spawn(cols, rows, cwd) {
+        self.open_tab(cols, rows, cwd, &[], None)
+    }
+
+    /// **Open an agent tab**: a shell with the launch's environment, which types the launch line at
+    /// its first prompt and keeps the self-test record. A shell that does not start keeps the record
+    /// too, so the card says why.
+    pub fn spawn_agent(&mut self, cols: u16, rows: u16, cwd: &Path, launch: AgentLaunch) -> usize {
+        let AgentLaunch { line, env, mut post } = launch;
+        let index = self.open_tab(cols, rows, cwd, &env, Some(post.harness.name().to_owned()));
+        self.agent_opened = true;
+        let tab = &mut self.open[index];
+        if !line.is_empty() {
+            if tab.session.is_some() {
+                tab.launch = Some(PendingLaunch { bytes: line, opened: Instant::now(), last_output: None });
+            } else if let Some(why) = &tab.problem {
+                post.not_started(why.clone());
+            }
+        }
+        tab.agent = Some(post);
+        index
+    }
+
+    /// The one place a tab is opened: a shell with `env` laid over the session's own, titled `title`
+    /// or after its directory.
+    fn open_tab(&mut self, cols: u16, rows: u16, cwd: &Path, env: &[(String, String)], title: Option<String>) -> usize {
+        match TerminalSession::spawn(cols, rows, cwd, env) {
             Ok(session) => {
-                let title = shell_title(cwd);
+                let title = title.unwrap_or_else(|| shell_title(cwd));
                 let mut screen = grid::TerminalScreen::new(cols, rows);
                 screen.resize(cols, rows);
                 screen.set_default_caret(self.default_caret);
@@ -140,18 +201,64 @@ impl Terminal {
                     session: Some(session),
                     screen,
                     problem: None,
+                    agent: None,
+                    launch: None,
                 });
                 self.active = self.open.len() - 1;
                 self.problem = None;
                 self.active
             }
             Err(why) => {
-                self.open.push(TerminalTab::refused(cols, rows, why.clone()));
+                let mut tab = TerminalTab::refused(cols, rows, why.clone());
+                if let Some(title) = title {
+                    tab.title = title;
+                }
+                self.open.push(tab);
                 self.active = self.open.len() - 1;
                 self.problem = Some(why);
                 self.active
             }
         }
+    }
+
+    /// **The person's agent settings** (`terminal_agent`, `terminal_agent_command`), which also
+    /// mark the settings as given, so the first shell may open.
+    pub fn set_agent(&mut self, agent: TerminalAgent, command: Option<String>) {
+        self.agent = agent;
+        self.agent_command = command;
+        self.settings_taken = true;
+    }
+
+    /// The agent the settings choose.
+    pub fn agent(&self) -> TerminalAgent {
+        self.agent
+    }
+
+    /// The custom harness's command line, when the settings set one.
+    pub fn agent_command(&self) -> Option<&str> {
+        self.agent_command.as_deref()
+    }
+
+    /// Have the person's settings been given yet? No shell opens before they are.
+    pub fn settings_taken(&self) -> bool {
+        self.settings_taken
+    }
+
+    /// **Should the pane open an agent tab now?** Once per process, as soon as the settings choose an
+    /// agent: the first tab when they already did at launch, or the next frame after a project's or the
+    /// person's settings turn one on.
+    pub fn wants_first_agent(&self) -> bool {
+        self.settings_taken && self.agent != TerminalAgent::Off && !self.agent_opened
+    }
+
+    /// The agent tab whose launch minted `token`.
+    pub fn agent_with_token_mut(&mut self, token: &str) -> Option<&mut AgentPost> {
+        self.agent_posts_mut().find(|post| post.token == token)
+    }
+
+    /// Every agent tab's self-test record.
+    pub fn agent_posts_mut(&mut self) -> impl Iterator<Item = &mut AgentPost> {
+        self.open.iter_mut().filter_map(|tab| tab.agent.as_mut())
     }
 
     /// **The caret every shell gets when its program asks for none** (#324), now and for each shell
@@ -348,6 +455,7 @@ impl Terminal {
     /// elsewhere.
     pub fn pump(&mut self) {
         let mut buffer = Vec::new();
+        let now = Instant::now();
         for tab in &mut self.open {
             let Some(session) = tab.session.as_mut() else {
                 continue;
@@ -366,8 +474,35 @@ impl Terminal {
                 }
                 session.write(&replies)
             });
+            if !buffer.is_empty()
+                && let Some(launch) = tab.launch.as_mut()
+            {
+                launch.last_output = Some(now);
+            }
             if let Err(why) = outcome {
+                if tab.launch.take().is_some()
+                    && let Some(post) = tab.agent.as_mut()
+                {
+                    post.not_started(format!("the shell stopped before the agent was typed: {why}"));
+                }
                 tab.problem = Some(why);
+                continue;
+            }
+            // **The agent is typed at the shell's prompt**, so the person's login PATH and rc files
+            // apply, and leaving the agent leaves them at a shell.
+            if tab.launch.as_ref().is_some_and(|launch| launch.is_due(now))
+                && let Some(launch) = tab.launch.take()
+            {
+                let typed = session.write(&launch.bytes);
+                if let Some(post) = tab.agent.as_mut() {
+                    match &typed {
+                        Ok(()) => post.started(),
+                        Err(why) => post.not_started(why.clone()),
+                    }
+                }
+                if let Err(why) = typed {
+                    tab.problem = Some(why);
+                }
             }
         }
     }
@@ -398,6 +533,16 @@ impl TerminalTab {
     /// Is a shell actually running in this tab?
     pub fn is_live(&self) -> bool {
         self.session.is_some()
+    }
+
+    /// This tab's agent and its self test, when it is an agent tab.
+    pub fn agent(&self) -> Option<&AgentPost> {
+        self.agent.as_ref()
+    }
+
+    /// This tab's agent record, mutably: a click on its status chip.
+    pub fn agent_mut(&mut self) -> Option<&mut AgentPost> {
+        self.agent.as_mut()
     }
 
     /// The directory this shell was started in — **not** where it is now, which only the shell knows.
@@ -464,7 +609,11 @@ impl Plugin for TerminalPlugin {
             // spawners runs at `Startup`; `init_resource` at `Startup` would order by luck.
             .add_systems(PreStartup, seat_the_terminals_cwd)
             .add_systems(Update, follow_the_project)
-            .add_plugins((crate::terminal_pane::TerminalPanePlugin, crate::terminal_view::TerminalViewPlugin));
+            .add_plugins((
+                crate::terminal_pane::TerminalPanePlugin,
+                crate::terminal_view::TerminalViewPlugin,
+                crate::terminal_agent::TerminalAgentPlugin,
+            ));
     }
 }
 

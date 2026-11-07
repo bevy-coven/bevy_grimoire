@@ -244,6 +244,24 @@ pub struct TerminalCdChip;
 #[derive(Component)]
 pub struct TerminalCloseTab;
 
+/// **The `Agent` chip**: another agent tab, in the open project. Shown while the settings choose an
+/// agent (`terminal_agent`).
+#[derive(Component)]
+pub struct TerminalAgentChip;
+
+/// **The drawn agent tab's status chip**: `omp connected · 22 tools`, or what is still checking or
+/// failed. A click brings the self-test card back, and asks a failed omp test again.
+#[derive(Component)]
+pub struct TerminalAgentStatusChip;
+
+/// **The self-test card** over the terminal's top right, while an agent tab's checks run and for a
+/// moment after.
+#[derive(Component)]
+pub struct TerminalAgentCard;
+
+/// The card's width, logical pixels: a check's row and its detail, wrapped beneath.
+const AGENT_CARD_W: f32 = 320.0;
+
 /// **The terminal has the keyboard**, which is the one state this feature must not get wrong.
 ///
 /// Written by this module, read by [`crate::editor::sense_context`] — which folds it into the same
@@ -385,6 +403,7 @@ impl Plugin for TerminalPanePlugin {
                     fit_the_pane_to_the_window,
                     step_aside_for_the_key_overlay,
                     count_the_matches,
+                    keep_the_agent_on_screen,
                 )
                     .run_if(the_pane_is_up),
             )
@@ -414,6 +433,8 @@ impl Plugin for TerminalPanePlugin {
             .add_observer(the_grip_resizes)
             .add_observer(a_chip_selects_its_tab)
             .add_observer(a_chip_adds_a_tab)
+            .add_observer(a_chip_opens_an_agent)
+            .add_observer(a_status_chip_reruns_the_test)
             .add_observer(a_chip_moves_the_shell)
             .add_observer(a_chip_closes_a_tab);
     }
@@ -738,6 +759,19 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             flex_grow: 1.0,
             ..default()
         });
+        // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state.
+        if let Some(post) = terminal.tab().and_then(|tab| tab.agent()) {
+            let (label, ink) = post.chip();
+            chrome::chip(
+                bar,
+                TerminalAgentStatusChip,
+                &label,
+                chrome::text::CONTROL,
+                ink,
+                chrome::BAR_BG,
+                chrome::PANEL_EDGE,
+            );
+        }
         // **A chip per session, and the two controls through the same builder.** `chrome::chip`
         // carries `RowRest`, so rest / hover / pressed are painted by `style_list_rows` without this
         // pane knowing what hover looks like — the fourth shape a hand-rolled `Button` would be,
@@ -769,6 +803,17 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 bar,
                 TerminalCdChip,
                 &name,
+                chrome::text::CONTROL,
+                chrome::ACCENT,
+                chrome::BAR_BG,
+                chrome::PANEL_EDGE,
+            );
+        }
+        if terminal.agent() != crate::settings::TerminalAgent::Off {
+            chrome::chip(
+                bar,
+                TerminalAgentChip,
+                "Agent",
                 chrome::text::CONTROL,
                 chrome::ACCENT,
                 chrome::BAR_BG,
@@ -976,6 +1021,92 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
         ))
         .id();
     commands.entity(body).add_child(frame);
+}
+
+/// **The self-test card**: the harness, then each check's word, name and what it found, in the check's
+/// ink. Floats where the find box does, and the pointer goes through it to the shell.
+fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::terminal_agent::AgentPost) {
+    let row = |words: String, ink: Color| {
+        (Text::new(words), TextColor(ink), chrome::font(chrome::text::LABEL), Pickable::IGNORE)
+    };
+    let card = commands
+        .spawn((
+            Node {
+                // PLACES-ITSELF-OK: the self-test card floats over the terminal it reports on, as the
+                // find box does; it is not a panel `chrome::Frame` places.
+                position_type: PositionType::Absolute,
+                top: Val::Px(crate::terminal_view::BODY_INSET.y),
+                right: Val::Px(chrome::MARGIN),
+                width: Val::Px(AGENT_CARD_W),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(chrome::GAP_TIGHT),
+                padding: UiRect::all(Val::Px(chrome::GAP_TIGHT)),
+                border: UiRect::all(Val::Px(chrome::EDGE_W)),
+                ..default()
+            },
+            BackgroundColor(chrome::BAR_BG),
+            BorderColor::all(chrome::PANEL_EDGE),
+            // Above the rows and the caret, which are its siblings.
+            ZIndex(2),
+            TerminalAgentCard,
+            Pickable::IGNORE,
+            Name::new("terminal agent card"),
+        ))
+        .with_children(|card| {
+            card.spawn(row(format!("Agent self test · {}", post.harness.name()), chrome::TEXT));
+            for (label, check) in crate::terminal_agent::CHECK_LABELS.iter().zip(&post.checks) {
+                card.spawn(row(format!("{} {label}: {}", check.mark(), check.detail()), check.ink()));
+            }
+        })
+        .id();
+    commands.entity(body).add_child(card);
+}
+
+/// What [`keep_the_agent_on_screen`] last drew from: the body, the tab count, the drawn tab, its
+/// record's revision, whether its card shows, whether find is open, and the chosen agent.
+type AgentDrawn = (Option<Entity>, usize, usize, u32, bool, bool, crate::settings::TerminalAgent);
+
+/// **The bar's chips and the self-test card follow the agent tabs.** Redrawn only when something they
+/// show moved: a tab opened or closed, another tab drawn, a check changed, the card's linger ran out,
+/// find opened (the card steps aside for it), the settings chose another agent, or a new pane was built.
+#[allow(clippy::too_many_arguments)]
+fn keep_the_agent_on_screen(
+    mut drawn: Local<Option<AgentDrawn>>,
+    terminal: Res<Terminal>,
+    find: Res<TerminalFind>,
+    time: Res<Time<Real>>,
+    bodies: Query<Entity, With<TerminalBody>>,
+    cards: Query<Entity, With<TerminalAgentCard>>,
+    bar: Query<Entity, With<TerminalBar>>,
+    mut commands: Commands,
+) {
+    let now = time.elapsed_secs_f64();
+    let body = bodies.single().ok();
+    let post = terminal.tab().and_then(|tab| tab.agent());
+    let shown = post.is_some_and(|post| post.card_shown(now));
+    let key = (
+        body,
+        terminal.len(),
+        terminal.active(),
+        post.map_or(0, |post| post.revision),
+        shown,
+        find.is_open(),
+        terminal.agent(),
+    );
+    if *drawn == Some(key) {
+        return;
+    }
+    *drawn = Some(key);
+    redraw_the_bar(&mut commands, &bar, &terminal);
+    for card in &cards {
+        commands.entity(card).despawn();
+    }
+    if let (Some(body), Some(post)) = (body, post)
+        && shown
+        && !find.is_open()
+    {
+        spawn_the_agent_card(&mut commands, body, post);
+    }
 }
 
 /// **A query typed into the box searches the active shell's scrollback**, as it is typed.
@@ -1633,6 +1764,48 @@ fn a_chip_adds_a_tab(
     redraw_the_bar(&mut commands, &bar, &terminal);
 }
 
+/// **`Agent` starts another agent tab**, in the open project, with its own self test.
+#[allow(clippy::too_many_arguments)]
+fn a_chip_opens_an_agent(
+    mut click: On<bevy::picking::events::PointerClick>,
+    chip: Query<(), With<TerminalAgentChip>>,
+    pane: Res<TerminalPane>,
+    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
+    root: Option<Res<crate::project_assets::ProjectRoot>>,
+    time: Res<Time<Real>>,
+    mut terminal: ResMut<Terminal>,
+    bar: Query<Entity, With<TerminalBar>>,
+    mut commands: Commands,
+) {
+    if !chip.contains(click.entity) {
+        return;
+    }
+    click.propagate(false);
+    let (cols, rows) = measured_cells(&pane);
+    crate::terminal_agent::open_agent_tab(&mut terminal, cols, rows, setup.as_deref(), root.as_deref(), time.elapsed_secs_f64());
+    redraw_the_bar(&mut commands, &bar, &terminal);
+}
+
+/// **The status chip brings the self-test card back**, and types the self-test prompt into omp again
+/// when its test failed after it connected.
+fn a_status_chip_reruns_the_test(
+    mut click: On<bevy::picking::events::PointerClick>,
+    chip: Query<(), With<TerminalAgentStatusChip>>,
+    time: Res<Time<Real>>,
+    mut terminal: ResMut<Terminal>,
+) {
+    if !chip.contains(click.entity) {
+        return;
+    }
+    click.propagate(false);
+    let now = time.elapsed_secs_f64();
+    let again = terminal.tab_mut().and_then(|tab| tab.agent_mut()).is_some_and(|post| post.rerun(now));
+    // The chip is the drawn tab's, and `write` goes to the drawn tab.
+    if again {
+        terminal.write(format!("{}\r", crate::terminal_agent::SELF_TEST_PROMPT).as_bytes());
+    }
+}
+
 /// **The cell count a shell is started with.**
 ///
 /// Not simply what the pane last measured, and the difference is a bug that shipped for an afternoon:
@@ -1677,8 +1850,7 @@ fn a_chip_moves_the_shell(
     }
     click.propagate(false);
     let root = terminal.next_cwd();
-    let quoted = root.to_string_lossy().replace('\'', "'\\''");
-    terminal.write(format!("cd '{quoted}'\n").as_bytes());
+    terminal.write(format!("cd {}\n", crate::terminal_agent::shell_quote(&root.to_string_lossy())).as_bytes());
     // **The pane records what it told the shell**, because only the shell knows where it went.
     if let Some(tab) = terminal.tab_mut() {
         tab.offered_cd(root);

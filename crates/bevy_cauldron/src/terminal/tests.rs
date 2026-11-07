@@ -94,7 +94,7 @@ fn a_shell_starts_and_answers() {
     let _guard = THE_SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     use_posix_shell();
 
-    let mut session = match TerminalSession::spawn(80, 24, Path::new("/tmp")) {
+    let mut session = match TerminalSession::spawn(80, 24, Path::new("/tmp"), &[]) {
         Ok(session) => session,
         Err(why) => panic!(
             "a shell must start in a test: {why}\nIf this is a machine with no /bin/sh, the \
@@ -125,7 +125,7 @@ fn a_resize_reaches_the_child() {
     let _guard = THE_SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     use_posix_shell();
 
-    let mut session = TerminalSession::spawn(80, 24, Path::new("/tmp")).expect("a shell starts");
+    let mut session = TerminalSession::spawn(80, 24, Path::new("/tmp"), &[]).expect("a shell starts");
     let mut screen = TerminalScreen::new(80, 24);
     session.resize(100, 30).expect("the child is told the new size");
     screen.resize(100, 30);
@@ -169,7 +169,7 @@ fn closing_the_session_reaps_the_child() {
     let _guard = THE_SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     use_posix_shell();
 
-    let session = TerminalSession::spawn(80, 24, Path::new("/tmp")).expect("a shell starts");
+    let session = TerminalSession::spawn(80, 24, Path::new("/tmp"), &[]).expect("a shell starts");
     let pid = session.pid();
     assert!(pid > 0, "a started shell has a pid");
     // The shell is alive right now: `kill(pid, 0)` answers whether the signal could be sent.

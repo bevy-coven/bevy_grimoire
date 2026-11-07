@@ -411,6 +411,21 @@ fn project_root(
     }))
 }
 
+/// **`grimoire/agent_hello` — an agent a terminal tab started finished its MCP handshake**
+/// (`terminal_agent`).
+fn agent_hello(
+    In(params): In<Value>,
+    mut terminal: ResMut<crate::terminal::Terminal>,
+    time: Res<Time<Real>>,
+) -> Result<Value, String> {
+    crate::terminal_agent::agent_hello(&mut terminal, &params, time.elapsed_secs_f64())
+}
+
+/// **`grimoire/self_test_result` — what `grimoire_self_test` found**, for its tab's card.
+fn self_test_result(In(params): In<Value>, mut terminal: ResMut<crate::terminal::Terminal>) -> Result<Value, String> {
+    crate::terminal_agent::self_test_result(&mut terminal, &params)
+}
+
 /// **The parameters of `grimoire/project_open`.** The MCP server's `grimoire_open_project` forwards exactly these
 /// (`a_tools_body_names_every_field`).
 #[derive(serde::Deserialize)]
@@ -2314,6 +2329,27 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({})),
             project_root,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/agent_hello",
+                "An MCP server started by Cauldron's terminal says its agent connected: token from \
+                 CAULDRON_AGENT_TOKEN, the client's name and version, and how many tools it offers. The \
+                 terminal's self-test card shows it.",
+            )
+            .example(json!({"token": "1a2b", "client": {"name": "omp", "version": "18.16.0"}, "tools": 22})),
+            agent_hello,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/self_test_result",
+                "The results of grimoire_self_test, for the self-test card of the terminal tab whose token \
+                 they carry.",
+            )
+            .example(json!({"token": "1a2b", "checks": [{"name": "state", "ok": true, "detail": "the editor is on launcher"}]})),
+            self_test_result,
         );
 
         app.add_debug_command(

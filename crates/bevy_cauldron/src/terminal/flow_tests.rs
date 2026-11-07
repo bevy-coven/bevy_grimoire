@@ -78,7 +78,7 @@ fn flooding() -> TerminalSession {
     let mut session = {
         let _env = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         unsafe { std::env::set_var("SHELL", "/bin/sh") };
-        TerminalSession::spawn(80, 24, std::path::Path::new("/tmp")).expect("a shell starts")
+        TerminalSession::spawn(80, 24, std::path::Path::new("/tmp"), &[]).expect("a shell starts")
     };
     session.write(b"yes\r").expect("the command reaches the shell");
     let deadline = Instant::now() + PATIENCE;
