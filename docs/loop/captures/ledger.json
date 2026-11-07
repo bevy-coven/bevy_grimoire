@@ -327,10 +327,10 @@
       "taken_at_ms": 1794011769640,
       "app_version": "0.3.8",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "running omp in the terminal widens the whole layout past the window, without end",
       "commit": "",
       "attempts": []
     }
