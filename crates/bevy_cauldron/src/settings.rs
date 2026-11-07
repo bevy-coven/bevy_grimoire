@@ -146,6 +146,12 @@ pub struct EditorSettings {
     /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
     /// Settings screen has no text control (#324), so this key is set in the file only.
     pub terminal_agent_command: Option<String>,
+    /// **The program a new terminal tab runs** (#324): VS Code's `terminal.integrated.defaultProfile`.
+    /// `None` is `$SHELL`, then `/bin/sh`. Tabs already open keep the shell they started with. Like
+    /// `terminal_agent_command`, not in the settings catalogue: the Settings screen has no text control.
+    pub terminal_shell: Option<String>,
+    /// The arguments `terminal_shell` is started with (VS Code's profile `args`); empty when none.
+    pub terminal_shell_args: Vec<String>,
     /// **The shell's arrangement, as a person left it** (UI-33, #227): a `bevy_gooey` `DockLayout` of
     /// this door's panels, written by the editor when a divider or a tab is moved and read back on
     /// the next start. `None` is `ui::shell_layout` — the default, so a person who has never moved
@@ -170,6 +176,8 @@ impl Default for EditorSettings {
             terminal_scrollback: crate::terminal::SCROLLBACK,
             terminal_agent: TerminalAgent::default(),
             terminal_agent_command: None,
+            terminal_shell: None,
+            terminal_shell_args: Vec::new(),
             shell_layout: None,
         }
     }
@@ -218,6 +226,10 @@ pub struct SettingsLayer {
     pub terminal_agent: Option<TerminalAgent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_agent_command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_shell: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_shell_args: Option<Vec<String>>,
     /// The shell's arrangement (UI-33, #227). Not in the settings catalogue: it is a thing a person
     /// drags, not one they type, and Window ▸ Reset layout is the way back to the default.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -242,6 +254,8 @@ impl Default for SettingsLayer {
             terminal_scrollback: None,
             terminal_agent: None,
             terminal_agent_command: None,
+            terminal_shell: None,
+            terminal_shell_args: None,
             shell_layout: None,
         }
     }
@@ -285,6 +299,14 @@ impl SettingsLayer {
         {
             return Err(refuse("terminal_agent_command", "an empty command runs nothing: leave the key out or name a program".to_owned()));
         }
+        if let Some(shell) = &layer.terminal_shell
+            && shell.trim().is_empty()
+        {
+            return Err(refuse("terminal_shell", "an empty shell runs nothing: leave the key out or name a program".to_owned()));
+        }
+        if layer.terminal_shell_args.is_some() && layer.terminal_shell.is_none() {
+            return Err(refuse("terminal_shell_args", "arguments for a shell that is not named: set `terminal_shell` too, or leave the key out".to_owned()));
+        }
         for (id, chord) in &layer.keymap {
             let field = format!("keymap.{id}");
             if crate::commands::by_id(id).is_none() {
@@ -319,6 +341,12 @@ impl EditorSettings {
             out.terminal_agent = layer.terminal_agent.unwrap_or(out.terminal_agent);
             if let Some(command) = &layer.terminal_agent_command {
                 out.terminal_agent_command = Some(command.clone());
+            }
+            // **A shell and its arguments are one value**: a layer that names a shell brings its own
+            // arguments (none when it gives none), never the earlier layer's, which were for another program.
+            if let Some(shell) = &layer.terminal_shell {
+                out.terminal_shell = Some(shell.clone());
+                out.terminal_shell_args = layer.terminal_shell_args.clone().unwrap_or_default();
             }
             // **The whole arrangement, not a key of it**: a layout is one value, and a later layer
             // that states one replaces the earlier's (the same rule as `theme`).

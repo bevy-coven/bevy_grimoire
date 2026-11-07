@@ -213,6 +213,11 @@ fn take_the_terminal_settings(
     }
     terminal.set_default_caret(settings.terminal_cursor.shape());
     terminal.set_scrollback(settings.terminal_scrollback);
+    // Before `set_agent`, which marks the settings as given and so lets the first shell open.
+    terminal.set_shell(settings.terminal_shell.as_ref().map(|program| crate::terminal::ShellChoice {
+        program: program.clone(),
+        args: settings.terminal_shell_args.clone(),
+    }));
     terminal.set_agent(settings.terminal_agent, settings.terminal_agent_command.clone());
     if metrics.text_scale != settings.terminal_text_scale {
         metrics.text_scale = settings.terminal_text_scale;
