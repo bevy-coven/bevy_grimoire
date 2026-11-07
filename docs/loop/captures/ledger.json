@@ -349,10 +349,10 @@
       "app_version": "0.4.1",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "Cmd+V and Cmd+A do nothing in the terminal on macOS (unresponsive); 'MCPs aren't loaded' is terminal_agent Off in this person's settings, so omp was started by hand in a plain tab; asks for better key capture",
-      "commit": "",
+      "reason": "Clipboard chords were Primary+Shift only, so Cmd+V/C/A fell through as letters; now Command+V/C/A, and no Command chord reaches the shell",
+      "commit": "b7d5e79e",
       "attempts": [
         {
           "host": "mac_air",
