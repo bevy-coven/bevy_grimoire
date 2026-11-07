@@ -435,7 +435,7 @@ impl Plugin for LauncherPlugin {
             .init_resource::<ProjectPictures>()
             .init_resource::<Launcher>()
             .add_observer(on_toast_action)
-            .add_systems(Update, paint_the_quiet_lines)
+            .add_systems(Update, (paint_the_quiet_lines, follow_the_updater))
             .add_systems(OnEnter(Screen::Launcher), (build_launcher, fill_the_home).chain())
             .add_systems(
                 Update,
@@ -635,16 +635,65 @@ pub(crate) fn fill_sidebar(commands: &mut Commands, sidebar: Entity, launcher: &
         // **One version line, and a button only when there is something to do** (design review,
         // 2026-11-05). It used to be `Version 0.2.4` *and* an always-present `Up to date — v0.2.4`
         // button: the same fact twice, the second dressed in a page tab's skin and inviting a press
-        // that does nothing. `actionable` is the one question that decides — an update to take, one in
-        // flight, or one that failed — so a first run ends on a quiet line and no dead action.
-        let version = env!("CARGO_PKG_VERSION");
-        let up_to_date = updater.is_some_and(|u| !u.actionable() && u.blocked.is_none());
-        let line = if up_to_date { format!("v{version} · up to date") } else { format!("v{version}") };
-        side.spawn(quiet(line));
-        if let Some(updater) = updater.filter(|u| u.actionable()) {
-            side.spawn(crate::update::update_button(updater.label()));
-        }
+        // that does nothing. The line is drawn here; what it says, and the button under it, are
+        // [`follow_the_updater`]'s, because the launch check answers after this sidebar is built.
+        side.spawn((quiet(version_line(updater)), VersionLine));
     });
+}
+
+/// The sidebar's version line, which [`follow_the_updater`] keeps saying what the updater knows.
+#[derive(Component)]
+pub struct VersionLine;
+
+/// **What the version line says**: the running version, and `up to date` only once a check has found
+/// nothing newer. A check still running, one that failed and a blocked updater have not found that.
+fn version_line(updater: Option<&crate::update::Updater>) -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    match updater.map(|u| &u.state) {
+        Some(crate::update::UpdateState::UpToDate) => format!("v{version} · up to date"),
+        _ => format!("v{version}"),
+    }
+}
+
+/// **The sidebar says what the updater knows now, not what it knew when the sidebar was built.**
+///
+/// The launch check answers from a thread about half a second after the window opens
+/// (`update::start_the_first_check`), and the home's sidebar is built in `OnEnter(Screen::Launcher)`,
+/// before that. The sidebar used to be drawn once from the updater as it stood then: `Idle`, printed
+/// as `v0.3.4 · up to date` with no button. The answer that 0.3.5 and 0.3.6 were out never reached
+/// it, so a 0.3.4 home offered nothing (reported at the keyboard on 2026-11-06). The editor's chrome
+/// bar already follows the updater (`update::place_in_the_chrome_bar`); this is the same rule for the
+/// sidebar on both screens that draw one: one [`crate::update::UpdateButton`] after the line while
+/// [`crate::update::Updater::actionable`], none otherwise. `update::relabel` keeps its words.
+fn follow_the_updater(
+    mut commands: Commands,
+    updater: Option<Res<crate::update::Updater>>,
+    mut lines: Query<(&ChildOf, &mut Text, Ref<VersionLine>)>,
+    buttons: Query<(Entity, &ChildOf), With<crate::update::UpdateButton>>,
+) {
+    let fresh = lines.iter().any(|(_, _, line)| line.is_added());
+    if !fresh && !updater.as_ref().is_some_and(|u| u.is_changed()) {
+        return;
+    }
+    let words = version_line(updater.as_deref());
+    let offer = updater.as_deref().filter(|u| u.actionable());
+    for (sidebar, mut text, _) in &mut lines {
+        if text.0 != words {
+            text.0.clone_from(&words);
+        }
+        let placed: Vec<Entity> = buttons.iter().filter(|(_, p)| p.parent() == sidebar.parent()).map(|(e, _)| e).collect();
+        match offer {
+            Some(updater) if placed.is_empty() => {
+                commands.entity(sidebar.parent()).with_child(crate::update::update_button(updater.label()));
+            }
+            Some(_) => {}
+            None => {
+                for button in placed {
+                    commands.entity(button).despawn();
+                }
+            }
+        }
+    }
 }
 
 /// What a card or a page needs to be drawn, bundled so the builders stay within the argument budget.
