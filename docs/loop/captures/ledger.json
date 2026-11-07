@@ -390,10 +390,10 @@
       "taken_at_ms": 1794062374181,
       "app_version": "0.4.1",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "bug: ls's tab gaps draw as missing-glyph boxes; alacritty stores a tab as a '\\t' cell and the view draws it as a glyph. Cmd+A/Cmd+C already fixed by b7d5e79 (after 0.4.1)",
       "commit": "",
       "attempts": []
     }
