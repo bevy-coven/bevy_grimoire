@@ -352,7 +352,7 @@ fn draw_the_terminal(
     bodies: Query<Entity, With<TerminalBody>>,
     mut rows: Query<(Entity, &TerminalRow, &mut Node, &mut Visibility)>,
     carets: Query<(&mut Node, &mut Visibility, &mut BackgroundColor), CaretFilter>,
-    mut glyphs: Query<(&mut Text, &mut TextFont), With<crate::terminal_pane::TerminalCaretGlyph>>,
+    mut glyphs: Query<(&mut Text, &mut TextFont, &mut TextColor), With<crate::terminal_pane::TerminalCaretGlyph>>,
     focus: Res<TerminalFocus>,
     mut commands: Commands,
 ) {
@@ -505,8 +505,10 @@ fn draw_the_terminal(
 
     // **The caret sits where the shell's cursor is**, in cells from the body's top-left, in the shape
     // the program asked for (#320). Without the keyboard it is an outline of its cell whatever its
-    // shape, VS Code's `cursorStyleInactive` default, so a glance says the keys are elsewhere. A solid
-    // block carries the character it covers, in the pane's ground, so the word stays readable.
+    // shape, VS Code's `cursorStyleInactive` default, so a glance says the keys are elsewhere. A block is
+    // a tint of the accent with the covered character drawn on it in its own ink, so the word stays
+    // readable through the blink (`terminal_pane::CARET_BLOCK_ALPHA`); a bar and an underline cover no
+    // character and keep the accent's full strength.
     let caret_visible = caret.visible && caret.row < lines.len();
     let (cell_w, cell_h) = (metrics.width(), metrics.height());
     let held = focus.holds();
@@ -525,7 +527,11 @@ fn draw_the_terminal(
     } else {
         UiRect::all(Val::Px(crate::terminal_pane::CARET_OUTLINE_W))
     };
-    let ground = if held { chrome::ACCENT } else { Color::NONE };
+    let ground = match (held, caret.shape) {
+        (false, _) => Color::NONE,
+        (true, CaretShape::Block) => chrome::ACCENT.with_alpha(crate::terminal_pane::CARET_BLOCK_ALPHA),
+        (true, _) => chrome::ACCENT,
+    };
     for (mut node, mut visibility, mut fill) in carets {
         let want = if caret_visible {
             Visibility::Inherited
@@ -556,27 +562,28 @@ fn draw_the_terminal(
             fill.0 = ground;
         }
     }
-    // The character under a solid block: the row's cell at the caret's column. A row is trimmed of its
-    // trailing blanks, so a caret past the end covers a space, which is drawn as nothing.
-    let covered = if solid_block {
+    // The character under a block, and its ink: the row's cell at the caret's column. A row is trimmed of
+    // its trailing blanks, so a caret past the end covers a space, which is drawn as nothing.
+    let (covered, ink) = if solid_block {
         lines
             .get(caret.row)
             .and_then(|line| line.cells.get(caret.column))
-            .map(|cell| cell.ch)
-            .filter(|ch| *ch != ' ')
-            .map(String::from)
-            .unwrap_or_default()
+            .filter(|cell| cell.ch != ' ')
+            .map_or((String::new(), chrome::TEXT), |cell| (String::from(cell.ch), cell.fg))
     } else {
-        String::new()
+        (String::new(), chrome::TEXT)
     };
     // The glyph is drawn at the rows' size, so a block over a large cell holds a large character.
     let glyph_font = terminal_font(metrics.text_scale());
-    for (mut glyph, mut font) in &mut glyphs {
+    for (mut glyph, mut font, mut glyph_ink) in &mut glyphs {
         if glyph.0 != covered {
             glyph.0.clone_from(&covered);
         }
         if font.font_size != glyph_font.font_size {
             font.font_size = glyph_font.font_size;
+        }
+        if glyph_ink.0 != ink {
+            glyph_ink.0 = ink;
         }
     }
 

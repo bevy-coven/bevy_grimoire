@@ -99,6 +99,12 @@ pub(crate) const CARET_UNDERLINE_H: f32 = CARET_W;
 /// The outline of a caret while the keyboard is elsewhere, logical px.
 pub(crate) const CARET_OUTLINE_W: f32 = 1.0;
 
+/// **How much of the accent a block caret's fill is.** The owner, 2026-11-06: "should be somewhat
+/// transparent, since it blinks slowly". A full-strength block hid its cell for the long lit half of the
+/// blink; at half strength the cell shows through, and the character on it ([`TerminalCaretGlyph`]) is
+/// drawn in that cell's own ink, so the letter under the caret reads as it does anywhere else.
+pub(crate) const CARET_BLOCK_ALPHA: f32 = 0.5;
+
 /// The find box's width, logical px: room for a query of a few words, its count and its close button.
 const FIND_BOX_W: f32 = 300.0;
 
@@ -613,16 +619,16 @@ fn build_the_pane(
             },
             BackgroundColor(chrome::ACCENT),
             BorderColor::all(chrome::ACCENT),
-            // **Above the rows, its siblings** (#320): a solid block is drawn over its cell with the
-            // cell's character on it ([`TerminalCaretGlyph`]); under the row's text it would be a
-            // block of accent with the shell's light ink on top, which does not read.
+            // **Above the rows, its siblings** (#320): a block caret is a tint over its cell with the
+            // cell's character drawn on it, in that cell's own ink ([`TerminalCaretGlyph`]), so the
+            // letter stays crisp through the tint rather than being dimmed by it.
             ZIndex(1),
             TerminalCaret,
             Pickable::IGNORE,
             Name::new("terminal caret"),
             children![(
                 Text::new(String::new()),
-                TextColor(chrome::PANEL_BG),
+                TextColor(chrome::TEXT),
                 TextLayout::no_wrap(),
                 crate::terminal_view::terminal_font(1.0),
                 TerminalCaretGlyph,
