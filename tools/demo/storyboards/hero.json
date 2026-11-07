@@ -9,7 +9,13 @@
   1020,
   664
  ],
- "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}, 
+ "setup": [
+  {
+   "key": "KeyJ",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
   {
    "mcp": "grimoire_frame_view",
    "args": {
@@ -26,7 +32,7 @@
  ],
  "chunks": [
   {
-   "seconds": 4.4
+   "seconds": 4.0
   },
   {
    "seconds": 2.5,
@@ -80,7 +86,7 @@
    "key": "Enter"
   },
   {
-   "at": 4.2,
+   "at": 3.85,
    "mcp": "grimoire_list_snips",
    "args": {
     "limit": 1
@@ -88,7 +94,7 @@
    "caption": "agent: reads the snip"
   },
   {
-   "at": 4.5,
+   "at": 4.15,
    "caption": "agent: placement_remove bed"
   },
   {

@@ -1,74 +1,92 @@
 {
-  "name": "place_and_undo",
-  "fps": 10,
-  "scale": 1,
-  "width": 760,
-  "crop": [334, 64, 1088, 640],
-  "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}, 
-    {
-      "mcp": "grimoire_frame_view",
-      "args": {
-        "target": {
-          "rect": [
-            1.4,
-            0.4,
-            3.0,
-            2.0
-          ]
-        }
-      }
+ "name": "place_and_undo",
+ "fps": 10,
+ "scale": 1,
+ "width": 760,
+ "crop": [
+  334,
+  64,
+  1088,
+  640
+ ],
+ "setup": [
+  {
+   "key": "KeyJ",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      1.4,
+      0.4,
+      3.0,
+      2.0
+     ]
     }
-  ],
-  "chunks": [
-    {
-      "seconds": 4.5
-    }
-  ],
-  "steps": [
-    {
-      "at": 0.2,
-      "click_label": "filter",
-      "within": [840, 150, 1280, 230]
-    },
-    {
-      "at": 0.4,
-      "type": "sofa"
-    },
-    {
-      "at": 0.5,
-      "caption": "person: filters the PLACE list to the sofa"
-    },
-    {
-      "at": 1.0,
-      "click_label": "Sofa",
-      "within": [840, 215, 1280, 330]
-    },
-    {
-      "at": 1.1,
-      "caption": "person: arms the sofa from the list"
-    },
-    {
-      "at": 1.7,
-      "click": [
-        496,
-        332
-      ]
-    },
-    {
-      "at": 1.8,
-      "caption": "person: click the floor to place the sofa"
-    },
-    {
-      "at": 2.4,
-      "clear_cursor": true
-    },
-    {
-      "at": 2.8,
-      "key": "KeyZ",
-      "mods": [
-        "ControlLeft"
-      ],
-      "caption": "person: Ctrl+Z takes the sofa back"
-    }
-  ]
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 4.5
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.15,
+   "key": "KeyF",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "at": 0.3,
+   "type": "sofa"
+  },
+  {
+   "at": 0.45,
+   "caption": "person: filters the PLACE list to the sofa"
+  },
+  {
+   "at": 1.0,
+   "click_label": "Sofa",
+   "within": [
+    840,
+    215,
+    1280,
+    330
+   ]
+  },
+  {
+   "at": 1.1,
+   "caption": "person: arms the sofa from the list"
+  },
+  {
+   "at": 1.7,
+   "click": [
+    496,
+    332
+   ]
+  },
+  {
+   "at": 1.8,
+   "caption": "person: click the floor to place the sofa"
+  },
+  {
+   "at": 2.4,
+   "clear_cursor": true
+  },
+  {
+   "at": 2.8,
+   "key": "KeyZ",
+   "mods": [
+    "ControlLeft"
+   ],
+   "caption": "person: Ctrl+Z takes the sofa back"
+  }
+ ]
 }
