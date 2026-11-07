@@ -47,12 +47,16 @@ pub const TERMINAL_CELL_W: f32 = chrome::text::LABEL.px() * 0.6;
 /// same rule [`chrome::BODY_LINE_H`] states.
 pub const TERMINAL_CELL_H: f32 = chrome::text::LABEL.px() * 1.2;
 
-/// **The body's inset, and one number for both sides of the boundary.**
+/// **Where the rows begin inside the body, logical px, and one number for every side of the boundary:**
+/// the window's panel margin across, a small inset down.
 ///
-/// The pane writes it as padding and this file subtracts it before dividing by a cell, so the two have
-/// to be the same number or every column count is off by a fraction of a cell. Written once, here,
-/// because the pane already imports the cell metrics from this file.
-pub(crate) const BODY_PAD: f32 = 2.0;
+/// The pane writes it as the body's padding; [`resize_the_terminal`] subtracts it before dividing by a cell,
+/// the caret adds it before multiplying by one, and `terminal_pane::cell_under` subtracts it from a press. It
+/// was a single 2 px written on both axes here while the pane padded its sides by `chrome::MARGIN`, and that
+/// cost three things on mac_air (feedback-1794011769640): the shell was told of 4 more columns than a row
+/// holds, so omp's full-width rule widened the pane without end; the caret stood 1.7 cells left of the
+/// cursor; and a press selected the character two cells right of the one under it.
+pub(crate) const BODY_INSET: Vec2 = Vec2::new(chrome::MARGIN, 2.0);
 
 /// **The terminal's face** (#323): FiraMono Nerd Font Mono, the Nerd Fonts patch of the face the editor
 /// ships (SIL OFL 1.1; the licence and the release note sit beside it in `assets/fonts/`). Prompts
@@ -273,7 +277,7 @@ fn resize_the_terminal(
         return;
     };
     let inner = body.size() * body.inverse_scale_factor();
-    let usable = (inner - Vec2::splat(BODY_PAD * 2.0)).max(Vec2::ZERO);
+    let usable = (inner - BODY_INSET * 2.0).max(Vec2::ZERO);
     // **One column minimum, one row minimum**, because a zero in either is a division by zero inside
     // the grid. The pane's own `TERMINAL_MIN_H` makes a zero unreachable from a drag; a test that
     // resizes the surface to something absurd is where it is reachable, and clamping is right there.
@@ -531,8 +535,8 @@ fn draw_the_terminal(
         if *visibility != want {
             *visibility = want;
         }
-        let left = Val::Px(BODY_PAD + caret.column as f32 * cell_w);
-        let top = Val::Px(BODY_PAD + caret.row as f32 * cell_h + drop);
+        let left = Val::Px(BODY_INSET.x + caret.column as f32 * cell_w);
+        let top = Val::Px(BODY_INSET.y + caret.row as f32 * cell_h + drop);
         if node.left != left {
             node.left = left;
         }

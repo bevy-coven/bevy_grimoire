@@ -464,3 +464,4 @@ mod the_terminal_takes_its_settings;
 mod the_terminal_keeps_the_scrollback_it_is_set_to;
 mod command_k_clears_the_terminal;
 mod the_home_shows_an_update_found_after_it_opened;
+mod capture_feedback_1794011769640;

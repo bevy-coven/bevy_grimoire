@@ -572,7 +572,10 @@ fn build_the_pane(
                 // shell's history lives in the grid, which is two answers to one question. `clip`
                 // is what stops a row painting over the status band.
                 overflow: Overflow::clip(),
-                padding: UiRect::axes(Val::Px(chrome::MARGIN), Val::Px(crate::terminal_view::BODY_PAD)),
+                padding: UiRect::axes(
+                    Val::Px(crate::terminal_view::BODY_INSET.x),
+                    Val::Px(crate::terminal_view::BODY_INSET.y),
+                ),
                 ..default()
             },
             BackgroundColor(chrome::PANEL_BG),
@@ -929,7 +932,7 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
                 // PLACES-ITSELF-OK: the find box floats over the scrollback it searches, as VS Code's
                 // terminal find does; it is not a panel `chrome::Frame` places.
                 position_type: PositionType::Absolute,
-                top: Val::Px(crate::terminal_view::BODY_PAD),
+                top: Val::Px(crate::terminal_view::BODY_INSET.y),
                 right: Val::Px(chrome::MARGIN),
                 width: Val::Px(FIND_BOX_W),
                 flex_direction: FlexDirection::Row,
@@ -1433,7 +1436,8 @@ fn a_drag_ends(drag: On<bevy::picking::events::PointerDragEnd>, mut pane: ResMut
     pane.drag_from = None;
 }
 
-/// The cell the pointer is over, from the UI backend's normalized hit position.
+/// The cell the pointer is over, from the UI backend's normalized hit position: counted from where the rows
+/// begin, past the body's inset (`terminal_view::BODY_INSET`).
 fn cell_under(
     hit: &bevy::picking::backend::HitData,
     node: &ComputedNode,
@@ -1441,7 +1445,7 @@ fn cell_under(
 ) -> Option<(usize, usize)> {
     let normalized = hit.position?;
     let size = node.size() * node.inverse_scale_factor();
-    let local = Vec2::new(normalized.x + 0.5, normalized.y + 0.5) * size;
+    let local = Vec2::new(normalized.x + 0.5, normalized.y + 0.5) * size - crate::terminal_view::BODY_INSET;
     Some((
         (local.y / metrics.height()).max(0.0) as usize,
         (local.x / metrics.width()).max(0.0) as usize,
@@ -1709,5 +1713,33 @@ fn blink_the_caret(
         if node.display != want {
             node.display = want;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The cell under the pointer is counted from where the rows begin** (feedback-1794011769640;
+    /// oracle `containment`). The body pads its rows [`chrome::MARGIN`] in from the sides and the
+    /// terminal's body inset down from the top; the pointer was counted from the body's own corner, so a
+    /// press on a character selected the one two cells to its right.
+    #[test]
+    fn a_press_on_a_character_is_on_that_characters_cell() {
+        const SCALE: f32 = 2.4;
+        let metrics = CellMetrics::default();
+        let size = Vec2::new(1066.0, 200.0);
+        let node = ComputedNode { size: size * SCALE, inverse_scale_factor: 1.0 / SCALE, ..default() };
+        // Where the rows draw row 2, column 4: past the body's padding, then whole cells.
+        let rows_begin = crate::terminal_view::BODY_INSET;
+        let (row, column) = (2usize, 4usize);
+        let middle = rows_begin + Vec2::new((column as f32 + 0.5) * metrics.width(), (row as f32 + 0.5) * metrics.height());
+        let normalized = middle / size - Vec2::splat(0.5);
+        let hit = bevy::picking::backend::HitData::new(Entity::PLACEHOLDER, 0.0, Some(normalized.extend(0.0)), None);
+        assert_eq!(
+            cell_under(&hit, &node, &metrics),
+            Some((row, column)),
+            "a press in the middle of the character at row {row}, column {column} is on that cell"
+        );
     }
 }
