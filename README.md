@@ -56,6 +56,10 @@ Opens the repository's own project on its `furniture` kit (`site` and `scp` are 
 
   ![The project page with the terminal docked across its bottom: the project's maps and kits above, and in the terminal an echo run in the project's shell, the same scrollback the editor's terminal had](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/changelog/media/2026-11-06-terminal-every-screen.png)
 
+- **Start your agent in the terminal, already connected**: set Settings, Terminal, **Terminal agent** to Oh My Pi (or to Custom command, with `terminal_agent_command` in `settings.ron`) and the first terminal tab starts it with Cauldron's tools. A card over the terminal checks the tools server, the start, the MCP connection and a one-turn self test as each passes, then a chip in the bar says `omp connected · 22 tools`; **Agent** in the bar opens another: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
+
+  ![The terminal's self-test card at its top right with four green OK rows (tools server, agent started, agent connected as omp-coding-agent 1.0.0 with 22 tools, and the self test's state, operation count and picture size), and the bar's green chip reading omp connected · 22 tools](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/changelog/media/2026-11-06-terminal-agent-self-test.png)
+
 - **Find any command**: the menu bar at the top of the window lists every command exactly once, under File, Edit, View, Map, Meshes, Tiles, Compose, Rigs, Tools and Help, each with the key it answers to; a row that cannot run greys out and says why.
 - **Work with the Familiar**: an agent turns, removes, labels, frames and captures through the same operations you use, and one Cmd+Z takes back its turn: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
 - **Show the agent what you mean**: Cmd+\ snips a rectangle of the editor with a note the agent can read and see: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
