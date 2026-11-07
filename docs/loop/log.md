@@ -2284,3 +2284,4 @@ Top 5 remaining:
 2026-11-06 pass 441 nothing left to answer
 2026-11-06 pass 442 nothing left to answer
 2026-11-06 pass 443 nothing left to answer
+2026-11-07 pass 444 epic #330 (owner steer): no bevy_grimoire item ready (UI-R01..R06 #331-#336 wait on bevy_gooey), so built G-55 double press at the source: bevy_gooey#62 closed by c5b3b5a, with an owner-approved evaluator fix of a fragile access test (bevy_gooey#74, 34eec48). Nothing packaged here changed, so no release; gooey's release is its own loop's. Biggest sink: bevy_gooey cargo builds (~1.5 min each). Removed /tmp/gooey-base worktree, /tmp/rune-ref, /tmp/lib.rs.mine. Report docs/loop/iterations/2026-11-06-feel-double-press.md.
