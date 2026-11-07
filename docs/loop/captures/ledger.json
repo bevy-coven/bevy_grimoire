@@ -348,10 +348,10 @@
       "taken_at_ms": 1794024642593,
       "app_version": "0.4.1",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Cmd+V and Cmd+A do nothing in the terminal on macOS (unresponsive); 'MCPs aren't loaded' is terminal_agent Off in this person's settings, so omp was started by hand in a plain tab; asks for better key capture",
       "commit": "",
       "attempts": []
     }
