@@ -264,6 +264,59 @@ impl std::fmt::Debug for TerminalSession {
     }
 }
 
+/// **How long a child has to leave after it is hung up on**, milliseconds, before it is killed.
+pub const HANGUP_GRACE_MS: u64 = 1_000;
+
+/// How often the wait for the child looks, milliseconds.
+const HANGUP_POLL_MS: u64 = 10;
+
+/// **Closing a session never waits on its child for ever** (#337).
+///
+/// `alacritty_terminal`'s `Pty` hangs the child up and then blocks in `Child::wait` with no limit
+/// (`tty/unix.rs`, `impl Drop for Pty`). A shell leaves at once; an agent (the tab that runs `omp`)
+/// may ignore `SIGHUP` or take its time, and the editor's main thread then sat in that `wait` after
+/// its window was gone: the freeze a person met when an update quit the app, which stayed alive,
+/// window-less, until it was killed by hand. This runs first (a type's own `Drop` runs before its
+/// fields'): it hangs up, gives the child [`HANGUP_GRACE_MS`] to go, and kills it if it has not, so the
+/// `Pty`'s own wait that follows returns at once. The pane that had it is already closed.
+#[cfg(unix)]
+impl Drop for TerminalSession {
+    fn drop(&mut self) {
+        let Some(pid) = i32::try_from(self.pty.child().id()).ok().and_then(rustix::process::Pid::from_raw) else {
+            return;
+        };
+        hang_up_then_kill(pid, std::time::Duration::from_millis(HANGUP_GRACE_MS));
+    }
+}
+
+/// **Hangs up on `pid`, and kills it if it is still there after `grace`.** `true` when it had to.
+///
+/// The look is `waitid` with `NOWAIT`: it says a child has exited **without reaping it**, so the pid
+/// stays this process's zombie until `Pty`'s `wait` collects it, and can never be another process's
+/// in between (a signal to a reaped and reused pid would hit a stranger).
+#[cfg(unix)]
+fn hang_up_then_kill(pid: rustix::process::Pid, grace: std::time::Duration) -> bool {
+    use rustix::process::{Signal, WaitId, WaitIdOptions, kill_process, waitid};
+    let _ = kill_process(pid, Signal::HUP);
+    let deadline = std::time::Instant::now() + grace;
+    loop {
+        match waitid(WaitId::Pid(pid), WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT) {
+            // It left, and is waiting to be collected.
+            Ok(Some(_)) => return false,
+            // Still running.
+            Ok(None) => {}
+            // Not this process's child any more (already collected): nothing is left to wait for.
+            Err(_) => return false,
+        }
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(HANGUP_POLL_MS));
+    }
+    let _ = kill_process(pid, Signal::KILL);
+    true
+}
+
 /// The name a program reads in `TERM_PROGRAM` to know it runs in this editor's terminal (#324).
 pub const TERM_PROGRAM: &str = "Cauldron";
 

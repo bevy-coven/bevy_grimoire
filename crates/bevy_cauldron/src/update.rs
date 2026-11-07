@@ -6,7 +6,8 @@
 //! button, and the editor's chrome bar shows it only once there is something to say ([`Updater::in_chrome`]).
 //! One click downloads the zip and checks it against the release's sums ([`fetch_verified`]), then checks
 //! its signature, its team against the running app's, and Gatekeeper's verdict. A small shell script
-//! waits for this process to exit, swaps the bundle, and opens the new one with the same arguments.
+//! ([`SWAP_SH`], in its own process group) waits for this process to exit, **for [`SWAP_KILL_AFTER_S`] seconds at
+//! most and then ends it** (#337), swaps the bundle, and opens the new one with the same arguments.
 //!
 //! **Only `main` inserts the [`Updater`], and only inside a `.app`** ([`bundle_of`]): `cargo run` and every
 //! test editor have none, so a development build never replaces itself.
@@ -484,42 +485,111 @@ fn team_of(codesign_stderr: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Waits for the old process, moves the old app aside, puts the new one in its place and opens it with
-/// the old arguments. Any failed move puts the old app back and opens that instead.
-#[cfg(target_os = "macos")]
-const SWAP_SH: &str = r#"#!/bin/sh
+/// **Waits for the old process, but only so long**, moves the old app aside, puts the new one in its
+/// place and opens it with the old arguments. Any failed move puts the old app back and opens that
+/// instead.
+///
+/// Arguments: the old app's pid, the old and the new bundle, the program that relaunches, how many
+/// seconds the old process has before it is asked to end (`TERM`) and before it is made to (`KILL`),
+/// then the arguments the old app was started with. **An old process that has not left by then is
+/// ended**, because it was asked to quit for this update and a swap that waits for ever on a window-less
+/// process is the freeze the person met (#337): the app stayed on its old version until they killed it
+/// and started it by hand. A pid that now names another program, or a zombie, counts as gone.
+pub const SWAP_SH: &str = r#"#!/bin/sh
 exec >"$(dirname "$0")/swap.log" 2>&1
-pid="$1"; old="$2"; new="$3"; shift 3
-relaunch() { if [ "$#" -gt 0 ]; then open "$old" --args "$@"; else open "$old"; fi; }
-while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
+pid="$1"; old="$2"; new="$3"; open="$4"; term_after="$5"; kill_after="$6"; shift 6
+relaunch() { if [ "$#" -gt 0 ]; then "$open" "$old" --args "$@"; else "$open" "$old"; fi; }
+comm="$(ps -p "$pid" -o comm= 2>/dev/null)"
+alive() {
+  state="$(ps -p "$pid" -o stat= 2>/dev/null | tr -d ' ')"
+  [ -n "$state" ] && [ "${state#Z}" = "$state" ] && [ "$(ps -p "$pid" -o comm= 2>/dev/null)" = "$comm" ]
+}
+waited=0
+while alive; do
+  sleep 0.2
+  waited=$((waited + 1))
+  if [ "$waited" -eq $((term_after * 5)) ]; then kill -TERM "$pid" 2>/dev/null; fi
+  if [ "$waited" -ge $((kill_after * 5)) ]; then kill -KILL "$pid" 2>/dev/null; fi
+done
 backup="$old.previous"
 rm -rf "$backup"
 if ! mv "$old" "$backup"; then relaunch "$@"; exit 1; fi
 if mv "$new" "$old"; then rm -rf "$backup"; relaunch "$@"; else mv "$backup" "$old"; relaunch "$@"; exit 1; fi
 "#;
 
+/// The program that opens the new app, and the old one when the swap fails.
+pub const RELAUNCH_PROGRAM: &str = "open";
+
+/// Seconds the old process has to leave on its own before the swap asks it to end.
+pub const SWAP_TERM_AFTER_S: u32 = 10;
+
+/// Seconds after which the swap ends the old process whether it was asked or not.
+pub const SWAP_KILL_AFTER_S: u32 = 15;
+
+/// One run of [`SWAP_SH`]: which process to wait for, which bundle replaces which, and what to do if
+/// the process does not leave.
+pub struct Swap<'a> {
+    /// The old app's process id.
+    pub pid: u32,
+    /// The bundle being replaced.
+    pub running: &'a Path,
+    /// The bundle replacing it.
+    pub new: &'a Path,
+    /// The program that relaunches the app ([`RELAUNCH_PROGRAM`]).
+    pub relaunch: &'a str,
+    /// Seconds before the old process is asked to end ([`SWAP_TERM_AFTER_S`]).
+    pub term_after_s: u32,
+    /// Seconds before it is made to ([`SWAP_KILL_AFTER_S`]).
+    pub kill_after_s: u32,
+    /// The arguments the old app was started with, passed on to the new one.
+    pub args: Vec<std::ffi::OsString>,
+}
+
+#[cfg(unix)]
+impl Swap<'_> {
+    /// Writes `script` and starts it, not waiting for it. **It runs in its own process group**, so
+    /// whatever ends the old app by group (a person force-quitting a window-less app, the terminal's
+    /// job control) cannot end the swap with it: the script outlives the process it is waiting for.
+    pub fn start(&self, script: &Path) -> Result<std::process::Child, String> {
+        use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
+        bevy_grimoire_core::atomic_file::write_cache(script, SWAP_SH).map_err(|e| format!("{}: {e}", script.display()))?;
+        Command::new("/bin/sh")
+            .arg(script)
+            .arg(self.pid.to_string())
+            .arg(self.running)
+            .arg(self.new)
+            .arg(self.relaunch)
+            .arg(self.term_after_s.to_string())
+            .arg(self.kill_after_s.to_string())
+            .args(&self.args)
+            .process_group(0)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("the swap did not start: {e}"))
+    }
+}
+
 /// Starts [`SWAP_SH`] for `new` over `running`, not waiting for it: it waits for this process to exit.
 #[cfg(target_os = "macos")]
 fn swap(new: &Path, running: &Path) -> Result<(), String> {
-    use std::process::{Command, Stdio};
     let dir = new
         .parent()
         .and_then(Path::parent)
         .ok_or_else(|| format!("{} is not in an update folder", new.display()))?;
-    let script = dir.join("swap.sh");
-    bevy_grimoire_core::atomic_file::write_cache(&script, SWAP_SH).map_err(|e| format!("{}: {e}", script.display()))?;
-    Command::new("/bin/sh")
-        .arg(&script)
-        .arg(std::process::id().to_string())
-        .arg(running)
-        .arg(new)
-        .args(std::env::args_os().skip(1))
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("the swap did not start: {e}"))
+    Swap {
+        pid: std::process::id(),
+        running,
+        new,
+        relaunch: RELAUNCH_PROGRAM,
+        term_after_s: SWAP_TERM_AFTER_S,
+        kill_after_s: SWAP_KILL_AFTER_S,
+        args: std::env::args_os().skip(1).collect(),
+    }
+    .start(&dir.join("swap.sh"))
+    .map(|_| ())
 }
 
 #[cfg(not(target_os = "macos"))]

@@ -146,6 +146,9 @@ fn main() -> AppExit {
     bevy_cauldron::terminal_agent::insert_for_the_running_binary(&mut app);
     // **The installed app's own update** (`update.rs`): only inside a `.app`, so `cargo run` never replaces itself.
     bevy_cauldron::update::insert_for_the_running_app(&mut app);
+    // **A quit that does not finish is finished for it** (`exit_watchdog.rs`, #337): only the binary adds it, because
+    // a test editor writes `AppExit` and goes on.
+    app.add_plugins(bevy_cauldron::exit_watchdog::ExitWatchdogPlugin::ends_the_process());
 
     // **Both screens' plugins, always added.** Which one *runs* is the state's business, not the
     // plugin list's — a list that changed with the screen would be two plugin graphs, and only one

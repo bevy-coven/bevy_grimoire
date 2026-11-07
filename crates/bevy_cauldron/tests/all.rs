@@ -479,3 +479,6 @@ mod a_settings_edit_during_a_capture_reaches_the_terminal;
 mod the_terminal_runs_the_shell_it_is_set_to;
 mod a_link_in_the_terminal_opens_on_a_primary_click;
 mod the_shell_knows_the_project_it_runs_beside;
+mod closing_a_terminal_never_waits_on_its_child;
+mod an_update_swaps_even_when_the_old_app_will_not_leave;
+mod a_quit_that_does_not_finish_is_ended;

@@ -59,7 +59,7 @@ use crate::terminal_agent::{AgentLaunch, AgentPost, LAUNCH_CAP_MS, LAUNCH_QUIET_
 use bevy::prelude::*;
 
 pub use grid::{CaretShape, Cell, Cursor, FindStatus, Line, SCROLLBACK, TerminalScreen};
-pub use pty::{ShellChoice, TERM_PROGRAM, TerminalSession, session_env};
+pub use pty::{HANGUP_GRACE_MS, ShellChoice, TERM_PROGRAM, TerminalSession, session_env};
 
 /// **The variable that names the open project to a shell** (#324): its root, as the editor holds it.
 pub const PROJECT_ENV: &str = "CAULDRON_PROJECT";

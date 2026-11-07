@@ -78,6 +78,7 @@ pub mod startup_probe;
 pub mod environment;
 pub mod fill;
 pub mod filter;
+pub mod exit_watchdog;
 #[cfg(feature = "debugger")]
 pub mod guided;
 #[cfg(feature = "debugger")]
