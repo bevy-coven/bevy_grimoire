@@ -8,10 +8,10 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 use bevy_cauldron::editor::{TargetLock, lock_on_placement};
-use bevy_cauldron::outliner::{OutlinerSearch, OutlinerTree, group_key, placement_key};
+use bevy_cauldron::outliner::{OutlinerItem, OutlinerSearch, OutlinerTree, group_key, placement_key};
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::selection::Selection;
-use bevy_gooey::{Table, TableSelection, Tree, ValueChange};
+use bevy_gooey::{Checked, Table, TableSelection, Tree, ValueChange};
 
 use crate::fixtures;
 
@@ -44,9 +44,20 @@ fn rig(tag: &str) -> (App, [String; 3]) {
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     updates(&mut app, 8);
+    show_the_outliner(&mut app, true);
     let ids: Vec<String> = app.world().resource::<OpenMap>().map.placements.iter().map(|p| p.id.clone()).collect();
     let [a, b, c]: [String; 3] = ids.try_into().expect("three pieces on the map");
     (app, [a, b, c])
+}
+
+/// The person chose View > Show outliner (or chose it again).
+fn show_the_outliner(app: &mut App, on: bool) {
+    let row = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<OutlinerItem>>().single(world).expect("the View menu carries one Show outliner row")
+    };
+    app.world_mut().commands().trigger(ValueChange { source: row, value: on, is_final: true });
+    updates(app, 6);
 }
 
 fn tree_entity(app: &mut App) -> Entity {
@@ -144,4 +155,31 @@ fn a_piece_selected_in_the_viewport_is_the_selected_row() {
     let selected = app.world().get::<TableSelection>(tree).cloned().unwrap_or_default();
     assert!(!selected.contains(placement_key(&chair)), "the chair is not in the searched tree: {selected:?}");
     assert!(!selected.contains(placement_key(&lamp_a)));
+}
+
+#[test]
+fn the_outliner_is_not_there_until_the_view_menu_asks_and_goes_when_it_is_asked_again() {
+    let root = fixtures::Fixture::new("outliner_menu").descriptor("site/wall", "alpha").place("site/wall", (1.0, 1.0)).build("m");
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    updates(&mut app, 8);
+    let count = |app: &mut App| {
+        let world = app.world_mut();
+        (world.query_filtered::<(), With<OutlinerTree>>().iter(world).count(), world.query_filtered::<(), With<OutlinerSearch>>().iter(world).count())
+    };
+    let ticked = |app: &mut App| {
+        let world = app.world_mut();
+        world.query_filtered::<Has<Checked>, With<OutlinerItem>>().single(world).expect("one row")
+    };
+    assert_eq!(count(&mut app), (0, 0), "nothing is there until it is asked for: no tree and no search box among the screens that count them");
+    assert!(!ticked(&mut app));
+
+    show_the_outliner(&mut app, true);
+    assert_eq!(count(&mut app), (1, 1), "asked for, there is one tree and one search box");
+    assert!(ticked(&mut app), "and the row is ticked");
+    show_the_outliner(&mut app, true);
+    assert_eq!(count(&mut app), (1, 1), "asking twice does not make two");
+
+    show_the_outliner(&mut app, false);
+    assert_eq!(count(&mut app), (0, 0), "and asked away it goes");
+    assert!(!ticked(&mut app));
 }

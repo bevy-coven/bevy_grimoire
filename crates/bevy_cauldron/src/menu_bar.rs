@@ -187,6 +187,8 @@ enum Slot {
     Recent(Vec<PathBuf>),
     Separator,
     Statistics,
+    /// View ▸ Show outliner (UI-51, #237).
+    Outliner,
     /// Window ▸ Reset layout (UI-33, #227).
     ResetLayout,
 }
@@ -267,6 +269,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
     if category == "view" {
         slots.push(Slot::Separator);
         slots.push(Slot::Statistics);
+        slots.push(Slot::Outliner);
         slots.push(Slot::Separator);
         slots.push(Slot::ResetLayout);
     }
@@ -333,6 +336,13 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
         }
         Slot::ResetLayout => {
             menu.spawn((AppVerb::ResetLayout, bevy_gooey::menu_item(AppVerb::ResetLayout.title())));
+        }
+        Slot::Outliner => {
+            menu.spawn((
+                crate::outliner::OutlinerItem,
+                bevy_gooey::check_item("Show outliner", false),
+                bevy_gooey::observe(crate::outliner::toggle_the_outliner),
+            ));
         }
         Slot::Statistics => {
             menu.spawn((

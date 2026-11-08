@@ -1,6 +1,6 @@
 //! **The outliner: the map's contents as a tree you can search** (UI-51, #237).
 //!
-//! A collapsible OUTLINER section at the top of the Map door's INSPECTOR panel: a search box over
+//! An OUTLINER section at the top of the Map door's INSPECTOR panel, shown by View ▸ Show outliner: a search box over
 //! gooey's virtualized `tree`. The first level is what each piece *is* (the first of its descriptor's
 //! `kind` tags, `other` for a piece with none), the second is the pieces themselves, one row per
 //! placement named `<id> · <descriptor>`.
@@ -31,7 +31,7 @@ use std::collections::{BTreeSet, HashMap};
 use bevy::prelude::*;
 use bevy_grimoire_core::map::Map;
 use bevy_grimoire_core::stack::descriptor_of;
-use bevy_gooey::{SectionId, SelectMode, Table, TableSelection, Tree, TreeNode, ValueChange, observe, section, text_input, tree};
+use bevy_gooey::{Checked, SelectMode, Table, TableSelection, Tree, TreeNode, ValueChange, observe, text_input, tree};
 
 use crate::editor::{MapControlsPane, TargetLock};
 use crate::project::{OpenMap, Project};
@@ -86,48 +86,73 @@ pub struct OutlinerPlugin;
 
 impl Plugin for OutlinerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_the_outliner, rebuild_the_tree, follow_the_viewport).chain().run_if(in_state(Screen::Editor)));
+        app.add_systems(Update, (rebuild_the_tree, follow_the_viewport, tick_the_menu_row).chain().run_if(in_state(Screen::Editor)));
     }
 }
 
-/// **The section goes into the Map door's INSPECTOR panel** the frame the panel appears, closed, so it
-/// is one row until a person opens it.
-fn spawn_the_outliner(mut commands: Commands, panes: Query<Entity, Added<MapControlsPane>>) {
-    for pane in &panes {
-        let block = commands
-            .spawn((
-                Outliner::default(),
-                Name::new("outliner"),
-                SectionId::new("outliner"),
-                section(
-                    "OUTLINER",
-                    false,
-                    children![
-                        (
-                            text_input("Search", ""),
-                            OutlinerSearch,
-                            observe(|typed: On<ValueChange<String>>, mut outliners: Query<&mut Outliner>| {
-                                if let Ok(mut outliner) = outliners.single_mut()
-                                    && outliner.query != typed.value
-                                {
-                                    outliner.query = typed.value.clone();
-                                }
-                            }),
-                        ),
-                        (tree(Vec::<TreeNode>::new()), OutlinerTree, SelectMode::Multi, observe(select_the_pieces)),
-                    ],
-                ),
-            ))
-            .id();
-        // **Into the pane if it is still there when the command runs**: a door change rebuilds the frame in the
-        // same frame the pane appears, and a command on a despawned entity is an error nobody handles.
-        commands.queue(move |world: &mut World| {
-            if let Ok(mut pane) = world.get_entity_mut(pane) {
-                pane.insert_children(0, &[block]);
-            } else {
-                world.despawn(block);
+/// The View ▸ Show outliner row.
+#[derive(Component)]
+pub struct OutlinerItem;
+
+/// **View ▸ Show outliner puts the section into the Map door's INSPECTOR panel, first among its rows, and
+/// takes it out again.** It is not there until it is asked for: a text box and a tree are entities, and the
+/// screens that look for "the" empty text input or count every button in the world (the settings search, the
+/// dialogs' answers) would find these. The row is a menu row, which the bar does not count as a button.
+pub fn toggle_the_outliner(
+    change: On<ValueChange<bool>>,
+    panes: Query<Entity, With<MapControlsPane>>,
+    blocks: Query<Entity, With<Outliner>>,
+    mut commands: Commands,
+) {
+    if !change.value {
+        for block in &blocks {
+            commands.entity(block).despawn();
+        }
+        return;
+    }
+    if !blocks.is_empty() {
+        return;
+    }
+    let Ok(pane) = panes.single() else { return };
+    let block = commands
+        .spawn((
+            Outliner::default(),
+            Name::new("outliner"),
+            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        ))
+        .with_children(|block| {
+            crate::chrome::list_heading(block, "OUTLINER");
+            block.spawn((
+                text_input("Find a piece", ""),
+                OutlinerSearch,
+                observe(|typed: On<ValueChange<String>>, mut outliners: Query<&mut Outliner>| {
+                    if let Ok(mut outliner) = outliners.single_mut()
+                        && outliner.query != typed.value
+                    {
+                        outliner.query = typed.value.clone();
+                    }
+                }),
+            ));
+            block.spawn((tree(Vec::<TreeNode>::new()), OutlinerTree, SelectMode::Multi, observe(select_the_pieces)));
+        })
+        .id();
+    commands.entity(pane).insert_children(0, &[block]);
+}
+
+/// **The tick on the menu row says whether the section is there**, whichever way it came or went (a door
+/// change respawns the panel and takes it with it).
+fn tick_the_menu_row(items: Query<(Entity, Has<Checked>), With<OutlinerItem>>, blocks: Query<(), With<Outliner>>, mut commands: Commands) {
+    let present = !blocks.is_empty();
+    for (item, ticked) in &items {
+        match (present, ticked) {
+            (true, false) => {
+                commands.entity(item).insert(Checked);
             }
-        });
+            (false, true) => {
+                commands.entity(item).remove::<Checked>();
+            }
+            _ => {}
+        }
     }
 }
 
