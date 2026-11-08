@@ -449,6 +449,14 @@ pub struct SettingsView {
     project: Watch,
 }
 
+impl SettingsView {
+    /// Has the open project's own file been looked at? Until it has, [`EditorSettings`] is the user's layer alone,
+    /// and a setting the project makes (the terminal's agent, say) is not yet in it.
+    pub fn project_looked(&self) -> bool {
+        self.project.path.is_some()
+    }
+}
+
 /// **Look at both settings files, decide what changed, and keep [`EditorSettings`] the layers' sum.**
 ///
 /// A file that does not read is refused and its layer stays as it last read; a file that is gone has no
