@@ -160,6 +160,11 @@ fn the_switch_in_the_block_is_the_view_rows_twin() {
     app.world_mut().commands().trigger(ValueChange { source: switch, value: true, is_final: true });
     updates(&mut app, 4);
     assert!(app.world().resource::<AgentPause>().0, "the switch pauses the agent");
+    let switch_on = {
+        let world = app.world_mut();
+        world.query_filtered::<Has<Checked>, With<FamiliarSwitch>>().single(world).expect("one switch")
+    };
+    assert!(switch_on, "and the switch in the block is on");
     let ticked = {
         let world = app.world_mut();
         world.query_filtered::<Has<Checked>, With<PauseItem>>().single(world).expect("one row")
