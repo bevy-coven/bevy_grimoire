@@ -616,10 +616,10 @@
       "taken_at_ms": 1794146958145,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Cmd+Backspace in the terminal does nothing: a Mac terminal sends the kill-to-line-start control code, and the editor eats every Command chord.",
       "commit": "",
       "attempts": []
     },
