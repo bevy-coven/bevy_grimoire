@@ -1,0 +1,127 @@
+{
+  "name": "hand_back_inline",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -3.2,
+            -2.5,
+            3.2,
+            2.5
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.0
+    },
+    {
+      "seconds": 5.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "key": "Escape"
+    },
+    {
+      "at": 0.6,
+      "caption": "person: View, Show agent, and Answer hand-backs here"
+    },
+    {
+      "at": 0.9,
+      "click_label": "View"
+    },
+    {
+      "at": 2.0,
+      "click_label": "Show agent"
+    },
+    {
+      "at": 3.2,
+      "click_label": "Answer hand-backs here"
+    },
+    {
+      "at": 4.2,
+      "caption": "agent: turns the sofa to 90 and hands the turn back"
+    },
+    {
+      "at": 4.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_set_yaw",
+        "parameters": {
+          "id": "sofa",
+          "yaw": 90
+        }
+      },
+      "as": "turned"
+    },
+    {
+      "at": 5.4,
+      "mcp": "grimoire_present",
+      "args": {
+        "title": "the turned sofa",
+        "summary": "Turned the sofa a quarter.",
+        "specified": [
+          "turn the sofa"
+        ],
+        "inferred": [
+          "a quarter turn is ninety degrees"
+        ],
+        "check": [
+          {
+            "what": "the sofa still clears the table",
+            "placements": [
+              "sofa"
+            ]
+          }
+        ],
+        "operation_ids": [
+          "$turned"
+        ]
+      }
+    },
+    {
+      "at": 6.6,
+      "caption": "the question is in the block, not over the map"
+    },
+    {
+      "at": 8.4,
+      "caption": "person: Undo 1 operation"
+    },
+    {
+      "at": 8.7,
+      "click_label": "Undo 1 operation"
+    },
+    {
+      "at": 10.0,
+      "caption": "the turn is taken back, and the block says how it was answered"
+    },
+    {
+      "at": 11.2,
+      "cursor": [
+        700,
+        610
+      ]
+    }
+  ]
+}
