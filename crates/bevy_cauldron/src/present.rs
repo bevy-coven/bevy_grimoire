@@ -39,10 +39,38 @@ pub struct Presented {
     /// **The operations it covers**, in the order the agent listed them. Undo walks these newest
     /// first, because that is the order the map's state can be rewound in.
     pub operation_ids: Vec<String>,
-    /// **The person's answer**: `None` until they give one, then `"kept"`, `"undone"`, or why the
+    /// **The person's answer**: `None` until they give one, then `"kept"`, `"dismissed"`, `"undone"`, or why the
     /// undo stopped. An agent reads this from `grimoire_state`, which is the only way it learns what
     /// happened after the call returned.
     pub answer: Option<String>,
+    /// What was made, in the agent's words.
+    pub summary: String,
+    /// What the person asked for, as the agent quotes it back.
+    pub specified: Vec<String>,
+    /// What the agent decided on its own.
+    pub inferred: Vec<String>,
+    /// The places it says are worth a look.
+    pub check: Vec<String>,
+    /// The question as the modal asks it, kept so it can be asked again if the AGENT block that held it closes.
+    pub body: String,
+    /// **Asked in the AGENT block, not in the modal.** With the block open the hand-back is answered there, where the
+    /// agent's other work is (Accept, Undo, Dismiss); with it closed the modal asks as it always did.
+    pub inline: bool,
+}
+
+/// **How the person answered a hand-back in the AGENT block.** Set by its buttons, taken by [`answer_presentation`].
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PresentationReply(pub Option<Reply>);
+
+/// The three answers the block offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reply {
+    /// Keep the result.
+    Accept,
+    /// Take every operation it covers back, newest first.
+    Undo,
+    /// Close it and keep the result, saying it was not looked at.
+    Dismiss,
 }
 
 /// **One thing worth a look**, as the agent states it.
@@ -123,9 +151,9 @@ pub struct PresentPlugin;
 
 impl Plugin for PresentPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Presenting>().add_systems(
+        app.init_resource::<Presenting>().init_resource::<PresentationReply>().add_systems(
             Update,
-            answer_presentation.in_set(crate::keys::Phase::Act),
+            (answer_presentation, ask_again_when_the_block_closes).chain().in_set(crate::keys::Phase::Act),
         );
     }
 }
@@ -137,22 +165,33 @@ impl Plugin for PresentPlugin {
 /// nothing.
 fn answer_presentation(
     mut confirm: ResMut<crate::confirm::Confirm>,
+    mut reply: ResMut<PresentationReply>,
     mut presenting: ResMut<Presenting>,
     mut project: Option<ResMut<crate::project::Project>>,
     mut open: Option<ResMut<crate::project::OpenMap>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut due: Option<ResMut<crate::watch::Due>>,
 ) {
-    let Some(kept) = confirm.answer(Asked::Presentation) else {
+    // The modal's answer (Yes undoes, No keeps) or the block's button, one or the other.
+    let replied = match confirm.answer(Asked::Presentation) {
+        Some(true) => Some(Reply::Undo),
+        Some(false) => Some(Reply::Accept),
+        None => reply.0.take(),
+    };
+    let Some(replied) = replied else {
         return;
     };
-    let Some(presented) = presenting.0.as_mut() else {
+    let Some(presented) = presenting.0.as_mut().filter(|presented| presented.answer.is_none()) else {
         return;
     };
-    if !kept {
-        presented.answer = Some("kept".to_owned());
+    if replied != Reply::Undo {
+        let (answer, said) = match replied {
+            Reply::Dismiss => ("dismissed", "dismissed the agent's hand-back, keeping its result"),
+            _ => ("kept", "kept the agent's result"),
+        };
+        presented.answer = Some(answer.to_owned());
         if let Some(state) = state.as_mut() {
-            state.status.note("kept the agent's result".to_owned());
+            state.status.note(said.to_owned());
         }
         return;
     }
@@ -209,4 +248,24 @@ fn answer_presentation(
     }
     presented.answer = Some("undone".to_owned());
     state.status.note(format!("undid the agent's {undone} change(s)"));
+}
+
+/// **A hand-back asked in the AGENT block whose block was closed is asked in the modal instead**, so a question never
+/// waits where nobody can see it. The words are the ones the block held.
+fn ask_again_when_the_block_closes(
+    mut confirm: ResMut<crate::confirm::Confirm>,
+    mut presenting: ResMut<Presenting>,
+    block: Query<(), With<crate::familiar::Familiar>>,
+) {
+    let Some(presented) = presenting.0.as_mut() else { return };
+    if !presented.inline || presented.answer.is_some() || !block.is_empty() || confirm.is_open() {
+        return;
+    }
+    confirm.ask(Asked::Presentation, presented.title.clone(), presented.body.clone(), undo_label(presented.operation_ids.len()), "Keep");
+    presented.inline = false;
+}
+
+/// What the answer that takes a turn back is called, in the modal and in the block.
+pub fn undo_label(operations: usize) -> String {
+    format!("Undo {operations} operation{}", if operations == 1 { "" } else { "s" })
 }

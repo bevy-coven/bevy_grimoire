@@ -104,7 +104,8 @@ impl Plugin for FamiliarPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AgentPause>().init_resource::<AgentActivity>().add_systems(
             Update,
-            (tick_the_menu_row, tick_the_familiar_row, follow_the_agent, follow_the_pause).run_if(in_state(Screen::Editor)),
+            (tick_the_menu_row, tick_the_familiar_row, follow_the_agent, follow_the_pause, follow_the_hand_back)
+                .run_if(in_state(Screen::Editor)),
         );
     }
 }
@@ -135,6 +136,15 @@ pub struct FamiliarSwitch;
 /// The block's Undo button.
 #[derive(Component)]
 pub struct FamiliarUndo;
+
+/// **The hand-back card**: what the agent handed back with `grimoire_present`, and the three answers, while the block is
+/// open and the question is waiting in it.
+#[derive(Component)]
+pub struct HandBackCard;
+
+/// One of the card's answers.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HandBackAnswer(pub crate::present::Reply);
 
 /// **View ▸ Show agent puts the AGENT block into the Map door's INSPECTOR panel, first among its rows, and takes it
 /// out again.**
@@ -338,5 +348,73 @@ fn tick_the_menu_row(pause: Res<AgentPause>, items: Query<(Entity, Has<Checked>)
             }
             _ => {}
         }
+    }
+}
+
+/// **The card is there while a hand-back waits in the block, and not otherwise.** It says what was made, what the person
+/// said, what the agent assumed and where to look, and offers Accept (keep it), the undo of every operation it covers, and
+/// Dismiss (keep it, unread). The answer goes the way the modal's goes ([`crate::present::PresentationReply`]).
+fn follow_the_hand_back(
+    presenting: Res<crate::present::Presenting>,
+    blocks: Query<Entity, With<Familiar>>,
+    cards: Query<Entity, With<HandBackCard>>,
+    mut commands: Commands,
+) {
+    let waiting = presenting.0.as_ref().filter(|presented| presented.inline && presented.answer.is_none());
+    match (waiting, cards.is_empty()) {
+        (Some(presented), true) => {
+            for block in &blocks {
+                let card = commands
+                    .spawn((
+                        HandBackCard,
+                        Name::new("agent hand-back"),
+                        Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+                    ))
+                    .with_children(|card| {
+                        for (name, text) in [
+                            ("MADE", presented.summary.clone()),
+                            ("SAID", presented.specified.join("; ")),
+                            ("ASSUMED", presented.inferred.join("; ")),
+                            ("CHECK", presented.check.join("; ")),
+                        ] {
+                            if text.is_empty() {
+                                continue;
+                            }
+                            card.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() })
+                                .with_children(|row| {
+                                    crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
+                                    row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
+                                        .with_children(|col| {
+                                            crate::chrome::row_value(col, text, crate::chrome::TEXT, ());
+                                        });
+                                });
+                        }
+                        card.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
+                            .with_children(|answers| {
+                                for (text, reply) in [
+                                    ("Accept".to_owned(), crate::present::Reply::Accept),
+                                    (crate::present::undo_label(presented.operation_ids.len()), crate::present::Reply::Undo),
+                                    ("Dismiss".to_owned(), crate::present::Reply::Dismiss),
+                                ] {
+                                    answers.spawn((
+                                        button(text),
+                                        HandBackAnswer(reply),
+                                        observe(move |_: On<Activate>, mut answer: ResMut<crate::present::PresentationReply>| {
+                                            answer.0 = Some(reply);
+                                        }),
+                                    ));
+                                }
+                            });
+                    })
+                    .id();
+                commands.entity(block).add_child(card);
+            }
+        }
+        (None, false) => {
+            for card in &cards {
+                commands.entity(card).despawn();
+            }
+        }
+        _ => {}
     }
 }

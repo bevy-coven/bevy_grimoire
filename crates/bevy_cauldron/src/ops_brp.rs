@@ -2610,6 +2610,8 @@ fn editor_present(
     // Not `Gates`: this system holds the confirm modal mutably, and `Gates` reads it.
     activity: Option<ResMut<crate::familiar::AgentActivity>>,
     time: Option<Res<Time<Real>>>,
+    // **The AGENT block, when it is open, is where the hand-back is answered.**
+    block: Query<(), With<crate::familiar::Familiar>>,
 ) -> Result<Value, String> {
     if let (Some(mut activity), Some(time)) = (activity, time) {
         activity.hear("present", time.elapsed_secs_f64());
@@ -2619,6 +2621,9 @@ fn editor_present(
     };
     if confirm.is_open() {
         return Err("another question is on screen — answer it first".to_owned());
+    }
+    if presenting.as_ref().and_then(|slot| slot.0.as_ref()).is_some_and(|prev| prev.inline && prev.answer.is_none()) {
+        return Err("another hand-back is waiting in the AGENT block — answer it first".to_owned());
     }
     if p.title.trim().is_empty() {
         return Err("a presentation needs a title".to_owned());
@@ -2656,15 +2661,20 @@ fn editor_present(
         })
         .collect();
     let body = crate::present::body(&p, &steps);
-    confirm.ask(
-        crate::confirm::Asked::Presentation,
-        p.title.clone(),
-        body,
-        // **Yes is the destructive answer**, so `Enter` answers nothing and the button says how much
-        // it takes back: a turn's worth of changes must not be discarded by a label that reads "Yes".
-        format!("Undo {} operation{}", p.operation_ids.len(), if p.operation_ids.len() == 1 { "" } else { "s" }),
-        "Keep",
-    );
+    // **With the AGENT block open the question is asked there**, beside the rest of what the agent did, and with it
+    // closed in the modal as it always was; a block that is closed on a waiting question hands it to the modal.
+    let inline = !block.is_empty();
+    if !inline {
+        confirm.ask(
+            crate::confirm::Asked::Presentation,
+            p.title.clone(),
+            body.clone(),
+            // **Yes is the destructive answer**, so `Enter` answers nothing and the button says how much
+            // it takes back: a turn's worth of changes must not be discarded by a label that reads "Yes".
+            crate::present::undo_label(p.operation_ids.len()),
+            "Keep",
+        );
+    }
     let Some(presenting) = presenting.as_mut() else {
         return Err("this editor has no presentation slot".to_owned());
     };
@@ -2681,6 +2691,12 @@ fn editor_present(
         title: p.title.clone(),
         operation_ids: p.operation_ids.clone(),
         answer: None,
+        summary: p.summary.clone(),
+        specified: p.specified.clone(),
+        inferred: p.inferred.clone(),
+        check: p.check.iter().map(|item| item.what.clone()).collect(),
+        body,
+        inline,
     });
     // **The turn is one undo step from here on (E-071).** Done at presentation rather than at the
     // answer, so Cmd+Z during the conversation takes the turn back — a person who does not want the
