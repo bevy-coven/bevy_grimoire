@@ -45,53 +45,57 @@
     },
     {
       "at": 0.5,
-      "caption": "person: opens the OUTLINER section of the INSPECTOR"
+      "caption": "person: View, then Show outliner"
     },
     {
       "at": 0.9,
-      "click_label": "OUTLINER"
+      "click_label": "View"
     },
     {
-      "at": 2.2,
-      "caption": "every piece on the map, grouped by what it is"
+      "at": 2.0,
+      "click_label": "Show outliner"
     },
     {
-      "at": 3.4,
+      "at": 3.0,
+      "caption": "the OUTLINER opens in the INSPECTOR: every piece, grouped by what it is"
+    },
+    {
+      "at": 4.0,
       "cursor": [
-        186,
-        263
+        190,
+        256
       ]
     },
     {
-      "at": 3.8,
+      "at": 4.4,
       "click": [
-        186,
-        263
+        190,
+        256
       ]
     },
     {
-      "at": 4.1,
+      "at": 4.7,
       "caption": "person: searches for lamp"
     },
     {
-      "at": 4.3,
+      "at": 4.9,
       "type": "lamp"
     },
     {
-      "at": 5.6,
+      "at": 6.0,
       "caption": "only the lamps are left, under their group"
     },
     {
-      "at": 6.8,
+      "at": 7.0,
       "click_label": "floor_lamp",
       "prefix": true
     },
     {
-      "at": 7.6,
+      "at": 7.8,
       "caption": "a row selects its piece: the viewport outlines it and the POSE block shows its pose"
     },
     {
-      "at": 8.6,
+      "at": 8.8,
       "cursor": [
         700,
         610

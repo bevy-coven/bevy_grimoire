@@ -45,8 +45,8 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **Goal:** Pick a piece out of a crowded map by name, without hunting for it in the viewport.
 
-1. In the INSPECTOR on the left, open the OUTLINER section (click its title). It lists every piece on the map, grouped by what it is (the first `kind` of its descriptor, or `other`), one row per piece named `<id> · <descriptor>`.
-2. Type in its Search box. Every word must appear in a row's id, descriptor or group, so `lamp` leaves the lamps under their group and hides everything else. Clear the box to see the whole map again.
+1. Choose **View ▸ Show outliner**. The OUTLINER section opens at the top of the INSPECTOR on the left (the row is ticked while it is there; choose it again to put it away). It lists every piece on the map, grouped by what it is (the first `kind` of its descriptor, or `other`), one row per piece named `<id> · <descriptor>`.
+2. Type in its Find a piece box. Every word must appear in a row's id, descriptor or group, so `lamp` leaves the lamps under their group and hides everything else. Clear the box to see the whole map again.
 3. Click a row to select its piece. Ctrl-click or Shift-click selects several. Clicking a group selects nothing.
 
 **What you see:** The piece is outlined in the viewport, the POSE block above shows its pose, and the row stays selected as you search. Selecting a piece in the viewport selects its row here too.

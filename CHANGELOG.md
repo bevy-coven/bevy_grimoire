@@ -5,7 +5,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 ## 2026-11-08
 
 - **ui-52-piece-drop** `7d876dfc` A library piece dragged from the PLACE list and let go over the map is placed where the pointer is, snapped like a click and undone in one step; the viewport lights as the place it may land (UI-52, #238) *For you: Drag a piece from the Place list onto the map to put it down where you let go.*<br><a href="docs/changelog/media/2026-11-08-ui-52-piece-drop.mp4"><img src="docs/changelog/media/2026-11-08-ui-52-piece-drop.png" width="320" alt="clip"></a>
-- **ui-51-outliner** `10d4addb` The OUTLINER section of the INSPECTOR lists the map's pieces in a tree grouped by what they are, a search narrows it to the matching pieces and their groups, and a row selects its piece in the viewport (UI-51, #237) *For you: A new Outliner in the Inspector lists every piece on the map: search for a name, click it, and the piece is selected.*<br><a href="docs/changelog/media/2026-11-08-ui-51-outliner.mp4"><img src="docs/changelog/media/2026-11-08-ui-51-outliner.png" width="320" alt="clip"></a>
+- **ui-51-outliner** `10d4addb` View > Show outliner puts an OUTLINER section at the top of the INSPECTOR that lists the map's pieces in a tree grouped by what they are; a search narrows it to the matching pieces and their groups, and a row selects its piece in the viewport (UI-51, #237) *For you: View > Show outliner lists every piece on the map in the Inspector: search for a name, click it, and the piece is selected.*<br><a href="docs/changelog/media/2026-11-08-ui-51-outliner.mp4"><img src="docs/changelog/media/2026-11-08-ui-51-outliner.png" width="320" alt="clip"></a>
 
 ## 2026-11-07
 
