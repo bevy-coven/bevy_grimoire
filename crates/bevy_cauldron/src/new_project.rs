@@ -29,7 +29,7 @@ use bevy_gooey::{Cancel, FieldProblem, TextHint, TextInputValue, ValueChange, bu
 use crate::launcher::{Launcher, OpenMapRequest};
 use crate::picker::{PickFor, PickRequest, Picked};
 use crate::screen::Screen;
-use crate::ui::accent_button;
+use crate::ui::submit_button;
 
 /// The vocabulary every new project starts from, byte for byte as the example project keeps it.
 pub(crate) const VOCAB: &[u8] = include_bytes!("../../../assets/grimoire/vocab.ron");
@@ -358,7 +358,9 @@ fn spawn_the_card(
                         observe(|_: On<bevy_gooey::Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_done = true),
                     ));
                     row.spawn((
-                        accent_button("Create"),
+                        submit_button("Create"),
+                        // **Return presses it** from the name field (UI-R03, #333): a dialog with a text field names its main action.
+                        bevy_gooey::DefaultButton,
                         CreateButton,
                         observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenMapRequest>| {
                             // Checked again here: a dimmed button can still be activated by a script.

@@ -1,6 +1,6 @@
 [package]
 name = "bevy_cauldron"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2024"
 description = "A standalone world-building editor: author maps from an asset library, save what a game can load."
 # Relicensed MIT OR Apache-2.0 on extraction from foundation_vs_slop (owner decision, Sanctuary decision 0087).
@@ -95,7 +95,7 @@ bevy_siren = { git = "https://github.com/bevy-coven/bevy_siren", rev = "7029b20"
 bevy_grimoire_core = { path = "../bevy_grimoire_core" }
 bevy_flora = { git = "https://github.com/bevy-coven/bevy_flora", rev = "25e956b3f88ba32a1b6d75957360c6840da6afd9", features = ["ron"], optional = true }
 # The editor's UI library (UI-01, #209): required, not a family-crate feature. `EditorUiPlugin` owns it.
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "e2644183ca6a561c3ae23e281bbc4d9148fc9287", features = ["serde", "reflect"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "70126efc91008407ab8b2bc8b0e542dcf3e4a13c", features = ["serde", "reflect"] }
 # The runtime half. The editor spawns pieces through `bevy_grimoire::spawn_descriptor` rather than its
 # own copy, so a map cannot look one way here and another in the game — the failure `bake.rs` and
 # `site_editor::source_map` demonstrated by independently growing the same RON writer.
@@ -179,7 +179,7 @@ bevy_debugger_bevy = { package = "bevy_fairy", git = "https://github.com/bevy-co
 # `bevy_gooey::testing` finds a widget by its label and clicks it (UI-06, #214). A test dependency only:
 # the editor itself ships none of it.
 [dev-dependencies]
-bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "e2644183ca6a561c3ae23e281bbc4d9148fc9287", features = ["serde", "reflect", "testing"] }
+bevy_gooey = { git = "https://github.com/bevy-coven/bevy_gooey", rev = "70126efc91008407ab8b2bc8b0e542dcf3e4a13c", features = ["serde", "reflect", "testing"] }
 # Reads a face's own character map, so a test can say the terminal's face has the icons a prompt draws
 # (#323). Already in the lock through Bevy's text stack; a test dependency only.
 ttf-parser = "0.25"

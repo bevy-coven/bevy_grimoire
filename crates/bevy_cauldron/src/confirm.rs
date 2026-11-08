@@ -431,7 +431,10 @@ fn sync_dialog(
                     }
                     card.spawn(menu()).with_children(|answers| {
                         let mut yes = answers.spawn((button(q.yes.clone()), ConfirmButton(Choice::Yes)));
-                        if !destructive {
+                        if destructive {
+                            // **A destructive answer says so** (UI-R03, #333): the danger colour, and the safe answer is focused.
+                            yes.insert(bevy_gooey::ButtonVariant::Danger);
+                        } else {
                             yes.insert(AutoFocus);
                         }
                         if let Some(alt) = &q.alt {

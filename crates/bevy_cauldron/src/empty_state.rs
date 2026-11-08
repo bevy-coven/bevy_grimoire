@@ -28,7 +28,7 @@ use crate::add_meshes::{ACTION as ADD_MESHES, AddMeshesButton, NO_PIECES};
 use crate::chrome::{Frame, FrameSystems};
 use crate::confirm::Confirm;
 use crate::project::{OpenMap, Project};
-use crate::ui::accent_button;
+use crate::ui::submit_button;
 use crate::screen::Screen;
 
 /// What the prompt says. One sentence, no full stop, as the writing style has every label.
@@ -126,7 +126,7 @@ fn spawn_prompt(commands: &mut Commands, viewport: Entity, kind: EmptyMapPrompt)
                 }
                 EmptyMapPrompt::NoPieces => {
                     p.spawn(bevy_gooey::label(NO_PIECES));
-                    p.spawn((accent_button(ADD_MESHES), AddMeshesButton));
+                    p.spawn((submit_button(ADD_MESHES), AddMeshesButton));
                 }
             }
         });

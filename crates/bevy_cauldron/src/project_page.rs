@@ -43,7 +43,7 @@ use crate::confirm::{Asked, Confirm};
 use crate::launcher::{self, HomeContent, Launcher, ProjectPictures, SidebarRoot, SplashArt};
 use crate::project_assets::{self, ProjectRoot};
 use crate::screen::Screen;
-use crate::ui::accent_button;
+use crate::ui::submit_button;
 
 /// The one message every action of the page goes through.
 #[derive(Message, Clone, Debug, PartialEq)]
@@ -717,7 +717,7 @@ fn open_dialog(commands: &mut Commands, page: &ProjectPage, form: Form, existing
         }
         card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
             row.spawn((button("Cancel"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
-            row.spawn((accent_button(accent), CreateButton, observe(create_clicked)));
+            row.spawn((submit_button(accent), bevy_gooey::DefaultButton, CreateButton, observe(create_clicked)));
         });
     });
 }
@@ -739,7 +739,7 @@ fn open_policy_dialog(commands: &mut Commands, kit_label: &str, entries: Vec<Pol
             });
         }
         card.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, ..default() }).with_children(|row| {
-            row.spawn((accent_button("Close"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
+            row.spawn((submit_button("Close"), observe(|_: On<Activate>, mut commands: Commands, dialogs: Query<Entity, With<PageDialog>>| close(&mut commands, &dialogs))));
         });
     });
 }

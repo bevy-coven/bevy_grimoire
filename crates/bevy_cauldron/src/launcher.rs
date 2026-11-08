@@ -23,7 +23,7 @@
 //! # What is built from what is missing in `bevy_gooey`
 //!
 //! A card, the accent button and the vertical navigation are local until bevy_gooey#41, #40 and #42 land: a card is a gooey
-//! button's skeleton with an image and two quiet lines, the accent button is [`crate::ui::AccentButton`], and the navigation is
+//! button's skeleton with an image and two quiet lines, the accent button is [`crate::ui::submit_button`], and the navigation is
 //! three buttons, the chosen one marked [`bevy::ui::Selected`].
 
 use std::path::{Path, PathBuf};
@@ -43,7 +43,7 @@ use bevy_gooey::{
 use crate::picker::{PickFor, PickRequest, Picked};
 use crate::recent::{self, Listed, Recent, RecentProjects};
 use crate::screen::Screen;
-use crate::ui::accent_button;
+use crate::ui::submit_button;
 
 
 /// The binary's name, as the copied command line spells it.
@@ -770,7 +770,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
         header.spawn(heading("Projects"));
         header.spawn(Node { flex_grow: 1.0, ..default() });
         // The one accent button of the page: New project, or, with nothing else to start from, nothing.
-        header.spawn((accent_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
+        header.spawn((submit_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
         header.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
     });
     body.spawn((
@@ -780,7 +780,8 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     ));
     // FOLLOW-OK: the cards are a grid of focusable buttons, not a list with a highlight of its own: gooey's focus navigation
     // scrolls a focused card into view, and the wheel scrolls the rest.
-    crate::chrome::scroll_list(body, ProjectGrid).with_children(|scroll| {
+    // **Type-select (UI-R04, #334):** the cards are a group, so typing a project's first letters moves to it, as it does in a list.
+    crate::chrome::scroll_list(body, (ProjectGrid, bevy_gooey::TypeSelectGroup)).with_children(|scroll| {
         scroll.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_GROUP), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|grid| {
             for row in &launcher.rows {
                 if row.missing {
@@ -827,13 +828,13 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
         card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|actions| {
             let example = launcher.example.is_some();
             if example {
-                actions.spawn((accent_button("Open the example"), observe(open_the_example)));
+                actions.spawn((submit_button("Open the example"), observe(open_the_example)));
             }
             let new = observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true);
             if example {
                 actions.spawn((button("New project"), new));
             } else {
-                actions.spawn((accent_button("New project"), new));
+                actions.spawn((submit_button("New project"), new));
             }
             actions.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
         });
@@ -949,6 +950,9 @@ pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: O
     Some(ImageNode::new(handle).with_rect(rect))
 }
 
+/// The scale a project card is drawn at while it is pressed: gooey's `PRESS_SCALE`, named here because the card asks for it.
+const CARD_PRESS_SCALE: f32 = 0.97;
+
 fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let path = row.project.path.clone();
     let picture = project_picture(&path, art.images, art.splash.clone(), art.pictures);
@@ -965,6 +969,9 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
         AutoDirectionalNavigation::default(),
         ContextMenu(art.menu),
         ProjectCard { path: path.clone(), key },
+        // **A card is drawn a little smaller under the press** (UI-R04, #334), as gooey's own card cells are: a card here is a button
+        // holding a picture, not gooey's `CardCell`, so it asks for the scale itself.
+        bevy_gooey::PressScale(CARD_PRESS_SCALE),
         observe(on_card),
     ))
     .with_children(|card| {

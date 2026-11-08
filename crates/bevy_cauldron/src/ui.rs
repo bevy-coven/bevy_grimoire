@@ -110,24 +110,16 @@ impl Plugin for EditorUiPlugin {
     }
 }
 
-/// **The one primary button of a screen**, filled with the skin's accent (#295). `bevy_gooey` has only one kind of button, so
-/// this marks a [`bevy_gooey::button`] and [`paint_marked_buttons`] repaints it after gooey's own restyle
-/// (bevy-coven/bevy_gooey#40 asks for the widget itself). A screen has at most one.
-#[derive(Component)]
-pub struct AccentButton;
-
-/// A [`bevy_gooey::button`] marked as the screen's primary action: [`AccentButton`].
-pub fn accent_button(text: impl Into<String>) -> impl Bundle {
-    (bevy_gooey::button(text), AccentButton)
+/// A [`bevy_gooey::button`] that is the screen's primary action: gooey's [`bevy_gooey::ButtonVariant::Submit`] (the accent fill,
+/// lifting under the pointer; UI-R03, #333). A screen has at most one. This replaced the editor's own marker and repaint
+/// system, which existed only because gooey had one kind of button (bevy-coven/bevy_gooey#40).
+pub fn submit_button(text: impl Into<String>) -> impl Bundle {
+    (bevy_gooey::button(text), bevy_gooey::ButtonVariant::Submit)
 }
 
-/// How far the accent moves toward white while hovered, and toward black while pressed.
-const ACCENT_HOVER_MIX: f32 = 0.18;
-const ACCENT_PRESS_MIX: f32 = 0.2;
-
-/// Repaints an [`AccentButton`] (accent fill, accent text) and a [`bevy::ui::Selected`] button (a card or a navigation row that
-/// is the chosen one: the skin's hovered fill, plus a [`SelectedRail`]). It runs after gooey's restyle, which does not restyle on
-/// a colour change, so the two never fight; a pressed selected button keeps gooey's own pressed fill.
+/// Repaints a [`bevy::ui::Selected`] button (a card or a navigation row that is the chosen one: the skin's hovered fill, plus a
+/// [`SelectedRail`]). It runs after gooey's restyle, which does not restyle on a colour change, so the two never fight; a pressed
+/// selected button keeps gooey's own pressed fill.
 ///
 /// **The rail is why this exists at all now.** A fill a few ramp steps lighter is not a selected state a person can see:
 /// measured in the shipped 0.2.4 screenshot on 2026-11-05, `Projects` — the selected tab — was not tellable from `Learn`. A
@@ -141,16 +133,15 @@ struct SelectedRail;
 fn paint_marked_buttons(
     skin: Res<bevy_gooey::GooeySkin>,
     mut buttons: Query<
-        (Entity, &mut BackgroundColor, Has<AccentButton>, Has<bevy::ui::Selected>, Option<&bevy::picking::hover::Hovered>, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
-        (With<bevy_gooey::Role>, Or<(With<AccentButton>, With<bevy::ui::Selected>)>),
+        (Entity, &mut BackgroundColor, Has<bevy::ui::Pressed>, Has<bevy::ui::InteractionDisabled>, Option<&Children>),
+        (With<bevy_gooey::Role>, With<bevy::ui::Selected>),
     >,
     mut rails: Query<&mut BackgroundColor, (With<SelectedRail>, Without<bevy_gooey::Role>)>,
-    mut texts: Query<(&bevy_gooey::Role, &mut TextColor, Option<&SelectedRail>)>,
     parents: Query<&ChildOf>,
     opacities: Query<&bevy_gooey::Opacity>,
     mut commands: Commands,
 ) {
-    for (entity, mut fill, accent, selected, hovered, pressed, disabled, children) in &mut buttons {
+    for (entity, mut fill, pressed, disabled, children) in &mut buttons {
         // **A button in a dialog that is fading out fades with it.** gooey multiplies the colours it writes by
         // the `Opacity` at and above a node; these are written after it, so they take the same factor, or the
         // chosen tab would stand solid in a card that is going.
@@ -169,15 +160,6 @@ fn paint_marked_buttons(
         let with_opacity = |color: Color| if faded < 1.0 { color.with_alpha(color.alpha() * faded) } else { color };
         let want = if disabled {
             skin.surface
-        } else if accent {
-            let base = skin.accent;
-            if pressed {
-                bevy::color::Mix::mix(&base, &Color::BLACK, ACCENT_PRESS_MIX)
-            } else if hovered.is_some_and(|h| h.0) {
-                bevy::color::Mix::mix(&base, &Color::WHITE, ACCENT_HOVER_MIX)
-            } else {
-                base
-            }
         } else if pressed {
             continue;
         } else {
@@ -187,18 +169,8 @@ fn paint_marked_buttons(
         if fill.0 != want {
             fill.0 = want;
         }
-        if accent && !disabled {
-            for child in children.into_iter().flat_map(|c| c.iter()) {
-                if let Ok((role, mut ink, _)) = texts.get_mut(child)
-                    && *role == bevy_gooey::Role::ButtonText
-                    && ink.0 != with_opacity(skin.accent_text)
-                {
-                    ink.0 = with_opacity(skin.accent_text);
-                }
-            }
-        }
-        // **The rail, for a button that is the chosen one and is not already the accent colour.**
-        let wants = selected && !accent && !disabled;
+        // **The rail, for a button that is the chosen one.**
+        let wants = !disabled;
         let has = children.is_some_and(|c| c.iter().any(|child| rails.get(child).is_ok()));
         if wants && has {
             for child in children.into_iter().flat_map(|c| c.iter()) {

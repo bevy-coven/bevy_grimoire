@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cauldron"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
@@ -1220,8 +1220,8 @@ dependencies = [
 
 [[package]]
 name = "bevy_gooey"
-version = "0.40.1"
-source = "git+https://github.com/bevy-coven/bevy_gooey?rev=e2644183ca6a561c3ae23e281bbc4d9148fc9287#e2644183ca6a561c3ae23e281bbc4d9148fc9287"
+version = "0.43.0"
+source = "git+https://github.com/bevy-coven/bevy_gooey?rev=70126efc91008407ab8b2bc8b0e542dcf3e4a13c#70126efc91008407ab8b2bc8b0e542dcf3e4a13c"
 dependencies = [
  "accesskit",
  "bevy",

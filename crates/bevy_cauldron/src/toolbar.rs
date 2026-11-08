@@ -257,6 +257,7 @@ pub fn spawn_toolbar(
                 {
                     parent.spawn((
                         ToolbarCommand(command.id),
+                        bevy_gooey::ButtonVariant::Ghost,
                         bevy_gooey::icon_button(
                             bevy_gooey::IconSource::Atlas { image: image.clone(), layout: layout.clone(), index },
                             bevy_gooey::Tooltip::new(command.title).with_shortcut(command.shortcut),
@@ -277,6 +278,7 @@ pub fn spawn_toolbar(
                     };
                     parent.spawn((
                         ToolbarCommand(command.id),
+                        bevy_gooey::ButtonVariant::Ghost,
                         bevy_gooey::icon_button(
                             bevy_gooey::IconSource::Atlas { image: image.clone(), layout: layout.clone(), index },
                             bevy_gooey::Tooltip::new(command.title).with_shortcut(command.shortcut),

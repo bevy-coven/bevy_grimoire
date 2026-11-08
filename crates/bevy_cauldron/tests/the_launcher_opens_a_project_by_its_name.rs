@@ -12,7 +12,7 @@ use bevy::ui_widgets::Activate;
 use bevy_cauldron::project_assets::PointedAt;
 use bevy_cauldron::launcher::{Launcher, LauncherPlugin, MissingCard, OpenRequest, ProjectCard};
 use bevy_cauldron::picker::{PickFor, Picked};
-use bevy_cauldron::ui::AccentButton;
+use bevy_gooey::ButtonVariant;
 use bevy_gooey::{Toast, ToastAction, ToastKind};
 use bevy_cauldron::project_assets::ProjectRoot;
 use bevy_cauldron::recent::{self, RecentProjects};
@@ -88,6 +88,12 @@ fn press(app: &mut App, text: &str) {
     app.world_mut().commands().trigger(Activate { entity: b });
     app.update();
     app.update();
+}
+
+/// The buttons that are a screen's primary action: gooey's `ButtonVariant::Submit` (UI-R03, #333; they were `AccentButton`).
+fn submit_buttons(app: &mut App) -> Vec<Entity> {
+    let world = app.world_mut();
+    world.query::<(Entity, &ButtonVariant)>().iter(world).filter(|(_, variant)| **variant == ButtonVariant::Submit).map(|(entity, _)| entity).collect()
 }
 
 fn screen_of(app: &App) -> Screen {
@@ -189,8 +195,8 @@ fn a_first_run_is_a_welcome_with_one_accent_button_that_opens_the_example() {
     let mut app = on_the_launcher("first", &s, &[], &[]);
     assert!(app.world().resource::<Launcher>().example.is_some(), "this checkout has an example beside it");
 
-    let mut accents = app.world_mut().query_filtered::<(&Children, Entity), With<AccentButton>>();
-    let found: Vec<_> = accents.iter(app.world()).map(|(kids, e)| (kids.to_vec(), e)).collect();
+    let accents = submit_buttons(&mut app);
+    let found: Vec<_> = accents.into_iter().map(|e| (app.world().get::<Children>(e).map(|kids| kids.to_vec()).unwrap_or_default(), e)).collect();
     assert_eq!(found.len(), 1, "exactly one accent button on the first run");
     let mut texts_q = app.world_mut().query::<(&Role, &Text)>();
     let label = found[0].0.iter().find_map(|k| texts_q.get(app.world(), *k).ok().map(|(_, t)| t.0.clone()));
@@ -226,7 +232,9 @@ fn open_the_example_lands_on_the_examples_map_in_this_process() {
     let mut app = on_the_launcher("example", &s, &[], &[]);
     let example = app.world().resource::<Launcher>().example.clone().expect("this checkout has an example");
     // The welcome's accent button (the Learn page offers a plain one too).
-    let accent = app.world_mut().query_filtered::<Entity, With<AccentButton>>().single(app.world()).unwrap();
+    let accents = submit_buttons(&mut app);
+    assert_eq!(accents.len(), 1, "exactly one accent button on the first run");
+    let accent = accents[0];
     app.world_mut().commands().trigger(Activate { entity: accent });
     app.update();
     app.update();
@@ -240,9 +248,9 @@ fn a_home_with_projects_has_new_project_as_its_one_accent_button() {
     let s = Scratch::new("accent");
     let alpha = project(&s.0, "alpha");
     let mut app = on_the_launcher("accent", &s, &[&alpha], &[]);
-    let mut accents = app.world_mut().query_filtered::<Entity, With<AccentButton>>();
-    assert_eq!(accents.iter(app.world()).count(), 1);
-    assert_eq!(button(&mut app, "New project"), accents.single(app.world()).unwrap());
+    let accents = submit_buttons(&mut app);
+    assert_eq!(accents.len(), 1);
+    assert_eq!(button(&mut app, "New project"), accents[0]);
 }
 
 #[test]
