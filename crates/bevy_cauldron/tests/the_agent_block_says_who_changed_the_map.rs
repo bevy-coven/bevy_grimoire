@@ -204,7 +204,7 @@ fn press(app: &mut App, code: KeyCode) {
 fn what_the_agent_handed_back_is_waiting_on_the_person_and_then_says_how_they_answered() {
     let mut app = editor("agent_block_handback");
     show_the_block(&mut app, true);
-    assert_eq!(line(&mut app, FamiliarLine::HandBack), "", "nothing handed back yet, so the line says nothing");
+    assert_eq!(line(&mut app, FamiliarLine::HandBack), "none yet", "nothing handed back yet");
 
     let done = turn_to(&mut app, 90.0);
     assert_eq!(done["outcome"], "applied", "{done}");

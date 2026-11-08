@@ -37,7 +37,7 @@
 
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
-use bevy_gooey::{Activate, Checked, ValueChange, button, label, observe, toggle};
+use bevy_gooey::{Activate, Checked, ValueChange, button, observe, toggle};
 
 use crate::commands;
 use crate::editor::{EditorState, MapControlsPane};
@@ -228,10 +228,10 @@ fn newest_sentence(state: &EditorState, map: &bevy_grimoire_core::map::Map) -> S
 }
 
 /// What the block says about the agent's last hand-back (`grimoire/present`): waiting on the person, or how they answered.
-/// Empty when nothing has been handed back this session.
+/// `none yet` when nothing has been handed back this session.
 fn hand_back_sentence(presenting: &crate::present::Presenting) -> String {
     match &presenting.0 {
-        None => String::new(),
+        None => "none yet".to_owned(),
         Some(presented) => match &presented.answer {
             None => format!("{}: waiting for your answer", presented.title),
             Some(answer) => format!("{}: you answered {answer}", presented.title),
