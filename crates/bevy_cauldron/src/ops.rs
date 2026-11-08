@@ -719,7 +719,7 @@ pub mod map_create {
         pub fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
             serde_json::from_value(raw.clone()).map_err(|e| {
                 Refusal::new(format!(
-                    "these are not the parameters for making a map: {e}. The fields are `name`,                      `bounds`, `origin` and `note`, and `name` is required."
+                    "these are not the parameters for making a map: {e}. The fields are `name`, `bounds`, `origin` and `note`, and `name` is required."
                 ))
             })
         }
@@ -796,7 +796,7 @@ pub mod map_create {
             let name = bevy_grimoire_core::naming::to_snake_case(&p.name);
             if name.is_empty() {
                 return Err(Refusal::new(format!(
-                    "`{}` leaves nothing usable as a name. Names are snake_case — lowercase                      letters, digits and single underscores, starting with a letter.",
+                    "`{}` leaves nothing usable as a name. Names are snake_case — lowercase letters, digits and single underscores, starting with a letter.",
                     p.name
                 )));
             }
@@ -806,14 +806,14 @@ pub mod map_create {
             let path = maps_dir.join(bevy_grimoire_core::naming::map_file_name(&name));
             if path.exists() {
                 return Err(Refusal::new(format!(
-                    "`{name}` already exists in this project. Pick another name, or open the one                      that is there."
+                    "`{name}` already exists in this project. Pick another name, or open the one that is there."
                 )));
             }
             if let Some(b) = p.bounds
                 && (b.0 <= 0.0 || b.1 <= 0.0 || b.2 <= 0.0)
             {
                 return Err(Refusal::new(format!(
-                    "a map's bounds are metres on each axis, and every one has to be positive —                      `{b:?}` is not."
+                    "a map's bounds are metres on each axis, and every one has to be positive — `{b:?}` is not."
                 )));
             }
             let default = bevy_grimoire_core::map::Map::default();
@@ -5522,7 +5522,7 @@ pub mod map_set_settings {
                 && (b.0 <= 0.0 || b.1 <= 0.0 || b.2 <= 0.0)
             {
                 return Err(Refusal::new(format!(
-                    "a map's bounds are metres on each axis, and every one has to be positive —                      `{b:?}` is not."
+                    "a map's bounds are metres on each axis, and every one has to be positive — `{b:?}` is not."
                 )));
             }
             // **An axis needs its value, and only its value.**
@@ -5533,7 +5533,7 @@ pub mod map_set_settings {
             // not ask for.
             if p.bounds.is_some() && p.axis.is_some() {
                 return Err(Refusal::new(
-                    "say the bounds one way or the other: `bounds` for all three axes, or `axis`                      and `axis_value` for one. Sending both is two answers to one question.",
+                    "say the bounds one way or the other: `bounds` for all three axes, or `axis` and `axis_value` for one. Sending both is two answers to one question.",
                 ));
             }
             if p.axis.is_some() && p.axis_value.is_none() {
@@ -10096,5 +10096,21 @@ mod tests {
             "the refusal does not name the duplicate: {refused}"
         );
         assert_eq!(map.placements.len(), 3, "the duplicate was added anyway");
+    }
+
+    /// **A refusal's sentence has no hole in it** (`feedback-1794147495932`, oracle `other:message-text`). The refusal for
+    /// parameters that are not a map's was one sentence with a run of blanks in the middle, left where a line continuation
+    /// had been collapsed, so a toast broke it into two ragged lines. A run of blanks is never wanted in a sentence.
+    #[test]
+    fn the_refusal_for_a_maps_parameters_is_one_unbroken_sentence() {
+        let refused = map_create::Params::parse(&serde_json::Value::Null)
+            .err()
+            .expect("null is not the parameters of a map");
+        assert!(!refused.0.contains("  "), "the sentence has a run of blanks in it: {:?}", refused.0);
+        assert!(
+            refused.0.contains("The fields are `name`, `bounds`, `origin` and `note`, and `name` is required."),
+            "the refusal no longer names the fields: {:?}",
+            refused.0
+        );
     }
 }

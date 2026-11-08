@@ -679,7 +679,7 @@ pub(crate) fn poll_tasks(
                     queue.total = 0;
                     let dropped = rig.clear_queue();
                     state.status.problem(format!(
-                        "batch stopped at {done}/{total} ({dropped} unphotographed) — {e}. The                          model runs on `bmb`: bring the forward up and press Shift+L again"
+                        "batch stopped at {done}/{total} ({dropped} unphotographed) — {e}. The model runs on `bmb`: bring the forward up and press Shift+L again"
                     ));
                 } else {
                     state
@@ -1048,7 +1048,7 @@ pub(crate) fn suggest_all(
         queue.paused = !queue.paused;
         if queue.paused {
             state.status.note(format!(
-                "batch held at {done}/{total} — Shift+L resumes, Shift+Y abandons it. Nothing                  already proposed is affected"
+                "batch held at {done}/{total} — Shift+L resumes, Shift+Y abandons it. Nothing already proposed is affected"
             ));
         } else {
             state

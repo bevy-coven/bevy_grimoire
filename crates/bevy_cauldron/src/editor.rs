@@ -16210,7 +16210,7 @@ fn group_name_keys(
                         };
                         state.replacing = Some(id.clone());
                         state.status.problem(format!(
-                            "`{id}` already exists — {held}. Enter again to redefine it from this                              selection, Esc to leave it alone."
+                            "`{id}` already exists — {held}. Enter again to redefine it from this selection, Esc to leave it alone."
                         ));
                     }
                     Ok(kept) => {
@@ -16230,7 +16230,7 @@ fn group_name_keys(
                                 format!("`{id}` redefined — armed, so the next click stamps it")
                             }
                             Kept::Replaced { stamps, .. } => format!(
-                                "`{id}` redefined — {stamps} stamp(s) here now expand to it, and                                  read as STALE until re-recorded"
+                                "`{id}` redefined — {stamps} stamp(s) here now expand to it, and read as STALE until re-recorded"
                             ),
                             _ => format!("`{id}` kept — armed, so the next click stamps it"),
                         });
@@ -16362,7 +16362,7 @@ pub fn strand_check(
         return Ok(());
     }
     Err(format!(
-        "replacing `{}` would strand {}: the new definition has no such member, and a map                  with a dangling override does not load. Remove the override first.",
+        "replacing `{}` would strand {}: the new definition has no such member, and a map with a dangling override does not load. Remove the override first.",
         comp.id,
         stranded.join(", ")
     ))

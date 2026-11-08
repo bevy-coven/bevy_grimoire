@@ -476,7 +476,7 @@ impl Glb {
             Some(5125) => 4,
             other => {
                 return Err(format!(
-                    "glb: accessor {index} has index component type {other:?}, which is not an                      unsigned byte, short or int"
+                    "glb: accessor {index} has index component type {other:?}, which is not an unsigned byte, short or int"
                 ))
             }
         };

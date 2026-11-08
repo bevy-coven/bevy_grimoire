@@ -398,7 +398,7 @@ pub fn slot_id(members: &[Member], accepts: &str) -> Result<String, String> {
     }
     if !bevy_grimoire_core::naming::is_id(&seed) {
         return Err(format!(
-            "slot token `{accepts}` cannot name a member — ids start with a lowercase letter and              carry only letters, digits and `_`. Rename the token in vocab.ron."
+            "slot token `{accepts}` cannot name a member — ids start with a lowercase letter and carry only letters, digits and `_`. Rename the token in vocab.ron."
         ));
     }
     Ok(fresh_id(members, &seed))
