@@ -72,6 +72,8 @@ fn return_in_the_new_project_name_field_creates_the_project() {
     std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{}: {e}", scratch.display()));
 
     let mut app = editor("create");
+    // Keys arrive on a window, which the headless editor has not spawned.
+    app.world_mut().spawn((Window { resolution: bevy::window::WindowResolution::new(1280, 720), ..default() }, bevy::window::PrimaryWindow));
     // A home with a project on it, so the header's `New project` is the page's main action (a first run's is `Open the example`).
     let listed = scratch.join("listed");
     std::fs::create_dir_all(listed.join("assets/grimoire")).unwrap_or_else(|e| panic!("{}: {e}", listed.display()));
