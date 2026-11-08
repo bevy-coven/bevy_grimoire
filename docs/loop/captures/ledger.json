@@ -412,10 +412,10 @@
       "app_version": "0.4.1",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "The terminal's bar shows an omp status chip, an omp tab and an Agent chip beside the Invoke Agent button: a person asks what they are, and says there should be one agent panel (suggestion, not the bug); also asks that the default be an omp agent, which is a setting default, not this screen's defect.",
-      "commit": "",
+      "reason": "The Agent chip no longer sits beside the empty pane's Invoke Agent button; it comes with the first tab. Default-on omp is #341.",
+      "commit": "a156f007",
       "attempts": [
         {
           "host": "mac_air",
