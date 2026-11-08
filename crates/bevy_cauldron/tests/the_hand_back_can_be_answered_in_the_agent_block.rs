@@ -1,13 +1,13 @@
-//! **With the AGENT block open, the agent's hand-back is answered in it: Accept, Undo, Dismiss** (UI-60b, #340).
+//! **With the AGENT block open and "Answer hand-backs here" on, the agent's hand-back is answered in it: Accept, Undo, Dismiss** (UI-60b, #340).
 //!
 //! `grimoire/present` used to ask only in a modal (Keep or Undo all), which covers the agent's other work while it waits. With
-//! the block open the question is asked there instead, beside what the agent did: what was made, what the person said, what
-//! the agent assumed and where to look, and three answers. With the block closed it is the modal as ever, and a block closed on
+//! the block open and the switch on the question is asked there instead, beside what the agent did: what was made, what the person said, what
+//! the agent assumed and where to look, and three answers. With the block closed, or the switch off, it is the modal as ever, and a block closed on
 //! a waiting question hands it to the modal, so a question never waits where nobody can see it.
 
 use bevy::prelude::*;
 use bevy_cauldron::confirm::{Asked, Confirm};
-use bevy_cauldron::familiar::{Familiar, FamiliarItem, HandBackAnswer, HandBackCard};
+use bevy_cauldron::familiar::{Familiar, FamiliarItem, HandBackAnswer, HandBackCard, HandBackHere, HandBackSwitch};
 use bevy_cauldron::harness;
 use bevy_cauldron::present::Reply;
 use bevy_gooey::{Activate, ValueChange};
@@ -36,6 +36,17 @@ fn show_the_block(app: &mut App, on: bool) {
     };
     app.world_mut().commands().trigger(ValueChange { source: row, value: on, is_final: true });
     updates(app, 6);
+}
+
+/// The person turned "Answer hand-backs here" on (or off) in the block.
+fn answer_here(app: &mut App, on: bool) {
+    let switch = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<HandBackSwitch>>().single(world).expect("the block carries the switch")
+    };
+    app.world_mut().commands().trigger(ValueChange { source: switch, value: on, is_final: true });
+    updates(app, 4);
+    assert_eq!(app.world().resource::<HandBackHere>().0, on);
 }
 
 fn try_call(app: &mut App, method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -114,9 +125,19 @@ fn with_the_block_closed_the_hand_back_is_the_modal_as_ever() {
 }
 
 #[test]
+fn with_the_block_open_but_the_switch_off_it_is_still_the_modal() {
+    let mut app = editor("hand_back_off");
+    show_the_block(&mut app, true);
+    hand_back(&mut app, 90.0).expect("presented");
+    assert!(modal_up(&app), "the person has not asked for it here");
+    assert_eq!(cards(&mut app), 0);
+}
+
+#[test]
 fn with_the_block_open_it_is_asked_there_and_says_what_was_made_assumed_and_worth_checking() {
     let mut app = editor("hand_back_card");
     show_the_block(&mut app, true);
+    answer_here(&mut app, true);
     hand_back(&mut app, 90.0).expect("presented");
     assert!(!modal_up(&app), "the block holds the question, so the modal does not cover it");
     assert_eq!(cards(&mut app), 1);
@@ -133,6 +154,7 @@ fn with_the_block_open_it_is_asked_there_and_says_what_was_made_assumed_and_wort
 fn accept_keeps_it_and_dismiss_keeps_it_unread() {
     let mut app = editor("hand_back_keep");
     show_the_block(&mut app, true);
+    answer_here(&mut app, true);
     hand_back(&mut app, 90.0).expect("presented");
     press(&mut app, Reply::Accept);
     assert_eq!(answer_of(&mut app), "kept");
@@ -149,6 +171,7 @@ fn accept_keeps_it_and_dismiss_keeps_it_unread() {
 fn undo_takes_every_operation_back() {
     let mut app = editor("hand_back_undo");
     show_the_block(&mut app, true);
+    answer_here(&mut app, true);
     let before = yaw_of(&app);
     hand_back(&mut app, 90.0).expect("presented");
     assert_eq!(yaw_of(&app), 90.0);
@@ -161,6 +184,7 @@ fn undo_takes_every_operation_back() {
 fn closing_the_block_on_a_waiting_hand_back_hands_it_to_the_modal() {
     let mut app = editor("hand_back_closed");
     show_the_block(&mut app, true);
+    answer_here(&mut app, true);
     hand_back(&mut app, 90.0).expect("presented");
     assert!(!modal_up(&app));
     show_the_block(&mut app, false);

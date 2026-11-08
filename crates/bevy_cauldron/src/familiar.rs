@@ -52,6 +52,12 @@ pub struct AgentPause(pub bool);
 #[derive(Component)]
 pub struct PauseItem;
 
+/// **Whether hand-backs are answered in the AGENT block** (UI-60b, #340). Off, `grimoire/present` asks in the modal as it
+/// always did; on, and with the block open, it asks in the block, beside what the agent did. A person's choice for the
+/// sitting, never saved.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HandBackHere(pub bool);
+
 /// What the editor last heard from an agent: the one fact it can know about it. Session state, never saved.
 #[derive(Resource, Clone, Debug, Default, PartialEq)]
 pub struct AgentActivity {
@@ -102,9 +108,9 @@ pub struct FamiliarPlugin;
 
 impl Plugin for FamiliarPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AgentPause>().init_resource::<AgentActivity>().add_systems(
+        app.init_resource::<AgentPause>().init_resource::<AgentActivity>().init_resource::<HandBackHere>().add_systems(
             Update,
-            (tick_the_menu_row, tick_the_familiar_row, follow_the_agent, follow_the_pause, follow_the_hand_back)
+            (tick_the_menu_row, tick_the_familiar_row, follow_the_agent, follow_the_pause, follow_the_hand_back_switch, follow_the_hand_back)
                 .run_if(in_state(Screen::Editor)),
         );
     }
@@ -137,6 +143,10 @@ pub struct FamiliarSwitch;
 #[derive(Component)]
 pub struct FamiliarUndo;
 
+/// The block's "Answer hand-backs here" switch.
+#[derive(Component)]
+pub struct HandBackSwitch;
+
 /// **The hand-back card**: what the agent handed back with `grimoire_present`, and the three answers, while the block is
 /// open and the question is waiting in it.
 #[derive(Component)]
@@ -153,6 +163,7 @@ pub fn toggle_the_familiar(
     panes: Query<Entity, With<MapControlsPane>>,
     blocks: Query<Entity, With<Familiar>>,
     pause: Res<AgentPause>,
+    here: Res<HandBackHere>,
     mut commands: Commands,
 ) {
     if !change.value {
@@ -195,6 +206,15 @@ pub fn toggle_the_familiar(
                 });
             }
             block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
+            block.spawn((
+                toggle("Answer hand-backs here", here.0),
+                HandBackSwitch,
+                observe(|change: On<ValueChange<bool>>, mut here: ResMut<HandBackHere>| {
+                    if here.0 != change.value {
+                        here.0 = change.value;
+                    }
+                }),
+            ));
             block.spawn((button("Undo the agent's change"), FamiliarUndo, observe(undo_the_agents_change)));
         })
         .id();
@@ -294,6 +314,21 @@ fn follow_the_agent(
 fn follow_the_pause(pause: Res<AgentPause>, switches: Query<(Entity, Has<Checked>), With<FamiliarSwitch>>, mut commands: Commands) {
     for (switch, ticked) in &switches {
         match (pause.0, ticked) {
+            (true, false) => {
+                commands.entity(switch).insert(Checked);
+            }
+            (false, true) => {
+                commands.entity(switch).remove::<Checked>();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The "Answer hand-backs here" switch says what the setting says.
+fn follow_the_hand_back_switch(here: Res<HandBackHere>, switches: Query<(Entity, Has<Checked>), With<HandBackSwitch>>, mut commands: Commands) {
+    for (switch, ticked) in &switches {
+        match (here.0, ticked) {
             (true, false) => {
                 commands.entity(switch).insert(Checked);
             }

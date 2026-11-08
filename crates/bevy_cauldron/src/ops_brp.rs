@@ -2601,6 +2601,7 @@ impl Plugin for OpsBridgePlugin {
 /// **It returns at once**, because an MCP call that blocked on a person would deadlock with the
 /// editor's own frame. The answer is read from `grimoire/state`, which is the only channel an agent
 /// has for what happened after its call returned.
+#[allow(clippy::too_many_arguments)]
 fn editor_present(
     In(p): In<crate::present::PresentParams>,
     project: Option<Res<crate::project::Project>>,
@@ -2610,8 +2611,9 @@ fn editor_present(
     // Not `Gates`: this system holds the confirm modal mutably, and `Gates` reads it.
     activity: Option<ResMut<crate::familiar::AgentActivity>>,
     time: Option<Res<Time<Real>>>,
-    // **The AGENT block, when it is open, is where the hand-back is answered.**
+    // **The AGENT block, when it is open and the person has asked for it, is where the hand-back is answered.**
     block: Query<(), With<crate::familiar::Familiar>>,
+    here: Option<Res<crate::familiar::HandBackHere>>,
 ) -> Result<Value, String> {
     if let (Some(mut activity), Some(time)) = (activity, time) {
         activity.hear("present", time.elapsed_secs_f64());
@@ -2661,9 +2663,9 @@ fn editor_present(
         })
         .collect();
     let body = crate::present::body(&p, &steps);
-    // **With the AGENT block open the question is asked there**, beside the rest of what the agent did, and with it
-    // closed in the modal as it always was; a block that is closed on a waiting question hands it to the modal.
-    let inline = !block.is_empty();
+    // **With the AGENT block open and "Answer hand-backs here" on, the question is asked there**, beside the rest of what the
+    // agent did; otherwise in the modal, as it always was. A block closed on a waiting question hands it to the modal.
+    let inline = here.is_some_and(|here| here.0) && !block.is_empty();
     if !inline {
         confirm.ask(
             crate::confirm::Asked::Presentation,
