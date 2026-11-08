@@ -28,6 +28,15 @@
           ]
         }
       }
+    },
+    {
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_remove",
+        "parameters": {
+          "id": "bed"
+        }
+      }
     }
   ],
   "chunks": [
@@ -59,29 +68,29 @@
     },
     {
       "at": 1.2,
-      "caption": "person: filters the PLACE list to lamp"
+      "caption": "person: filters the PLACE list to pouf"
     },
     {
       "at": 1.3,
-      "type": "lamp"
+      "type": "pouf"
     },
     {
       "at": 2.8,
-      "caption": "person: drags the Lamp row onto the floor"
+      "caption": "person: drags the Pouffe row onto the floor"
     },
     {
       "at": 3.1,
       "drag": [
-        948,
-        346,
-        462,
-        420
+        960,
+        298,
+        600,
+        415
       ],
       "secs": 1.8
     },
     {
       "at": 5.3,
-      "caption": "let go: the lamp is placed where the pointer was"
+      "caption": "let go: the pouffe is placed where the pointer was"
     },
     {
       "at": 7.8,
