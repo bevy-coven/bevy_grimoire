@@ -2408,3 +2408,4 @@ Top 5 remaining:
 - 2026-11-08 **pass 83** — **nothing left to answer**: 0 new captures on mac_air, `next` exits 3 (33 ledger rows: 23 `fixed`, 10 `blocked`; no review due, `new` is 1 of 5), as in passes 28 to 82. Nothing was changed.
 - 2026-11-08 **pass 84** — **nothing left to answer**: 0 new captures on mac_air, `next` exits 3 (33 ledger rows: 23 `fixed`, 10 `blocked`; no review due, `new` is 1 of 5), as in passes 28 to 83. Nothing was changed.
 - 2026-11-08 **pass 85** — **nothing left to answer**: 0 new captures on mac_air, `next` exits 3 (33 ledger rows: 23 `fixed`, 10 `blocked`; no review due, `new` is 1 of 5), as in passes 28 to 84. Nothing was changed.
+- 2026-11-08 **pass 86** — **nothing left to answer**: 0 new captures on mac_air, `next` exits 3 (33 ledger rows: 23 `fixed`, 10 `blocked`; no review due, `new` is 1 of 5), as in passes 28 to 85. Nothing was changed.
