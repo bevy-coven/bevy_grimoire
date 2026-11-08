@@ -59,7 +59,8 @@ fn a_dropped_piece_is_placed_at_the_pointer_by_the_place_operation_and_one_undo_
     drop_on(&mut app, "site/wall", over);
 
     let map = app.world().resource::<OpenMap>().map.clone();
-    assert_eq!(map.placements.len(), 1, "one piece was placed: {:?}", map.placements.iter().map(|p| &p.id).collect::<Vec<_>>());
+    let said = app.world().resource::<bevy_cauldron::editor::EditorState>().status.line().to_owned();
+    assert_eq!(map.placements.len(), 1, "one piece was placed (the editor said `{said}`; the pointer was {over:?}): {:?}", map.placements.iter().map(|p| &p.id).collect::<Vec<_>>());
     let placed = &map.placements[0];
     assert_eq!(placed.descriptor, "site/wall");
     assert!((placed.at.0 - 2.0).abs() <= 0.5 && (placed.at.1 - 2.0).abs() <= 0.5, "at the cell under the pointer, snapped: {:?}", placed.at);
