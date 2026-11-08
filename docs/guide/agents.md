@@ -251,6 +251,7 @@ Goal: know whether the agent is there, whose the newest change is, and undo the 
 3. **NEWEST** says whether the newest thing on the undo stack is the agent's or yours, and what it was. **HAND-BACK** says what the agent last handed back (`grimoire_present`) and whether it still waits for your Keep or Undo all, or how you answered.
 4. **Undo the agent's change** presses Undo (so it is exactly Cmd+Z, and it shows in the History). It is greyed unless the newest change is the agent's: it never undoes your own edit under the agent's name.
 5. **Pause agent writes** in the block is the View row's twin: the same switch, ticked in both.
+6. **Answer hand-backs here** (off by default) moves the agent's hand-back out of the modal and into the block. With it on and the block open, `grimoire_present` shows a card in the block instead of the Keep / Undo dialog: what was made, what you said, what the agent assumed and where to look, then **Accept** (keep it), **Undo N operations** (take every operation it covers back, newest first) and **Dismiss** (keep it, unread). The answer reaches the agent the same way as the dialog's, in `grimoire_state`'s `presentation.answer` (`kept`, `undone` or `dismissed`). Close the block on a waiting card and the question moves to the dialog, so it never waits where nobody can see it.
 
 ## Limits
 
