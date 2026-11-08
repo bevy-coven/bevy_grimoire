@@ -1,0 +1,22 @@
+{
+  "name": "launcher_conventions",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "setup": [],
+  "chunks": [
+    {"seconds": 11}
+  ],
+  "steps": [
+    {"at": 0.3, "caption": "person: the Projects home. A list longer than its box fades where rows are hidden"},
+    {"at": 1.8, "wheel": {"y": -1, "n": 6, "at": [640, 420]}},
+    {"at": 2.6, "caption": "person: scrolls; the top edge fades now"},
+    {"at": 4.0, "click_label": "bravo"},
+    {"at": 4.1, "caption": "person: one press chooses a card"},
+    {"at": 5.2, "type": "al"},
+    {"at": 5.3, "caption": "person: typing `al` moves focus to the card named alpha"},
+    {"at": 7.0, "click_label": "alpha"},
+    {"at": 7.12, "click_label": "alpha"},
+    {"at": 7.2, "caption": "person: a double press opens the project"}
+  ]
+}

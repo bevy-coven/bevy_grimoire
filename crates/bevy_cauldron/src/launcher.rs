@@ -780,7 +780,8 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
     ));
     // FOLLOW-OK: the cards are a grid of focusable buttons, not a list with a highlight of its own: gooey's focus navigation
     // scrolls a focused card into view, and the wheel scrolls the rest.
-    crate::chrome::scroll_list(body, ProjectGrid).with_children(|scroll| {
+    // **Type-select (UI-R04, #334):** the cards are a group, so typing a project's first letters moves to it, as it does in a list.
+    crate::chrome::scroll_list(body, (ProjectGrid, bevy_gooey::TypeSelectGroup)).with_children(|scroll| {
         scroll.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_GROUP), row_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|grid| {
             for row in &launcher.rows {
                 if row.missing {
@@ -949,6 +950,9 @@ pub(crate) fn project_picture(root: &Path, images: &mut Assets<Image>, splash: O
     Some(ImageNode::new(handle).with_rect(rect))
 }
 
+/// The scale a project card is drawn at while it is pressed: gooey's `PRESS_SCALE`, named here because the card asks for it.
+const CARD_PRESS_SCALE: f32 = 0.97;
+
 fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
     let path = row.project.path.clone();
     let picture = project_picture(&path, art.images, art.splash.clone(), art.pictures);
@@ -965,6 +969,9 @@ fn project_card(grid: &mut ChildSpawnerCommands, row: &Listed, art: &mut Art) {
         AutoDirectionalNavigation::default(),
         ContextMenu(art.menu),
         ProjectCard { path: path.clone(), key },
+        // **A card is drawn a little smaller under the press** (UI-R04, #334), as gooey's own card cells are: a card here is a button
+        // holding a picture, not gooey's `CardCell`, so it asks for the scale itself.
+        bevy_gooey::PressScale(CARD_PRESS_SCALE),
         observe(on_card),
     ))
     .with_children(|card| {
