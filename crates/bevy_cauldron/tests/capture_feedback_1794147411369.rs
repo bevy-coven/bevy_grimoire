@@ -129,6 +129,7 @@ fn a_wheel_off_the_map_leaves_its_zoom_and_one_on_it_zooms() {
             .filter(|rect| rect.size().x > 1.0 && rect.size().y > 1.0)
             .collect()
     };
+    assert!(!panes.is_empty(), "the editor has a laid-out terminal pane, which is what the capture was taken over");
     for pane in &panes {
         let at = pane.center();
         let (before, after) = notch(&mut app, at);
