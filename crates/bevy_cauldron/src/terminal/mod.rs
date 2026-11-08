@@ -130,6 +130,10 @@ pub struct TerminalTab {
     agent: Option<AgentPost>,
     /// The launch line, typed once the shell has gone quiet at its prompt.
     launch: Option<PendingLaunch>,
+    /// **Has a person sent this shell anything?** A key, a paste, a mouse report or the `cd` chip
+    /// (`Terminal::write`). A shell that leaves after that was told to (`exit`, Ctrl+D) and its tab
+    /// closes; one that leaves with nothing sent never got going, and its tab stays to say so.
+    typed: bool,
 }
 
 impl TerminalTab {
@@ -143,7 +147,23 @@ impl TerminalTab {
             problem: Some(why),
             agent: None,
             launch: None,
+            typed: false,
         }
+    }
+
+    /// **A shell left on its own, before a person sent it anything**: a shell that could not stay up (a
+    /// bad `terminal_shell`, an rc file that ends the session). The tab stays, with the reason in red and
+    /// no session, so the bar can close it and the person can open another. Closing it here would open a
+    /// fresh shell the next frame, and a shell that cannot stay up would be opened for ever.
+    fn ended_on_its_own(&mut self) {
+        let why = "the shell ended before anything was typed to it; close this tab and open another".to_owned();
+        if self.launch.take().is_some()
+            && let Some(post) = self.agent.as_mut()
+        {
+            post.not_started(format!("the shell stopped before the agent was typed: {why}"));
+        }
+        self.problem = Some(why);
+        self.session = None;
     }
 }
 
@@ -213,6 +233,7 @@ impl Terminal {
                     problem: None,
                     agent: None,
                     launch: None,
+                    typed: false,
                 });
                 self.active = self.open.len() - 1;
                 self.problem = None;
@@ -343,7 +364,16 @@ impl Terminal {
         if self.open.is_empty() {
             return;
         }
-        self.open.remove(self.active);
+        self.remove_tab(self.active);
+    }
+
+    /// **Take the tab at `index` out**, with its shell (`Drop` hangs the child up), keeping the same tab
+    /// drawn when it is another one that goes.
+    fn remove_tab(&mut self, index: usize) {
+        self.open.remove(index);
+        if index < self.active {
+            self.active -= 1;
+        }
         self.active = self.active.min(self.open.len().saturating_sub(1));
         self.problem = None;
     }
@@ -452,6 +482,7 @@ impl Terminal {
         let Some(session) = tab.session.as_mut() else {
             return;
         };
+        tab.typed = true;
         tab.screen.scroll_to_bottom();
         if let Err(why) = session.write(bytes) {
             self.problem = Some(why);
@@ -480,18 +511,28 @@ impl Terminal {
         }
     }
 
-    /// **Read every shell that has output, and answer every question one asked.**
+    /// **Read every shell that has output, answer every question one asked, and close the tab of a shell
+    /// that has left.**
     ///
     /// Run once per frame by [`crate::terminal_view`]. Every tab, not just the drawn one: a `cargo
     /// build` in a background tab must not stall on a full pipe because the pane was looking
     /// elsewhere.
+    ///
+    /// **A shell that was told to leave (`exit`, Ctrl+D) takes its tab with it**, the way every terminal
+    /// does (feedback-1794112080244: the pane stayed up over a dead shell, which a person met as the
+    /// terminal freezing). What follows is the `×` path's: a fresh shell for a pane with no agent chosen,
+    /// the `Invoke Agent` button for one with an agent chosen, and either way `+` opens another.
     pub fn pump(&mut self) {
         let mut buffer = Vec::new();
         let now = Instant::now();
-        for tab in &mut self.open {
+        let mut left = Vec::new();
+        for (index, tab) in self.open.iter_mut().enumerate() {
             let Some(session) = tab.session.as_mut() else {
                 continue;
             };
+            // **Asked before the drain**, so everything the shell wrote before it went is already in the
+            // pipe when the answer is yes, and the drain below reads all of it.
+            let exited = session.has_exited();
             buffer.clear();
             let outcome = session.drain(&mut buffer).and_then(|_| {
                 if !buffer.is_empty() {
@@ -510,6 +551,16 @@ impl Terminal {
                 && let Some(launch) = tab.launch.as_mut()
             {
                 launch.last_output = Some(now);
+            }
+            // **A shell that left is handled before a failed write to it is**: the answer to a question it
+            // asked on its way out has nowhere to go, and that error would otherwise hold the tab for ever.
+            if exited {
+                if tab.typed {
+                    left.push(index);
+                } else {
+                    tab.ended_on_its_own();
+                }
+                continue;
             }
             if let Err(why) = outcome {
                 if tab.launch.take().is_some()
@@ -536,6 +587,9 @@ impl Terminal {
                     tab.problem = Some(why);
                 }
             }
+        }
+        for index in left.into_iter().rev() {
+            self.remove_tab(index);
         }
     }
 

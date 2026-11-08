@@ -173,6 +173,22 @@ impl TerminalSession {
         self.pty.child().id()
     }
 
+    /// **Has the shell left?** Asked without collecting it: the child stays this process's zombie until
+    /// the session is dropped (`child_has_left`), so the pid is still the shell's and never a stranger's.
+    ///
+    /// The pane asks **before** it drains, so everything the shell wrote before it went is already in the
+    /// pipe when the answer is yes, and one drain reads it all.
+    #[cfg(unix)]
+    pub fn has_exited(&self) -> bool {
+        i32::try_from(self.pty.child().id()).ok().and_then(rustix::process::Pid::from_raw).is_some_and(child_has_left)
+    }
+
+    /// No session exists on this target (`spawn_with` refuses), so none has left.
+    #[cfg(not(unix))]
+    pub fn has_exited(&self) -> bool {
+        false
+    }
+
     /// Keystrokes to the child.
     ///
     /// A full pipe is **not** an error worth reporting: the child is not reading yet (a `cargo build`
@@ -289,24 +305,31 @@ impl Drop for TerminalSession {
     }
 }
 
+/// **Has `pid` left?** The look is `waitid` with `NOWAIT`: it says a child has exited **without reaping
+/// it**, so the pid stays this process's zombie until `Pty`'s `wait` collects it, and can never be another
+/// process's in between (a signal to a reaped and reused pid would hit a stranger).
+#[cfg(unix)]
+fn child_has_left(pid: rustix::process::Pid) -> bool {
+    use rustix::process::{WaitId, WaitIdOptions, waitid};
+    match waitid(WaitId::Pid(pid), WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT) {
+        // It left, and is waiting to be collected.
+        Ok(Some(_)) => true,
+        // Still running.
+        Ok(None) => false,
+        // Not this process's child any more (already collected): nothing is left to wait for.
+        Err(_) => true,
+    }
+}
+
 /// **Hangs up on `pid`, and kills it if it is still there after `grace`.** `true` when it had to.
-///
-/// The look is `waitid` with `NOWAIT`: it says a child has exited **without reaping it**, so the pid
-/// stays this process's zombie until `Pty`'s `wait` collects it, and can never be another process's
-/// in between (a signal to a reaped and reused pid would hit a stranger).
 #[cfg(unix)]
 fn hang_up_then_kill(pid: rustix::process::Pid, grace: std::time::Duration) -> bool {
-    use rustix::process::{Signal, WaitId, WaitIdOptions, kill_process, waitid};
+    use rustix::process::{Signal, kill_process};
     let _ = kill_process(pid, Signal::HUP);
     let deadline = std::time::Instant::now() + grace;
     loop {
-        match waitid(WaitId::Pid(pid), WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT) {
-            // It left, and is waiting to be collected.
-            Ok(Some(_)) => return false,
-            // Still running.
-            Ok(None) => {}
-            // Not this process's child any more (already collected): nothing is left to wait for.
-            Err(_) => return false,
+        if child_has_left(pid) {
+            return false;
         }
         if std::time::Instant::now() >= deadline {
             break;

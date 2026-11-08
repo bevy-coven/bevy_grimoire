@@ -214,3 +214,88 @@ fn select_all_takes_every_drawn_line_and_no_blank_tail() {
     screen.select_all();
     assert_eq!(screen.selection_text().as_deref(), Some("one\ntwo\nthree"));
 }
+
+/// **Pump until `done`, or give up.** The shell answers asynchronously, so every assertion about what a tab does when its
+/// shell leaves is "it eventually did", never "within one pump".
+fn pump_until(terminal: &mut super::Terminal, done: impl Fn(&super::Terminal) -> bool) -> bool {
+    let deadline = Instant::now() + PATIENCE;
+    while Instant::now() < deadline {
+        terminal.pump();
+        if done(terminal) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
+/// **A session knows its shell has left** (feedback-1794112080244): the pane has nothing else to tell it. A shell that
+/// was told `exit` is a zombie the session holds, and its master reads end-of-file without ever saying why.
+#[test]
+fn a_session_knows_when_its_shell_has_left() {
+    let _guard = THE_SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    use_posix_shell();
+
+    let mut session = TerminalSession::spawn(80, 24, Path::new("/tmp"), &[]).expect("a shell starts");
+    assert!(!session.has_exited(), "a shell that has just started has not left");
+    session.write(b"exit\n").expect("the shell takes input");
+    let deadline = Instant::now() + PATIENCE;
+    while !session.has_exited() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(session.has_exited(), "the shell was told `exit` and the session never noticed it had left");
+}
+
+/// **A shell told to leave takes its tab with it** (feedback-1794112080244: *"If I exit omp, then type "exit" from the
+/// shell, it freezes. We should close this terminal, then allow the user to create another one"*). The tab stayed, over a
+/// shell that was gone, and looked frozen.
+#[test]
+fn a_shell_told_to_exit_takes_its_tab_with_it() {
+    let _guard = THE_SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    use_posix_shell();
+
+    let mut terminal = super::Terminal::default();
+    terminal.spawn(80, 24, Path::new("/tmp"));
+    assert_eq!(terminal.len(), 1);
+    terminal.write(b"exit\n");
+    assert!(
+        pump_until(&mut terminal, |t| t.is_empty()),
+        "the shell was told `exit`, and its tab is still there ({} open)",
+        terminal.len()
+    );
+}
+
+/// **Another tab's shell leaving never moves the one being drawn**: tab 0 exits while tab 1 is the one the pane shows, and
+/// the pane is still showing that same shell afterwards.
+#[test]
+fn a_tab_that_leaves_behind_the_drawn_one_keeps_the_drawn_one_drawn() {
+    let _guard = THE_SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    use_posix_shell();
+
+    let mut terminal = super::Terminal::default();
+    terminal.spawn(80, 24, Path::new("/tmp"));
+    terminal.spawn(80, 24, Path::new("/tmp"));
+    let shown = terminal.tab().and_then(|tab| tab.session.as_ref().map(TerminalSession::pid)).expect("the second tab has a shell");
+    terminal.select(0);
+    terminal.write(b"exit\n");
+    terminal.select(1);
+    assert!(pump_until(&mut terminal, |t| t.len() == 1), "the first tab's shell was told `exit` and its tab stayed");
+    assert_eq!(terminal.active(), 0, "the drawn tab is now the only one");
+    assert_eq!(terminal.tab().and_then(|tab| tab.session.as_ref().map(TerminalSession::pid)), Some(shown), "and it is the same shell that was drawn");
+}
+
+/// **A shell that leaves before anyone typed to it keeps its tab and says so**: closing it would open a fresh shell the next
+/// frame, and a shell that cannot stay up (a bad `terminal_shell`) would be opened for ever.
+#[test]
+fn a_shell_that_cannot_stay_up_keeps_its_tab_and_says_why() {
+    let mut terminal = super::Terminal::default();
+    terminal.set_shell(Some(super::ShellChoice { program: "/bin/sh".to_owned(), args: vec!["-c".to_owned(), "exit 3".to_owned()] }));
+    terminal.spawn(80, 24, Path::new("/tmp"));
+    assert!(
+        pump_until(&mut terminal, |t| t.tab().is_some_and(|tab| tab.problem().is_some())),
+        "a shell that ended by itself left no word on its tab"
+    );
+    assert_eq!(terminal.len(), 1, "and its tab is still there to close");
+    let said = terminal.tab().and_then(|tab| tab.problem()).unwrap_or_default().to_owned();
+    assert!(said.contains("ended before anything was typed"), "{said}");
+}
