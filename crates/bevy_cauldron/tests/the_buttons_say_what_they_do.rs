@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use bevy::ui_widgets::{Activate, ValueChange};
+use bevy::ui_widgets::Activate;
 use bevy_cauldron::confirm::{Asked, Confirm};
 use bevy_cauldron::launcher::LauncherPlugin;
 use bevy_cauldron::new_project::{NameField, NewProjectForm};
@@ -88,12 +88,11 @@ fn return_in_the_new_project_name_field_creates_the_project() {
 
     // The form is up with its Name field holding the keyboard; put it somewhere that is ours, and type a name.
     app.world_mut().resource_mut::<NewProjectForm>().0.location = scratch.to_string_lossy().into_owned();
-    let field = app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).unwrap_or_else(|e| panic!("{e}"));
-    app.world_mut().commands().trigger(ValueChange::<String> { source: field, value: "harbour".to_owned(), is_final: false });
-    settle(&mut app, 3);
+    assert!(app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).is_ok(), "the form has its Name field");
+    bevy_gooey::testing::type_text(&mut app, "harbour");
     assert!(!scratch.join("harbour").exists(), "typing a name creates nothing by itself");
 
-    tap(&mut app, Key::Enter, KeyCode::Enter);
+    bevy_gooey::testing::press(&mut app, KeyCode::Enter);
     settle(&mut app, 4);
     assert!(scratch.join("harbour").is_dir(), "Return in the Name field pressed Create: the project's folder is made");
     assert!(app.world().get_resource::<NewProjectForm>().is_none(), "and the form is gone");

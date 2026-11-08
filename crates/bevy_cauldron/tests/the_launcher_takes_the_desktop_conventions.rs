@@ -133,14 +133,15 @@ fn a_double_press_on_a_card_opens_the_project() {
     let (mut app, paths) = on_the_launcher("double", &scratch, &["alpha"]);
     let card = card_of(&mut app, &paths[0]);
     let at = centre_of(&app, card);
-    let before = app.world().resource::<PointedAt>().root.clone();
+    let pointed = |app: &App| app.world().get_resource::<PointedAt>().map(|at| at.root.clone());
+    let before = pointed(&app);
     click(&mut app, at);
     settle(&mut app, 2);
-    assert_eq!(app.world().resource::<PointedAt>().root, before, "one press opens nothing");
+    assert_eq!(pointed(&app), before, "one press opens nothing");
     assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Launcher, "one press chooses the card and opens nothing");
     click(&mut app, at);
     settle(&mut app, 4);
-    assert_eq!(app.world().resource::<PointedAt>().root, paths[0], "the second press of a double press opens that folder");
+    assert_eq!(pointed(&app), Some(paths[0].clone()), "the second press of a double press opens that folder");
 }
 
 #[test]
