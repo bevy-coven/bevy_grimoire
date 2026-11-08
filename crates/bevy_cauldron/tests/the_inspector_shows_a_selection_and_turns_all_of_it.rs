@@ -110,6 +110,14 @@ fn two_pieces_with_different_turns_read_mixed_and_typing_90_turns_both_in_one_un
     assert_eq!(app.world().resource::<EditorState>().undo_depth(), before + 1, "and it is one undo step");
     assert!(!mixed_paths(&mut app).iter().any(|p| p == "yaw"), "the pieces now agree, so the facing is no longer mixed");
     assert!(!row_reads_mixed(&mut app, "yaw"), "and the row reads 90 again");
+
+    // One undo is the whole edit: each piece goes back to the turn it had, not both to one.
+    bevy_cauldron::editor::undo_for_test(app.world_mut());
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!((yaw_of(&app, &a), yaw_of(&app, &b)), (0.0, 30.0), "one undo put both pieces back to the turns they had");
+    assert_eq!(app.world().resource::<EditorState>().undo_depth(), before, "and took only the edit");
 }
 
 #[test]
@@ -120,6 +128,13 @@ fn pieces_tipped_differently_keep_their_own_tips_and_the_edit_is_still_one_undo_
     assert_eq!((yaw_of(&app, &a), yaw_of(&app, &b)), (90.0, 90.0), "both are turned");
     assert_eq!((tip_of(&app, &a), tip_of(&app, &b)), ((0, 0), (1, 0)), "a facing never changes how a piece is tipped");
     assert_eq!(app.world().resource::<EditorState>().undo_depth(), before + 1, "two calls, one undo step");
+
+    bevy_cauldron::editor::undo_for_test(app.world_mut());
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!((yaw_of(&app, &a), yaw_of(&app, &b)), (0.0, 30.0), "one undo put both pieces back to the turns they had");
+    assert_eq!((tip_of(&app, &a), tip_of(&app, &b)), ((0, 0), (1, 0)), "and the tips as they were");
 }
 
 #[test]
