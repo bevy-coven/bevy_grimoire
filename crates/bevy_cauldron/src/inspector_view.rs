@@ -32,8 +32,8 @@
 //! # The panel
 //!
 //! [`spawn_the_block`] puts a heading and gooey's `inspector(...)` over the view at the top of the Map
-//! door's INSPECTOR panel (the scroll list `MapControlsPane`), and the block is drawn only while
-//! something is selected.
+//! door's INSPECTOR panel (the scroll list `MapControlsPane`) while something is selected, and takes it
+//! out again when nothing is.
 
 use bevy::prelude::*;
 use bevy::reflect::Reflect;
@@ -103,10 +103,7 @@ impl Plugin for InspectorPlugin {
         app.register_type::<PoseView>()
             .init_resource::<PoseInspector>()
             .add_systems(OnEnter(Screen::Editor), spawn_the_view.after(crate::chrome::FrameSystems))
-            .add_systems(
-                Update,
-                (spawn_the_block, mirror_the_selection).chain().run_if(in_state(Screen::Editor)),
-            )
+            .add_systems(Update, mirror_the_selection.run_if(in_state(Screen::Editor)))
             .add_observer(pose_edits_are_operations);
     }
 }
@@ -118,29 +115,28 @@ fn spawn_the_view(mut commands: Commands, mut slot: ResMut<PoseInspector>) {
     slot.0 = Some(entity);
 }
 
-/// **The block goes into the Map door's INSPECTOR panel** the frame the panel appears, first among the
-/// panel's rows so it is on screen without scrolling.
-fn spawn_the_block(mut commands: Commands, panes: Query<Entity, Added<MapControlsPane>>, slot: Res<PoseInspector>) {
-    let Some(view) = slot.0 else { return };
-    for pane in &panes {
-        let block = commands
-            .spawn((
-                PoseBlock,
-                Name::new("pose block"),
-                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), display: Display::None, ..default() },
-            ))
-            .with_children(|block| {
-                crate::chrome::list_heading(block, "POSE");
-                block.spawn((
-                    PoseWidget,
-                    Name::new("pose inspector"),
-                    bevy_gooey::inspector(bevy_gooey::InspectTarget::component::<PoseView>(view)),
-                    bevy_gooey::InspectMixed::default(),
-                ));
-            })
-            .id();
-        commands.entity(pane).insert_children(0, &[block]);
-    }
+/// **The block goes into the Map door's INSPECTOR panel while something is selected**, first among the
+/// panel's rows so it is on screen without scrolling, and goes out again when nothing is. It is not kept
+/// hidden: a hidden gooey inspector is still a set of entities (its number fields carry `TextHint`), and
+/// the screens that find "the one search box" by that component would find the wrong one.
+fn spawn_the_block(commands: &mut Commands, pane: Entity, view: Entity) {
+    let block = commands
+        .spawn((
+            PoseBlock,
+            Name::new("pose block"),
+            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+        ))
+        .with_children(|block| {
+            crate::chrome::list_heading(block, "POSE");
+            block.spawn((
+                PoseWidget,
+                Name::new("pose inspector"),
+                bevy_gooey::inspector(bevy_gooey::InspectTarget::component::<PoseView>(view)),
+                bevy_gooey::InspectMixed::default(),
+            ));
+        })
+        .id();
+    commands.entity(pane).insert_children(0, &[block]);
 }
 
 /// **The selected pieces, primary first**: the selection when it holds the lock's piece, else the lock's
@@ -158,23 +154,28 @@ fn selected_ids(lock: &TargetLock, selection: Option<&Selection>, open: &OpenMap
 /// **The fields follow the selection.** The locked placement (else the only one selected, else nothing)
 /// is what the inspector shows; the view is written only when it differs, so a settled selection costs
 /// a comparison. With several pieces selected, the fields on which they differ are named to gooey as
-/// mixed, and the block is drawn only while something is selected.
+/// mixed, and the block exists only while something is selected.
 fn mirror_the_selection(
     open: Option<Res<OpenMap>>,
     lock: Option<Res<TargetLock>>,
     selection: Option<Res<Selection>>,
+    slot: Res<PoseInspector>,
     mut views: Query<&mut PoseView>,
-    mut blocks: Query<&mut Node, With<PoseBlock>>,
+    blocks: Query<Entity, With<PoseBlock>>,
+    panes: Query<Entity, With<MapControlsPane>>,
     mut widgets: Query<(Entity, Option<&bevy_gooey::InspectMixed>), With<PoseWidget>>,
     mut commands: Commands,
 ) {
     let (Some(open), Some(lock)) = (open, lock) else { return };
     let ids = selected_ids(&lock, selection.as_deref(), &open);
-    let display = if ids.is_empty() { Display::None } else { Display::Flex };
-    for mut node in &mut blocks {
-        if node.display != display {
-            node.display = display;
+    if ids.is_empty() {
+        for block in &blocks {
+            commands.entity(block).despawn();
         }
+    } else if blocks.is_empty()
+        && let (Some(view), Ok(pane)) = (slot.0, panes.single())
+    {
+        spawn_the_block(&mut commands, pane, view);
     }
     let Some(primary) = ids.first().and_then(|id| open.map.placements.iter().find(|p| p.id == *id)) else { return };
     let want = PoseView::of(primary);

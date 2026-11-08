@@ -150,17 +150,19 @@ fn pieces_tipped_differently_keep_their_own_tips_and_the_edit_is_still_one_undo_
 }
 
 #[test]
-fn one_piece_is_never_mixed_and_the_block_is_drawn_only_while_something_is_selected() {
+fn one_piece_is_never_mixed_and_the_block_exists_only_while_something_is_selected() {
     let root = fixtures::Fixture::new("inspector_block").descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
     }
-    let shown = |app: &mut App| {
+    // The block is entities, not a hidden node: an unselected editor has no inspector rows at all, so nothing
+    // else that looks for "the" text box by its components can find one of the inspector's number fields.
+    let present = |app: &mut App| {
         let world = app.world_mut();
-        world.query_filtered::<&Node, With<PoseBlock>>().iter(world).map(|n| n.display != Display::None).collect::<Vec<bool>>()
+        (world.query_filtered::<(), With<PoseBlock>>().iter(world).count(), world.query::<&InspectRow>().iter(world).count())
     };
-    assert_eq!(shown(&mut app), vec![false], "nothing is selected, so the block is not drawn");
+    assert_eq!(present(&mut app), (0, 0), "nothing is selected, so there is no block and no row");
 
     place_for_test(app.world_mut(), "site/wall", (1.5, 0.5));
     app.update();
@@ -169,7 +171,9 @@ fn one_piece_is_never_mixed_and_the_block_is_drawn_only_while_something_is_selec
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(shown(&mut app), vec![true], "one piece is selected, so the block is drawn");
+    let (blocks, rows) = present(&mut app);
+    assert_eq!(blocks, 1, "one piece is selected, so the block is there");
+    assert!(rows >= 4, "with its rows (x, z, yaw, lift): {rows}");
     assert!(mixed_paths(&mut app).is_empty(), "one piece differs from nothing");
 }
 
