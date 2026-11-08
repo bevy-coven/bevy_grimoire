@@ -1,0 +1,70 @@
+{
+  "name": "toolbar_slide",
+  "fps": 20,
+  "scale": 1,
+  "width": 720,
+  "crop": [
+    0,
+    20,
+    720,
+    150
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "key": "Escape"
+    },
+    {
+      "at": 0.6,
+      "caption": "person: clicks Move; the tool light slides over to it"
+    },
+    {
+      "at": 0.9,
+      "click_label": "Move"
+    },
+    {
+      "at": 2.0,
+      "caption": "Erase: the light slides again"
+    },
+    {
+      "at": 2.2,
+      "click_label": "Erase"
+    },
+    {
+      "at": 3.3,
+      "caption": "Clone"
+    },
+    {
+      "at": 3.5,
+      "click_label": "Clone"
+    },
+    {
+      "at": 4.6,
+      "caption": "and back to Place"
+    },
+    {
+      "at": 4.8,
+      "click_label": "Place"
+    },
+    {
+      "at": 5.8,
+      "cursor": [
+        700,
+        610
+      ]
+    }
+  ]
+}
