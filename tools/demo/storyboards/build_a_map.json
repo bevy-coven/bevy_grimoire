@@ -5,11 +5,17 @@
   "width": 760,
   "crop": [
     450,
-    200,
-    830,
+    170,
+    1185,
     690
   ],
-  "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]}, 
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
     {
       "mcp": "grimoire_frame_view",
       "args": {
@@ -44,7 +50,12 @@
     {
       "at": 0.5,
       "click_label": "filter",
-      "within": [840, 150, 1280, 230]
+      "within": [
+        840,
+        150,
+        1280,
+        230
+      ]
     },
     {
       "at": 0.7,
@@ -60,7 +71,12 @@
     {
       "at": 1.55,
       "click_label": "Sofa",
-      "within": [840, 215, 1280, 330]
+      "within": [
+        840,
+        215,
+        1280,
+        330
+      ]
     },
     {
       "at": 2.05,
