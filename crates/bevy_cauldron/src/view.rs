@@ -94,6 +94,26 @@ fn wheel_lines(scroll: &AccumulatedMouseScroll, per_line: MouseScrollPixelsPerLi
         MouseScrollUnit::Pixel => scroll.delta.y / per_line,
     }
 }
+
+/// **Is a turn of the wheel the map's?** — only when the pointer is where the map is drawn.
+///
+/// `viewport` is the rect the map camera renders into ([`Camera::logical_viewport_rect`], the frame's
+/// hole), and `pointer` is in the same surface pixels ([`Pointer`]). A wheel anywhere else belongs to what
+/// is there: the terminal's scrollback, a menu, the status band. [`OverUi`] cannot say so for those, because
+/// it only knows the nodes that carry `Hovered`, and the terminal pane, the menu bar and the status band are
+/// not among them — measured on the installed 0.5.0: a wheel over the terminal, its bar, the status band and
+/// the menu bar each zoomed the map, while one over the inspector did not (feedback-1794147411369).
+///
+/// **No pointer, or no viewport yet, is not a refusal.** There is nothing to say the wheel is somewhere
+/// else, so it stays the map's, which is what an injected wheel with no cursor has always done and what a
+/// frame before the first layout must not break: [`over_ui`] answers the same way for a missing cursor.
+fn wheel_is_the_maps(pointer: Option<Vec2>, viewport: Option<Rect>) -> bool {
+    match (pointer, viewport) {
+        (Some(at), Some(rect)) => rect.contains(at),
+        _ => true,
+    }
+}
+
 /// **Viewport heights a second a held pan key crosses**, not metres a second.
 ///
 /// It was an absolute 16.0 m/s matched to the game's `src/camera.rs`, on the argument that the same
@@ -398,8 +418,13 @@ pub(crate) fn drive(
     // both want it, and reading the raw wheel means scrolling the list also zooms the world out from
     // under it. Every pickable widget carries `Hovered`; readouts are `Pickable::IGNORE` and have none.
     over_ui: Res<OverUi>,
+    // **The wheel belongs to the map only where the map is drawn.** `over_ui` knows the panels that carry
+    // `Hovered`; the menu bar, the status band and the terminal pane are not in that list, and a wheel over
+    // them zoomed the map from under a person scrolling their shell (feedback-1794147411369). The camera's
+    // viewport is the region the map is drawn into — the same rect `cursor_ray` asks of a click.
+    pointer: Res<Pointer>,
     mut rig: ResMut<Rig>,
-    camera: Option<Single<(&mut Transform, &mut Projection), With<MainCamera>>>,
+    camera: Option<Single<(&mut Transform, &mut Projection, &Camera), With<MainCamera>>>,
     // The Maps door has one; the other doors have none and keep the plain ceiling.
     open: Option<Res<crate::project::OpenMap>>,
 ) {
@@ -414,7 +439,7 @@ pub(crate) fn drive(
         _ => 1.0,
     };
     let lines = wheel_lines(&scroll, *per_line);
-    if lines != 0.0 && !over_ui {
+    if lines != 0.0 && !over_ui && wheel_is_the_maps(pointer.0, camera.2.logical_viewport_rect()) {
         // **A ratio, so a detent is the same gesture at every scale.** Subtracting metres put one
         // wheel stop between the floor and 2 m.
         rig.height = (rig.height * ZOOM_STEP.powf(-lines))
@@ -460,7 +485,7 @@ pub(crate) fn drive(
         rig.focus += screen * PAN_SPEED * height * dt;
     }
 
-    let (mut tf, mut proj) = camera.into_inner();
+    let (mut tf, mut proj, _) = camera.into_inner();
     *tf = Transform::from_translation(rig.focus + iso).looking_at(rig.focus, Vec3::Y);
     *proj = map_projection(rig.height, &tf, open.as_deref());
 }
@@ -1059,5 +1084,30 @@ mod tests {
             super::frame_box(&turning, centre, size, 1.4, 1000.0),
             super::frame_box(&settled, centre, size, 1.4, 1000.0),
         );
+    }
+
+    /// **A wheel is the map's only where the map is drawn** (feedback-1794147411369, oracle `other:key-routing`).
+    /// A pointer inside the viewport rect keeps it, every point of the chrome around that rect refuses it, and
+    /// the edges follow `Rect::contains` (the same test `cursor_ray` makes of a click).
+    #[test]
+    fn the_wheel_is_the_maps_only_inside_the_viewport() {
+        let viewport = Some(Rect::from_corners(Vec2::new(330.0, 150.0), Vec2::new(1075.0, 435.0)));
+        assert!(super::wheel_is_the_maps(Some(Vec2::new(700.0, 300.0)), viewport), "inside");
+        // The terminal below, the status band, the menu bar above, and the dock beside it.
+        for outside in [Vec2::new(700.0, 500.0), Vec2::new(700.0, 690.0), Vec2::new(700.0, 15.0), Vec2::new(100.0, 300.0)] {
+            assert!(!super::wheel_is_the_maps(Some(outside), viewport), "{outside:?} is chrome, not the map");
+        }
+        assert!(!super::wheel_is_the_maps(Some(Vec2::new(700.0, 436.0)), viewport), "one pixel past the bottom edge");
+    }
+
+    /// **Nothing to say the wheel is elsewhere keeps it the map's**: an injected wheel with no cursor, and the
+    /// frames before the camera has a viewport, behave as they always did ([`super::over_ui`] answers a missing
+    /// cursor the same way).
+    #[test]
+    fn a_wheel_with_no_pointer_or_no_viewport_stays_the_maps() {
+        let viewport = Some(Rect::from_corners(Vec2::ZERO, Vec2::splat(100.0)));
+        assert!(super::wheel_is_the_maps(None, viewport), "no pointer");
+        assert!(super::wheel_is_the_maps(Some(Vec2::new(900.0, 900.0)), None), "no viewport yet");
+        assert!(super::wheel_is_the_maps(None, None));
     }
 }
