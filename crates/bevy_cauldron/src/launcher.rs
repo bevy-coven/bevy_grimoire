@@ -23,7 +23,7 @@
 //! # What is built from what is missing in `bevy_gooey`
 //!
 //! A card, the accent button and the vertical navigation are local until bevy_gooey#41, #40 and #42 land: a card is a gooey
-//! button's skeleton with an image and two quiet lines, the accent button is [`crate::ui::AccentButton`], and the navigation is
+//! button's skeleton with an image and two quiet lines, the accent button is [`crate::ui::submit_button`], and the navigation is
 //! three buttons, the chosen one marked [`bevy::ui::Selected`].
 
 use std::path::{Path, PathBuf};
@@ -43,7 +43,7 @@ use bevy_gooey::{
 use crate::picker::{PickFor, PickRequest, Picked};
 use crate::recent::{self, Listed, Recent, RecentProjects};
 use crate::screen::Screen;
-use crate::ui::accent_button;
+use crate::ui::submit_button;
 
 
 /// The binary's name, as the copied command line spells it.
@@ -770,7 +770,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
         header.spawn(heading("Projects"));
         header.spawn(Node { flex_grow: 1.0, ..default() });
         // The one accent button of the page: New project, or, with nothing else to start from, nothing.
-        header.spawn((accent_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
+        header.spawn((submit_button("New project"), observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true)));
         header.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
     });
     body.spawn((
@@ -827,13 +827,13 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
         card.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|actions| {
             let example = launcher.example.is_some();
             if example {
-                actions.spawn((accent_button("Open the example"), observe(open_the_example)));
+                actions.spawn((submit_button("Open the example"), observe(open_the_example)));
             }
             let new = observe(|_: On<Activate>, mut launcher: ResMut<Launcher>| launcher.new_project_asked = true);
             if example {
                 actions.spawn((button("New project"), new));
             } else {
-                actions.spawn((accent_button("New project"), new));
+                actions.spawn((submit_button("New project"), new));
             }
             actions.spawn((button("Open folder…"), observe(|_: On<Activate>, mut out: MessageWriter<PickRequest>| { out.write(PickRequest(PickFor::OpenFolder)); })));
         });

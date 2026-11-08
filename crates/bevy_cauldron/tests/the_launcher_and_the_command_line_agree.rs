@@ -105,7 +105,9 @@ fn copy_command_line_shows_the_line_for_the_row_even_when_the_clipboard_cannot_t
     let item = {
         let world = app.world_mut();
         let card = world.query_filtered::<Entity, With<bevy_cauldron::launcher::ProjectCard>>().single(world).expect("a recent project has a card");
-        let menu = world.query::<&bevy_gooey::ContextMenu>().iter(world).next().map(|m| m.0).expect("a card names its menu");
+        // **The card's own menu, not the first menu in the world**: the terminal pane has a context menu too, and which of the two a
+        // query yields first depends on archetype order, which moved with the gooey pin (UI-R03..R05, pass 3).
+        let menu = world.get::<bevy_gooey::ContextMenu>(card).map(|m| m.0).expect("a card names its menu");
         let mut items = world.query::<(Entity, &Children)>();
         let mut texts = world.query::<(&Role, &Text)>();
         let item = items

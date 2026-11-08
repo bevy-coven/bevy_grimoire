@@ -1,0 +1,115 @@
+//! **A button says what it does** (UI-R03, #333): the screen's main action is gooey's `ButtonVariant::Submit` (the editor's own
+//! `AccentButton` and its repaint are gone), the toolbar's icon buttons are `Ghost`, a destructive confirmation's agreeing
+//! answer is `Danger` and an ordinary one is not, and a dialog with a text field names the button Return presses.
+
+use std::path::PathBuf;
+
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::prelude::*;
+use bevy::ui_widgets::{Activate, ValueChange};
+use bevy_cauldron::confirm::{Asked, Confirm};
+use bevy_cauldron::launcher::LauncherPlugin;
+use bevy_cauldron::new_project::{NameField, NewProjectForm};
+use bevy_cauldron::screen::Screen;
+use bevy_cauldron::toolbar::ToolbarCommand;
+use bevy_gooey::{ButtonVariant, Role};
+
+use crate::fixtures;
+
+fn editor(tag: &str) -> App {
+    let root = fixtures::Fixture::new(&format!("buttons_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..4 {
+        app.update();
+    }
+    app
+}
+
+fn settle(app: &mut App, frames: usize) {
+    for _ in 0..frames {
+        app.update();
+    }
+}
+
+/// A keystroke the way a keyboard sends it: a press and a release, then a frame.
+fn tap(app: &mut App, logical: Key, code: KeyCode) {
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        app.world_mut().write_message(KeyboardInput { key_code: code, logical_key: logical.clone(), state, text: None, repeat: false, window: Entity::PLACEHOLDER });
+    }
+    app.update();
+}
+
+/// The button that says `text`.
+fn button(app: &mut App, text: &str) -> Entity {
+    let world = app.world_mut();
+    let mut q = world.query::<(Entity, &Children)>();
+    let mut t = world.query::<(&Role, &Text)>();
+    q.iter(world)
+        .find_map(|(e, kids)| kids.iter().find_map(|k| t.get(world, k).ok().filter(|(r, t)| **r == Role::ButtonText && t.0 == text).map(|_| e)))
+        .unwrap_or_else(|| panic!("no button says `{text}`"))
+}
+
+fn variant_of(app: &App, entity: Entity) -> Option<ButtonVariant> {
+    app.world().get::<ButtonVariant>(entity).copied()
+}
+
+#[test]
+fn return_in_the_new_project_name_field_creates_the_project() {
+    let scratch: PathBuf = std::env::temp_dir().join(format!("grimoire_default_button_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{}: {e}", scratch.display()));
+
+    let mut app = editor("create");
+    app.add_plugins(LauncherPlugin);
+    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
+    settle(&mut app, 4);
+    let open = button(&mut app, "New project");
+    assert_eq!(variant_of(&app, open), Some(ButtonVariant::Submit), "the page's main action is gooey's Submit");
+    app.world_mut().commands().trigger(Activate { entity: open });
+    settle(&mut app, 4);
+
+    // The form is up with its Name field holding the keyboard; put it somewhere that is ours, and type a name.
+    app.world_mut().resource_mut::<NewProjectForm>().0.location = scratch.to_string_lossy().into_owned();
+    let field = app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().commands().trigger(ValueChange::<String> { source: field, value: "harbour".to_owned(), is_final: false });
+    settle(&mut app, 3);
+    assert!(!scratch.join("harbour").exists(), "typing a name creates nothing by itself");
+
+    tap(&mut app, Key::Enter, KeyCode::Enter);
+    settle(&mut app, 4);
+    assert!(scratch.join("harbour").is_dir(), "Return in the Name field pressed Create: the project's folder is made");
+    assert!(app.world().get_resource::<NewProjectForm>().is_none(), "and the form is gone");
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+#[test]
+fn every_toolbar_icon_button_is_ghost() {
+    let mut app = editor("toolbar");
+    let found: Vec<(&'static str, Option<ButtonVariant>)> = {
+        let world = app.world_mut();
+        world.query::<(&ToolbarCommand, Option<&ButtonVariant>)>().iter(world).map(|(command, variant)| (command.0, variant.copied())).collect()
+    };
+    assert!(!found.is_empty(), "the editor's toolbar has command buttons");
+    let others: Vec<_> = found.iter().filter(|(_, variant)| *variant != Some(ButtonVariant::Ghost)).collect();
+    assert!(others.is_empty(), "a toolbar button is a Ghost, no fill at rest: {others:?}");
+}
+
+#[test]
+fn a_destructive_answer_is_danger_and_an_ordinary_one_is_not() {
+    let mut app = editor("danger");
+    app.world_mut().resource_mut::<Confirm>().ask(Asked::DeleteEntry, "Delete the map `harbour`?", "The map file is removed.", "Delete map `harbour`", "Keep it");
+    settle(&mut app, 3);
+    let yes = button(&mut app, "Delete map `harbour`");
+    assert_eq!(variant_of(&app, yes), Some(ButtonVariant::Danger), "deleting a map is the danger colour");
+    let no = button(&mut app, "Keep it");
+    assert_eq!(variant_of(&app, no), None, "the safe answer is a plain button");
+
+    // Answer it, then ask an ordinary question: quitting keeps everything saved.
+    tap(&mut app, Key::Character("n".into()), KeyCode::KeyN);
+    settle(&mut app, 3);
+    app.world_mut().resource_mut::<Confirm>().ask(Asked::QuitApp, "Quit Cauldron?", "Anything already saved stays saved.", "Quit", "Stay");
+    settle(&mut app, 3);
+    let quit = button(&mut app, "Quit");
+    assert_eq!(variant_of(&app, quit), None, "an ordinary answer is not red");
+}
