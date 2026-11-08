@@ -352,14 +352,20 @@ fn pump_the_terminal(
     pane: Res<TerminalPane>,
     project: Option<Res<crate::project::Project>>,
     view: Option<Res<crate::settings::SettingsView>>,
+    root: Option<Res<crate::project_assets::ProjectRoot>>,
 ) {
     let raised = panes.iter().any(|node| node.display != Display::None);
-    // **Nor before the open project's own settings have been looked at** (#339). The settings are first taken in the
-    // frame the door opens, when `EditorSettings` is the user's layer alone: `sync_settings` reads the project's file
-    // only once the project exists, and the agent the project chose arrives a frame after the first shell would have
-    // opened. A shell already open is not the empty pane that invites the agent. An app that does not sync settings has
-    // no layer to wait for.
-    let project_layer_in = project.is_none() || view.as_deref().is_none_or(|view| view.project_looked());
+    // **Nor before the open project's own settings have been looked at** (#339). The door's pane is drawn two frames
+    // before its `Project` exists (the root is pointed at before the first frame, the project is built in the editor's
+    // first), and the settings are taken in that gap with `EditorSettings` the user's layer alone: a shell started
+    // there is a plain one for a project that chooses an agent, and a shell already open is not the empty pane that
+    // invites the agent. So: a project on its way (a root, no `Project` yet) is waited for, and so is the look at its
+    // file. An app with no root, or that does not sync settings, has no layer to wait for.
+    let project_layer_in = if project.is_some() {
+        view.as_deref().is_none_or(|view| view.project_looked())
+    } else {
+        root.as_deref().is_none_or(|root| root.current().is_none())
+    };
 
     // **Not before the settings are read**, or a person who chose an agent gets a plain first shell.
     if raised && terminal.settings_taken() && project_layer_in {
