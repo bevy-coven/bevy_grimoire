@@ -218,6 +218,8 @@ fn tap(app: &mut App, key_code: KeyCode, logical_key: Key) {
 #[test]
 fn enter_starts_the_agent_for_a_person_at_the_keyboard_and_only_when_the_terminal_has_the_keys() {
     let mut app = editor_with_an_agent("invoke_agent_enter");
+    // Keys arrive on a window, which the headless editor has not spawned.
+    app.world_mut().spawn((Window { resolution: bevy::window::WindowResolution::new(1280, 720), ..default() }, PrimaryWindow));
     until(&mut app, "the Invoke Agent button was never drawn", |app| the_button(app).is_some());
 
     // Keys that are not the terminal's start nothing, whatever they are.
