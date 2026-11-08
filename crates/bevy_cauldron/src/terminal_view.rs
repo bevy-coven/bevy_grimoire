@@ -350,18 +350,11 @@ fn pump_the_terminal(
     mut terminal: ResMut<Terminal>,
     panes: Query<&Node, With<crate::terminal_pane::TerminalPaneRoot>>,
     pane: Res<TerminalPane>,
-    project: Option<Res<crate::project::Project>>,
-    view: Option<Res<crate::settings::SettingsView>>,
 ) {
     let raised = panes.iter().any(|node| node.display != Display::None);
-    // **Nor before the open project's own settings are in** (#339). `EditorSettings` is the user's layer alone until the
-    // project's file has been looked at, and the settings are taken at the first frame, before any project is open. A
-    // shell started in that gap is a plain first shell for a project that chooses an agent, and an open shell is not the
-    // empty pane that invites the agent. With no project, or no settings sync, there is no layer to wait for.
-    let project_layer_in = project.is_none() || view.as_deref().is_none_or(|view| !view.started() || view.project_looked());
 
     // **Not before the settings are read**, or a person who chose an agent gets a plain first shell.
-    if raised && terminal.settings_taken() && project_layer_in {
+    if raised && terminal.settings_taken() {
         // The cells the pane is drawing, so the shell's first prompt is wrapped for the width it will
         // actually be shown at rather than for a guessed 80 and then resized a frame later.
         let (cols, rows) = crate::terminal_pane::measured_cells(&pane);
