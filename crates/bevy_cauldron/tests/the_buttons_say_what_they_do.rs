@@ -88,7 +88,21 @@ fn return_in_the_new_project_name_field_creates_the_project() {
 
     // The form is up with its Name field holding the keyboard; put it somewhere that is ours, and type a name.
     app.world_mut().resource_mut::<NewProjectForm>().0.location = scratch.to_string_lossy().into_owned();
-    assert!(app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).is_ok(), "the form has its Name field");
+    // The text box inside the Name row is what takes characters: put the keyboard on it, as a click on the field does.
+    let row = app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).unwrap_or_else(|e| panic!("the form has its Name field: {e}"));
+    let text_box = {
+        let world = app.world_mut();
+        let mut boxes = world.query_filtered::<Entity, With<bevy::ui_widgets::TextInput>>();
+        let found: Vec<Entity> = boxes
+            .iter(world)
+            .filter(|e| std::iter::successors(Some(*e), |at| world.get::<ChildOf>(*at).map(ChildOf::parent)).any(|at| at == row))
+            .collect();
+        assert_eq!(found.len(), 1, "one text box in the Name row: {found:?}");
+        found[0]
+    };
+    app.world_mut().resource_mut::<bevy::input_focus::InputFocus>().set(text_box, bevy::input_focus::FocusCause::Navigated);
+    app.world_mut().insert_resource(bevy::input_focus::InputFocusVisible(true));
+    settle(&mut app, 3);
     bevy_gooey::testing::type_text(&mut app, "harbour");
     eprintln!("DEBUG name={:?} focus={:?} label={:?}", app.world().resource::<NewProjectForm>().0.name, bevy_gooey::testing::focused(&app), bevy_gooey::testing::focused_label(&app));
     assert!(!scratch.join("harbour").exists(), "typing a name creates nothing by itself");
