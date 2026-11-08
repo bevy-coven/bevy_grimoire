@@ -10873,7 +10873,8 @@ pub struct PieceDrag(pub String);
 
 /// **A library piece let go over the map is placed where the pointer is** (UI-52, #238).
 ///
-/// gooey sends `DroppedOnWorld` when a drag ends over nothing the interface draws; this takes the pointer
+/// The viewport's `Dock` is the drop target (`chrome.rs`), because the interface covers the map and gooey sends a
+/// world drop only over nothing it draws. This takes the pointer
 /// to the ground the way a click does, snaps it by the same rung and the same modifier (`brush_at`), and
 /// commits through `place_one`, which is the `placement_add` operation with the click's own numbers, so a
 /// drop is one log line and one undo step exactly like a click. The piece is laid at the facing the brush
@@ -10881,7 +10882,7 @@ pub struct PieceDrag(pub String);
 /// not over the ground, and a piece the library no longer has is a problem on the status line.
 #[allow(clippy::too_many_arguments)]
 fn drop_a_piece_on_the_map(
-    dropped: On<bevy_gooey::DroppedOnWorld<PieceDrag>>,
+    dropped: On<bevy_gooey::Dropped<PieceDrag>>,
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,

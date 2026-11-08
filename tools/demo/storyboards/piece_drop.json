@@ -32,6 +32,9 @@
   ],
   "chunks": [
     {
+      "seconds": 6.5
+    },
+    {
       "seconds": 5.0
     }
   ],
@@ -55,8 +58,41 @@
       ]
     },
     {
+      "at": 1.2,
+      "caption": "person: filters the PLACE list to lamp"
+    },
+    {
       "at": 1.3,
       "type": "lamp"
+    },
+    {
+      "at": 2.8,
+      "caption": "person: drags the Lamp row onto the floor"
+    },
+    {
+      "at": 3.1,
+      "drag": [
+        948,
+        346,
+        462,
+        420
+      ],
+      "secs": 1.8
+    },
+    {
+      "at": 5.3,
+      "caption": "let go: the lamp is placed where the pointer was"
+    },
+    {
+      "at": 7.8,
+      "key": "KeyZ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 8.3,
+      "caption": "one Ctrl+Z takes it back"
     }
   ]
 }

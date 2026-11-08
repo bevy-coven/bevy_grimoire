@@ -1379,6 +1379,9 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
             // **The person's arrangement, else the default** (UI-33, #227). `sync_settings` has read
             // the files by the time a frame is built, so this is the layout the editor opens on.
             bevy_gooey::Dock(settings.and_then(|s| s.shell_layout.clone()).unwrap_or_else(crate::ui::shell_layout)),
+            // **The map is where a library piece may be let go** (UI-52, #238): the dock covers the viewport, so it is
+            // the drop target, and `editor::drop_a_piece_on_the_map` places what lands on it.
+            bevy_gooey::DropTarget::<crate::editor::PieceDrag>::new(),
             Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
         ))
         .id();

@@ -23,6 +23,8 @@ A new map with nothing on it says **Place a piece from the library** over the vi
 
 **If it goes wrong:** Hold `Alt` (Option on a Mac) while you click to place the piece exactly where the pointer is. Alt turns off grid snapping for that click.
 
+**Or drag it.** Press on a piece's row in the PLACE list, move the pointer onto the map and let go: the piece is placed where you let go, snapped to the grid (hold `Alt` for the exact spot), at the facing the brush has now, as one step `Cmd+Z` takes back. A row that you only click, without moving six pixels, still arms the brush as before. Letting go over the PLACE list or another panel places nothing.
+
 Or right-click the piece's row in the palette: its menu opens with Place, Mount on floor, Mount on wall, Mount on ceiling and Remove from the kit. Place is the row's own click. A mount is one line in the history, and a wall mount keeps the height the piece already has. Remove from the kit sends the piece back to the NOT IMPORTED shelf, and says which map places it when one does, and then leaves it in the library.
 
 ## Turn, tip and lift a piece

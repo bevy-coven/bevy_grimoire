@@ -1,15 +1,16 @@
 //! **A library piece carried onto the map is placed where it is let go** (UI-52, #238).
 //!
-//! The PLACE palette's rows are drag sources carrying the descriptor's id. gooey reports a drag that ends over nothing the
-//! interface draws as `DroppedOnWorld`; the editor takes the pointer to the ground as a click does, snaps it by the same rung,
-//! and places through `place_one`, the click's own commit (`plan_placement` is the `placement_add` operation's reasoning): one undo step.
+//! The PLACE palette's rows are drag sources carrying the descriptor's id, and the dock that covers the viewport is the drop
+//! target: gooey sends `Dropped` on it when a row is let go over the map. The editor takes the pointer to the ground as a click
+//! does, snaps it by the same rung, and places through `place_one`, the click's own commit (`plan_placement` is the
+//! `placement_add` operation's reasoning): one undo step.
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, Window};
 use bevy_cauldron::editor::{PaletteRow, PieceDrag};
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::view::MainCamera;
-use bevy_gooey::{DragPayload, DroppedOnWorld};
+use bevy_gooey::{DragPayload, DropTarget, Dock, Dropped};
 
 use crate::fixtures;
 
@@ -34,7 +35,13 @@ fn editor(tag: &str) -> App {
 }
 
 fn drop_on(app: &mut App, id: &str, pointer: Vec2) {
-    app.world_mut().trigger(DroppedOnWorld { source: Entity::PLACEHOLDER, payload: PieceDrag(id.to_owned()), pointer });
+    // What gooey sends when a drag of a row ends over the viewport: an event on the drop target, the dock that covers it.
+    let dock = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<Dock>>().single(world).expect("one dock covers the viewport")
+    };
+    assert!(app.world().entity(dock).contains::<DropTarget<PieceDrag>>(), "the dock takes a library piece");
+    app.world_mut().trigger(Dropped { target: dock, source: Entity::PLACEHOLDER, payload: PieceDrag(id.to_owned()), pointer });
     for _ in 0..4 {
         app.update();
     }
