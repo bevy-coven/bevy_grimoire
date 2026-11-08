@@ -17,6 +17,20 @@ pub fn editor_skin() -> GooeySkin {
     crate::ui_skin::from_ron(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.ron does not read: {e}"))
 }
 
+/// **How the editor spells a chord: in words, `Cmd+Z`, never the symbol `⌘Z`** (`feedback-1794097488318`, and
+/// `feedback-1793927744511` before it; `bevy-coven/bevy_gooey#45`).
+///
+/// gooey spells a Mac's chords with Apple's symbols by default (`⌘⌃⌥⇧` and `↩⌫⌦⎋⇥`), and a face that does not
+/// map a symbol draws the missing-glyph box, which the owner twice reported as "a `?`". The face this editor
+/// ships, Fira Mono, lacks `⌘ ⌃ ⌥ ↩ ⎋ ⇥`, six of the thirteen, and `⌘` is on nearly every chord. Only the host
+/// knows which face it ships, so gooey makes the spelling a host setting
+/// ([`bevy_gooey::BindingSettings::chord_glyphs`]); this is the editor's answer. It reaches every place gooey
+/// draws a chord: a tooltip's keycap, a menu row, the badges and the palette. On a platform that is not a Mac
+/// the two spellings are the same string.
+pub fn editor_binding_settings() -> bevy_gooey::BindingSettings {
+    bevy_gooey::BindingSettings { chord_glyphs: bevy_gooey::ChordGlyphs::Words, ..default() }
+}
+
 /// Adds gooey's style plugin and its navigation plugin, puts the editor's skin in as the running one and adds the system that applies the project's skin file ([`crate::ui_skin::apply_ui_skin`]).
 pub struct EditorUiPlugin;
 
@@ -57,6 +71,7 @@ impl Plugin for EditorUiPlugin {
         // **The settings screen** (UI-71, #249): Cmd/Ctrl+, over any screen.
         app.add_plugins((crate::settings_screen::SettingsScreenPlugin, crate::project_config::ProjectConfigPlugin, crate::keymap_screen::KeymapScreenPlugin));
         app.insert_resource(editor_skin());
+        app.insert_resource(editor_binding_settings());
         // **A person's arrangement, kept and restored** (UI-33, #227). The observer saves each change
         // gooey reports; the system is what a file edit or Reset reaches the dock through.
         app.add_observer(save_the_layout);
@@ -340,5 +355,51 @@ mod tests {
         };
         assert_eq!(rails(&mut app, kept), 1);
         assert_eq!(rails(&mut app, stale), 0);
+    }
+
+    /// **Every chord the editor can spell on a Mac is made of codepoints the face it ships maps** (`feedback-1794097488318`).
+    ///
+    /// The relation is between two things the build holds: the words a chord is drawn with, and the character map of the
+    /// face they are drawn in. A codepoint the face does not map is a missing-glyph box, whatever the layout does. Written
+    /// over the modifiers a chord can carry and the named keys gooey gives a glyph on a Mac (`↩⌫⌦⎋⇥↑↓←→`), so one more
+    /// symbol in gooey's table shows up here as a missing one, and independent of that table: the face is the measurement.
+    #[test]
+    fn every_chord_spelled_on_a_mac_is_drawable_in_the_face_the_editor_ships() {
+        use bevy_gooey::{Modifiers, Platform, Shortcut};
+        let face = ttf_parser::Face::parse(include_bytes!("../assets/fonts/FiraMono-Regular.ttf"), 0)
+            .unwrap_or_else(|e| panic!("the shipped face does not parse: {e}"));
+        let settings = bevy_gooey::BindingSettings { platform: Some(Platform::Mac), ..editor_binding_settings() };
+        let modifiers = [
+            Modifiers::NONE,
+            Modifiers::CTRL,
+            Modifiers::SHIFT,
+            Modifiers::ALT,
+            Modifiers::META,
+            Modifiers::CTRL | Modifiers::SHIFT | Modifiers::ALT | Modifiers::META,
+        ];
+        let keys = [
+            KeyCode::KeyZ,
+            KeyCode::Digit1,
+            KeyCode::Comma,
+            KeyCode::Enter,
+            KeyCode::Backspace,
+            KeyCode::Delete,
+            KeyCode::Escape,
+            KeyCode::Tab,
+            KeyCode::ArrowUp,
+            KeyCode::ArrowDown,
+            KeyCode::ArrowLeft,
+            KeyCode::ArrowRight,
+        ];
+        let mut missing = Vec::new();
+        for modifiers in modifiers {
+            for key in keys {
+                let words = settings.chord(Shortcut::new(modifiers, key));
+                missing.extend(
+                    words.chars().filter(|c| face.glyph_index(*c).is_none()).map(|c| format!("{words:?}: U+{:04X} {c}", c as u32)),
+                );
+            }
+        }
+        assert!(missing.is_empty(), "a chord spelled for a Mac has codepoints the face lacks:\n  {}", missing.join("\n  "));
     }
 }
