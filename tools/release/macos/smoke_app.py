@@ -32,6 +32,11 @@ import zlib
 
 SMOKE_PORT = 15791
 READY_TIMEOUT_S = 120
+# How long a window that has said it has not had focus is waited for before the app is launched afresh.
+FOCUS_PATIENCE_S = 40
+# How many launches a window that never takes focus gets, and the pause between them.
+LAUNCH_ATTEMPTS = 3
+RETRY_PAUSE_S = 5
 MIN_WINDOW_COLOURS = 8
 SAMPLE_GRID = 64
 # How often the log is re-read while waiting for the window self-check.
@@ -48,6 +53,10 @@ TOOLS_NEEDED = ("grimoire_read_log", "grimoire_open_project", "grimoire_capture_
 
 class SmokeFailure(Exception):
     """A reason the release must not ship, said in one sentence."""
+
+
+class NeverFocused(SmokeFailure):
+    """The window never took the foreground, so its pixels cannot be judged: the one failure a fresh launch can change."""
 
 
 def pids_of(exe):
@@ -251,6 +260,7 @@ def smoke(app, out_dir, home, state):
 
     deadline = time.time() + READY_TIMEOUT_S
     colours = None
+    focus_deadline = time.time() + FOCUS_PATIENCE_S
     while colours is None:
         lines = log_lines(mcp)
         if any("the window is black" in l for l in lines):
@@ -262,9 +272,10 @@ def smoke(app, out_dir, home, state):
                     colours = int(m.group(1))
                     print("smoke: %s" % l.strip())
         if colours is None:
+            unfocused = any("window has not had focus" in l for l in lines)
+            if unfocused and time.time() > focus_deadline:
+                raise NeverFocused("the window never took focus within %d s: nothing can be judged; another app held the foreground" % FOCUS_PATIENCE_S)
             if time.time() > deadline:
-                if any("window has not had focus" in l for l in lines):
-                    raise SmokeFailure("the window never took focus: nothing can be judged; another app held the foreground")
                 raise SmokeFailure("no window self-check line within %d s" % READY_TIMEOUT_S)
             time.sleep(POLL_S)
     if colours < MIN_WINDOW_COLOURS:
@@ -281,19 +292,17 @@ def smoke(app, out_dir, home, state):
             raise SmokeFailure("the %s still shows %d colours, fewer than %d" % (source, n, MIN_WINDOW_COLOURS))
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--app", required=True)
-    parser.add_argument("--out", required=True)
-    args = parser.parse_args()
-    app = os.path.abspath(args.app)
-    out_dir = os.path.abspath(args.out)
-    os.makedirs(out_dir, exist_ok=True)
+def attempt(app, out_dir):
+    """One launch of the app, driven and torn down. Returns `(failure, unfocused)`: why it must not ship
+    (`None` when it passed), and whether the cause was a window that never took the foreground."""
     home = tempfile.mkdtemp(prefix="cauldron-smoke-")
     state = {}
     failure = None
+    unfocused = False
     try:
         smoke(app, out_dir, home, state)
+    except NeverFocused as e:
+        failure, unfocused = str(e), True
     except SmokeFailure as e:
         failure = str(e)
     except Exception as e:  # anything unexpected is a failed release, with its reason kept
@@ -309,6 +318,37 @@ def main():
         if state.get("pid") is not None:
             subprocess.run(["kill", str(state["pid"])])
         shutil.rmtree(home, ignore_errors=True)
+    return failure, unfocused
+
+
+def run_attempts(attempt_once, attempts, pause=lambda: None, say=print):
+    """Launches until one passes or fails for a reason a relaunch cannot change. **Only a window that never
+    took the foreground is tried again**: macOS gives a window the foreground to an app launched by a
+    background job only when no other app is in use, so a release smoke on a Mac someone is working at
+    (2026-11-08, 0.4.4: run once under launchd it passed, the next launch ten seconds later never took
+    focus) is flaky, and a fresh launch is the thing that has been seen to work. Any other failure is
+    the app's, and is returned at once. Returns the last failure, or `None`."""
+    failure = None
+    for n in range(1, attempts + 1):
+        failure, unfocused = attempt_once(n)
+        if failure is None:
+            return None
+        if not unfocused or n == attempts:
+            break
+        say("smoke: attempt %d of %d: %s; launching a fresh app" % (n, attempts, failure))
+        pause()
+    return failure
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--app", required=True)
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args()
+    app = os.path.abspath(args.app)
+    out_dir = os.path.abspath(args.out)
+    os.makedirs(out_dir, exist_ok=True)
+    failure = run_attempts(lambda n: attempt(app, out_dir), LAUNCH_ATTEMPTS, pause=lambda: time.sleep(RETRY_PAUSE_S))
     if failure is not None:
         with open(os.path.join(out_dir, "reason.txt"), "w") as f:
             f.write(failure + "\n")
