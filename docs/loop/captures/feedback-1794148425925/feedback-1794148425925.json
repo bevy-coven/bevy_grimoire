@@ -1,0 +1,72 @@
+{
+  "version": 2,
+  "stem": "feedback-1794148425925",
+  "taken_at_ms": 1794148425925,
+  "audience": "developers",
+  "app_version": "0.5.0",
+  "screen": "editor",
+  "project": "/Users/ladvien/Documents/Cauldron Projects/lavender_hills",
+  "map": "deadite_caverns",
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 12884900782,
+        "rect_px": [
+          0.0,
+          875.0,
+          2560.0,
+          1344.0
+        ],
+        "path": [
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal",
+            "role": null,
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        616.7969,
+        1059.3672
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "If there was an agent in process, Cauldron should remember it and restart there.  For example, capturing omp's resume ID on exit and automaticaly resuming with that id on restart.",
+  "picture": {
+    "file": "feedback-1794148425925.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794148425925_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794148425925.log"
+}
