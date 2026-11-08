@@ -1913,7 +1913,7 @@ fn the_button_invokes_the_agent(
 /// agent chosen could not start it. Only while the terminal holds the keys and invites the agent.
 #[allow(clippy::too_many_arguments)]
 fn enter_invokes_the_agent(
-    keys: Res<ButtonInput<KeyCode>>,
+    mut presses: MessageReader<bevy::input::keyboard::KeyboardInput>,
     focus: Res<TerminalFocus>,
     pane: Res<TerminalPane>,
     setup: Option<Res<crate::terminal_agent::AgentSetup>>,
@@ -1923,7 +1923,12 @@ fn enter_invokes_the_agent(
     bar: Query<Entity, With<TerminalBar>>,
     mut commands: Commands,
 ) {
-    if !focus.holds() || !terminal.invites_the_agent() || !(keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter)) {
+    // **The key messages, not `ButtonInput`**: while the terminal holds the keyboard `hold_the_keyboard`
+    // clears every terminal key's `just_pressed` so the editor never sees it, and the message is what is left.
+    let pressed = presses.read().any(|press| {
+        press.state == bevy::input::ButtonState::Pressed && !press.repeat && matches!(press.key_code, KeyCode::Enter | KeyCode::NumpadEnter)
+    });
+    if !pressed || !focus.holds() || !terminal.invites_the_agent() {
         return;
     }
     let (cols, rows) = measured_cells(&pane);
