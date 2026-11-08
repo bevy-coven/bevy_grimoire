@@ -447,6 +447,8 @@ door_state![
     // change it would answer about a map the person never saw, which is the stale-value class
     // this list exists for.
     crate::present::Presenting,
+    // **The answer to that question goes with it**: a button pressed on one door and not yet taken must not answer the next door's question.
+    crate::present::PresentationReply,
     crate::tiles::MapView,
     crate::tiles::NoteEdit,
     crate::tiles::ScaleEdit,
@@ -707,6 +709,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`**: whether the agent may write is the person's call about the whole sitting, not a door's.
     ("bevy_cauldron::familiar::AgentPause", Ownership::Session),
     ("bevy_cauldron::familiar::AgentActivity", Ownership::Session),
+    // **`Session`**: whether hand-backs are answered in the AGENT block is the person's choice for the sitting, like the pause.
+    ("bevy_cauldron::familiar::HandBackHere", Ownership::Session),
     ("bevy_cauldron::selection::Selection", Ownership::Session),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.
@@ -734,6 +738,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::tiles::HeightEdit", Ownership::Door),
     ("bevy_cauldron::tiles::LatticePick", Ownership::Door),
     ("bevy_cauldron::present::Presenting", Ownership::Door),
+    ("bevy_cauldron::present::PresentationReply", Ownership::Door),
     ("bevy_cauldron::tiles::MapView", Ownership::Door),
     ("bevy_cauldron::tiles::NoteEdit", Ownership::Door),
     ("bevy_cauldron::tiles::ScaleEdit", Ownership::Door),
