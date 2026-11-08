@@ -433,10 +433,10 @@
       "app_version": "0.4.1",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "The agent self-test card's lines wrap onto a second line (the complaint stands alone); the LED asks for a new live indicator (an enhancement, filed apart as an issue, not as a capture).",
-      "commit": "",
+      "reason": "The self-test card is as wide as its longest row, so rows are one line; the LED request is #343.",
+      "commit": "2c1d8606",
       "attempts": [
         {
           "host": "mac_air",
