@@ -39,6 +39,18 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **While a piece is armed,** `R`, `T`, `Y` and `U` turn and tip the armed piece instead (the INSPECTOR's YAW row shows its facing), so the next click places it already turned. A placed piece under the pointer is left alone.
 
+## Find a piece in the outliner
+
+**Goal:** Pick a piece out of a crowded map by name, without hunting for it in the viewport.
+
+1. In the INSPECTOR on the left, open the OUTLINER section (click its title). It lists every piece on the map, grouped by what it is (the first `kind` of its descriptor, or `other`), one row per piece named `<id> · <descriptor>`.
+2. Type in its Search box. Every word must appear in a row's id, descriptor or group, so `lamp` leaves the lamps under their group and hides everything else. Clear the box to see the whole map again.
+3. Click a row to select its piece. Ctrl-click or Shift-click selects several. Clicking a group selects nothing.
+
+**What you see:** The piece is outlined in the viewport, the POSE block above shows its pose, and the row stays selected as you search. Selecting a piece in the viewport selects its row here too.
+
+**If it goes wrong:** A piece that does not match the search is not in the tree, so it cannot be selected from there until the search is cleared. The outliner lists placements only; compositions, people, triggers and notes are not in it yet.
+
 ## Turn or lift several pieces at once
 
 **Goal:** Give a few pieces the same facing, or the same lift, with one number.

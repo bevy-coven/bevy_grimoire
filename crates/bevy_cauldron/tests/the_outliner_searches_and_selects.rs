@@ -116,7 +116,7 @@ fn searching_lamp_leaves_the_lamps_and_the_group_that_holds_them() {
 fn a_row_selects_its_piece_and_a_group_selects_nothing() {
     let (mut app, [lamp_a, lamp_b, chair]) = rig("outliner_select");
     click_rows(&mut app, &[placement_key(&chair)]);
-    assert_eq!(app.world().resource::<Selection>().ids(), [chair.clone()], "the row's piece is the selection");
+    assert_eq!(app.world().resource::<Selection>().ids(), std::slice::from_ref(&chair), "the row's piece is the selection");
     assert_eq!(app.world().resource::<TargetLock>().placement_id(), Some(chair.as_str()), "and the primary, which the POSE block and the viewport read");
 
     click_rows(&mut app, &[placement_key(&lamp_b), placement_key(&lamp_a)]);
