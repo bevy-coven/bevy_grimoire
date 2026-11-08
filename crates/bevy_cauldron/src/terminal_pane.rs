@@ -249,6 +249,16 @@ pub struct TerminalCloseTab;
 #[derive(Component)]
 pub struct TerminalAgentChip;
 
+/// **The `Invoke Agent` button**, in the middle of an empty terminal while the settings choose an
+/// agent. No agent starts by itself, because a session costs tokens to warm up: the press opens the
+/// agent tab, and until then the pane costs nothing.
+#[derive(Component)]
+pub struct TerminalInvokeButton;
+
+/// The node that holds [`TerminalInvokeButton`] over the body, so the button stands in its middle.
+#[derive(Component)]
+pub struct TerminalInvite;
+
 /// **The drawn agent tab's status chip**: `omp connected · 22 tools`, or what is still checking or
 /// failed. A click brings the self-test card back, and asks a failed omp test again.
 #[derive(Component)]
@@ -436,6 +446,7 @@ impl Plugin for TerminalPanePlugin {
             .add_observer(a_chip_selects_its_tab)
             .add_observer(a_chip_adds_a_tab)
             .add_observer(a_chip_opens_an_agent)
+            .add_observer(the_button_invokes_the_agent)
             .add_observer(a_status_chip_reruns_the_test)
             .add_observer(a_chip_moves_the_shell)
             .add_observer(a_chip_closes_a_tab);
@@ -1064,9 +1075,47 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
     commands.entity(body).add_child(card);
 }
 
+/// **The invitation**: a button in the middle of the empty terminal that starts the agent.
+fn spawn_the_invitation(commands: &mut Commands, body: Entity) {
+    let invite = commands
+        .spawn((
+            Node {
+                // PLACES-ITSELF-OK: the invitation floats over the empty body it stands in, as the
+                // self-test card floats over a full one; it is not a panel `chrome::Frame` places.
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                top: Val::Px(0.0),
+                bottom: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ZIndex(2),
+            // **Not `Pickable::IGNORE`**: it skips an entity and everything below it, and the button is
+            // below it. A click beside the button bubbles to the pane, which takes the keyboard.
+            TerminalInvite,
+            Name::new("terminal invitation"),
+        ))
+        .with_children(|invite| {
+            chrome::chip(
+                invite,
+                TerminalInvokeButton,
+                "Invoke Agent",
+                chrome::text::CONTROL,
+                chrome::ACCENT,
+                chrome::BAR_BG,
+                chrome::PANEL_EDGE,
+            );
+        })
+        .id();
+    commands.entity(body).add_child(invite);
+}
+
 /// What [`keep_the_agent_on_screen`] last drew from: the body, the tab count, the drawn tab, its
-/// record's revision, whether its card shows, whether find is open, and the chosen agent.
-type AgentDrawn = (Option<Entity>, usize, usize, u32, bool, bool, crate::settings::TerminalAgent);
+/// record's revision, whether its card shows, whether find is open, the chosen agent, and whether the
+/// pane invites the agent.
+type AgentDrawn = (Option<Entity>, usize, usize, u32, bool, bool, crate::settings::TerminalAgent, bool);
 
 /// **The bar's chips and the self-test card follow the agent tabs.** Redrawn only when something they
 /// show moved: a tab opened or closed, another tab drawn, a check changed, the card's linger ran out,
@@ -1079,6 +1128,7 @@ fn keep_the_agent_on_screen(
     time: Res<Time<Real>>,
     bodies: Query<Entity, With<TerminalBody>>,
     cards: Query<Entity, With<TerminalAgentCard>>,
+    invitations: Query<Entity, With<TerminalInvite>>,
     bar: Query<Entity, With<TerminalBar>>,
     mut commands: Commands,
 ) {
@@ -1094,14 +1144,20 @@ fn keep_the_agent_on_screen(
         shown,
         find.is_open(),
         terminal.agent(),
+        terminal.invites_the_agent(),
     );
     if *drawn == Some(key) {
         return;
     }
     *drawn = Some(key);
     redraw_the_bar(&mut commands, &bar, &terminal);
-    for card in &cards {
+    for card in cards.iter().chain(&invitations) {
         commands.entity(card).despawn();
+    }
+    if let Some(body) = body
+        && terminal.invites_the_agent()
+    {
+        spawn_the_invitation(&mut commands, body);
     }
     if let (Some(body), Some(post)) = (body, post)
         && shown
@@ -1819,6 +1875,29 @@ fn a_chip_opens_an_agent(
     mut commands: Commands,
 ) {
     if !chip.contains(click.entity) {
+        return;
+    }
+    click.propagate(false);
+    let (cols, rows) = measured_cells(&pane);
+    crate::terminal_agent::open_agent_tab(&mut terminal, cols, rows, setup.as_deref(), root.as_deref(), time.elapsed_secs_f64());
+    redraw_the_bar(&mut commands, &bar, &terminal);
+}
+
+/// **`Invoke Agent` starts the agent**, in the open project, with its own self test: the one way an
+/// agent starts that no person pressed for is gone.
+#[allow(clippy::too_many_arguments)]
+fn the_button_invokes_the_agent(
+    mut click: On<bevy::picking::events::PointerClick>,
+    button: Query<(), With<TerminalInvokeButton>>,
+    pane: Res<TerminalPane>,
+    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
+    root: Option<Res<crate::project_assets::ProjectRoot>>,
+    time: Res<Time<Real>>,
+    mut terminal: ResMut<Terminal>,
+    bar: Query<Entity, With<TerminalBar>>,
+    mut commands: Commands,
+) {
+    if !button.contains(click.entity) {
         return;
     }
     click.propagate(false);
