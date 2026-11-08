@@ -89,7 +89,7 @@ impl TerminalCursor {
     }
 }
 
-/// **The agent the terminal's first tab starts**, connected to the editor's MCP server and proved with
+/// **The agent the terminal's `Invoke Agent` button starts**, connected to the editor's MCP server and proved with
 /// a power-on self test (`terminal_agent`). `Custom` runs `terminal_agent_command` from the file.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TerminalAgent {
@@ -140,8 +140,10 @@ pub struct EditorSettings {
     /// How many lines of output each terminal keeps above its screen (#324): VS Code's
     /// `terminal.integrated.scrollback`.
     pub terminal_scrollback: usize,
-    /// The agent the terminal's first tab starts, connected to the editor's tools. Off by default: a
-    /// shell is what a terminal opens until the person picks an agent.
+    /// The agent the terminal's `Invoke Agent` button starts, connected to the editor's tools. Off by
+    /// default: a shell is what a terminal opens until the person picks an agent. With one picked the
+    /// terminal opens empty and starts nothing until the button is pressed, because a session costs
+    /// tokens to warm up.
     pub terminal_agent: TerminalAgent,
     /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
     /// Settings screen has no text control (#324), so this key is set in the file only.

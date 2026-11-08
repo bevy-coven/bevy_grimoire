@@ -1,7 +1,8 @@
 //! **The agent a terminal tab starts, and the power-on self test that proves it is connected.**
 //!
-//! The person picks a harness in Settings, Terminal (`terminal_agent`). The terminal's first tab of
-//! each editor process then types that harness into its login shell, already pointed at the editor's
+//! The person picks a harness in Settings, Terminal (`terminal_agent`). The terminal then shows an
+//! `Invoke Agent` button, because a session costs tokens to warm up and a person who is only looking
+//! around pays none; its press opens an agent tab that types that harness into its login shell, already pointed at the editor's
 //! MCP server (`bevy_cauldron_mcp`), and four checks are shown on a card over the terminal as they
 //! pass:
 //!
@@ -483,7 +484,7 @@ pub fn self_test_result(terminal: &mut Terminal, params: &Value) -> Result<Value
 }
 
 /// **Open an agent tab** of the chosen harness, `cols` by `rows`, where the next shell starts, its
-/// server told the open project: what the first tab and the `Agent` chip both do.
+/// server told the open project: what the `Invoke Agent` button and the `Agent` chip both do.
 pub fn open_agent_tab(
     terminal: &mut Terminal,
     cols: u16,

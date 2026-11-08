@@ -97,14 +97,12 @@ pub struct Terminal {
     /// **The history each shell keeps** (#324), the person's `terminal_scrollback`; `None` until a setting
     /// names one, which is [`SCROLLBACK`].
     scrollback: Option<usize>,
-    /// **The agent the first tab starts** (`terminal_agent`), and a custom harness's command line:
-    /// the person's settings, given by `terminal_view::take_the_terminal_settings`.
+    /// **The agent an `Invoke Agent` press starts** (`terminal_agent`), and a custom harness's command
+    /// line: the person's settings, given by `terminal_view::take_the_terminal_settings`.
     agent: TerminalAgent,
     agent_command: Option<String>,
     /// **The shell new tabs run**, the person's `terminal_shell` and its arguments; `None` is `$SHELL`.
     shell: Option<ShellChoice>,
-    /// An agent tab was opened in this process, so the settings start no other by themselves.
-    agent_opened: bool,
     /// **The settings have been given at least once.** No shell opens before: a first tab that opened
     /// a frame before the settings were read would be a plain shell for a person who chose an agent.
     settings_taken: bool,
@@ -181,7 +179,6 @@ impl Terminal {
     pub fn spawn_agent(&mut self, cols: u16, rows: u16, cwd: &Path, launch: AgentLaunch) -> usize {
         let AgentLaunch { line, env, mut post } = launch;
         let index = self.open_tab(cols, rows, cwd, &env, Some(post.harness.name().to_owned()));
-        self.agent_opened = true;
         let tab = &mut self.open[index];
         if !line.is_empty() {
             if tab.session.is_some() {
@@ -268,11 +265,12 @@ impl Terminal {
         self.settings_taken
     }
 
-    /// **Should the pane open an agent tab now?** Once per process, as soon as the settings choose an
-    /// agent: the first tab when they already did at launch, or the next frame after a project's or the
-    /// person's settings turn one on.
-    pub fn wants_first_agent(&self) -> bool {
-        self.settings_taken && self.agent != TerminalAgent::Off && !self.agent_opened
+    /// **Does the pane offer the agent instead of a shell?** While the settings choose an agent and
+    /// nothing is open. An agent session costs tokens to warm up, so none starts by itself: the pane
+    /// shows an `Invoke Agent` button, a person who is only looking around pays nothing, and the press
+    /// opens the agent tab (`terminal_agent::open_agent_tab`). The `+` chip still opens a plain shell.
+    pub fn invites_the_agent(&self) -> bool {
+        self.settings_taken && self.agent != TerminalAgent::Off && self.open.is_empty()
     }
 
     /// The agent tab whose launch minted `token`.

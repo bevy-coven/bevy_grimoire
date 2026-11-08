@@ -350,9 +350,6 @@ fn pump_the_terminal(
     mut terminal: ResMut<Terminal>,
     panes: Query<&Node, With<crate::terminal_pane::TerminalPaneRoot>>,
     pane: Res<TerminalPane>,
-    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
-    root: Option<Res<crate::project_assets::ProjectRoot>>,
-    time: Res<Time<Real>>,
 ) {
     let raised = panes.iter().any(|node| node.display != Display::None);
 
@@ -361,18 +358,10 @@ fn pump_the_terminal(
         // The cells the pane is drawing, so the shell's first prompt is wrapped for the width it will
         // actually be shown at rather than for a guessed 80 and then resized a frame later.
         let (cols, rows) = crate::terminal_pane::measured_cells(&pane);
-        // **The agent tab**, once per process, as soon as the settings choose one: the first tab, or
-        // the next one when a project's settings turn it on after a plain shell opened.
-        if terminal.wants_first_agent() {
-            crate::terminal_agent::open_agent_tab(
-                &mut terminal,
-                cols,
-                rows,
-                setup.as_deref(),
-                root.as_deref(),
-                time.elapsed_secs_f64(),
-            );
-        } else if terminal.is_empty() {
+        // **No agent starts by itself.** A session costs tokens to warm up, so with an agent chosen the
+        // pane stays empty and shows an `Invoke Agent` button (`terminal_pane`), and only its press opens
+        // the agent tab. A person who is just looking around the game pays nothing.
+        if !terminal.invites_the_agent() && terminal.is_empty() {
             let cwd = terminal.next_cwd();
             terminal.spawn(cols.max(2), rows.max(1), &cwd);
         }
