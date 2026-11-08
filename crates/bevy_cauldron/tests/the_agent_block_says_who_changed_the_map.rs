@@ -230,3 +230,34 @@ fn what_the_agent_handed_back_is_waiting_on_the_person_and_then_says_how_they_an
     assert!(answered.contains("You answered: kept"), "{answered}");
     assert_eq!(yaw_of(&app), 90.0, "keeping changes nothing");
 }
+
+/// **The block's lines stand one under the other, never over one another**: a line that wraps takes the room it wraps into. The
+/// text is the longest it gets (the agent's call and its change), because a short line cannot overlap anything.
+#[test]
+fn the_blocks_lines_do_not_overlap_when_they_wrap() {
+    use bevy::ui::{ComputedNode, UiGlobalTransform};
+    let mut app = editor("agent_block_layout");
+    show_the_block(&mut app, true);
+    let done = turn_to(&mut app, 90.0);
+    assert_eq!(done["outcome"], "applied", "{done}");
+    call(
+        &mut app,
+        "grimoire/present",
+        serde_json::json!({"title": "the turned table, which is a long title", "summary": "Turned the table.", "operation_ids": [done["operation_id"]]}),
+    );
+    updates(&mut app, 12);
+    let mut boxes: Vec<(FamiliarLine, f32, f32, String)> = {
+        let world = app.world_mut();
+        world
+            .query::<(&FamiliarLine, &ComputedNode, &UiGlobalTransform, &Text)>()
+            .iter(world)
+            .map(|(line, node, at, text)| (*line, at.translation.y - node.size().y / 2.0, at.translation.y + node.size().y / 2.0, text.0.clone()))
+            .collect()
+    };
+    boxes.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let order: Vec<FamiliarLine> = boxes.iter().map(|b| b.0).collect();
+    assert_eq!(order, [FamiliarLine::Heard, FamiliarLine::Newest, FamiliarLine::HandBack], "{boxes:?}");
+    for pair in boxes.windows(2) {
+        assert!(pair[1].1 >= pair[0].2 - 0.5, "`{}` ({:?}) overlaps `{}` ({:?}): {boxes:?}", pair[0].3, (pair[0].1, pair[0].2), pair[1].3, (pair[1].1, pair[1].2));
+    }
+}
