@@ -638,9 +638,9 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "Asks for the Add meshes action to live in the right (PLACE) pane, where the meshes will be, instead of as a button over the empty viewport: new placement of a control.",
+      "reason": "removing the map's Add meshes\u2026 overlay re-pins two tests that assert it (an_empty_library_leads_to_adding_meshes, wanted_prompt's table)",
       "commit": "",
       "attempts": []
     },
