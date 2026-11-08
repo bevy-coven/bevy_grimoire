@@ -1,0 +1,78 @@
+{
+  "version": 2,
+  "stem": "feedback-1794088663844",
+  "taken_at_ms": 1794088663844,
+  "audience": "developers",
+  "app_version": "0.4.1",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 4294966202,
+        "rect_px": [
+          0.0,
+          949.0,
+          2560.0,
+          1007.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal",
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal bar",
+            "role": null,
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        1838.5703,
+        997.5156
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "What are these chips?  Why does having a default agent bring on \"omp\" and then there is an \"Agent\" and another \"omp\"  We should only have agent panel.  Also, make sure the default is to have an omp agent on, right now it's defaulted to off.",
+  "picture": {
+    "file": "feedback-1794088663844.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794088663844_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794088663844.log"
+}

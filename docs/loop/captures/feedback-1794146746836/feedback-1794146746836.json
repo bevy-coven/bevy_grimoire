@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "stem": "feedback-1794146746836",
+  "taken_at_ms": 1794146746836,
+  "audience": "developers",
+  "app_version": "0.5.0",
+  "screen": "editor",
+  "project": "/Users/ladvien/Documents/Cauldron Projects/test",
+  "map": "test",
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "scene",
+        "world": [
+          259.0824,
+          0.0,
+          264.50153
+        ],
+        "map": [
+          259.0824,
+          264.50153
+        ],
+        "cell": [
+          259,
+          264
+        ],
+        "placement": null,
+        "camera": {
+          "translation": [
+            242.0,
+            11.999999,
+            262.0
+          ],
+          "forward": [
+            -0.5773504,
+            -0.57735026,
+            -0.57735026
+          ]
+        }
+      },
+      "at": [
+        1428.8516,
+        652.7344
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "This should go away if if I invoke an agent.",
+  "picture": {
+    "file": "feedback-1794146746836.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794146746836_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794146746836.log"
+}

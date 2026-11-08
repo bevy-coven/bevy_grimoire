@@ -1,0 +1,126 @@
+{
+  "version": 2,
+  "stem": "feedback-1794103491165",
+  "taken_at_ms": 1794103491165,
+  "audience": "developers",
+  "app_version": "0.4.5",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 8589933502,
+        "rect_px": [
+          1085.0,
+          224.0,
+          1526.0,
+          574.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Split",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "SplitPane",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Surface(0)",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Button",
+            "control": null,
+            "text": "test"
+          }
+        ]
+      },
+      "at": [
+        1382.2734,
+        561.1406
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "I have to click on this twice, why?",
+  "picture": {
+    "file": "feedback-1794103491165.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794103491165_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794103491165.log"
+}

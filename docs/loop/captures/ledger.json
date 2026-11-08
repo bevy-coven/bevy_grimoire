@@ -405,6 +405,102 @@
           "saw": "installed 0.4.1 on the projects home: ls in a folder of 40 names draws a missing-glyph box at every tab stop it jumped, and printf 'a\\tb\\tc|' draws a box after a and after b; Cmd+A selected nothing (the 0.4.1 build predates b7d5e79)"
         }
       ]
+    },
+    {
+      "stem": "feedback-1794088663844",
+      "taken_at_ms": 1794088663844,
+      "app_version": "0.4.1",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794089256357",
+      "taken_at_ms": 1794089256357,
+      "app_version": "0.4.1",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794089325724",
+      "taken_at_ms": 1794089325724,
+      "app_version": "0.4.1",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794096613481",
+      "taken_at_ms": 1794096613481,
+      "app_version": "0.4.3",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794097488318",
+      "taken_at_ms": 1794097488318,
+      "app_version": "0.4.3",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794103491165",
+      "taken_at_ms": 1794103491165,
+      "app_version": "0.4.5",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794112080244",
+      "taken_at_ms": 1794112080244,
+      "app_version": "0.4.6",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794146746836",
+      "taken_at_ms": 1794146746836,
+      "app_version": "0.5.0",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
     }
   ]
 }

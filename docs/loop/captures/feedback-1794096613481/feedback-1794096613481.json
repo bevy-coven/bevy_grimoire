@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "stem": "feedback-1794096613481",
+  "taken_at_ms": 1794096613481,
+  "audience": "developers",
+  "app_version": "0.4.3",
+  "screen": "editor",
+  "project": "/Users/ladvien/Documents/Cauldron Projects/test",
+  "map": "first_map",
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 4294965557,
+        "rect_px": [
+          194.49997,
+          244.4,
+          463.49997,
+          308.4
+        ],
+        "path": [
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Toolbar",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "ToggleGroup",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "GroupOption",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Tooltip",
+            "control": null,
+            "text": "Remove mode"
+          }
+        ]
+      },
+      "at": [
+        252.4375,
+        300.1172
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "This box is bouncing left and right SUPER fast by 2-3px.",
+  "picture": {
+    "file": "feedback-1794096613481.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794096613481_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794096613481.log"
+}

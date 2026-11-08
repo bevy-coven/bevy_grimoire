@@ -1,0 +1,78 @@
+{
+  "version": 2,
+  "stem": "feedback-1794112080244",
+  "taken_at_ms": 1794112080244,
+  "audience": "developers",
+  "app_version": "0.4.6",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 4294966176,
+        "rect_px": [
+          0.0,
+          1006.0,
+          2560.0,
+          1405.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal",
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal body",
+            "role": null,
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        246.07031,
+        1011.46875
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "If I exit omp, then type \"exit\" from the shell, it freezes.  We should close thiss terminal, then allow the user to create another one",
+  "picture": {
+    "file": "feedback-1794112080244.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794112080244_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794112080244.log"
+}

@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "stem": "feedback-1794089325724",
+  "taken_at_ms": 1794089325724,
+  "audience": "developers",
+  "app_version": "0.4.1",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 4294966160,
+        "rect_px": [
+          29.0,
+          784.0,
+          547.0,
+          813.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Split",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "SplitPane",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": "Surface(1)",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": "v0.4.1"
+          }
+        ]
+      },
+      "at": [
+        311.9453,
+        800.5781
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "May we also have discrete button stating to refresh whether there is an update or not\"Check for Update\"pr something, in case an update was pushed after opening the app.",
+  "picture": {
+    "file": "feedback-1794089325724.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794089325724_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794089325724.log"
+}
