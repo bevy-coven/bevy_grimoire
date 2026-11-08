@@ -53,6 +53,15 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **If it goes wrong:** A piece that does not match the search is not in the tree, so it cannot be selected from there until the search is cleared. The outliner lists placements only; compositions, people, triggers and notes are not in it yet.
 
+## Pick a tool from the toolbar
+
+**Goal:** Arm Place, Move, Erase, Clone or Run without a key.
+
+1. Click one of the five options at the left of the toolbar, under the menu bar.
+2. The one that is armed is lit, whichever way it was armed (the toolbar or its key), and the light slides from the tool that was armed to the new one instead of changing in place.
+
+**What you see:** The light lands on the new tool within a fraction of a second. With **Reduced motion** on (Settings) it lands at once, and nothing about the tool changes either way.
+
 ## Turn or lift several pieces at once
 
 **Goal:** Give a few pieces the same facing, or the same lift, with one number.
