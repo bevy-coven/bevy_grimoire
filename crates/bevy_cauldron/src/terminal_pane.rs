@@ -279,8 +279,33 @@ pub struct TerminalAgentStatusChip;
 #[derive(Component)]
 pub struct TerminalAgentCard;
 
-/// The card's width, logical pixels: a check's row and its detail, wrapped beneath.
-const AGENT_CARD_W: f32 = 320.0;
+/// The least the card is wide, logical pixels: wide enough for the first check's row (`OK Tools server: bevy_cauldron_mcp
+/// on port 15702`), so the card does not start narrower than that and grow row by row.
+const AGENT_CARD_MIN_W: f32 = 320.0;
+
+/// **The card takes the width its longest row needs** (feedback-1794089256357: *"Each item should fit on one line, or be
+/// handled appropriately"*). It was a fixed 320 px, and a row longer than that (`OK Agent connected: omp-coding-agent 1.0.0 ·
+/// 22 tools`, `OK Agent self test: the editor is on launcher · 88 operations · a 2560x1406 picture`) broke onto a second line
+/// whose last word stood alone at the card's left edge, under the mark. Now the card is as wide as its content, from
+/// [`AGENT_CARD_MIN_W`] up to the terminal's own width, so every row is one line while there is room for it. Only in a
+/// terminal narrower than a row does a row wrap, as any text does.
+fn agent_card_node() -> Node {
+    Node {
+        // PLACES-ITSELF-OK: the self-test card floats over the terminal it reports on, as the
+        // find box does; it is not a panel `chrome::Frame` places.
+        position_type: PositionType::Absolute,
+        top: Val::Px(crate::terminal_view::BODY_INSET.y),
+        right: Val::Px(chrome::MARGIN),
+        width: Val::Auto,
+        min_width: Val::Px(AGENT_CARD_MIN_W),
+        max_width: Val::Percent(100.0),
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(chrome::GAP_TIGHT),
+        padding: UiRect::all(Val::Px(chrome::GAP_TIGHT)),
+        border: UiRect::all(Val::Px(chrome::EDGE_W)),
+        ..default()
+    }
+}
 
 /// **The terminal has the keyboard**, which is the one state this feature must not get wrong.
 ///
@@ -1055,19 +1080,7 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
     };
     let card = commands
         .spawn((
-            Node {
-                // PLACES-ITSELF-OK: the self-test card floats over the terminal it reports on, as the
-                // find box does; it is not a panel `chrome::Frame` places.
-                position_type: PositionType::Absolute,
-                top: Val::Px(crate::terminal_view::BODY_INSET.y),
-                right: Val::Px(chrome::MARGIN),
-                width: Val::Px(AGENT_CARD_W),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(chrome::GAP_TIGHT),
-                padding: UiRect::all(Val::Px(chrome::GAP_TIGHT)),
-                border: UiRect::all(Val::Px(chrome::EDGE_W)),
-                ..default()
-            },
+            agent_card_node(),
             BackgroundColor(chrome::BAR_BG),
             BorderColor::all(chrome::PANEL_EDGE),
             // Above the rows and the caret, which are its siblings.
@@ -2096,5 +2109,16 @@ mod tests {
         terminal.spawn(80, 24, std::path::Path::new("/tmp"));
         assert!(!terminal.invites_the_agent());
         assert!(offers_another_agent(&terminal), "with a tab open the chip adds another agent beside it");
+    }
+
+    /// **The self-test card's width follows its content** (feedback-1794089256357; oracle `containment`). A constant width is
+    /// what made `OK Agent connected: omp-coding-agent 1.0.0 · 22 tools` wrap onto a second line: the card has no fixed width,
+    /// is never narrower than its first row needs, and never wider than the terminal it floats over.
+    #[test]
+    fn the_agent_card_is_as_wide_as_its_content_within_the_terminal() {
+        let card = agent_card_node();
+        assert_eq!(card.width, Val::Auto, "its width is its content's, not a constant");
+        assert_eq!(card.min_width, Val::Px(AGENT_CARD_MIN_W), "and never less than the first row needs");
+        assert_eq!(card.max_width, Val::Percent(100.0), "and never more than the terminal's body");
     }
 }
