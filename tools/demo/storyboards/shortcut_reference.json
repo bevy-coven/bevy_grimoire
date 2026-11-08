@@ -1,0 +1,83 @@
+{
+  "name": "shortcut_reference",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.5
+    },
+    {
+      "seconds": 4.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "person: Help, then Keyboard shortcuts"
+    },
+    {
+      "at": 0.7,
+      "click_label": "Help"
+    },
+    {
+      "at": 2.0,
+      "click_label": "Keyboard shortcuts"
+    },
+    {
+      "at": 3.0,
+      "caption": "one row per command of the registry, each on the chord it answers to"
+    },
+    {
+      "at": 4.4,
+      "cursor": [
+        690,
+        182
+      ]
+    },
+    {
+      "at": 4.8,
+      "click": [
+        690,
+        182
+      ]
+    },
+    {
+      "at": 5.1,
+      "caption": "person: looks for Redo"
+    },
+    {
+      "at": 5.3,
+      "type": "redo"
+    },
+    {
+      "at": 7.0,
+      "caption": "person's editor.ron moves Redo to Ctrl+Alt+J"
+    },
+    {
+      "at": 7.1,
+      "write": {
+        "path": "assets/grimoire/editor.ron",
+        "text": "(version:1,keymap:{\"edit.redo\":(modifiers:(ctrl:true,shift:false,alt:true,meta:false),key:KeyJ)})"
+      }
+    },
+    {
+      "at": 8.6,
+      "caption": "the row follows the file"
+    }
+  ]
+}

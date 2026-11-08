@@ -1,0 +1,137 @@
+{
+  "name": "inspector_mixed",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -1.4,
+            0.4,
+            2.8,
+            2.6
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.5
+    },
+    {
+      "seconds": 5.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "key": "Escape"
+    },
+    {
+      "at": 0.4,
+      "caption": "person: Shift-click the sofa, then the armchair"
+    },
+    {
+      "at": 0.7,
+      "cursor": [
+        480,
+        388
+      ]
+    },
+    {
+      "at": 1.1,
+      "click": [
+        480,
+        388
+      ],
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 1.8,
+      "cursor": [
+        648,
+        470
+      ]
+    },
+    {
+      "at": 2.2,
+      "click": [
+        648,
+        470
+      ],
+      "mods": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 3.0,
+      "caption": "the POSE block reads a dash where the two differ: they face different ways"
+    },
+    {
+      "at": 4.2,
+      "cursor": [
+        204,
+        326
+      ]
+    },
+    {
+      "at": 4.6,
+      "click": [
+        204,
+        326
+      ]
+    },
+    {
+      "at": 5.1,
+      "caption": "person: types 90 for the facing"
+    },
+    {
+      "at": 5.2,
+      "type": "90"
+    },
+    {
+      "at": 5.9,
+      "key": "Enter"
+    },
+    {
+      "at": 6.3,
+      "caption": "both pieces turn to 90 together"
+    },
+    {
+      "at": 7.0,
+      "cursor": [
+        300,
+        400
+      ]
+    },
+    {
+      "at": 8.6,
+      "key": "KeyZ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "at": 9.2,
+      "caption": "one undo puts both back"
+    }
+  ]
+}
