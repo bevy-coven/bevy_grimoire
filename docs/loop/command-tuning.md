@@ -62,3 +62,17 @@ pass's code: touch and push again.
 
 **Watch.** No test run whose count is the base's while the pass has added tests, and no push refused
 for a path outside the pass's own tree.
+
+## Tuning 5 — a pass on a small-disk Mac wrote the same eight scripts again (pass 480)
+
+**Measured.** Passes 479 and 480, both on mac_air (about 9 GB free, so every build, test, recording and gate runs on big),
+each wrote a fresh set of ssh helper scripts at the start: check a ref out in the worktree, build to a scratch path,
+record a storyboard and render it with its sheet, retake the standing GIFs, retake `editor.png`, rewrite the media
+README's *Captured* rows, push through the gate, clean up. Eight scripts a pass, each with a quoting detail (big's login
+shell is fish, and `pkill -f` over ssh kills the ssh command). Writing them is a handful of tool calls at the start of each
+pass and every slip in a retyped one (a relative path in pass 480's `place-and-undo` trial) costs another call.
+
+**Change.** The scripts live in `tools/loop/remote/` (`README.md` says the order), parameterised by `WT` and `TAG`; a Mac
+pass copies them to big and uses them, and fixes one there rather than retyping it.
+
+**Watch.** The next mac_air pass's orient-to-first-build time, and no pass whose log line names a retyped helper script.
