@@ -50,6 +50,17 @@ fn button(app: &mut App, text: &str) -> Entity {
         .unwrap_or_else(|| panic!("no button says `{text}`"))
 }
 
+/// The `Submit` button that says `text`: the page's main action, and not a plain one with the same words on another page.
+fn submit_button_named(app: &mut App, text: &str) -> Entity {
+    let world = app.world_mut();
+    let mut q = world.query::<(Entity, &ButtonVariant, &Children)>();
+    let mut t = world.query::<(&Role, &Text)>();
+    q.iter(world)
+        .filter(|(_, variant, _)| **variant == ButtonVariant::Submit)
+        .find_map(|(e, _, kids)| kids.iter().find_map(|k| t.get(world, k).ok().filter(|(r, t)| **r == Role::ButtonText && t.0 == text).map(|_| e)))
+        .unwrap_or_else(|| panic!("no Submit button says `{text}`"))
+}
+
 fn variant_of(app: &App, entity: Entity) -> Option<ButtonVariant> {
     app.world().get::<ButtonVariant>(entity).copied()
 }
@@ -64,8 +75,8 @@ fn return_in_the_new_project_name_field_creates_the_project() {
     app.add_plugins(LauncherPlugin);
     app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
     settle(&mut app, 4);
-    let open = button(&mut app, "New project");
-    assert_eq!(variant_of(&app, open), Some(ButtonVariant::Submit), "the page's main action is gooey's Submit");
+    // The page's main action is gooey's Submit.
+    let open = submit_button_named(&mut app, "New project");
     app.world_mut().commands().trigger(Activate { entity: open });
     settle(&mut app, 4);
 

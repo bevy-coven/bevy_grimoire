@@ -485,3 +485,4 @@ mod a_quit_that_does_not_finish_is_ended;
 mod the_terminal_starts_no_agent_until_it_is_invoked;
 mod the_project_list_fades_at_the_edges_that_hide_rows;
 mod the_buttons_say_what_they_do;
+mod the_launcher_takes_the_desktop_conventions;
