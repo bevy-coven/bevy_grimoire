@@ -430,6 +430,12 @@ fn self_test_result(In(params): In<Value>, mut terminal: ResMut<crate::terminal:
     crate::terminal_agent::self_test_result(&mut terminal, &params)
 }
 
+/// **`grimoire/agent_session` — the omp session an agent tab is in**, from the extension Cauldron writes beside the tools
+/// config (`terminal_agent::OMP_EXTENSION_SOURCE`), so the next launch can resume it (`agent_resume`).
+fn agent_session(In(params): In<Value>, mut terminal: ResMut<crate::terminal::Terminal>) -> Result<Value, String> {
+    crate::terminal_agent::agent_session(&mut terminal, &params)
+}
+
 /// **The parameters of `grimoire/project_open`.** The MCP server's `grimoire_open_project` forwards exactly these
 /// (`a_tools_body_names_every_field`).
 #[derive(serde::Deserialize)]
@@ -2404,6 +2410,17 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({"token": "1a2b", "checks": [{"name": "state", "ok": true, "detail": "the editor is on launcher"}]})),
             self_test_result,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/agent_session",
+                "The omp extension Cauldron's terminal started says which session its agent is in (or null once \
+                 it left the session), with the tab's token, so the editor can resume that session the next time \
+                 it opens the project.",
+            )
+            .example(json!({"token": "1a2b", "session": "01a1bb82-fdc4-7343-83c6-b6dce13deffa"})),
+            agent_session,
         );
 
         app.add_debug_command(

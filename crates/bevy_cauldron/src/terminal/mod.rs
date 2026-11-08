@@ -106,6 +106,9 @@ pub struct Terminal {
     /// **The settings have been given at least once.** No shell opens before: a first tab that opened
     /// a frame before the settings were read would be a plain shell for a person who chose an agent.
     settings_taken: bool,
+    /// **The projects whose agent tab was closed or whose shell left**, until `terminal_agent::keep_the_resume_record`
+    /// takes them: the person ended that agent, so its resume record goes. Quitting the editor adds nothing here.
+    ended_agents: Vec<PathBuf>,
 }
 
 /// One shell, its screen, and what is drawn about it.
@@ -304,6 +307,11 @@ impl Terminal {
         self.open.iter_mut().filter_map(|tab| tab.agent.as_mut())
     }
 
+    /// **Take the projects whose agent tab has been taken out** since the last call ([`Self::remove_tab`]).
+    pub fn take_ended_agents(&mut self) -> Vec<PathBuf> {
+        std::mem::take(&mut self.ended_agents)
+    }
+
     /// **The caret every shell gets when its program asks for none** (#324), now and for each shell
     /// opened after. A program that asked for a shape keeps it.
     pub fn set_default_caret(&mut self, shape: CaretShape) {
@@ -370,6 +378,9 @@ impl Terminal {
     /// **Take the tab at `index` out**, with its shell (`Drop` hangs the child up), keeping the same tab
     /// drawn when it is another one that goes.
     fn remove_tab(&mut self, index: usize) {
+        if let Some(project) = self.open[index].agent.as_ref().and_then(|post| post.project.clone()) {
+            self.ended_agents.push(project);
+        }
         self.open.remove(index);
         if index < self.active {
             self.active -= 1;

@@ -469,6 +469,7 @@ impl Plugin for TerminalPanePlugin {
                 )
                     .in_set(crate::terminal_view::TerminalChordSet),
             )
+            .add_systems(Update, resume_the_agent_that_was_running)
             .add_observer(a_click_takes_the_keyboard)
             .add_observer(a_click_elsewhere_gives_it_back)
             .add_observer(a_drag_begins)
@@ -1956,6 +1957,54 @@ fn enter_invokes_the_agent(
     let (cols, rows) = measured_cells(&pane);
     crate::terminal_agent::open_agent_tab(&mut terminal, cols, rows, setup.as_deref(), root.as_deref(), time.elapsed_secs_f64());
     redraw_the_bar(&mut commands, &bar, &terminal);
+}
+
+/// **An agent that was running when Cauldron last closed is started again, where it left off** (`feedback-1794148425925`).
+///
+/// Once per project per run: the first frame the terminal would offer `Invoke Agent` (the settings choose omp and nothing
+/// is open) at a project whose resume record names an omp session ([`crate::agent_resume`]), the tab opens by itself and
+/// types `omp --resume <session>`. A person who pressed `Invoke Agent` or `+` first is not overridden (a tab is open), a
+/// record that cannot be read is said in the pane and nothing is started, and the record is struck out when the person ends
+/// that agent, or when the resumed omp never connects (`terminal_agent::keep_the_resume_record`), so a session that cannot
+/// be resumed is not tried at every launch.
+#[allow(clippy::too_many_arguments)]
+fn resume_the_agent_that_was_running(
+    pane: Res<TerminalPane>,
+    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
+    root: Option<Res<crate::project_assets::ProjectRoot>>,
+    time: Res<Time<Real>>,
+    mut terminal: ResMut<Terminal>,
+    bar: Query<Entity, With<TerminalBar>>,
+    mut commands: Commands,
+    mut tried: Local<Option<std::path::PathBuf>>,
+) {
+    if terminal.agent() != crate::settings::TerminalAgent::OhMyPi || !terminal.invites_the_agent() {
+        return;
+    }
+    let (Some(setup), Some(project)) = (setup.as_deref(), root.as_deref().and_then(crate::project_assets::ProjectRoot::current)) else {
+        return;
+    };
+    if tried.as_ref() == Some(&project) {
+        return;
+    }
+    *tried = Some(project.clone());
+    match crate::agent_resume::recall(&setup.files, &project) {
+        Ok(Some(entry)) if entry.harness == crate::settings::TerminalAgent::OhMyPi.name() => {
+            let (cols, rows) = measured_cells(&pane);
+            crate::terminal_agent::open_agent_tab_resuming(
+                &mut terminal,
+                cols,
+                rows,
+                Some(setup),
+                root.as_deref(),
+                Some(&entry.session),
+                time.elapsed_secs_f64(),
+            );
+            redraw_the_bar(&mut commands, &bar, &terminal);
+        }
+        Ok(_) => {}
+        Err(why) => terminal.refuse(format!("the agent that was running here could not be looked up, so none was resumed: {why}")),
+    }
 }
 
 /// **The status chip brings the self-test card back**, and types the self-test prompt into omp again

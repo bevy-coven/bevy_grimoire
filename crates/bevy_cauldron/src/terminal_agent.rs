@@ -59,9 +59,45 @@ const MCP_CONFIG_FILE: &str = "mcp.json";
 /// it was given with `-e <dir>`, and omp has no flag naming an MCP config.
 const OMP_EXTENSION_DIR: &str = "omp";
 const OMP_MCP_FILE: &str = ".mcp.json";
-/// The extension's entry, which omp resolves a folder to; it does nothing.
+/// The extension's entry, which omp resolves a folder to.
 const OMP_EXTENSION_ENTRY: &str = "index.ts";
-const OMP_EXTENSION_SOURCE: &str = "// Written by Cauldron on every agent launch: an empty omp extension whose folder carries the editor's MCP server (.mcp.json).\nexport default function () {}\n";
+/// **The extension written beside the MCP config on every launch.** It tells the editor which omp session its tab is in
+/// (`grimoire/agent_session`, with the tab's token), when the session starts and when the person switches to another
+/// inside omp, and that the agent left its session when omp shuts down. That is how the editor can resume the session the
+/// next time it opens the project ([`crate::agent_resume`]); omp has no flag that prints its session id, and the id is the
+/// extension's to read (`ctx.sessionManager.getSessionId()`). A report the editor cannot take is said in omp's own UI.
+pub const OMP_EXTENSION_SOURCE: &str = r#"// Written by Cauldron on every agent launch. An omp extension whose folder carries the editor's MCP server (.mcp.json), and which tells the editor which omp session its tab is in, so the editor can resume that session the next time it opens this project.
+const port = process.env.BEVY_BRP_PORT;
+const token = process.env.CAULDRON_AGENT_TOKEN;
+
+async function tell(session: string | null): Promise<string | null> {
+	if (!port || !token) return "BEVY_BRP_PORT or CAULDRON_AGENT_TOKEN is not set";
+	try {
+		const reply = await fetch(`http://127.0.0.1:${port}/`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "grimoire/agent_session", params: { token, session } }),
+			signal: AbortSignal.timeout(1000),
+		});
+		const body: any = await reply.json();
+		return body.error ? String(body.error.message ?? body.error) : null;
+	} catch (e) {
+		return String(e);
+	}
+}
+
+export default function (pi: any) {
+	const report = async (_event: unknown, ctx: any) => {
+		const failed = await tell(ctx.sessionManager.getSessionId());
+		if (failed) ctx.ui?.notify?.(`Cauldron was not told this session's id, so it cannot resume it: ${failed}`, "warning");
+	};
+	pi.on("session_start", report);
+	pi.on("session_switch", report);
+	pi.on("session_shutdown", async () => {
+		await tell(null);
+	});
+}
+"#;
 
 /// **The four checks, in the order the card lists them.**
 pub const CHECK_LABELS: [&str; 4] = ["Tools server", "Agent started", "Agent connected", "Agent self test"];
@@ -160,6 +196,18 @@ pub struct AgentPost {
     /// How many tools the server offered its client.
     pub tools: Option<usize>,
     pub revision: u32,
+    /// **The project the tab was started for**, which keys its resume record ([`crate::agent_resume`]); `None` when no
+    /// project was open.
+    pub project: Option<PathBuf>,
+    /// **The omp session the agent says it is in now** (`grimoire/agent_session`): `None` before it says, and again once it
+    /// has left its session.
+    pub session: Option<String>,
+    /// The session this launch was told to resume, when it was a resume.
+    pub resuming: Option<String>,
+    /// `session` changed since the resume record was last settled ([`keep_the_resume_record`]).
+    session_changed: bool,
+    /// A resumed agent never connected, so the session the record named cannot be resumed: the record is struck out.
+    resume_failed: bool,
 }
 
 impl AgentPost {
@@ -175,6 +223,11 @@ impl AgentPost {
             shown_until_s: None,
             tools: None,
             revision: 0,
+            project: None,
+            session: None,
+            resuming: None,
+            session_changed: false,
+            resume_failed: false,
         }
     }
 
@@ -206,7 +259,7 @@ impl AgentPost {
             Some((name, version)) => format!("{name} {version} · {tools} tools"),
             None => format!("an MCP client · {tools} tools"),
         });
-        if !matches!(self.checks[SELF_TEST], CheckStatus::Passed(_)) {
+        if self.resuming.is_none() && !matches!(self.checks[SELF_TEST], CheckStatus::Passed(_)) {
             self.checks[SELF_TEST] = CheckStatus::Pending;
             self.settled_s = None;
         }
@@ -225,6 +278,15 @@ impl AgentPost {
         self.revision += 1;
     }
 
+    /// **The agent says which session it is in** (`grimoire/agent_session`), or `None` once it has left its session
+    /// (omp shut down). The resume record follows it ([`keep_the_resume_record`]).
+    pub fn session_reported(&mut self, session: Option<String>) {
+        if self.session != session {
+            self.session = session;
+            self.session_changed = true;
+        }
+    }
+
     /// **The timeouts, and the moment the checks settled.**
     pub fn tick(&mut self, now_s: f64) {
         if self.checks[CONNECTED] == CheckStatus::Pending
@@ -236,6 +298,7 @@ impl AgentPost {
                 self.harness.name()
             ));
             self.checks[SELF_TEST] = CheckStatus::Skipped("needs a connected agent".to_owned());
+            self.resume_failed = self.resuming.is_some();
             self.revision += 1;
         }
         if self.checks[SELF_TEST] == CheckStatus::Pending
@@ -333,6 +396,21 @@ pub fn plan(
     project: Option<&Path>,
     now_s: f64,
 ) -> AgentLaunch {
+    plan_resuming(harness, command, setup, project, None, now_s)
+}
+
+/// **[`plan`], for an omp tab that picks a remembered session back up** (`omp --resume <id>`): no self-test prompt is
+/// typed, because the session already has its history and a person has not asked for a turn, and the self test is skipped
+/// with that said. `resume` names the session; anything but an omp harness, or an id that is not a session id, starts
+/// nothing and says so on the card.
+pub fn plan_resuming(
+    harness: TerminalAgent,
+    command: Option<&str>,
+    setup: Option<&AgentSetup>,
+    project: Option<&Path>,
+    resume: Option<&str>,
+    now_s: f64,
+) -> AgentLaunch {
     let token = format!(
         "{:x}",
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())
@@ -343,6 +421,8 @@ pub fn plan(
         TerminalAgent::OhMyPi | TerminalAgent::Off => harness.name(),
     };
     let mut post = AgentPost::new(harness, token.clone(), first_word.to_owned(), now_s);
+    post.project = project.map(Path::to_path_buf);
+    post.resuming = resume.map(str::to_owned);
     let nothing = |mut post: AgentPost, why: String| {
         post.checks[SERVER] = CheckStatus::Failed(why);
         post.skip_from(STARTED, "nothing was started");
@@ -350,6 +430,14 @@ pub fn plan(
     };
     if harness == TerminalAgent::Off {
         return nothing(post, "no terminal agent is chosen: pick one in Settings, Terminal".to_owned());
+    }
+    if let Some(id) = resume {
+        if harness != TerminalAgent::OhMyPi {
+            return nothing(post, "only an omp session can be resumed".to_owned());
+        }
+        if !crate::agent_resume::is_session_id(id) {
+            return nothing(post, format!("{id:?} is not a session id, so nothing was resumed"));
+        }
     }
     let Some(setup) = setup else {
         return nothing(post, "this editor was started without an agent setup, so it cannot hand an agent its tools".to_owned());
@@ -399,9 +487,13 @@ pub fn plan(
     }
     post.checks[SERVER] = CheckStatus::Passed(format!("{MCP_BINARY} on port {port}"));
     let line = match harness {
-        TerminalAgent::OhMyPi => {
-            format!("omp -e {} {}\r", shell_quote(&omp_dir.to_string_lossy()), shell_quote(SELF_TEST_PROMPT))
-        }
+        TerminalAgent::OhMyPi => match resume {
+            Some(session) => {
+                post.checks[SELF_TEST] = CheckStatus::Skipped("a resumed session is not asked its self test again".to_owned());
+                format!("omp -e {} --resume {}\r", shell_quote(&omp_dir.to_string_lossy()), shell_quote(session))
+            }
+            None => format!("omp -e {} {}\r", shell_quote(&omp_dir.to_string_lossy()), shell_quote(SELF_TEST_PROMPT)),
+        },
         TerminalAgent::Custom | TerminalAgent::Off => match command {
             Some(command) => format!("{command}\r"),
             None => {
@@ -483,6 +575,33 @@ pub fn self_test_result(terminal: &mut Terminal, params: &Value) -> Result<Value
     Ok(json!({"known": true}))
 }
 
+/// `grimoire/agent_session`'s body.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SessionReport {
+    token: Option<String>,
+    session: Option<String>,
+}
+
+/// **An omp extension a terminal tab started says which session it is in**, or that it left its session (`session: null`),
+/// for the tab whose token it carries. `{"known": true}` when the token is a tab's. The id is typed into a shell on the
+/// next launch, so one that is not a session id is refused here.
+pub fn agent_session(terminal: &mut Terminal, params: &Value) -> Result<Value, String> {
+    const SHAPE: &str = "agent_session takes token and session (a session id, or null once the agent left its session)";
+    let report: SessionReport = serde_json::from_value(params.clone()).map_err(|e| format!("{SHAPE}: {e}"))?;
+    if let Some(id) = &report.session
+        && !crate::agent_resume::is_session_id(id)
+    {
+        return Err(format!("{SHAPE}: {id:?} is not a session id"));
+    }
+    let post = report.token.as_deref().and_then(|token| terminal.agent_with_token_mut(token));
+    let Some(post) = post else {
+        return Ok(json!({"known": false}));
+    };
+    post.session_reported(report.session);
+    Ok(json!({"known": true}))
+}
+
 /// **Open an agent tab** of the chosen harness, `cols` by `rows`, where the next shell starts, its
 /// server told the open project: what the `Invoke Agent` button and the `Agent` chip both do.
 pub fn open_agent_tab(
@@ -493,8 +612,22 @@ pub fn open_agent_tab(
     root: Option<&crate::project_assets::ProjectRoot>,
     now_s: f64,
 ) -> usize {
+    open_agent_tab_resuming(terminal, cols, rows, setup, root, None, now_s)
+}
+
+/// **[`open_agent_tab`] for an omp session that was running when the editor closed**, which picks that session back up
+/// (`omp --resume <session>`): what the pane does by itself at a project that has a resume record.
+pub fn open_agent_tab_resuming(
+    terminal: &mut Terminal,
+    cols: u16,
+    rows: u16,
+    setup: Option<&AgentSetup>,
+    root: Option<&crate::project_assets::ProjectRoot>,
+    resume: Option<&str>,
+    now_s: f64,
+) -> usize {
     let project = root.and_then(crate::project_assets::ProjectRoot::current);
-    let launch = plan(terminal.agent(), terminal.agent_command(), setup, project.as_deref(), now_s);
+    let launch = plan_resuming(terminal.agent(), terminal.agent_command(), setup, project.as_deref(), resume, now_s);
     let cwd = terminal.next_cwd();
     terminal.spawn_agent(cols, rows, &cwd, launch)
 }
@@ -504,7 +637,7 @@ pub struct TerminalAgentPlugin;
 
 impl Plugin for TerminalAgentPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, tick_the_agents);
+        app.add_systems(Update, (tick_the_agents, keep_the_resume_record));
     }
 }
 
@@ -520,6 +653,52 @@ fn tick_the_agents(mut terminal: ResMut<Terminal>, time: Res<Time<Real>>) {
     }
     if moved {
         terminal.set_changed();
+    }
+}
+
+/// **The record of what is running in each project follows what the agents say** ([`crate::agent_resume`]).
+///
+/// A project's record is the newest session an open agent tab of it holds, or nothing: written when a tab reports a
+/// session, struck out when its agent leaves the session, when its tab is closed ([`Terminal::take_ended_agents`]: the
+/// person closed it, or typed `exit` at its shell), and when a resumed agent never connected. **Nothing here runs when
+/// the editor quits**, so a record that is still there at the next launch is an agent that was running when it closed.
+/// A record that cannot be written or read is said in the pane's refusal, not dropped.
+fn keep_the_resume_record(mut terminal: ResMut<Terminal>, setup: Option<Res<AgentSetup>>) {
+    let Some(setup) = setup else {
+        return;
+    };
+    let quiet = terminal.bypass_change_detection();
+    let mut projects = quiet.take_ended_agents();
+    for post in quiet.agent_posts_mut() {
+        let failed = std::mem::take(&mut post.resume_failed);
+        if failed {
+            post.session = None;
+        }
+        if (std::mem::take(&mut post.session_changed) || failed)
+            && let Some(project) = &post.project
+        {
+            projects.push(project.clone());
+        }
+    }
+    projects.sort();
+    projects.dedup();
+    let mut refused = Vec::new();
+    for project in projects {
+        let session = quiet
+            .agent_posts_mut()
+            .filter(|post| post.project.as_deref() == Some(project.as_path()))
+            .filter_map(|post| post.session.clone())
+            .last();
+        let settled = match &session {
+            Some(session) => crate::agent_resume::remember(&setup.files, &project, TerminalAgent::OhMyPi.name(), session),
+            None => crate::agent_resume::forget(&setup.files, &project),
+        };
+        if let Err(why) = settled {
+            refused.push(format!("the agent's resume record for {} could not be kept: {why}", project.display()));
+        }
+    }
+    for why in refused {
+        terminal.refuse(why);
     }
 }
 
@@ -638,5 +817,63 @@ mod tests {
         post.self_test(&[("state".to_owned(), true, "a".to_owned()), ("picture".to_owned(), true, "b".to_owned())]);
         assert_eq!(post.checks[3], CheckStatus::Passed("a · b".to_owned()));
         assert!(!post.rerun(102.0), "a passing test is not asked again");
+    }
+
+    /// **A resumed omp session is picked back up and not asked its self test again** (`feedback-1794148425925`, oracle
+    /// `spec`): the line is `omp --resume <session>` with the extension, with no prompt typed.
+    #[test]
+    fn a_resumed_omp_plan_types_resume_with_the_session_and_no_self_test_prompt() {
+        let setup = setup("resume");
+        let session = "01a1bb82-fdc4-7343-83c6-b6dce13deffa";
+        let launch = plan_resuming(TerminalAgent::OhMyPi, None, Some(&setup), Some(Path::new("/tmp/p")), Some(session), 0.0);
+        let omp = setup.files.join("omp");
+        assert_eq!(String::from_utf8_lossy(&launch.line), format!("omp -e '{}' --resume '{session}'\r", omp.display()));
+        assert!(!String::from_utf8_lossy(&launch.line).contains("self test"), "no prompt is typed into a resumed session");
+        assert!(matches!(launch.post.checks[3], CheckStatus::Skipped(_)), "{:?}", launch.post.checks[3]);
+        assert_eq!(launch.post.project.as_deref(), Some(Path::new("/tmp/p")));
+        assert_eq!(launch.post.resuming.as_deref(), Some(session));
+        let mut post = launch.post;
+        post.started();
+        post.hello(None, 22, 5.0);
+        assert!(matches!(post.checks[3], CheckStatus::Skipped(_)), "a connection does not ask a resumed session for its self test");
+    }
+
+    /// **An id that is typed into a shell is checked, and only omp resumes.**
+    #[test]
+    fn a_resume_of_a_string_that_is_not_a_session_or_of_a_harness_that_is_not_omp_starts_nothing() {
+        let setup = setup("resume_refused");
+        let bad = plan_resuming(TerminalAgent::OhMyPi, None, Some(&setup), None, Some("x; rm -rf ~"), 0.0);
+        assert!(bad.line.is_empty(), "a session id with a shell in it is never typed");
+        assert!(matches!(&bad.post.checks[0], CheckStatus::Failed(why) if why.contains("not a session id")), "{:?}", bad.post.checks[0]);
+        let other = plan_resuming(TerminalAgent::Custom, Some("echo hi"), Some(&setup), None, Some("0197-abc"), 0.0);
+        assert!(other.line.is_empty());
+        assert!(matches!(&other.post.checks[0], CheckStatus::Failed(why) if why.contains("only an omp session")), "{:?}", other.post.checks[0]);
+    }
+
+    /// **A resumed agent that never connects strikes its own record**: the session cannot be resumed, so the next launch does
+    /// not try it again.
+    #[test]
+    fn a_resumed_agent_that_never_connects_asks_for_its_record_to_go_and_a_fresh_one_does_not() {
+        let setup = setup("resume_fails");
+        for (resume, struck) in [(Some("0197-abc"), true), (None, false)] {
+            let launch = plan_resuming(TerminalAgent::OhMyPi, None, Some(&setup), Some(Path::new("/tmp/p")), resume, 0.0);
+            let mut post = launch.post;
+            post.started();
+            post.tick(AGENT_HELLO_TIMEOUT_S + 1.0);
+            assert_eq!(post.resume_failed, struck, "resume {resume:?}");
+        }
+    }
+
+    /// **The agent's session report names a tab by its token, and only a session id is taken** (it is typed into a shell next
+    /// launch).
+    #[test]
+    fn a_session_report_for_no_tab_is_unknown_and_one_that_is_not_an_id_is_refused() {
+        let mut terminal = Terminal::default();
+        let stranger = agent_session(&mut terminal, &json!({"token": "nobody", "session": "0197-abc"}));
+        assert_eq!(stranger, Ok(json!({"known": false})));
+        let no_token = agent_session(&mut terminal, &json!({"token": null, "session": null}));
+        assert_eq!(no_token, Ok(json!({"known": false})));
+        assert!(agent_session(&mut terminal, &json!({"token": "t", "session": "a b; c"})).is_err(), "a string with a shell in it is refused");
+        assert!(agent_session(&mut terminal, &json!({"token": "t", "session": "0197-abc", "extra": 1})).is_err(), "an unknown field is refused");
     }
 }
