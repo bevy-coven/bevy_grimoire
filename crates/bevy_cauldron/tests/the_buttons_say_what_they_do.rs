@@ -90,10 +90,12 @@ fn return_in_the_new_project_name_field_creates_the_project() {
     app.world_mut().resource_mut::<NewProjectForm>().0.location = scratch.to_string_lossy().into_owned();
     assert!(app.world_mut().query_filtered::<Entity, With<NameField>>().single(app.world()).is_ok(), "the form has its Name field");
     bevy_gooey::testing::type_text(&mut app, "harbour");
+    eprintln!("DEBUG name={:?} focus={:?} label={:?}", app.world().resource::<NewProjectForm>().0.name, bevy_gooey::testing::focused(&app), bevy_gooey::testing::focused_label(&app));
     assert!(!scratch.join("harbour").exists(), "typing a name creates nothing by itself");
 
     bevy_gooey::testing::press(&mut app, KeyCode::Enter);
     settle(&mut app, 4);
+    eprintln!("DEBUG after enter: form={} problem={:?} done={}", app.world().get_resource::<NewProjectForm>().is_some(), app.world().resource::<bevy_cauldron::launcher::Launcher>().problem, app.world().resource::<bevy_cauldron::launcher::Launcher>().new_project_done);
     assert!(scratch.join("harbour").is_dir(), "Return in the Name field pressed Create: the project's folder is made");
     assert!(app.world().get_resource::<NewProjectForm>().is_none(), "and the form is gone");
     let _ = std::fs::remove_dir_all(&scratch);
