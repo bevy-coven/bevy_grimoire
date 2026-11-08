@@ -649,10 +649,10 @@
       "taken_at_ms": 1794147411369,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Says how the screen is: scrolling over the terminal also zooms the map; the note's suggestion (no zoom off the map) is the fix.",
       "commit": "",
       "attempts": []
     },
