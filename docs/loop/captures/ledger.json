@@ -504,11 +504,28 @@
       "app_version": "0.4.3",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "The Undo tooltip's keycap shows a '?' where the Mac chord's command glyph should be: the face lacks the glyph and draws a fallback.",
-      "commit": "",
-      "attempts": []
+      "reason": "the face lacks the Mac command glyph, so the Undo keycap drew a box; the editor now spells chords in words (gooey ChordGlyphs::Words, #45)",
+      "commit": "edb51e56",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2176x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed Cauldron 0.5.0 on a scratch project, the fitted default window, pointer on the Undo button: the tooltip opens and its keycap's text reads the single string '\u2318Z' (read over BRP), the command-key symbol that Fira Mono's character map lacks, so it draws as the box with a question mark."
+        },
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "The capture's own window (saved frame 1280x703 logical, scale factor 2, UI scale 2.4): the same keycap, text '\u2318Z'. The editor's own hint in the same window spells the chord 'Cmd+O' in words."
+        }
+      ]
     },
     {
       "stem": "feedback-1794103491165",
