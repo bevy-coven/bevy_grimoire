@@ -453,10 +453,10 @@
       "taken_at_ms": 1794089325724,
       "app_version": "0.4.1",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "enhancement",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Asks for a Check for Update button beside the version, to look again for an update published after the app opened: new behaviour.",
       "commit": "",
       "attempts": []
     },
