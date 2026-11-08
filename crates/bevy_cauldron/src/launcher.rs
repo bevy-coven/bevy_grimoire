@@ -670,6 +670,8 @@ fn follow_the_updater(
     updater: Option<Res<crate::update::Updater>>,
     mut lines: Query<(&ChildOf, &mut Text, Ref<VersionLine>)>,
     buttons: Query<(Entity, &ChildOf), With<crate::update::UpdateButton>>,
+    checks: Query<(Entity, &ChildOf), With<crate::update::CheckButton>>,
+    children: Query<&Children>,
 ) {
     let fresh = lines.iter().any(|(_, _, line)| line.is_added());
     if !fresh && !updater.as_ref().is_some_and(|u| u.is_changed()) {
@@ -682,13 +684,33 @@ fn follow_the_updater(
             text.0.clone_from(&words);
         }
         let placed: Vec<Entity> = buttons.iter().filter(|(_, p)| p.parent() == sidebar.parent()).map(|(e, _)| e).collect();
+        let check_placed: Vec<Entity> = checks.iter().filter(|(_, p)| p.parent() == sidebar.parent()).map(|(e, _)| e).collect();
         match offer {
             Some(updater) if placed.is_empty() => {
-                commands.entity(sidebar.parent()).with_child(crate::update::update_button(updater.label()));
+                // Above the quiet control when it is already there: the offer is the primary thing on the home.
+                let new = commands.spawn(crate::update::update_button(updater.label())).id();
+                let at = children.get(sidebar.parent()).ok().and_then(|kids| kids.iter().position(|kid| check_placed.contains(&kid)));
+                match at {
+                    Some(at) => commands.entity(sidebar.parent()).insert_children(at, &[new]),
+                    None => commands.entity(sidebar.parent()).add_child(new),
+                };
             }
             Some(_) => {}
             None => {
                 for button in placed {
+                    commands.entity(button).despawn();
+                }
+            }
+        }
+        // **The quiet control is the sidebar's last row**, under the button that takes an update when there is one: the
+        // offer is the primary thing on the home and the way to look again is not.
+        match updater.as_deref().filter(|u| u.offers_a_check()) {
+            Some(updater) if check_placed.is_empty() => {
+                commands.entity(sidebar.parent()).with_child(crate::update::check_button(updater.check_label()));
+            }
+            Some(_) => {}
+            None => {
+                for button in check_placed {
                     commands.entity(button).despawn();
                 }
             }

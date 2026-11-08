@@ -346,6 +346,21 @@ impl Updater {
         self.actionable()
     }
 
+    /// **Does the home offer to look again?** Whenever nothing is being installed: a download or a restart in flight is
+    /// not interrupted by a question about newer releases, and every other state (never checked, up to date, an offer on
+    /// the table, a failure) can ask the feed again.
+    pub fn offers_a_check(&self) -> bool {
+        !matches!(self.state, UpdateState::Downloading { .. } | UpdateState::Installing(_))
+    }
+
+    /// What [`CheckButton`] reads: its words, or that it is looking.
+    pub fn check_label(&self) -> String {
+        match self.state {
+            UpdateState::Checking => "Checking for updates…".to_owned(),
+            _ => "Check for updates".to_owned(),
+        }
+    }
+
     /// Start a check. `manual` says a person pressed for it, which is what decides whether an
     /// answer of "nothing newer" is worth saying — see [`Self::manual`].
     fn begin_check(&mut self, manual: bool) {
@@ -607,6 +622,21 @@ pub fn update_button(label: String) -> impl bevy::prelude::Bundle {
     (button(label), UpdateButton, bevy::picking::Pickable::default(), observe(on_activate))
 }
 
+/// **The discrete `Check for updates` control on the home** (feedback-1794089325724: *"a discrete button ... "Check for
+/// Update" or something, in case an update was pushed after opening the app"*).
+///
+/// The launch check asks the feed once, so a release published after the app opened was never found while it stayed
+/// open: the home shows [`UpdateButton`] only once there is something to take, and `UpToDate` is a quiet line. This is the
+/// way to look again, in the quietest button the skin has, and it does only that: [`on_check`] begins a check and never a
+/// download, so it cannot be mistaken for the button that installs.
+#[derive(Component)]
+pub struct CheckButton;
+
+/// A quiet button that looks for an update. `Pickable` for the same reason [`update_button`]'s is.
+pub fn check_button(label: String) -> impl bevy::prelude::Bundle {
+    (button(label), bevy_gooey::ButtonVariant::GhostMuted, CheckButton, bevy::picking::Pickable::default(), observe(on_check))
+}
+
 /// **The download bar**, shown beside the update button while an update is coming down
 /// (`feedback-1793903311065`: *"Can we make this a download bar whenever you hit Update, then when the
 /// update is finished, switch back to a button"*).
@@ -734,6 +764,25 @@ fn on_activate(
             }
         }
         UpdateState::Checking | UpdateState::Downloading { .. } | UpdateState::Installing(_) => {}
+    }
+}
+
+/// **A press on [`CheckButton`]**: look again. An app that cannot update where it is says why instead; a check, a download or
+/// a restart already under way is left alone. From `Available` it looks for a newer release than the one on offer, which
+/// the offer's own button, whose press is a download, cannot.
+fn on_check(
+    _: On<bevy_gooey::Activate>,
+    updater: Option<ResMut<Updater>>,
+    mut editor: Option<ResMut<crate::editor::EditorState>>,
+    mut launcher: Option<ResMut<crate::launcher::Launcher>>,
+) {
+    let Some(mut updater) = updater else { return };
+    if let Some(reason) = updater.blocked.clone() {
+        tell(&reason, editor.as_deref_mut(), launcher.as_deref_mut());
+        return;
+    }
+    if updater.offers_a_check() && updater.state != UpdateState::Checking {
+        updater.begin_check(true);
     }
 }
 
@@ -943,15 +992,59 @@ fn place_in_the_chrome_bar(
     }
 }
 
-/// Every update button reads [`Updater::label`].
-fn relabel(updater: Option<Res<Updater>>, buttons: Query<&Children, With<UpdateButton>>, mut texts: Query<&mut Text>) {
+/// Every update button reads [`Updater::label`], and every check button [`Updater::check_label`].
+fn relabel(
+    updater: Option<Res<Updater>>,
+    buttons: Query<&Children, With<UpdateButton>>,
+    checks: Query<&Children, With<CheckButton>>,
+    mut texts: Query<&mut Text>,
+) {
     let Some(updater) = updater else { return };
-    let want = updater.label();
-    for child in buttons.iter().flat_map(|children| children.iter()) {
-        if let Ok(mut text) = texts.get_mut(child)
-            && text.0 != want
-        {
-            text.0.clone_from(&want);
+    for (children, want) in buttons.iter().map(|c| (c, updater.label())).chain(checks.iter().map(|c| (c, updater.check_label()))) {
+        for child in children.iter() {
+            if let Ok(mut text) = texts.get_mut(child)
+                && text.0 != want
+            {
+                text.0.clone_from(&want);
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn updater_in(state: UpdateState) -> Updater {
+        let mut updater = Updater::new("http://127.0.0.1:9/none".to_owned(), PathBuf::from("/nonexistent/Cauldron.app"));
+        updater.state = state;
+        updater
+    }
+
+    /// **The home offers to look again in every state but an install** (feedback-1794089325724; oracle `spec`). A release
+    /// published after the app opened is found by asking the feed again, so never-checked, up to date, an offer on the
+    /// table, a failure and a check already running all keep the control; a download or a restart is not interrupted by it.
+    #[test]
+    fn the_check_control_is_offered_in_every_state_but_an_install() {
+        let offer = Offer { version: semver::Version::new(9, 9, 9), zip_url: String::new(), sums_url: String::new() };
+        for (state, offered) in [
+            (UpdateState::Idle, true),
+            (UpdateState::Checking, true),
+            (UpdateState::UpToDate, true),
+            (UpdateState::Available(offer), true),
+            (UpdateState::Failed("offline".to_owned()), true),
+            (UpdateState::Downloading { version: semver::Version::new(9, 9, 9), received: 1, total: Some(2) }, false),
+            (UpdateState::Installing(semver::Version::new(9, 9, 9)), false),
+        ] {
+            let updater = updater_in(state.clone());
+            assert_eq!(updater.offers_a_check(), offered, "{state:?}");
+        }
+    }
+
+    /// While a check runs the control says so, and is not a second press waiting to be dropped.
+    #[test]
+    fn the_check_control_says_when_it_is_looking() {
+        assert_eq!(updater_in(UpdateState::UpToDate).check_label(), "Check for updates");
+        assert_eq!(updater_in(UpdateState::Checking).check_label(), "Checking for updates…");
     }
 }
