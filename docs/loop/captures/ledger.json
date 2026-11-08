@@ -454,11 +454,20 @@
       "app_version": "0.4.1",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
       "reason": "Asks for a Check for Update button beside the version, to look again for an update published after the app opened: new behaviour.",
-      "commit": "",
-      "attempts": []
+      "commit": "cadd7a05",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2176x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Observed after the fix, for the record pass 13 left out: the installed Cauldron 0.5.0 launcher (no build with the fix) shows the sidebar's version line 'v0.5.0 \u00b7 up to date' and nothing under it: no way to look again for a release published after the app opened. The enhancement's spec test failed the same way on the base (no 'Check for updates' control)."
+        }
+      ]
     },
     {
       "stem": "feedback-1794096613481",
