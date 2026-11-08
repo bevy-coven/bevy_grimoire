@@ -406,6 +406,22 @@ fn follow_the_hand_back(
                         Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
                     ))
                     .with_children(|card| {
+                        card.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
+                            .with_children(|answers| {
+                                for (text, reply) in [
+                                    ("Accept".to_owned(), crate::present::Reply::Accept),
+                                    (crate::present::undo_label(presented.operation_ids.len()), crate::present::Reply::Undo),
+                                    ("Dismiss".to_owned(), crate::present::Reply::Dismiss),
+                                ] {
+                                    answers.spawn((
+                                        button(text),
+                                        HandBackAnswer(reply),
+                                        observe(move |_: On<Activate>, mut answer: ResMut<crate::present::PresentationReply>| {
+                                            answer.0 = Some(reply);
+                                        }),
+                                    ));
+                                }
+                            });
                         for (name, text) in [
                             ("MADE", presented.summary.clone()),
                             ("SAID", presented.specified.join("; ")),
@@ -424,25 +440,11 @@ fn follow_the_hand_back(
                                         });
                                 });
                         }
-                        card.spawn(Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() })
-                            .with_children(|answers| {
-                                for (text, reply) in [
-                                    ("Accept".to_owned(), crate::present::Reply::Accept),
-                                    (crate::present::undo_label(presented.operation_ids.len()), crate::present::Reply::Undo),
-                                    ("Dismiss".to_owned(), crate::present::Reply::Dismiss),
-                                ] {
-                                    answers.spawn((
-                                        button(text),
-                                        HandBackAnswer(reply),
-                                        observe(move |_: On<Activate>, mut answer: ResMut<crate::present::PresentationReply>| {
-                                            answer.0 = Some(reply);
-                                        }),
-                                    ));
-                                }
-                            });
                     })
                     .id();
-                commands.entity(block).add_child(card);
+                // Right under the HAND-BACK line (the heading and the three lines are the block's first four children), where the
+                // answers are on screen without scrolling the panel.
+                commands.entity(block).insert_children(4, &[card]);
             }
         }
         (None, false) => {
