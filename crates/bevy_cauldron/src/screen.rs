@@ -706,6 +706,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // pieces that are not on the new map are dropped the next frame.
     // **`Session`**: whether the agent may write is the person's call about the whole sitting, not a door's.
     ("bevy_cauldron::familiar::AgentPause", Ownership::Session),
+    ("bevy_cauldron::familiar::AgentActivity", Ownership::Session),
     ("bevy_cauldron::selection::Selection", Ownership::Session),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.

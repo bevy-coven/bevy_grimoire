@@ -492,3 +492,4 @@ mod the_outliner_searches_and_selects;
 mod a_library_piece_dropped_on_the_map_is_placed;
 mod the_outliner_does_no_work_on_a_settled_frame;
 mod the_agent_can_be_paused;
+mod the_agent_block_says_who_changed_the_map;

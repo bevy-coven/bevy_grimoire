@@ -417,7 +417,11 @@ fn agent_hello(
     In(params): In<Value>,
     mut terminal: ResMut<crate::terminal::Terminal>,
     time: Res<Time<Real>>,
+    activity: Option<ResMut<crate::familiar::AgentActivity>>,
 ) -> Result<Value, String> {
+    if let Some(mut activity) = activity {
+        activity.hear("agent_hello", time.elapsed_secs_f64());
+    }
     crate::terminal_agent::agent_hello(&mut terminal, &params, time.elapsed_secs_f64())
 }
 
@@ -502,6 +506,17 @@ fn frame_json(
 struct Gates<'w> {
     confirm: Option<Res<'w, crate::confirm::Confirm>>,
     pause: Option<Res<'w, crate::familiar::AgentPause>>,
+    activity: Option<ResMut<'w, crate::familiar::AgentActivity>>,
+    time: Option<Res<'w, Time<Real>>>,
+}
+
+impl Gates<'_> {
+    /// An agent called `method`: the AGENT block says when it was last heard.
+    fn hear(&mut self, method: &'static str) {
+        if let (Some(activity), Some(time)) = (self.activity.as_mut(), self.time.as_deref()) {
+            activity.hear(method, time.elapsed_secs_f64());
+        }
+    }
 }
 
 /// The project and the open map, both optional: `editor_state` answers for an editor with neither.
@@ -1364,7 +1379,9 @@ fn operation_preview(
     project: Option<ResMut<crate::project::Project>>,
     open: Option<ResMut<crate::project::OpenMap>>,
     menu: Option<Res<crate::project_assets::PointedAt>>,
+    mut gates: Gates,
 ) -> Result<Value, String> {
+    gates.hear("operation_preview");
     let Some(op) = ops::find(&p.operation) else {
         return Err(format!(
             "`{}` is not an operation this editor knows.",
@@ -1442,7 +1459,7 @@ fn operation_apply(
     mut open: Option<ResMut<crate::project::OpenMap>>,
     mut due: Option<ResMut<crate::watch::Due>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
-    gates: Gates,
+    mut gates: Gates,
     door: Option<Res<crate::tiles::Door>>,
     mode: Option<Res<crate::tiles::Mode>>,
     filters: Option<Res<crate::filter::Filters>>,
@@ -1471,6 +1488,7 @@ fn operation_apply(
                 .join(", ")
         ));
     };
+    gates.hear("operation_apply");
     // **Paused: a write is refused before anything is planned, and a preview still answers.** The refusal is the
     // editor's own sentence, on the status line as a problem and in the answer; nothing is changed or logged.
     if !p.dry_run && gates.pause.as_deref().is_some_and(|pause| pause.0) {
@@ -1850,10 +1868,11 @@ fn operation_undo(
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
     presenting: Option<Res<crate::present::Presenting>>,
-    pause: Option<Res<crate::familiar::AgentPause>>,
+    mut gates: Gates,
 ) -> Result<Value, String> {
+    gates.hear("operation_undo");
     // **Taking a change back is a write too** (UI-60, #246): paused, it is refused like the change was.
-    if !p.dry_run && pause.as_deref().is_some_and(|pause| pause.0) {
+    if !p.dry_run && gates.pause.as_deref().is_some_and(|pause| pause.0) {
         let why = crate::familiar::refusal("undo");
         if let Some(state) = state.as_mut() {
             state.problem_agent_refusal("undo", &why);
