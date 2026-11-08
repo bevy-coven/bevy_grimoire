@@ -18,20 +18,30 @@
 //! the same shape `filter.rs` and `anim_tab.rs` already use for their read-only views: the editor's own
 //! type, not the crate's, and one writer per fact.
 //!
-//! # One selection at a time
+//! # A selection of several pieces
 //!
-//! A multi-selection is **not** a view with mixed values yet: the inspector shows the locked piece and
-//! says how many others are selected. #236's first acceptance item ("two pieces with different turns
-//! show —; typing 90 turns both through one log line") is the next slice, and it needs a
-//! `placement_set_pose` that takes a list — an operation change, not an inspector change.
+//! The view shows the **primary** (the lock's piece), and a field is **mixed** when another selected piece
+//! differs from it there: [`PoseWidget`] carries gooey's `InspectMixed` naming those fields, so the row
+//! reads "—" instead of one piece's number. An edit of the facing or the lift is applied to **every**
+//! selected piece: one `placement_set_pose` per distinct tip (it carries the facing and the tip
+//! together, and typing a facing must not change a tip), taking `ids` so one log line names them all, and
+//! the entries those calls leave are collapsed into one undo step (`EditorState::group_turn`). A
+//! position is not edited by typing here, so an `x` or `z` edit of several pieces does nothing.
+//!
+//! # The panel
+//!
+//! [`spawn_the_block`] puts a heading and gooey's `inspector(...)` over the view at the top of the Map
+//! door's INSPECTOR panel (the scroll list `MapControlsPane`), and the block is drawn only while
+//! something is selected.
 
 use bevy::prelude::*;
 use bevy::reflect::Reflect;
 
-use crate::editor::{EditorState, TargetLock};
+use crate::editor::{EditorState, MapControlsPane, TargetLock};
 use crate::ops::{self, Ctx, Source};
 use crate::project::{OpenMap, Project};
 use crate::screen::Screen;
+use crate::selection::Selection;
 
 /// **The selection's pose, as the reflect inspector edits it.**
 ///
@@ -68,6 +78,23 @@ impl PoseView {
 #[derive(Resource, Default)]
 pub struct PoseInspector(pub Option<Entity>);
 
+/// **The block in the INSPECTOR panel**: a heading and the reflect inspector. Drawn only while something
+/// is selected, so an empty selection does not show a row of zeroes.
+#[derive(Component)]
+pub struct PoseBlock;
+
+/// **gooey's reflect inspector over the view.** Its `InspectMixed` names the fields on which the selected
+/// pieces differ, and an edit made in it arrives as an `InspectorChange` on this entity.
+#[derive(Component)]
+pub struct PoseWidget;
+
+/// The fields of [`PoseView`] a mixed selection can differ on, by reflect path.
+const POSE_FIELDS: [&str; 4] = ["x", "z", "yaw", "lift"];
+
+/// Two floats are the same pose value when they are within a hair, so a float written and read back
+/// is not "mixed" with itself.
+const SAME_POSE_EPSILON: f32 = 1e-4;
+
 pub struct InspectorPlugin;
 
 impl Plugin for InspectorPlugin {
@@ -77,7 +104,7 @@ impl Plugin for InspectorPlugin {
             .add_systems(OnEnter(Screen::Editor), spawn_the_view.after(crate::chrome::FrameSystems))
             .add_systems(
                 Update,
-                mirror_the_selection.run_if(in_state(Screen::Editor)),
+                (spawn_the_block, mirror_the_selection).chain().run_if(in_state(Screen::Editor)),
             )
             .add_observer(pose_edits_are_operations);
     }
@@ -90,21 +117,90 @@ fn spawn_the_view(mut commands: Commands, mut slot: ResMut<PoseInspector>) {
     slot.0 = Some(entity);
 }
 
+/// **The block goes into the Map door's INSPECTOR panel** the frame the panel appears, first among the
+/// panel's rows so it is on screen without scrolling.
+fn spawn_the_block(mut commands: Commands, panes: Query<Entity, Added<MapControlsPane>>, slot: Res<PoseInspector>) {
+    let Some(view) = slot.0 else { return };
+    for pane in &panes {
+        let block = commands
+            .spawn((
+                PoseBlock,
+                Name::new("pose block"),
+                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), display: Display::None, ..default() },
+            ))
+            .with_children(|block| {
+                crate::chrome::list_heading(block, "POSE");
+                block.spawn((
+                    PoseWidget,
+                    Name::new("pose inspector"),
+                    bevy_gooey::inspector(bevy_gooey::InspectTarget::component::<PoseView>(view)),
+                    bevy_gooey::InspectMixed::default(),
+                ));
+            })
+            .id();
+        commands.entity(pane).insert_children(0, &[block]);
+    }
+}
+
+/// **The selected pieces, primary first**: the selection when it holds the lock's piece, else the lock's
+/// piece alone. A piece that left the map is not in it.
+fn selected_ids(lock: &TargetLock, selection: Option<&Selection>, open: &OpenMap) -> Vec<String> {
+    let Some(primary) = lock.placement_id().map(str::to_owned) else { return Vec::new() };
+    let mut ids: Vec<String> = selection
+        .map(|s| s.ids().to_vec())
+        .filter(|ids| ids.first() == Some(&primary))
+        .unwrap_or_else(|| vec![primary]);
+    ids.retain(|id| open.map.placements.iter().any(|p| p.id == *id));
+    ids
+}
+
 /// **The fields follow the selection.** The locked placement (else the only one selected, else nothing)
 /// is what the inspector shows; the view is written only when it differs, so a settled selection costs
-/// a comparison.
+/// a comparison. With several pieces selected, the fields on which they differ are named to gooey as
+/// mixed, and the block is drawn only while something is selected.
 fn mirror_the_selection(
     open: Option<Res<OpenMap>>,
     lock: Option<Res<TargetLock>>,
+    selection: Option<Res<Selection>>,
     mut views: Query<&mut PoseView>,
+    mut blocks: Query<&mut Node, With<PoseBlock>>,
+    mut widgets: Query<(Entity, Option<&bevy_gooey::InspectMixed>), With<PoseWidget>>,
+    mut commands: Commands,
 ) {
     let (Some(open), Some(lock)) = (open, lock) else { return };
-    let Some(id) = lock.placement_id().map(str::to_owned) else { return };
-    let Some(placed) = open.map.placements.iter().find(|p| p.id == id) else { return };
-    let want = PoseView::of(placed);
+    let ids = selected_ids(&lock, selection.as_deref(), &open);
+    let display = if ids.is_empty() { Display::None } else { Display::Flex };
+    for mut node in &mut blocks {
+        if node.display != display {
+            node.display = display;
+        }
+    }
+    let Some(primary) = ids.first().and_then(|id| open.map.placements.iter().find(|p| p.id == *id)) else { return };
+    let want = PoseView::of(primary);
     for mut view in &mut views {
         if *view != want {
             *view = want;
+        }
+    }
+    let mixed: Vec<String> = POSE_FIELDS
+        .iter()
+        .filter(|field| {
+            ids.iter().skip(1).filter_map(|id| open.map.placements.iter().find(|p| p.id == *id)).any(|other| {
+                let other = PoseView::of(other);
+                let (a, b) = match **field {
+                    "x" => (want.x, other.x),
+                    "z" => (want.z, other.z),
+                    "yaw" => (want.yaw, other.yaw),
+                    _ => (want.lift, other.lift),
+                };
+                (a - b).abs() > SAME_POSE_EPSILON
+            })
+        })
+        .map(|field| (*field).to_owned())
+        .collect();
+    for (widget, now) in &mut widgets {
+        if now.map(|m| &m.0) != Some(&mixed) {
+            commands.entity(widget).insert(bevy_gooey::InspectMixed(mixed.clone()));
         }
     }
 }
@@ -112,45 +208,70 @@ fn mirror_the_selection(
 /// **An edit of the view is the operation that owns it.**
 ///
 /// `placement_set_pose` carries the facing and the tip together, and `placement_set_lift` the lift: the
-/// view has no tip field yet, so a pose edit keeps the placement's own tip as it is. One edit is one
-/// dispatch and therefore one undo step, exactly as the key that does the same thing.
+/// view has no tip field yet, so a pose edit keeps each piece's own tip as it is. One edit is one
+/// dispatch per distinct tip (one, for pieces that stand the same way) and therefore one undo step,
+/// exactly as the key that does the same thing; several pieces' entries are collapsed into one.
 ///
 /// **The map goes through `open`**, not read from disk: a dispatch with an empty `open` resolves the
 /// placement against the file, so an edit made between two saves would be refused or applied to the
 /// wrong row. The editor's own note dispatch takes the same care (`editor::dispatch_note`).
+#[allow(clippy::too_many_arguments)]
 fn pose_edits_are_operations(
     change: On<bevy_gooey::InspectorChange>,
     inspectors: Res<PoseInspector>,
+    widgets: Query<(), With<PoseWidget>>,
     views: Query<&PoseView>,
     project: Option<Res<Project>>,
     open: Option<ResMut<OpenMap>>,
     state: Option<ResMut<EditorState>>,
     lock: Option<Res<TargetLock>>,
+    selection: Option<Res<Selection>>,
 ) {
     let (Some(project), Some(mut open), Some(mut state), Some(lock)) = (project, open, state, lock)
     else {
         return;
     };
-    {
-        if inspectors.0 != Some(change.entity) {
-            return;
+    // The change is on the view (a test, or a host that edits it directly) or on gooey's inspector over it.
+    let ours = inspectors.0 == Some(change.entity) || widgets.contains(change.entity);
+    let Some(view_entity) = inspectors.0.filter(|_| ours) else { return };
+    let Ok(view) = views.get(view_entity) else { return };
+    let ids = selected_ids(&lock, selection.as_deref(), &open);
+    if ids.is_empty() {
+        return;
+    }
+    let lift_edit = change.path.ends_with("lift");
+    let facing_edit = change.path.ends_with("yaw");
+    // A position is not typed in here, and a batch never moves pieces: only a facing or a lift is applied to a set.
+    if ids.len() > 1 && !(lift_edit || facing_edit) {
+        return;
+    }
+    // (operation, its parameters, what to say if it is refused)
+    let mut calls: Vec<(&'static str, serde_json::Value, String)> = Vec::new();
+    if lift_edit {
+        for id in &ids {
+            calls.push(("placement_set_lift", serde_json::json!({ "id": id, "lift": view.lift }), format!("lift {id}")));
         }
-        let Ok(view) = views.get(change.entity) else { return };
-        let Some(id) = lock.placement_id().map(str::to_owned) else { return };
-        let Some(placed) = open.map.placements.iter().find(|p| p.id == id) else { return };
-        let (name, params, phrase) = if change.path.ends_with("lift") {
-            (
-                "placement_set_lift",
-                serde_json::json!({ "id": id, "lift": view.lift }),
-                format!("lift {id}"),
-            )
-        } else {
-            (
-                "placement_set_pose",
-                serde_json::json!({ "id": id, "yaw": view.yaw, "tip": placed.tip }),
-                format!("turn {id}"),
-            )
-        };
+    } else {
+        // One call per distinct tip, so a typed facing never changes how a piece is tipped.
+        let mut by_tip: Vec<([u8; 2], Vec<String>)> = Vec::new();
+        for id in &ids {
+            let Some(placed) = open.map.placements.iter().find(|p| p.id == *id) else { continue };
+            let tip = [placed.tip.0, placed.tip.1];
+            match by_tip.iter_mut().find(|(t, _)| *t == tip) {
+                Some((_, group)) => group.push(id.clone()),
+                None => by_tip.push((tip, vec![id.clone()])),
+            }
+        }
+        for (tip, group) in by_tip {
+            let (params, phrase) = match group.as_slice() {
+                [one] => (serde_json::json!({ "id": one, "yaw": view.yaw, "tip": tip }), format!("turn {one}")),
+                many => (serde_json::json!({ "ids": many, "yaw": view.yaw, "tip": tip }), format!("turn {} pieces", many.len())),
+            };
+            calls.push(("placement_set_pose", params, phrase));
+        }
+    }
+    let mut logged: Vec<String> = Vec::new();
+    for (name, params, phrase) in calls {
         let mut ctx = Ctx {
             view: None,
             trust_file: None,
@@ -174,6 +295,7 @@ fn pose_edits_are_operations(
                 // dispatch site records (`editor::dispatch_note`), so an inspector edit is not a change
                 // the history never saw.
                 state.status.note(outcome.summary.clone());
+                logged.push(operation_id.clone());
                 state.record_logged(operation_id, outcome.summary, false);
             }
             Ok(ops::Applied::Refused(e)) | Err(e) => {
@@ -181,4 +303,6 @@ fn pose_edits_are_operations(
             }
         }
     }
+    // Several calls are still one act: Cmd+Z takes the whole edit back.
+    state.group_turn(&logged);
 }
