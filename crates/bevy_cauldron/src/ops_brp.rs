@@ -2607,7 +2607,9 @@ fn editor_present(
     mut confirm: Option<ResMut<crate::confirm::Confirm>>,
     mut presenting: Option<ResMut<crate::present::Presenting>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
+    mut gates: Gates,
 ) -> Result<Value, String> {
+    gates.hear("present");
     let Some(confirm) = confirm.as_mut() else {
         return Err("this editor has no confirm modal, so nothing can be asked".to_owned());
     };

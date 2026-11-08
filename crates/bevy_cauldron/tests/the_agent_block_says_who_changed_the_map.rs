@@ -221,7 +221,7 @@ fn what_the_agent_handed_back_is_waiting_on_the_person_and_then_says_how_they_an
     updates(&mut app, 4);
     let waiting = line(&mut app, FamiliarLine::HandBack);
     assert!(waiting.contains("the turned table") && waiting.contains("Waiting for your answer"), "{waiting}");
-    assert!(heard(&mut app).contains("present") || heard(&mut app).contains("operation_apply"), "{}", heard(&mut app));
+    assert!(heard(&mut app).contains("present"), "the hand-back is the call it last made: `{}`", heard(&mut app));
 
     // N keeps: the safe answer, which changes nothing.
     press(&mut app, KeyCode::KeyN);
