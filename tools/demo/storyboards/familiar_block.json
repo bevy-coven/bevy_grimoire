@@ -1,0 +1,97 @@
+{
+  "name": "familiar_block",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -3.2,
+            -2.5,
+            3.2,
+            2.5
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 5.5
+    },
+    {
+      "seconds": 5.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "key": "Escape"
+    },
+    {
+      "at": 0.6,
+      "caption": "person: View, then Show agent"
+    },
+    {
+      "at": 0.9,
+      "click_label": "View"
+    },
+    {
+      "at": 2.0,
+      "click_label": "Show agent"
+    },
+    {
+      "at": 3.2,
+      "caption": "agent: turns the sofa to 90"
+    },
+    {
+      "at": 3.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_set_yaw",
+        "parameters": {
+          "id": "sofa",
+          "yaw": 90
+        }
+      }
+    },
+    {
+      "at": 5.0,
+      "caption": "the block says: last heard, and the newest change is the agent's"
+    },
+    {
+      "at": 7.0,
+      "caption": "person: Undo, in the block"
+    },
+    {
+      "at": 7.3,
+      "click_label": "Undo the agent's change"
+    },
+    {
+      "at": 9.0,
+      "caption": "the sofa is back, and the block has nothing of the agent's to undo"
+    },
+    {
+      "at": 10.6,
+      "cursor": [
+        700,
+        610
+      ]
+    }
+  ]
+}

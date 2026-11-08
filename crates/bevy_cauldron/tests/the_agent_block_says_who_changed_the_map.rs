@@ -62,7 +62,7 @@ fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::V
 }
 
 fn turn_to(app: &mut App, yaw: f32) -> serde_json::Value {
-    call(app, "grimoire/operation_apply", serde_json::json!({"operation": "placement_set_yaw", "parameters": {"id": "table@0", "yaw": yaw}}))
+    call(app, "grimoire/operation_apply", serde_json::json!({"operation": "placement_set_yaw", "parameters": {"id": "table@0", "yaw": yaw}, "dry_run": false}))
 }
 
 fn yaw_of(app: &App) -> f32 {

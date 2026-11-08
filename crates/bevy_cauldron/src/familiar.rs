@@ -207,7 +207,7 @@ fn newest_sentence(state: &EditorState, map: &bevy_grimoire_core::map::Map) -> S
 
 /// **The block follows the editor**: both lines are rewritten when the words change, and the Undo button is greyed
 /// unless pressing it would undo the agent's change.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn follow_the_agent(
     activity: Res<AgentActivity>,
     time: Res<Time<Real>>,
