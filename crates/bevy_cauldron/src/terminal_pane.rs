@@ -245,9 +245,18 @@ pub struct TerminalCdChip;
 pub struct TerminalCloseTab;
 
 /// **The `Agent` chip**: another agent tab, in the open project. Shown while the settings choose an
-/// agent (`terminal_agent`).
+/// agent (`terminal_agent`) and the pane is not the one inviting the first (see [`offers_another_agent`]).
 #[derive(Component)]
 pub struct TerminalAgentChip;
+
+/// **Does the bar offer the `Agent` chip?** Only when it adds something: the settings choose an agent and
+/// something is already open. An empty pane with an agent chosen already holds the one way in, the
+/// `Invoke Agent` button in the middle of it, and a second control in the bar that did the same thing was
+/// "an `omp` and then an `Agent` and another `omp`" to the person who asked what the chips were
+/// (feedback-1794088663844): two doors to one room.
+fn offers_another_agent(terminal: &Terminal) -> bool {
+    terminal.agent() != crate::settings::TerminalAgent::Off && !terminal.invites_the_agent()
+}
 
 /// **The `Invoke Agent` button**, in the middle of an empty terminal while the settings choose an
 /// agent. No agent starts by itself, because a session costs tokens to warm up: the press opens the
@@ -824,7 +833,7 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 chrome::PANEL_EDGE,
             );
         }
-        if terminal.agent() != crate::settings::TerminalAgent::Off {
+        if offers_another_agent(terminal) {
             chrome::chip(
                 bar,
                 TerminalAgentChip,
@@ -2069,5 +2078,23 @@ mod tests {
             Some((row, column)),
             "a press in the middle of the character at row {row}, column {column} is on that cell"
         );
+    }
+
+    /// **The bar offers `Agent` only when the pane is not already inviting the agent** (feedback-1794088663844;
+    /// oracle `spec`). An empty pane with an agent chosen has the `Invoke Agent` button; a chip that starts the same
+    /// agent beside it is a second door.
+    #[test]
+    fn the_agent_chip_is_not_a_second_door_to_the_empty_panes_button() {
+        use crate::settings::TerminalAgent;
+        let mut terminal = Terminal::default();
+        assert!(!offers_another_agent(&terminal), "no settings taken, no agent");
+        terminal.set_agent(TerminalAgent::Off, None);
+        assert!(!offers_another_agent(&terminal), "no agent chosen: nothing to add");
+        terminal.set_agent(TerminalAgent::OhMyPi, None);
+        assert!(terminal.invites_the_agent());
+        assert!(!offers_another_agent(&terminal), "an empty pane holds the Invoke Agent button: the bar adds no second control for it");
+        terminal.spawn(80, 24, std::path::Path::new("/tmp"));
+        assert!(!terminal.invites_the_agent());
+        assert!(offers_another_agent(&terminal), "with a tab open the chip adds another agent beside it");
     }
 }
