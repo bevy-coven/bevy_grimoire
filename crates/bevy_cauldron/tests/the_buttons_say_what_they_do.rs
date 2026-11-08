@@ -104,6 +104,7 @@ fn return_in_the_new_project_name_field_creates_the_project() {
     app.world_mut().insert_resource(bevy::input_focus::InputFocusVisible(true));
     settle(&mut app, 3);
     bevy_gooey::testing::type_text(&mut app, "harbour");
+    eprintln!("DEBUG box={text_box:?} value={:?} focused_is_box={}", app.world().get::<bevy_gooey::TextInputValue>(text_box).map(|v| v.0.clone()), bevy_gooey::testing::focused(&app) == Some(text_box));
     eprintln!("DEBUG name={:?} focus={:?} label={:?}", app.world().resource::<NewProjectForm>().0.name, bevy_gooey::testing::focused(&app), bevy_gooey::testing::focused_label(&app));
     assert!(!scratch.join("harbour").exists(), "typing a name creates nothing by itself");
 
