@@ -18,36 +18,28 @@
   "steps": [
     {
       "at": 0.3,
-      "caption": "the project chooses an agent: the terminal gets an Agent tab"
+      "caption": "the settings choose an agent: the terminal opens empty, so no tokens are spent"
     },
     {
-      "at": 1.2,
-      "click_label": "Agent"
-    },
-    {
-      "at": 2.2,
-      "caption": "the tab opens empty: no agent has started, so no tokens are spent"
-    },
-    {
-      "at": 4.4,
+      "at": 3.4,
       "caption": "person: presses Invoke Agent"
     },
     {
-      "at": 4.5,
+      "at": 3.6,
       "cursor": [
         540,
-        515
+        520
       ]
     },
     {
-      "at": 4.9,
+      "at": 4.0,
       "click": [
         540,
-        515
+        520
       ]
     },
     {
-      "at": 6.2,
+      "at": 5.6,
       "caption": "the press starts the session"
     }
   ]

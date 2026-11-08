@@ -1459,7 +1459,7 @@ fn operation_apply(
     mut screen_next: Option<ResMut<NextState<crate::screen::Screen>>>,
     // **An agent's armed composition is the Map's (E-002)**, as a picker row's click arms it.
     mut composition_armed: Option<ResMut<crate::compose::Armed>>,
-    ) -> Result<Value, String> {
+) -> Result<Value, String> {
     let Some(op) = ops::find(&p.operation) else {
         return Err(format!(
             "`{}` is not an operation this editor knows. The known ones are: {}.",
@@ -1841,6 +1841,7 @@ pub(crate) fn refused_answer(operation: &str, refusal: &ops::Refusal) -> Value {
 /// **A front end and nothing more.** [`ops::undo`] resolves the line, dispatches its recorded
 /// inverse through the registry and appends the new line; this builds the context from the
 /// editor's own resources and puts the map back, exactly as `grimoire/operation_apply` does.
+#[allow(clippy::too_many_arguments)]
 fn operation_undo(
     In(p): In<UndoParams>,
     mut project: Option<ResMut<crate::project::Project>>,
