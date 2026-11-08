@@ -106,13 +106,10 @@ fn return_in_the_new_project_name_field_creates_the_project() {
     app.world_mut().insert_resource(bevy::input_focus::InputFocusVisible(true));
     settle(&mut app, 3);
     bevy_gooey::testing::type_text(&mut app, "harbour");
-    eprintln!("DEBUG box={text_box:?} value={:?} focused_is_box={}", app.world().get::<bevy_gooey::TextInputValue>(text_box).map(|v| v.0.clone()), bevy_gooey::testing::focused(&app) == Some(text_box));
-    eprintln!("DEBUG name={:?} focus={:?} label={:?}", app.world().resource::<NewProjectForm>().0.name, bevy_gooey::testing::focused(&app), bevy_gooey::testing::focused_label(&app));
     assert!(!scratch.join("harbour").exists(), "typing a name creates nothing by itself");
 
     bevy_gooey::testing::press(&mut app, KeyCode::Enter);
     settle(&mut app, 4);
-    eprintln!("DEBUG after enter: form={} problem={:?} done={}", app.world().get_resource::<NewProjectForm>().is_some(), app.world().resource::<bevy_cauldron::launcher::Launcher>().problem, app.world().resource::<bevy_cauldron::launcher::Launcher>().new_project_done);
     assert!(scratch.join("harbour").is_dir(), "Return in the Name field pressed Create: the project's folder is made");
     assert!(app.world().get_resource::<NewProjectForm>().is_none(), "and the form is gone");
     let _ = std::fs::remove_dir_all(&scratch);
