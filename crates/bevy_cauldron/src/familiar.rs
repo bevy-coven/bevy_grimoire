@@ -159,13 +159,22 @@ pub fn toggle_the_familiar(
         .spawn((
             Familiar,
             Name::new("agent"),
-            Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            // **Never squeezed**: the INSPECTOR's rows scroll, and a flex item that may shrink is made shorter than its text when
+            // the panel's rows are taller than the panel, which draws one line over the next (found in a capture, where the
+            // headless layout, whose panel is not full, shows nothing wrong).
+            Node {
+                flex_direction: FlexDirection::Column,
+                width: Val::Percent(100.0),
+                flex_shrink: 0.0,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            },
         ))
         .with_children(|block| {
             crate::chrome::list_heading(block, "AGENT");
             // **A line wider than the panel wraps, and takes the room it wraps into**: a definite width is what lets the
             // text's height be measured at the width it is drawn at, and the next line then starts below it.
-            let wrapped = || (Node { width: Val::Percent(100.0), ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary));
+            let wrapped = || (Node { width: Val::Percent(100.0), flex_shrink: 0.0, ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary));
             for line in [FamiliarLine::Heard, FamiliarLine::Newest, FamiliarLine::HandBack] {
                 block.spawn((label(""), wrapped(), line));
             }
