@@ -1,0 +1,237 @@
+//! **The outliner: the map's contents as a tree you can search** (UI-51, #237).
+//!
+//! A collapsible OUTLINER section at the top of the Map door's INSPECTOR panel: a search box over
+//! gooey's virtualized `tree`. The first level is what each piece *is* (the first of its descriptor's
+//! `kind` tags, `other` for a piece with none), the second is the pieces themselves, one row per
+//! placement named `<id> · <descriptor>`.
+//!
+//! - **Searching narrows the tree to what matches and the groups that hold it.** Every word typed must
+//!   appear in the row's id, descriptor or group, case aside, so `lamp` leaves the lamps under their
+//!   group and nothing else. A search opens every group it leaves, so a match is never behind a closed
+//!   chevron.
+//! - **Selecting a row selects the piece.** Rows are the selection's own vocabulary: the first selected
+//!   becomes the lock's piece (the primary the INSPECTOR's POSE block shows and the viewport outlines),
+//!   and a Ctrl- or Shift-click selects several, exactly as Shift-clicking pieces in the viewport does
+//!   ([`crate::selection::Selection`]). Clicking a group selects nothing.
+//! - **The tree follows the viewport.** A piece selected there is the selected row here, when the
+//!   search leaves it in view.
+//!
+//! Nothing here writes the map: a selection is session state, so there is no operation to dispatch and
+//! nothing to undo. Visibility and lock toggles, and compositions, people, triggers and notes as
+//! further groups, are the rest of the issue and are not built.
+//!
+//! # Keys
+//!
+//! A tree row's key is a `u64`. A piece's is a hash of its id with the top bit clear and a group's a
+//! hash of its name with the top bit set ([`placement_key`], [`group_key`]), so the two never meet and a
+//! key survives a rebuild: the tree keeps its own selection and open groups across a map edit.
+
+use std::collections::{BTreeSet, HashMap};
+
+use bevy::prelude::*;
+use bevy_grimoire_core::map::Map;
+use bevy_grimoire_core::stack::descriptor_of;
+use bevy_gooey::{SectionId, SelectMode, Table, TableSelection, Tree, TreeNode, ValueChange, observe, section, text_input, tree};
+
+use crate::editor::{MapControlsPane, TargetLock};
+use crate::project::{OpenMap, Project};
+use crate::screen::Screen;
+use crate::selection::Selection;
+
+/// The top bit of a key: set on a group's, clear on a piece's.
+const GROUP_BIT: u64 = 1 << 63;
+
+/// The group a piece with no `kind` tag stands under.
+const OTHER_GROUP: &str = "other";
+
+/// The outliner's state, on its section: what is typed, what the tree was last built from, and which
+/// piece each row means.
+#[derive(Component, Default)]
+pub struct Outliner {
+    /// What the search box holds.
+    pub query: String,
+    /// The piece behind each row's key.
+    rows: HashMap<u64, String>,
+    /// A fingerprint of what the tree was last built from (the query and every piece's id and
+    /// descriptor), so a settled map costs a comparison and not a rebuild.
+    built_from: u64,
+}
+
+/// The tree widget.
+#[derive(Component)]
+pub struct OutlinerTree;
+
+/// The search box.
+#[derive(Component)]
+pub struct OutlinerSearch;
+
+/// FNV-1a over `text`, which is stable across runs and platforms (a `HashMap`'s hasher is not).
+fn fnv(text: &str) -> u64 {
+    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0100_0000_01b3;
+    text.bytes().fold(BASIS, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(PRIME))
+}
+
+/// The key of the row for the piece `id`.
+pub fn placement_key(id: &str) -> u64 {
+    fnv(id) & !GROUP_BIT
+}
+
+/// The key of the row for the group `kind`.
+pub fn group_key(kind: &str) -> u64 {
+    fnv(kind) | GROUP_BIT
+}
+
+pub struct OutlinerPlugin;
+
+impl Plugin for OutlinerPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, (spawn_the_outliner, rebuild_the_tree, follow_the_viewport).chain().run_if(in_state(Screen::Editor)));
+    }
+}
+
+/// **The section goes into the Map door's INSPECTOR panel** the frame the panel appears, closed, so it
+/// is one row until a person opens it.
+fn spawn_the_outliner(mut commands: Commands, panes: Query<Entity, Added<MapControlsPane>>) {
+    for pane in &panes {
+        let block = commands
+            .spawn((
+                Outliner::default(),
+                Name::new("outliner"),
+                SectionId::new("outliner"),
+                section(
+                    "OUTLINER",
+                    false,
+                    children![
+                        (
+                            text_input("Search", ""),
+                            OutlinerSearch,
+                            observe(|typed: On<ValueChange<String>>, mut outliners: Query<&mut Outliner>| {
+                                if let Ok(mut outliner) = outliners.single_mut()
+                                    && outliner.query != typed.value
+                                {
+                                    outliner.query = typed.value.clone();
+                                }
+                            }),
+                        ),
+                        (tree(Vec::<TreeNode>::new()), OutlinerTree, SelectMode::Multi, observe(select_the_pieces)),
+                    ],
+                ),
+            ))
+            .id();
+        commands.entity(pane).insert_children(0, &[block]);
+    }
+}
+
+/// **A click on rows selects the pieces they name**, the first of them the primary. A group row names no
+/// piece, so a click on one changes nothing.
+fn select_the_pieces(
+    picked: On<ValueChange<TableSelection>>,
+    outliners: Query<&Outliner>,
+    open: Res<OpenMap>,
+    mut lock: ResMut<TargetLock>,
+    mut selection: ResMut<Selection>,
+) {
+    let Ok(outliner) = outliners.single() else { return };
+    // In the map's own order, so the same rows always make the same selection with the same primary.
+    let ids: Vec<String> = open
+        .map
+        .placements
+        .iter()
+        .filter(|p| picked.value.0.iter().any(|key| outliner.rows.get(key).is_some_and(|id| *id == p.id)))
+        .map(|p| p.id.clone())
+        .collect();
+    let Some(primary) = ids.first().and_then(|id| open.map.placements.iter().find(|p| p.id == *id)) else { return };
+    lock.hold(&primary.id.clone(), primary.at);
+    selection.set(ids);
+}
+
+/// **The tree, built from the map and the search.** Returns the nodes and the piece behind each key.
+///
+/// A piece is kept when every word of `query` is in its id, its descriptor or its group's name. A group
+/// with no piece kept is not drawn. Groups and pieces are in a stable order (groups by name, pieces in
+/// the map's order), so a rebuild never shuffles rows under the pointer. `group_open` says whether a
+/// group the tree already had is open; a group it did not have starts open, and so does every group
+/// while something is searched for.
+pub fn nodes_for(
+    map: &Map,
+    library: &bevy_grimoire_core::library::Library,
+    query: &str,
+    group_open: impl Fn(u64) -> Option<bool>,
+) -> (Vec<TreeNode>, HashMap<u64, String>) {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    let mut groups: std::collections::BTreeMap<String, Vec<TreeNode>> = std::collections::BTreeMap::new();
+    let mut rows = HashMap::new();
+    for placed in &map.placements {
+        let kind = descriptor_of(library, placed).and_then(|d| d.kind.first().cloned()).unwrap_or_else(|| OTHER_GROUP.to_owned());
+        let haystack = format!("{} {} {}", placed.id, placed.descriptor, kind).to_lowercase();
+        if !words.iter().all(|word| haystack.contains(word.as_str())) {
+            continue;
+        }
+        let key = placement_key(&placed.id);
+        rows.insert(key, placed.id.clone());
+        groups.entry(kind).or_default().push(TreeNode::new(key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
+    }
+    let searching = !words.is_empty();
+    let nodes = groups
+        .into_iter()
+        .map(|(kind, pieces)| {
+            let key = group_key(&kind);
+            let node = TreeNode::new(key, kind).children(pieces);
+            if searching || group_open(key).unwrap_or(true) { node.expanded() } else { node }
+        })
+        .collect();
+    (nodes, rows)
+}
+
+/// Whether the tree needs building again: a fingerprint of the query and of every piece's identity.
+fn fingerprint(map: &Map, query: &str) -> u64 {
+    let mut text = String::with_capacity(query.len() + map.placements.len() * 16);
+    text.push_str(query);
+    for placed in &map.placements {
+        text.push('\u{1f}');
+        text.push_str(&placed.id);
+        text.push('\u{1e}');
+        text.push_str(&placed.descriptor);
+    }
+    fnv(&text)
+}
+
+/// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
+fn rebuild_the_tree(
+    open: Res<OpenMap>,
+    project: Res<Project>,
+    mut outliners: Query<&mut Outliner>,
+    mut tables: Query<&mut Table, With<OutlinerTree>>,
+) {
+    let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
+    let now = fingerprint(&open.map, &outliner.query);
+    if outliner.built_from == now {
+        return;
+    }
+    let Some(tree) = table.source_mut::<Tree>() else { return };
+    let (nodes, rows) = nodes_for(&open.map, &project.library, &outliner.query, |key| tree.is_open(key));
+    tree.set_nodes(nodes);
+    outliner.rows = rows;
+    outliner.built_from = now;
+}
+
+/// **A piece selected in the viewport is the selected row**, when the search leaves it in view.
+fn follow_the_viewport(
+    lock: Res<TargetLock>,
+    selection: Res<Selection>,
+    outliners: Query<&Outliner>,
+    trees: Query<(Entity, Option<&TableSelection>), With<OutlinerTree>>,
+    mut commands: Commands,
+) {
+    let (Ok(outliner), Ok((tree, now))) = (outliners.single(), trees.single()) else { return };
+    let selected: Vec<&str> = match (lock.placement_id(), selection.ids()) {
+        (Some(primary), ids) if ids.first().map(String::as_str) == Some(primary) => ids.iter().map(String::as_str).collect(),
+        (Some(primary), _) => vec![primary],
+        (None, _) => Vec::new(),
+    };
+    let want: BTreeSet<u64> = selected.iter().map(|id| placement_key(id)).filter(|key| outliner.rows.contains_key(key)).collect();
+    if now.map(|n| &n.0) != Some(&want) && !(now.is_none() && want.is_empty()) {
+        commands.entity(tree).insert(TableSelection(want));
+    }
+}
