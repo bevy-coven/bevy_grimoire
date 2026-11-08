@@ -156,12 +156,15 @@ pub fn toggle_the_familiar(
         .spawn((
             Familiar,
             Name::new("agent"),
-            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
         ))
         .with_children(|block| {
             crate::chrome::list_heading(block, "AGENT");
-            block.spawn((label(""), FamiliarHeard));
-            block.spawn((label(""), FamiliarNewest));
+            // **A line wider than the panel wraps, and takes the room it wraps into**: a definite width is what lets the
+            // text's height be measured at the width it is drawn at, and the next line then starts below it.
+            let wrapped = || (Node { width: Val::Percent(100.0), ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary));
+            block.spawn((label(""), wrapped(), FamiliarHeard));
+            block.spawn((label(""), wrapped(), FamiliarNewest));
             block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
             block.spawn((button("Undo the agent's change"), FamiliarUndo, observe(undo_the_agents_change)));
         })
