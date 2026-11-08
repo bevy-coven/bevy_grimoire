@@ -692,11 +692,20 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "Asks for new behaviour: remember an agent that was running and resume its session on the next launch, not how the screen is.",
-      "commit": "",
-      "attempts": []
+      "reason": "omp's session id is reported by Cauldron's extension and kept per project; the next launch resumes it unless the person ended the agent",
+      "commit": "e451b86d",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed 0.5.0, scratch copy of the project with omp chosen, reopened: the terminal offers Invoke Agent and starts no agent; 0.5.0 keeps no record of a session, so there is nothing for an agent running at close to resume from."
+        }
+      ]
     }
   ]
 }
