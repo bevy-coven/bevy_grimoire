@@ -197,6 +197,8 @@ impl CellMetrics {
 /// pane's ([`pump_the_terminal`]), and no shell opens until this has run once.
 fn take_the_terminal_settings(
     settings: Option<Res<crate::settings::EditorSettings>>,
+    project: Option<Res<crate::project::Project>>,
+    view: Option<Res<crate::settings::SettingsView>>,
     mut terminal: ResMut<Terminal>,
     mut metrics: ResMut<CellMetrics>,
     mut drawn: ResMut<Drawn>,
@@ -208,7 +210,13 @@ fn take_the_terminal_settings(
         }
         return;
     };
-    if !settings.is_changed() {
+    // **The first shell waits for the project's own settings** (#339). `EditorSettings` starts as the user's layer
+    // alone and the project's arrives a look later; taking the settings in between opened a plain shell before a
+    // project that chooses an agent could say so, and an open shell is not the empty pane that invites the agent.
+    if project.is_some() && view.as_deref().is_some_and(|view| view.started() && !view.project_looked()) {
+        return;
+    }
+    if terminal.settings_taken() && !settings.is_changed() {
         return;
     }
     terminal.set_default_caret(settings.terminal_cursor.shape());
