@@ -176,7 +176,7 @@ fn closing_the_agent_tab_brings_the_button_back_and_starts_no_shell() {
             .expect("the bar has a ×")
     };
     click(&mut app, close);
-    until(&mut app, "closing the only tab never emptied the terminal", |app| app.world().resource::<Terminal>().len() == 0);
+    until(&mut app, "closing the only tab never emptied the terminal", |app| app.world().resource::<Terminal>().is_empty());
     until(&mut app, "the button never came back", |app| the_button(app).is_some());
     quiet(&mut app);
     assert_eq!(app.world().resource::<Terminal>().len(), 0, "an empty terminal with an agent chosen opens no shell by itself");
