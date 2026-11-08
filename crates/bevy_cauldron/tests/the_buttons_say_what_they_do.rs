@@ -72,6 +72,12 @@ fn return_in_the_new_project_name_field_creates_the_project() {
     std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{}: {e}", scratch.display()));
 
     let mut app = editor("create");
+    // A home with a project on it, so the header's `New project` is the page's main action (a first run's is `Open the example`).
+    let listed = scratch.join("listed");
+    std::fs::create_dir_all(listed.join("assets/grimoire")).unwrap_or_else(|e| panic!("{}: {e}", listed.display()));
+    let file = scratch.join("recent.ron");
+    bevy_cauldron::recent::record(&file, &listed.canonicalize().unwrap_or_else(|e| panic!("{e}"))).unwrap_or_else(|e| panic!("{e}"));
+    app.insert_resource(bevy_cauldron::recent::RecentProjects(file));
     app.add_plugins(LauncherPlugin);
     app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
     settle(&mut app, 4);

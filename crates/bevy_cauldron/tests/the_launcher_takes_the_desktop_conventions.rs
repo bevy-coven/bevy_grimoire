@@ -71,7 +71,7 @@ fn on_the_launcher(tag: &str, scratch: &Scratch, names: &[&str]) -> (App, Vec<Pa
     }
     app.insert_resource(RecentProjects(file)).add_plugins(LauncherPlugin);
     app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
-    settle(&mut app, 6);
+    settle(&mut app, 12);
     (app, paths)
 }
 
