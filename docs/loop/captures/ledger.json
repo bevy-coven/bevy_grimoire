@@ -437,7 +437,16 @@
       "host": "mac_air",
       "reason": "The agent self-test card's lines wrap onto a second line (the complaint stands alone); the LED asks for a new live indicator (an enhancement, filed apart as an issue, not as a capture).",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2176x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed Cauldron 0.5.0 (capture was 0.4.1), project screen (the launcher's terminal is hidden here), the display's 2176x1406 surface: pressing Invoke Agent shows the self-test card with 'OK Agent started: typed /tmp/p12_agent.sh into the' / 'shell' and 'OK Agent connected: omp-coding-agent 1.0.0 \u00b7 22' / 'tools' on two lines each, the orphan word at the card's left edge under the mark. The capture's longest line ('Agent self test: the editor is on launcher \u00b7 88 operations \u00b7 a 2560x1406 picture') wraps the same way."
+        }
+      ]
     },
     {
       "stem": "feedback-1794089325724",
