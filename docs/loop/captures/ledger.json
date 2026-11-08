@@ -554,11 +554,20 @@
       "app_version": "0.4.6",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "After exit from a terminal's shell (here after leaving omp), the pane freezes instead of closing so a new terminal can be made.",
-      "commit": "",
-      "attempts": []
+      "reason": "a shell told to exit stayed a zombie under its tab, so the pane looked frozen; the tab now closes with its shell and + opens another",
+      "commit": "ddeeebec",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed Cauldron 0.5.0, the launcher's terminal in the capture's own window (saved frame 1280x703 logical, scale factor 2, UI scale 2.4), a fresh home so a plain /bin/sh opens: clicked the pane, typed exit and Enter. Three seconds later the shell is a <defunct> child of the app (it exited and was never collected) and the bar still shows its tab chip, so the pane stays up with a dead shell in it. The note's omp is not needed: omp leaves the tab at the same shell."
+        }
+      ]
     },
     {
       "stem": "feedback-1794146746836",
