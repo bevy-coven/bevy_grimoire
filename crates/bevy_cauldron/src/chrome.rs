@@ -2265,6 +2265,12 @@ pub fn scroll_list<'a>(
                 ..default()
             },
             ScrollArea,
+            // **Glide and fade, from gooey (UI-R05, #335).** A scroll the crate makes (a key, the pad, Tab onto
+            // a card) travels there instead of jumping, and an edge that hides content fades: two overlays beside
+            // this viewport, in its wrapper, each as opaque as the content under its edge, and none at an edge
+            // with nothing hidden. The wheel, a trackpad and the bar still move it 1:1.
+            bevy_gooey::ScrollGlide::default(),
+            bevy_gooey::ScrollEdgeFade::default(),
             marker,
         ))
         .id();

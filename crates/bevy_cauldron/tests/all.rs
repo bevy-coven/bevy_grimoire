@@ -483,3 +483,4 @@ mod closing_a_terminal_never_waits_on_its_child;
 mod an_update_swaps_even_when_the_old_app_will_not_leave;
 mod a_quit_that_does_not_finish_is_ended;
 mod the_terminal_starts_no_agent_until_it_is_invoked;
+mod the_project_list_fades_at_the_edges_that_hide_rows;
