@@ -70,7 +70,16 @@ impl Plugin for EmptyStatePlugin {
     }
 }
 
-/// **The prompt exists exactly while the open map has no placements and no question is open.**
+/// **What the prompt is, from what is true now**: `None` unless the map is empty, no question is open and no agent has been
+/// invoked. An agent that is working the map is the answer to "what do I do next", and a sentence that sends a person to the
+/// library while one is placing things (or has built a forest, which are not placements) is in the way
+/// (`feedback-1794146746836`: *"This should go away if I invoke an agent"*).
+fn wanted_prompt(map_is_empty: bool, question_open: bool, agent_invoked: bool, library_is_empty: bool) -> Option<EmptyMapPrompt> {
+    (map_is_empty && !question_open && !agent_invoked)
+        .then_some(if library_is_empty { EmptyMapPrompt::NoPieces } else { EmptyMapPrompt::NoPlacements })
+}
+
+/// **The prompt exists exactly while the open map has no placements, no question is open and no agent is invoked.**
 /// Reads before it writes: a map that stays empty (or stays full) spawns and despawns nothing.
 fn keep_the_prompt_while_the_map_is_empty(
     mut commands: Commands,
@@ -78,14 +87,18 @@ fn keep_the_prompt_while_the_map_is_empty(
     open: Option<Res<OpenMap>>,
     project: Option<Res<Project>>,
     confirm: Option<Res<Confirm>>,
+    terminal: Option<Res<crate::terminal::Terminal>>,
     prompt: Query<(Entity, &EmptyMapPrompt)>,
 ) {
     // **A question takes the prompt away**, and only a question: a menu opens as a gooey modal
     // popover (a `Dialog`), and a prompt behind one is where it belongs.
-    let map_is_empty = open.is_some_and(|o| o.map.placements.is_empty()) && !confirm.is_some_and(|c| c.is_open());
-    let wanted = map_is_empty.then(|| {
-        if project.is_some_and(|p| p.library.descriptors.is_empty()) { EmptyMapPrompt::NoPieces } else { EmptyMapPrompt::NoPlacements }
-    });
+    // **So does an invoked agent**: a tab the terminal opened for one, until that tab is closed.
+    let wanted = wanted_prompt(
+        open.is_some_and(|o| o.map.placements.is_empty()),
+        confirm.is_some_and(|c| c.is_open()),
+        terminal.is_some_and(|t| t.tabs().iter().any(|tab| tab.agent().is_some())),
+        project.is_some_and(|p| p.library.descriptors.is_empty()),
+    );
     let standing = prompt.iter().next().map(|(_, kind)| *kind);
     if wanted == standing {
         return;
@@ -161,5 +174,34 @@ fn on_open_library(
     }
     if let Some(command) = crate::commands::by_id("view.focus_filter") {
         chords.queue(&command, *live);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **An invoked agent takes the prompt away, and nothing else about the prompt moves** (`feedback-1794146746836`).
+    ///
+    /// The four facts the prompt is decided from, every combination: it stands only on an empty map with no question open and
+    /// no agent invoked, and the kind it takes is the library's (pieces to place, or none to add).
+    #[test]
+    fn the_prompt_stands_only_on_an_empty_map_with_no_question_and_no_agent() {
+        for map_is_empty in [false, true] {
+            for question_open in [false, true] {
+                for agent_invoked in [false, true] {
+                    for library_is_empty in [false, true] {
+                        let wanted = wanted_prompt(map_is_empty, question_open, agent_invoked, library_is_empty);
+                        let stands = map_is_empty && !question_open && !agent_invoked;
+                        let kind = if library_is_empty { EmptyMapPrompt::NoPieces } else { EmptyMapPrompt::NoPlacements };
+                        assert_eq!(
+                            wanted,
+                            stands.then_some(kind),
+                            "map empty {map_is_empty}, question {question_open}, agent {agent_invoked}, library empty {library_is_empty}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
