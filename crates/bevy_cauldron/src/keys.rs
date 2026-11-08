@@ -1725,7 +1725,7 @@ pub const BINDINGS: &[Binding] = &[
         false,
         Context::Map,
         "B",
-        "move / Shift: clone / Cmd: run / M: keep as a composition",
+        "move / Shift: clone / Shift+Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     bs(
@@ -1735,28 +1735,33 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Map,
         "B",
-        "move / Shift: clone / Cmd: run / M: keep as a composition",
+        "move / Shift: clone / Shift+Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     // **The fourth verb on the family, and the one the other three could not be.**
     //
-    // `Cmd+B` arms the run tool: drag a line and the armed piece repeats along it, at its own
+    // `Shift+Cmd+B` arms the run tool: drag a line and the armed piece repeats along it, at its own
     // pitch. It shares the family's `does`, so `rows()` still collapses the four into one line —
     // the Map context's key budget is tight and this costs **no row**.
     //
-    // **The modifier, not another letter.** `B` is the last free key under the left hand (the
+    // **The modifiers, not another letter.** `B` is the last free key under the left hand (the
     // row above says why), the cluster is full, and the run needs the *command* modifier anyway
     // because the plain `B` is a gesture the author reaches for while moving things around — the
     // run is a deliberate act, and `Cmd` is the modifier the editor already uses for the
     // deliberate ones (`Cmd+S` saves, `Cmd+Z` undoes, `Cmd+Delete` edits a piece).
+    //
+    // **`Shift+Cmd+B`, since 2026-11-08, and not `Cmd+B`** (feedback-1794146831022): `Cmd+B` is the
+    // platform's, and VS Code's, toggle for the left side bar, which the owner asked this editor's
+    // left panel to answer to (`shell_view`). `Shift+Cmd` is how `Redo` already spells the shifted
+    // form of a Cmd chord.
     bs(
         Action::RunMode,
         KeyCode::KeyB,
         true,
-        false,
+        true,
         Context::Map,
         "B",
-        "move / Shift: clone / Cmd: run / M: keep as a composition",
+        "move / Shift: clone / Shift+Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     // **A third verb on a state that already exists.** `Shift+B` drags a box and leaves a set in
@@ -1770,7 +1775,7 @@ pub const BINDINGS: &[Binding] = &[
         false,
         Context::Map,
         "M",
-        "move / Shift: clone / Cmd: run / M: keep as a composition",
+        "move / Shift: clone / Shift+Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     bs(

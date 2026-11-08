@@ -711,6 +711,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::familiar::AgentActivity", Ownership::Session),
     // **`Session`**: whether hand-backs are answered in the AGENT block is the person's choice for the sitting, like the pause.
     ("bevy_cauldron::familiar::HandBackHere", Ownership::Session),
+    // **`Session`**: what the person has hidden of the shell (the left panel, Zen mode) is their call for the sitting, not a door's;
+    // the next door's frame is folded the same way the frame of this one was.
+    ("bevy_cauldron::shell_view::ShellView", Ownership::Session),
     ("bevy_cauldron::selection::Selection", Ownership::Session),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.

@@ -101,7 +101,7 @@ Or right-click the piece: its menu opens at the pointer with Turn left, Turn rig
 **Goal:** Copy a piece, or lay a line of the same piece.
 
 1. Press `Shift+B` to clone.
-2. Press `Cmd+B` to run a line of pieces.
+2. Press `Shift+Cmd+B` to run a line of pieces.
 
 **What you see:** The clone tool copies the piece you pick up. The run tool lays a line of the same piece.
 

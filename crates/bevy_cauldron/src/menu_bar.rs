@@ -193,6 +193,10 @@ enum Slot {
     Familiar,
     /// View ▸ Pause agent writes (UI-60, #246).
     PauseAgent,
+    /// View ▸ Show left panel (feedback-1794146831022): the tick is the panel shown.
+    LeftPanel,
+    /// View ▸ Zen mode (feedback-1794146831022).
+    Zen,
     /// Window ▸ Reset layout (UI-33, #227).
     ResetLayout,
 }
@@ -273,6 +277,8 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
     if category == "view" {
         slots.push(Slot::Separator);
         slots.push(Slot::Statistics);
+        slots.push(Slot::LeftPanel);
+        slots.push(Slot::Zen);
         slots.push(Slot::Outliner);
         slots.push(Slot::Familiar);
         slots.push(Slot::PauseAgent);
@@ -355,6 +361,20 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::familiar::PauseItem,
                 bevy_gooey::check_item("Pause agent writes", false),
                 bevy_gooey::observe(crate::familiar::toggle_the_pause),
+            ));
+        }
+        Slot::LeftPanel => {
+            menu.spawn((
+                crate::shell_view::LeftPanelItem,
+                bevy_gooey::check_item("Show left panel", true),
+                bevy_gooey::observe(crate::shell_view::toggle_the_left_panel),
+            ));
+        }
+        Slot::Zen => {
+            menu.spawn((
+                crate::shell_view::ZenItem,
+                bevy_gooey::check_item("Zen mode", false),
+                bevy_gooey::observe(crate::shell_view::toggle_zen),
             ));
         }
         Slot::Outliner => {

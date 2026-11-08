@@ -84,7 +84,9 @@ These keys work on the Map tab.
 | `Home` | Any time | Frame the view: the locked placement when there is one, otherwise the whole map. |
 | `B` | Any time | Move. |
 | `Shift+B` | Any time | Clone. |
-| `Cmd+B` | Any time | Run. |
+| `Shift+Cmd+B` | Any time | Run. |
+| `Cmd+B` | Any time | Show or hide the left panel (`Ctrl+B` elsewhere; View, Show left panel). |
+| `Shift+Cmd+M` | Any time | Zen mode: hide everything but the viewport, and bring it back (`Shift+Ctrl+M` elsewhere; View, Zen mode). |
 | `M` | Any time | Keep the selected set as a composition. |
 | `N` | Any time | Rename the map. |
 | `O` | Any time | Pin or unpin. |
