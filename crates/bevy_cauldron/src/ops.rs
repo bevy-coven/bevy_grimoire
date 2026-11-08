@@ -10104,8 +10104,7 @@ mod tests {
     #[test]
     fn the_refusal_for_a_maps_parameters_is_one_unbroken_sentence() {
         let refused = map_create::Params::parse(&serde_json::Value::Null)
-            .err()
-            .expect("null is not the parameters of a map");
+            .expect_err("null is not the parameters of a map");
         assert!(!refused.0.contains("  "), "the sentence has a run of blanks in it: {:?}", refused.0);
         assert!(
             refused.0.contains("The fields are `name`, `bounds`, `origin` and `note`, and `name` is required."),
