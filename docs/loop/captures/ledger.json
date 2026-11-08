@@ -503,10 +503,10 @@
       "taken_at_ms": 1794097488318,
       "app_version": "0.4.3",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "The Undo tooltip's keycap shows a '?' where the Mac chord's command glyph should be: the face lacks the glyph and draws a fallback.",
       "commit": "",
       "attempts": []
     },
