@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy_cauldron::app_verbs::AppVerb;
 use bevy_cauldron::commands;
-use bevy_cauldron::keymap_screen::{effective, shown};
+use bevy_cauldron::keymap_screen::shown;
 use bevy_cauldron::settings::{SettingsLayer, UserSettingsFile};
 use bevy_gooey::testing::find_by_label;
 use bevy_gooey::{Activate, Binding, BindingValue, Modifiers, Shortcut};
@@ -62,7 +62,8 @@ fn narrow_to(app: &mut App, words: &str) {
 fn the_reference_has_one_row_per_command_each_on_the_chord_it_answers_to() {
     let (mut app, _user) = editor("shortcuts_every");
     open_the_reference(&mut app);
-    let want: Vec<Shortcut> = effective(&Default::default()).into_iter().map(|(_, chord)| chord).collect();
+    // The registry's own defaults, read off each command, not through the screen's resolver.
+    let want: Vec<Shortcut> = commands::all().iter().map(|c| c.shortcut).collect();
     assert!(want.len() > 50, "the registry is the editor's whole vocabulary of commands: {} of them", want.len());
     let got = rows_shown(&mut app);
     assert_eq!(got.len(), want.len(), "one row for every command of the registry, and no row for anything else");
@@ -86,7 +87,8 @@ fn a_rebinding_shows_on_the_command_and_the_old_chord_is_left() {
     assert_eq!(layer.keymap.get("edit.redo"), Some(&elsewhere), "the person's file holds the rebinding");
 
     narrow_to(&mut app, "");
-    let want: Vec<Shortcut> = effective(&layer.keymap).into_iter().map(|(_, chord)| chord).collect();
+    // Every command on its default, except the one the person moved.
+    let want: Vec<Shortcut> = commands::all().iter().map(|c| if c.id == "edit.redo" { elsewhere } else { c.shortcut }).collect();
     let got = rows_shown(&mut app);
     assert_eq!(got, want, "the whole reference follows the file: the one rebound command shows its new chord, every other its own");
 
