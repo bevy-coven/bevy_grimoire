@@ -61,14 +61,38 @@ while read -r still; do
   cp "$still" "$APP/Contents/Resources/$still"
 done < <(python3 tools/release/macos/news_stills.py CHANGELOG.md "$NEWS_SHOWN")
 
+# **A timestamped signature asks Apple's timestamp server, which now and then does not answer** (release 0.5.1, run
+# 42470951199: "A timestamp was expected but was not found", 15 s into the first call, and the whole release failed with
+# nothing built to upload). Nothing about the bundle was wrong, so the same call is tried again, a few times, before the
+# release is given up; any other codesign failure stays a failure at once, because a bad bundle is not made good by waiting.
+SIGN_ATTEMPTS=${CAULDRON_SIGN_ATTEMPTS:-4}
+SIGN_WAIT_S=${CAULDRON_SIGN_WAIT_S:-20}
+stamped_codesign() {
+  local attempt out status=1
+  for attempt in $(seq 1 "$SIGN_ATTEMPTS"); do
+    status=0
+    out=$(codesign "$@" 2>&1) || status=$?
+    [ -z "$out" ] || echo "$out" >&2
+    [ "$status" = 0 ] && return 0
+    case "$out" in
+      *"timestamp service is not available"* | *"A timestamp was expected but was not found"*) ;;
+      *) return "$status" ;;
+    esac
+    [ "$attempt" = "$SIGN_ATTEMPTS" ] && break
+    echo "build_app.sh: the timestamp service did not answer (attempt $attempt of $SIGN_ATTEMPTS); trying again in ${SIGN_WAIT_S}s" >&2
+    sleep "$SIGN_WAIT_S"
+  done
+  return "$status"
+}
+
 # The nested binary is signed first, with the app's own flags: `codesign` on the bundle signs only its main executable,
 # and notarization refuses a bundle with an unsigned (or untimestamped) executable inside it.
 if [ "$IDENTITY" = - ]; then
   codesign --force --options runtime --sign - "$APP/Contents/MacOS/bevy_cauldron_mcp"
   codesign --force --options runtime --entitlements "$MACOS_DIR/entitlements.plist" --sign - "$APP"
 else
-  codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/MacOS/bevy_cauldron_mcp"
-  codesign --force --options runtime --timestamp --entitlements "$MACOS_DIR/entitlements.plist" --sign "$IDENTITY" "$APP"
+  stamped_codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/MacOS/bevy_cauldron_mcp"
+  stamped_codesign --force --options runtime --timestamp --entitlements "$MACOS_DIR/entitlements.plist" --sign "$IDENTITY" "$APP"
 fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 
@@ -108,7 +132,7 @@ ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname Cauldron -srcfolder "$STAGE" -ov -format UDZO "dist/$NAME.dmg"
 rm -rf "$STAGE"
 if [ "$IDENTITY" != - ]; then
-  codesign --timestamp --sign "$IDENTITY" "dist/$NAME.dmg"
+  stamped_codesign --timestamp --sign "$IDENTITY" "dist/$NAME.dmg"
 fi
 
 if [ "$NOTARIZE" = 1 ]; then
