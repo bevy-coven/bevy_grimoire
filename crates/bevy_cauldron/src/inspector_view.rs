@@ -206,6 +206,14 @@ fn mirror_the_selection(
     }
 }
 
+/// The selected pieces that face one way (`yaw_bits` is the facing's bit pattern, so equal means equal) and are tipped
+/// alike: one `placement_set_pose` can take them together and one inverse can put them back.
+struct SameStance {
+    yaw_bits: u32,
+    tip: [u8; 2],
+    ids: Vec<String>,
+}
+
 /// **An edit of the view is the operation that owns it.**
 ///
 /// `placement_set_pose` carries the facing and the tip together, and `placement_set_lift` the lift: the
@@ -258,16 +266,16 @@ fn pose_edits_are_operations(
         // `placement_set_pose` refuses pieces that were not facing the same way; and a typed facing must
         // never change how a piece is tipped, so each group keeps its own tip. The calls are one act
         // again below, in one undo step.
-        let mut by_pose: Vec<((u32, [u8; 2]), Vec<String>)> = Vec::new();
+        let mut by_pose: Vec<SameStance> = Vec::new();
         for id in &ids {
             let Some(placed) = open.map.placements.iter().find(|p| p.id == *id) else { continue };
-            let key = (placed.yaw.to_bits(), [placed.tip.0, placed.tip.1]);
-            match by_pose.iter_mut().find(|(k, _)| *k == key) {
-                Some((_, group)) => group.push(id.clone()),
-                None => by_pose.push((key, vec![id.clone()])),
+            let (yaw_bits, tip) = (placed.yaw.to_bits(), [placed.tip.0, placed.tip.1]);
+            match by_pose.iter_mut().find(|g| g.yaw_bits == yaw_bits && g.tip == tip) {
+                Some(group) => group.ids.push(id.clone()),
+                None => by_pose.push(SameStance { yaw_bits, tip, ids: vec![id.clone()] }),
             }
         }
-        for ((_, tip), group) in by_pose {
+        for SameStance { tip, ids: group, .. } in by_pose {
             let (params, phrase) = match group.as_slice() {
                 [one] => (serde_json::json!({ "id": one, "yaw": view.yaw, "tip": tip }), format!("turn {one}")),
                 many => (serde_json::json!({ "ids": many, "yaw": view.yaw, "tip": tip }), format!("turn {} pieces", many.len())),
