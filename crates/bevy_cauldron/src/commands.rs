@@ -33,7 +33,7 @@ pub struct Command {
     pub id: &'static str,
     /// What a menu or the palette shows, in sentence case.
     pub title: &'static str,
-    /// The default shortcut, as gooey writes it: `Ctrl+S` here and `⌘S` on a mac.
+    /// The default shortcut, as the editor spells it (`ui::editor_binding_settings`): `Ctrl+S` here and `Cmd+S` on a mac.
     pub shortcut: Shortcut,
     /// Where the binding is live. `Global` is every tab.
     pub context: Context,
