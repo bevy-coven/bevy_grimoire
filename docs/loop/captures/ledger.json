@@ -575,11 +575,20 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "Something drawn in the editor stays on screen after an agent is invoked, where it should go away; the pick is a scene point, so which thing needs the picture.",
-      "commit": "",
-      "attempts": []
+      "reason": "the empty-map prompt kept telling a person to place a piece from the library while an agent was working the map; it now yields to a tab",
+      "commit": "45a46830",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed Cauldron 0.5.0, the capture's own window (saved frame 1280x703 logical, scale factor 2, UI scale 2.4), an empty map in a project that chooses a custom agent: the map shows the prompt 'Place a piece from the library' with its 'Open library' button; pressing Invoke Agent opens the agent tab, the button goes, and the prompt is still there. The capture's pick is a scene point just under that button and the omp agent already running below; this is the one thing at that spot that an agent makes pointless."
+        }
+      ]
     },
     {
       "stem": "feedback-1794146831022",
