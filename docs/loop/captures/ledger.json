@@ -596,11 +596,20 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "Asks for a Zen mode toggle that hides all the UI and shows only the game, and for Cmd+B to toggle the left panel like VS Code: new behaviour.",
-      "commit": "",
-      "attempts": []
+      "reason": "Cmd+B toggles the left panel and Shift+Cmd+M is Zen mode (both fold parts with Display::None); Run moved to Shift+Cmd+B to free Cmd+B",
+      "commit": "7545878d",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed Cauldron 0.5.0 on a scratch copy of assets/grimoire, the capture's own window (saved frame 1280x703 logical, scale factor 2, UI scale 2.4), the editor on the bedroom map, keys sent through bevy_fairy/input. Cmd+B arms the Run tool (state.editor.tool Place becomes Run) and the INSPECTOR and PLACE panels stay where they are; Shift+Cmd+M does nothing. There is no way to hide the left panel or the rest of the UI. (An enhancement: this is the current behaviour, read before the change.)"
+        }
+      ]
     },
     {
       "stem": "feedback-1794146958145",
