@@ -595,10 +595,10 @@
       "taken_at_ms": 1794146831022,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "enhancement",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Asks for a Zen mode toggle that hides all the UI and shows only the game, and for Cmd+B to toggle the left panel like VS Code: new behaviour.",
       "commit": "",
       "attempts": []
     },
