@@ -574,10 +574,10 @@
       "taken_at_ms": 1794146746836,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Something drawn in the editor stays on screen after an agent is invoked, where it should go away; the pick is a scene point, so which thing needs the picture.",
       "commit": "",
       "attempts": []
     },
