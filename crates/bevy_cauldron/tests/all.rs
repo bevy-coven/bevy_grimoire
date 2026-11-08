@@ -487,3 +487,4 @@ mod the_project_list_fades_at_the_edges_that_hide_rows;
 mod the_buttons_say_what_they_do;
 mod the_launcher_takes_the_desktop_conventions;
 mod the_inspector_shows_a_selection_and_turns_all_of_it;
+mod the_shortcut_reference_lists_every_command_with_its_current_binding;

@@ -29,6 +29,8 @@ A key marked "in filter boxes" still walks its list while a filter box has focus
 
 Each key on this page is also a command with an id that does not change, such as `file.save`, `edit.undo` or `tiles.align_forward`. The part before the dot is the category a menu groups it under. A menu, the command palette and an agent name a command by its id, so renaming a key never breaks them. `crates/bevy_cauldron/src/commands.rs` lists every id and its title, and a test fails when two commands share an id, a title, or a shortcut on a tab where both work.
 
+Help ▸ Keyboard shortcuts lists every command of the registry with the chord it answers to now, so a command added tomorrow is on it without anyone writing it, and a command you rebound shows the new chord. The same screen is where you rebind: press a chord on a row, and a chord another command already has is refused by name.
+
 An agent runs a command by its id with `grimoire_run_command`, and it presses the same shortcut, so a command that is not available now (a key that needs a piece in hand, or a text field holding the keys) is refused with the reason a menu would show.
 
 ## The command palette

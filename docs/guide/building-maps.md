@@ -39,6 +39,19 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **While a piece is armed,** `R`, `T`, `Y` and `U` turn and tip the armed piece instead (the INSPECTOR's YAW row shows its facing), so the next click places it already turned. A placed piece under the pointer is left alone.
 
+## Turn or lift several pieces at once
+
+**Goal:** Give a few pieces the same facing, or the same lift, with one number.
+
+1. Put the brush down (`Esc`), so no piece is armed.
+2. Shift-click the first piece, then Shift-click each piece that should go with it. A Shift-click on a selected piece takes it out again. A click on a piece without Shift is still the one that carries it.
+3. Find the POSE block at the top of the INSPECTOR. It shows the first piece's x, z, facing and lift. A field the selected pieces do not share reads a dash instead of a number.
+4. Type a number in the yaw (facing) field, or the lift field, and press Return.
+
+**What you see:** Every selected piece turns to that facing, or rises to that lift, and each keeps the way it was tipped. The history gets one step per group of pieces that faced alike before, and one undo (`Cmd+Z`) puts every piece back.
+
+**If it goes wrong:** The x and z fields move one piece, so with several selected they do nothing: drag the pieces, or select one.
+
 ## Move a piece
 
 **Goal:** Pick up a placed piece and set it down somewhere else.
