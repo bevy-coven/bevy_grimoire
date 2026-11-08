@@ -49,6 +49,11 @@ fn rebuilds(app: &mut App) -> u32 {
     world.query::<&Outliner>().single(world).expect("the outliner is open").rebuilds()
 }
 
+fn looks(app: &mut App) -> u32 {
+    let world = app.world_mut();
+    world.query::<&Outliner>().single(world).expect("the outliner is open").looks()
+}
+
 fn nodes(app: &mut App) -> usize {
     let world = app.world_mut();
     let table = world.query_filtered::<&Table, With<OutlinerTree>>().single(world).expect("one tree");
@@ -62,8 +67,10 @@ fn a_settled_map_and_search_cost_no_rebuild_and_a_change_costs_one() {
     let built = rebuilds(&mut app);
     assert_eq!(built, 1, "the tree was built once when the section opened");
 
+    let read = looks(&mut app);
     updates(&mut app, 120);
     assert_eq!(rebuilds(&mut app), built, "a hundred and twenty settled frames rebuild nothing");
+    assert_eq!(looks(&mut app), read, "and read no piece to find that out: the cost that grows with the map is not paid on a settled frame");
 
     place_for_test(app.world_mut(), "site/wall", (399.0, 399.0));
     updates(&mut app, 4);

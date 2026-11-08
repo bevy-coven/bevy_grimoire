@@ -60,12 +60,20 @@ pub struct Outliner {
     /// How many times the tree has been built from the map. A settled map and search cost none: this is the
     /// number the UI budget (UI-93, #259) is written against, and a test holds it.
     rebuilds: u32,
+    /// How many times every piece has been read to decide whether to build: the cost that grows with the map. A settled
+    /// frame adds none.
+    looks: u32,
 }
 
 impl Outliner {
     /// How many times the tree has been built since the section opened.
     pub fn rebuilds(&self) -> u32 {
         self.rebuilds
+    }
+
+    /// How many times every piece has been read to decide whether to build, since the section opened.
+    pub fn looks(&self) -> u32 {
+        self.looks
     }
 }
 
@@ -258,6 +266,7 @@ fn rebuild_the_tree(
     if !moved {
         return;
     }
+    outliner.looks += 1;
     let now = fingerprint(&open.map, &outliner.query);
     if outliner.built_from == now {
         let query = outliner.query.clone();
