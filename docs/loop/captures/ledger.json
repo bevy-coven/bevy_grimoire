@@ -670,10 +670,10 @@
       "taken_at_ms": 1794147495932,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "No ask, only confusion at how the screen is: a toast reads as a raw serde error with a ragged break in the middle of its text.",
       "commit": "",
       "attempts": []
     },
