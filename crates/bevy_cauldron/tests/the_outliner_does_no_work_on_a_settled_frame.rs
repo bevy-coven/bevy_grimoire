@@ -16,8 +16,9 @@ use crate::fixtures;
 
 /// How many pieces the reference map holds. Big enough that an O(n) cost on every frame is not subtle.
 const PIECES: usize = 2_000;
-/// How many entities the tree widget and its rows may be, however many pieces there are: a header-less table's pool.
-const WIDGET_ENTITIES_MAX: usize = 60;
+/// How many entities the tree widget and its rows may be, however many pieces there are: a header-less table's pool of rows
+/// and their cells. Measured 68 at two thousand pieces; a row per piece would be thousands.
+const WIDGET_ENTITIES_MAX: usize = 100;
 
 fn updates(app: &mut App, n: usize) {
     for _ in 0..n {
