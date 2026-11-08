@@ -691,10 +691,10 @@
       "taken_at_ms": 1794148425925,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "enhancement",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "Asks for new behaviour: remember an agent that was running and resume its session on the next launch, not how the screen is.",
       "commit": "",
       "attempts": []
     }
