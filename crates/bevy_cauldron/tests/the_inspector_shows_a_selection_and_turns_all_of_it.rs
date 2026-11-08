@@ -6,7 +6,7 @@
 //! inverse), in one undo step, each piece's own tip kept.
 
 use bevy::prelude::*;
-use bevy_cauldron::editor::{lock_on_placement, place_for_test, EditorState};
+use bevy_cauldron::editor::{lock_on_placement, place_for_test, EditorState, Placement};
 use bevy_cauldron::inspector_view::{PoseBlock, PoseInspector, PoseView, PoseWidget};
 use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::selection::Selection;
@@ -77,6 +77,15 @@ fn yaw_of(app: &App, id: &str) -> f32 {
     app.world().resource::<OpenMap>().map.placements.iter().find(|p| p.id == id).map(|p| p.yaw).expect("the piece is on the map")
 }
 
+/// The turn of the piece **as drawn**: the entity the viewport shows, not the row of the map.
+fn drawn_turn_of(app: &mut App, id: &str) -> Quat {
+    let world = app.world_mut();
+    let mut q = world.query::<(&Placement, &Transform)>();
+    let found: Vec<Quat> = q.iter(world).filter(|(p, _)| p.0 == id).map(|(_, t)| t.rotation).collect();
+    assert_eq!(found.len(), 1, "one entity draws `{id}`: {}", found.len());
+    found[0]
+}
+
 fn tip_of(app: &App, id: &str) -> (u8, u8) {
     app.world().resource::<OpenMap>().map.placements.iter().find(|p| p.id == id).map(|p| p.tip).expect("the piece is on the map")
 }
@@ -105,8 +114,11 @@ fn two_pieces_with_different_turns_read_mixed_and_typing_90_turns_both_in_one_un
     assert!(!row_reads_mixed(&mut app, "lift"), "and not the lift row");
 
     let before = app.world().resource::<EditorState>().undo_depth();
+    let drawn_before = drawn_turn_of(&mut app, &a);
     type_a_facing(&mut app, 90.0);
     assert_eq!((yaw_of(&app, &a), yaw_of(&app, &b)), (90.0, 90.0), "typing 90 turned both pieces");
+    assert_ne!(drawn_turn_of(&mut app, &a), drawn_before, "and the piece on screen turned, not only the row of the map");
+    assert_eq!(drawn_turn_of(&mut app, &a), drawn_turn_of(&mut app, &b), "both are drawn facing 90");
     assert_eq!(app.world().resource::<EditorState>().undo_depth(), before + 1, "and it is one undo step");
     assert!(!mixed_paths(&mut app).iter().any(|p| p == "yaw"), "the pieces now agree, so the facing is no longer mixed");
     assert!(!row_reads_mixed(&mut app, "yaw"), "and the row reads 90 again");

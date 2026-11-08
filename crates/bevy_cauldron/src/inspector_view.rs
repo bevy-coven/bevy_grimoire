@@ -227,6 +227,7 @@ fn pose_edits_are_operations(
     state: Option<ResMut<EditorState>>,
     lock: Option<Res<TargetLock>>,
     selection: Option<Res<Selection>>,
+    due: Option<ResMut<crate::watch::Due>>,
 ) {
     let (Some(project), Some(mut open), Some(mut state), Some(lock)) = (project, open, state, lock)
     else {
@@ -275,6 +276,7 @@ fn pose_edits_are_operations(
         }
     }
     let mut logged: Vec<String> = Vec::new();
+    let mut drawn_stale = false;
     for (name, params, phrase) in calls {
         let mut ctx = Ctx {
             view: None,
@@ -299,6 +301,7 @@ fn pose_edits_are_operations(
                 // dispatch site records (`editor::dispatch_note`), so an inspector edit is not a change
                 // the history never saw.
                 state.status.note(outcome.summary.clone());
+                drawn_stale |= outcome.saved;
                 logged.push(operation_id.clone());
                 state.record_logged(operation_id, outcome.summary, false);
             }
@@ -309,4 +312,10 @@ fn pose_edits_are_operations(
     }
     // Several calls are still one act: Cmd+Z takes the whole edit back.
     state.group_turn(&logged);
+    // **The pieces on screen are drawn again**, by the one flag that means "the map changed under the
+    // entities": the map is the data, and without this the inspector said 90 while the sofa kept
+    // facing the way it did (`editor::redraw_the_map`, the path every other operation's change takes).
+    if drawn_stale && let Some(mut due) = due {
+        due.map_replaced = true;
+    }
 }
