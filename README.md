@@ -60,6 +60,8 @@ Opens the repository's own project on its `furniture` kit (`site` and `scp` are 
 
 - **Mac line editing in the terminal**: on a Mac, Cmd+Backspace clears the line the shell is reading back to its start, and Cmd+Left and Cmd+Right go to its start and end, as in VS Code's and iTerm2's terminals (they send the control codes `^U`, `^A` and `^E`).
 
+- **The wheel belongs to what is under it**: a wheel turned over the terminal scrolls its output, and over the menu bar, the status band or any panel it leaves the map alone; the map zooms only when the pointer is over the map itself.
+
 - **Start your agent in the terminal, already connected**: set Settings, Terminal, **Terminal agent** to Oh My Pi (or to Custom command, with `terminal_agent_command` in `settings.ron`) and the terminal shows an **Invoke Agent** button (nothing starts, and no tokens are spent, until you press it or hit Enter in the terminal) that starts it with Cauldron's tools. A card over the terminal checks the tools server, the start, the MCP connection and a one-turn self test as each passes, then a chip in the bar says `omp connected · 22 tools`; **Agent** in the bar opens another: [agents](https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/agents.md).
 
   ![The terminal's self-test card at its top right with four green OK rows (tools server, agent started, agent connected as omp-coding-agent 1.0.0 with 22 tools, and the self test's state, operation count and picture size), and the bar's green chip reading omp connected · 22 tools](https://raw.githubusercontent.com/bevy-coven/bevy_grimoire/main/docs/changelog/media/2026-11-06-terminal-agent-self-test.png)

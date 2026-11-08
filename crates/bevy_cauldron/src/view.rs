@@ -424,7 +424,9 @@ pub(crate) fn drive(
     // viewport is the region the map is drawn into — the same rect `cursor_ray` asks of a click.
     pointer: Res<Pointer>,
     mut rig: ResMut<Rig>,
-    camera: Option<Single<(&mut Transform, &mut Projection, &Camera), With<MainCamera>>>,
+    camera: Option<Single<(&mut Transform, &mut Projection), With<MainCamera>>>,
+    // Only the rect the map is drawn into is wanted from it.
+    viewport: Option<Single<&Camera, With<MainCamera>>>,
     // The Maps door has one; the other doors have none and keep the plain ceiling.
     open: Option<Res<crate::project::OpenMap>>,
 ) {
@@ -439,7 +441,8 @@ pub(crate) fn drive(
         _ => 1.0,
     };
     let lines = wheel_lines(&scroll, *per_line);
-    if lines != 0.0 && !over_ui && wheel_is_the_maps(pointer.0, camera.2.logical_viewport_rect()) {
+    let viewport = viewport.and_then(|camera| camera.logical_viewport_rect());
+    if lines != 0.0 && !over_ui && wheel_is_the_maps(pointer.0, viewport) {
         // **A ratio, so a detent is the same gesture at every scale.** Subtracting metres put one
         // wheel stop between the floor and 2 m.
         rig.height = (rig.height * ZOOM_STEP.powf(-lines))
@@ -485,7 +488,7 @@ pub(crate) fn drive(
         rig.focus += screen * PAN_SPEED * height * dt;
     }
 
-    let (mut tf, mut proj, _) = camera.into_inner();
+    let (mut tf, mut proj) = camera.into_inner();
     *tf = Transform::from_translation(rig.focus + iso).looking_at(rig.focus, Vec3::Y);
     *proj = map_projection(rig.height, &tf, open.as_deref());
 }
