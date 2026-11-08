@@ -164,3 +164,21 @@ fn shift_cmd_b_arms_the_run_tool() {
     assert_eq!(app.world().resource::<EditorState>().tool, Tool::Run, "Shift+Cmd+B arms the run tool");
     assert!(!app.world().resource::<ShellView>().left_hidden, "and does not touch the left panel");
 }
+
+/// **A shell that has the keyboard keeps a Ctrl chord as its own, and Zen mode gives the keyboard back**: off a Mac the primary
+/// chords are Ctrl chords, which a shell reads as control codes, so the chord must not toggle anything; on a Mac it is the
+/// window's, Zen begins and the keys that move the camera stop reaching a shell nobody can see.
+#[test]
+fn zen_mode_gives_the_terminals_keyboard_back_and_a_shell_keeps_its_own_ctrl_chords() {
+    use bevy_cauldron::terminal_pane::TerminalFocus;
+    let mut app = editor("shell_view_focus");
+    app.world_mut().resource_mut::<TerminalFocus>().take();
+    let shells = app.world().resource::<TerminalFocus>().owns(&bevy_cauldron::shell_view::zen_chord());
+
+    chord(&mut app, &[primary(), KeyCode::ShiftLeft, KeyCode::KeyM]);
+    let zen = app.world().resource::<ShellView>().zen;
+    assert_eq!(zen, !shells, "the shell owns the chord ({shells}) and Zen mode is {zen}");
+    if zen {
+        assert!(!app.world().resource::<TerminalFocus>().holds(), "Zen mode began and the hidden terminal still holds the keyboard");
+    }
+}

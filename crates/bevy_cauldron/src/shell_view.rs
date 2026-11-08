@@ -95,17 +95,21 @@ impl Plugin for ShellViewPlugin {
     }
 }
 
-/// **The two chords.** Not while a text field has the keys (a chord typed into a field is the field's) nor over a question.
+/// **The two chords.** Not while a text field has the keys (a chord typed into a field is the field's), nor over a question, nor
+/// when the shell has the keyboard and the chord is on Ctrl (a control code it reads, `TerminalFocus::owns`: off a Mac every
+/// primary chord). **Zen mode gives the terminal's keyboard back**, or the keys that move the camera would go on reaching a shell
+/// nobody can see.
 fn toggle_on_the_chords(
     keys: Res<ButtonInput<KeyCode>>,
     live: Res<Live>,
     confirm: Res<Confirm>,
     bindings: Res<bevy_gooey::BindingSettings>,
+    mut focus: ResMut<crate::terminal_pane::TerminalFocus>,
     mut view: ResMut<ShellView>,
     mut commands: Commands,
 ) {
-    let left = LEFT_PANEL_CHORD.just_pressed(&keys);
-    let zen = zen_chord().just_pressed(&keys);
+    let left = LEFT_PANEL_CHORD.just_pressed(&keys) && !focus.owns(&LEFT_PANEL_CHORD);
+    let zen = zen_chord().just_pressed(&keys) && !focus.owns(&zen_chord());
     if !(left || zen) || live.0 == Context::Typing || confirm.is_open() {
         return;
     }
@@ -115,6 +119,7 @@ fn toggle_on_the_chords(
     if zen {
         view.zen = !view.zen;
         if view.zen {
+            focus.release();
             commands.spawn(bevy_gooey::toast(format!("Zen mode: {} brings the editor back", bindings.chord(zen_chord()))));
         }
     }
