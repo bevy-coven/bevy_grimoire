@@ -474,10 +474,10 @@
       "taken_at_ms": 1794096613481,
       "app_version": "0.4.3",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "A tooltip box on the toolbar's Remove mode option bounces left and right by 2-3 px, fast: a layout that oscillates between frames.",
       "commit": "",
       "attempts": []
     },
