@@ -5,18 +5,19 @@
   "width": 900,
   "setup": [],
   "chunks": [
-    {"seconds": 9}
+    {"seconds": 9.5}
   ],
   "steps": [
-    {"at": 0.3, "caption": "person: the Projects home. A list longer than its box fades where rows are hidden"},
-    {"at": 1.4, "wheel": {"y": -1, "n": 6, "at": [640, 420]}},
-    {"at": 2.2, "caption": "person: scrolls; the top edge fades now"},
-    {"at": 3.2, "click_label": "bravo"},
-    {"at": 3.3, "caption": "person: one press chooses a card"},
-    {"at": 4.4, "type": "al"},
-    {"at": 4.5, "caption": "person: typing `al` moves focus to the card named alpha"},
-    {"at": 6.0, "click_label": "alpha"},
-    {"at": 6.12, "click_label": "alpha"},
-    {"at": 6.2, "caption": "person: a double press opens the project"}
+    {"at": 0.3, "caption": "person: the Projects home. Rows are hidden below, so the bottom edge fades"},
+    {"at": 1.2, "wheel": {"y": -1, "n": 3, "at": [640, 250]}},
+    {"at": 2.2, "caption": "person: scrolls down; rows are hidden above too, so the top edge fades as well"},
+    {"at": 3.2, "wheel": {"y": 1, "n": 3, "at": [640, 250]}},
+    {"at": 4.2, "click_label": "bravo"},
+    {"at": 4.3, "caption": "person: one press chooses a card, and it shrinks under the press"},
+    {"at": 5.4, "type": "al"},
+    {"at": 5.5, "caption": "person: typing `al` moves focus to the card named alpha"},
+    {"at": 7.2, "click_label": "alpha"},
+    {"at": 7.32, "click_label": "alpha"},
+    {"at": 7.4, "caption": "person: a double press opens the project"}
   ]
 }
