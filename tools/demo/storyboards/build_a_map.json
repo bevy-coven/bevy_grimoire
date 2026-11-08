@@ -63,6 +63,10 @@
       "within": [840, 215, 1280, 330]
     },
     {
+      "at": 1.85,
+      "cursor": [700, 430]
+    },
+    {
       "at": 2.05,
       "caption": "R turns the armed piece a quarter turn"
     },
