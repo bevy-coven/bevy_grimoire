@@ -2607,9 +2607,13 @@ fn editor_present(
     mut confirm: Option<ResMut<crate::confirm::Confirm>>,
     mut presenting: Option<ResMut<crate::present::Presenting>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
-    mut gates: Gates,
+    // Not `Gates`: this system holds the confirm modal mutably, and `Gates` reads it.
+    activity: Option<ResMut<crate::familiar::AgentActivity>>,
+    time: Option<Res<Time<Real>>>,
 ) -> Result<Value, String> {
-    gates.hear("present");
+    if let (Some(mut activity), Some(time)) = (activity, time) {
+        activity.hear("present", time.elapsed_secs_f64());
+    }
     let Some(confirm) = confirm.as_mut() else {
         return Err("this editor has no confirm modal, so nothing can be asked".to_owned());
     };
