@@ -260,7 +260,8 @@ fn rebuild_the_tree(
     }
     let now = fingerprint(&open.map, &outliner.query);
     if outliner.built_from == now {
-        outliner.built_for.clone_from(&outliner.query);
+        let query = outliner.query.clone();
+        outliner.built_for = query;
         return;
     }
     let Some(tree) = table.source_mut::<Tree>() else { return };
@@ -268,7 +269,8 @@ fn rebuild_the_tree(
     tree.set_nodes(nodes);
     outliner.rows = rows;
     outliner.built_from = now;
-    outliner.built_for = outliner.query.clone();
+    let query = outliner.query.clone();
+    outliner.built_for = query;
     outliner.rebuilds += 1;
 }
 

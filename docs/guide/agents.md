@@ -232,6 +232,16 @@ A removal with `put_back` is the undo of another removal. An agent cannot apply 
 
 Cmd+Z in the editor undoes the newest change on the door you are on. The keys page lists which doors keep a history.
 
+## Pause the agent
+
+Goal: stop an agent changing the map while you look, think or take over, without disconnecting it.
+
+1. Choose **View ▸ Pause agent writes**. The row is ticked while the pause is on.
+2. While it is on, an agent's `grimoire_apply_operation` and `grimoire_undo_operation` are refused. The answer says `refused` and why, the status line shows the same sentence as a problem, and nothing is changed or logged. A `dry_run` preview still answers, so the agent can keep planning.
+3. Choose the row again to let it write.
+
+Your own edits are not affected, and the pause is not saved: the next session starts with the agent free to write.
+
 ## Limits
 
 - The editor must be running. The server answers with a sentence when it cannot reach the editor, and changes nothing.

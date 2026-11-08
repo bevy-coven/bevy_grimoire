@@ -1,0 +1,127 @@
+{
+  "name": "agent_pause",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -3.2,
+            -2.5,
+            3.2,
+            2.5
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.5
+    },
+    {
+      "seconds": 6.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "key": "Escape"
+    },
+    {
+      "at": 0.6,
+      "caption": "agent: turns the sofa to 90"
+    },
+    {
+      "at": 0.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_set_yaw",
+        "parameters": {
+          "id": "sofa",
+          "yaw": 90
+        }
+      }
+    },
+    {
+      "at": 2.4,
+      "caption": "person: View, then Pause agent writes"
+    },
+    {
+      "at": 2.7,
+      "click_label": "View"
+    },
+    {
+      "at": 3.8,
+      "click_label": "Pause agent writes"
+    },
+    {
+      "at": 4.8,
+      "caption": "agent: tries to turn the sofa again"
+    },
+    {
+      "at": 5.0,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_set_yaw",
+        "parameters": {
+          "id": "sofa",
+          "yaw": 180
+        }
+      }
+    },
+    {
+      "at": 6.0,
+      "caption": "refused, with the reason: nothing changed"
+    },
+    {
+      "at": 7.6,
+      "caption": "person: turns the pause off"
+    },
+    {
+      "at": 7.9,
+      "click_label": "View"
+    },
+    {
+      "at": 9.0,
+      "click_label": "Pause agent writes"
+    },
+    {
+      "at": 10.0,
+      "caption": "agent: tries again, and it goes through"
+    },
+    {
+      "at": 10.2,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_set_yaw",
+        "parameters": {
+          "id": "sofa",
+          "yaw": 180
+        }
+      }
+    },
+    {
+      "at": 11.8,
+      "cursor": [
+        700,
+        610
+      ]
+    }
+  ]
+}
