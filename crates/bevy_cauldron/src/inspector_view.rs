@@ -155,6 +155,7 @@ fn selected_ids(lock: &TargetLock, selection: Option<&Selection>, open: &OpenMap
 /// is what the inspector shows; the view is written only when it differs, so a settled selection costs
 /// a comparison. With several pieces selected, the fields on which they differ are named to gooey as
 /// mixed, and the block exists only while something is selected.
+#[allow(clippy::too_many_arguments)]
 fn mirror_the_selection(
     open: Option<Res<OpenMap>>,
     lock: Option<Res<TargetLock>>,
