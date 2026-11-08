@@ -475,11 +475,28 @@
       "app_version": "0.4.3",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "A tooltip box on the toolbar's Remove mode option bounces left and right by 2-3 px, fast: a layout that oscillates between frames.",
+      "reason": "cause is in bevy_gooey: centre_keycaps, TooltipBox::cap and apply_skin feed each other, so a shortcut tooltip flips width; #79",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2176x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Installed Cauldron 0.5.0 on a scratch project, the fitted default window: hovering Erase opens its tooltip ('Remove mode', keycap X), and the words in the box sit at x = 300 px in some frames and x = 293 px in others (7 physical px, 2.9 logical) for the whole 5 s sampled (298 samples). Only the words' position was read in this run."
+        },
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "The capture's own window (saved frame 1280x703 logical, scale factor 2, UI scale 2.4): the same flip, the box's words at 293 px in 102 of 301 samples and at 300 px in 199; the keycap is 45 px wide in the second state and 59 px in the first. Place pieces, whose tooltip has no shortcut, stays at one x in 269 of 269 samples."
+        }
+      ]
     },
     {
       "stem": "feedback-1794097488318",
