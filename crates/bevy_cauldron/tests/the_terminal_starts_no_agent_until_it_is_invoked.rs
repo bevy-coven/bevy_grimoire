@@ -7,12 +7,15 @@
 //! input on the image the editor draws into, as `a_click_puts_the_keyboard_in_the_terminal` does.
 
 use bevy::camera::{ImageRenderTarget, NormalizedRenderTarget};
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::picking::pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput};
 use bevy::prelude::*;
 
 use bevy_cauldron::terminal::Terminal;
 use bevy_cauldron::terminal_agent::AgentSetup;
-use bevy_cauldron::terminal_pane::{TerminalBody, TerminalCloseTab, TerminalInvokeButton};
+use bevy::window::PrimaryWindow;
+use bevy_cauldron::terminal_pane::{TerminalBody, TerminalCloseTab, TerminalFocus, TerminalInvokeButton};
 
 use crate::fixtures;
 
@@ -190,4 +193,47 @@ fn with_no_agent_chosen_the_terminal_opens_its_shell_and_offers_no_button() {
     assert!(terminal.tab().is_some_and(|tab| tab.agent().is_none()), "a plain shell");
     assert!(!terminal.invites_the_agent());
     assert!(the_button(&mut app).is_none(), "no agent is chosen, so there is nothing to invoke");
+}
+
+/// One key, pressed and let go, on the primary window.
+fn tap(app: &mut App, key_code: KeyCode, logical_key: Key) {
+    let window = app
+        .world_mut()
+        .query_filtered::<Entity, With<PrimaryWindow>>()
+        .single(app.world())
+        .expect("one primary window");
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        app.world_mut().write_message(KeyboardInput {
+            key_code,
+            logical_key: logical_key.clone(),
+            state,
+            text: None,
+            repeat: false,
+            window,
+        });
+        app.update();
+    }
+}
+
+#[test]
+fn enter_starts_the_agent_for_a_person_at_the_keyboard_and_only_when_the_terminal_has_the_keys() {
+    let mut app = editor_with_an_agent("invoke_agent_enter");
+    until(&mut app, "the Invoke Agent button was never drawn", |app| the_button(app).is_some());
+
+    // Keys that are not the terminal's start nothing, whatever they are.
+    app.world_mut().resource_mut::<TerminalFocus>().release();
+    tap(&mut app, KeyCode::Enter, Key::Enter);
+    quiet(&mut app);
+    assert_eq!(app.world().resource::<Terminal>().len(), 0, "Enter outside the terminal starts nothing");
+
+    app.world_mut().resource_mut::<TerminalFocus>().take();
+    tap(&mut app, KeyCode::Space, Key::Unidentified(NativeKey::Unidentified));
+    assert_eq!(app.world().resource::<Terminal>().len(), 0, "only Enter presses the button");
+
+    tap(&mut app, KeyCode::Enter, Key::Enter);
+    until(&mut app, "Enter in the terminal never opened the agent's tab", |app| app.world().resource::<Terminal>().len() == 1);
+    until(&mut app, "the custom command was never typed into the new tab's shell", |app| {
+        screen_text(app).lines().any(|line| line.trim() == SAID)
+    });
+    assert!(app.world().resource::<Terminal>().tab().is_some_and(|tab| tab.agent().is_some()));
 }

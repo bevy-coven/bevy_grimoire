@@ -255,7 +255,8 @@ pub struct TerminalAgentChip;
 #[derive(Component)]
 pub struct TerminalInvokeButton;
 
-/// The node that holds [`TerminalInvokeButton`] over the body, so the button stands in its middle.
+/// The node that holds [`TerminalInvokeButton`] over the body, so the button stands in its middle. Enter
+/// presses the button while the terminal holds the keyboard.
 #[derive(Component)]
 pub struct TerminalInvite;
 
@@ -430,6 +431,7 @@ impl Plugin for TerminalPanePlugin {
                     close_the_tab_on_its_chord,
                     open_find_on_its_chord,
                     clear_on_its_chord,
+                    enter_invokes_the_agent,
                 )
                     .in_set(crate::terminal_view::TerminalChordSet),
             )
@@ -1901,6 +1903,29 @@ fn the_button_invokes_the_agent(
         return;
     }
     click.propagate(false);
+    let (cols, rows) = measured_cells(&pane);
+    crate::terminal_agent::open_agent_tab(&mut terminal, cols, rows, setup.as_deref(), root.as_deref(), time.elapsed_secs_f64());
+    redraw_the_bar(&mut commands, &bar, &terminal);
+}
+
+/// **Enter presses `Invoke Agent` for a person at the keyboard.** The button is a click target, as the
+/// bar's chips are, and the agent used to start by itself: without this a keyboard-only person with an
+/// agent chosen could not start it. Only while the terminal holds the keys and invites the agent.
+#[allow(clippy::too_many_arguments)]
+fn enter_invokes_the_agent(
+    keys: Res<ButtonInput<KeyCode>>,
+    focus: Res<TerminalFocus>,
+    pane: Res<TerminalPane>,
+    setup: Option<Res<crate::terminal_agent::AgentSetup>>,
+    root: Option<Res<crate::project_assets::ProjectRoot>>,
+    time: Res<Time<Real>>,
+    mut terminal: ResMut<Terminal>,
+    bar: Query<Entity, With<TerminalBar>>,
+    mut commands: Commands,
+) {
+    if !focus.holds() || !terminal.invites_the_agent() || !(keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter)) {
+        return;
+    }
     let (cols, rows) = measured_cells(&pane);
     crate::terminal_agent::open_agent_tab(&mut terminal, cols, rows, setup.as_deref(), root.as_deref(), time.elapsed_secs_f64());
     redraw_the_bar(&mut commands, &bar, &terminal);
