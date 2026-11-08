@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy_cauldron::editor::{EditorState, place_for_test};
-use bevy_cauldron::familiar::{AgentPause, Familiar, FamiliarHeard, FamiliarItem, FamiliarNewest, FamiliarSwitch, FamiliarUndo, PauseItem};
+use bevy_cauldron::familiar::{AgentPause, Familiar, FamiliarItem, FamiliarLine, FamiliarSwitch, FamiliarUndo, PauseItem};
 use bevy_cauldron::harness;
 use bevy_gooey::{Activate, Checked, ValueChange};
 
@@ -69,14 +69,22 @@ fn yaw_of(app: &App) -> f32 {
     app.world().resource::<bevy_cauldron::project::OpenMap>().map.placements.iter().find(|p| p.id == "table@0").map(|p| p.yaw).expect("the table")
 }
 
-fn heard(app: &mut App) -> String {
+fn line(app: &mut App, which: FamiliarLine) -> String {
     let world = app.world_mut();
-    world.query_filtered::<&Text, With<FamiliarHeard>>().single(world).expect("one heard line").0.clone()
+    world
+        .query::<(&Text, &FamiliarLine)>()
+        .iter(world)
+        .find(|(_, line)| **line == which)
+        .map(|(text, _)| text.0.clone())
+        .unwrap_or_else(|| panic!("the block has no {which:?} line"))
+}
+
+fn heard(app: &mut App) -> String {
+    line(app, FamiliarLine::Heard)
 }
 
 fn newest(app: &mut App) -> String {
-    let world = app.world_mut();
-    world.query_filtered::<&Text, With<FamiliarNewest>>().single(world).expect("one newest line").0.clone()
+    line(app, FamiliarLine::Newest)
 }
 
 fn undo_button(app: &mut App) -> (Entity, bool) {
@@ -174,4 +182,51 @@ fn the_switch_in_the_block_is_the_view_rows_twin() {
         world.query_filtered::<Has<Checked>, With<FamiliarSwitch>>().single(world).expect("one switch")
     };
     assert!(!on, "the switch in the block is off with it");
+}
+
+/// A key the way a person presses it: written as input, then one update, which is the path the question's modal reads.
+fn press(app: &mut App, code: KeyCode) {
+    use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
+    for state in [bevy::input::ButtonState::Pressed, bevy::input::ButtonState::Released] {
+        app.world_mut().write_message(KeyboardInput {
+            key_code: code,
+            logical_key: Key::Unidentified(NativeKey::Unidentified),
+            state,
+            text: None,
+            repeat: false,
+            window: Entity::PLACEHOLDER,
+        });
+    }
+    app.update();
+}
+
+#[test]
+fn what_the_agent_handed_back_is_waiting_on_the_person_and_then_says_how_they_answered() {
+    let mut app = editor("agent_block_handback");
+    show_the_block(&mut app, true);
+    assert_eq!(line(&mut app, FamiliarLine::HandBack), "", "nothing handed back yet, so the line says nothing");
+
+    let done = turn_to(&mut app, 90.0);
+    assert_eq!(done["outcome"], "applied", "{done}");
+    call(
+        &mut app,
+        "grimoire/present",
+        serde_json::json!({
+            "title": "the turned table",
+            "summary": "Turned the table a quarter.",
+            "specified": ["turn the table"],
+            "operation_ids": [done["operation_id"]],
+        }),
+    );
+    updates(&mut app, 4);
+    let waiting = line(&mut app, FamiliarLine::HandBack);
+    assert!(waiting.contains("the turned table") && waiting.contains("Waiting for your answer"), "{waiting}");
+    assert!(heard(&mut app).contains("present") || heard(&mut app).contains("operation_apply"), "{}", heard(&mut app));
+
+    // N keeps: the safe answer, which changes nothing.
+    press(&mut app, KeyCode::KeyN);
+    updates(&mut app, 4);
+    let answered = line(&mut app, FamiliarLine::HandBack);
+    assert!(answered.contains("You answered: kept"), "{answered}");
+    assert_eq!(yaw_of(&app), 90.0, "keeping changes nothing");
 }

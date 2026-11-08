@@ -117,13 +117,16 @@ pub struct FamiliarItem;
 #[derive(Component)]
 pub struct Familiar;
 
-/// The line that says when the agent was last heard.
-#[derive(Component)]
-pub struct FamiliarHeard;
-
-/// The line that says whose the newest change is.
-#[derive(Component)]
-pub struct FamiliarNewest;
+/// One of the block's lines of text.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FamiliarLine {
+    /// When the agent was last heard.
+    Heard,
+    /// Whose the newest change is, and what it was.
+    Newest,
+    /// What the agent handed back, and what the person answered.
+    HandBack,
+}
 
 /// The block's pause switch.
 #[derive(Component)]
@@ -163,8 +166,9 @@ pub fn toggle_the_familiar(
             // **A line wider than the panel wraps, and takes the room it wraps into**: a definite width is what lets the
             // text's height be measured at the width it is drawn at, and the next line then starts below it.
             let wrapped = || (Node { width: Val::Percent(100.0), ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary));
-            block.spawn((label(""), wrapped(), FamiliarHeard));
-            block.spawn((label(""), wrapped(), FamiliarNewest));
+            for line in [FamiliarLine::Heard, FamiliarLine::Newest, FamiliarLine::HandBack] {
+                block.spawn((label(""), wrapped(), line));
+            }
             block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
             block.spawn((button("Undo the agent's change"), FamiliarUndo, observe(undo_the_agents_change)));
         })
@@ -208,32 +212,45 @@ fn newest_sentence(state: &EditorState, map: &bevy_grimoire_core::map::Map) -> S
     }
 }
 
-/// **The block follows the editor**: both lines are rewritten when the words change, and the Undo button is greyed
+/// What the block says about the agent's last hand-back (`grimoire/present`): waiting on the person, or how they answered.
+/// Empty when nothing has been handed back this session.
+fn hand_back_sentence(presenting: &crate::present::Presenting) -> String {
+    match &presenting.0 {
+        None => String::new(),
+        Some(presented) => match &presented.answer {
+            None => format!("Handed back: {}. Waiting for your answer", presented.title),
+            Some(answer) => format!("Handed back: {}. You answered: {answer}", presented.title),
+        },
+    }
+}
+
+/// **The block follows the editor**: its lines are rewritten when the words change, and the Undo button is greyed
 /// unless pressing it would undo the agent's change.
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn follow_the_agent(
     activity: Res<AgentActivity>,
     time: Res<Time<Real>>,
     state: Option<Res<EditorState>>,
     open: Option<Res<OpenMap>>,
-    mut heard: Query<&mut Text, (With<FamiliarHeard>, Without<FamiliarNewest>)>,
-    mut newest: Query<&mut Text, (With<FamiliarNewest>, Without<FamiliarHeard>)>,
+    presenting: Option<Res<crate::present::Presenting>>,
+    mut lines: Query<(&mut Text, &FamiliarLine)>,
     undo: Query<(Entity, Has<InteractionDisabled>), With<FamiliarUndo>>,
     mut commands: Commands,
 ) {
-    for mut text in &mut heard {
-        let said = activity.sentence(time.elapsed_secs_f64());
+    for (mut text, line) in &mut lines {
+        let said = match line {
+            FamiliarLine::Heard => activity.sentence(time.elapsed_secs_f64()),
+            FamiliarLine::Newest => match (&state, &open) {
+                (Some(state), Some(open)) => newest_sentence(state, &open.map),
+                _ => continue,
+            },
+            FamiliarLine::HandBack => presenting.as_deref().map(hand_back_sentence).unwrap_or_default(),
+        };
         if text.0 != said {
             text.0 = said;
         }
     }
-    let (Some(state), Some(open)) = (state, open) else { return };
-    for mut text in &mut newest {
-        let said = newest_sentence(&state, &open.map);
-        if text.0 != said {
-            text.0 = said;
-        }
-    }
+    let Some(state) = state else { return };
     let can = newest_is_the_agents(&state);
     for (button, disabled) in &undo {
         match (can, disabled) {
