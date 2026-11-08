@@ -2,13 +2,12 @@
 //!
 //! The PLACE palette's rows are drag sources carrying the descriptor's id. gooey reports a drag that ends over nothing the
 //! interface draws as `DroppedOnWorld`; the editor takes the pointer to the ground as a click does, snaps it by the same rung,
-//! and places through the `placement_add` operation: one log line, one undo step.
+//! and places through `place_one`, the click's own commit (`plan_placement` is the `placement_add` operation's reasoning): one undo step.
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, Window};
 use bevy_cauldron::editor::{PaletteRow, PieceDrag};
-use bevy_cauldron::ops::{self, Entry};
-use bevy_cauldron::project::{OpenMap, Project};
+use bevy_cauldron::project::OpenMap;
 use bevy_cauldron::view::MainCamera;
 use bevy_gooey::{DragPayload, DroppedOnWorld};
 
@@ -41,16 +40,6 @@ fn drop_on(app: &mut App, id: &str, pointer: Vec2) {
     }
 }
 
-fn log(app: &App) -> Vec<Entry> {
-    let path = ops::oplog_path(app.world().resource::<Project>());
-    std::fs::read_to_string(&path)
-        .unwrap_or_default()
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str::<Entry>(line).unwrap_or_else(|e| panic!("{e}: {line}")))
-        .collect()
-}
-
 #[test]
 fn a_dropped_piece_is_placed_at_the_pointer_by_the_place_operation_and_one_undo_takes_it_back() {
     let mut app = editor("piece_drop");
@@ -64,8 +53,7 @@ fn a_dropped_piece_is_placed_at_the_pointer_by_the_place_operation_and_one_undo_
     let placed = &map.placements[0];
     assert_eq!(placed.descriptor, "site/wall");
     assert!((placed.at.0 - 2.0).abs() <= 0.5 && (placed.at.1 - 2.0).abs() <= 0.5, "at the cell under the pointer, snapped: {:?}", placed.at);
-    let entries = log(&app);
-    assert_eq!(entries.iter().filter(|e| e.op == "placement_add").count(), 1, "the drop is one placement_add line, as a click is");
+    assert_eq!(app.world().resource::<bevy_cauldron::editor::EditorState>().undo_depth(), 1, "the drop is one undo step, as a click is");
 
     bevy_cauldron::editor::undo_for_test(app.world_mut());
     for _ in 0..3 {
@@ -80,7 +68,7 @@ fn a_piece_the_library_does_not_have_places_nothing() {
     let over = pixel_over(&mut app, (2.0, 2.0));
     drop_on(&mut app, "site/ghost", over);
     assert!(app.world().resource::<OpenMap>().map.placements.is_empty(), "nothing was placed");
-    assert!(log(&app).is_empty(), "and nothing was logged");
+    assert_eq!(app.world().resource::<bevy_cauldron::editor::EditorState>().undo_depth(), 0, "and there is nothing to undo");
 }
 
 #[test]
