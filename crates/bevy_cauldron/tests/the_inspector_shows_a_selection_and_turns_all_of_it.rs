@@ -2,7 +2,8 @@
 //!
 //! The inspector is gooey's reflect inspector over `PoseView`. Two pieces with different turns show "—" in the
 //! facing (`InspectMixed` names `yaw`, gooey marks the row `MixedValue`), and a typed 90 reaches both
-//! through `placement_set_pose` with `ids`: one log line, one undo step, each piece's own tip kept.
+//! through `placement_set_pose` (one call per distinct old facing and tip, since a batch is undone by one
+//! inverse), in one undo step, each piece's own tip kept.
 
 use bevy::prelude::*;
 use bevy_cauldron::editor::{lock_on_placement, place_for_test, EditorState};

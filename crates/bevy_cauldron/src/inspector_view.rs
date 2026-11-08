@@ -23,9 +23,10 @@
 //! The view shows the **primary** (the lock's piece), and a field is **mixed** when another selected piece
 //! differs from it there: [`PoseWidget`] carries gooey's `InspectMixed` naming those fields, so the row
 //! reads "—" instead of one piece's number. An edit of the facing or the lift is applied to **every**
-//! selected piece: one `placement_set_pose` per distinct tip (it carries the facing and the tip
-//! together, and typing a facing must not change a tip), taking `ids` so one log line names them all, and
-//! the entries those calls leave are collapsed into one undo step (`EditorState::group_turn`). A
+//! selected piece: one `placement_set_pose` per distinct old facing and tip (a batch is undone by one
+//! inverse, so it refuses pieces that were not facing alike, and typing a facing must not change a tip),
+//! each taking `ids` for the pieces that share one, and the entries those calls leave are collapsed into
+//! one undo step (`EditorState::group_turn`). A
 //! position is not edited by typing here, so an `x` or `z` edit of several pieces does nothing.
 //!
 //! # The panel
@@ -209,7 +210,7 @@ fn mirror_the_selection(
 ///
 /// `placement_set_pose` carries the facing and the tip together, and `placement_set_lift` the lift: the
 /// view has no tip field yet, so a pose edit keeps each piece's own tip as it is. One edit is one
-/// dispatch per distinct tip (one, for pieces that stand the same way) and therefore one undo step,
+/// dispatch per distinct old facing and tip (one, for pieces that stand the same way) and therefore one undo step,
 /// exactly as the key that does the same thing; several pieces' entries are collapsed into one.
 ///
 /// **The map goes through `open`**, not read from disk: a dispatch with an empty `open` resolves the
@@ -252,17 +253,20 @@ fn pose_edits_are_operations(
             calls.push(("placement_set_lift", serde_json::json!({ "id": id, "lift": view.lift }), format!("lift {id}")));
         }
     } else {
-        // One call per distinct tip, so a typed facing never changes how a piece is tipped.
-        let mut by_tip: Vec<([u8; 2], Vec<String>)> = Vec::new();
+        // **One call per distinct old facing and tip.** A batch is undone by one inverse, so
+        // `placement_set_pose` refuses pieces that were not facing the same way; and a typed facing must
+        // never change how a piece is tipped, so each group keeps its own tip. The calls are one act
+        // again below, in one undo step.
+        let mut by_pose: Vec<((u32, [u8; 2]), Vec<String>)> = Vec::new();
         for id in &ids {
             let Some(placed) = open.map.placements.iter().find(|p| p.id == *id) else { continue };
-            let tip = [placed.tip.0, placed.tip.1];
-            match by_tip.iter_mut().find(|(t, _)| *t == tip) {
+            let key = (placed.yaw.to_bits(), [placed.tip.0, placed.tip.1]);
+            match by_pose.iter_mut().find(|(k, _)| *k == key) {
                 Some((_, group)) => group.push(id.clone()),
-                None => by_tip.push((tip, vec![id.clone()])),
+                None => by_pose.push((key, vec![id.clone()])),
             }
         }
-        for (tip, group) in by_tip {
+        for ((_, tip), group) in by_pose {
             let (params, phrase) = match group.as_slice() {
                 [one] => (serde_json::json!({ "id": one, "yaw": view.yaw, "tip": tip }), format!("turn {one}")),
                 many => (serde_json::json!({ "ids": many, "yaw": view.yaw, "tip": tip }), format!("turn {} pieces", many.len())),
