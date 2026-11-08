@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "stem": "feedback-1794147495932",
+  "taken_at_ms": 1794147495932,
+  "audience": "developers",
+  "app_version": "0.5.0",
+  "screen": "editor",
+  "project": "/Users/ladvien/Documents/Cauldron Projects/lavender_hills",
+  "map": "first_map",
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "scene",
+        "world": [
+          -0.1375122,
+          0.0,
+          1.7144375
+        ],
+        "map": [
+          -0.1375122,
+          1.7144375
+        ],
+        "cell": [
+          -1,
+          1
+        ],
+        "placement": null,
+        "camera": {
+          "translation": [
+            13.326203,
+            13.999999,
+            10.673795
+          ],
+          "forward": [
+            -0.57735026,
+            -0.57735026,
+            -0.5773503
+          ]
+        }
+      },
+      "at": [
+        1322.4766,
+        640.0547
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "Huh?",
+  "picture": {
+    "file": "feedback-1794147495932.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794147495932_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794147495932.log"
+}
