@@ -1847,7 +1847,7 @@ pub struct TriangleTotal;
 /// 9 glyphs of the 10 px label face (6 px each, 54 px), and the column is that and 4 px of air. Wider
 /// than `COL_LABEL` by exactly what that word needs: a column the width of `COL_WIDE` costs the value
 /// column the room the two-line receipt and hint slots are measured against.
-const READOUT_LABEL_W: f32 = 58.0;
+pub(crate) const READOUT_LABEL_W: f32 = 58.0;
 
 /// One labelled row of the readout. A field per line, rather than one string with separators in it,
 /// because a separator is a thing the reader has to parse and a column is not.

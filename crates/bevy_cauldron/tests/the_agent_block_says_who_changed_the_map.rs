@@ -122,8 +122,8 @@ fn the_block_is_there_only_when_asked_for_and_the_row_follows_it() {
 fn it_says_who_made_the_newest_change_and_undo_takes_the_agents_back_and_never_the_persons() {
     let mut app = editor("agent_block_undo");
     show_the_block(&mut app, true);
-    assert!(heard(&mut app).contains("Not heard"), "no call yet: `{}`", heard(&mut app));
-    assert!(newest(&mut app).contains("No change"), "{}", newest(&mut app));
+    assert!(heard(&mut app).contains("not heard"), "no call yet: `{}`", heard(&mut app));
+    assert!(newest(&mut app).contains("none yet"), "{}", newest(&mut app));
     assert!(undo_button(&mut app).1, "nothing to undo: the button is greyed");
 
     let before = yaw_of(&app);
@@ -135,7 +135,7 @@ fn it_says_who_made_the_newest_change_and_undo_takes_the_agents_back_and_never_t
 
     press_undo(&mut app);
     assert_eq!(yaw_of(&app), before, "Undo took the agent's change back");
-    assert!(newest(&mut app).contains("No change"), "and the newest is no longer it: `{}`", newest(&mut app));
+    assert!(newest(&mut app).contains("none yet"), "and the newest is no longer it: `{}`", newest(&mut app));
     assert!(undo_button(&mut app).1, "greyed again");
 
     // The person's own edit on top of the agent's: the button must not undo it.
@@ -220,14 +220,14 @@ fn what_the_agent_handed_back_is_waiting_on_the_person_and_then_says_how_they_an
     );
     updates(&mut app, 4);
     let waiting = line(&mut app, FamiliarLine::HandBack);
-    assert!(waiting.contains("the turned table") && waiting.contains("Waiting for your answer"), "{waiting}");
+    assert!(waiting.contains("the turned table") && waiting.contains("waiting for your answer"), "{waiting}");
     assert!(heard(&mut app).contains("present"), "the hand-back is the call it last made: `{}`", heard(&mut app));
 
     // N keeps: the safe answer, which changes nothing.
     press(&mut app, KeyCode::KeyN);
     updates(&mut app, 4);
     let answered = line(&mut app, FamiliarLine::HandBack);
-    assert!(answered.contains("You answered: kept"), "{answered}");
+    assert!(answered.contains("you answered kept"), "{answered}");
     assert_eq!(yaw_of(&app), 90.0, "keeping changes nothing");
 }
 

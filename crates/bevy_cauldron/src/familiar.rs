@@ -88,11 +88,11 @@ impl AgentActivity {
     /// The line the AGENT block says it in.
     pub fn sentence(&self, now_s: f64) -> String {
         match &self.last {
-            None => "Not heard from an agent this session".to_owned(),
+            None => "not heard this session".to_owned(),
             Some(Heard { method, at_s }) => {
                 let ago = (now_s - at_s).max(0.0).round() as u64;
                 let calls = if self.heard == 1 { "1 call".to_owned() } else { format!("{} calls", self.heard) };
-                format!("Last heard: {method}, {ago} s ago ({calls})")
+                format!("{method}, {ago} s ago ({calls})")
             }
         }
     }
@@ -172,11 +172,17 @@ pub fn toggle_the_familiar(
         ))
         .with_children(|block| {
             crate::chrome::list_heading(block, "AGENT");
-            // **A line wider than the panel wraps, and takes the room it wraps into**: a definite width is what lets the
-            // text's height be measured at the width it is drawn at, and the next line then starts below it.
-            let wrapped = || (Node { width: Val::Percent(100.0), flex_shrink: 0.0, ..default() }, TextLayout::new(Justify::Left, LineBreak::WordBoundary));
-            for line in [FamiliarLine::Heard, FamiliarLine::Newest, FamiliarLine::HandBack] {
-                block.spawn((label(""), wrapped(), line));
+            // **The INSPECTOR's own row**: a label column and a value column that wraps beside it. A bare gooey `label` here
+            // was measured one line short of what it drew once it wrapped at this panel's width, and the next line was
+            // drawn over it (found in a capture; the headless layout does not show it); the rows beside this block are the
+            // builders that have been drawn at this width since the readout began, so these are theirs.
+            for (line, name) in [(FamiliarLine::Heard, "HEARD"), (FamiliarLine::Newest, "NEWEST"), (FamiliarLine::HandBack, "HAND-BACK")] {
+                block.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|row| {
+                    crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
+                    row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                        crate::chrome::row_value(col, "", crate::chrome::TEXT, line);
+                    });
+                });
             }
             block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
             block.spawn((button("Undo the agent's change"), FamiliarUndo, observe(undo_the_agents_change)));
@@ -215,9 +221,9 @@ pub fn newest_is_the_agents(state: &EditorState) -> bool {
 /// What the block says about the newest change: whose it is and what it was.
 fn newest_sentence(state: &EditorState, map: &bevy_grimoire_core::map::Map) -> String {
     match state.undo_next(map) {
-        None => "No change has been made yet".to_owned(),
-        Some(what) if newest_is_the_agents(state) => format!("Newest change, the agent's: {what}"),
-        Some(what) => format!("Newest change, yours: {what}"),
+        None => "none yet".to_owned(),
+        Some(what) if newest_is_the_agents(state) => format!("the agent's: {what}"),
+        Some(what) => format!("yours: {what}"),
     }
 }
 
@@ -227,8 +233,8 @@ fn hand_back_sentence(presenting: &crate::present::Presenting) -> String {
     match &presenting.0 {
         None => String::new(),
         Some(presented) => match &presented.answer {
-            None => format!("Handed back: {}. Waiting for your answer", presented.title),
-            Some(answer) => format!("Handed back: {}. You answered: {answer}", presented.title),
+            None => format!("{}: waiting for your answer", presented.title),
+            Some(answer) => format!("{}: you answered {answer}", presented.title),
         },
     }
 }

@@ -247,8 +247,8 @@ Your own edits are not affected, and the pause is not saved: the next session st
 Goal: know whether the agent is there, whose the newest change is, and undo the agent's without touching yours.
 
 1. Choose **View ▸ Show agent**. An AGENT block appears at the top of the Map door's INSPECTOR panel; choose the row again to hide it.
-2. **Last heard** says which call the editor last got from an agent and how long ago, and how many it has had this session. It is what the editor can know: an agent that has asked nothing has not been heard, so this is not a promise that one is connected.
-3. **Newest change** says whether the newest thing on the undo stack is the agent's or yours, and what it was.
+2. **HEARD** says which call the editor last got from an agent and how long ago, and how many it has had this session. It is what the editor can know: an agent that has asked nothing has not been heard, so this is not a promise that one is connected.
+3. **NEWEST** says whether the newest thing on the undo stack is the agent's or yours, and what it was. **HAND-BACK** says what the agent last handed back (`grimoire_present`) and whether it still waits for your Keep or Undo all, or how you answered.
 4. **Undo the agent's change** presses Undo (so it is exactly Cmd+Z, and it shows in the History). It is greyed unless the newest change is the agent's: it never undoes your own edit under the agent's name.
 5. **Pause agent writes** in the block is the View row's twin: the same switch, ticked in both.
 
