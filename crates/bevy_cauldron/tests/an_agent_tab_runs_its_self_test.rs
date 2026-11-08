@@ -12,7 +12,7 @@ use serde_json::json;
 
 use bevy_cauldron::terminal::Terminal;
 use bevy_cauldron::terminal_agent::{self, AgentSetup, CheckStatus};
-use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalNewTab};
+use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalInvokeButton, TerminalNewTab};
 use bevy_gooey::testing::find_by_label;
 
 use crate::fixtures;
@@ -102,9 +102,28 @@ fn point(app: &mut App, at: Vec2, action: PointerAction) {
     app.update();
 }
 
+/// **The terminal starts no agent by itself** (it costs tokens to warm up), so the test presses `Invoke
+/// Agent` the way a person does, through the pointer chain, before it looks at the agent's tab.
+fn invoke_the_agent(app: &mut App) {
+    let button = |app: &mut App| {
+        let world = app.world_mut();
+        world.query_filtered::<&UiGlobalTransform, With<TerminalInvokeButton>>().iter(world).next().map(|at| at.translation)
+    };
+    until(app, "the Invoke Agent button was never drawn", |app| button(app).is_some());
+    let at = button(app).expect("the button stands");
+    for action in [
+        PointerAction::Move { delta: Vec2::ZERO },
+        PointerAction::Press(PointerButton::Primary),
+        PointerAction::Release(PointerButton::Primary),
+    ] {
+        point(app, at, action);
+    }
+}
+
 #[test]
 fn an_agent_tab_types_its_command_then_shows_the_connection_and_the_test() {
     let mut app = editor_with_an_agent();
+    invoke_the_agent(&mut app);
     until(&mut app, "the custom command was never typed into the first tab's shell", |app| {
         screen_text(app).lines().any(|line| line.trim() == SAID)
     });
