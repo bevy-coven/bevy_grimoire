@@ -1451,6 +1451,8 @@ fn operation_apply(
     mut screen_next: Option<ResMut<NextState<crate::screen::Screen>>>,
     // **An agent's armed composition is the Map's (E-002)**, as a picker row's click arms it.
     mut composition_armed: Option<ResMut<crate::compose::Armed>>,
+    // **The person's switch (UI-60, #246)**: while it is on, no write goes through.
+    pause: Option<Res<crate::familiar::AgentPause>>,
 ) -> Result<Value, String> {
     let Some(op) = ops::find(&p.operation) else {
         return Err(format!(
@@ -1463,6 +1465,19 @@ fn operation_apply(
                 .join(", ")
         ));
     };
+    // **Paused: a write is refused before anything is planned, and a preview still answers.** The refusal is the
+    // editor's own sentence, on the status line as a problem and in the answer; nothing is changed or logged.
+    if !p.dry_run && pause.as_deref().is_some_and(|pause| pause.0) {
+        let why = crate::familiar::refusal(&p.operation);
+        if let Some(state) = state.as_mut() {
+            state.problem_agent_refusal(&p.operation, &why);
+        }
+        return Ok(json!({
+            "operation": p.operation,
+            "outcome": "refused",
+            "refusal": why,
+        }));
+    }
     // **A door is refused before anything is planned when the editor cannot cross to it now (gaps 6,
     // 10 and 11).** A question on screen, a leaving question, or a door already waiting owns the next
     // frame. The refusal is the editor's own sentence, and nothing is written or logged.
@@ -1828,7 +1843,20 @@ fn operation_undo(
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
     presenting: Option<Res<crate::present::Presenting>>,
+    pause: Option<Res<crate::familiar::AgentPause>>,
 ) -> Result<Value, String> {
+    // **Taking a change back is a write too** (UI-60, #246): paused, it is refused like the change was.
+    if !p.dry_run && pause.as_deref().is_some_and(|pause| pause.0) {
+        let why = crate::familiar::refusal("undo");
+        if let Some(state) = state.as_mut() {
+            state.problem_agent_refusal("undo", &why);
+        }
+        return Ok(json!({
+            "operation": "undo",
+            "outcome": "refused",
+            "refusal": why,
+        }));
+    }
     // **`turn: true` takes back what was presented (E-084)**, newest first, so the agent's door and
     // the person's Cmd+Z take back the same amount. It is a loop over the id form rather than a
     // second undo mechanism: each step is the same `ops::undo(ctx, Some(id))` the id form makes, and

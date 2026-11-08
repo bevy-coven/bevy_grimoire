@@ -189,6 +189,8 @@ enum Slot {
     Statistics,
     /// View ▸ Show outliner (UI-51, #237).
     Outliner,
+    /// View ▸ Pause agent writes (UI-60, #246).
+    PauseAgent,
     /// Window ▸ Reset layout (UI-33, #227).
     ResetLayout,
 }
@@ -270,6 +272,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::Separator);
         slots.push(Slot::Statistics);
         slots.push(Slot::Outliner);
+        slots.push(Slot::PauseAgent);
         slots.push(Slot::Separator);
         slots.push(Slot::ResetLayout);
     }
@@ -336,6 +339,13 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
         }
         Slot::ResetLayout => {
             menu.spawn((AppVerb::ResetLayout, bevy_gooey::menu_item(AppVerb::ResetLayout.title())));
+        }
+        Slot::PauseAgent => {
+            menu.spawn((
+                crate::familiar::PauseItem,
+                bevy_gooey::check_item("Pause agent writes", false),
+                bevy_gooey::observe(crate::familiar::toggle_the_pause),
+            ));
         }
         Slot::Outliner => {
             menu.spawn((

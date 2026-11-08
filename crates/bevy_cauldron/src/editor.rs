@@ -2485,6 +2485,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         app.add_plugins(crate::inspector_view::InspectorPlugin);
         app.add_plugins(crate::outliner::OutlinerPlugin);
+        app.add_plugins(crate::familiar::FamiliarPlugin);
         app.add_observer(drop_a_piece_on_the_map);
         app.add_plugins(crate::selection::SelectionPlugin);
         #[cfg(feature = "bevy_siren")]

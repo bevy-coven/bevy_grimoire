@@ -1,0 +1,54 @@
+{
+  "name": "invoke_agent",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [],
+  "chunks": [
+    {
+      "seconds": 8.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "caption": "the project chooses an agent: the terminal gets an Agent tab"
+    },
+    {
+      "at": 1.2,
+      "click_label": "Agent"
+    },
+    {
+      "at": 2.2,
+      "caption": "the tab opens empty: no agent has started, so no tokens are spent"
+    },
+    {
+      "at": 4.4,
+      "caption": "person: presses Invoke Agent"
+    },
+    {
+      "at": 4.5,
+      "cursor": [
+        540,
+        515
+      ]
+    },
+    {
+      "at": 4.9,
+      "click": [
+        540,
+        515
+      ]
+    },
+    {
+      "at": 6.2,
+      "caption": "the press starts the session"
+    }
+  ]
+}

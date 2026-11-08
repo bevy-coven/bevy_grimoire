@@ -704,6 +704,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::inspector_view::PoseInspector", Ownership::Door),
     // **`Session`**: where the person is looking, not this door's state. A door change keeps it, and the
     // pieces that are not on the new map are dropped the next frame.
+    // **`Session`**: whether the agent may write is the person's call about the whole sitting, not a door's.
+    ("bevy_cauldron::familiar::AgentPause", Ownership::Session),
     ("bevy_cauldron::selection::Selection", Ownership::Session),
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.

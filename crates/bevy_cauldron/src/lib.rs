@@ -67,6 +67,7 @@ pub mod decide_labels;
 pub mod devshot;
 pub mod editor;
 pub mod inspector_view;
+pub mod familiar;
 pub mod outliner;
 pub mod app_verbs;
 pub mod menu_bar;

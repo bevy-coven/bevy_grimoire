@@ -53,8 +53,20 @@ pub struct Outliner {
     /// The piece behind each row's key.
     rows: HashMap<u64, String>,
     /// A fingerprint of what the tree was last built from (the query and every piece's id and
-    /// descriptor), so a settled map costs a comparison and not a rebuild.
+    /// descriptor), so a map edit that changes no piece's identity (a turn, a nudge) is not a rebuild.
     built_from: u64,
+    /// The query the tree was last built for, so a settled frame compares two short strings and nothing else.
+    built_for: String,
+    /// How many times the tree has been built from the map. A settled map and search cost none: this is the
+    /// number the UI budget (UI-93, #259) is written against, and a test holds it.
+    rebuilds: u32,
+}
+
+impl Outliner {
+    /// How many times the tree has been built since the section opened.
+    pub fn rebuilds(&self) -> u32 {
+        self.rebuilds
+    }
 }
 
 /// The tree widget.
@@ -239,8 +251,16 @@ fn rebuild_the_tree(
 ) {
     let (Some(open), Some(project)) = (open, project) else { return };
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
+    // **A settled frame does no work that grows with the map.** The fingerprint reads every piece, so it is taken
+    // only when the map, the library or the search moved, or the tree has not been built yet: ten thousand pieces
+    // at sixty frames a second was a second of string building for a tree nobody touched.
+    let moved = outliner.built_from == 0 || open.is_changed() || project.is_changed() || outliner.built_for != outliner.query;
+    if !moved {
+        return;
+    }
     let now = fingerprint(&open.map, &outliner.query);
     if outliner.built_from == now {
+        outliner.built_for.clone_from(&outliner.query);
         return;
     }
     let Some(tree) = table.source_mut::<Tree>() else { return };
@@ -248,6 +268,8 @@ fn rebuild_the_tree(
     tree.set_nodes(nodes);
     outliner.rows = rows;
     outliner.built_from = now;
+    outliner.built_for = outliner.query.clone();
+    outliner.rebuilds += 1;
 }
 
 /// **A piece selected in the viewport is the selected row**, when the search leaves it in view.
