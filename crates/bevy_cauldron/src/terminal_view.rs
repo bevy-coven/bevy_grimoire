@@ -741,6 +741,32 @@ pub fn command_held(keys: &ButtonInput<KeyCode>) -> bool {
     keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)
 }
 
+/// **The Command chords that edit the line a shell is reading**, as a Mac terminal sends them (feedback-1794146958145: *"I pressed
+/// Cmd+Backspace (Mac) and it did not clear the line to the beginning. We need our terminal to automatically respect terminal
+/// conventions"*). Every other Command chord is the pane's or the window's and never the shell's ([`command_held`]); these three
+/// are what VS Code's and iTerm2's terminals send on a Mac, as the control codes readline binds:
+///
+/// |chord|sends|readline's name|
+/// |---|---|---|
+/// |`Cmd+Backspace`|`^U`|unix-line-discard: clear to the start of the line|
+/// |`Cmd+Left`|`^A`|beginning-of-line|
+/// |`Cmd+Right`|`^E`|end-of-line|
+///
+/// Only with Command alone: a Shift, Option or Ctrl held with it is another gesture. (`Option+Backspace` is the word before the
+/// cursor and already goes as `ESC DEL`.)
+pub fn line_editing_chord(keys: &ButtonInput<KeyCode>, key: KeyCode) -> Option<&'static [u8]> {
+    let others = [KeyCode::ShiftLeft, KeyCode::ShiftRight, KeyCode::AltLeft, KeyCode::AltRight, KeyCode::ControlLeft, KeyCode::ControlRight];
+    if !command_held(keys) || keys.any_pressed(others) {
+        return None;
+    }
+    match key {
+        KeyCode::Backspace => Some(b"\x15"),
+        KeyCode::ArrowLeft => Some(b"\x01"),
+        KeyCode::ArrowRight => Some(b"\x05"),
+        _ => None,
+    }
+}
+
 /// **The keys, and the swallow.**
 ///
 /// While [`TerminalFocus`] holds, every keystroke becomes the bytes a terminal sends, and the editor
@@ -845,6 +871,10 @@ fn type_keys(
             None => {}
         }
         if command_held(&keys) {
+            // A Command chord is never the shell's letter, except the three that edit its line.
+            if let Some(bytes) = line_editing_chord(&keys, event.key_code) {
+                out.extend_from_slice(bytes);
+            }
             continue;
         }
         let app_cursor = terminal.tab().is_some_and(|tab| tab.screen().app_cursor());
@@ -1051,6 +1081,37 @@ mod tests {
                 assert_eq!(clipboard_chord(&keys, key), None, "{held:?} + {key:?}");
                 assert!(!command_held(&keys), "{held:?} + {key:?}");
             }
+        }
+    }
+
+    /// **Command with Backspace, Left and Right edit the line the shell is reading** (feedback-1794146958145): `^U`, `^A` and `^E`,
+    /// what VS Code's and iTerm2's terminals send on a Mac.
+    #[test]
+    fn command_backspace_left_and_right_send_the_line_editing_codes() {
+        for (key, bytes) in [(KeyCode::Backspace, b"\x15"), (KeyCode::ArrowLeft, b"\x01"), (KeyCode::ArrowRight, b"\x05")] {
+            for command in [KeyCode::SuperLeft, KeyCode::SuperRight] {
+                assert_eq!(line_editing_chord(&pressed(&[command], key), key), Some(&bytes[..]), "{command:?} + {key:?}");
+            }
+        }
+    }
+
+    /// **Only Command alone, and only those three keys**: another modifier with it is another gesture, a bare key is the shell's own
+    /// (Backspace is `DEL`, an arrow its escape sequence), and no other Command chord is sent on.
+    #[test]
+    fn other_chords_are_not_line_editing() {
+        for held in [
+            &[KeyCode::SuperLeft, KeyCode::ShiftLeft][..],
+            &[KeyCode::SuperLeft, KeyCode::AltLeft][..],
+            &[KeyCode::SuperLeft, KeyCode::ControlLeft][..],
+            &[][..],
+            &[KeyCode::AltLeft][..],
+        ] {
+            for key in [KeyCode::Backspace, KeyCode::ArrowLeft, KeyCode::ArrowRight] {
+                assert_eq!(line_editing_chord(&pressed(held, key), key), None, "{held:?} + {key:?}");
+            }
+        }
+        for key in [KeyCode::KeyU, KeyCode::KeyA, KeyCode::Delete, KeyCode::ArrowUp, KeyCode::Home] {
+            assert_eq!(line_editing_chord(&pressed(&[KeyCode::SuperLeft], key), key), None, "Command + {key:?}");
         }
     }
 }
