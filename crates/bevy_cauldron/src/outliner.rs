@@ -119,7 +119,15 @@ fn spawn_the_outliner(mut commands: Commands, panes: Query<Entity, Added<MapCont
                 ),
             ))
             .id();
-        commands.entity(pane).insert_children(0, &[block]);
+        // **Into the pane if it is still there when the command runs**: a door change rebuilds the frame in the
+        // same frame the pane appears, and a command on a despawned entity is an error nobody handles.
+        commands.queue(move |world: &mut World| {
+            if let Ok(mut pane) = world.get_entity_mut(pane) {
+                pane.insert_children(0, &[block]);
+            } else {
+                world.despawn(block);
+            }
+        });
     }
 }
 
@@ -128,11 +136,11 @@ fn spawn_the_outliner(mut commands: Commands, panes: Query<Entity, Added<MapCont
 fn select_the_pieces(
     picked: On<ValueChange<TableSelection>>,
     outliners: Query<&Outliner>,
-    open: Res<OpenMap>,
-    mut lock: ResMut<TargetLock>,
-    mut selection: ResMut<Selection>,
+    open: Option<Res<OpenMap>>,
+    lock: Option<ResMut<TargetLock>>,
+    selection: Option<ResMut<Selection>>,
 ) {
-    let Ok(outliner) = outliners.single() else { return };
+    let (Ok(outliner), Some(open), Some(mut lock), Some(mut selection)) = (outliners.single(), open, lock, selection) else { return };
     // In the map's own order, so the same rows always make the same selection with the same primary.
     let ids: Vec<String> = open
         .map
@@ -199,11 +207,12 @@ fn fingerprint(map: &Map, query: &str) -> u64 {
 
 /// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
 fn rebuild_the_tree(
-    open: Res<OpenMap>,
-    project: Res<Project>,
+    open: Option<Res<OpenMap>>,
+    project: Option<Res<Project>>,
     mut outliners: Query<&mut Outliner>,
     mut tables: Query<&mut Table, With<OutlinerTree>>,
 ) {
+    let (Some(open), Some(project)) = (open, project) else { return };
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
     let now = fingerprint(&open.map, &outliner.query);
     if outliner.built_from == now {
@@ -218,13 +227,13 @@ fn rebuild_the_tree(
 
 /// **A piece selected in the viewport is the selected row**, when the search leaves it in view.
 fn follow_the_viewport(
-    lock: Res<TargetLock>,
-    selection: Res<Selection>,
+    lock: Option<Res<TargetLock>>,
+    selection: Option<Res<Selection>>,
     outliners: Query<&Outliner>,
     trees: Query<(Entity, Option<&TableSelection>), With<OutlinerTree>>,
     mut commands: Commands,
 ) {
-    let (Ok(outliner), Ok((tree, now))) = (outliners.single(), trees.single()) else { return };
+    let (Some(lock), Some(selection), Ok(outliner), Ok((tree, now))) = (lock, selection, outliners.single(), trees.single()) else { return };
     let selected: Vec<&str> = match (lock.placement_id(), selection.ids()) {
         (Some(primary), ids) if ids.first().map(String::as_str) == Some(primary) => ids.iter().map(String::as_str).collect(),
         (Some(primary), _) => vec![primary],
