@@ -553,10 +553,10 @@
       "taken_at_ms": 1794112080244,
       "app_version": "0.4.6",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "After exit from a terminal's shell (here after leaving omp), the pane freezes instead of closing so a new terminal can be made.",
       "commit": "",
       "attempts": []
     },
