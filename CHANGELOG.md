@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-08
+
+- **ui-51-outliner** `10d4addb` The OUTLINER section of the INSPECTOR lists the map's pieces in a tree grouped by what they are, a search narrows it to the matching pieces and their groups, and a row selects its piece in the viewport (UI-51, #237) *For you: A new Outliner in the Inspector lists every piece on the map: search for a name, click it, and the piece is selected.*<br><a href="docs/changelog/media/2026-11-08-ui-51-outliner.mp4"><img src="docs/changelog/media/2026-11-08-ui-51-outliner.png" width="320" alt="clip"></a>
+
 ## 2026-11-07
 
 - **ui-91-shortcuts** `090f9f0b` Help > Keyboard shortcuts is generated from the command registry: one row per command on the chord it answers to now, so a command added tomorrow is on it and a rebinding (even one made in the settings file) shows at once (UI-91, #257) *For you: Help > Keyboard shortcuts lists every command with the key it answers to, including the ones you changed.*<br><a href="docs/changelog/media/2026-11-07-ui-91-shortcuts.mp4"><img src="docs/changelog/media/2026-11-07-ui-91-shortcuts.png" width="320" alt="clip"></a>

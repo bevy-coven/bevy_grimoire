@@ -1,0 +1,101 @@
+{
+  "name": "outliner",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -3.2,
+            -2.5,
+            3.2,
+            2.5
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 6.5
+    },
+    {
+      "seconds": 5.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "key": "Escape"
+    },
+    {
+      "at": 0.5,
+      "caption": "person: opens the OUTLINER section of the INSPECTOR"
+    },
+    {
+      "at": 0.9,
+      "click_label": "OUTLINER"
+    },
+    {
+      "at": 2.2,
+      "caption": "every piece on the map, grouped by what it is"
+    },
+    {
+      "at": 3.4,
+      "cursor": [
+        186,
+        263
+      ]
+    },
+    {
+      "at": 3.8,
+      "click": [
+        186,
+        263
+      ]
+    },
+    {
+      "at": 4.1,
+      "caption": "person: searches for lamp"
+    },
+    {
+      "at": 4.3,
+      "type": "lamp"
+    },
+    {
+      "at": 5.6,
+      "caption": "only the lamps are left, under their group"
+    },
+    {
+      "at": 6.8,
+      "click_label": "floor_lamp",
+      "prefix": true
+    },
+    {
+      "at": 7.6,
+      "caption": "a row selects its piece: the viewport outlines it and the POSE block shows its pose"
+    },
+    {
+      "at": 8.6,
+      "cursor": [
+        700,
+        610
+      ]
+    }
+  ]
+}
