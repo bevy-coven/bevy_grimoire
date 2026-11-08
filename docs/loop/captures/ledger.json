@@ -532,10 +532,10 @@
       "taken_at_ms": 1794103491165,
       "app_version": "0.4.5",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "A project button on the launcher's Projects home needs two clicks to do its work; the first does nothing a person can see.",
       "commit": "",
       "attempts": []
     },
