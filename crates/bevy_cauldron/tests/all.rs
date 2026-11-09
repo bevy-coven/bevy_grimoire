@@ -511,3 +511,4 @@ mod capture_feedback_1794230462401;
 mod the_agent_led_is_dark_with_no_agent_tab;
 mod the_agent_block_lists_the_plan;
 mod a_broken_relation_is_a_problem_with_go_to;
+mod a_note_body_is_edited_on_several_lines;

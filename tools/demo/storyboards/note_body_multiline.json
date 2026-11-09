@@ -1,0 +1,126 @@
+{
+ "name": "note_body_multiline",
+ "fps": 10,
+ "scale": 1,
+ "width": 900,
+ "setup": [
+  {
+   "key": "KeyJ",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "mcp": "grimoire_apply_operation",
+   "args": {
+    "operation": "note_add",
+    "parameters": {
+     "pieces": [
+      "sofa"
+     ],
+     "text": "turn the sofa"
+    }
+   }
+  },
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": "map"
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 6
+  },
+  {
+   "seconds": 7
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    640,
+    300
+   ]
+  },
+  {
+   "at": 0.05,
+   "key": "Escape"
+  },
+  {
+   "at": 0.3,
+   "caption": "the Inspector's NOTES section"
+  },
+  {
+   "at": 0.6,
+   "scroll_to": "NOTES",
+   "over": [
+    150,
+    400
+   ],
+   "region": [
+    0,
+    130,
+    330,
+    440
+   ]
+  },
+  {
+   "at": 3.0,
+   "caption": "person: Edit, on the note"
+  },
+  {
+   "at": 3.3,
+   "click_label": "Edit",
+   "within": [
+    0,
+    130,
+    330,
+    470
+   ]
+  },
+  {
+   "at": 4.5,
+   "caption": "a text area: Enter adds a line"
+  },
+  {
+   "at": 4.8,
+   "type": "-to-face-the-room"
+  },
+  {
+   "at": 5.6,
+   "key": "Enter"
+  },
+  {
+   "at": 6.0,
+   "type": "then-move-it-by-the-window"
+  },
+  {
+   "at": 8.0,
+   "caption": "Ctrl+Enter saves it as one note_edit"
+  },
+  {
+   "at": 8.3,
+   "key": "Enter",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "at": 11.0,
+   "caption": "the note holds both lines"
+  },
+  {
+   "at": 12.5,
+   "clear_cursor": true
+  }
+ ],
+ "crop": [
+  0,
+  0,
+  1080,
+  640
+ ]
+}

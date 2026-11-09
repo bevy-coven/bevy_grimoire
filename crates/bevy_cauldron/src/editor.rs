@@ -1582,6 +1582,27 @@ struct NoteOpButton {
     op: String,
 }
 
+/// **A note row's Edit button** (UI-55, #241): opens a text area holding the note's text under the list.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct NoteEditButton {
+    pub id: String,
+}
+
+/// **Where the Notes panel's text area opens**: a sibling after [`NotesList`], never inside it, so the list's rebuild twice a second
+/// cannot take the field out from under a person typing in it.
+#[derive(Component, Clone, Copy)]
+pub struct NotesEditor;
+
+/// The text area open on one note: which note, and what its text was when the area opened.
+#[derive(Component, Clone, Debug)]
+struct NoteBodyEdit {
+    id: String,
+    was: String,
+}
+
+/// How many lines high the Notes panel's text area stands before it scrolls.
+const NOTE_BODY_ROWS: usize = 5;
+
 /// The status the Notes list is filtered to; `None` shows every note.
 #[derive(Resource, Default)]
 pub struct NotesFilter(Option<&'static str>);
@@ -3835,6 +3856,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         ..default()
                     },
                 ));
+                s.spawn((NotesEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
             });
 
             // **Reload (#203).** What became of each file's latest edit: whether a game is connected, and
@@ -6596,6 +6618,9 @@ fn on_notes_click(
     sends: Query<(), With<NotesSendAll>>,
     leases: Query<&NoteLeaseButton>,
     op_buttons: Query<&NoteOpButton>,
+    edit_buttons: Query<&NoteEditButton>,
+    editors: Query<Entity, With<NotesEditor>>,
+    mut commands: Commands,
     filter: Option<ResMut<NotesFilter>>,
     project: Option<ResMut<Project>>,
     open: Option<ResMut<OpenMap>>,
@@ -6616,6 +6641,24 @@ fn on_notes_click(
     } else if sends.get(e).is_ok() {
         let mut project = project;
         send_notes(project.as_deref_mut(), &mut open, &mut state);
+    } else if let Ok(button) = edit_buttons.get(e) {
+        let notes = bevy_grimoire_core::notes::Notes::load(&bevy_grimoire_core::notes::path_for_map(&open.map_path));
+        let Some(note) = notes.ok().and_then(|n| n.get(&button.id).cloned()) else {
+            state.status.problem(format!("note {} is no longer on the map", button.id));
+            return;
+        };
+        for editor in &editors {
+            commands.entity(editor).despawn_related::<Children>();
+            commands.entity(editor).with_children(|slot| {
+                slot.spawn((
+                    bevy_gooey::text_area(format!("Note {}", note.id), note.text.clone(), NOTE_BODY_ROWS),
+                    NoteBodyEdit { id: note.id.clone(), was: note.text.clone() },
+                    bevy::input_focus::AutoFocus,
+                    bevy_gooey::observe(save_the_note_body),
+                ));
+            });
+        }
+        state.status.note(format!("editing note {}: Enter adds a line, Ctrl+Enter saves", note.id));
     } else if let Ok(button) = op_buttons.get(e) {
         let (Some(project), Some(mut rig)) = (project, rig) else {
             return;
@@ -6685,6 +6728,34 @@ fn on_notes_click(
             }
             Err(why) => state.status.problem(why),
         }
+    }
+}
+
+/// **The Notes panel's text area ends its edit** (UI-55, #241): on the final change (Ctrl+Enter or Cmd+Enter, or the field losing the
+/// keys) the text goes through `note_edit`, as the ground note box's Enter does, or `note_remove` when it was emptied. Text the
+/// same as when the area opened writes nothing. The area goes either way; the list shows the saved note on its next read.
+fn save_the_note_body(
+    change: On<bevy_gooey::ValueChange<String>>,
+    edits: Query<&NoteBodyEdit>,
+    project: Option<ResMut<Project>>,
+    open: Option<ResMut<OpenMap>>,
+    state: Option<ResMut<EditorState>>,
+    mut commands: Commands,
+) {
+    if !change.is_final {
+        return;
+    }
+    let Ok(edit) = edits.get(change.source) else { return };
+    commands.entity(change.source).despawn();
+    let (Some(mut open), Some(mut state)) = (open, state) else { return };
+    let mut project = project;
+    if change.value == edit.was {
+        return;
+    }
+    if change.value.trim().is_empty() {
+        remove_note(project.as_deref_mut(), &mut open, &mut state, &edit.id);
+    } else {
+        edit_note(project.as_deref_mut(), &mut open, &mut state, &edit.id, &change.value);
     }
 }
 
@@ -6941,13 +7012,13 @@ fn refresh_notes_list(
                     ("done", _) => &[("note_keep", "Keep", ""), ("note_undo_work", "Undo this note", "")],
                     _ => &[],
                 };
-                if !ops.is_empty() {
-                    p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
-                        for (op, label, text) in ops {
-                            crate::chrome::button(h, NoteLeaseButton { id: id.clone(), op, text }, label, crate::chrome::Severity::Plain);
-                        }
-                    });
-                }
+                // **Edit is on every note**, whatever its status: the text is the person's to correct.
+                p.spawn(Node { column_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() }).with_children(|h| {
+                    crate::chrome::button(h, NoteEditButton { id: id.clone() }, "Edit", crate::chrome::Severity::Plain);
+                    for (op, label, text) in ops {
+                        crate::chrome::button(h, NoteLeaseButton { id: id.clone(), op, text }, label, crate::chrome::Severity::Plain);
+                    }
+                });
             }
         });
     }
