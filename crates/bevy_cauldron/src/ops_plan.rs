@@ -6,7 +6,7 @@
 //! one undo step puts the previous plan back, and a plan (a preview) is the same code on a copy that is
 //! never written.
 
-use bevy_grimoire_core::plan::{self, Plan, PlanItem};
+use bevy_grimoire_core::plan::{self, Plan, PlanItem, Status};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -62,6 +62,29 @@ pub fn plan_json(plan: &Plan) -> serde_json::Value {
         "done": done,
         "skipped": skipped,
     })
+}
+
+/// **A step's status as the editor says it**: the word the PLAN section and the AGENT block both print in brackets, so the two
+/// surfaces cannot disagree.
+pub fn status_word(status: Status) -> &'static str {
+    match status {
+        Status::Pending => "pending",
+        Status::Doing => "doing",
+        Status::Done => "done",
+        Status::Skipped => "skipped",
+    }
+}
+
+/// **The plan as lines of words**: `no plan` alone when there is none, else `plan: <done> of <n> done` and then
+/// `<n> [<status>] <text>` for each step in the agent's order.
+pub fn plan_text(plan: &Plan) -> Vec<String> {
+    if plan.items.is_empty() {
+        return vec!["no plan".to_owned()];
+    }
+    let (_, _, done, _) = plan.counts();
+    let mut lines = vec![format!("plan: {done} of {} done", plan.items.len())];
+    lines.extend(plan.items.iter().enumerate().map(|(at, item)| format!("{} [{}] {}", at + 1, status_word(item.status), item.text)));
+    lines
 }
 
 /// **The plan of the open map** as `grimoire_state` reports it: an empty list when there is none.

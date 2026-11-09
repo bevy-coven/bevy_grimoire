@@ -8,6 +8,7 @@ use bevy::camera::{ImageRenderTarget, NormalizedRenderTarget};
 use bevy::picking::pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput};
 use bevy::prelude::*;
 
+use bevy_cauldron::terminal::Terminal;
 use bevy_cauldron::terminal_agent::AgentSetup;
 use bevy_cauldron::terminal_pane::{TerminalAgentCard, TerminalBar, TerminalInvokeButton};
 use bevy_gooey::{Led, LedState, LedWord};
@@ -129,6 +130,15 @@ fn word_of(app: &mut App, led: Entity) -> Option<String> {
     children.iter().find_map(|child| world.get::<LedWord>(*child).and_then(|_| world.get::<Text>(*child)).map(|text| text.0.clone()))
 }
 
+/// What the shown tab's screen says. The agent's command prints `AGENT-UP`.
+fn the_screen(app: &mut App) -> String {
+    let mut terminal = app.world_mut().resource_mut::<Terminal>();
+    let Some(tab) = terminal.tab_mut() else {
+        return String::new();
+    };
+    tab.screen_mut().lines().iter().map(|line| line.cells.iter().map(|c| c.ch).collect::<String>()).collect::<Vec<_>>().join("\n")
+}
+
 fn bar_leds(app: &mut App) -> Vec<LedState> {
     leds(app).into_iter().filter(|(_, home, _)| *home == Home::Bar).map(|(_, _, state)| state).collect()
 }
@@ -152,4 +162,7 @@ fn the_dark_led_lights_when_the_agent_tab_opens() {
     invoke_the_agent(&mut app);
     until(&mut app, "the bar's LED never lit when the agent's tab opened", |app| bar_leds(app) == vec![LedState::Busy]);
     assert_eq!(bar_leds(&mut app).len(), 1, "still one LED in the bar");
+    // **The shell has started before the test ends.** An `App` dropped while its agent's shell is still starting waits for a child
+    // that the pty will not let go of (the test then never returns), so the test lets the command run first.
+    until(&mut app, "the agent's command never ran", |app| the_screen(app).contains("AGENT-UP"));
 }

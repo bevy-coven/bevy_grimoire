@@ -1,0 +1,135 @@
+{
+  "name": "familiar_plan",
+  "fps": 10,
+  "scale": 1,
+  "width": 900,
+  "crop": [
+    0,
+    0,
+    1080,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            -3.2,
+            -2.5,
+            3.2,
+            2.5
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 5.0
+    },
+    {
+      "seconds": 5.0
+    },
+    {
+      "seconds": 4.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.3,
+      "key": "Escape"
+    },
+    {
+      "at": 0.6,
+      "caption": "person: View, Show agent"
+    },
+    {
+      "at": 0.9,
+      "click_label": "View"
+    },
+    {
+      "at": 2.0,
+      "click_label": "Show agent"
+    },
+    {
+      "at": 3.0,
+      "caption": "the AGENT block's PLAN row: no plan yet"
+    },
+    {
+      "at": 5.2,
+      "caption": "agent: plan_set, three steps; the first is in hand"
+    },
+    {
+      "at": 5.5,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "plan_set",
+        "parameters": {
+          "items": [
+            {
+              "text": "turn the sofa",
+              "status": "doing"
+            },
+            {
+              "text": "check the clearance",
+              "status": "pending"
+            },
+            {
+              "text": "hand it back",
+              "status": "pending"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 8.0,
+      "caption": "the steps are listed in the block"
+    },
+    {
+      "at": 9.6,
+      "caption": "agent: the sofa is turned, the step is ticked"
+    },
+    {
+      "at": 9.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "plan_set",
+        "parameters": {
+          "items": [
+            {
+              "text": "turn the sofa",
+              "status": "done"
+            },
+            {
+              "text": "check the clearance",
+              "status": "doing"
+            },
+            {
+              "text": "hand it back",
+              "status": "pending"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 11.5,
+      "caption": "plan: 1 of 3 done"
+    },
+    {
+      "at": 13.0,
+      "cursor": [
+        700,
+        610
+      ]
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+ "name": "data_table_edit",
+ "fps": 10,
+ "scale": 1,
+ "width": 900,
+ "setup": [
+  {
+   "key": "KeyJ",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": "map"
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 6
+  },
+  {
+   "seconds": 6
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    640,
+    300
+   ]
+  },
+  {
+   "at": 0.05,
+   "key": "Escape"
+  },
+  {
+   "write": {
+    "path": "assets/grimoire/furniture/mob.ron",
+    "text": "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n"
+   },
+   "at": 0.1
+  },
+  {
+   "write": {
+    "path": "assets/grimoire/furniture/data.ron",
+    "text": "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])"
+   },
+   "at": 0.15000000000000002
+  },
+  {
+   "at": 0.3,
+   "caption": "the Inspector's DATA section: the registered leaves, as a table"
+  },
+  {
+   "at": 0.6,
+   "scroll_to": "DATA",
+   "over": [
+    150,
+    400
+   ],
+   "region": [
+    0,
+    130,
+    330,
+    335
+   ]
+  },
+  {
+   "at": 3.5,
+   "caption": "person: open the speed row"
+  },
+  {
+   "at": 3.8,
+   "click_label": "mob.speed",
+   "within": [
+    0,
+    130,
+    330,
+    470
+   ]
+  },
+  {
+   "at": 4.2,
+   "key": "Enter"
+  },
+  {
+   "at": 5.5,
+   "caption": "a text field over the value; type 2.5, Enter"
+  },
+  {
+   "at": 5.8,
+   "key": "Backspace"
+  },
+  {
+   "at": 5.9,
+   "key": "Backspace"
+  },
+  {
+   "at": 6.0,
+   "key": "Backspace"
+  },
+  {
+   "at": 6.1,
+   "key": "Backspace"
+  },
+  {
+   "at": 6.4,
+   "type": "2.5"
+  },
+  {
+   "at": 7.2,
+   "key": "Enter"
+  },
+  {
+   "at": 9.0,
+   "caption": "one data_set: the table shows mob.speed = 2.5"
+  },
+  {
+   "at": 11.0,
+   "clear_cursor": true
+  }
+ ],
+ "crop": [
+  0,
+  0,
+  1080,
+  640
+ ]
+}
