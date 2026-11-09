@@ -231,12 +231,13 @@ pub struct TerminalTabChip(pub usize);
 #[derive(Component)]
 pub struct TerminalNewTab;
 
-/// **The `cd` chip: move the drawn shell to the project the editor is pointed at now.**
+/// **The move chip, "Go to `<folder>`": move the drawn shell to the project the editor is pointed at now.**
 ///
 /// The shell is *not* moved when a project opens — a running `cargo build` belongs to the project it
 /// was started in, and yanking its working directory would break it. So the pane offers the move
 /// instead: it types `cd '<root>'` into the shell, which is a keystroke the person could type
-/// themselves, and the shell's own history records it.
+/// themselves, and the shell's own history records it. Offered for a shell only: an agent tab's input is a
+/// prompt for the agent, not a shell (feedback-1794230949329).
 #[derive(Component)]
 pub struct TerminalCdChip;
 
@@ -814,6 +815,20 @@ fn clear_the_scrollback(_click: On<bevy_gooey::Activate>, mut terminal: ResMut<T
     }
 }
 
+/// What the status chip's tooltip says: the chip is the agent's self-test, and a click shows it again.
+const TIP_AGENT_STATUS: &str = "The agent's self-test: click to show it again";
+
+/// What the `x` chip's tooltip says.
+const TIP_CLOSE_TAB: &str = "Close this session and end its shell";
+
+/// **The folder a new session starts in, by name**: what the bar's tooltips and the move chip call the open project.
+fn project_folder(terminal: &Terminal) -> String {
+    terminal
+        .next_cwd()
+        .file_name()
+        .map_or_else(|| "the open project".to_owned(), |name| name.to_string_lossy().into_owned())
+}
+
 /// **The bar**: the pane's name on the left, its sessions and its two controls on the right.
 fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
     commands.entity(bar).despawn_children();
@@ -832,6 +847,9 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             let state = post.map_or(bevy_gooey::LedState::Off, |post| post.led());
             bar.spawn((bevy_gooey::led(AGENT_LED_LABEL, state), TerminalAgentLed));
         }
+        // **Every chip says what it does** (feedback-1794230949329: *"What are the different chips on here for? It's unclear"*):
+        // a tooltip on each, in words, because a chip's own label is only its name (`omp`, `Agent`, `+`, `x`).
+        let folder = project_folder(terminal);
         // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state.
         if let Some(post) = post {
             let (label, ink) = post.chip();
@@ -843,7 +861,8 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 ink,
                 chrome::BAR_BG,
                 chrome::PANEL_EDGE,
-            );
+            )
+            .insert(bevy_gooey::Tooltip::new(TIP_AGENT_STATUS));
         }
         // **A chip per session, and the two controls through the same builder.** `chrome::chip`
         // carries `RowRest`, so rest / hover / pressed are painted by `style_list_rows` without this
@@ -853,6 +872,7 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             let active = index == terminal.active();
             let ink = if active { chrome::ACCENT } else { chrome::TEXT };
             let fill = if active { chrome::ROW_SELECTED } else { chrome::BAR_BG };
+            let kind = if tab.agent().is_some() { "agent" } else { "shell" };
             chrome::chip(
                 bar,
                 TerminalTabChip(index),
@@ -861,26 +881,29 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 ink,
                 fill,
                 chrome::PANEL_EDGE,
-            );
+            )
+            .insert(bevy_gooey::Tooltip::new(format!("Show this {kind} session")));
         }
-        // **`cd` only when it would do something.** The chip names the directory it would move to, so a
-        // person reads where it goes rather than trusting a verb; with no open project, or a shell
-        // already in it, there is nothing to offer and no chip.
+        // **The move chip only when it would do something, and only for a shell.** It names the folder it would move to, so a
+        // person reads where it goes rather than trusting a verb, and it says "Go to" and not `cd`: what it types is a shell
+        // command, and the tooltip shows it. An agent tab is not a shell: `cd '<root>'` typed into the agent's prompt is a message
+        // to the agent, so the chip is never offered there (feedback-1794230949329: *"'cd lavender_hills' doesn't make a lot of
+        // sense"*). With no open project, or a shell already in it, there is nothing to offer and no chip.
         let want = terminal.next_cwd();
-        if terminal.tab().is_some_and(|tab| tab.wants_cd_to(&want)) {
-            let name = want
-                .file_name()
-                .map(|n| format!("cd {}", n.to_string_lossy()))
-                .unwrap_or_else(|| "cd".to_owned());
+        if terminal.tab().is_some_and(|tab| tab.agent().is_none() && tab.wants_cd_to(&want)) {
             chrome::chip(
                 bar,
                 TerminalCdChip,
-                &name,
+                &format!("Go to {folder}"),
                 chrome::text::CONTROL,
                 chrome::ACCENT,
                 chrome::BAR_BG,
                 chrome::PANEL_EDGE,
-            );
+            )
+            .insert(bevy_gooey::Tooltip::new(format!(
+                "Move this shell into the open project: types cd {} for you",
+                crate::terminal_agent::shell_quote(&want.to_string_lossy())
+            )));
         }
         if offers_another_agent(terminal) {
             chrome::chip(
@@ -891,7 +914,8 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 chrome::ACCENT,
                 chrome::BAR_BG,
                 chrome::PANEL_EDGE,
-            );
+            )
+            .insert(bevy_gooey::Tooltip::new(format!("Start another agent session in {folder}")));
         }
         chrome::chip(
             bar,
@@ -901,7 +925,8 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             chrome::TEXT,
             chrome::BAR_BG,
             chrome::PANEL_EDGE,
-        );
+        )
+        .insert(bevy_gooey::Tooltip::new(format!("Open a new shell in {folder}")));
         chrome::chip(
             bar,
             TerminalCloseTab,
@@ -910,7 +935,8 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             chrome::DANGER,
             chrome::BAR_BG,
             chrome::PANEL_EDGE,
-        );
+        )
+        .insert(bevy_gooey::Tooltip::new(TIP_CLOSE_TAB));
     });
 }
 /// **`Ctrl+\`` raises the pane, or lowers it when it already has the keys.**
