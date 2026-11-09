@@ -1,0 +1,53 @@
+name: Agent wish
+description: The one tool that would most have helped with the task just done. Written by the Cauldron agent at the end of a turn; one per hand-back.
+title: "Agent wish: "
+labels: [agent-wish, enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A wish is written by an agent that has just finished a task in Cauldron, an editor built on
+        this repository. It is not a complaint about the task: it names **the one tool that would
+        most have helped**, so the next agent spends fewer steps on the same work.
+
+        The fields below arrive filled in. Nothing in them was typed by a person.
+  - type: textarea
+    id: task
+    attributes:
+      label: What the task was
+      description: One or two sentences, in the terms the person asked it in.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: hardship
+    attributes:
+      label: What cost steps
+      description: Where the work stalled, repeated itself, or needed a second call to learn what one call should have said.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: tool
+    attributes:
+      label: The tool that would have helped
+      description: Its name, and one sentence saying what it does.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: example_call
+    attributes:
+      label: The call, as the agent would like to write it
+      description: Its name and arguments, exactly as the agent would send it.
+      render: code
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context, as the editor recorded it
+      description: The hand-back the wish follows, the operations the task applied, the editor's version and the agent client. The editor writes this; it carries no path and no file of the project.
+      render: text
+    validations:
+      required: false

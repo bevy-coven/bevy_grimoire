@@ -37,6 +37,16 @@ Put a result in front of the person: a title, a one-paragraph summary, what they
 | `destructiveHint` | false |
 | `idempotentHint` | false |
 
+### `grimoire_wish`
+
+After a grimoire_present hand-back (or a note you resolved), name the one tool that would most have helped with that task: after, the hand-back it follows ({presentation: "present-1"} or {note: "n3"}); task, what the task was; hardship, what cost steps; tool, the single tool, named and described in one sentence (200 characters at most); example_call, a call to it as you would like to write it (600 at most). The editor queues the wish and the editor adds the context it already has — the hand-back's title, the operations the task applied, its version and your client's name and version — so do not restate those. It returns at once with the wish's id and "waiting"; read grimoire_state's wishes for what became of it. One wish per hand-back: a second one citing the same hand-back, or one citing an id this editor never handed back, is refused with the reason. An empty field, or one past its limit, is refused naming the field — a wish is never trimmed. It writes nothing outside the editor's own queue.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | false |
+| `destructiveHint` | false |
+| `idempotentHint` | false |
+
 ### `grimoire_list_operations`
 
 Every operation the running bevy_grimoire editor knows, with each one's parameters' JSON schema and how it is undone. Call this before grimoire_apply_operation so the parameters are the ones the operation actually takes. Returns the list; it does not change anything. The undo column names the strategy an operation declares; grimoire_undo_operation performs it. Pass query (words such as "carve" or "note") to get only the operations whose name or parameters match, best first, and total, the number of operations there are.

@@ -52,6 +52,23 @@ pub const TOOLS: &[ToolDoc] = &[
         idempotent: false,
     },
     ToolDoc {
+        name: "grimoire_wish",
+        description: "After a grimoire_present hand-back (or a note you resolved), name the one tool that would most \
+                      have helped with that task: after, the hand-back it follows ({presentation: \"present-1\"} or \
+                      {note: \"n3\"}); task, what the task was; hardship, what cost steps; tool, the single tool, named \
+                      and described in one sentence (200 characters at most); example_call, a call to it as you would \
+                      like to write it (600 at most). The editor queues the wish and the editor adds the context it \
+                      already has — the hand-back's title, the operations the task applied, its version and your \
+                      client's name and version — so do not restate those. It returns at once with the wish's id and \
+                      \"waiting\"; read grimoire_state's wishes for what became of it. One wish per hand-back: a second \
+                      one citing the same hand-back, or one citing an id this editor never handed back, is refused \
+                      with the reason. An empty field, or one past its limit, is refused naming the field — a wish is \
+                      never trimmed. It writes nothing outside the editor's own queue.",
+        read_only: false,
+        destructive: false,
+        idempotent: false,
+    },
+    ToolDoc {
         name: "grimoire_list_operations",
         description: "Every operation the running bevy_grimoire editor knows, with each one's parameters' \
                       JSON schema and how it is undone. Call this before grimoire_apply_operation so the \
@@ -542,6 +559,26 @@ pub fn schemas() -> Value {
                     },
                 },
                 "operation_ids": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        "grimoire_wish": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["after", "task", "hardship", "tool", "example_call"],
+            "properties": {
+                "after": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "The hand-back the wish follows: exactly one of presentation or note.",
+                    "properties": {
+                        "presentation": {"type": ["string", "null"], "description": "A presentation's id, as grimoire_present returned it."},
+                        "note": {"type": ["string", "null"], "description": "A note's id, as the agent resolved it."},
+                    },
+                },
+                "task": {"type": "string", "maxLength": 600, "description": "What the task was."},
+                "hardship": {"type": "string", "maxLength": 600, "description": "What cost steps."},
+                "tool": {"type": "string", "maxLength": 200, "description": "The single tool that would most have helped, named and described in one sentence."},
+                "example_call": {"type": "string", "maxLength": 600, "description": "A call to that tool, as you would like to write it."},
             },
         },
         "grimoire_list_operations": {

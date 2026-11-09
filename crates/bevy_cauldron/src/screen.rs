@@ -449,6 +449,11 @@ door_state![
     crate::present::Presenting,
     // **The answer to that question goes with it**: a button pressed on one door and not yet taken must not answer the next door's question.
     crate::present::PresentationReply,
+    // **A wish cites a hand-back, and a hand-back belongs to a door** (#353): carried across, a wish
+    // would name an operation of a map nobody is looking at, and the queue's one-wish rule would be
+    // enforced against a turn this door never showed.
+    crate::present::HandBacks,
+    crate::present::Wishes,
     crate::tiles::MapView,
     crate::tiles::NoteEdit,
     crate::tiles::ScaleEdit,
@@ -709,6 +714,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`**: whether the agent may write is the person's call about the whole sitting, not a door's.
     ("bevy_cauldron::familiar::AgentPause", Ownership::Session),
     ("bevy_cauldron::familiar::AgentActivity", Ownership::Session),
+    // **`Session`**: which client is talking is true for the whole sitting, not for one door — the
+    // agent that made a wish about the last map is still the agent after a crossing.
+    ("bevy_cauldron::present::AgentClient", Ownership::Session),
     // **`Session`**: whether hand-backs are answered in the AGENT block is the person's choice for the sitting, like the pause.
     ("bevy_cauldron::familiar::HandBackHere", Ownership::Session),
     // **`Session`**: what the person has hidden of the shell (the left panel, Zen mode) is their call for the sitting, not a door's;
@@ -742,6 +750,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::tiles::LatticePick", Ownership::Door),
     ("bevy_cauldron::present::Presenting", Ownership::Door),
     ("bevy_cauldron::present::PresentationReply", Ownership::Door),
+    ("bevy_cauldron::present::HandBacks", Ownership::Door),
+    ("bevy_cauldron::present::Wishes", Ownership::Door),
     ("bevy_cauldron::tiles::MapView", Ownership::Door),
     ("bevy_cauldron::tiles::NoteEdit", Ownership::Door),
     ("bevy_cauldron::tiles::ScaleEdit", Ownership::Door),
