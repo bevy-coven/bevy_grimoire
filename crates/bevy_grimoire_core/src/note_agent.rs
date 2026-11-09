@@ -17,8 +17,12 @@ pub const AGENT_VERSION: u32 = 1;
 pub const DEFAULT_MODEL: &str = "claude-sonnet-5-5";
 
 /// What the started agent is asked. It names the guide, so the prompt stays short and the rules live in one place.
+///
+/// **`grimoire_guide` first, not a document** (#346, AG-01). The guide is shipped inside the MCP
+/// server and returned by that tool, so the agent reads the text the server actually carries — the
+/// same text `docs/mcp-tools.md` is rendered from — rather than a file that may not be there.
 pub const DEFAULT_PROMPT: &str = "Work the sent notes on the open map through the editor's MCP server. \
-Read the notes guide in the MCP docs first: call grimoire_state, claim a sent note with note_claim, stay inside its area, \
+Call grimoire_guide first: call grimoire_state, claim a sent note with note_claim, stay inside its area, \
 ask before removing a person's piece, and finish with note_resolve.";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
