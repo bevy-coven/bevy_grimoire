@@ -47,6 +47,7 @@
 //! [`Vocabulary::validate`] refuses more than 64 tokens on an axis rather than wrapping.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use std::path::Path;
 
@@ -62,7 +63,7 @@ pub const VOCAB_VERSION: u32 = 1;
 ///
 /// Order is significant — see the module docs. Serialized as a plain list so a project's vocabulary
 /// file reads as what it is.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Vocabulary {
     /// Tokens, in bit order. `tokens[i]` owns bit `1 << i`.
@@ -74,7 +75,7 @@ pub struct Vocabulary {
 /// The note is not decoration. Four shipped affordance tokens turned out to have no reader, and the
 /// only way anyone found out was an audit that read the whole tree. A token that cannot be described
 /// in a sentence is a token nobody has decided the meaning of yet.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Token {
     pub name: String,
@@ -187,7 +188,7 @@ impl Vocabulary {
 /// One file per project rather than a table in this crate, for the same reason `stretch_y` is a
 /// project patch: a library shared between games must not carry one game's idea of what a prop can be.
 /// The *mechanism* — closed tables, position bits, two-sided checking — is what is reusable.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Vocabularies {
     /// The format version: [`VOCAB_VERSION`]. A file from before it existed has none and reads as the

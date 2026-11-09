@@ -26,6 +26,7 @@
 //! | `grimoire_snip` | one rectangle of the picture, cut out and written as a crop with its metadata |
 //! | `grimoire_decide` | ask a named check or typed questions about pictures and facts; a probability for every answer |
 //! | `grimoire_present` | put a result in front of the person and take their Keep or Undo all |
+//! | `grimoire_schema` | one kind of project file's JSON Schema, generated from the type the reader reads |
 //! | `grimoire_list_pieces` | the library's pieces, a page at a time, with their label provenance |
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
 //! | `grimoire_feedback_list` | the reports the person filed about Cauldron itself, newest first |
@@ -37,7 +38,7 @@
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-two tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-three tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -79,6 +80,16 @@ pub struct ListParams {
     /// Without them, every operation.
     #[serde(default)]
     pub query: Option<String>,
+}
+
+/// **The parameters of `grimoire_schema`.**
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaParams {
+    /// **The kind of file's schema**, a [`bevy_grimoire_core::reload::FileKind::id`]: `map`, `kits`,
+    /// `library`, `vocab`, `compositions`, `rigs`, `rules`, `standards`, `notes`, `relations`,
+    /// `terrain`, `volume`, `agent`, `play`, `destructible_marks`, and the rest of `schema::KINDS`.
+    pub kind: String,
 }
 
 /// **The parameters of `grimoire_self_test`**: none. The test is the same every time.
@@ -606,6 +617,41 @@ impl Grimoire {
         match self.editor.call("grimoire/operation_list", json!({"query": p.query})).await {
             Ok(v) => Ok(CallToolResult::structured(v)),
             Err(e) => Ok(refusal(&e)),
+        }
+    }
+
+    /// **`grimoire_schema` — the JSON Schema of one kind of project file.**
+    ///
+    /// **A read, and the answer to "what may this file say?"** The schema is generated from the Rust
+    /// type the editor's reader reads, so it cannot describe a file the reader refuses; a field's doc
+    /// comment is its `description`, and a field that names another file's value carries
+    /// `x-dark-factory-ref: <kind>` so a caller can follow it. The same file is written into the
+    /// project at `.dark_factory/schema/<kind>.schema.json` for an outside editor's YAML extension.
+    #[tool(
+        name = "grimoire_schema",
+        description = "The JSON Schema of one kind of project file, generated from the Rust type \
+                       the editor reads, so it describes exactly what the reader accepts. Its \
+                       properties carry the field's doc comment as description, and a field that \
+                       names another file's value carries x-dark-factory-ref (the kind it names). \
+                       kind is a file kind's id: map, kits, library, vocab, compositions, rigs, \
+                       rules, standards, notes, relations, terrain, volume, agent, play, \
+                       destructible_marks and the rest. Returns the schema as JSON; it changes \
+                       nothing. The same schema is on disk at \
+                       .dark_factory/schema/<kind>.schema.json.",
+        annotations(
+            title = "One file kind's JSON Schema",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn schema(&self, Parameters(p): Parameters<SchemaParams>) -> Result<CallToolResult, ErrorData> {
+        // **Generated here, not asked of the editor**: the type is this crate's own dependency, so a
+        // schema answers with no editor running and no project open.
+        match bevy_grimoire_core::schema::for_kind(&p.kind) {
+            Ok(schema) => Ok(CallToolResult::structured(schema)),
+            Err(problem) => Ok(refusal(&problem.line())),
         }
     }
 

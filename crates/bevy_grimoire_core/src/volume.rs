@@ -6,9 +6,10 @@
 //! inside solid; a mesher such as `bevy_isomesh` samples that function per chunk.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// A primitive. Lengths are metres in the map's frame, y up.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum Shape {
     Sphere { center: [f32; 3], radius_m: f32 },
     Box { center: [f32; 3], half_m: [f32; 3] },
@@ -16,7 +17,7 @@ pub enum Shape {
 }
 
 /// Whether an edit makes solid or removes it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Mode {
     Add,
     Carve,
@@ -24,7 +25,7 @@ pub enum Mode {
 
 /// One edit: a primitive, applied by union (`Add`) or subtraction (`Carve`), blended over
 /// `smooth_m` (0 is a hard edge).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Edit {
     pub shape: Shape,
     pub mode: Mode,
@@ -94,7 +95,7 @@ fn smin(a: f32, b: f32, k: f32) -> f32 {
 pub const VOLUME_VERSION: u32 = 1;
 
 /// Every edit of a map, in the order they were made.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Volume {
     /// The format version: [`VOLUME_VERSION`]. A file from before it existed has none and reads as the
     /// first; a file of another version is refused, naming the one this build reads.

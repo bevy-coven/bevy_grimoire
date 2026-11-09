@@ -20,6 +20,7 @@
 //! about a placement row.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::map::Placed;
 
@@ -41,7 +42,7 @@ pub fn path_for_map(map_path: &std::path::Path) -> std::path::PathBuf {
 }
 
 /// Every relation one map is meant to keep.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Relations {
     pub version: u32,
@@ -131,7 +132,7 @@ impl Relations {
 }
 
 /// One thing a placement is meant to keep true.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Relation {
     /// The placement id this relation is about.
@@ -149,7 +150,7 @@ fn is_false(b: &bool) -> bool {
 }
 
 /// What a relation asks of [`Relation::of`].
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Kind {
     /// Points at this placement, within [`FACING_TOLERANCE_DEG`]. Measures the angle off, degrees.

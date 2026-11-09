@@ -9,6 +9,7 @@
 //! The grid's cell `(ix, iz)` sits at world `(origin.0 + ix * cell_m, origin.1 + iz * cell_m)`.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// What a brush does to the heights under it.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -65,7 +66,7 @@ impl std::error::Error for HeightmapError {}
 /// The format version of a terrain file (#202). A file with no `version` is the first.
 pub const TERRAIN_VERSION: u32 = 1;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Heightfield {
     /// The format version: [`TERRAIN_VERSION`]. A file from before it existed has none and reads as the
     /// first; a file of another version is refused, naming the one this build reads.

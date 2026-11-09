@@ -37,6 +37,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::composition::Compositions;
 use crate::library::Library;
@@ -81,7 +82,7 @@ pub const MAX_DIVISIONS: u32 = 8;
 /// The project is the level at which neither two kits nor two maps can disagree, so the project is
 /// what owns it. Found from the other side, while splitting the editor into one door per entity:
 /// the door that authors tiles has to derive an interface with no map open at all.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Lattice {
     /// **How finely a piece's subgrid of EDGE TOKENS is indexed** — the lattice a face is read on.
@@ -210,7 +211,7 @@ fn four_metres() -> f32 {
 }
 
 /// **One namespace, and the directory that provides it.**
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Bind {
     /// The `site` in `site/wall_corner` — what a map's ids name.
@@ -225,7 +226,7 @@ pub struct Bind {
 /// Names namespaces, not directories, for the reason [`Bind`] separates them: `site` is the
 /// interface and `site_greybox` is one implementation of it. Binding decides which directory
 /// answers for a namespace; a bash decides which of those answers a given map draws on.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Bash {
     /// One snake_case segment — what a map's `bash` field names.
@@ -237,7 +238,7 @@ pub struct Bash {
 }
 
 /// **The project's kit bindings**, read from `kits.ron`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Kits {
     pub version: u32,

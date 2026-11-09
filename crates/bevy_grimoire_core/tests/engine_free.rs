@@ -86,6 +86,11 @@ use std::path::{Path, PathBuf};
 /// touches a GPU. The alternative was a hand-written YAML parser, which is a far larger and far less
 /// tested piece of code than either, for a format whose corner cases (block scalars, quoting rules, flow
 /// collections) are the whole job. Added as assumed owner exceptions (two new rows, nothing loosened).
+///
+/// **`schemars`** (#366, GD-04) generates each file kind's JSON Schema from its type (`schema.rs`), so
+/// the schema cannot describe a file the type does not read. It is a derive and a `Schema` type tree:
+/// `serde`, `serde_json`, `dyn-clone` and a proc macro, none of which knows what a renderer is, and it
+/// is the crate the MCP server already uses. Added as an assumed owner exception (a third new row).
 const ALLOWED_DEPS: &[&str] = &[
     "serde",
     "serde_json",
@@ -98,6 +103,7 @@ const ALLOWED_DEPS: &[&str] = &[
     "dirs",
     "serde_yaml_ng",
     "saphyr-parser",
+    "schemars",
 ];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so

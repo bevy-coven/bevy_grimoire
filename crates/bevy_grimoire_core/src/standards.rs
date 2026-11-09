@@ -17,6 +17,7 @@
 //! piece at import is a separate choice for the caller.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::{Descriptor, placed_footprint, placed_height};
 use crate::library::Library;
@@ -32,7 +33,7 @@ pub const FILE: &str = "standards.ron";
 pub const MULTIPLE_TOLERANCE: f32 = 0.01;
 
 /// Every standard one project's kits are meant to meet.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Standards {
     pub version: u32,
@@ -76,7 +77,7 @@ impl Standards {
 }
 
 /// One dimension of a piece a rule bounds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Dim {
     /// The footprint's first axis, before yaw.
     Width,
@@ -87,7 +88,7 @@ pub enum Dim {
 }
 
 /// One standard: a dimension of the pieces it covers, and the bounds it must keep.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     /// What the rule is called in a report: `"door passage"`, `"wall module"`.

@@ -39,6 +39,7 @@
 //!   is collapsed one block at a time and not as one grid.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::glb::fnv1a;
 use crate::grammar::{self, Grammar, Prototype};
@@ -68,7 +69,7 @@ pub const PARTS: [&str; 9] = [
 ];
 
 /// The rules a project states for its blocks.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rules {
     pub version: u32,
@@ -77,7 +78,7 @@ pub struct Rules {
 }
 
 /// The rules for one kind of block.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BlockRules {
     /// The map the grammar is learned from (its name, so `maps/<example>.map.ron`).
@@ -106,7 +107,7 @@ pub struct BlockRules {
 }
 
 /// Multiply the learned weight of every piece whose id starts with `prefix` by `times`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Weight {
     pub prefix: String,
@@ -114,7 +115,7 @@ pub struct Weight {
 }
 
 /// A multi-cell thing made of nine parts named `<prefix><part>` ([`PARTS`]).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Footprint {
     pub prefix: String,

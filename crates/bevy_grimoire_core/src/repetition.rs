@@ -25,6 +25,7 @@
 //! Engine-free: reads a map's placements and a library, nothing else.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::tipped_footprint;
 use crate::library::Library;
@@ -41,7 +42,7 @@ pub const FILE: &str = "repetition.ron";
 pub const REPETITION_VERSION: u32 = 1;
 
 /// What a repeat is, and what it costs, as data an author can tune.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct RepetitionRules {
     /// The format version: [`REPETITION_VERSION`]. A file from before it existed has none and reads as

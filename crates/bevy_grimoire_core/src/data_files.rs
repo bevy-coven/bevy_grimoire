@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::ron_surgery::{fmt_f32, scan_ron_leaves};
 use crate::reload_check::Refusal;
@@ -23,7 +24,7 @@ pub const REGISTRY_FILE: &str = "data.ron";
 pub const REGISTRY_VERSION: u32 = 1;
 
 /// An inclusive numeric range for one leaf; either end may be open.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Bounds {
     #[serde(default)]
     pub min: Option<f64>,
@@ -32,7 +33,7 @@ pub struct Bounds {
 }
 
 /// One registered data file.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DataFile {
     /// Stable name the operations address the file by (`tuning/mob`).
     pub id: String,
@@ -46,7 +47,7 @@ pub struct DataFile {
 }
 
 /// The parsed `data.ron`, with the directory its paths are relative to.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DataFiles {
     pub version: u32,
     pub files: Vec<DataFile>,

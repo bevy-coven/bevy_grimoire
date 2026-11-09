@@ -62,6 +62,7 @@ const OWNED_ELSEWHERE: &[(&str, &str)] = &[
     ("game_data", "the game's own RON: the game owns the shape, `data.ron` only lists the files"),
     ("family", "one file per family crate, in that crate's own serde type: the crate versions it"),
     ("trees", "a family crate's own species type: the crate versions it"),
+    ("schema", "a JSON Schema generated from the type on every write: it is derived, so a version of it is the type's"),
 ];
 
 /// **Versioned kinds that are a cache**: a file of another version is stale, never damaged, and the

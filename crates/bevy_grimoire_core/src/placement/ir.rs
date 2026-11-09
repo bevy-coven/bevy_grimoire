@@ -13,6 +13,7 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// Stable handle for a region within one generation. Index into `Dungeon::regions`.
 pub type RegionId = u32;
@@ -76,7 +77,7 @@ impl Rect2 {
 /// definition of "do these two overlap" and "is this inside its room". A second copy for the Site
 /// would have been a second answer to the same question, which is the failure mode this codebase
 /// spends most of its comments avoiding.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Footprint {
     pub x: f32,
     pub z: f32,
@@ -309,7 +310,7 @@ pub enum Modality {
 ///
 /// `PartialEq`/`Eq` because `map::Interaction` carries one and wants to be comparable — this newtype
 /// is a `String`, so equality is exactly string equality and there is nothing to get wrong.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Guard(pub String);
 
 /// A compiled rule: scope + predicate + modality + guard (the grammar decomposition, vetting §1/§7).
@@ -323,7 +324,7 @@ pub struct Constraint {
 }
 
 /// A solved placement: a candidate positioned in the world with a yaw about +Y.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct Placement {
     pub candidate: CandidateIx,
     /// World position (x, y, z).

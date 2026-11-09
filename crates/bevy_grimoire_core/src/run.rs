@@ -61,6 +61,7 @@
 //! 4. **A refusal, not a degradation.** Every way this can fail is named.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::Descriptor;
 use crate::library::Library;
@@ -77,7 +78,7 @@ pub const MAX_POSTS: usize = 1024;
 /// The whole of a run's *intent*. The posts it stands for are derived by [`lay`], and the same
 /// [`Run`] always derives the same posts — which is what lets the editor's ghost and its commit
 /// agree.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Run {
     /// The descriptor to repeat. Its own footprint is the default pitch.
@@ -101,7 +102,7 @@ pub struct Run {
 ///
 /// [`crate::map::Map::expanded`] lays it with [`lay`] and names each row `<id>/<n>`, so moving an
 /// end of the fence is one edit and the rows follow. The id shares the placement and stamp id space.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RunPlaced {
     /// Unique within the map and shared with no placement or stamp: its rows are `<id>/<n>`.
@@ -123,7 +124,7 @@ pub fn post_id(run: &str, n: usize) -> String {
 ///
 /// The point the path turns at, and the direction it takes *after* the turn. The post at the corner
 /// carries this yaw.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Corner {
     /// Where the turn is, in map space.
@@ -137,7 +138,7 @@ pub struct Corner {
 /// `count` posts are missing, starting at `at_post` (0-based, counted along the run). The
 /// graveyard's south edge is one of these: three posts out of ten, and the posts either side of
 /// them are still at the run's pitch.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Gap {
     /// How many posts are missing.

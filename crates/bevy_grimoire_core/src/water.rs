@@ -7,9 +7,10 @@
 //! separate, explicit step and never part of placing.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// Pours water in: `rate_m3_s` over the cells within `radius_m` of `(x, z)`.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Spring {
     pub x: f32,
     pub z: f32,
@@ -18,7 +19,7 @@ pub struct Spring {
 }
 
 /// Drains water: up to `rate_m3_s` from the cells within `radius_m` of `(x, z)`.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Sink {
     pub x: f32,
     pub z: f32,
@@ -27,7 +28,7 @@ pub struct Sink {
 }
 
 /// A lake: the water surface is held at `level_m` within `radius_m` of `(x, z)`.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Lake {
     pub x: f32,
     pub z: f32,
@@ -36,7 +37,7 @@ pub struct Lake {
 }
 
 /// One thing to place.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum Placed {
     Spring(Spring),
     Sink(Sink),
@@ -50,7 +51,7 @@ pub const WATER_PLAN_VERSION: u32 = 1;
 pub const WATER_FIELD_VERSION: u32 = 1;
 
 /// Every water source, sink and lake of a map, in the order they were placed.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct WaterPlan {
     /// The format version: [`WATER_PLAN_VERSION`]. A file from before it existed has none and reads as
     /// the first; a file of another version is refused, naming the one this build reads.
@@ -121,7 +122,7 @@ impl WaterPlan {
 
 /// **The water the plan settles into** (#100): a depth in metres over every cell of the ground it
 /// ran on, kept as the map's starting water.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct WaterField {
     /// The format version: [`WATER_FIELD_VERSION`]. A file from before it existed has none and reads as
     /// the first; a file of another version is refused, naming the one this build reads.

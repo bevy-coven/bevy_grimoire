@@ -59,6 +59,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::{Descriptor, Dir as ClearDir, Mount, DecalHost, Subgrid};
 use crate::library::Library;
@@ -82,7 +83,7 @@ pub const MAX_COMPOSITION_DEPTH: u32 = 8;
 pub const MAX_RESOLVED_MEMBERS: usize = 256;
 
 /// A named, reusable group.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Composition {
     /// Same shape as a descriptor id — `naming::is_id`, kit namespace and all.
@@ -104,7 +105,7 @@ pub struct Composition {
 ///
 /// The one parameter that distinguishes the two things authors actually build. There is deliberately
 /// no second parameter: a field with one legal value is a stub, and this schema does not carry stubs.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Envelope {
     /// Positioned relative to its anchor and claiming no tile. A table and its chairs.
@@ -119,7 +120,7 @@ pub enum Envelope {
 }
 
 /// One thing a composition is made of.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Member {
     /// Unique within the composition, and **the stable target an [`Override`] names**. Never an index:
@@ -174,7 +175,7 @@ fn paint_is_zero(v: &i8) -> bool {
 /// `Descriptor` shape for a patch to decal, and its own members answer their own hosts; a `tip`,
 /// `patch` or `on` on a group would each be a field with no meaning that some reader would eventually
 /// act on.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 // Boxing the Descriptor variant's `patch` would change a public field's type, which breaks Sanctuary's path dependency.
 #[allow(clippy::large_enum_variant)]
@@ -269,13 +270,14 @@ pub struct OpenSlot {
 }
 
 /// A composition placed in a map.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Stamped {
     /// Unique within the map, and shared with no placement — the rows this expands to are named
     /// `<stamp>/<member>`, so a collision would make a location's `props` ambiguous.
     pub id: String,
-    /// The [`Composition::id`] this is an instance of.
+    /// The [`Composition::id`] this is an instance of: a composition.
+    #[schemars(extend("x-dark-factory-ref" = "compositions"))]
     pub of: String,
     pub at: (f32, f32),
     #[serde(default)]
@@ -304,7 +306,7 @@ pub struct Stamped {
 }
 
 /// One authored opinion layered over a member of the stamped composition.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Override {
     /// A [`Member::id`] of the composition being stamped. **Its own members only** — reaching into a
@@ -1800,7 +1802,7 @@ pub const COMPOSITIONS_VERSION: u32 = 1;
 /// **Prose goes in a `note` field**, on the set, on a composition, on a member, on a location, on an
 /// interaction. `crate::map` already made this choice for the map format and gives the argument: if
 /// the reasoning is a field, no serializer can lose it and no writer has to be surgical.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Compositions {
     pub version: u32,

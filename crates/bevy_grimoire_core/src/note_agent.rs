@@ -6,6 +6,7 @@
 //! queues the notes. Engine-free: `std::process` only.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -21,7 +22,7 @@ pub const DEFAULT_PROMPT: &str = "Work the sent notes on the open map through th
 Read the notes guide in the MCP docs first: call grimoire_state, claim a sent note with note_claim, stay inside its area, \
 ask before removing a person's piece, and finish with note_resolve.";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettings {
     pub version: u32,
