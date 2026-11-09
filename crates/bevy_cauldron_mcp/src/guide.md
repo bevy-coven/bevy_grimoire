@@ -36,7 +36,7 @@
 
 **Say what you did not do.** An operation you previewed and did not apply, a note you left for them, a file that needs their hand: put it in the summary. The editor's status line and its toast are theirs; `grimoire_read_log` is the editor's own log file, read from disk, and it answers when the editor is not running at all — so it is where you look when something failed and `grimoire_state` did not say why.
 
-**Two tools that are not part of a task.** `grimoire_open_project` opens a project folder in the running editor, from any screen including the Projects home, and is the first call when they name a project rather than a map. `grimoire_jobs_stop` asks a background job such as the palette's thumbnail bake to stop, and `grimoire_self_test` is Cauldron's power-on self test, run once when its own terminal starts you: it reads the state, counts the operations, takes one picture and returns them.
+**Three tools that are not part of a task.** `grimoire_open_project` opens a project folder in the running editor, from any screen including the Projects home, and is the first call when they name a project rather than a map. `grimoire_jobs_stop` asks a background job such as the palette's thumbnail bake to stop, and `grimoire_self_test` is Cauldron's power-on self test, run once when its own terminal starts you: it reads the state, counts the operations, takes one picture and returns them.
 
 ## After a task: reflect
 

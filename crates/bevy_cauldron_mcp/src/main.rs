@@ -454,10 +454,11 @@ pub struct WishParams {
     /// What cost steps: where the work stalled, repeated itself, or needed a second call to learn
     /// what one call should have said.
     pub hardship: String,
-    /// **The single tool that would most have helped**, named and described in one sentence. 200
-    /// characters at most.
+    /// **The single tool that would most have helped**, named and described in one sentence. Its
+    /// limit is [`bevy_grimoire_core::wish::WISH_TOOL_MAX_CHARS`], stated in the tool's schema.
     pub tool: String,
-    /// A call to that tool, as you would like to write it. 600 characters at most.
+    /// A call to that tool, as you would like to write it. Its limit is
+    /// [`bevy_grimoire_core::wish::WISH_FIELD_MAX_CHARS`], stated in the tool's schema.
     pub example_call: String,
 }
 
@@ -952,8 +953,8 @@ impl Grimoire {
                        tool that would most have helped with that task: after, the hand-back it \
                        follows ({presentation: \"present-1\"} or {note: \"n3\"}); task, what the \
                        task was; hardship, what cost steps; tool, the single tool, named and \
-                       described in one sentence (200 characters at most); example_call, a call to \
-                       it as you would like to write it (600 at most). The editor queues the wish \
+                       described in one sentence, inside the limit its schema states; example_call, \
+                       a call to it as you would like to write it, inside its own. The editor queues the wish \
                        and the editor adds the context it already has — the hand-back's title, the \
                        operations the task applied, its version and your client's name and version \
                        — so do not restate those. It returns at once with the wish's id and \

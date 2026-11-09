@@ -144,9 +144,30 @@ impl Wish {
             push_encoded(&mut url, value);
         }
         if url.len() > WISH_URL_MAX_BYTES {
+            // **The field the address is mostly made of**, so the refusal names the one thing worth
+            // changing instead of listing three fields that are already inside their own limits.
+            let (field, bytes) = [
+                ("task", &self.task),
+                ("hardship", &self.hardship),
+                ("tool", &self.tool),
+                ("example_call", &self.example_call),
+                ("context", &self.context),
+            ]
+            .into_iter()
+            .map(|(field, value)| (field, percent_encode(value).len()))
+            .max_by_key(|(_, bytes)| *bytes)
+            .unwrap_or(("context", 0));
+            let advice = if field == "context" {
+                // The editor writes this one, so there is nothing for the agent to shorten.
+                "`context` is the editor's own record of the turn and is not yours to shorten; the \
+                 words you wrote are already inside their limits, so this turn is too large to \
+                 file as one wish."
+            } else {
+                "Shorten that field and make the wish again."
+            };
             return Err(format!(
                 "the issue address is {} bytes and GitHub takes at most {WISH_URL_MAX_BYTES}. \
-                 Shorten `task`, `hardship` or `example_call` and make the wish again.",
+                 The largest part is `{field}` at {bytes} bytes encoded. {advice}",
                 url.len()
             ));
         }

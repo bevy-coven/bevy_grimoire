@@ -1359,8 +1359,14 @@ pub mod layout_propose {
             "layout_propose"
         }
         fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            // **`area` takes its corners in either order**, and [`Shown::Map`] promises `x0 <= x1`
+            // and `z0 <= z1`, so the answer sorts them: a rectangle handed over sideways is the
+            // same area, and the frame code refuses an inverted box.
             match Params::parse(params).ok().and_then(|p| p.area) {
-                Some([x0, z0, x1, z1]) => Shown::Map { rect: [x0, z0, x1, z1], placements: Vec::new() },
+                Some([x0, z0, x1, z1]) => Shown::Map {
+                    rect: [x0.min(x1), z0.min(z1), x0.max(x1), z0.max(z1)],
+                    placements: Vec::new(),
+                },
                 None => Shown::MapWhole,
             }
         }
@@ -2442,9 +2448,8 @@ pub mod map_save {
         fn name(&self) -> &'static str {
             "map_save"
         }
-        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             // **It writes the map that is already on screen**, so there is no new place to look at.
-            let _ = ctx;
             Shown::Nowhere
         }
         fn writes(&self) -> &'static [&'static str] {

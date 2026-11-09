@@ -20,7 +20,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_file};
 use crate::ops_people::People;
 
 /// Who a trigger is for. Everyone, when all three are empty.
@@ -141,6 +141,18 @@ pub fn scripts_of(project: &crate::project::Project, map: &str) -> Scripts {
 /// and a refusal naming the file and the field when there is one that does not read (#200).
 pub fn try_scripts_of(project: &crate::project::Project, map: &str) -> Result<Scripts, Refusal> {
     crate::map_files::read_or_empty("scripts", project, &path_of(project, map)?)
+}
+
+/// **Where a map's triggers are seen**: exactly the file [`path_of`] writes, relative to the
+/// project's root.
+///
+/// A `map` the operation would refuse, or no project to hold the file, names nothing a person can
+/// look at — the write refuses in the same breath.
+fn shown_scripts(ctx: &Ctx, map: &str) -> Shown {
+    match ctx.project.as_ref().map(|project| path_of(project, map)) {
+        Some(Ok(path)) => shown_file(ctx, &path, None),
+        _ => Shown::MapWhole,
+    }
 }
 
 /// **A trigger as the terrain line writes it**: `trigger <id> | <on> | <if> | <then> [| people=..] [| faction=..] [| area=..]`,
@@ -385,15 +397,14 @@ impl Operation for TriggerSet {
     fn name(&self) -> &'static str {
         "trigger_set"
     }
-    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
-        // **A trigger is a file beside the map**, which the scripts panel lists.
-        Shown::File {
-            path: params
-                .get("map")
-                .and_then(serde_json::Value::as_str)
-                .map(|m| format!("assets/grimoire/scripts/{m}.ron"))
-                .unwrap_or_else(|| "assets/grimoire/scripts".to_owned()),
-            lines: None,
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The file the write goes to**, named by [`path_of`] itself, so the answer and the write
+        // cannot name two places: the triggers live in the authoring kit's own folder,
+        // `<grimoire_dir>/scripts/<map>.ron`, and not beside `assets/grimoire` where nothing is
+        // written.
+        match params.get("map").and_then(serde_json::Value::as_str) {
+            Some(map) => shown_scripts(ctx, map),
+            None => Shown::MapWhole,
         }
     }
     fn writes(&self) -> &'static [&'static str] {

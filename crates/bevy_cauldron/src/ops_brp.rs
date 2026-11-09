@@ -132,7 +132,11 @@ pub enum AfterRef {
 }
 
 impl AfterRef {
-    /// **The id as the wish records it**, so the record says which kind of hand-back it cites.
+    /// **The id as the wish records it** — the bare presentation or note id, with the kind dropped.
+    ///
+    /// A wish's `after` is one string, so this is what the queue's one-wish-per-hand-back rule
+    /// compares and what `grimoire_state` hands back; which *kind* of hand-back it was is the
+    /// caller's knowledge, from the parameter it matched.
     fn recorded_id(&self) -> String {
         match self {
             AfterRef::Presentation(id) | AfterRef::Note(id) => id.clone(),
@@ -2697,8 +2701,9 @@ impl Plugin for OpsBridgePlugin {
                  hand-back, refused at the door and never trimmed.",
             )
             .params(
-                "after: {\"presentation\": \"present-1\"} or {\"note\": \"n3\"}; task, hardship \
-                     and example_call (600 characters each at most); tool (200 at most).",
+                "after: {\"presentation\": \"present-1\"} or {\"note\": \"n3\"}; task, what the \
+                     task was; hardship, what cost steps; tool; example_call. Each field's limit is \
+                     the one this tool's schema states.",
             )
             .example(json!({
                 "after": {"presentation": "present-1"},

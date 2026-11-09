@@ -15,6 +15,7 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_saved_arrangement_is_the_one_the_editor_shows;
+mod a_scripts_and_trees_shown_where_they_are_written;
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;

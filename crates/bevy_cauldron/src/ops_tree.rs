@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_named};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_file};
 use crate::project::Project;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -157,9 +157,11 @@ impl Operation for TreeEdit {
         "tree_edit"
     }
     fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
-        match params.get("name").and_then(serde_json::Value::as_str) {
-            Some(name) => shown_named(ctx, &format!("assets/grimoire/trees/{name}.tree.ron")),
-            None => Shown::MapWhole,
+        // **The file the write goes to**, by [`tree_path`] itself: the trees live in the authoring
+        // kit's own folder, `<grimoire_dir>/trees/<name>.tree.ron`, not beside `assets/grimoire`.
+        match Params::parse(params).map(|p| tree_path(ctx, &p.name)) {
+            Ok(Ok((_, path))) => shown_file(ctx, &path, None),
+            _ => Shown::MapWhole,
         }
     }
     fn writes(&self) -> &'static [&'static str] {
