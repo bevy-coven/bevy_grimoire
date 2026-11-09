@@ -39,7 +39,7 @@ use bevy_gooey::{
 
 use crate::project::Project;
 use crate::setting_catalogue::{self, CATEGORIES, Kind, SCALE_STEP, Setting, Value};
-use crate::settings::{PROJECT_FILE, SettingsLayer, UserSettingsFile};
+use crate::settings::{PROJECT_FILE, SettingsLayer, TerminalAgent, UserSettingsFile};
 
 /// How often the open screen looks at the two files, in seconds.
 const LOOK_EVERY: f32 = 0.25;
@@ -147,14 +147,23 @@ struct Rows(usize);
 #[derive(Component)]
 struct ProblemLine;
 
-/// The dialog's two files, as this app names them.
+/// The dialog's two files, as this app names them — and, beside them, **what this machine has** (#341).
 #[derive(SystemParam)]
 pub(crate) struct Files<'w> {
     pub(crate) user: Option<Res<'w, UserSettingsFile>>,
     pub(crate) project: Option<Res<'w, Project>>,
+    /// What the binary found on this machine's `PATH` at start-up. Absent in a test, and absent is
+    /// `Off` — the same answer the terminal's own resolution gives for an app that never asked.
+    pub(crate) machine: Option<Res<'w, crate::settings::MachineAgent>>,
 }
 
 impl Files<'_> {
+    /// **The agent this machine's terminal is using when no file states one** (#341). The row a file
+    /// does not set shows this, so the screen and the pane cannot say two things about one setting.
+    pub(crate) fn machine_agent(&self) -> TerminalAgent {
+        self.machine.as_deref().copied().map_or(TerminalAgent::Off, |machine| machine.0)
+    }
+
     pub(crate) fn user(&self) -> Option<PathBuf> {
         self.user.as_ref().map(|f| f.0.clone())
     }
@@ -380,7 +389,15 @@ fn refresh(
     }
 
     // What each row shows: the value the edited layer sets, else the one it inherits.
-    let default_of = |key: &str| setting_catalogue::default_value(key);
+    //
+    // **The inherited value is this machine's default for the terminal's agent** (#341), because that
+    // is the value the terminal is using: a machine with `omp` installed starts with it chosen, and a
+    // screen saying `Off` beside a pane offering `Invoke Agent` would be two answers to one question.
+    // Every other key's default is the built-in one, which no machine answers.
+    let default_of = |key: &str| match key {
+        "terminal_agent" => Some(Value::Option(crate::setting_catalogue::agent_index(files.machine_agent()))),
+        _ => setting_catalogue::default_value(key),
+    };
     for (page, Rows(tab)) in &pages {
         commands.entity(page).despawn_children();
         let category = tab.checked_sub(1).and_then(|i| CATEGORIES.get(i)).copied();

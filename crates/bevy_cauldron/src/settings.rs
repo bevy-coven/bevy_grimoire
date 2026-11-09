@@ -109,6 +109,63 @@ impl TerminalAgent {
     }
 }
 
+/// **The program a machine must have for the terminal to start with the agent chosen** (#341).
+///
+/// It is what an `Invoke Agent` press types, so a machine that has it can start an agent and a machine
+/// that does not would only fail its self test.
+pub const AGENT_PROGRAM: &str = "omp";
+
+/// **Is the agent installed on this machine?** — the executable [`AGENT_PROGRAM`] on the `PATH` it is
+/// given, in any of its folders.
+///
+/// Off the environment as a parameter rather than read inside, so the answer for any `PATH` can be
+/// tested without touching the process's own. A file that is not executable is not a program: a
+/// machine with one has no agent, and its terminal keeps its shell.
+pub fn agent_in_path(path: Option<&str>) -> TerminalAgent {
+    let Some(path) = path else { return TerminalAgent::Off };
+    let separator = if cfg!(windows) { ';' } else { ':' };
+    let found = path
+        .split(separator)
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| Path::new(dir).join(AGENT_PROGRAM))
+        .any(|program| is_runnable(&program));
+    if found { TerminalAgent::OhMyPi } else { TerminalAgent::Off }
+}
+
+/// Is `program` a file this machine can run? A directory named `omp` is not, and neither is a file
+/// whose mode has no execute bit on it.
+fn is_runnable(program: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(program) else { return false };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+/// **What this machine has, asked once** and carried for the whole session (#341).
+///
+/// A `PATH` that gains the agent while the editor runs does not change the editor under the person
+/// using it: the answer is taken at start-up, which is also what lets Settings show the effective value
+/// as a value rather than as a thing that moves. Inserted by `main`; absent in a test, whose editor
+/// resolves from the built-in default alone.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MachineAgent(pub TerminalAgent);
+
+impl MachineAgent {
+    /// Asks this machine what it has.
+    pub fn ask() -> MachineAgent {
+        MachineAgent(agent_in_path(std::env::var("PATH").ok().as_deref()))
+    }
+}
+
 /// **What the running editor uses**: the defaults with the user's file and then the project's laid over
 /// them, key by key.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -140,10 +197,16 @@ pub struct EditorSettings {
     /// How many lines of output each terminal keeps above its screen (#324): VS Code's
     /// `terminal.integrated.scrollback`.
     pub terminal_scrollback: usize,
-    /// The agent the terminal's `Invoke Agent` button starts, connected to the editor's tools. Off by
-    /// default: a shell is what a terminal opens until the person picks an agent. With one picked the
-    /// terminal opens empty and starts nothing until the button is pressed, because a session costs
-    /// tokens to warm up.
+    /// The agent the terminal's `Invoke Agent` button starts, connected to the editor's tools.
+    ///
+    /// **The built-in default is `Off`**, a pure value with no machine behind it. What a person meets is
+    /// the resolved settings, and that asks this machine once at start-up (`MachineAgent`, #341): a
+    /// machine with `omp` on its `PATH` resolves to `OhMyPi`, so its terminal opens on the empty pane that
+    /// offers the agent; a machine without one resolves to `Off` and opens a shell. A `terminal_agent`
+    /// key in either settings file wins over both.
+    ///
+    /// Either way nothing starts by itself — a session costs tokens to warm up — until the button is
+    /// pressed.
     pub terminal_agent: TerminalAgent,
     /// The shell line `TerminalAgent::Custom` types. Deliberately not in the settings catalogue: the
     /// Settings screen has no text control (#324), so this key is set in the file only.
@@ -325,7 +388,28 @@ impl SettingsLayer {
 impl EditorSettings {
     /// **The defaults with `user` and then `project` laid over them, key by key.**
     pub fn resolve(user: Option<&SettingsLayer>, project: Option<&SettingsLayer>) -> EditorSettings {
-        let mut out = EditorSettings::default();
+        EditorSettings::resolve_with(user, project, EditorSettings::default())
+    }
+
+    /// **The same, on this machine** (#341): the built-in defaults with the one key a machine answers
+    /// filled in first — [`TerminalAgent`], which is `Off` unless `machine` says the agent is installed.
+    ///
+    /// **A file still wins, both ways.** `machine` fills the default, it does not overrule a layer, so a
+    /// person on a machine with `omp` who wants a plain shell names `Off` in their file and gets it, and
+    /// a person whose agent is somewhere their `PATH` does not reach names it too. Only the key nobody
+    /// stated comes from the machine.
+    pub fn resolve_on_this_machine(
+        user: Option<&SettingsLayer>,
+        project: Option<&SettingsLayer>,
+        machine: TerminalAgent,
+    ) -> EditorSettings {
+        EditorSettings::resolve_with(user, project, EditorSettings { terminal_agent: machine, ..EditorSettings::default() })
+    }
+
+    /// **The one resolution**, from `base`. Every caller goes through here, so a key added to the
+    /// defaults cannot be resolved one way by the editor and another by whatever asked a machine about
+    /// it.
+    fn resolve_with(user: Option<&SettingsLayer>, project: Option<&SettingsLayer>, mut out: EditorSettings) -> EditorSettings {
         for layer in [user, project].into_iter().flatten() {
             out.theme = layer.theme.unwrap_or(out.theme);
             out.text_scale = layer.text_scale.unwrap_or(out.text_scale);
@@ -457,14 +541,31 @@ impl SettingsView {
     }
 }
 
+/// **Everything [`sync_settings`] resolves from**, grouped so its argument list stays readable and
+/// under clippy's limit as a source is added.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct SettingsSources<'w> {
+    project: Option<Res<'w, Project>>,
+    user_file: Option<Res<'w, UserSettingsFile>>,
+    /// **What this machine has** (#341), asked once at start-up by the binary. Absent in a test, whose
+    /// editor resolves from the built-in default alone and so opens the shell it always did.
+    machine: Option<Res<'w, MachineAgent>>,
+}
+
+impl SettingsSources<'_> {
+    /// The agent this machine's terminal starts with when no file states one.
+    fn machine_agent(&self) -> TerminalAgent {
+        self.machine.as_deref().copied().map_or(TerminalAgent::Off, |machine| machine.0)
+    }
+}
+
 /// **Look at both settings files, decide what changed, and keep [`EditorSettings`] the layers' sum.**
 ///
 /// A file that does not read is refused and its layer stays as it last read; a file that is gone has no
 /// layer. A verdict is said once per distinct finding, so a frame in between decides nothing.
 pub fn sync_settings(
     time: Res<Time>,
-    project: Option<Res<Project>>,
-    user_file: Option<Res<UserSettingsFile>>,
+    sources: SettingsSources,
     mut view: ResMut<SettingsView>,
     mut settings: ResMut<EditorSettings>,
     mut reloads: Option<ResMut<EditorReloads>>,
@@ -472,15 +573,15 @@ pub fn sync_settings(
 ) {
     let dt = time.delta_secs();
     let mut looks: Vec<(String, Look)> = Vec::new();
-    if let Some(file) = user_file {
+    if let Some(file) = &sources.user_file {
         let name = file.0.to_string_lossy().replace('\\', "/");
         if let Some(look) = view.user.look(&file.0, &name, dt) {
             looks.push((name, look));
         }
     }
-    if let Some(project) = project {
+    if let Some(project) = &sources.project {
         let path = project.project_dir.join(PROJECT_FILE);
-        let name = crate::map_files::file_name(&project, &path);
+        let name = crate::map_files::file_name(project, &path);
         if let Some(look) = view.project.look(&path, &name, dt) {
             looks.push((name, look));
         }
@@ -509,7 +610,11 @@ pub fn sync_settings(
             reloads.decide(vec![verdict]);
         }
     }
-    let resolved = EditorSettings::resolve(view.user.good.as_ref(), view.project.good.as_ref());
+    let resolved = EditorSettings::resolve_on_this_machine(
+        view.user.good.as_ref(),
+        view.project.good.as_ref(),
+        sources.machine_agent(),
+    );
     if *settings != resolved {
         *settings = resolved;
     }
