@@ -713,10 +713,10 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "asks for the LED that #343 assumed: a glowing live indicator on the agent card/bar; a request, not how the screen is",
-      "commit": "",
+      "reason": "The agent has an LED: dark in the bar once an agent is chosen, then busy, live or failed, and at the card's foot (gooey led(), #343)",
+      "commit": "c59ffe49",
       "attempts": [
         {
           "host": "mac_air",
