@@ -371,49 +371,13 @@ impl Grimoire {
         &self.project
     }
 
-    /// **Grab a picture of the editor, as base64 PNG.**
-    ///
-    /// **Two calls, because the screenshot is asynchronous.** The editor answers
-    /// `bevy_fairy/screenshot` with an id, and the picture is ready a frame or two later, when
-    /// `bevy_fairy/capture` answers with the bytes. **So this asks, waits, and asks again** —
-    /// and the wait is bounded, because a capture that never lands must not hang an agent.
+    /// **Grab a picture of the editor, as base64 PNG**, through `bevy_fairy/screenshot` and
+    /// `bevy_fairy/capture` (`Brp::screenshot`), from the surface the editor draws into.
     async fn grab(&self) -> Result<String, String> {
-        let asked = self
-            .editor
-            .call("bevy_fairy/screenshot", json!({"source": "offscreen"}))
-            .await?;
-        let id = asked
-            .get("id")
-            .and_then(|i| i.as_u64())
-            .ok_or("the editor did not give the capture an id")?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        loop {
-            let answer = self
-                .editor
-                .call("bevy_fairy/capture", json!({"id": id}))
-                .await?;
-            match answer.get("status").and_then(|s| s.as_str()) {
-                Some("done") => {
-                    return answer
-                        .get("png_base64")
-                        .and_then(|p| p.as_str())
-                        .map(|p| p.to_owned())
-                        .ok_or_else(|| "the editor's capture had no picture in it".to_owned());
-                }
-                Some("failed") => {
-                    let why = answer
-                        .get("error")
-                        .and_then(|e| e.as_str())
-                        .unwrap_or("the editor did not say why");
-                    return Err(format!("the editor's capture failed: {why}"));
-                }
-                _ => {}
-            }
-            if std::time::Instant::now() > deadline {
-                return Err("the editor's capture did not arrive within ten seconds.".to_owned());
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
+        self.editor
+            .screenshot(json!({"source": "offscreen"}))
+            .await
+            .map_err(|e| format!("the editor's {e}"))
     }
 
     /// **Where a capture lands.**
@@ -988,7 +952,11 @@ impl Grimoire {
                        each one's probability) or score (levels, a weighted score), with state in words, \
                        images (project files, at most four) and facts (JSON). A check that needs a picture or \
                        facts it was not given is refused and names what is missing; it never answers from \
-                       less. Advisory: it changes no map data and a finding never blocks or undoes an \
+                       less. game: also look at the running game that play started: a frame from its \
+                       bevy_fairy, named game, on the port in play.ron or game.port, and one BRP call's \
+                       answer (game.state) as facts.game; a check that asks for the image game takes it \
+                       itself, and a game's own checks live in the project's assets/grimoire/checks.ron. \
+                       Advisory: it changes no map data and a finding never blocks or undoes an \
                        operation. The endpoint is one per run, local by default; a Cloudflare endpoint sends \
                        pictures off the LAN and is opt-in.",
         annotations(
@@ -1015,10 +983,19 @@ impl Grimoire {
         } else {
             None
         };
+        let game = if bevy_grimoire_mcp::decide::needs_game(&p, &checks) {
+            let asked = p.game.clone().unwrap_or_default();
+            match bevy_grimoire_mcp::decide::fetch_game(&self.project, &asked).await {
+                Ok(g) => Some(g),
+                Err(e) => return Ok(refusal(&e)),
+            }
+        } else {
+            None
+        };
         let project = self.project.clone();
         let answer = tokio::task::spawn_blocking(move || {
             let http = bevy_grimoire_decide::Http::new(bevy_grimoire_decide::Config::from_env());
-            bevy_grimoire_mcp::decide::decide(&p, &project, view.as_deref(), &http)
+            bevy_grimoire_mcp::decide::decide_with(&p, &project, view.as_deref(), game.as_ref(), &http)
         })
         .await
         .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;

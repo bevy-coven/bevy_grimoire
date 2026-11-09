@@ -919,6 +919,10 @@ pub mod layout_propose {
         /// Absent offers none: the answer is the one layout `seed` lays, as before.
         #[serde(default)]
         pub options: Option<u32>,
+        /// **Lay only here** (#192, graybox first): `[x0, z0, x1, z1]` in map metres. Absent lays the
+        /// whole map. Keeping the layout replaces only the unpinned rows in it.
+        #[serde(default)]
+        pub area: Option<[f32; 4]>,
     }
 
     /// The most options one call offers. A person compares a handful, not a page.
@@ -949,6 +953,13 @@ pub mod layout_propose {
                         "type": "integer",
                         "minimum": 1,
                         "maximum": MAX_OPTIONS
+                    },
+                    "area": {
+                        "description": "Lay only inside this rectangle, [x0, z0, x1, z1] in map metres (the same space as a placement's `at`), corners in either order: a cell is in it when the cell's centre is. The cells around it stay as they are and the new layout joins them; keeping it with `layout_accept` replaces only the unpinned rows in the area. Omit it to lay the whole map. Refused when it holds no cell of the map, or under the project's block rules.",
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 4,
+                        "maxItems": 4
                     }
                 }
             })
@@ -958,16 +969,24 @@ pub mod layout_propose {
             serde_json::from_value(raw.clone()).map_err(|e| {
                 Refusal::new(format!(
                     "these are not the parameters for proposing a layout: {e}. The fields are \
-                     `source` (learned, declared or composed), `seed` and `options`, and `source` is \
-                     required."
+                     `source` (learned, declared or composed), `seed`, `options` and `area` \
+                     ([x0, z0, x1, z1] in map metres), and `source` is required."
                 ))
             })
-            .and_then(|p: Params| match p.options {
-                Some(n) if n == 0 || n > MAX_OPTIONS => Err(Refusal::new(format!(
+            .and_then(|p: Params| match (p.options, p.area) {
+                (Some(n), _) if n == 0 || n > MAX_OPTIONS => Err(Refusal::new(format!(
                     "`options` is {n}, and a proposal offers 1 to {MAX_OPTIONS} layouts."
+                ))),
+                (_, Some(a)) if !a.iter().all(|v| v.is_finite()) => Err(Refusal::new(format!(
+                    "`area` is {a:?}, and an area is four finite numbers: [x0, z0, x1, z1] in map metres."
                 ))),
                 _ => Ok(p),
             })
+        }
+
+        /// The area to lay in, or `None` for the whole map.
+        pub fn area(&self) -> Option<bevy_grimoire_core::grammar::Area> {
+            self.area.map(|[x0, z0, x1, z1]| bevy_grimoire_core::grammar::Area { from: (x0, z0), to: (x1, z1) })
         }
     }
 
@@ -1020,6 +1039,7 @@ pub mod layout_propose {
         project: &crate::project::Project,
         open: &crate::project::OpenMap,
         source: crate::editor::LayoutSource,
+        area: Option<bevy_grimoire_core::grammar::Area>,
         first: u64,
         n: u32,
     ) -> Result<serde_json::Value, Refusal> {
@@ -1029,8 +1049,8 @@ pub mod layout_propose {
         while kept.len() < n as usize && tried < u64::from(n) * SEEDS_PER_OPTION {
             let seed = first.wrapping_add(tried);
             tried += 1;
-            let laid =
-                crate::editor::propose(project, open, source, seed).map_err(Refusal::new)?;
+            let laid = crate::editor::propose_in(project, open, source, area, seed)
+                .map_err(Refusal::new)?;
             let key = looks(&laid.proposed);
             if kept.iter().any(|(_, _, k)| *k == key) {
                 duplicates += 1;
@@ -1108,7 +1128,7 @@ pub mod layout_propose {
                     "no map is open, so there is nowhere to propose a layout.",
                 ));
             };
-            let laid = crate::editor::propose(project, open, p.source, p.seed.unwrap_or(1))
+            let laid = crate::editor::propose_in(project, open, p.source, p.area(), p.seed.unwrap_or(1))
                 .map_err(Refusal::new)?;
             let mut answer = json!({
                 "map": open.map.name,
@@ -1138,7 +1158,7 @@ pub mod layout_propose {
             if let Some(n) = p.options
                 && let (Some(obj), serde_json::Value::Object(offered)) = (
                     answer.as_object_mut(),
-                    offer(project, open, p.source, p.seed.unwrap_or(1), n)?,
+                    offer(project, open, p.source, p.area(), p.seed.unwrap_or(1), n)?,
                 )
             {
                 obj.extend(offered);
@@ -1156,7 +1176,7 @@ pub mod layout_propose {
             };
             // **The same computation the plan made**, so what was previewed is what stands — the
             // preview is this operation's own plan thrown away, and it must not be a second opinion.
-            let laid = crate::editor::propose(project, open, p.source, p.seed.unwrap_or(1))
+            let laid = crate::editor::propose_in(project, open, p.source, p.area(), p.seed.unwrap_or(1))
                 .map_err(Refusal::new)?;
             let note = laid.note.clone();
             ctx.proposal = Some(laid.proposed);
@@ -1284,9 +1304,9 @@ pub mod layout_accept {
             // **What it would clear**, read now. The count is the whole of `docs/ui.md` §3.2's delta:
             // what changes, beside what is there.
             let clears = if proposed.composes {
-                open.map.stamps.iter().filter(|s| !s.owned).count()
+                open.map.stamps.iter().filter(|s| proposed.replaces_stamp(&open.map, s)).count()
             } else {
-                open.map.placements.iter().filter(|p| !p.owned).count()
+                open.map.placements.iter().filter(|p| proposed.replaces_placement(&open.map, p)).count()
             };
             Ok(json!({
                 "map": open.map.name,
@@ -1365,7 +1385,7 @@ pub mod layout_accept {
                     .placements
                     .iter()
                     .enumerate()
-                    .filter(|(_, p)| !p.owned)
+                    .filter(|(_, p)| taken.replaces_placement(&open.map, p))
                     .map(|(index, row)| Indexed { index, row: row.clone() })
                     .collect()
             };
@@ -1374,7 +1394,7 @@ pub mod layout_accept {
                     .stamps
                     .iter()
                     .enumerate()
-                    .filter(|(_, s)| !s.owned)
+                    .filter(|(_, s)| taken.replaces_stamp(&open.map, s))
                     .map(|(index, row)| Indexed { index, row: row.clone() })
                     .collect()
             } else {
@@ -1420,6 +1440,7 @@ pub mod layout_accept {
                         .collect(),
                     cell: taken.cell,
                     preview_only: taken.preview_only,
+                    area: taken.area,
                     generation: taken.generation,
                 });
                 return Err(Refusal::new(format!(

@@ -1,0 +1,30 @@
+{
+  "name": "piece_menu_move_note",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [0, 0, 12, 8]}}}
+  ],
+  "chunks": [
+    {"seconds": 8},
+    {"seconds": 8}
+  ],
+  "steps": [
+    {"at": 0.0, "cursor": [500, 500]},
+    {"at": 0.8, "cursor": [629, 344]},
+    {"at": 1.4, "click": [629, 344], "button": "Right", "caption": "person: right-click the bed, and its menu opens"},
+    {"at": 3.0, "cursor": [657, 520]},
+    {"at": 3.6, "cursor": [657, 552], "caption": "person: Move"},
+    {"at": 4.6, "click": [657, 552]},
+    {"at": 5.6, "cursor": [560, 220], "caption": "the bed is already in hand: click where it goes"},
+    {"at": 7.0, "click": [560, 220]},
+    {"at": 8.6, "cursor": [747, 404]},
+    {"at": 9.2, "click": [747, 404], "button": "Right", "caption": "person: right-click the sofa"},
+    {"at": 10.6, "cursor": [775, 620]},
+    {"at": 11.2, "cursor": [775, 641], "caption": "person: Note"},
+    {"at": 12.2, "click": [775, 641]},
+    {"at": 13.2, "type": "swap", "caption": "the note box is open on the sofa: type it, Enter saves"},
+    {"at": 14.6, "key": "Enter"}
+  ]
+}

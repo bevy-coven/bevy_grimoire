@@ -1,0 +1,128 @@
+{
+ "name": "scripts_panel",
+ "fps": 6,
+ "scale": 1,
+ "width": 660,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      0,
+      0,
+      24,
+      16
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "trigger_set",
+    "parameters": {
+     "map": "hamlet",
+     "id": "dawn",
+     "on": "Activity(\"work\")",
+     "then": "fx.bark(actor, \"Morning.\");",
+     "bind": {
+      "area": [
+       0,
+       0,
+       12,
+       8
+      ]
+     }
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "trigger_set",
+    "parameters": {
+     "map": "hamlet",
+     "id": "dusk",
+     "on": "Activity(\"sleep\")",
+     "then": "fx.bark(actor, \"Good night.\");",
+     "bind": {
+      "area": [
+       12,
+       0,
+       24,
+       8
+      ]
+     }
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "trigger_set",
+    "parameters": {
+     "map": "hamlet",
+     "id": "supper",
+     "on": "Activity(\"eat\")",
+     "then": "fx.bark(actor, \"Is it ready?\");"
+    }
+   }
+  },
+  {
+   "seconds": 3,
+   "operation": {
+    "name": "trigger_set",
+    "parameters": {
+     "map": "hamlet",
+     "id": "dawn",
+     "remove": true
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.4,
+   "wheel": {
+    "y": -1,
+    "n": 25,
+    "at": [
+     220,
+     400
+    ]
+   }
+  },
+  {
+   "at": 0.2,
+   "caption": "the Scripts panel: no triggers on this map"
+  },
+  {
+   "at": 2.7,
+   "caption": "agent: trigger_set dawn, bound to an area"
+  },
+  {
+   "at": 5.7,
+   "caption": "agent: dusk"
+  },
+  {
+   "at": 8.7,
+   "caption": "agent: supper, for everyone"
+  },
+  {
+   "at": 11.7,
+   "caption": "agent: removes dawn; the row goes"
+  }
+ ],
+ "crop": [
+  0,
+  40,
+  440,
+  700
+ ]
+}

@@ -977,6 +977,31 @@ pub fn enclosure_rules(
     want: f32,
     weight: Option<u32>,
 ) -> Result<(), String> {
+    enclosure_rules_beyond(p, place, faces, w, h, [false; 4], want, weight)
+}
+
+/// **[`enclosure_rules`] for a region that is part of a larger map** (#261).
+///
+/// `beyond[dir]` (N, E, S, W) says there is more map past that side of the grid. A border cell is
+/// outside without condition only where nothing lies beyond it, the map's own edge. On a side that has
+/// more map past it, a border cell is outside through that side's face when the face is open, and a
+/// wall on that face keeps the room closed: the region is judged by the walls it lays, not by the
+/// accident of where the area was cut.
+///
+/// Slice 1 of #192 got this effect by collapsing the neighbouring ring as part of the grid, which
+/// made every cell of the ring count in `want`'s denominator (a 3 x 3 area could not reach above 9 of
+/// 25, 0.36). The area is the region now and the ring speaks only through these faces.
+#[allow(clippy::too_many_arguments)]
+pub fn enclosure_rules_beyond(
+    p: &mut Problem,
+    place: &[Vec<Var>],
+    faces: &crate::range::Faces,
+    w: usize,
+    h: usize,
+    beyond: [bool; 4],
+    want: f32,
+    weight: Option<u32>,
+) -> Result<(), String> {
     if w == 0 || h == 0 {
         return Err(format!("constraints: a {w} x {h} region has no cells to enclose"));
     }
@@ -1015,7 +1040,8 @@ pub fn enclosure_rules(
         for x in 0..w {
             let c = z * w + x;
             for dir in 0..4 {
-                if step(w, h, x, z, dir).is_none() {
+                // A face off the grid has a variable only on a side with more map beyond it.
+                if step(w, h, x, z, dir).is_none() && !beyond[dir] {
                     continue;
                 }
                 let open = Lit::pos(p.var());
@@ -1078,10 +1104,20 @@ pub fn enclosure_rules(
             // R1. Every border cell is outside, unconditionally and regardless of what sits there —
             // `range::reached_from_border` seeds them all, because there is no cell beyond the region
             // to start from.
-            if (x == 0 || z == 0 || x + 1 == w || z + 1 == h)
-                && let Some(&o) = outside.get(z * w + x)
-            {
-                p.add_clause(&[o]);
+            let Some(&o) = outside.get(z * w + x) else {
+                continue;
+            };
+            // **Unless more map lies beyond that side**: then the cell is outside through that face
+            // when it is open, and not otherwise.
+            let sides = [(z == 0, N), (x + 1 == w, E), (z + 1 == h, S), (x == 0, W)];
+            for (on_edge, dir) in sides {
+                if !on_edge {
+                    continue;
+                }
+                match face_open[(z * w + x) * 4 + dir] {
+                    Some(open) if beyond[dir] => p.add_clause(&[!open, o]),
+                    _ => p.add_clause(&[o]),
+                }
             }
         }
     }

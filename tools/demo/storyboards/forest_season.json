@@ -1,0 +1,92 @@
+{
+ "name": "forest_season",
+ "fps": 8,
+ "scale": 1,
+ "width": 960,
+ "setup": [
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": {
+     "rect": [
+      -24,
+      -22,
+      24,
+      6
+     ]
+    }
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 2.5
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "10"
+    }
+   }
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "12"
+    }
+   }
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "4"
+    }
+   }
+  },
+  {
+   "seconds": 2.5,
+   "operation": {
+    "name": "family_set",
+    "parameters": {
+     "crate": "bevy_elements",
+     "field": "clock.date.month",
+     "value": "7"
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.2,
+   "caption": "oaks in June, noon"
+  },
+  {
+   "at": 2.7,
+   "caption": "agent: the month is October"
+  },
+  {
+   "at": 5.2,
+   "caption": "agent: December"
+  },
+  {
+   "at": 7.7,
+   "caption": "agent: April"
+  },
+  {
+   "at": 10.2,
+   "caption": "agent: July"
+  }
+ ]
+}

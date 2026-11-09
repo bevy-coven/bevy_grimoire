@@ -1,0 +1,99 @@
+{
+  "name": "notes_claims",
+  "fps": 10,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "note_add",
+        "parameters": {
+          "pieces": [
+            "sofa@2"
+          ],
+          "text": "turn the sofa to face the room"
+        }
+      }
+    },
+    {
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "note_send",
+        "parameters": {}
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 8
+    },
+    {
+      "seconds": 8
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "cursor": [
+        640,
+        300
+      ]
+    },
+    {
+      "at": 0.1,
+      "wheel": {
+        "y": -4,
+        "n": 5,
+        "at": [
+          220,
+          450
+        ]
+      }
+    },
+    {
+      "at": 0.7,
+      "caption": "NOTES: a sent note offers Claim"
+    },
+    {
+      "at": 3.0,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "note_claim",
+        "parameters": {
+          "id": "n1",
+          "agent": "omp"
+        }
+      },
+      "caption": "agent: note_claim over MCP, and the row says who holds it"
+    },
+    {
+      "at": 7.0,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "note_renew",
+        "parameters": {
+          "id": "n1",
+          "agent": "omp"
+        }
+      },
+      "caption": "agent: note_renew keeps the lease"
+    },
+    {
+      "at": 11.0,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "note_release",
+        "parameters": {
+          "id": "n1",
+          "agent": "omp"
+        }
+      },
+      "caption": "agent: note_release gives it back, and Claim returns"
+    },
+    {
+      "at": 14.5,
+      "caption": "the row's buttons follow the lease: Claim, then Renew and Release, then Claim again"
+    }
+  ]
+}

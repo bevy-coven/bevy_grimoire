@@ -31,6 +31,12 @@ Each key on this page is also a command with an id that does not change, such as
 
 An agent runs a command by its id with `grimoire_run_command`, and it presses the same shortcut, so a command that is not available now (a key that needs a piece in hand, or a text field holding the keys) is refused with the reason a menu would show.
 
+## The command palette
+
+`Cmd+Shift+P` (`Ctrl+Shift+P` elsewhere) or `Cmd+K` (`Ctrl+K`) opens a box over every command. Type a few letters ("undo", or "opn prj" for "File: Open Project") and the list narrows; the commands you ran last come first. `Up` and `Down` move the lit row, `Enter` or a click runs it, and `Esc`, a click outside, or the same chord again closes it. Each row shows its shortcut at the end, and a command that cannot run now stays in the list with the reason where the shortcut would be ("Not on this tab", "Only while holding a piece"), judged in the tab you were on when you opened it. A command from the palette runs as its shortcut would: the same undo step, the same line in the history, the same refusals.
+
+The palette does not open while a text field has the keys, because `Cmd+K` there is the field's.
+
 ## Everywhere
 
 These keys work on every tab.

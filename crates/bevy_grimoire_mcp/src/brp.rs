@@ -93,6 +93,43 @@ impl Brp {
             .await?
     }
 
+    /// **Take one picture through `bevy_fairy`, as base64 PNG**, of the editor or of a game: `params` is
+    /// `bevy_fairy/screenshot`'s (`{"source": "offscreen"}` for the editor, `{}` for a game's own default).
+    ///
+    /// **Two calls, because the screenshot is asynchronous.** The answer to `bevy_fairy/screenshot` is an
+    /// id, and the picture is ready a frame or two later, when `bevy_fairy/capture` answers with the
+    /// bytes. So this asks, waits, and asks again, and the wait is bounded: a capture that never lands
+    /// must not hang an agent.
+    pub async fn screenshot(&self, params: Value) -> Result<String, String> {
+        let asked = self.call("bevy_fairy/screenshot", params).await?;
+        let id = asked
+            .get("id")
+            .and_then(|i| i.as_u64())
+            .ok_or("the capture was not given an id")?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let answer = self.call("bevy_fairy/capture", json!({"id": id})).await?;
+            match answer.get("status").and_then(|s| s.as_str()) {
+                Some("done") => {
+                    return answer
+                        .get("png_base64")
+                        .and_then(|p| p.as_str())
+                        .map(|p| p.to_owned())
+                        .ok_or_else(|| "the capture had no picture in it".to_owned());
+                }
+                Some("failed") => {
+                    let why = answer.get("error").and_then(|e| e.as_str()).unwrap_or("no reason was given");
+                    return Err(format!("the capture failed: {why}"));
+                }
+                _ => {}
+            }
+            if std::time::Instant::now() > deadline {
+                return Err("the capture did not arrive within ten seconds.".to_owned());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
     /// **Call one BRP method, where an editor too busy to answer within the budget is `Ok(None)`,
     /// not a refusal** (#179).
     ///

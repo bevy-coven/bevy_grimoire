@@ -1,0 +1,21 @@
+{
+  "name": "command_palette",
+  "fps": 12,
+  "scale": 1,
+  "width": 960,
+  "setup": [
+    {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-6, -4, 6, 4]}}}
+  ],
+  "chunks": [
+    {"seconds": 2.5},
+    {"seconds": 0.6, "operation": {"name": "placement_remove", "parameters": {"id": "sofa@1"}}},
+    {"seconds": 9.5}
+  ],
+  "steps": [
+    {"at": 0.2, "caption": "a bed and a sofa"},
+    {"at": 2.7, "caption": "agent: removes the sofa"},
+    {"at": 4.4, "key": "KeyP", "mods": ["ControlLeft", "ShiftLeft"], "caption": "person: Ctrl+Shift+P opens the command palette"},
+    {"at": 6.4, "type": "undo", "caption": "person: types undo, and Edit: Undo is the first row, with its shortcut"},
+    {"at": 9.0, "key": "Enter", "caption": "Enter runs it: the sofa is back"}
+  ]
+}

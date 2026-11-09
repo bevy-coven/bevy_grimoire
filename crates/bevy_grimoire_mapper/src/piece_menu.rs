@@ -9,7 +9,9 @@
 //!   the secondary `PointerClick` its guide says a host sends when it does its own picking.
 //! - **What the items do.** Each item is the verb a key already has (`editor::piece_verb`), by the
 //!   piece's id and through the operation registry, so a menu choice is one log line and one `Cmd+Z`,
-//!   the same as the key. The chord each item shows is the command's own, read from `commands`.
+//!   the same as the key. Move and Note are the two tools: they arm the move tool with this piece in hand
+//!   (`editor::carry_piece`) and the Note tool with its box open on this piece (`editor::note_pick_piece`,
+//!   shared with the Shift-click). The chord each item shows is the command's own, read from `commands`.
 //!
 //! The keyboard way in (Shift+F10 on a focused widget) is gooey's and needs nothing here.
 
@@ -25,7 +27,8 @@ use bevy_gooey::{ContextMenu, ContextTarget, context_menu, menu_item, separator}
 
 use crate::commands;
 use crate::editor::{
-    EditorState, PieceVerb, Placement, Rung, TargetLock, piece_verb, snap_level, ui_blocks_gesture,
+    CloneDrag, EditorState, MoveDrag, NoteBox, PieceVerb, Placement, Rung, TargetLock, carry_piece, note_pick_piece,
+    piece_verb, snap_level, ui_blocks_gesture,
 };
 use crate::view::MainCamera;
 use crate::keys::Action;
@@ -36,17 +39,31 @@ use crate::project::{OpenMap, Project};
 #[derive(Component)]
 pub struct PieceMenu;
 
-/// What is in the menu, top to bottom: the words, the verb, and the key the verb already has. A gap
+/// What one item does to the piece the menu is for: a one-shot verb the registry runs, or one of the two
+/// tools, entered with this piece already chosen.
+#[derive(Clone, Copy)]
+enum Act {
+    Verb(PieceVerb),
+    /// The move tool, with this piece in hand: the next click on the map puts it down.
+    Move,
+    /// The Note tool, with the note box open on this piece.
+    Note,
+}
+
+/// What is in the menu, top to bottom: the words, what it does, and the key it already has. A gap
 /// is a separator. One table, so the menu and its test read the same list.
-const ITEMS: [Option<(&str, PieceVerb, Option<Action>)>; 8] = [
-    Some(("Turn left", PieceVerb::TurnLeft, Some(Action::TurnPieceLeft))),
-    Some(("Turn right", PieceVerb::TurnRight, Some(Action::TurnPieceRight))),
-    Some(("Tip about x", PieceVerb::TipX, Some(Action::TipX))),
-    Some(("Tip about z", PieceVerb::TipZ, Some(Action::TipZ))),
-    Some(("Lift", PieceVerb::Lift, Some(Action::LiftUp))),
-    Some(("Lower", PieceVerb::Lower, Some(Action::LiftDown))),
+const ITEMS: [Option<(&str, Act, Option<Action>)>; 11] = [
+    Some(("Turn left", Act::Verb(PieceVerb::TurnLeft), Some(Action::TurnPieceLeft))),
+    Some(("Turn right", Act::Verb(PieceVerb::TurnRight), Some(Action::TurnPieceRight))),
+    Some(("Tip about x", Act::Verb(PieceVerb::TipX), Some(Action::TipX))),
+    Some(("Tip about z", Act::Verb(PieceVerb::TipZ), Some(Action::TipZ))),
+    Some(("Lift", Act::Verb(PieceVerb::Lift), Some(Action::LiftUp))),
+    Some(("Lower", Act::Verb(PieceVerb::Lower), Some(Action::LiftDown))),
     None,
-    Some(("Remove", PieceVerb::Remove, None)),
+    Some(("Move", Act::Move, Some(Action::MoveMode))),
+    Some(("Note", Act::Note, Some(Action::NoteTool))),
+    None,
+    Some(("Remove", Act::Verb(PieceVerb::Remove), None)),
 ];
 
 /// Spawns the menu and watches for the right-click that opens it.
@@ -65,7 +82,7 @@ fn spawn_menu(mut commands: Commands) {
     let menu = commands.spawn((context_menu(()), PieceMenu)).id();
     for entry in ITEMS {
         match entry {
-            Some((label, verb, action)) => {
+            Some((label, act, action)) => {
                 // The chord is the command's own, so a rebind shows here with no second table. `Remove`
                 // has none: its key arms the removal *mode*, which is not what this item does.
                 let item = match action {
@@ -82,6 +99,9 @@ fn spawn_menu(mut commands: Commands) {
                                    assets: Res<AssetServer>,
                                    keyboard: Res<ButtonInput<KeyCode>>,
                                    rung: Res<Rung>,
+                                   mut move_drag: ResMut<MoveDrag>,
+                                   mut clone_drag: ResMut<CloneDrag>,
+                                   mut note_box: ResMut<NoteBox>,
                                    project: Option<Res<Project>>,
                                    open: Option<ResMut<OpenMap>>,
                                    state: Option<ResMut<EditorState>>,
@@ -97,17 +117,21 @@ fn spawn_menu(mut commands: Commands) {
                         let Ok(Placement(id)) = placements.get(piece) else {
                             return;
                         };
-                        piece_verb(
-                            &mut commands,
-                            &assets,
-                            &project,
-                            &mut open,
-                            &mut state,
-                            &placed,
-                            id,
-                            verb,
-                            snap_level(&keyboard, rung.0),
-                        );
+                        match act {
+                            Act::Verb(verb) => piece_verb(
+                                &mut commands,
+                                &assets,
+                                &project,
+                                &mut open,
+                                &mut state,
+                                &placed,
+                                id,
+                                verb,
+                                snap_level(&keyboard, rung.0),
+                            ),
+                            Act::Move => carry_piece(&open, &mut state, &mut move_drag, &mut clone_drag, id),
+                            Act::Note => note_pick_piece(&open, &mut state, &mut note_box, id.clone(), false),
+                        }
                     });
             }
             None => {
