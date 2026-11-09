@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "stem": "feedback-1794230412409",
+  "taken_at_ms": 1794230412409,
+  "audience": "developers",
+  "app_version": "0.5.0",
+  "screen": "launcher",
+  "project": null,
+  "map": null,
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 197568493958,
+        "rect_px": [
+          1763.0,
+          1011.0,
+          2531.0,
+          1262.0
+        ],
+        "path": [
+          {
+            "name": "projects home",
+            "role": "Screen",
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal",
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal body",
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal agent card",
+            "role": null,
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        2005.9688,
+        1049.4297
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "This still needs work, where are the LEDs?",
+  "picture": {
+    "file": "feedback-1794230412409.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794230412409_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794230412409.log"
+}

@@ -706,6 +706,18 @@
           "saw": "Installed 0.5.0, scratch copy of the project with omp chosen, reopened: the terminal offers Invoke Agent and starts no agent; 0.5.0 keeps no record of a session, so there is nothing for an agent running at close to resume from."
         }
       ]
+    },
+    {
+      "stem": "feedback-1794230412409",
+      "taken_at_ms": 1794230412409,
+      "app_version": "0.5.0",
+      "record_version": 2,
+      "kind": "enhancement",
+      "status": "triaged",
+      "host": "mac_air",
+      "reason": "asks for the LED that #343 assumed: a glowing live indicator on the agent card/bar; a request, not how the screen is",
+      "commit": "",
+      "attempts": []
     }
   ]
 }
