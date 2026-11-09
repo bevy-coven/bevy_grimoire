@@ -21,9 +21,16 @@ pub const DEFAULT_MODEL: &str = "claude-sonnet-5-5";
 /// **`grimoire_guide` first, not a document** (#346, AG-01). The guide is shipped inside the MCP
 /// server and returned by that tool, so the agent reads the text the server actually carries — the
 /// same text `docs/mcp-tools.md` is rendered from — rather than a file that may not be there.
+///
+/// **`grimoire_wish` last, after the hand-back** (#355, AW-03). The wish is the one thing a person
+/// reading a finished result cannot see, so the prompt names it after `note_resolve` and leaves the
+/// prose — what a good wish is, and what it is not — to the guide, where it is read once and
+/// maintained once.
 pub const DEFAULT_PROMPT: &str = "Work the sent notes on the open map through the editor's MCP server. \
 Call grimoire_guide first: call grimoire_state, claim a sent note with note_claim, stay inside its area, \
-ask before removing a person's piece, and finish with note_resolve.";
+ask before removing a person's piece, and finish with note_resolve. Once the note is resolved, reflect \
+in one grimoire_wish citing it: name the single tool that would most have helped, and make no wish if \
+nothing was hard.";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

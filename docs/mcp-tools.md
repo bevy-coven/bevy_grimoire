@@ -40,11 +40,27 @@ The server speaks the Model Context Protocol over **stdio**, and reaches the run
 
 **Every task ends with `grimoire_present`, or with `note_resolve` for a note.** A presentation is a title, one paragraph of summary, what the person specified, what you inferred, up to three places worth checking and the operation ids it covers. The editor shows it as a question — Keep, or Undo all — and this call returns at once: read their answer from `grimoire_state`'s presentation, where `kept` and `undone` say which they chose. A task that ends without one is a task the person cannot accept in one click.
 
-**Wish for the one tool that would have helped most.** After the handback, `grimoire_wish` records the one tool that would have helped most; one per handback. It takes the four fields the issue form asks for (the task, the hardship, the tool, an example call) and the hand-back or resolved note it follows, and it queues the wish for the person to file as an issue.
-
 **Say what you did not do.** An operation you previewed and did not apply, a note you left for them, a file that needs their hand: put it in the summary. The editor's status line and its toast are theirs; `grimoire_read_log` is the editor's own log file, read from disk, and it answers when the editor is not running at all — so it is where you look when something failed and `grimoire_state` did not say why.
 
 **Two tools that are not part of a task.** `grimoire_open_project` opens a project folder in the running editor, from any screen including the Projects home, and is the first call when they name a project rather than a map. `grimoire_jobs_stop` asks a background job such as the palette's thumbnail bake to stop, and `grimoire_self_test` is Cauldron's power-on self test, run once when its own terminal starts you: it reads the state, counts the operations, takes one picture and returns them.
+
+## After a task: reflect
+
+**Once you have handed back, look at what it cost.** After `grimoire_present`, or after `note_resolve` for a note, ask yourself one question: which single tool would most have made that easier? Then record the answer with `grimoire_wish` — exactly one wish, citing that hand-back. This is the one thing the person reading a finished result cannot see, and it is how the editor learns what it is missing.
+
+**A wish is the hand-back's id plus four fields.** `after` names the hand-back the wish follows: `presentation` set to an id `grimoire_present` returned, such as `present-1`, or `note` set to an id you resolved, such as `n3` — exactly one of the two, because a wish citing both is a wish about two tasks. `task` is what the task was. `hardship` is what cost steps: where the work stalled, repeated itself, or needed a second call to learn what one call should have said. `tool` is the single tool, named and described in one sentence, 200 characters at most. `example_call` is a call to it, written out, 600 characters at most.
+
+```text
+{"after": {"presentation": "present-1"}, "task": "laid a wall of site/wall along the north edge", "hardship": "finding which of the 96 operations places a run of wall took three grimoire_list_operations calls and one refused grimoire_apply_operation", "tool": "grimoire_list_operations returning the operation a plain-English phrase maps to, so a placement is found by what it does rather than by its verb.", "example_call": "grimoire_list_operations {\"query\": \"place a run of wall\"}"}
+```
+
+**The hardship is the steps it cost, not a complaint.** *"Three calls to find the operation"* is something the person can act on. *"The tool list is unhelpful"* is not. Say what you did and what it would have been; the person files the wish as an issue only when it names a change someone can make.
+
+**A wish is not a bug, and it is not a request for more permissions.** A tool that answered wrongly, or refused something it should have allowed, belongs in the hand-back's summary where the person can see it beside the result — not in a wish, which is about what is missing rather than what is broken. Asking for more permissions, a wider fence, or an editor write you were refused is also not a wish: say it in the hand-back and let the person decide.
+
+**A wish is not a tool you already wished for in this session.** If you asked for it once, it is already queued and a second row is noise the person has to read and reject. Wish for a different tool, or make no wish.
+
+**Wish and move on.** `grimoire_wish` returns as soon as the wish is queued — it does not wait for a person to read it, because they may be away and your turn may be the last one. Do not poll `grimoire_state` for its answer, and do not repeat the wish because nothing happened yet. **If nothing was hard, make no wish at all**: an empty wish costs the person a row to read and reject, and it teaches them that the queue is not worth reading.
 
 ## Working a note
 

@@ -381,6 +381,7 @@ mod the_next_undo_is_named;
 mod the_note_box_is_on_screen_while_typed;
 mod the_plan_panel_lists_the_agents_steps;
 mod the_pointer_is_read_before_anything_acts_on_it;
+mod the_prompts_ask_for_a_wish;
 mod the_refusal_is_on_screen;
 mod the_run_receipt_names_the_triggers_that_fired;
 mod the_scripts_panel_lists_the_maps_triggers;
