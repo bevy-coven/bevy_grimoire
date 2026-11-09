@@ -16,7 +16,25 @@
 //! small flow collection.
 
 use bevy_grimoire_core::data_files::Bounds;
+use serde::Deserialize;
 use bevy_grimoire_core::yaml_surgery::{self, Value};
+
+/// The shape `YARD` has, so a test can read an edited file back and check the value came through. Every
+/// field is read by a test's assertion; the ones a given test does not look at are still deserialized,
+/// which is the point — a field the reader would refuse makes the read fail.
+#[derive(Debug, Deserialize)]
+struct Yard {
+    #[allow(dead_code)] version: u32,
+    name: String,
+    #[allow(dead_code)] placements: Vec<Row>,
+    #[allow(dead_code)] sealed: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct Row {
+    #[allow(dead_code)] id: String,
+    #[allow(dead_code)] turn_deg: f32,
+}
 
 /// A project file with a comment on every line. The list is indented, which is a style the writer does
 /// not use but a person may, and the surgery must copy the *siblings'* indentation rather than assume
@@ -214,6 +232,12 @@ fn a_flow_list_takes_a_leaf_and_an_empty_one_becomes_a_block() {
     let after = yaml_surgery::add_item(empty, "placements", "id: bed\nturn_deg: 90.0").unwrap_or_else(|e| panic!("{}", e.line()));
     assert_eq!(after, "version: 9\nplacements:\n- id: bed\n  turn_deg: 90.0\n");
 
+    // A comment after the `[]` is the KEY's, so it stays on the key's line and only the empty list
+    // becomes a block.
+    let commented = "version: 9\nplacements: []  # none yet\nsealed: true\n";
+    let after = yaml_surgery::add_item(commented, "placements", "id: bed").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "version: 9\nplacements:  # none yet\n- id: bed\nsealed: true\n");
+
     // A flow list with an item in it cannot take another without rewriting the line it is on, which
     // would move bytes this edit was not asked for.
     let problem = yaml_surgery::add_item(flow, "placements", "id: sofa").expect_err("a flow list is refused");
@@ -294,4 +318,160 @@ fn a_blank_or_missing_value_is_refused_rather_than_guessed() {
     assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("a"), "{}", problem.line());
     let after = yaml_surgery::set(nulls, "a", Value::Null, None).unwrap_or_else(|e| panic!("{}", e.line()));
     assert!(line_diff(nulls, &after).is_empty(), "a null set to a null is the same file:\n{after}");
+}
+
+// ------------------------------------------------------------------------------------------------
+// Review of #364: what an edit may write, and what a collection's bytes really are.
+// ------------------------------------------------------------------------------------------------
+
+#[test]
+fn an_edit_whose_result_does_not_read_is_refused_naming_the_path() {
+    // `data_files::set_leaf` refuses a result that does not parse, and this is the same rule: an edit
+    // that would duplicate a key, write an anchor, or break the text is refused rather than written, so
+    // the editor never hands an author a file its own reader will not take.
+    let text = "version: 9\nlocations:\n  yard:\n    note: a\n  shed:\n    note: b\n";
+    let problem = yaml_surgery::add_entry(text, "locations", "yard: duplicate").expect_err("a duplicate key does not read");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("locations"), "{}", problem.line());
+    assert!(problem.line().contains("given twice"), "{}", problem.line());
+
+    // An item whose text carries an anchor does not read either.
+    let problem = yaml_surgery::add_item("xs:\n- a\n", "xs", "&named b").expect_err("an anchor does not read");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("xs"), "{}", problem.line());
+}
+
+#[test]
+fn a_string_that_would_be_misread_is_quoted_wherever_it_lands() {
+    // `#` after a space starts a comment, so `red #1` would read as `red`.
+    let after = set(YARD, "name", Value::Str("red #1".into()));
+    assert!(after.contains("name: 'red #1'"), "{after}");
+    // A newline cannot be written plain over one line.
+    let after = set(YARD, "name", Value::Str("a\nb".into()));
+    assert!(after.contains("name: \"a\\nb\""), "{after}");
+    let yard: Yard = bevy_grimoire_core::yaml::from_str(&after, "maps/yard.yaml").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(yard.name, "a\nb");
+    // A leading or trailing space is not plain either.
+    let after = set(YARD, "name", Value::Str(" yard".into()));
+    assert!(after.contains("name: ' yard'"), "{after}");
+    // YAML's own syntax characters.
+    for nasty in ["a: b", "- a", "? a", ": a", "[a]", "{a}", "*a", "&a", "!a", "%a", "@a", "`a", "'a'", "\"a\"", "|a", ">a"] {
+        let after = set(YARD, "name", Value::Str(nasty.into()));
+        let yard: Yard = bevy_grimoire_core::yaml::from_str(&after, "maps/yard.yaml")
+            .unwrap_or_else(|e| panic!("`{nasty}` did not read back: {}\n{after}", e.line()));
+        assert_eq!(yard.name, nasty, "`{nasty}` did not come back as itself:\n{after}");
+    }
+}
+
+#[test]
+fn a_float_written_into_an_integer_leaf_is_refused_or_made_whole() {
+    // An integer leaf stays an integer: 9.5 into `version` must not write `9.5`, which the reader refuses.
+    let problem = yaml_surgery::set(YARD, "version", Value::Float(9.5), None).expect_err("an integer leaf takes a whole number");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("version"), "{}", problem.line());
+    // A whole value is a whole number, and writes.
+    let after = set(YARD, "version", Value::Float(9.0));
+    assert!(after.contains("version: 9"), "{after}");
+}
+
+#[test]
+fn an_infinity_or_a_nan_is_refused_with_no_bounds_too() {
+    for bad in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+        let problem = yaml_surgery::set(YARD, "placements[0].turn_deg", Value::Float(bad), None)
+            .expect_err("a file holds no infinity and no NaN");
+        assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("placements[0].turn_deg"), "{}", problem.line());
+    }
+}
+
+#[test]
+fn a_block_scalar_leaf_is_replaced_and_takes_none_of_the_next_line_with_it() {
+    let text = "\
+version: 9
+placements:
+  - id: bed
+    note: |
+      first line
+      second line
+    turn_deg: 90.0
+sealed: true
+";
+    // A block scalar's value is a string, so a string is what replaces it; the field after it is intact.
+    let after = set(text, "placements[0].note", Value::Str("one line".into()));
+    let expected = text.replace("    note: |\n      first line\n      second line\n", "    note: one line\n");
+    assert!(line_diff(&expected, &after).is_empty(), "a block scalar was replaced without eating the next field:\n{}", line_diff(&expected, &after).join("\n"));
+
+    // An item whose last field is a block scalar is removed whole, and the next item's first line stays.
+    let last_block = "\
+version: 9
+placements:
+  - id: bed
+    note: |
+      one
+      two
+  - id: sofa
+    note: |-
+      three
+sealed: true
+";
+    let after = yaml_surgery::remove_item(last_block, "placements", 0).unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "version: 9\nplacements:\n  - id: sofa\n    note: |-\n      three\nsealed: true\n", "{after}");
+
+    // An item added after one that ends in a block scalar goes below its content, not into it.
+    let after = yaml_surgery::add_item(last_block, "placements", "id: table\nnote: x").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert!(after.contains("      three\n  - id: table"), "the new item is below the block scalar's content:\n{after}");
+    assert!(after.contains("sealed: true"), "{after}");
+}
+
+#[test]
+fn a_flow_collection_cannot_be_removed_from() {
+    // A flow list is one line: removing an item from it would delete the line the key is on.
+    let text = "at: [1.0, 2.0]\nnext: 1\n";
+    let problem = yaml_surgery::remove_item(text, "at", 0).expect_err("a flow list has no lines to remove");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("at"), "{}", problem.line());
+    let text = "at: {x: 1.0}\nnext: 1\n";
+    let problem = yaml_surgery::remove_entry(text, "at", "x").expect_err("a flow mapping has no lines to remove");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("at"), "{}", problem.line());
+    assert!(text.contains("at: {x: 1.0}"), "and the file is untouched");
+}
+
+#[test]
+fn removing_an_items_first_key_keeps_the_item_and_promotes_the_next_key() {
+    // `- id: bed` on its own line: removing `id` must not take the `-` with it, or the rest of the row
+    // stops being an item of the list.
+    let text = "\
+placements:
+  - id: bed
+    turn_deg: 90.0
+  - id: sofa
+    turn_deg: 0.0
+";
+    let after = yaml_surgery::remove_entry(text, "placements[0]", "id").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "placements:\n  - turn_deg: 90.0\n  - id: sofa\n    turn_deg: 0.0\n", "{after}");
+    let _ = text;
+}
+
+#[test]
+fn a_nested_item_keeps_its_own_indentation() {
+    let text = "\
+items:
+- id: a
+  patch:
+    scale: 2
+";
+    let after = yaml_surgery::add_item(text, "items", "id: b\npatch:\n  scale: 3").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "items:\n- id: a\n  patch:\n    scale: 2\n- id: b\n  patch:\n    scale: 3\n", "{after}");
+}
+
+#[test]
+fn an_item_added_to_a_file_with_no_trailing_newline_does_not_join_its_last_line() {
+    let text = "xs:\n- a";
+    let after = yaml_surgery::add_item(text, "xs", "b").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "xs:\n- a\n- b\n", "{after}");
+}
+
+#[test]
+fn a_surgery_says_where_a_refusal_stands_rather_than_line_one() {
+    // The refusal's position is the node's own where it has one, and absent where it has none — never a
+    // made-up `line 1, column 1`, which #363 removed from the reader.
+    let problem = yaml_surgery::set(YARD, "placements[0].turn_deg", Value::Str("bed".into()), None).expect_err("a wrong kind");
+    let why = problem.why.clone().unwrap_or_default();
+    assert!(!why.contains("line 1, column 1"), "{why}");
+    assert!(problem.where_.as_ref().and_then(|w| w.field.as_deref()).is_some(), "{}", problem.line());
 }

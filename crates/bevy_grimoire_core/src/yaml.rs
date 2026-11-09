@@ -198,6 +198,7 @@ fn fix_for(field: &Option<String>) -> String {
 }
 
 /// **One thing the scan found the file may not say**, with where it stands.
+#[derive(Clone)]
 pub(crate) struct Site {
     what: String,
     field: Option<String>,
@@ -210,6 +211,14 @@ pub(crate) struct Site {
     tab_report: bool,
 }
 
+/// **The first fault in a file**, whichever reader met it first: the tab that indents a line, or the
+/// walk's own first refusal. One function, so the reader and an editor ask the same question and cannot
+/// answer it two ways.
+pub(crate) fn first_fault(text: &str, walk: Walk) -> Option<Site> {
+    let tab = indentation_tab(text, &walk.blocks);
+    earlier_fault(tab, walk.site)
+}
+
 /// **A refusal a caller outside this module builds**, when an edit would produce a file the reader
 /// refuses ([`crate::yaml_surgery`]): the field's path, what happened, why, and the fix.
 #[allow(clippy::result_large_err)]
@@ -217,20 +226,43 @@ pub(crate) fn problem_at(path: &str, field: Option<String>, line: usize, what: &
     refusal(path, Site { what: what.to_owned(), field, line, column: 1, why: why.to_owned(), fix: fix.to_owned(), tab_report: false })
 }
 
-/// **The tab that indents a line**, as a refusal, if the file has one: an edit asks before it moves a
-/// byte, so it never edits a file its reader would refuse.
-pub(crate) fn indentation_tab_site(text: &str, blocks: &[(usize, usize)]) -> Option<Site> {
-    indentation_tab(text, &blocks.to_vec())
+/// **A refusal at a byte of the text**, with its own line and column: what a surgery says when it
+/// refuses an edit, so no refusal carries a made-up position.
+#[allow(clippy::result_large_err)]
+pub(crate) fn problem_at_node(path: &str, field: Option<String>, text: &str, byte: usize, what: &str, why: &str, fix: &str) -> Problem {
+    let site = Site {
+        what: what.to_owned(),
+        field,
+        line: line_of(text, byte),
+        column: column_of(text, byte),
+        why: why.to_owned(),
+        fix: fix.to_owned(),
+        tab_report: false,
+    };
+    refusal(path, site)
+}
+
+/// **The line a byte is on**, counted from 1 as an editor shows it.
+fn line_of(text: &str, byte: usize) -> usize {
+    text[..byte.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1
+}
+
+/// **The column a byte is at**, counted in characters from its line's start, from 1.
+fn column_of(text: &str, byte: usize) -> usize {
+    let byte = byte.min(text.len());
+    let start = text[..byte].rfind('\n').map_or(0, |at| at + 1);
+    text[start..byte].chars().count() + 1
+}
+
+/// **A refusal that adopts a fault the reader found**, naming the field an edit asked about: the edit's
+/// own path, with the walk's own line and column and words.
+pub(crate) fn problem_naming(path: &str, field: Option<String>, site: Site) -> Problem {
+    refusal(path, Site { field, ..site })
 }
 
 /// A [`Site`] as the one [`Problem`] it is.
 pub(crate) fn refusal_of(path: &str, site: Site) -> Problem {
     refusal(path, site)
-}
-
-/// **The block scalar content lines the walk found**, for a caller asking whether a tab indents.
-pub(crate) fn block_lines(walk: &Walk) -> &[(usize, usize)] {
-    &walk.blocks
 }
 
 /// `path[3]`, the way a refusal and an edit both spell a sequence item.
@@ -316,6 +348,13 @@ pub(crate) enum Style {
 }
 
 impl Style {
+    /// **Whether a scalar written this way holds a number**: a plain scalar whose text is one. A quoted
+    /// scalar that spells `9` is the string `"9"`, which is the one thing a write must not turn a number
+    /// into.
+    pub(crate) fn accepts_number(self, text: &str) -> bool {
+        self == Style::Plain && is_number(text)
+    }
+
     /// **Whether a scalar written this way holds a string**, whatever its text spells: a quoted scalar
     /// and a block scalar always do, and a plain one does only when its text is not a number, a bool or
     /// a null.
@@ -349,6 +388,7 @@ pub(crate) fn is_number(text: &str) -> bool {
 }
 
 /// Everything the walk learned about a file.
+#[derive(Clone)]
 pub(crate) struct Walk {
     /// Every node, parents before children.
     pub(crate) nodes: Vec<Node>,

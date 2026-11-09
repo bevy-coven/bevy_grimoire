@@ -48,10 +48,9 @@
 //! rewritten by an edit.
 //!
 //! A flow collection (`[a, b]`) is one line: a leaf inside it is set in place (its span is exact), but
-//! a list with an item in it cannot take another without rewriting the line it is on, which would move
-//! bytes the edit was not asked for — so that is refused, naming the path. An **empty** flow list
-//! (`placements: []`) is the one case with no sibling to copy, and it becomes a block, which is the
-//! style this repository's writer emits anyway.
+//! adding to or removing from one would rewrite the line it shares with its key, so both are refused,
+//! naming the path. An **empty** flow collection (`placements: []`) is the one case with no sibling to
+//! copy, and it becomes a block, which is the style this repository's writer emits anyway.
 
 use crate::data_files::Bounds;
 use crate::problem::Problem;
@@ -72,6 +71,11 @@ pub enum Value {
     /// The null a leaf already holds, which is the only value a null leaf takes.
     Null,
 }
+
+// **A bool is `true` or `false` and a [`Value`] cannot say which, on purpose.** A caller that means to
+// flip a switch says so with [`Value::Bool`], and the value it writes is the one it holds: an edit here
+// changes a number, a string or a null, and swapping a `true` for a `false` is a different operation a
+// caller states with `Value::Bool(false)`.
 
 impl Value {
     /// What this value is, for a refusal's sentence: `an integer`, `a string`.
@@ -119,13 +123,43 @@ fn format_float(x: f64) -> String {
     if text.contains(['.', 'e', 'E', 'n', 'i']) { text } else { format!("{text}.0") }
 }
 
-/// **`s` as a YAML scalar that is a string**: plain when the text cannot be misread, single-quoted
-/// otherwise. Single quotes, because a string with a `\` or a `"` in it needs no escaping there.
+/// **`s` as a YAML scalar that reads back as exactly `s`**, quoted as little as the text allows.
+///
+/// - **Single quotes** for a string YAML would otherwise misread but that needs no escape: a `#` after a
+///   space (which starts a comment), a leading or trailing space, `: ` or a trailing `:`, a leading
+///   indicator (`-`, `?`, `[`, `&`, `!` and the rest), or a word the reader would take for a number, a
+///   bool or a null.
+/// - **Double quotes** when the text holds a character no plain or single-quoted scalar can carry: a
+///   newline, a tab, a control character, or a `\` (which a single-quoted scalar cannot escape and a
+///   plain one reads as itself only in some positions). The escapes are YAML's own.
 fn quote(s: &str) -> String {
-    if s.is_empty() || !Style::Plain.is_text(s) || starts_with_indicator(s) || s.trim() != s || s.contains(": ") || s.ends_with(':') {
+    if needs_double(s) {
+        let mut out = String::with_capacity(s.len() + 2);
+        out.push('"');
+        for c in s.chars() {
+            match c {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                '\n' => out.push_str("\\n"),
+                '\t' => out.push_str("\\t"),
+                '\r' => out.push_str("\\r"),
+                c if c.is_control() => out.push_str(&format!("\\x{:02x}", c as u32)),
+                c => out.push(c),
+            }
+        }
+        out.push('"');
+        return out;
+    }
+    if s.is_empty() || !Style::Plain.is_text(s) || starts_with_indicator(s) || s.trim() != s || s.contains(" #") || s.contains(": ") || s.ends_with(':') {
         return format!("'{}'", s.replace('\'', "''"));
     }
     s.to_owned()
+}
+
+/// Whether `s` holds something only a double-quoted scalar can carry: a line break, a tab, a control
+/// character, or a backslash.
+fn needs_double(s: &str) -> bool {
+    s.chars().any(|c| c == '\\' || c.is_control())
 }
 
 /// Whether `s` starts with a character YAML reads as syntax when it begins a plain scalar.
@@ -137,54 +171,157 @@ fn starts_with_indicator(s: &str) -> bool {
 /// leaf's bytes change. `bounds` is what a caller registered for a number, if anything.
 #[allow(clippy::result_large_err)]
 pub fn set(text: &str, path: &str, value: Value, bounds: Option<&Bounds>) -> Result<String, Problem> {
-    let walk = walk_or_refuse(text, path)?;
-    let node = walk.nodes.iter().find(|n| n.path == path).ok_or_else(|| {
-        let near = nearest(&walk, path);
-        yaml::problem_at(
-            FILE,
-            Some(path.to_owned()),
-            1,
-            &format!("`{path}` is not in this file"),
-            &format!("the nearest paths are: {}", near.iter().map(|p| format!("`{p}`")).collect::<Vec<_>>().join(", ")),
-            "check the path against the file's own keys",
-        )
-    })?;
+    let walk = walk_or_refuse(text)?;
+    let node = find(&walk, path)?;
     let Some(leaf) = &node.scalar else {
-        return Err(yaml::problem_at(
-            FILE,
-            Some(path.to_owned()),
-            1,
+        return Err(at_node(text,
+            node,
             &format!("`{path}` is not a value"),
             "it is a list or a mapping, which takes an item or an entry and not a value",
             "use `add_item` or `add_entry` for a list or a mapping",
         ));
     };
-    if !value.fits(leaf) {
-        return Err(yaml::problem_at(
-            FILE,
-            Some(path.to_owned()),
-            1,
-            &format!("`{path}` holds {}, which does not take {}", describe(leaf), value.kind()),
-            // A `Str` over a null leaf is the one pairing a person expects to work, so it is named as
-            // what it is: a null is not a string, and the caller decides.
-            "the kind of a value never changes; write a value of the kind the leaf holds",
-            "check the field's type",
-        ));
+
+    // **A float is finite whether or not a caller registered bounds.** A file holds no infinity and no
+    // NaN: both are written as a word the reader takes for a string, which would change the leaf's kind.
+    if let Value::Float(x) = &value
+        && !x.is_finite()
+    {
+        return Err(at_node_named(text, node, path, &format!("`{path}`: {x} is not a finite number"), "a file holds no infinity and no NaN", "write a finite number"));
     }
-    if let (Some(bounds), Value::Int(n)) = (bounds, &value) {
-        check_bounds(path, *n as f64, bounds)?;
-    }
-    if let (Some(bounds), Value::Float(x)) = (bounds, &value) {
-        if !x.is_finite() {
-            return Err(yaml::problem_at(FILE, Some(path.to_owned()), 1, &format!("`{path}`: {x} is not a finite number"), "a file holds no infinity or NaN", "write a finite number"));
+    // **A number with a fraction needs a float leaf, and a whole value may fill an integer one.** `9.5`
+    // into an integer leaf would be a file the reader refuses (`9.5` is not a `u32`), and `9.0` is
+    // exactly the integer `9`.
+    let value = match (&value, &leaf.style) {
+        (Value::Float(x), _) if !leaf.style.accepts_number(&leaf.text) => return Err(wrong_kind(text, node, leaf, &value, path)),
+        (Value::Float(x), _) if is_integer_leaf(leaf) => {
+            if x.fract() != 0.0 {
+                return Err(at_node_named(text,
+                    node,
+                    path,
+                    &format!("`{path}` holds an integer, and {x} is not a whole number"),
+                    "a float leaf is the only one that takes a fraction",
+                    "write a whole number",
+                ));
+            }
+            Value::Int(*x as i64)
         }
-        check_bounds(path, *x, bounds)?;
+        _ => value.clone(),
+    };
+    if !value.fits(leaf) {
+        return Err(wrong_kind(text, node, leaf, &value, path));
     }
+    if let Some(bounds) = bounds {
+        let number = match &value {
+            Value::Int(n) => *n as f64,
+            Value::Float(x) => *x,
+            _ => f64::NAN,
+        };
+        if number.is_finite() {
+            check_bounds(text, node, path, number, bounds)?;
+        }
+    }
+
+    // **A block scalar's span is its content, not its indicator.** `saphyr-parser` reports a `|` scalar
+    // from its first content character to the start of the line after its last, so a replacement runs
+    // from the `|` itself (which says the value was a block) to the end of the content.
+    let (start, end) = if leaf.style == Style::Block {
+        (block_indicator(text, node), content_end(text, node, &walk))
+    } else {
+        (node.span.0, node.span.1)
+    };
     let mut out = String::with_capacity(text.len() + 8);
-    out.push_str(&text[..node.span.0]);
+    out.push_str(&text[..start]);
     out.push_str(&value.text());
-    out.push_str(&text[node.span.1..]);
-    Ok(out)
+    out.push_str(&text[end..]);
+    verified(out, path)
+}
+
+/// **The `|` or `>` that makes a scalar a block**, which is where a replacement of one starts: the span
+/// `saphyr-parser` reports begins at the first content character, so the indicator is the last one
+/// between the value's key and that character.
+fn block_indicator(text: &str, node: &Node) -> usize {
+    let from = node.key.as_ref().map_or(node.span.0, |key| key.span.1);
+    text[from..node.span.0.min(text.len())]
+        .rfind(['|', '>'])
+        .map_or(node.span.0, |at| from + at)
+}
+
+/// Whether a leaf's number is a whole number, so a `Float` that is whole may fill it.
+fn is_integer_leaf(leaf: &yaml::Leaf) -> bool {
+    leaf.style == Style::Plain && yaml::is_number(&leaf.text) && !leaf.text.contains(['.', 'e', 'E'])
+}
+
+/// **A flow collection cannot be edited line by line.** `at: [1.0, 2.0]` is one line, and adding to or
+/// removing from it would rewrite that line and whatever sits around it, which is bytes this edit was
+/// not asked to move.
+fn flow_refusal(text: &str, node: &Node, path: &str, verb: &str) -> Problem {
+    at_node_named(
+        text,
+        node,
+        path,
+        &format!("`{path}` is a flow collection"),
+        &format!("it is written on one line, so an item {verb} it would rewrite the line it shares with its key"),
+        "write the collection in block style (one item a line) first",
+    )
+}
+
+/// **An item's first key removed without losing the item**: the `-` stays, and the next key is promoted
+/// onto its line, so what is left is still an item of the list.
+fn promote_first_key(text: &str, dash: usize, line_start: usize, after_removed: usize) -> String {
+    // Whatever follows the removed entry is the item's next line, which carries its own indentation.
+    let rest = &text[after_removed..];
+    let next_end = rest.find('\n').map_or(rest.len(), |at| at + 1);
+    let next_line = &rest[..next_end];
+    let indent = next_line.len() - next_line.trim_start_matches(' ').len();
+    let body = next_line.trim_start();
+    let mut out = String::with_capacity(text.len());
+    out.push_str(&text[..line_start]);
+    // **The `-` stays and the next key takes its own column**, which is what keeps the row an item of
+    // the list: `  - turn_deg: 90.0` with `turn_deg` where the item's first key was.
+    let dash_column = dash - line_start;
+    out.push_str(&" ".repeat(dash_column));
+    out.push_str("- ");
+    out.push_str(body.trim_end());
+    out.push('\n');
+    out.push_str(&rest[next_end..]);
+    let _ = indent;
+    out
+}
+
+/// A refusal at a node: its own line and column, never a made-up `line 1`.
+fn at_node(text: &str, node: &Node, what: &str, why: &str, fix: &str) -> Problem {
+    yaml::problem_at_node(FILE, None, text, node.span.0, what, why, fix)
+}
+
+/// A refusal at a node, naming the field's path: what every refusal about a leaf says.
+fn at_node_named(text: &str, node: &Node, path: &str, what: &str, why: &str, fix: &str) -> Problem {
+    yaml::problem_at_node(FILE, Some(path.to_owned()), text, node.span.0, what, why, fix)
+}
+
+/// A refusal that a leaf does not take a value.
+fn wrong_kind(text: &str, node: &Node, leaf: &yaml::Leaf, value: &Value, path: &str) -> Problem {
+    yaml::problem_at_node(
+        FILE,
+        Some(path.to_owned()),
+        text,
+        node.span.0,
+        &format!("`{path}` holds {}, which does not take {}", describe(leaf), value.kind()),
+        "the kind of a value never changes; write a value of the kind the leaf holds",
+        "check the field's type",
+    )
+}
+
+/// **The edited text, once the reader is asked about it.** An edit that produced a file its own reader
+/// refuses is refused here instead of written — a duplicate key, an anchor, a broken line — with the
+/// path it was asked about. `data_files::set_leaf` has the same rule for RON, and this is that rule.
+#[allow(clippy::result_large_err)]
+fn verified(text: String, path: &str) -> Result<String, Problem> {
+    let walk = yaml::walk(&text);
+    if let Some(site) = yaml::first_fault(&text, walk) {
+        return Err(yaml::problem_naming(FILE, Some(path.to_owned()), site));
+    }
+    Ok(text)
 }
 
 /// What a leaf holds, for a refusal's sentence.
@@ -192,7 +329,7 @@ fn describe(leaf: &yaml::Leaf) -> String {
     match leaf.style {
         Style::Quoted | Style::Block => "a string".to_owned(),
         Style::Plain => {
-            if leaf.text.is_empty() {
+            if leaf.text.is_empty() || matches!(leaf.text.as_str(), "~" | "null" | "Null" | "NULL") {
                 "a null".to_owned()
             } else if matches!(leaf.text.as_str(), "true" | "false") {
                 "a bool".to_owned()
@@ -209,12 +346,13 @@ fn describe(leaf: &yaml::Leaf) -> String {
 
 /// **`x` inside `bounds`**, or a refusal naming the leaf.
 #[allow(clippy::result_large_err)]
-fn check_bounds(path: &str, x: f64, bounds: &Bounds) -> Result<(), Problem> {
+fn check_bounds(text: &str, node: &Node, path: &str, x: f64, bounds: &Bounds) -> Result<(), Problem> {
     if bounds.min.is_some_and(|m| x < m) || bounds.max.is_some_and(|m| x > m) {
-        return Err(yaml::problem_at(
+        return Err(yaml::problem_at_node(
             FILE,
             Some(path.to_owned()),
-            1,
+            text,
+            node.span.0,
             &format!("`{path}`: {x} is outside its bounds {}", range(bounds)),
             "the field is registered with a range, and this value is not in it",
             "write a value inside the bounds",
@@ -232,22 +370,22 @@ fn range(b: &Bounds) -> String {
 /// style. `item` is YAML text: one or more lines, the first of which is the item's own first line.
 #[allow(clippy::result_large_err)]
 pub fn add_item(text: &str, path: &str, item: &str) -> Result<String, Problem> {
-    let walk = walk_or_refuse(text, path)?;
+    let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Sequence {
         return Err(not_a(path, "a list"));
     }
     let item_lines: Vec<&str> = item.trim_end_matches('\n').lines().map(str::trim_end).collect();
     if item_lines.is_empty() || item_lines[0].trim().is_empty() {
-        return Err(yaml::problem_at(FILE, Some(path.to_owned()), 1, "an item to add is empty", "there is nothing to write", "give the item's first line"));
+        return Err(at_node(text, node, "an item to add is empty", "there is nothing to write", "give the item's first line"));
     }
     let items: Vec<&Node> = walk.nodes.iter().filter(|n| is_item_of(&n.path, path)).collect();
     let flow = text[node.span.0..node.span.1].trim_start().starts_with('[');
     if flow && !items.is_empty() {
-        return Err(yaml::problem_at(
-            FILE,
-            Some(path.to_owned()),
-            1,
+        return Err(at_node_named(
+            text,
+            node,
+            path,
             &format!("`{path}` is a flow list with an item in it"),
             "an item added to it would rewrite the line the list is on, and this edit moves no byte it was not asked for",
             "write the list in block style (one item a line) first",
@@ -270,18 +408,21 @@ pub fn add_item(text: &str, path: &str, item: &str) -> Result<String, Problem> {
             block.push_str("- ");
             block.push_str(line.trim_start());
         } else {
-            block.push_str(&" ".repeat(field_column));
-            block.push_str(line.trim());
+            // **Every later line keeps the indentation it was written with**, relative to the item's
+            // first line, so a nested mapping stays nested: `patch:` then `  scale: 2` is two levels.
+            let relative = line.len() - line.trim_start().len();
+            block.push_str(&" ".repeat(field_column + relative));
+            block.push_str(line.trim_start());
         }
         block.push('\n');
     }
-    Ok(insert_after_last_of(text, node, &walk, &block, flow))
+    verified(insert_after_last_of(text, node, &walk, &block, flow), path)
 }
 
 /// **Add `entry` as the last entry of the mapping at `path`**, copying the siblings' indentation.
 #[allow(clippy::result_large_err)]
 pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem> {
-    let walk = walk_or_refuse(text, path)?;
+    let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Mapping {
         return Err(not_a(path, "a mapping"));
@@ -317,20 +458,25 @@ pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
         block.push_str(body);
         block.push('\n');
     }
-    Ok(insert_after_last_of(text, node, &walk, &block, false))
+    verified(insert_after_last_of(text, node, &walk, &block, false), path)
 }
 
 /// **Remove item `index` of the sequence at `path`**, taking only its own lines.
 #[allow(clippy::result_large_err)]
 pub fn remove_item(text: &str, path: &str, index: usize) -> Result<String, Problem> {
-    let walk = walk_or_refuse(text, path)?;
+    let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Sequence {
         return Err(not_a(path, "a list"));
     }
+    // **A flow list is one line, and this cannot edit one.** Removing an item from `at: [1.0, 2.0]` would
+    // take the line the key is on, so it is refused exactly as adding to a non-empty flow list is.
+    if is_flow(text, node) {
+        return Err(flow_refusal(text, node, path, "removed from"));
+    }
     let item_path = yaml::join_path_index(path, index);
     let item = walk.nodes.iter().find(|n| n.path == item_path).ok_or_else(|| {
-        yaml::problem_at(FILE, Some(item_path.clone()), 1, &format!("`{item_path}` is not in this file"), "the list has fewer items than that", "check the item's index")
+        at_node_named(text, node, &item_path, &format!("`{item_path}` is not in this file"), "the list has fewer items than that", "check the item's index")
     })?;
     // The item's own lines: from its dash (or its first character) through the end of its last line.
     let from = item.dash.unwrap_or(item.span.0);
@@ -339,28 +485,43 @@ pub fn remove_item(text: &str, path: &str, index: usize) -> Result<String, Probl
     let mut out = String::with_capacity(text.len());
     out.push_str(&text[..start]);
     out.push_str(&text[end..]);
-    Ok(out)
+    verified(out, path)
 }
 
 /// **Remove the entry named `key` from the mapping at `path`**, taking only its own lines.
 #[allow(clippy::result_large_err)]
 pub fn remove_entry(text: &str, path: &str, key: &str) -> Result<String, Problem> {
-    let walk = walk_or_refuse(text, path)?;
+    let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Mapping {
         return Err(not_a(path, "a mapping"));
     }
+    if is_flow(text, node) {
+        return Err(flow_refusal(text, node, path, "removed from"));
+    }
     let entry_path = yaml::join_path_key(path, key);
     let entry = walk.nodes.iter().find(|n| n.path == entry_path).ok_or_else(|| {
-        yaml::problem_at(FILE, Some(entry_path.clone()), 1, &format!("`{entry_path}` is not in this file"), "the mapping has no such key", "check the key's spelling")
+        at_node_named(text, node, &entry_path, &format!("`{entry_path}` is not in this file"), "the mapping has no such key", "check the key's spelling")
     })?;
+
+    // **An entry on the line its item's `-` starts is the item's first key.** Removing its whole line
+    // would take the `-` with it and leave the rest of the row as a key of the list's parent, so the
+    // next key is promoted onto that line instead: `  - id: bed` and `    turn_deg: 90.0` become
+    // `  - turn_deg: 90.0`.
+    if entry.dash.is_some() {
+        let key_at = entry.key.as_ref().map_or(entry.span.0, |k| k.span.0);
+        let line_start = text[..key_at].rfind('\n').map_or(0, |at| at + 1);
+        let dash = entry.dash.unwrap_or(key_at);
+        let after_key = end_of_last_line(text, entry.span.1);
+        return verified(promote_first_key(text, dash, line_start, after_key), path);
+    }
     let from_key = entry.key.as_ref().map_or(entry.span.0, |k| k.span.0);
     let start = text[..from_key].rfind('\n').map_or(from_key, |at| at + 1);
     let end = end_of_last_line(text, content_end(text, entry, &walk));
     let mut out = String::with_capacity(text.len());
     out.push_str(&text[..start]);
     out.push_str(&text[end..]);
-    Ok(out)
+    verified(out, path)
 }
 
 /// **`text` with `block` inserted after the last line the node at `node` holds.**
@@ -376,16 +537,32 @@ fn insert_after_last_of(text: &str, node: &Node, walk: &Walk, block: &str, flow:
     let at = end_of_last_line(text, content_end(text, node, walk));
     let mut out = String::with_capacity(text.len() + block.len());
     if flow {
-        // `placements: []` becomes `placements:` and the block under it.
-        let before = &text[..node.span.0];
-        out.push_str(before.trim_end_matches(' '));
+        // `placements: []` becomes `placements:` and the block under it. **A comment after the `[]` stays
+        // where it was**: it is the key's, not the empty list's, and the list is the only thing that
+        // changes.
+        // The line the empty collection stands on, split either side of it: what comes before is the key,
+        // and whatever follows — a comment, when a person wrote one — is the KEY's, so it stays there.
+        let line_start = text[..node.span.0].rfind('\n').map_or(0, |at| at + 1);
+        let line_end = text[line_start..].find('\n').map_or(text.len(), |at| line_start + at + 1);
+        let head = text[line_start..node.span.0].trim_end_matches(' ');
+        // The `[]`'s own end. Its span can stop a byte short of the `]`, so the bracket is found rather
+        // than assumed, and everything after it on the line — a comment — stays with the key.
+        let bracket = text[node.span.0..line_end].rfind(']').map_or(node.span.1, |at| node.span.0 + at + 1);
+        let after = text[bracket.min(line_end)..line_end].trim_end_matches('\n');
+        out.push_str(&text[..line_start]);
+        out.push_str(head);
+        out.push_str(after);
         out.push('\n');
         out.push_str(block.trim_end_matches('\n'));
         out.push('\n');
-        out.push_str(text[node.span.1..].trim_start_matches('\n'));
+        out.push_str(&text[line_end..]);
         return out;
     }
     out.push_str(&text[..at]);
+    // A file whose last line has no newline would otherwise have the block glued onto it.
+    if at > 0 && !text[..at].ends_with('\n') {
+        out.push('\n');
+    }
     out.push_str(block);
     out.push_str(&text[at..]);
     out
@@ -398,7 +575,20 @@ fn insert_after_last_of(text: &str, node: &Node, walk: &Walk, block: &str, flow:
 /// in the collection. A scalar's end is its own; a flow collection's end includes its bracket; and a
 /// block collection's end is the end of its last child's content, one level at a time.
 fn content_end(text: &str, node: &Node, walk: &Walk) -> usize {
-    if node.kind == NodeKind::Scalar || is_flow(text, node) {
+    if node.kind == NodeKind::Scalar {
+        // **A block scalar's span runs one line past its content.** `saphyr-parser` ends a `|` or `>`
+        // scalar at the start of the next line, so an edit that took `span.1` would eat the field after
+        // it. Its content's last line is the last non-blank line of the span, and that is where it ends.
+        if node.scalar.as_ref().is_some_and(|leaf| leaf.style == Style::Block) {
+            // The span ends on the next line's indentation, so the content's end is just past its last
+            // non-blank character. The newline that ends that line stays: it is the line break the next
+            // field is written after.
+            let content = text[..node.span.1].trim_end();
+            return content.len().max(node.span.0);
+        }
+        return node.span.1;
+    }
+    if is_flow(text, node) {
         return node.span.1;
     }
     let children: Vec<&Node> = walk.nodes.iter().filter(|n| is_direct_child(&n.path, &node.path)).collect();
@@ -450,17 +640,14 @@ const FILE: &str = "a project file";
 
 /// The walk of `text`, or the refusal it earned (the file says one of the things a reader refuses).
 #[allow(clippy::result_large_err)]
-fn walk_or_refuse(text: &str, path: &str) -> Result<Walk, Problem> {
+fn walk_or_refuse(text: &str) -> Result<Walk, Problem> {
     let walk = yaml::walk(text);
-    if let Some(site) = yaml::indentation_tab_site(text, yaml::block_lines(&walk)) {
+    // One question, one answer: `first_fault` is what the reader asks too, so an edit and a read cannot
+    // disagree about which fault a file has. A file that does not read is refused before any path is
+    // looked for, because a wrong path in a broken file must not be the answer.
+    if let Some(site) = yaml::first_fault(text, walk.clone()) {
         return Err(yaml::refusal_of(FILE, site));
     }
-    if let Some(site) = walk.site {
-        return Err(yaml::refusal_of(FILE, site));
-    }
-    // The path is checked by the caller that uses it, so a file that does not read is refused before
-    // any path is looked for: a wrong path in a broken file must not be the answer.
-    let _ = path;
     Ok(walk)
 }
 
