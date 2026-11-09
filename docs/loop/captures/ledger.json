@@ -734,9 +734,9 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "enhancement",
-      "status": "triaged",
+      "status": "blocked",
       "host": "mac_air",
-      "reason": "asks the centre 'Add meshes' empty state out of the map; it belongs in the right panel only",
+      "reason": "second ask for the map's Add meshes\u2026 overlay to go; re-pins protected tests (an_empty_library\u2026, wanted_prompt), as 1794147258746",
       "commit": "",
       "attempts": []
     },
