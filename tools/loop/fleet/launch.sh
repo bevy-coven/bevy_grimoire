@@ -25,7 +25,7 @@ mkdir -p /tmp/fleet /tmp/dark-incorporated
 clone=$clone
 [ -e "$worktree" ] && { echo "worktree exists: $worktree" >&2; exit 1; }
 git -C "\$clone" fetch -q origin
-git -C "\$clone" worktree add -b "$branch" "$worktree" "$base"
+git -C "\$clone" worktree add -q -b "$branch" "$worktree" "$base"
 SH
 if [ "$host" = local ]; then cp "$brief" "/tmp/fleet/brief-$issue.md"; else scp -q "$brief" "$host:/tmp/fleet/brief-$issue.md"; fi
 
