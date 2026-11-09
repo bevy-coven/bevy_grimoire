@@ -39,7 +39,7 @@
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-three tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-four tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
