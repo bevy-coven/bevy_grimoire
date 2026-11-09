@@ -73,8 +73,9 @@ fn project() -> Vec<(&'static str, String)> {
         ("vocab.yaml", round_trip::<Vocabularies>("vocab.yaml", shipped("vocab.ron"))),
         ("compositions.yaml", round_trip::<Compositions>("compositions.yaml", shipped("compositions.ron"))),
         ("rigs.yaml", round_trip::<Rigs>("rigs.yaml", shipped("rigs.ron"))),
-        ("rules.yaml", round_trip::<Rules>("rules.yaml", ron::from_str(&format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION)).expect("the rules file this build writes"))),
+        ("rules.yaml", round_trip::<Rules>("rules.yaml", frozen("core-0.3.0/rules.ron"))),
         ("maps/bedroom.map.yaml", round_trip::<Map>("maps/bedroom.map.yaml", shipped("maps/bedroom.map.ron"))),
+        ("maps/yard.map.yaml", round_trip::<Map>("maps/yard.map.yaml", frozen("core-0.3.0/map.ron"))),
         // Kinds the shipped project has no sample of: a file a release wrote, frozen in tests/old_data.
         ("standards.yaml", round_trip::<Standards>("standards.yaml", frozen("core-0.3.0/standards.ron"))),
         ("repetition.yaml", round_trip::<RepetitionRules>("repetition.yaml", frozen("core-0.3.0/repetition.ron"))),
@@ -94,10 +95,6 @@ fn project() -> Vec<(&'static str, String)> {
         (
             "destructible/site__cart.bake.yaml",
             round_trip::<Bake>("destructible/site__cart.bake.yaml", frozen("editor-3f4084c/site__cart.bake.ron")),
-        ),
-        (
-            "maps/yard.map.yaml",
-            round_trip::<Map>("maps/yard.map.yaml", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }),
         ),
     ]
 }

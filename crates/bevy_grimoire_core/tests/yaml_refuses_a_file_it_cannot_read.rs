@@ -164,6 +164,22 @@ fn an_alias_with_nothing_to_point_at_is_refused_at_its_line() {
 }
 
 #[test]
+fn a_broken_anchor_is_refused_as_a_broken_anchor_and_not_as_an_alias() {
+    // `a: &` names nothing, so there is no alias in the file: the parser's complaint is about the `&`
+    // itself (`did not find expected alphabetic or numeric character`). Calling that an alias would name
+    // a construct the file does not have.
+    let text = GOOD.replace("name: yard", "name: &");
+    let problem = refused(&text);
+    assert_eq!(field(&problem), Some("name"), "{}", problem.line());
+    // The refusal's own sentence is the `what`; what it *found* is in `why`, and there is no alias in
+    // the file for it to name.
+    let why = why(&problem);
+    assert!(why.contains("a broken anchor"), "{why}");
+    assert!(why.contains("line 2"), "{why}");
+    assert!(!why.contains("an alias (`"), "there is no alias in the file: {why}");
+}
+
+#[test]
 fn a_merge_key_is_refused_where_it_copies_another_mapping_in() {
     let text = "\
 version: 9
@@ -223,6 +239,19 @@ fn a_tab_inside_a_later_block_scalar_does_not_replace_the_refusal_before_it() {
     let why = why(&problem);
     assert!(why.contains("`version` is given twice"), "{why}");
     assert!(why.contains("line 2"), "the second `version` is on line 2: {why}");
+}
+
+#[test]
+fn a_block_scalar_after_a_duplicate_key_is_not_known_yet_and_takes_the_answer_from_it() {
+    // `saphyr-parser` stops at the duplicate key on line 2, so the block scalar on line 2 onward was
+    // never recorded: its content tab must not be read as indentation, and the duplicate key — the first
+    // fault, and the one a person has to fix — is the answer. The slack a tab may take from the walk's
+    // own tab report applies to a tab report only, never to a duplicate, an anchor or a second document.
+    let text = "version: 9\nversion: |\n  \tb\nname: x\nplacements: []\nsealed: true\n";
+    let problem = refused(text);
+    let why = why(&problem);
+    assert!(why.contains("`version` is given twice"), "{why}");
+    assert!(why.contains("line 2"), "{why}");
 }
 
 #[test]

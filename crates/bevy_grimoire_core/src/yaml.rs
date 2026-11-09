@@ -205,13 +205,16 @@ pub(crate) struct Site {
     column: usize,
     why: String,
     fix: String,
+    /// **Whether this is `saphyr-parser`'s own fault report**, whose line may be one past the truth.
+    /// See [`earlier_fault`].
+    tab_report: bool,
 }
 
 /// **A refusal a caller outside this module builds**, when an edit would produce a file the reader
 /// refuses ([`crate::yaml_surgery`]): the field's path, what happened, why, and the fix.
 #[allow(clippy::result_large_err)]
 pub(crate) fn problem_at(path: &str, field: Option<String>, line: usize, what: &str, why: &str, fix: &str) -> Problem {
-    refusal(path, Site { what: what.to_owned(), field, line, column: 1, why: why.to_owned(), fix: fix.to_owned() })
+    refusal(path, Site { what: what.to_owned(), field, line, column: 1, why: why.to_owned(), fix: fix.to_owned(), tab_report: false })
 }
 
 /// **The tab that indents a line**, as a refusal, if the file has one: an edit asks before it moves a
@@ -385,8 +388,22 @@ pub(crate) fn walk(text: &str) -> Walk {
                 // **An alias is an alias however the parser met it.** A `*name` with nothing to point
                 // at is a scan error (`found unknown anchor`) and never reaches `Event::Alias`, so the
                 // file would otherwise be refused as "not YAML" — which says nothing about what to fix.
-                let site = if lower.contains("anchor") {
+                // **A `*name` with nothing to point at** is the one anchor-flavoured scan error that is an
+                // alias: `found unknown anchor`, at the alias. A broken `&` (`did not find expected
+                // alphabetic or numeric character`) names no anchor at all, so it is refused as the
+                // anchor syntax it is and not as an alias the file does not have.
+                let site = if lower.contains("unknown anchor") {
                     alias_site(&stack, marker.line(), marker.col() + 1)
+                } else if lower.contains("anchor") {
+                    Site {
+                        what: "a broken anchor (`&`) is not read".to_owned(),
+                        field: path_of(&child_path(&stack)),
+                        line: marker.line(),
+                        column: marker.col() + 1,
+                        why: info,
+                        fix: "write the value out where it is used, and drop the anchor".to_owned(),
+                        tab_report: false,
+                    }
                 } else if lower.contains("tab") {
                     Site {
                         what: "a tab is used for indentation".to_owned(),
@@ -395,6 +412,7 @@ pub(crate) fn walk(text: &str) -> Walk {
                         column: marker.col() + 1,
                         why: info,
                         fix: indent_fix(),
+                        tab_report: true,
                     }
                 } else {
                     Site {
@@ -404,6 +422,7 @@ pub(crate) fn walk(text: &str) -> Walk {
                         column: marker.col() + 1,
                         why: info,
                         fix: "write the line as YAML 1.2".to_owned(),
+                        tab_report: true,
                     }
                 };
                 walk.site = Some(site);
@@ -427,6 +446,7 @@ pub(crate) fn walk(text: &str) -> Walk {
                         column,
                         why: "a project file is one document, so a second one is a file that was not made".to_owned(),
                         fix: "keep one document here and put the other in a file of its own".to_owned(),
+                        tab_report: false,
                     });
                     return walk;
                 }
@@ -454,6 +474,7 @@ pub(crate) fn walk(text: &str) -> Walk {
                             column,
                             why: "a merge copies another mapping's keys in, so this mapping does not say what it holds".to_owned(),
                             fix: "write the keys out here, and drop the merge".to_owned(),
+                            tab_report: false,
                         });
                         return walk;
                     }
@@ -466,6 +487,7 @@ pub(crate) fn walk(text: &str) -> Walk {
                                 column,
                                 why: format!("it is first given on line {first}, so a reader would take one of the two by accident of order"),
                                 fix: format!("keep one `{name}`"),
+                                tab_report: false,
                             });
                             return walk;
                         }
@@ -535,6 +557,7 @@ fn alias_site(stack: &[Frame], line: usize, column: usize) -> Site {
         column,
         why: "an alias points at an anchor elsewhere, so this value does not stand where it is read".to_owned(),
         fix: "write the value out where it is used, and drop the anchor and its alias".to_owned(),
+        tab_report: false,
     }
 }
 
@@ -547,6 +570,7 @@ fn anchor_refusal(stack: &[Frame], line: usize, column: usize) -> Site {
         column,
         why: "a value given a name so an alias elsewhere can repeat it does not say everything where it stands".to_owned(),
         fix: "write the value out where it is used, and drop the anchor and its alias".to_owned(),
+        tab_report: false,
     }
 }
 
@@ -628,14 +652,19 @@ fn finish_value(stack: &mut [Frame]) {
 /// against 0.3.3), so a tab one line past the walk's fault is the same fault and is taken as the tab.
 fn earlier_fault(tab: Option<Site>, walked: Option<Site>) -> Option<Site> {
     match (tab, walked) {
-        (Some(tab), Some(walked)) if tab.line <= walked.line + TAB_REPORT_SLACK_LINES => Some(tab),
+        // The slack is the *parser's* alone: it reports a tab it meets at the tab's line or at the line
+        // after it. A duplicate key, an anchor, a merge or a second document is placed exactly, so a tab
+        // below one of those is not yet known to be indentation — the walk stopped before the block
+        // scalar it might be content of — and the exact fault wins.
+        (Some(tab), Some(walked)) if walked.tab_report && tab.line <= walked.line + TAB_REPORT_SLACK_LINES => Some(tab),
         (_, Some(walked)) => Some(walked),
         (tab, None) => tab,
     }
 }
 
-/// **How far past the walk's fault a tab may be and still be the same fault**, because
-/// `saphyr-parser` reports a tab at the line it meets and sometimes at the line after it.
+/// **How far past the parser's own fault a tab may be and still be the same fault**, because
+/// `saphyr-parser` reports a tab it meets at the tab's line and sometimes at the line after it. It applies
+/// to a [`Site::tab_report`] only: every other fault is placed exactly.
 const TAB_REPORT_SLACK_LINES: usize = 1;
 
 /// **The first tab that indents a line**, outside every block scalar's content.
@@ -658,6 +687,7 @@ fn indentation_tab(text: &str, blocks: &Blocks) -> Option<Site> {
                 column: at + 1,
                 why: format!("line {number} is indented with a tab, and a reader that took it would nest the line somewhere nobody wrote"),
                 fix: indent_fix(),
+                tab_report: false,
             });
         }
     }
