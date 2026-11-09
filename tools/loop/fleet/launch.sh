@@ -19,6 +19,8 @@ branch=fleet/$issue-$slug
 remote() { if [ "$host" = local ]; then bash -s; else ssh "$host" bash -s; fi; }
 remote <<SH
 set -e
+# A non-interactive ssh shell has a bare PATH: git-lfs (checkout filter) lives under homebrew on a Mac.
+export PATH=/opt/homebrew/bin:/usr/local/bin:\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH
 mkdir -p /tmp/fleet /tmp/dark-incorporated
 clone=$clone
 [ -e "$worktree" ] && { echo "worktree exists: $worktree" >&2; exit 1; }
@@ -41,7 +43,8 @@ else
   out=$(hc tab create --workspace "$ws" --cwd "$worktree" --label "w$issue" --no-focus)
   pane=$(printf '%s' "$out" | js 'print(d["result"]["root_pane"]["pane_id"])')
 fi
-hc pane run "$pane" "exec zsh -l" >/dev/null
+# Powerlevel10k asks its configuration wizard on a host without a p10k config, which hides the prompt.
+hc pane run "$pane" "exec env POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true zsh -l" >/dev/null
 sleep 3
 hc agent start "w$issue" --kind omp --pane "$pane" --timeout 120000 -- --model "$MODEL" --thinking high >/dev/null
 hc agent prompt "w$issue" "Read /tmp/fleet/brief-$issue.md and follow it exactly; it is your whole task." >/dev/null
