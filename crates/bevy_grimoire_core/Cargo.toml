@@ -38,3 +38,8 @@ rand_chacha.workspace = true
 # The platform's per-user data and config folders (`user_dirs.rs`): the one place the editor and its MCP server
 # name where `recent.ron`, `settings.ron`, `trusted.ron` and `cauldron.log` live. No engine in it.
 dirs = "6"
+# The one YAML reader and writer every project file goes through (`yaml.rs`, GD-01, #363), and the event
+# parser that says where each node stands — which is what a refusal's line and field path come from.
+# Neither holds an engine type.
+serde_yaml_ng.workspace = true
+saphyr-parser.workspace = true
