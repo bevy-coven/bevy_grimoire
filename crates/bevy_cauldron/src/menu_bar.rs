@@ -199,6 +199,10 @@ enum Slot {
     Zen,
     /// Window ▸ Reset layout (UI-33, #227).
     ResetLayout,
+    /// View ▸ Light map (UI-80, #254): a tick that shows or hides the viewport overlay. Only built in a
+    /// build that has the overlay; `layout` adds it under the same `cfg` the row's spawn is under.
+    #[cfg(feature = "bevy_light_grid")]
+    LightMap,
 }
 
 /// **The Map menu, in the groups its keys fall into**: choosing and tools, turning and tipping, filling, and the map itself.
@@ -280,6 +284,8 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::LeftPanel);
         slots.push(Slot::Zen);
         slots.push(Slot::Outliner);
+        #[cfg(feature = "bevy_light_grid")]
+        slots.push(Slot::LightMap);
         slots.push(Slot::Familiar);
         slots.push(Slot::PauseAgent);
         slots.push(Slot::Separator);
@@ -382,6 +388,16 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::outliner::OutlinerItem,
                 bevy_gooey::check_item("Show outliner", false),
                 bevy_gooey::observe(crate::outliner::toggle_the_outliner),
+            ));
+        }
+        // **View ▸ Light map** (UI-80, #254). Gated with the slot: a build without the overlay has no
+        // row that looks live and does nothing, which is what `commands::enabled` exists to prevent.
+        #[cfg(feature = "bevy_light_grid")]
+        Slot::LightMap => {
+            menu.spawn((
+                crate::light_overlay::LightMapItem,
+                bevy_gooey::check_item("Light map", false),
+                bevy_gooey::observe(crate::light_overlay::on_light_map_item),
             ));
         }
         Slot::Statistics => {

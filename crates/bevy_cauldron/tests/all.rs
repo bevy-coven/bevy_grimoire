@@ -516,3 +516,4 @@ mod a_note_body_is_edited_on_several_lines;
 mod the_data_panel_is_a_table_and_a_cell_edit_is_one_data_set;
 mod the_agent_tabs_ink_comes_from_the_skin;
 mod the_theme_is_a_skin_and_the_text_fits;
+mod the_view_menu_toggles_the_overlays;
