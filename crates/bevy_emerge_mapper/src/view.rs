@@ -194,7 +194,13 @@ impl Plugin for ViewPlugin {
     }
 }
 
-fn setup(mut commands: Commands, rig: Res<Rig>, surface: Res<crate::surface::Surface>) {
+fn setup(
+    mut commands: Commands,
+    rig: Res<Rig>,
+    surface: Res<crate::surface::Surface>,
+    open: Option<Res<crate::project::OpenMap>>,
+) {
+    let tf = Transform::from_translation(rig.focus + ISO_OFFSET).looking_at(rig.focus, Vec3::Y);
     commands.spawn((
         Name::new("editor camera"),
         MainCamera,
@@ -212,13 +218,8 @@ fn setup(mut commands: Commands, rig: Res<Rig>, surface: Res<crate::surface::Sur
             handle: surface.image.clone(),
             scale_factor: 1.0,
         }),
-        Projection::from(OrthographicProjection {
-            scaling_mode: ScalingMode::FixedVertical {
-                viewport_height: rig.height,
-            },
-            ..OrthographicProjection::default_3d()
-        }),
-        Transform::from_translation(rig.focus + ISO_OFFSET).looking_at(rig.focus, Vec3::Y),
+        map_projection(rig.height, &tf, open.as_deref()),
+        tf,
         // `AmbientLight` is a COMPONENT in Bevy 0.19 and applies per-camera; the resource form is
         // global. On the camera is both correct and the only form that compiles.
         AmbientLight {
@@ -239,17 +240,133 @@ fn setup(mut commands: Commands, rig: Res<Rig>, surface: Res<crate::surface::Sur
     ));
 }
 
-/// **The furthest out the rig goes on this map.** [`MAX_ZOOM`] for an ordinary room, and wide enough
-/// to see the whole of a map larger than that (a town 300 m across) with a quarter to spare. The
-/// ceiling used to be the constant, so a map past 80 m could never be seen whole.
-pub(crate) fn max_zoom(open: Option<&crate::project::OpenMap>) -> f32 {
+/// **The furthest out the rig goes on this map.** [`MAX_ZOOM`] for an ordinary room, and for a larger
+/// map enough to see all of it, with a quarter to spare, at any yaw and viewport shape.
+///
+/// It was `1.25 x` the longer side, which assumed the map lies square to the screen. Under the iso
+/// rig it lies at 45 degrees, and the Map's viewport is narrower than it is tall, so on an 1120 m
+/// square a whole-map frame needed about 1880 m of viewport height and the ceiling allowed 1400: the
+/// whole map could never be seen. A projected map is never wider than its ground diagonal, at any
+/// yaw, so the diagonal over the aspect (width / height, at most 1) is enough for every view. One
+/// ceiling for the wheel and for [`frame_box`], so a frame never lands somewhere the wheel cannot.
+pub(crate) fn max_zoom(open: Option<&crate::project::OpenMap>, aspect: f32) -> f32 {
+    let aspect = if aspect.is_finite() && aspect > 0.0 {
+        aspect.min(1.0)
+    } else {
+        1.0
+    };
     open.map_or(MAX_ZOOM, |o| {
-        MAX_ZOOM.max(1.25 * o.map.bounds.0.max(o.map.bounds.2))
+        MAX_ZOOM.max(1.25 * o.map.bounds.0.hypot(o.map.bounds.2) / aspect)
+    })
+}
+
+/// **How much depth to allow beyond the map's bounds**, as a fraction of their diagonal: pieces can
+/// stand past the ceiling or outside the floor, and the ground slab sits below the datum. A quarter,
+/// the same spare [`max_zoom`] gives the width.
+const DEPTH_SLACK: f32 = 0.25;
+
+/// **The depth range the Map's camera draws**, `(near, far)` along its view axis, in metres from the
+/// camera.
+///
+/// The camera sits only [`ISO_DISTANCE`] from its focus, and Bevy's
+/// `OrthographicProjection::default_3d()` draws depths 0..1000. That is enough for a room and not
+/// for a town: on a 300 x 1120 m map, zooming out (which [`max_zoom`] allows) showed the whole width
+/// while everything nearer the camera than its focus distance was cut away at a straight edge, pieces
+/// and all (B-010). An orthographic image does not depend on distance, so the fix is the range, not
+/// the camera's position: every corner of the map's bounds, plus [`DEPTH_SLACK`], is inside it, and
+/// it is never narrower than the default.
+pub fn depth_range(camera: &Transform, open: Option<&crate::project::OpenMap>) -> (f32, f32) {
+    let default = OrthographicProjection::default_3d();
+    let Some(open) = open else {
+        return (default.near, default.far);
+    };
+    let (centre, size) = crate::editor::map_bounds(open);
+    let half = size * 0.5;
+    let forward = *camera.forward();
+    let (mut nearest, mut farthest) = (f32::INFINITY, f32::NEG_INFINITY);
+    for sx in [-1.0, 1.0] {
+        for sy in [-1.0, 1.0] {
+            for sz in [-1.0, 1.0] {
+                let corner = centre + half * Vec3::new(sx, sy, sz);
+                let depth = (corner - camera.translation).dot(forward);
+                nearest = nearest.min(depth);
+                farthest = farthest.max(depth);
+            }
+        }
+    }
+    let slack = size.length() * DEPTH_SLACK;
+    (
+        default.near.min(nearest - slack),
+        default.far.max(farthest + slack),
+    )
+}
+
+/// **The room a framed box is given**, as a multiplier on its extent: a tenth each way, so a box framed
+/// to the edge does not sit against the viewport's border.
+const FRAME_MARGIN: f32 = 1.1;
+
+/// **Where to look, and how far out, to see a box whole**: `(focus, viewport height)`.
+///
+/// The focus is the box's centre, so the box is centred on screen. The height is what the box needs
+/// both ways on the camera's own screen axes, measured from its eight corners at the rig's yaw and
+/// elevation (so a box that is not aligned with the view still fits), with the margin, clamped to the
+/// zoom floor and `ceiling`. The yaw is the one the rig is turning *to* (`goal_yaw`), so a frame taken
+/// mid-turn still holds once the turn settles.
+///
+/// `aspect` is the viewport's width over its height. It is passed in, not read here, so this stays pure
+/// and testable; the caller reads it from the Map camera's logical viewport, because a wrong aspect is
+/// the fault this must not have.
+///
+/// **Camera state only.** The result is a focus and a height for the rig. Nothing the map holds
+/// changes, so framing is not an operation and is not undoable.
+pub fn frame_box(rig: &Rig, centre: Vec3, size: Vec3, aspect: f32, ceiling: f32) -> (Vec3, f32) {
+    debug_assert!(
+        aspect > 0.0,
+        "a viewport has a positive aspect, got {aspect}"
+    );
+    let settled = Rig {
+        focus: Vec3::ZERO,
+        yaw: rig.goal_yaw,
+        goal_yaw: rig.goal_yaw,
+        height: rig.height,
+        elevation: rig.elevation,
+    };
+    let view = Transform::from_translation(settled.offset()).looking_at(Vec3::ZERO, Vec3::Y);
+    let (right, up) = (*view.right(), *view.up());
+    let half = size * 0.5;
+    let (mut across, mut down) = (0.0f32, 0.0f32);
+    for sx in [-1.0, 1.0] {
+        for sy in [-1.0, 1.0] {
+            for sz in [-1.0, 1.0] {
+                let corner = half * Vec3::new(sx, sy, sz);
+                across = across.max(corner.dot(right).abs());
+                down = down.max(corner.dot(up).abs());
+            }
+        }
+    }
+    let needed = (2.0 * down).max(2.0 * across / aspect) * FRAME_MARGIN;
+    (centre, needed.clamp(MIN_ZOOM, ceiling))
+}
+
+/// **The Map camera's projection**: the rig's zoom, and a depth range that holds the whole map.
+fn map_projection(
+    height: f32,
+    camera: &Transform,
+    open: Option<&crate::project::OpenMap>,
+) -> Projection {
+    let (near, far) = depth_range(camera, open);
+    Projection::from(OrthographicProjection {
+        scaling_mode: ScalingMode::FixedVertical {
+            viewport_height: height,
+        },
+        near,
+        far,
+        ..OrthographicProjection::default_3d()
     })
 }
 
 #[allow(clippy::too_many_arguments)]
-fn drive(
+pub(crate) fn drive(
     time: Res<Time<Real>>,
     keys: Res<ButtonInput<KeyCode>>,
     // **The whole system cannot be gated**, because its tail writes the camera transform every frame
@@ -271,11 +388,18 @@ fn drive(
     let over_ui = hovered_ui.iter().any(|h| h.0);
     let dt = time.delta_secs();
 
+    // The viewport's shape, from the projection this system wrote last frame, so the wheel's
+    // ceiling is the same one a frame uses (see `max_zoom`).
+    let aspect = match &*camera.1 {
+        Projection::Orthographic(o) if o.area.height() > 0.0 => o.area.width() / o.area.height(),
+        _ => 1.0,
+    };
     let lines = wheel_lines(&scroll, *per_line);
     if lines != 0.0 && !over_ui {
         // **A ratio, so a detent is the same gesture at every scale.** Subtracting metres put one
         // wheel stop between the floor and 2 m.
-        rig.height = (rig.height * ZOOM_STEP.powf(-lines)).clamp(MIN_ZOOM, max_zoom(open.as_deref()));
+        rig.height = (rig.height * ZOOM_STEP.powf(-lines))
+            .clamp(MIN_ZOOM, max_zoom(open.as_deref(), aspect));
     }
 
     let step = TAU / ROTATION_STEPS as f32;
@@ -319,16 +443,11 @@ fn drive(
 
     let (mut tf, mut proj) = camera.into_inner();
     *tf = Transform::from_translation(rig.focus + iso).looking_at(rig.focus, Vec3::Y);
-    *proj = Projection::from(OrthographicProjection {
-        scaling_mode: ScalingMode::FixedVertical {
-            viewport_height: rig.height,
-        },
-        ..OrthographicProjection::default_3d()
-    });
+    *proj = map_projection(rig.height, &tf, open.as_deref());
 }
 
-/// **Where the editor's pointer is**, in logical window pixels — the one answer every spatial system
-/// reads.
+/// **Where the editor's pointer is**, in surface pixels: the window's logical position times its scale
+/// factor, the same pixels as the editor's render target. The one answer every spatial system reads.
 ///
 /// Filled once a frame by [`sense_pointer`]. It exists so that "where is the cursor" has a single
 /// definition in this crate: a system that asks the `Window` directly is invisible to an agent, and a
@@ -765,9 +884,122 @@ mod tests {
                 std::path::PathBuf::from("m.map.ron"),
             )
         };
-        assert_eq!(max_zoom(None), MAX_ZOOM);
-        assert_eq!(max_zoom(Some(&open((20.0, 5.0, 12.0)))), MAX_ZOOM, "a room keeps the constant");
-        assert_eq!(max_zoom(Some(&open((300.0, 60.0, 280.0)))), 375.0, "a town sees itself whole");
-        assert_eq!(max_zoom(Some(&open((100.0, 10.0, 300.0)))), 375.0, "the longer side decides");
+        assert_eq!(max_zoom(None, 1.0), MAX_ZOOM);
+        assert_eq!(
+            max_zoom(Some(&open((20.0, 5.0, 12.0))), 1.0),
+            MAX_ZOOM,
+            "a room keeps the constant"
+        );
+        // The ground diagonal decides, because a projected map is never wider than it at any yaw.
+        let town = 1.25 * 300.0f32.hypot(280.0);
+        assert_eq!(
+            max_zoom(Some(&open((300.0, 60.0, 280.0))), 1.0),
+            town,
+            "a town sees itself whole"
+        );
+        assert_eq!(
+            max_zoom(Some(&open((100.0, 10.0, 300.0))), 1.0),
+            1.25 * 100.0f32.hypot(300.0),
+            "the diagonal decides, not the longer side"
+        );
+        // A viewport narrower than tall needs more height for the same width; a wider one never
+        // lowers the ceiling below the square case.
+        assert_eq!(max_zoom(Some(&open((300.0, 60.0, 280.0))), 0.5), town * 2.0);
+        assert_eq!(max_zoom(Some(&open((300.0, 60.0, 280.0))), 2.0), town);
+    }
+
+    /// **A frame is centred on the box it frames**, wherever the rig was looking before. The focus is
+    /// the box's centre, so the box sits in the middle of the view.
+    #[test]
+    fn a_frame_is_centred_on_its_box() {
+        let rig = Rig {
+            focus: Vec3::new(-40.0, 0.0, 9.0),
+            ..Rig::default()
+        };
+        let centre = Vec3::new(120.0, 3.0, -75.0);
+        let (focus, _) = super::frame_box(&rig, centre, Vec3::new(60.0, 4.0, 30.0), 1.5, MAX_ZOOM);
+        assert_eq!(focus, centre);
+    }
+
+    /// **The box fits in both directions, with a tenth to spare.** Measured in the camera's own basis
+    /// (built from the rig's offset, not from the framing code), the box's half-width is within
+    /// `height * aspect / 2` and its half-height within `height / 2`, each with the margin.
+    #[test]
+    fn a_frame_fits_its_box_with_a_margin_in_both_directions() {
+        let rig = Rig {
+            yaw: 0.7,
+            goal_yaw: 0.7,
+            ..Rig::default()
+        };
+        let (centre, size) = (Vec3::new(10.0, 0.0, -5.0), Vec3::new(180.0, 12.0, 60.0));
+        let cam = Transform::from_translation(rig.offset()).looking_at(Vec3::ZERO, Vec3::Y);
+        let half = size * 0.5;
+        let (mut hx, mut hy) = (0.0f32, 0.0f32);
+        for sx in [-1.0, 1.0] {
+            for sy in [-1.0, 1.0] {
+                for sz in [-1.0, 1.0] {
+                    let d = half * Vec3::new(sx, sy, sz);
+                    hx = hx.max(d.dot(*cam.right()).abs());
+                    hy = hy.max(d.dot(*cam.up()).abs());
+                }
+            }
+        }
+        for aspect in [0.5, 1.0, 1.6, 2.5] {
+            let (_, h) = super::frame_box(&rig, centre, size, aspect, 1000.0);
+            assert!(
+                hx * 2.0 * 1.1 <= h * aspect + 1e-3,
+                "aspect {aspect}: width {hx} does not fit in {h}"
+            );
+            assert!(
+                hy * 2.0 * 1.1 <= h + 1e-3,
+                "aspect {aspect}: height {hy} does not fit in {h}"
+            );
+        }
+    }
+
+    /// **A wide viewport needs less height for the same box.** The aspect is the viewport's real
+    /// shape: a square window must zoom out to fit a long box, a wide one need not.
+    #[test]
+    fn a_wide_viewport_needs_less_height_for_the_same_box() {
+        let rig = Rig::default();
+        let size = Vec3::new(200.0, 4.0, 4.0);
+        let (_, square) = super::frame_box(&rig, Vec3::ZERO, size, 1.0, 1000.0);
+        let (_, wide) = super::frame_box(&rig, Vec3::ZERO, size, 3.0, 1000.0);
+        assert!(
+            wide < square,
+            "a 3:1 view should need less height than a square one: {wide} vs {square}"
+        );
+    }
+
+    /// **The height is held between the zoom floor and the ceiling.** A speck frames at the closest
+    /// zoom the rig allows, and a map bigger than the ceiling frames at the ceiling, not beyond it.
+    #[test]
+    fn the_framed_height_stays_between_the_floor_and_the_ceiling() {
+        let rig = Rig::default();
+        let (_, speck) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(0.01), 1.0, 375.0);
+        assert_eq!(speck, MIN_ZOOM);
+        let (_, vast) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(5000.0), 1.0, 375.0);
+        assert_eq!(vast, 375.0);
+    }
+
+    /// **The frame uses where the rig is turning to, not where it is now**, so a frame taken mid-turn
+    /// still holds once the turn settles.
+    #[test]
+    fn the_frame_holds_where_the_rig_is_turning_to() {
+        let (centre, size) = (Vec3::new(30.0, 0.0, 0.0), Vec3::new(150.0, 3.0, 40.0));
+        let turning = Rig {
+            yaw: 0.0,
+            goal_yaw: 0.9,
+            ..Rig::default()
+        };
+        let settled = Rig {
+            yaw: 0.9,
+            goal_yaw: 0.9,
+            ..Rig::default()
+        };
+        assert_eq!(
+            super::frame_box(&turning, centre, size, 1.4, 1000.0),
+            super::frame_box(&settled, centre, size, 1.4, 1000.0),
+        );
     }
 }

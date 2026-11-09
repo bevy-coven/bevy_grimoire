@@ -83,14 +83,14 @@ impl Library {
             // project's divisions-per-tile, which lives in `project.ron` and is not knowable from
             // this file alone. `policy::layered_library` runs `validate_lattices` once both layers
             // are parsed — it is the one loader, so there is no path on which the check is skipped.
-            if let Some(j) = self.descriptors.iter().position(|o| o.id == d.id) {
-                if j != i {
-                    return Err(format!(
-                        "library: `{}` is declared twice (entries {j} and {i}). A map references \
-                         descriptors by id, so a duplicate makes every reference to it ambiguous.",
-                        d.id
-                    ));
-                }
+            if let Some(j) = self.descriptors.iter().position(|o| o.id == d.id)
+                && j != i
+            {
+                return Err(format!(
+                    "library: `{}` is declared twice (entries {j} and {i}). A map references \
+                     descriptors by id, so a duplicate makes every reference to it ambiguous.",
+                    d.id
+                ));
             }
         }
         Ok(())
@@ -171,16 +171,14 @@ impl Library {
             Ok(())
         };
         for d in &self.descriptors {
-            match (&d.subgrid, crate::descriptor::divisions(d, divisions)) {
+            let div = crate::descriptor::divisions(d, divisions);
+            // No cells, so there is nothing to be wrong about, whatever the lattice would be.
+            if let Some(grid) = &d.subgrid {
                 // Authored cells. The divisions **must** derive — a cell index means nothing without
                 // them — so this is the one arm that propagates that failure.
-                (Some(grid), div) => {
-                    let div = div?;
-                    ceiling(d, div)?;
-                    grid.validate(&d.id, div)?;
-                }
-                // No cells, so there is nothing to be wrong about, whatever the lattice would be.
-                (None, _) => {}
+                let div = div?;
+                ceiling(d, div)?;
+                grid.validate(&d.id, div)?;
             }
         }
         Ok(())

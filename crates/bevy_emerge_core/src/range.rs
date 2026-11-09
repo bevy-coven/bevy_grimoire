@@ -444,7 +444,7 @@ mod tests {
     #[test]
     fn a_door_in_the_ring_is_counted_against_the_region_it_opens() {
         let mut g = sealed_room();
-        g[1 * 5 + 2] = DOOR; // directly north of the floor cell
+        g[5 + 2] = DOOR; // directly north of the floor cell
         let m = score(5, 5, &g);
         assert_eq!(m.enclosure, 1.0, "a door is part of the boundary, so the room still closes");
         assert_eq!(m.regions, 1);
@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn a_gap_in_the_ring_lets_the_fill_in_and_nothing_is_enclosed() {
         let mut g = sealed_room();
-        g[1 * 5 + 2] = VOID; // a hole, not a door: no walls at all
+        g[5 + 2] = VOID; // a hole, not a door: no walls at all
         let m = score(5, 5, &g);
         assert_eq!(m.enclosure, 0.0);
         assert_eq!(m.regions, 0);
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn open_floor_everywhere_encloses_nothing() {
-        let m = score(4, 4, &vec![OPEN; 16]);
+        let m = score(4, 4, &[OPEN; 16]);
         assert_eq!(m.enclosure, 0.0);
         assert_eq!(m.regions, 0);
         assert_eq!(m.opening_density, None);
@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn a_grid_with_no_floor_scores_zero_rather_than_dividing_by_zero() {
-        let m = score(4, 4, &vec![SOLID; 16]);
+        let m = score(4, 4, &[SOLID; 16]);
         assert_eq!(m.enclosure, 0.0);
         assert_eq!(m.regions, 0, "solid is not floor, so there is no room in there");
         assert_eq!(m.opening_density, None);
@@ -513,9 +513,9 @@ mod tests {
     fn a_ring_of_one_sided_walls_seals_from_every_side() {
         let mut g = vec![VOID; 25];
         // Outward faces, for the eight cells around the centre of a 5x5.
-        g[1 * 5 + 1] = masked(&[N, W]);
-        g[1 * 5 + 2] = masked(&[N]);
-        g[1 * 5 + 3] = masked(&[N, E]);
+        g[5 + 1] = masked(&[N, W]);
+        g[5 + 2] = masked(&[N]);
+        g[5 + 3] = masked(&[N, E]);
         g[2 * 5 + 1] = masked(&[W]);
         g[2 * 5 + 3] = masked(&[E]);
         g[3 * 5 + 1] = masked(&[W, S]);
@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn a_ring_of_inward_facing_walls_seals_from_the_near_side() {
         let mut g = vec![VOID; 25];
-        g[1 * 5 + 2] = masked(&[S]); // north of the room, walling south
+        g[5 + 2] = masked(&[S]); // north of the room, walling south
         g[3 * 5 + 2] = masked(&[N]);
         g[2 * 5 + 1] = masked(&[E]);
         g[2 * 5 + 3] = masked(&[W]);
@@ -556,7 +556,7 @@ mod tests {
         assert_eq!(m.regions, 1);
 
         let mut leaky = g.clone();
-        leaky[1 * 5 + 2] = masked(&[]);
+        leaky[5 + 2] = masked(&[]);
         assert_eq!(score(5, 5, &leaky).enclosure, 0.0, "one face is the whole seal");
     }
 

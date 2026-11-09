@@ -24,8 +24,10 @@ use bevy_emerge_core::vocab::{Masks, Vocabularies};
 /// Where a project's own files live, under its root. Inside `assets/` rather than beside it, so a
 /// descriptor's `mesh` path means the same thing to this editor and to the game that loads the map.
 const EMERGE_DIR: &str = "assets/emerge";
-const VOCAB: &str = "assets/emerge/vocab.ron";
-const LIBRARY_FILE: &str = "library.ron";
+/// **Where the vocabulary lives** — public because the file watcher names it.
+pub const VOCAB: &str = "assets/emerge/vocab.ron";
+/// **The library file's name** — public because the file watcher names it.
+pub const LIBRARY_FILE: &str = "library.ron";
 /// **Where maps live** — the project's own directory, not a kit's.
 ///
 /// They sat beside the kit that drew them, on the argument that *"a map means nothing without the
@@ -39,7 +41,11 @@ const LIBRARY_FILE: &str = "library.ron";
 const MAPS_DIR: &str = "maps";
 
 /// The opened project.
-#[derive(Resource)]
+/// **Cloned, because the operation context owns what it carries.** The registry's operations are
+/// a `dyn`, and a `dyn` cannot have a lifetime on its methods — so the context holds the project
+/// and the map by value. One copy of a project's settings is a price worth paying for a registry
+/// that can hold more than one operation.
+#[derive(Resource, Clone)]
 pub struct Project {
     pub root: PathBuf,
     /// **The kit's directory** — `assets/emerge`, or a named subdirectory of it.
@@ -127,9 +133,19 @@ pub struct Project {
     /// Held so `G` can lay a block the way the game will (`editor::generate_from`), instead of
     /// learning from the whole map at the editor's own 1 m step.
     pub rules: bevy_emerge_core::rules::Rules,
-    /// **Where every map in this project lives** — see [`MAPS_DIR`]. Held rather than re-derived, so
+    /// Where every map in this project lives — see [`MAPS_DIR`]. Held rather than re-derived, so
     /// a rename follows the name without re-deciding which directory a map belongs to.
     pub maps_dir: PathBuf,
+    /// **The map that was open**, by name — the last one this project had open.
+    ///
+    /// **The Kit door has no map, and the crossing needs to know which one to come back to.**
+    /// Without this, crossing from the Kit door to the Map door has nothing to open — and the
+    /// refusal it gives is *true* and useless: the author was on a map a moment ago.
+    ///
+    /// So the name is **carried across the crossing**, the way the armed composition is: it is the
+    /// author's intent about which map they are working on, and it outlives the door it was opened
+    /// in. It is a name and not a path, so a map that has been renamed since is refused by name.
+    pub open_map_name: Option<String>,
     /// **Descriptor ids whose resolved form changed since the Map last redrew**, and which therefore
     /// have placements standing on screen built from an older shape.
     ///
@@ -371,6 +387,8 @@ impl Project {
             masks,
             project_dir,
             maps_dir,
+            // **No map yet.** The Map door sets it when it opens one, and the crossing carries it.
+            open_map_name: None,
             touched: Vec::new(),
             triangles,
         })
@@ -468,6 +486,12 @@ impl Project {
             .iter()
             .find(|k| k.library.get(id).is_some())
             .map(|k| k.namespace.as_str())
+    }
+
+    /// **A piece another kit owns**, by that kit's namespace. `None` when this kit owns it, or
+    /// when no bound kit has it. The refusals use it to say whose piece it is.
+    pub fn other_kit_of(&self, id: &str) -> Option<&str> {
+        self.kit_of(id).filter(|ns| *ns != self.namespace)
     }
 
     /// **Every map in this project that places `id`**, by name, in a stable order.
@@ -603,6 +627,92 @@ impl Project {
         self.compositions = proposed;
         Ok(())
     }
+
+    /// **Rename a composition, and every map that stamps it.**
+    ///
+    /// # Why it lives here
+    ///
+    /// **Because this is the only module allowed to name the compositions file** — see
+    /// `tests/compose_is_read_only.rs`: *"project.rs is the only module that names the file, and
+    /// every tab reaches it there."* The COMPOSE tab asks; it does not write.
+    ///
+    /// # All of it, or none of it
+    ///
+    /// The core's writer returns **every** new text, and this writes them **only if every one
+    /// succeeded** — the composition's file and every map that stamped it. A rename that updated the
+    /// composition and left one map naming the old id would be a **partial rename**, and a partial
+    /// rename is a project that will not open.
+    ///
+    /// **And a refusal changes nothing**: the old name stands, the old files stand, and the reason
+    /// is what the caller is given.
+    pub fn rename_composition(
+        &mut self,
+        from: &str,
+        to: &str,
+        // The map that is open, so the editor shows what the file now says.
+        open: Option<&mut OpenMap>,
+    ) -> Result<(), String> {
+        let path = self
+            .project_dir
+            .join(bevy_emerge_core::composition::Compositions::FILE);
+        let text = read(&path)?;
+
+        // **Every map in the project.** The ones that stamp the composition are edited; the ones that
+        // do not are left byte for byte, which the core's writer does by itself.
+        let map_texts: Vec<(String, String)> = self
+            .maps_dir
+            .read_dir()
+            .map_err(|e| format!("cannot read the maps: {e}"))?
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                    return None;
+                }
+                let text = std::fs::read_to_string(&path).ok()?;
+                Some((path.display().to_string(), text))
+            })
+            .collect();
+
+        let renamed =
+            bevy_emerge_core::composition::rename_composition(&text, &map_texts, from, to)?;
+
+        // **The composition's file.**
+        bevy_emerge_core::ron_surgery::save_atomic(&path, &renamed.compositions)
+            .map_err(|e| format!("NOT RENAMED: cannot write {}: {e}", path.display()))?;
+
+        // **And every map that named it.** A map the rename did not touch is not written at all —
+        // writing it back would be a second chance to fail.
+        for (name, new_text) in &renamed.maps {
+            let unchanged = map_texts
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, t)| t == new_text)
+                .unwrap_or(true);
+            if unchanged {
+                continue;
+            }
+            bevy_emerge_core::ron_surgery::save_atomic(std::path::Path::new(name), new_text)
+                .map_err(|e| {
+                    format!(
+                        "NOT RENAMED: the composition is renamed but {name} could not be written: \
+                         {e}. The project needs that file fixed before it will open."
+                    )
+                })?;
+        }
+
+        // **And the project, in memory** — the editor must show what the file now says.
+        let set = bevy_emerge_core::composition::Compositions::parse(&renamed.compositions)?;
+        self.compositions = set;
+        if let Some(open) = open {
+            let path = open.map_path.display().to_string();
+            if let Some((_, new_text)) = renamed.maps.iter().find(|(n, _)| *n == path)
+                && let Ok(map) = bevy_emerge_core::map::Map::parse(new_text)
+            {
+                open.map = map;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn read(path: &Path) -> Result<String, String> {
@@ -624,7 +734,8 @@ fn read(path: &Path) -> Result<String, String> {
 /// file and nowhere else. The Meshes and Tiles doors commit straight to disk through
 /// `tiles::commit_measured` and [`Project::commit_composition`], so the map is the only thing this
 /// editor ever holds unsaved.
-#[derive(Resource)]
+/// **Cloned, for the same reason as [`Project`]** — the operation context owns the map it edits.
+#[derive(Resource, Clone)]
 pub struct OpenMap {
     /// The map itself.
     pub map: Map,
@@ -648,6 +759,28 @@ impl OpenMap {
     /// Whether the map differs from what is on disk.
     pub fn dirty(&self) -> bool {
         self.map != self.saved
+    }
+
+    /// **What the editor last saved or read** — the map as the file has it.
+    ///
+    /// The file watcher's whole question is *"does the file say something the editor does not?"*,
+    /// and there are two "the editor" it can mean: `map`, which holds the person's unsaved edits,
+    /// and this, which holds what the file said the last time the two agreed. **The second one is
+    /// the one a re-read may be compared against.** Comparing against `map` made every save
+    /// followed by an unsaved edit look like an outside change, and the poll then replaced the
+    /// person's edit with the file — see `watch::adopt_map`.
+    pub fn saved(&self) -> &Map {
+        &self.saved
+    }
+
+    /// **Say that what is on disk is what the editor holds.**
+    ///
+    /// **Used by the file watcher**, which re-reads the map from disk and puts it in the editor.
+    /// **Without it the editor would think the map was unsaved** — the dirty flag compares the
+    /// map with what it last saved, and a re-read from disk did not go through the save — **and
+    /// the author would be told to save a map that was already saved.**
+    pub fn mark_saved(&mut self) {
+        self.saved = self.map.clone();
     }
 
     /// Open a map by **name**, or start one under that name.
@@ -716,13 +849,34 @@ impl OpenMap {
             ));
         }
 
-        let counted = bevy_emerge_core::census::of_map(&map);
-        info!(
-            "map: {} — {} placement(s), {} stamp(s)",
-            map_path.display(),
-            counted.placements,
-            counted.stamps
+        // **Counted by the census**, like every other count — the ratchet
+        // `tests/census_is_the_one_counter.rs` enforces, and the reason two panels cannot
+        // disagree about the same number.
+        //
+        // The map's own rows and the rows its stamps bring are separate numbers, and the log
+        // says both: a map with 728 hand-placed rows and one stamp of an 18-member group is a
+        // 746-row level, and a log that said "728" would be describing half of it.
+        let counted = bevy_emerge_core::census::of_map(
+            &map,
+            &project.compositions.compositions,
+            &project.library,
         );
+        match counted {
+            Ok(counted) => info!(
+                "map: {} — {} placement(s), {} stamp(s) standing for {} row(s)",
+                map_path.display(),
+                counted.placements,
+                counted.stamps,
+                counted.stamped
+            ),
+            // A map whose stamps do not expand is refused by the save gate, but opening it is
+            // still legal — the author may be about to fix the group. The log says so rather
+            // than printing a count that would be a guess.
+            Err(e) => info!(
+                "map: {} — and its stamps do not expand: {e}",
+                map_path.display()
+            ),
+        }
 
         Ok(OpenMap::new(map, map_path))
     }
@@ -739,14 +893,16 @@ impl OpenMap {
         // resolves passed this door and was written with a cheerful "saved" — and then failed at
         // `FVS_EMERGE_MAP` load with "the map has holes". The editor saying saved while the game says
         // broken is the exact drift the shared `bevy_emerge_core` validation exists to prevent.
+        //
+        // **And now the question is literally the same one.** The game expands a map's stamps when
+        // it loads it, so the gate expands them the same way — through `Map::expanded`, the same
+        // function `project_data::load` calls. Before this, the gate checked that the stamps
+        // *could* expand while the game did not expand them at all, so the gate was on the wrong
+        // side of the file: it proved the file was loadable, not that the game would load it.
         if !self.map.stamps.is_empty() {
-            bevy_emerge_core::composition::expand(
-                &self.map,
-                &self.map.stamps,
-                &project.compositions.compositions,
-                &project.library,
-            )
-            .map_err(|e| format!("not saved — the game could not load this: {e}"))?;
+            self.map
+                .expanded(&project.compositions.compositions, &project.library)
+                .map_err(|e| format!("not saved — the game could not load this: {e}"))?;
         }
         // Follow a rename. The path is derived rather than remembered, so the file a map is in is
         // always the file its name says it is.
@@ -756,10 +912,84 @@ impl OpenMap {
         // tiles — which was right while a project was one kit and is now the opposite of right: the
         // library that draws a map is the merge of every bound kit, so filing it under one of them
         // picks a winner arbitrarily.
-        self.map_path = project.maps_dir.join(naming::map_file_name(&self.map.name));
+        let path = project.maps_dir.join(naming::map_file_name(&self.map.name));
         let text = ron::ser::to_string_pretty(&self.map, ron::ser::PrettyConfig::default())
             .map_err(|e| format!("map: serialize: {e}"))?;
-        bevy_emerge_core::ron_surgery::save_atomic(&self.map_path, &text)?;
+
+        // **A rename is a move, and a move is not a copy.**
+        //
+        // This is where the map's name and the file's name come apart, and where they were
+        // allowed to: the old file was never removed, so a rename left **two files answering to one
+        // map** — and the stale one *"refuses to open with `<path>` calls itself `<name>`"*, a
+        // message about a schema mismatch, for a rename that half-happened. The old file's removal
+        // belongs here, at the save, and not on the keystroke that typed the name: the editor's own
+        // reason for not removing it there was *"deleting it here would destroy a file on a
+        // keystroke"*, which is true and is why the removal waits for the write.
+        let renamed = path != self.map_path;
+
+        if renamed {
+            // **The refusal, and it is the kernel's.** `save_atomic_no_replace` will not replace an
+            // existing target, and it will not *check* first either — POSIX gives atomicity to the
+            // single call, so a check-then-write would leave a window in which the target appears
+            // and is then removed. A map is a file the author spent hours on, and "silently
+            // replaced" is not a thing that may happen to one.
+            //
+            // **And it names the map that is in the way**, because the author needs to know *which*
+            // name to change.
+            if path.exists() {
+                // **The name that is taken, and the file that holds it.** The author needs to know
+                // *which* name to change, and the map that is in the way is a file they can open.
+                //
+                // **And it is the new name twice, on purpose**: the name the map is *becoming* is
+                // the one that is taken, and the map it is *becoming it from* is the file the
+                // author is editing. Saying it once would leave the author with two names and no
+                // way to tell which is which.
+                let was = self
+                    .map_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| self.map.name.clone());
+                return Err(format!(
+                    "NOT SAVED: `{}` is already a map in this project — {} — so the map now \
+                     called `{}` cannot take that name. Rename this map to something else.",
+                    self.map.name,
+                    path.display(),
+                    was
+                ));
+            }
+            bevy_emerge_core::ron_surgery::save_atomic_no_replace(&path, &text)?;
+            // **And now the old file goes — or the rename is taken back.** A rename is all or nothing:
+            // a refused call changes nothing, so a rename whose old file cannot be removed has not
+            // happened. The new file is ours (save_atomic_no_replace just created it), so removing it
+            // touches nothing the author had.
+            if let Err(e) = std::fs::remove_file(&self.map_path) {
+                let old = self.map_path.clone();
+                return match std::fs::remove_file(&path) {
+                    Ok(()) => Err(format!(
+                        "the old file {} could not be removed, so the map keeps its name: {e}. \
+                         Nothing was changed.",
+                        old.display()
+                    )),
+                    // **The take-back failed too, so the map is in two files and must say so.** The
+                    // map follows the new file, because that is where the write landed, and the
+                    // refusal tells the author which file to delete by hand.
+                    Err(back) => {
+                        self.map_path = path.clone();
+                        Err(format!(
+                            "saved as `{}`, but the old file {} could not be removed: {e}, and the new \
+                             file {} could not be taken back: {back}. Delete the old file by hand — \
+                             until then the list shows this map twice.",
+                            self.map.name,
+                            old.display(),
+                            path.display()
+                        ))
+                    }
+                };
+            }
+        } else {
+            bevy_emerge_core::ron_surgery::save_atomic(&path, &text)?;
+        }
+        self.map_path = path;
         self.saved = self.map.clone();
         Ok(())
     }

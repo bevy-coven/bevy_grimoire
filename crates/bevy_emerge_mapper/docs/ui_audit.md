@@ -135,7 +135,30 @@ Text-on-ground, by contrast, is mostly excellent — with three exceptions that 
 centred island roughly 700 px wide with ~2,500 px of dead void either side. Panel widths are pure
 pixel constants (300 / 380 / 264 / 420) with no relationship to the window.
 
-### F3 — Opening the Map door crashes the application (reproduced 2/2)
+### F3 — Opening the Map door crashes the application (reproduced 2/2) — **FIXED 2026-10-21**
+
+**Fixed.** The cause was measured and the fix is in `surface.rs`; the notes below are the
+original finding, kept because the *reason* is worth more than the summary.
+
+> **The cause, measured.** The world camera is 3-D, and so is the only camera with a **depth
+> attachment**. `prepare_core_3d_depth_textures` sizes that depth from
+> `camera.computed.target_info.physical_size` — the image's size **as it was when the camera last
+> refreshed**. A camera refreshes on the image's `AssetEvent::Modified`, and `camera_system` reads
+> that from the **message** stream — which `Assets::asset_events` writes in `PostUpdate` **after**
+> `camera_system` has already read it (`.before(AssetEventSystems)`). So a resize is **one frame
+> late** at the camera, and that frame assembles the pass with a depth texture for the old extent
+> and a colour attachment for the new one.
+>
+> **The fix, two parts.** The surface is **created at the window's physical size** (the window is
+> spawned by `WindowPlugin::build`, before the editor's plugins, so the size is known), and a
+> resize that does happen **announces itself in the frame the camera reads it** — the editor writes
+> the image's `AssetEvent::Modified` itself, in `PreUpdate`, because `AssetEvent` is a `Message` and
+> an application may write one.
+>
+> **The ratchet** is `tests/the_surface_and_the_camera_agree.rs`, and it **fails on the unfixed
+> code** with the crash's own numbers: *"the camera at order -1 still believes the target is
+> (3396, 1356) while the image is (3440, 1440)"*. The measurement is
+> `examples/probe_surface_resize.rs`.
 
 `cargo run -p bevy_emerge_mapper --features debugger -- . <map>` dies inside two seconds:
 
@@ -307,9 +330,15 @@ corner are one decision made once, so a surface reads as an object.
 The editor's docks may keep pixel widths — a viewport wants the space — but the menu has no viewport
 to protect and must stretch. Base scale goes up so 11 px body text is readable on a 3396 px display.
 
-### D3 — Fix the Map-door crash, with a regression test *(answers F3)*
+### D3 — Fix the Map-door crash, with a regression test *(answers F3)* — **done 2026-10-21**
 
-A headless test resizes the surface and asserts the viewport follows **in the same frame**.
+`tests/the_surface_and_the_camera_agree.rs`. It resizes the window the way the compositor does
+(3396×1356 → 3440×1440), steps one frame, and asserts that **every camera which shares the
+surface image believes the size the image is** — the invariant whose violation *is* the crash.
+
+**It fails on the unfixed code**, with the crash's own numbers, so it is a ratchet and not a
+comment: *"the camera at order -1 still believes the target is (3396, 1356) while the image is
+(3440, 1440)"*. The measurement behind it is `examples/probe_surface_resize.rs`.
 
 ### D4 — Three clickable shapes, five states *(answers F10, F11)*
 
@@ -377,6 +406,75 @@ editor's docks. `←`/`→` clamp at the ends instead of carousel-wrapping.
 - Every clickable must be one of the three builders; every overlay must declare a `GlobalZIndex`;
   every panel must come from `panel_root`.
 
+### F20 — The editor's two halves could not be crossed without the menu *(new, 2026-10-21)*
+
+**This audit found every *visual* defect in the editor, and missed this one** — which is worth
+saying plainly, because it is the same class as F19: the finding is not a picture.
+
+The editor has two doors. The **Kit** door authors content — meshes, tiles, compositions. The
+**Map** door builds the level out of it. The door is chosen at startup (`--door kit`,
+`--door map`), and there was **no key that changed it**.
+
+**Measured on 2026-10-21, the round trip was three keystrokes and a full project reload**:
+`Cmd+O`, walk a column, `Enter` — each way. The reload re-reads `kits.ron`, `vocab.ron` and
+`rules.ron`, re-validates 332 library descriptors and 16 compositions, and **re-measures every
+GLB's triangle count** from its JSON chunk. None of that changes when the author walks from one
+door to the other to look at the thing they just made.
+
+**And the workflow it broke** is the one the editor exists for: *stamp a house on the map, walk to
+the Kit door, read the house's members and what has gone stale under them, walk back, place the
+next one.* **Each of those walks was three keystrokes and a reload.**
+
+**Fixed 2026-10-21** — one key (`=`) crosses, and the crossing **keeps the project**. The `Ownership`
+table already said it should: `Project` is *"reloaded when the kit is not"*.
+
+**Three things the fix had to learn, and none of them were about the key:**
+
+- **A crossing must happen in `PreUpdate`.** The editor's Map-door systems are gated by
+  `Door::map_door_is_open` — a **run condition on the tuple** — and Bevy evaluates a *set's*
+  conditions **once per schedule** (`bevy_ecs-0.20.0/src/schedule/executor/multi_threaded.rs`:
+  `evaluated_sets`). A crossing inside `Update` left that condition evaluated against the *old*
+  door, and four systems that take a `Res<OpenMap>` ran on the Kit door, which has no map — and
+  Bevy 0.19 **panics a system whose `Res<T>` is missing** rather than skipping it.
+- **The world must never be without a project.** The first version took the `Project` out and put
+  it back in `Chosen`, and **twenty** editor systems read one in the frame it was missing.
+- **The key has to be legible, and only the picture said so.** The backquote was the first choice —
+  the industry's cue for "the other place" — and **at 11 px it read as a speck**. `=` is the widest
+  mark on the keyboard, the most legible of the free ones, and the shape of a toggle.
+
+**And the headless harness never registered `ScreenPlugin`**, so a door change had **no test at
+all** — which is why the crossing's own test went green while the door's working state *survived*
+it. The harness registers it now.
+
+### F19 — The Map door could not arm a composition, and the arm died with the door *(new, 2026-10-21)*
+
+**This audit found every visual defect in the editor and missed this one**, which is worth saying
+plainly: the finding is not a picture, and a picture is what this audit is made of.
+
+The COMPOSE tab could arm a composition, and the Map tab was where a composition is stamped. The
+two were on **different doors** — the door is chosen at startup (`--door kit`, `--door map`) — and
+the arm was a field of `ComposeState`, which `Ownership::Door` resets. So the COMPOSE tab armed a
+house and said *"the map tab stamps it"*, and **there was no map tab in that process**.
+
+Measured on Sanctuary's project: **16 house compositions defined, 0 stamped, 727 hand-placed rows
+on the map.** The composer could read a group; nothing could *place* one.
+
+**Fixed 2026-10-21** — the arm is its own resource (`compose::Armed`, `Ownership::Session`), and the
+Map door grew a **COMPOSITIONS picker**: `P` takes the arrows, the arrows walk the compositions,
+`Enter` arms one. Four keystrokes and a click, on the door where stamping happens.
+
+**Two things the fix had to learn, and both are the editor's own rules:**
+
+- **A keyboard route is not a convenience — it is the route.** `bevy_picking` reads the mouse from
+  the `WindowEvent` stream (`bevy_picking-0.20.0/src/input.rs:153`) and BRP injects into
+  `ButtonInput<MouseButton>`, so **no `Button` in this editor receives a click over BRP** — the
+  palette's rows and the back button included. It was measured, and it is also the editor's own
+  brief: *"this should be done by the keyboard, as key strokes are faster."*
+- **A door change has no test, and that is why `close_the_door` is `pub`.** The headless harness does
+  not register `ScreenPlugin` — it inserts the state directly — so `OnExit(Editor)` never runs in a
+  test. The first attempt at the regression test went through the state machine and **passed on the
+  broken code**, because nothing was torn down. The teardown is now called directly.
+
 ---
 
 ## Part 5 — What changed
@@ -435,7 +533,7 @@ its own rule and nothing else.
 |---|---|---|
 | F1 | Surfaces do not separate | **Fixed.** Elevation ladder, borders, radii; `the_ladder_is_a_ladder` holds it |
 | F2 | Does not fill or scale with the window | **Fixed.** Menu columns flex to the window; `surface::ui_scale_for` grows density with width to a cap |
-| F3 | Map door crashes on direct boot | **NOT FIXED — see below** |
+| F3 | Map door crashes on direct boot | **Fixed 2026-10-21** — the cause was a one-frame-late `AssetEvent`; see below |
 | F4 | `+ new project` silently does nothing | **Fixed.** `create_project` existed and was unreachable; the bug was the keyboard wiring |
 | F5 | KIT INFO draws its value over its label | **Fixed.** `row_label`'s column is a floor, not a cap |
 | F6 | Count joins the sentence it labels | **Fixed.** `tiles::count_cell`, non-wrapping, its own column |
@@ -445,6 +543,8 @@ its own rule and nothing else.
 | F10 | Six row dialects | **Fixed.** Three shapes, ratcheted |
 | F11 | Dead and invisible clickables | **Fixed.** `KitRow` clicks, `ShelfChip` lights, `PaletteRow` joined the shared repainter and `editor::style_rows` is deleted |
 | F12 | Headings mean four things | **Fixed.** `INSPECTOR` / `PIECES` / `PLACE` / `RIGS`; no panel named for the application, no anagrams |
+| **F19** | **The Map door could not arm a composition, and the arm died with the door** | **Fixed 2026-10-21** — the arm is its own `Session` resource and the Map door grew a COMPOSITIONS picker |
+| **F20** | **The editor's two halves could not be crossed without the menu** | **Fixed 2026-10-21** — one key (`=`) crosses, and the crossing **keeps the project** |
 | F13 | Four dimmers, three opacities | **Fixed.** One `modal_card` |
 | F14 | Two modals, two contracts | **Fixed.** One shell, one z ladder |
 | F15 | Layout not uniform | **Fixed.** One `CONTROLS_W`, every left dock scrolls |
@@ -452,7 +552,7 @@ its own rule and nothing else.
 | F17 | Font ratchet laundering hole | **Fixed** by the type, not by a regex |
 | F18 | Nothing ratchets shape | **Fixed.** Five new ratchets |
 
-### F3 is open, and two fixes have been eliminated
+### F3 was open, and two fixes have been eliminated — **it is fixed now; the history is kept**
 
 **`bevy_emerge_mapper . <map>` still dies inside two seconds**, reproduced 4/4; booting through the
 chooser never does, 0/4. `bevy_render`'s default handler treats the validation error as fatal, so the

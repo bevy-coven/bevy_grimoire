@@ -410,6 +410,10 @@ pub fn mount_token(m: &Mount) -> &'static str {
     match m {
         Mount::OnFloor => "floor",
         Mount::OnSurface { .. } => "surface",
+        // Its own token rather than a second spelling of `surface`: the model has to be able to say
+        // "this could go either way", and folding it into `surface` would make every dressing set
+        // come back as surface-only — the guess the feature exists to stop being permanent.
+        Mount::OnSurfaceOrFloor { .. } => "surface_or_floor",
         Mount::OnFace { .. } => "face",
         Mount::OnWall { .. } => "wall",
         Mount::OnCeiling => "ceiling",
@@ -452,6 +456,12 @@ fn mount_meaning(m: &Mount) -> &'static str {
             "too small or unstable to stand on the ground - it belongs ON \
                                     TOP OF another piece of furniture (a mug, a lamp, a keyboard, \
                                     a book, a tray)"
+        }
+        Mount::OnSurfaceOrFloor { .. } => {
+            "small enough to sit on a table but also at home directly on the floor \
+                                          - a set of tools, a pile of ingots, a bundle of rods, a \
+                                          stack of sheets. Choose this only when BOTH readings are \
+                                          natural; a mug is `surface`"
         }
         Mount::OnFace { .. } => {
             "fixed flat against the vertical face of another piece - not \
@@ -500,7 +510,9 @@ fn mount_meaning(m: &Mount) -> &'static str {
 fn mount_shape(m: &Mount) -> String {
     let token = mount_token(m);
     match m {
-        Mount::OnSurface { class } => format!(r#"{{"on": "{token}", "class": "{class}"}}"#),
+        Mount::OnSurface { class } | Mount::OnSurfaceOrFloor { class } => {
+            format!(r#"{{"on": "{token}", "class": "{class}"}}"#)
+        }
         // A face carries both halves — the class saying which face, the height saying how far up
         // it — and `valid_mount` demands both rather than inventing either.
         Mount::OnFace { class, height } => {
@@ -873,6 +885,29 @@ fn valid_mount(raw: &RawMount, surfaces: &Vocabulary) -> Result<Mount, String> {
                 ));
             }
             Ok(Mount::OnSurface { class })
+        }
+        // **The same class demand as `surface`, and for the same reason.** The class is what matches
+        // a host, so a model that answered this token without one would be asking the library to
+        // invent the half of the sentence that decides where the piece lands.
+        "surface_or_floor" => {
+            let class = raw
+                .class
+                .clone()
+                .ok_or_else(|| {
+                    format!(
+                        "mount on `surface_or_floor` needs `class` — the class is one of: {}",
+                        surfaces.names().collect::<Vec<_>>().join(", ")
+                    )
+                })?;
+            if !surfaces.contains(&class) {
+                let hint = nearest(surfaces, &class)
+                    .map(|n| format!(" (did you mean `{n}`?)"))
+                    .unwrap_or_default();
+                return Err(format!(
+                    "mount class `{class}` is not a `surfaces` token{hint}"
+                ));
+            }
+            Ok(Mount::OnSurfaceOrFloor { class })
         }
         // **The face mount needs both halves, and neither is inventable.** A class the project has
         // not declared, or a height nobody stated, would be a guess written into a library entry —
@@ -1432,11 +1467,6 @@ pub fn probe(cfg: &VlmConfig) -> Reach {
         // An address this cannot parse is not evidence of anything; let the real request judge it.
         return Reach::Ready;
     };
-    // A remote endpoint (Ollama Cloud) is not worth a connect probe — DNS and TLS make a refusal
-    // mean several different things, and the request's own error is the better message.
-    if !(host == "localhost" || host.starts_with("127.") || host == "::1") {
-        return Reach::Ready;
-    }
     use std::net::ToSocketAddrs;
     let Ok(mut addrs) = (host.as_str(), port).to_socket_addrs() else {
         return Reach::Unreachable(format!("`{host}` does not resolve"));
@@ -1450,6 +1480,16 @@ pub fn probe(cfg: &VlmConfig) -> Reach {
     // asking anything, so a batch went back to learning the endpoint was down one mesh at a time.
     // Decided on the resolved address rather than the spelling of the host, so a name that maps to
     // the LAN is treated the same as its literal.
+    //
+    // **And the spelling gate that used to sit above this is gone.** It decided by the *spelling*
+    // — `localhost`, `127.`, `::1` — and answered `Ready` for everything else, **including a LAN
+    // address written out in full**. So the rule the comment above describes and the rule the
+    // code did were two different rules, and the code's won: the portable setup, the one this
+    // comment was written about, is exactly the one that never got a preflight.
+    //
+    // **The internet is still not probed**, and that is the same judgement: DNS and TLS make a
+    // refusal out there mean several different things, and the request's own error is the better
+    // message.
     let ip = addr.ip();
     if !is_near(ip) {
         return Reach::Ready;
@@ -1680,6 +1720,52 @@ mod tests {
                 !super::is_near(far),
                 "{far} is on the internet — its refusal means too many things to preflight on"
             );
+        }
+    }
+
+    /// **The preflight reaches a LAN host that is spelled as one.**
+    ///
+    /// **This is B-004**, and it is the one the code's own comment says it had already fixed.
+    ///
+    /// [`probe`] decided what to probe by the **spelling** of the host: loopback, `127.`, and
+    /// `::1` were probed, and **everything else was answered `Ready` without a single byte being
+    /// sent**. So the portable setup — the model bound to the LAN on bmb,
+    /// `EMERGE_VLM_URL=http://192.168.1.113:9292/…`, no SSH forward anywhere — **silently lost
+    /// its preflight**, and a batch went back to discovering a dead endpoint one mesh at a time.
+    ///
+    /// **The comment below the check says the rule is "decided on the resolved address rather
+    /// than the spelling of the host"** — and the check above it decides on the spelling. **The
+    /// two disagree, and the spelling won**, because the spelling is what the code does.
+    ///
+    /// **The test is on the LAN host, and it is a real one that is really down**: a socket bound
+    /// and dropped, so the port is genuinely closed. A `Ready` answer for a closed LAN port is the
+    /// bug, exactly.
+    #[test]
+    fn a_lan_host_that_is_down_is_not_reported_as_ready() {
+        use std::net::TcpListener;
+        // **A port that was open and is now closed.** Binding and dropping leaves the port
+        // unbound, and a connect to it is refused — the same thing a machine that is off does.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a port to borrow");
+        let port = listener.local_addr().expect("the borrowed port").port();
+        drop(listener);
+
+        let cfg = VlmConfig::from_lookup(|name| match name {
+            "EMERGE_VLM_KEY" => Some("test-key".to_owned()),
+            "EMERGE_VLM_URL" => Some(format!("http://192.168.1.113:{port}/v1/chat/completions")),
+            _ => None,
+        })
+        .expect("the config loads");
+
+        match probe(&cfg) {
+            Reach::Ready => panic!(
+                "the preflight said a LAN host on a closed port was READY, without sending a \
+                 single byte. The endpoint is down, and the batch would discover that one mesh at \
+                 a time -- which is the whole failure the preflight exists to prevent. The \
+                 portable setup (the model bound to the LAN on bmb, no SSH forward) is the case \
+                 that suffers, because a LAN address is not spelled like loopback."
+            ),
+            Reach::Unreachable(_) => {}
+            Reach::Warming(_) => {}
         }
     }
 

@@ -1,0 +1,16 @@
+{
+  "name": "move_the_camera",
+  "fps": 8,
+  "scale": 2,
+  "width": 600,
+  "crop": [470, 64, 950, 690],
+  "setup": [{"mcp": "emerge_frame_view", "args": {"target": {"rect": [16.6, -69.9, 56.6, -39.9]}}}],
+  "chunks": [{"seconds": 4.0}],
+  "steps": [
+    {"at": 0.4, "caption": "person: taps A and D to pan left and right"},
+    {"at": 0.8, "hold": "KeyD", "secs": 0.1},
+    {"at": 1.5, "hold": "KeyA", "secs": 0.1},
+    {"at": 2.2, "hold": "KeyD", "secs": 0.1},
+    {"at": 2.9, "hold": "KeyA", "secs": 0.1}
+  ]
+}

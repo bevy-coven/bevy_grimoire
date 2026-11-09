@@ -114,13 +114,18 @@ pub fn open(args: &[String]) -> Result<Opened, String> {
         })?,
     };
 
-    let project = Project::open(&root, kit)
-        .map_err(|e| format!("cannot open {}: {e}", root.display()))?;
+    let mut project =
+        Project::open(&root, kit).map_err(|e| format!("cannot open {}: {e}", root.display()))?;
 
     // **Only the Maps door takes a map**, and it is the only one that needs the second positional.
     let open_map = if door == Door::Map {
         let name = positional.get(1).copied().unwrap_or("untitled_map");
-        Some(OpenMap::open(&project, name).map_err(|e| format!("cannot open map `{name}`: {e}"))?)
+        let m =
+            OpenMap::open(&project, name).map_err(|e| format!("cannot open map `{name}`: {e}"))?;
+        // **And the project remembers the map's name**, so a crossing from the Kit door back to the
+        // Map door knows which map to open. See `Project::open_map_name`.
+        project.open_map_name = Some(m.map.name.clone());
+        Some(m)
     } else {
         None
     };

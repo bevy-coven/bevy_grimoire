@@ -100,8 +100,21 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
             // Two plugins, two jobs: the capture rig is the shared crate, the verbs are ours.
             bevy_devshot::DevShotPlugin,
             crate::devshot::DrivePlugin,
+            // **The file watcher** — a change on disk, in the editor, without a restart.
+            //
+            // In the shared list because it is about how the editor reads its own project, not
+            // about debugging: the editor holds a parsed copy of the project's files, and without
+            // this a developer who edited one saw nothing happen until they restarted.
+            crate::watch::WatchPlugin,
+            // **The capture sequencer** -- the editor takes the frames, so frame 0 is the state
+            // before the operation and the operation is applied after it.
+            crate::sequencer::SequencerPlugin,
         ),
     ));
+    // **The paint system belongs to the editor too.** `bevy_emerge::apply_paint` is what gives a
+    // painted piece its biased material, and it lives in `EmergePlugin`, which the game installs and
+    // the editor did not. Without this, a placement's paint was written and read and drawn nowhere.
+    app.add_plugins(bevy_emerge::EmergePlugin);
     // **The guide vocabulary belongs in the shared list; the transport does not.**
     //
     // `add_debugger_plugins` sits outside this function because it binds a port and a test process
@@ -113,6 +126,10 @@ pub fn add_editor_plugins(app: &mut App) -> &mut App {
     // The `#[cfg]` is on the module rather than on a tuple element, so the list above stays one list.
     #[cfg(feature = "debugger")]
     app.add_plugins(crate::guided::GuidePlugin);
+    // **The agent's presentation question** (S1.7). Its own `add_plugins` call rather than a tuple
+    // element: the list above is one element away from Bevy's fifteen-plugin cap, and a plugin that
+    // owns one question and one system does not need to be in that list.
+    app.add_plugins(crate::present::PresentPlugin);
     app
 }
 
@@ -140,7 +157,7 @@ pub fn add_debugger_plugins(app: &mut App) -> &mut App {
         .and_then(|p| p.parse::<u16>().ok())
         .unwrap_or(bevy::remote::http::DEFAULT_PORT);
     app.add_plugins((
-        bevy_debugger_bevy::DebuggerPlugin,
+        bevy_debugger_bevy::DebuggerPlugin::default(),
         bevy::remote::http::RemoteHttpPlugin::default().with_port(port),
         // **The capture target is `crate::surface`'s, and it is in the SHARED list, not this one.**
         // There used to be a `DebugCapturePlugin` here owning a second `Camera3d` that mirrored the
@@ -148,6 +165,13 @@ pub fn add_debugger_plugins(app: &mut App) -> &mut App {
         // one camera. The editor now draws world and interface into one surface and shows it in the
         // window, so the image an agent reads is the image the author is looking at. That belongs
         // in the shared list because it is how the application draws, not a debugging addition.
+        //
+        // **The agent's door is here, and not in the shared list**, for the same reason the
+        // transport is: it registers BRP methods, and a headless test process builds several
+        // `App`s and cannot have two things bound to one port. `crate::ops_brp` registers typed
+        // commands that dispatch through `crate::ops::dispatch` — the same function the key
+        // handlers call — so an agent and a person are doing one thing, not two.
+        crate::ops_brp::OpsBridgePlugin,
     ))
 }
 
@@ -238,10 +262,13 @@ pub fn build_headless_at(
     mode: crate::tiles::Mode,
 ) -> Result<App, String> {
     let door = crate::tiles::Door::showing(mode);
-    let project = crate::project::Project::open(root, kit)?;
+    let mut project = crate::project::Project::open(root, kit)?;
     // **The map is its own resource**, because four of the five doors do not have one — see
     // `project::OpenMap`. The headless harness stands up the Maps door, which does.
     let open_map = crate::project::OpenMap::open(&project, map)?;
+    // **And the project remembers the map's name**, so a crossing from the Kit door back to the Map
+    // door knows which map to open. See `Project::open_map_name`.
+    project.open_map_name = Some(open_map.map.name.clone());
     let mut app = App::new();
 
     // **The injected-pointer resource, without the plugin that owns it.**
@@ -324,6 +351,24 @@ pub fn build_headless_at(
     }
 
     add_editor_plugins(&mut app);
+    // **The screen plugin, so a test can change the door.**
+    //
+    // The harness stands up a door by inserting the state directly, and it did **not** register
+    // `ScreenPlugin` — so `OnExit(Editor)` never ran and `close_the_door` was unreachable. That was
+    // found on 2026-10-21, when the door switch's own test went green while the door's working
+    // state **survived** the crossing: the teardown had not run at all.
+    //
+    // **Registering it is safe for the other tests**, because `ScreenPlugin` only adds `OnExit` and
+    // `OnEnter` schedules for `Screen`, and the harness's state is `Screen::Editor` — so `OnEnter`
+    // runs on the first frame and `OnExit` only runs when a test asks to leave. The harness's own
+    // `insert_state(Screen::Editor)` is what `OnEnter(Editor)` is for, and it is the *same* set of
+    // spawns the binary's first frame runs.
+    //
+    // **Guarded, because a test may add it itself** — `leaving_a_door_survives_the_frames_after_it`
+    // does, and Bevy refuses a plugin added twice.
+    if !app.is_plugin_added::<crate::screen::ScreenPlugin>() {
+        app.add_plugins(crate::screen::ScreenPlugin);
+    }
     install_font(&mut app, &root)?;
     Ok(app)
 }

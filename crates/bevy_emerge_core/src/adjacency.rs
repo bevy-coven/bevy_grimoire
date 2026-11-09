@@ -222,6 +222,8 @@ pub(crate) fn index(v: f32, (lo, hi): (f32, f32), n: u32) -> u32 {
     (((v - lo) / (hi - lo) * n as f32) as i64).clamp(0, n as i64 - 1) as u32
 }
 
+type SeamTokens<'a> = (Vec<Option<&'a str>>, Vec<Option<&'a str>>);
+
 /// **The tokens either side of a seam presents to the other, over the part they actually share.**
 ///
 /// # Why not whole faces
@@ -256,7 +258,7 @@ pub fn seam<'a>(
     b_at: Placed3,
     dir: Dir,
     subunit: f32,
-) -> Option<(Vec<Option<&'a str>>, Vec<Option<&'a str>>)> {
+) -> Option<SeamTokens<'a>> {
     if !(subunit.is_finite() && subunit > 0.0) {
         return None;
     }
@@ -331,7 +333,11 @@ pub struct Fault {
 }
 
 /// N, E, S, W as an author reads them.
-fn dir_name(dir: Dir) -> &'static str {
+///
+/// Public because a report that names a fault's direction must spell it the one way this crate
+/// spells it: a second copy in the editor is a second spelling, and the two drift the first time
+/// one of them gains a word.
+pub fn dir_name(dir: Dir) -> &'static str {
     match dir {
         N => "N",
         E => "E",
@@ -576,18 +582,18 @@ pub fn faults(map: &Map, library: &Library, divisions: u32) -> Vec<Fault> {
                 // declared anywhere near it is nobody's problem, and saying so would bury the faults
                 // that are.
                 for t in [a, b] {
-                    if let Err(message) = &t.turned {
-                        if !yaw_reported.contains(&t.id) {
-                            yaw_reported.push(t.id);
-                            out.push(Fault {
-                                a: t.id.to_owned(),
-                                b: String::new(),
-                                dir: N,
-                                a_face: Vec::new(),
-                                b_face: Vec::new(),
-                                message: message.clone(),
-                            });
-                        }
+                    if let Err(message) = &t.turned
+                        && !yaw_reported.contains(&t.id)
+                    {
+                        yaw_reported.push(t.id);
+                        out.push(Fault {
+                            a: t.id.to_owned(),
+                            b: String::new(),
+                            dir: N,
+                            a_face: Vec::new(),
+                            b_face: Vec::new(),
+                            message: message.clone(),
+                        });
                     }
                 }
                 // **The part they share, not the whole face.** See [`seam`] for why, and for the two
@@ -758,14 +764,14 @@ mod tests {
         );
     }
 
-    /// **The inert property, and it must hold without a branch.** Every shipped descriptor has an
-    /// empty lattice, so every face is all-`None`, so everything matches everything. If this ever
+    // **The inert property, and it must hold without a branch.** Every shipped descriptor has an
+    // empty lattice, so every face is all-`None`, so everything matches everything. If this ever
 
 
-    /// Faces of different lengths cannot agree, rather than agreeing on a prefix.
-    ///
-    /// Divisions are derived from size now, so this is the differently-**sized** case: a piece one
-    /// cell deep beside one three cells deep. Their faces are genuinely different shapes and saying
+    // Faces of different lengths cannot agree, rather than agreeing on a prefix.
+    //
+    // Divisions are derived from size now, so this is the differently-**sized** case: a piece one
+    // cell deep beside one three cells deep. Their faces are genuinely different shapes and saying
 
     /// Four quarter turns put every cell back where it started.
     #[test]

@@ -25,6 +25,7 @@
 //! disagree, and STALE says which member changed underneath it and by how much. A badge that says
 //! only "something is wrong" would be the version of this tool that gets ignored.
 
+use bevy::input::keyboard::Key;
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
@@ -34,6 +35,64 @@ use crate::chrome::{ACCENT, DANGER, DIM, TEXT};
 use crate::keys::{self, Action};
 use crate::project::Project;
 use crate::tiles::{ComposeRoot, Mode};
+
+/// **Which composition the next click stamps** — and the one thing in the editor that outlives a
+/// door change.
+///
+/// # Why it is not on [`ComposeState`]
+///
+/// It used to be, and that was a wall rather than a detail. `ComposeState` is
+/// `Ownership::Door` — a door change resets it, which is right for its *cursors* (a different
+/// kit's composition ids mean nothing here) and right for its *staged carousel* (the entities are
+/// despawned). But the arm is neither: it is **the author's intent**, it names a composition by
+/// id, and it is meaningless if a door change throws it away.
+///
+/// The cost of that wall was measured on 2026-10-21. The COMPOSE tab armed a house and said
+/// *"the map tab stamps it"* — and there was no map tab in that process, because the door is
+/// chosen at startup. The author's only route to a stamp was to leave, come back through the menu,
+/// re-open the map, and **re-arm the composition by hand**, because the arm had been reset.
+/// Sixteen house compositions were defined in Sanctuary's project and not one was stamped on
+/// either map; the maps held 727 hand-placed rows and zero stamps.
+///
+/// So the arm is its own resource, and it is [`crate::screen::Ownership::Session`] — *"true for as
+/// long as the application runs"*. It is in memory, it is named, and it crosses.
+///
+/// # Named, never indexed
+///
+/// A composition id, exactly as `ComposeState::armed` held it. An index would re-point the
+/// moment `compositions.ron` gained a row above it, which is the same argument
+/// [`bevy_emerge_core::composition::Override`] makes about naming a member. A *stale* arm is also
+/// safe for the same reason: it is a name, so it either resolves against the project or the stamp
+/// is refused by name.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug)]
+pub struct Armed(pub Option<String>);
+
+impl Armed {
+    /// The armed composition's id, if there is one.
+    pub fn id(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+
+    /// Whether this composition is the armed one — the question every row in the picker asks.
+    pub fn is(&self, id: &str) -> bool {
+        self.0.as_deref() == Some(id)
+    }
+
+    /// **Arm this composition, or disarm it if it was already armed.**
+    ///
+    /// One writer, because the two doors' pickers and the COMPOSE tab's own row must agree: a
+    /// second writer is a second answer to "what is armed", and the crate spends its refusals on
+    /// exactly that shape.
+    pub fn toggle(&mut self, id: &str) -> bool {
+        if self.is(id) {
+            self.0 = None;
+            false
+        } else {
+            self.0 = Some(id.to_owned());
+            true
+        }
+    }
+}
 
 /// **Where the Compose tab stands the group it is editing.**
 ///
@@ -77,6 +136,14 @@ pub struct ComposeState {
     /// Index into `project.compositions.compositions`. Clamped on rebuild rather than stored as an
     /// `Option`, because the list is never empty while a selection exists.
     pub selected: usize,
+    /// **The name being typed for a composition**, or `None` when nothing is being named.
+    ///
+    /// **Its own field, and the crate says why**: `chrome::paint_name_box`'s own doc asks for
+    /// exactly this — *"if a second tab ever asks again the answer is another field, not another
+    /// condition on this one."* The Map owns `EditorState::grouping` and the Tiles tab owns
+    /// `Build::naming`; the COMPOSE tab owns this one. Three fields, one box, and the box's title
+    /// says which question is being answered.
+    pub renaming: Option<ComposeRename>,
     /// Index into the selected group's members — the second cursor, under the one above. Clamped the
     /// same way and for the same reason.
     pub member: usize,
@@ -86,12 +153,10 @@ pub struct ComposeState {
     /// defect this tab was rebuilt for, so this is drawn — see `rebuild`, which tints the focused
     /// list's header — and the lists are all on screen at once rather than one at a time.
     pub focus: Pane,
-    /// **The armed group** — by id, never by index.
+    /// **The armed group** used to live here, and it is now [`Armed`] — its own resource, and the
+    /// one thing in the editor that outlives a door change. See that type for the measurement that
+    /// moved it.
     ///
-    /// An index would silently re-point the moment `compositions.ron` gained a row above it, which is
-    /// the same argument [`bevy_emerge_core::composition::Override`] makes about naming a member. The id
-    /// costs one lookup at stamp time and cannot go stale.
-    pub armed: Option<String>,
     /// **What was last stood up**, so nothing is respawned unless the picture actually changed.
     ///
     /// This exists for a defect rather than for speed. [`restage_group`] takes `ResMut<ComposeState>`
@@ -110,15 +175,29 @@ pub struct ComposeState {
     pub status: crate::chrome::Status,
 }
 
+/// **The name being typed for a composition.**
+///
+/// **The raw text and the composition it is for.** The raw text is what the author typed — before
+/// `to_snake_case`, so the field can show what they are typing as they type it and the naming rule
+/// teaches itself. The id it is for is named rather than indexed, because the list is rebuilt
+/// wholesale and an index would silently re-point.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComposeRename {
+    /// What has been typed, before `to_snake_case`.
+    pub raw: String,
+    /// The composition being renamed.
+    pub of: String,
+}
+
 /// Written out rather than derived, so adding a field costs a compile error here — which is the right
 /// place to be asked whether its zero value is the one this tab should open in.
 impl Default for ComposeState {
     fn default() -> Self {
         ComposeState {
             selected: 0,
+            renaming: None,
             member: 0,
             focus: Pane::default(),
-            armed: None,
             staged: None,
             status: crate::chrome::Status::default(),
         }
@@ -174,6 +253,12 @@ pub struct ComposePlugin;
 impl Plugin for ComposePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ComposeState>()
+            // **The arm is a `Session` resource, not a `Door` one** — see [`Armed`]. It is the
+            // author's intent, and it crosses a door change.
+            .init_resource::<Armed>()
+            // **The picker's cursor**, and whether it has the keyboard. `Session`, like the arm: the
+            // cursor is the author's, not the door's.
+            .init_resource::<picker::Picker>()
             .init_resource::<StagedCarousel>()
             .init_resource::<Budget>()
             .add_systems(Update,
@@ -196,6 +281,14 @@ impl Plugin for ComposePlugin {
                 ((walk, arm, cycle_focus, step_carousel, pick_slot)
                     .in_set(keys::Phase::Act)
                     .run_if(in_compose_mode),)
+                    .run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            // **The rename, in `Phase::Text`** — the fields run last and the actions run first, so
+            // census action cannot fire on a keystroke a field has already swallowed. See
+            // `keys::Phase`.
+            .add_systems(
+                Update,
+                (rename.in_set(keys::Phase::Text).run_if(in_compose_mode),)
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             // Not gated on the mode: the staged strip is despawned when the tab is left, and a
@@ -236,8 +329,117 @@ impl Plugin for ComposePlugin {
             // Observers rather than screen-gated systems: they fire on rows that only the Kit
             // door ever spawns, so the screen is already implied by the entity.
             .add_observer(on_comp_row_click)
-            .add_observer(on_member_row_click);
+            .add_observer(on_member_row_click)
+            // **The Map door's picker**, and its observer. The observer is global for the same
+            // reason the two above are: a click on a `Button` anywhere must not panic the
+            // application, and a missing `Res<Project>` on the menu screen would.
+            .add_observer(picker::on_row_click)
+            .add_systems(
+                Update,
+                (rebuild_picker.after(keys::Phase::Act))
+                    .run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            // **The picker's keyboard route**, on the Map door only — the picker is a block in the
+            // Map door's INSPECTOR panel and nothing else spawns it.
+            .add_systems(
+                Update,
+                (
+                    (picker::walk, picker::act)
+                        .in_set(keys::Phase::Act)
+                        .chain(),
+                )
+                    .run_if(in_state(crate::screen::Screen::Editor))
+                    .run_if(crate::editor::in_map_mode),
+            );
     }
+}
+
+/// **The Map door's picker, drawn.** The project's compositions, the armed one starred.
+///
+/// **Not gated on the door** — the Map door is the only one that spawns the block, so the query is
+/// empty elsewhere and the system does nothing. A system that stops running cannot despawn what it
+/// drew, and the block belongs to the Map door's panel, which the door's own teardown removes.
+fn rebuild_picker(
+    mut commands: Commands,
+    project: Res<Project>,
+    armed: Res<Armed>,
+    picker: Res<picker::Picker>,
+    body: Query<Entity, With<picker::PickerBody>>,
+    children: Query<&Children>,
+) {
+    if !(project.is_changed() || armed.is_changed() || picker.is_changed()) {
+        return;
+    }
+    let Ok(root) = body.single() else {
+        return;
+    };
+    // **The whole block is emptied, not just the rows.** A despawn is deferred, so for one frame
+    // the old rows are still in the world — and they are still on top, still holding the pointer's
+    // hover, and still carrying the `PickerRow` index the click will read. That is what a click on
+    // the *second* row did: it read the *first* row's index and toggled the first row off, because
+    // the old row was the one under the pointer.
+    //
+    // Emptying the block's **children** is the same shape the COMPOSE tab's `rebuild` uses, and it
+    // closes the window: the rows and their parent go together, and nothing is left to answer a
+    // click meant for a row that has moved. The block itself stays — it carries the marker the
+    // query finds.
+    if let Ok(kids) = children.get(root) {
+        for e in kids.iter() {
+            commands.entity(e).despawn();
+        }
+    }
+    commands.entity(root).with_children(|p| {
+        if project.compositions.compositions.is_empty() {
+            // **A project with no compositions says so, and says it in the panel.** A project with
+            // none stamps nothing, which is not a broken one — the same words the COMPOSE tab uses,
+            // so the author learns one sentence and meets it twice.
+            crate::chrome::row_value(
+                p,
+                "none — this project stamps nothing",
+                crate::chrome::DIM,
+                (),
+            );
+            return;
+        }
+        for (ix, c) in project.compositions.compositions.iter().enumerate() {
+            let is_armed = armed.is(&c.id);
+            // **The cursor's row is the selected one**, so the picker says where the arrows are
+            // even when the picker does not have the keyboard. The armed row is a *different* mark
+            // — the `*` — and the two are told apart by their ink, not by their background.
+            let is_cursor = picker.selected == ix;
+            crate::chrome::list_row(p, is_cursor, (picker::PickerRow(ix),))
+                .with_children(|row| {
+                    row.spawn((
+                        Text::new(c.id.clone()),
+                        TextColor(crate::chrome::TEXT),
+                        crate::chrome::font(crate::chrome::text::BODY),
+                    ));
+                    if is_armed {
+                        // **The armed mark in its own ink** — the same `*` the COMPOSE tab's rows
+                        // carry for "this is the one a stamp places", so the two lists say the same
+                        // thing the same way.
+                        row.spawn((
+                            Text::new("  *"),
+                            TextColor(crate::chrome::ACCENT),
+                            crate::chrome::font(crate::chrome::text::BODY),
+                        ));
+                    }
+                })
+                // **Pickable, and that is what makes the row a button.**
+                //
+                // The whole frame is `Pickable::IGNORE` — the editor's chrome answers no clicks, so
+                // a click meant for the map falls through to the map. `Pickable` is *inherited*, so
+                // a row inside the frame is unpickable too, and `bevy_ui_widgets::Button` never
+                // sees a `PointerPress` — so it never gets `Pressed`, and it never triggers
+                // `Activate`. The row looks like a row and does nothing.
+                //
+                // The back button in the chrome bar makes the same move, and says why: *"the bar
+                // is `Pickable::IGNORE` so the frame answers no clicks; this narrows that for the
+                // one node on it that is a button."* This is the Map door's one node that is a
+                // button.
+                .insert(bevy::picking::Pickable::default());
+        }
+    });
 }
 
 /// **Put the group cursor on `ix`, and the member cursor back at the top.**
@@ -305,6 +507,10 @@ fn clamp_selection(project: Res<Project>, mut state: ResMut<ComposeState>) {
     }
 }
 
+// One follower query, aliased, so `ComposeBody` and its `ScrollPosition` sit on one line.
+// `every_list_follows_its_selection` reads this file as text and checks exactly that.
+type BodyFollower<'w, 's> = Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition), (With<ComposeBody>, Without<CompRow>, Without<MemberRow>)>;
+
 /// **The compose body follows whichever list has the arrows.**
 ///
 /// Both lists live in ONE scroll area — `rebuild` builds the compositions and the selected group's
@@ -325,10 +531,7 @@ fn keep_compose_selection_on_screen(
     state: Res<ComposeState>,
     comp_rows: Query<(&CompRow, &ComputedNode, &UiGlobalTransform)>,
     member_rows: Query<(&MemberRow, &ComputedNode, &UiGlobalTransform)>,
-    mut lists: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (With<ComposeBody>, Without<CompRow>, Without<MemberRow>),
-    >,
+    mut lists: BodyFollower<'_, '_>,
     mut follow: Local<crate::chrome::Follow<(Pane, usize)>>,
 ) {
     let want = match state.focus {
@@ -641,8 +844,8 @@ fn walk(
         // and an arrow that answers nothing at all is the defect. The groups list needs nothing
         // here: `rebuild` states *that* empty case in prose that stays on screen, which is the right
         // lifetime for a fact about the file rather than about a keypress.
-        if state.focus == Pane::Members {
-            if let Some(said) = project
+        if state.focus == Pane::Members
+            && let Some(said) = project
                 .compositions
                 .compositions
                 .get(state.selected)
@@ -650,7 +853,6 @@ fn walk(
             {
                 state.status.note(said);
             }
-        }
         return;
     }
     let last = (n - 1) as i64;
@@ -676,14 +878,22 @@ fn walk(
 /// group. The library list went with authoring, so one key means one thing again.
 fn arm(
     mut state: ResMut<ComposeState>,
+    mut armed: ResMut<Armed>,
     project: Res<Project>,
     keys: Res<keys::Live>,
     input: Res<ButtonInput<KeyCode>>,
 ) {
+    // **`Enter` is not the arm's while the name field is open**, and that is the guard's job, not
+    // this function's: `editor::Fields::typing` counts the COMPOSE tab's rename prompt, so
+    // `keys::Context::Typing` holds the keyboard and every other action is refused. See
+    // `editor::Fields` — *"Adding a field is adding a line, here and nowhere else."*
+    //
+    // **The phases do not do this.** `Phase::Text` runs *before* `Phase::Act`, so the rename commits
+    // first and the arm would run second, on the same frame, with the same key still down.
     if !keys::just_pressed(&input, *keys, Action::ComposeArm) {
         return;
     }
-    toggle_arm(&mut state, &project);
+    toggle_arm(&mut state, &mut armed, &project);
 }
 
 /// **Arm the selected group, or disarm it if it was already armed.**
@@ -692,17 +902,136 @@ fn arm(
 /// the two immediately disagreed — the keyboard toggled and the sentinel did not — so a captured
 /// frame was evidence about a path no author could take, which is the one thing that driver exists to
 /// avoid.
-pub fn toggle_arm(state: &mut ComposeState, project: &Project) {
+///
+/// **The arm itself is [`Armed`], not this state** — see that type for the measurement that moved
+/// it. What is left here is *which* composition the COMPOSE tab's own cursor is on, and the receipt
+/// the author reads.
+pub fn toggle_arm(state: &mut ComposeState, armed: &mut Armed, project: &Project) {
     let Some(c) = project.compositions.compositions.get(state.selected) else {
         state.status.note("no composition to arm");
         return;
     };
-    if state.armed.as_deref() == Some(c.id.as_str()) {
-        state.armed = None;
-        state.status.note(format!("`{}` disarmed", c.id));
+    if armed.toggle(&c.id) {
+        state
+            .status
+            .note(format!("`{}` armed — the map stamps it", c.id));
     } else {
-        state.armed = Some(c.id.clone());
-        state.status.note(format!("`{}` armed — the map tab stamps it", c.id));
+        state.status.note(format!("`{}` disarmed", c.id));
+    }
+}
+
+/// **Rename the composition this tab is showing** — `I` opens the name, `Enter` keeps it, `Esc`
+/// leaves it alone.
+///
+/// **The same shape as the Meshes tab's id field**, because it is the same verb: *"say what this
+/// thing is called"*. The name is forced to snake_case as it is typed, so the naming rule teaches
+/// itself and an illegal id is never *reachable* rather than merely rejected at the end.
+///
+/// **And every map that stamps the composition follows** — see
+/// [`bevy_emerge_core::composition::rename_composition`]. A rename that updated the composition and
+/// left the maps naming the old one would be a **partial rename**, and a partial rename is a project
+/// that will not open.
+fn rename(
+    mut events: MessageReader<bevy::input::keyboard::KeyboardInput>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    live: Res<keys::Live>,
+    mut state: ResMut<ComposeState>,
+    // **Mutable, because the rename writes through it** — `Project::rename_composition` is the one
+    // door, and it hands back the project the file now says.
+    mut project: ResMut<Project>,
+    mut open: Option<ResMut<crate::project::OpenMap>>,
+) {
+    if state.renaming.is_none() {
+        if keys::just_pressed(&keyboard, *live, Action::RenameComposition) {
+            let Some(c) = project.compositions.compositions.get(state.selected) else {
+                state.status.note("no composition to rename");
+                return;
+            };
+            state.renaming = Some(ComposeRename {
+                // **The field starts EMPTY**, so the first keystroke replaces rather than appends —
+                // the same rule the Meshes tab's id field follows.
+                raw: String::new(),
+                of: c.id.clone(),
+            });
+            state
+                .status
+                .note("type a new name — Enter keeps it, Esc leaves it alone".to_owned());
+        }
+        // **Drain before leaving**, or the `I` that opened the field is read as its first character
+        // next frame. The same invariant every field in this crate guards.
+        events.clear();
+        return;
+    }
+
+    for event in events.read() {
+        if !event.state.is_pressed() {
+            continue;
+        }
+        match &event.logical_key {
+            Key::Enter => {
+                let Some(rename) = state.renaming.take() else {
+                    return;
+                };
+                // **`to_id`, not `to_snake_case`.** A composition's id may carry a `/`
+                // namespace — *which kit, which piece* — and `to_snake_case` drops every
+                // character that is not a letter or a digit. So `town/house_cottage_brick` typed
+                // into the field came out as `town_house_cottage_brick`: a different id, in a
+                // different namespace, colliding with nothing. `to_id` forces each segment and
+                // keeps the separators.
+                let id = bevy_emerge_core::naming::to_id(&rename.raw);
+                if id.is_empty() {
+                    // **A refusal, so a problem.** The editor could not do what was asked — the
+                    // name was empty — and the rule is that a refusal reaches the toast and the
+                    // journal, not the one dim receipt row a later action erases.
+                    state
+                        .status
+                        .problem("a name cannot be empty; nothing was changed".to_owned());
+                    return;
+                }
+                // **The write goes through `project.rs`** — the one module allowed to name the
+                // compositions file. See `tests/compose_is_read_only.rs`: *"project.rs is the only
+                // module that names the file, and every tab reaches it there."*
+                if let Err(e) = crate::project::Project::rename_composition(
+                    &mut project,
+                    &rename.of,
+                    &id,
+                    open.as_deref_mut(),
+                ) {
+                    // **The refusal reaches the toast and the journal.** The note line still said
+                    // *"type a new name — Enter keeps it"* — advice for a field that is now closed,
+                    // which is worse than no advice: an author reading it would press `I` again.
+                    // The crate's own rule is that *"a problem outlives every note"*, so the
+                    // refusal is safe in the problem slot; filing it in the **note** as well meant
+                    // two rows said one thing, and the note was the one a later action erased.
+                    state.status.problem(format!("NOT RENAMED: {e}"));
+                } else {
+                    // **The receipt says how to get back.** The rename is symmetric by
+                    // construction — the same writer, the same rules, the other direction — and
+                    // a reader who wants to back out should not have to work that out. A receipt
+                    // that only says what happened leaves the author hunting for the way back.
+                    state.status.note(format!(
+                        "`{}` is now `{id}`, and every map that stamped it follows. Rename it \
+                         back to undo.",
+                        rename.of
+                    ));
+                }
+            }
+            Key::Escape => {
+                state.renaming = None;
+                state.status.note("the name is unchanged".to_owned());
+            }
+            Key::Backspace => {
+                if let Some(rename) = state.renaming.as_mut() {
+                    rename.raw.pop();
+                }
+            }
+            Key::Character(text) => {
+                if let Some(rename) = state.renaming.as_mut() {
+                    rename.raw.push_str(text);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -815,6 +1144,9 @@ impl Carousel {
     }
 }
 
+/// A group's footprint: its centre on the stage, then its width and depth.
+type Footprint = ((f32, f32), (f32, f32));
+
 /// **How much floor one group takes**, or why that cannot be answered.
 ///
 /// The two-variant match the schema already forces, and the same one [`member_footprint`] makes:
@@ -837,7 +1169,7 @@ pub fn footprint(
     c: &Composition,
     comps: &[Composition],
     library: &bevy_emerge_core::library::Library,
-) -> Result<((f32, f32), (f32, f32)), String> {
+) -> Result<Footprint, String> {
     match c.envelope {
         Envelope::Bounded { size } => Ok(((0.0, 0.0), (size.0, size.2))),
         Envelope::Anchored => {
@@ -1229,7 +1561,19 @@ const ENVELOPE_IDLE: Color = crate::chrome::scaled(crate::chrome::ACCENT, 0.5);
 struct SlotLabel(usize);
 
 /// How far below the slot's projected centre the label sits, in logical pixels.
-const LABEL_DROP: f32 = 4.0;
+pub const LABEL_DROP: f32 = 4.0;
+
+/// **What a label says when its name could not be shown.**
+///
+/// **Furnas (2006)**, *A Fisheye Follow-up: Further Reflections on Focus + Context*, CHI
+/// ([10.1145/1124772.1124921](https://doi.org/10.1145/1124772.1124921)) — *"Explicit elision
+/// markers"* — and the editor's own rule from the 2026-10-20-07b run: a refusal is reported in
+/// the channel the author watches.
+///
+/// **So the name is elided, visibly, and the group is still there.** Three dots, because the
+/// name is one action away — `O`/`P` step the carousel to it, and the panel beside the stage
+/// lists every group's full id.
+pub(crate) const ELIDED: &str = "…";
 
 /// Label type sizes: the focal group's, then a miniature's.
 ///
@@ -1336,6 +1680,8 @@ fn restage_group(
             stamps: Vec::new(),
             locations: Vec::new(),
             note: None,
+            // A stage for standing a group up, never a map that generates, so no wish is in play.
+            enclosure: bevy_emerge_core::map::Enclosure::default(),
         };
         let stamp = bevy_emerge_core::composition::Stamped {
             id: "staged".to_owned(),
@@ -1394,10 +1740,8 @@ fn restage_group(
             if let Some(e) = crate::editor::spawn_piece(
                 &mut commands,
                 &assets,
-                &d,
+                crate::editor::Pose { d: &d, yaw: p.yaw, tip: p.tip },
                 p.at,
-                p.yaw,
-                p.tip,
                 scratch.origin,
                 y,
             ) {
@@ -1538,10 +1882,12 @@ fn rebuild_labels(
     mut commands: Commands,
     carousel: Res<StagedCarousel>,
     state: Res<ComposeState>,
+    armed: Res<Armed>,
     project: Res<Project>,
     existing: Query<Entity, With<SlotLabel>>,
 ) {
-    if !(carousel.is_changed() || state.is_changed() || project.is_changed()) {
+    if !(carousel.is_changed() || state.is_changed() || armed.is_changed() || project.is_changed())
+    {
         return;
     }
     for e in &existing {
@@ -1551,7 +1897,7 @@ fn rebuild_labels(
         let Some(c) = project.compositions.compositions.get(slot.index) else {
             continue;
         };
-        let armed = state.armed.as_deref() == Some(c.id.as_str());
+        let armed = armed.is(&c.id);
         commands.spawn((
             SlotLabel(k),
             Text::new(if armed { format!("{} *", c.id) } else { c.id.clone() }),
@@ -1575,30 +1921,179 @@ fn rebuild_labels(
     }
 }
 
+/// **The label's own box, in the one space the drawing and the collision test both use.**
+///
+/// **Logical pixels, relative to the stage panel.** That is `Val::Px`'s own unit, so the drawing
+/// writes the box into the node **unchanged** — which is the whole point of this function existing
+/// as a separate, testable thing.
+///
+/// # The conversion, and it is the bug
+///
+/// Three spaces meet here, and getting them confused is what put every label in the wrong place:
+///
+/// | | space |
+/// |---|---|
+/// | the projection (`world_to_viewport`) | **physical** pixels, relative to the camera's viewport rect |
+/// | the node's size (`ComputedNode.size`) | **physical** pixels |
+/// | `Val::Px(x)` | **logical** pixels — Bevy multiplies it by `UiScale` on the way to physical |
+///
+/// **So the scale is applied exactly once, on the way in.** Measured on the editor at
+/// `UiScale(2.4)`, the focal group's 26-character id has a node 412 physical px wide and the
+/// projection answers at x 1765 — so the box's left is `(1765 - 412/2) / 2.4 = 649.58` logical,
+/// and the drawn ink starts at 649.58 × 2.4 = 1559 physical, which is the group's own centre.
+///
+/// **The width is the node's own size, not `chars × BODY_CHAR_W`.** The constant is right — the
+/// measurement above gives 6.60 logical px per glyph against `BODY_CHAR_W`'s 6.6 — but the *node*
+/// is what is drawn, and a collision test against a width that is not the drawn width is a
+/// collision test against the wrong thing. A `…` marker, a different face, or a glyph that is not
+/// the width of the rest measures itself.
+///
+/// **`None` when the node is not laid out yet**, or when the scale is not usable. A zero-sized node
+/// has no box, and a label with no box has nothing to collide with.
+pub fn label_box(
+    anchor: Vec2,
+    node_size: Vec2,
+    ui_scale: f32,
+) -> Option<crate::compose_labels::LabelBox> {
+    // --- **A zero or negative scale would be a host misconfiguration rather than a state to
+    // --- render around**, and dividing by it would put every label at infinity.
+    let s = if ui_scale > 0.0 { ui_scale } else { 1.0 };
+    let width = node_size.x / s;
+    let height = node_size.y / s;
+    if width <= 0.0 || height <= 0.0 {
+        // --- **Not laid out yet**, so there is nothing on screen and nothing to collide with.
+        return None;
+    }
+    Some(crate::compose_labels::LabelBox {
+        // --- **Centred on the group**, and **below** it: the label sits under its miniature, so
+        // --- the box's top is the anchor's `y` plus the drop.
+        left: anchor.x / s - width * 0.5,
+        top: anchor.y / s + LABEL_DROP,
+        width,
+        height,
+        height_allowance: LABEL_DROP,
+    })
+}
+
+/// **Where a slot's label goes on the screen, in the camera's viewport pixels.**
+///
+/// **The one place that answers it**, so the collision test and the drawing cannot disagree: the
+/// box builder and the drawing both call this, and a label that is tested in one place and drawn
+/// in another is how the first version of this passed its own test and still overlapped on
+/// screen.
+///
+/// **The footprint's near ground edge, not the group's origin.** The camera looks down at the
+/// strip, so the footprint's *nearest* edge projects **lower** on the screen than its centre —
+/// measured on Sanctuary's `town` kit, the focal house's near edge is at screen y 953 and its
+/// centre at 874. **A label placed at the centre is therefore drawn across the house's own
+/// wall**, which is exactly what it did: the label's ink sat at y 884..919, inside the house's
+/// 560..953.
+///
+/// **The x is the group's centre and the y is the lowest of its four ground corners.** The lowest
+/// corner, because the camera's yaw is not square to the strip — a single "front" corner would be
+/// the near one for one group and the far one for the next, and the label would jump about as the
+/// carousel stepped. The x stays at the centre, because a label under the *edge* of a miniature
+/// reads as belonging to its neighbour.
+///
+/// **`None` when the camera cannot see the group.** A group with no screen position has no label,
+/// and a label at a guessed position would name nothing.
+pub fn label_anchor(cam: &Camera, cam_tf: &GlobalTransform, slot: &Slot) -> Option<Vec2> {
+    // --- **The x is the group's own centre**, so the label sits under the middle of the miniature
+    // --- and not off to one side.
+    let centre = COMPOSE_STAGE + Vec3::new(slot.at.0, 0.0, slot.at.1);
+    let Ok(mid) = cam.world_to_viewport(cam_tf, centre) else {
+        return None;
+    };
+    // --- **The y is the lowest of the four ground corners**, because the camera looks down at the
+    // --- strip and the footprint's near edge is lower on the screen than its centre.
+    //
+    // --- **"Lowest" is the LARGER `y`.** A viewport's `y` grows *downwards* — `world_to_viewport`
+    // --- flips the NDC's `y` for exactly this reason (`bevy_camera`'s `world_to_viewport_core`:
+    // --- *"Flip the Y co-ordinate origin from the bottom to the top"*) — so the near edge is the
+    // --- one with the **largest** `y`, and taking the **smallest** put the label at the
+    // --- footprint's *far* edge, which is behind the miniature and therefore *inside* it.
+    let half = (slot.size.0 * 0.5, slot.size.1 * 0.5);
+    let mut lowest: Option<f32> = None;
+    for dx in [-half.0, half.0] {
+        for dz in [-half.1, half.1] {
+            let corner = COMPOSE_STAGE + Vec3::new(slot.at.0 + dx, 0.0, slot.at.1 + dz);
+            if let Ok(p) = cam.world_to_viewport(cam_tf, corner) {
+                lowest = Some(lowest.map_or(p.y, |l: f32| l.max(p.y)));
+            }
+        }
+    }
+    Some(Vec2::new(mid.x, lowest.unwrap_or(mid.y)))
+}
+
 /// **Put each label under its slot**, in logical window pixels.
 ///
 /// The single owner of a label's `display`, so there is one rule for when a label is on screen rather
 /// than two systems disagreeing about it. Hidden when the tab is not live and when the projection has
 /// no answer.
-/// **`world_to_viewport` answers in logical viewport pixels; `Val::Px` is multiplied by [`UiScale`].**
 ///
-/// Both entry points set `UiScale(1.2)` (`main.rs`, `harness.rs`), so writing the projection straight
-/// into a `Val::Px` put every label 20% further from the top-left than the point it names — invisible
-/// on the focal group at the centre of the screen, worst on the outermost miniatures, which is exactly
-/// the shape that reads as "the labels are a bit off" rather than as a bug.
+/// # The three spaces, and which is which
+///
+/// **This is the whole bug, and it took a measurement to settle it**, so the answer is written down
+/// here rather than rediscovered. Measured on the editor at `UiScale(2.4)`, on a 2560×1406 window
+/// (Sanctuary's `town` kit, the COMPOSE tab, the focal group's 26-character id):
+///
+/// | quantity | space | the measured value |
+/// |---|---|---|
+/// | `world_to_viewport` | **physical**, and relative to the **camera's viewport rect** | `(1765.0, 878.6)` |
+/// | the camera's viewport rect | physical, in the window | `970..2560 × 146..1344` |
+/// | `ComputedNode.size` | **physical** | `412 × 32` |
+/// | `UiGlobalTransform.translation` | **physical**, and the node's **centre** | `(1885.0, 899.0)` |
+/// | `Val::Px(x)` | **logical** — Bevy multiplies it by `UiScale` on the way to physical | — |
+///
+/// **So: the projection is physical, the node is physical, and `Val::Px` is logical.** The
+/// conversion is one division by `UiScale` — and getting it wrong is invisible, because the error
+/// is a *factor* and the labels still look roughly like they are near their groups.
+///
+/// ## What was wrong, and it was three things at once
+///
+/// 1. **The width.** `chars × BODY_CHAR_W` is a *logical* measurement, and the node's size is
+///    *physical* — so the two could not be compared without a division. The measurement confirms
+///    the constant is right: the focal node's 412 physical px over 26 characters is **6.60**
+///    logical px per glyph, and `BODY_CHAR_W` is **6.6**. The neighbour's 312 over 24 is **5.42**,
+///    and `6.6 × 9/11` is **5.4**. So the advance is right and the *space* was the problem.
+/// 2. **The position.** The label is a child of the stage's panel, so `Val::Px` is relative to
+///    **that panel**, and the projection is relative to the **camera's viewport rect**. Those are
+///    the same rect only by accident.
+/// 3. **The sign of the offset.** The label sits *below* its group, so the box's `top` is the
+///    projection's `y` **plus** the drop — and the deconfliction pushes a label *down*, so the
+///    pushed label must be drawn at the pushed `top` and nowhere else.
+///
+/// **The fix: one space, measured once, used by both the collision test and the drawing.** The
+/// box is in **logical pixels relative to the stage panel**, it is built from the **projection**
+/// (the one place that knows where the group is), and the drawing writes it into `Val::Px`
+/// **unchanged**, because `Val::Px` *is* logical pixels.
 fn place_labels(
     mode: Res<Mode>,
     carousel: Res<StagedCarousel>,
     ui_scale: Res<UiScale>,
+    // **The project, for the name of a label that is shown again** — a label that was elided and
+    // then had room again says its name again, and the name is the project's, not the node's.
+    project: Res<Project>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<crate::view::MainCamera>>>,
-    mut labels: Query<(&SlotLabel, &Text, &mut Node)>,
+    // **`Text` is mutable**, because a label that was elided and then had room again says its
+    // name again — the node is reused, and the elision marker is not the label's text.
+    // **The node's own transform**, because the box has to be measured where the text is drawn.
+    mut labels: Query<
+        (
+            &SlotLabel,
+            &mut Text,
+            &mut Node,
+            &bevy::ui::ComputedNode,
+            &UiGlobalTransform,
+        ),
+    >,
     ui_nodes: Query<
         (&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform),
         With<bevy::picking::hover::Hovered>,
     >,
 ) {
     let Some(camera) = camera.filter(|_| *mode == Mode::Compose) else {
-        for (_, _, mut node) in &mut labels {
+        for (_, _, mut node, _, _) in &mut labels {
             if node.display != Display::None {
                 node.display = Display::None;
             }
@@ -1606,13 +2101,69 @@ fn place_labels(
         return;
     };
     let (cam, cam_tf) = *camera;
-    for (label, text, mut node) in &mut labels {
+    // --- **The deconfliction, and then the placement.** The stage's labels used to be drawn
+    // --- wherever their group projected, which put them **on top of each other**: the groups
+    // --- stand a few tens of centimetres apart on a **diagonal** strip, so their labels — 22 to 25
+    // --- characters wide — overlap by a hundred pixels or more. Measured on a real capture of
+    // --- Sanctuary's own project: **813 px** of continuous ink where three labels should be, and
+    // --- **918 px** where four should be.
+    // ---
+    // --- **Bell, Feiner & Höllerer (2001)**, *View Management for Virtual and Augmented Reality*,
+    // --- UIST ([10.1145/502348.502363](https://doi.org/10.1145/502348.502363)) names this exact
+    // --- approach as the one that fails — *"position each label at the projected centroid of the
+    // --- object… result in overlaps and mislabelings"* — and answers: **allocate a label only
+    // --- where it does not collide, or withhold it.** **Azuma & Furmanski (2003)**, ISMAR
+    // --- ([10.1109/ismar.2003.1240689](https://doi.org/10.1109/ismar.2003.1240689)) settles the
+    // --- trade: *"read labels fastest with the algorithms that most quickly prevented overlap,
+    // --- even if placement wasn't ideal."*
+    // ---
+    // --- **So the order is the focal group first** — it is the object of interest and it is never
+    // --- withheld — **and then the neighbours by distance**, and a neighbour that collides is
+    // --- **pushed down one step** or **withheld**.
+    let mut boxes: Vec<(usize, crate::compose_labels::LabelBox)> = Vec::new();
+    for (label, _, _, computed, _) in &mut labels {
+        let Some(slot) = carousel.0.slots.get(label.0) else {
+            continue;
+        };
+        // --- **Where the label goes**, from the one function that knows. The box builder and the
+        // --- drawing both call it, so the collision test and the drawn label cannot disagree
+        // --- about where the label is.
+        let Some(p) = label_anchor(cam, cam_tf, slot) else {
+            // --- **No projection, no label.** A group the camera cannot see has no screen
+            // --- position, and a label at a guessed one would name nothing.
+            continue;
+        };
+        // --- **The box, in the one space.** The node's own size, the projection's own point, and
+        // --- the scale between them — see [`label_box`].
+        let Some(b) = label_box(p, computed.size(), ui_scale.0) else {
+            continue;
+        };
+        boxes.push((label.0, b));
+    }
+    // --- **The focal group is the one with no offset** — it is the group being edited, and it is
+    // --- the one the author came to look at.
+    let focal = carousel
+        .0
+        .slots
+        .iter()
+        .position(|s| s.offset == 0)
+        .unwrap_or(0);
+    // --- **The deconfliction, and then the placement.** The boxes are in one space and the drawing
+    // --- reads them in the same one, so a label that was pushed down is drawn where it was put.
+    let (drawn, withheld) = crate::compose_labels::deconflict(&boxes, focal);
+    let drawn_at: std::collections::HashMap<usize, crate::compose_labels::LabelBox> =
+        drawn.into_iter().collect();
+    // --- **And the withheld ones are reported, not dropped** — the author sees a marker where the
+    // --- name would be, so the group is visibly there with its name one action away. Furnas
+    // --- (2006) on explicit elision markers, and the editor's own rule from the last run: a
+    // --- refusal is reported in the channel the author watches.
+    let withheld_set: std::collections::HashSet<usize> = withheld.into_iter().collect();
+
+    for (label, mut text, mut node, _, _) in &mut labels {
         let placed = carousel.0.slots.get(label.0).and_then(|slot| {
             let advance = LABEL_CHAR_W
                 * if slot.offset == 0 { 1.0 } else { LABEL_PX.1.px() / LABEL_PX.0.px() };
-            cam.world_to_viewport(cam_tf, COMPOSE_STAGE + Vec3::new(slot.at.0, 0.0, slot.at.1))
-                .ok()
-                .map(|p| (p, advance))
+            label_anchor(cam, cam_tf, slot).map(|p| (p, advance))
         });
         // **A label the panel covers is taken down, not drawn through.** The projection knows
         // nothing of panel geometry, so a slot near the screen edge landed its label half behind
@@ -1631,17 +2182,72 @@ fn place_labels(
                 )
             })
         });
+        // --- **A withheld label shows a marker, not a name.** Bell et al. (2001): *"If no such
+        // --- space can be found, then no label is allocated."* **And Furnas (2006) on explicit
+        // --- elision markers: an elision must be VISIBLE**, because a thing that is present but
+        // --- unnamed and a thing that is not there are different facts, and only one of them is
+        // --- true.
+        // ---
+        // --- **So the label's own node carries the marker** — the group is visibly there, and its
+        // --- name is one action away (`O`/`P` step the carousel, and the panel beside the stage
+        // --- lists every group's full id). **The node is not hidden**, because a hidden label
+        // --- would be a group that is silently nameless.
+        if withheld_set.contains(&label.0) {
+            if text.0 != ELIDED {
+                text.0 = ELIDED.to_owned();
+            }
+            // --- **And it is placed like any other**, so the marker sits where the name would be.
+            // --- **From the node's own place**, for the same reason the boxes are: the projection
+            // --- is the viewport's space and the node is the window's, and the marker must land on
+            // --- the group it names.
+            if let Some((p, advance)) = placed {
+                let half = ELIDED.chars().count() as f32 * advance * 0.5;
+                let s = if ui_scale.0 > 0.0 { ui_scale.0 } else { 1.0 };
+                // --- The same conversion as every other position here: the projection is
+                // --- physical and `Val::Px` is logical, so it is divided — once.
+                let (left, top) = (Val::Px(p.x / s - half), Val::Px(p.y / s + LABEL_DROP));
+                if node.display != Display::Flex || node.left != left || node.top != top {
+                    node.display = Display::Flex;
+                    node.left = left;
+                    node.top = top;
+                }
+            }
+            continue;
+        }
+        // --- **And a label that is drawn again says its name again**, because the node is reused.
+        if text.0 == ELIDED
+            && let Some(slot) = carousel.0.slots.get(label.0)
+                && let Some(c) = project.compositions.compositions.get(slot.index)
+            {
+                text.0 = c.id.clone();
+            }
         match placed {
             // Centred by measuring the string, which works because the shipped face is monospace —
             // see `LABEL_CHAR_W`.
             Some((p, advance)) => {
-                let half = text.0.chars().count() as f32 * advance * 0.5;
-                // Into `Val::Px`'s own units, which are scaled ones. A zero or negative scale would be
-                // a host misconfiguration rather than a state to render around; guard so it cannot
-                // produce a NaN position.
-                let s = if ui_scale.0 > 0.0 { ui_scale.0 } else { 1.0 };
-                let (left, top) =
-                    (Val::Px((p.x - half) / s), Val::Px((p.y + LABEL_DROP) / s));
+                // --- **The position the deconfliction chose**, not the raw projection: a neighbour
+                // --- that collided was pushed down one step, and it is drawn where it was put.
+                let (left, top) = match drawn_at.get(&label.0) {
+                    Some(b) => {
+                        // --- **The box is already in `Val::Px`'s own units** — logical pixels
+                        // --- relative to the stage panel — so it is written **unchanged**.
+                        // ---
+                        // --- **Not divided by the scale again.** The scale was applied once, when
+                        // --- the box was built from the physical projection, and applying it a
+                        // --- second time put every label a factor of 2.4 from where the
+                        // --- deconfliction had put it: the labels were tested against each other
+                        // --- in one space and drawn in another, so the test passed and the screen
+                        // --- overlapped.
+                        (Val::Px(b.left), Val::Px(b.top))
+                    }
+                    None => {
+                        // --- Into `Val::Px`'s own units, which are logical ones. The projection
+                        // --- is physical, so it is divided — **once**.
+                        let half = text.0.chars().count() as f32 * advance * 0.5;
+                        let s = if ui_scale.0 > 0.0 { ui_scale.0 } else { 1.0 };
+                        (Val::Px(p.x / s - half), Val::Px(p.y / s + LABEL_DROP))
+                    }
+                };
                 // **Guarded against the no-op write**, the way `editor::refresh_status` is: `Node` is
                 // change-detected, and touching it every frame makes Bevy re-lay the whole UI tree
                 // on every frame the camera happens to be still.
@@ -1750,21 +2356,36 @@ pub fn pick_along(
     true
 }
 
+/// What `rebuild` reads and writes, bundled so the system stays within the argument budget.
+#[derive(bevy::ecs::system::SystemParam)]
+struct ComposeInput<'w, 's> {
+    commands: Commands<'w, 's>,
+    state: Res<'w, ComposeState>,
+    armed: Res<'w, Armed>,
+    project: Res<'w, Project>,
+    budget: Res<'w, Budget>,
+    body: Query<'w, 's, Entity, With<ComposeBody>>,
+    lines: Query<'w, 's, Entity, With<ComposeLine>>,
+    receipt: Query<'w, 's, &'static mut Text, With<ComposeReceipt>>,
+}
+
 /// **Everything the panel says, derived on the spot.**
 ///
 /// No count and no badge is stored: staleness and the interface are recomputed from the library and
 /// the composition set each time this runs, so a panel cannot disagree with the files it is about.
 /// That is the same discipline `bevy_emerge_core::census` applies to counts, for the same reason.
-fn rebuild(
-    mut commands: Commands,
-    state: Res<ComposeState>,
-    project: Res<Project>,
-    budget: Res<Budget>,
-    body: Query<Entity, With<ComposeBody>>,
-    lines: Query<Entity, With<ComposeLine>>,
-    mut receipt: Query<&mut Text, With<ComposeReceipt>>,
-) {
-    if !(state.is_changed() || project.is_changed()) {
+fn rebuild(input: ComposeInput<'_, '_>) {
+    let ComposeInput {
+        mut commands,
+        state,
+        armed,
+        project,
+        budget,
+        body,
+        lines,
+        mut receipt,
+    } = input;
+    if !(state.is_changed() || armed.is_changed() || project.is_changed()) {
         return;
     }
     // **The receipt, into its fixed slot at the foot of the panel** — see [`ComposeReceipt`] for why
@@ -1833,7 +2454,7 @@ fn rebuild(
             ix: i,
             text: format!("{}  —  {} member(s), {envelope}", c.id, c.members.len()),
             selected: i == state.selected,
-            armed: state.armed.as_deref() == Some(c.id.as_str()),
+            armed: armed.is(&c.id),
         });
     }
 
@@ -1872,6 +2493,15 @@ fn rebuild(
                 Line::Comp { ix, text, selected, armed } => {
                     crate::chrome::list_row(p, selected, (CompRow(ix), ComposeLine)).with_children(
                         |row| {
+                            // **The name, and the badge that renames it.** The row's own text is
+                            // the name, so the badge belongs on it — and the COMPOSE tab's `I` badge
+                            // is its own control id, because the Meshes tab's `IdField` is already
+                            // claimed and two visible nodes claiming one id is a bug the census fails
+                            // on.
+                            row.spawn((
+                                Node::default(),
+                                crate::chrome::Control(crate::keys::ControlId::ComposeNames),
+                            ));
                             row.spawn((
                                 Text::new(text),
                                 TextColor(TEXT),
@@ -2063,6 +2693,181 @@ mod line_tests {
         assert_eq!(split_indent("        eat: diner"), (8, "eat: diner"));
         // The face table: 4-space block indent plus `{:>5}` padding, one column either way.
         assert_eq!(split_indent("      eat: n 0.00..1.00"), (6, "eat: n 0.00..1.00"));
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// The picker — the Map door's way to arm a composition
+// ------------------------------------------------------------------------------------------------
+
+/// **The Map door's composition picker** — a list of the project's compositions, the armed one
+/// starred, and a click that arms it.
+///
+/// # Why it is not the COMPOSE tab
+///
+/// The COMPOSE tab is an *authoring* surface: the carousel, the members, the stages, the budget. The
+/// Map door wants a **picker**: which compositions exist, which one is armed, and the verb that
+/// arms it. Shipping the whole tab onto the map would put an authoring surface where an authoring
+/// action is not — and the tab's own docs say its members list is *"the second cursor, under the one
+/// above"*, which means nothing on a map.
+///
+/// # Why it exists at all
+///
+/// Because the arm used to be reachable **only** from the COMPOSE tab, and the COMPOSE tab is only
+/// on the Kit door — while stamping happens on the Map door. Measured on 2026-10-21: the COMPOSE tab
+/// armed a house and said *"the map tab stamps it"*, and there was no map tab in that process,
+/// because the door is chosen at startup. Sixteen house compositions were defined in Sanctuary's
+/// project and not one was stamped on either map; the maps held 727 hand-placed rows and zero
+/// stamps.
+///
+/// # Why `Enter` is read off the message stream and not off the census
+///
+/// The census gives one row per action, and `Context::Global` overlaps every tab — so making the
+/// arm's row `Global` would have taken `Enter` away from `Accept` on Meshes, `TileOpen` and
+/// `BuildDrop` on Tiles, `AdoptMeasured` on Anim and `AcceptProposal` on Map. The census refused
+/// the change, and it was right.
+///
+/// So this picker reads `Enter` from the **message stream**, the way `crate::tiles`'s
+/// `take_the_one_match` does for the tag block: a *narrowed* list's `Enter` takes the one match
+/// rather than committing a walk, and the census has no way to say that. The scope is the picker's
+/// own focus — a filter box over the picker, exactly as the tag block is a filter box over the
+/// tags.
+pub mod picker {
+    use bevy::prelude::*;
+
+    use crate::compose::Armed;
+    use crate::project::Project;
+
+    /// **The block the picker is written into** — the Map door's INSPECTOR panel, below the map
+    /// size fields.
+    #[derive(Component)]
+    pub struct PickerBody;
+
+    /// **One row**, carrying the composition's index. The list is rebuilt wholesale, so the index
+    /// is re-derived every rebuild and cannot go stale between clicks.
+    #[derive(Component, Clone, Copy)]
+    pub struct PickerRow(pub usize);
+
+    /// **The picker's own cursor**, and whether it has the keyboard.
+    ///
+    /// A `Stance` and not a context, because the picker is a *list on the Map tab* rather than a tab
+    /// of its own, and the Map tab's arrows are already bound — to the palette. See
+    /// [`crate::keys::Stance::Picking`].
+    ///
+    /// **The cursor is an index into the project's compositions**, the same order the rows are drawn
+    /// in, so the two cannot disagree. It is clamped rather than stored as an `Option`, for
+    /// [`ComposeState::selected`]'s reason: the list is never empty while a selection exists.
+    #[derive(Resource, Default, Clone, PartialEq, Eq, Debug)]
+    pub struct Picker {
+        /// Which composition the cursor is on.
+        pub selected: usize,
+        /// **Whether the picker has the keyboard** — the arrows walk it rather than the palette.
+        pub active: bool,
+    }
+
+    /// **Arm the composition this row names**, or disarm it if it was already armed.
+    ///
+    /// **One writer**, and it is [`Armed::toggle`] — the same call the COMPOSE tab's `Enter` makes
+    /// and the same call the devshot driver makes. Three ways to arm and one writer is the point:
+    /// two writers would be two answers to "what is armed", and the crate spends its refusals on
+    /// exactly that shape.
+    ///
+    /// The receipt goes to the **Map's own status line**, not to a panel of its own: the picker is
+    /// a block in the INSPECTOR panel, and the panel's status block is where the Map says anything.
+    pub fn arm_row(
+        ix: usize,
+        project: &Project,
+        armed: &mut Armed,
+        status: &mut crate::chrome::Status,
+    ) {
+        let Some(c) = project.compositions.compositions.get(ix) else {
+            status.note("no composition to arm");
+            return;
+        };
+        if armed.toggle(&c.id) {
+            status.note(format!("`{}` armed — the next click stamps it", c.id));
+        } else {
+            status.note(format!("`{}` disarmed", c.id));
+        }
+    }
+
+    /// **The picker's own keyboard route** — `P` takes the arrows, the arrows walk the list, and
+    /// `Enter` arms.
+    ///
+    /// **One writer** — [`arm_row`] — so the keyboard, the mouse and the devshot driver all land on
+    /// the same answer.
+    pub fn walk(
+        mut picker: ResMut<Picker>,
+        project: Res<Project>,
+        keys: Res<crate::keys::Live>,
+        input: Res<ButtonInput<KeyCode>>,
+    ) {
+        let by = if crate::keys::just_pressed(&input, *keys, crate::keys::Action::CompositionPrev) {
+            -1
+        } else if crate::keys::just_pressed(&input, *keys, crate::keys::Action::CompositionNext) {
+            1
+        } else {
+            return;
+        };
+        let n = project.compositions.compositions.len();
+        if n == 0 {
+            return;
+        }
+        // **It clamps at the ends, where it used to wrap.** The crate has already argued this twice,
+        // in the two places it made the choice: *"an author holding an arrow at the end of a list
+        // should stop there rather than wrap to the other end of it"*. One editor cannot answer one
+        // keystroke two ways.
+        picker.selected = (picker.selected as i64 + by).clamp(0, n as i64 - 1) as usize;
+    }
+
+    /// **`P` takes the arrows to the picker**, and `Enter` arms what the cursor is on.
+    pub fn act(
+        mut picker: ResMut<Picker>,
+        mut armed: ResMut<Armed>,
+        mut state: ResMut<crate::editor::EditorState>,
+        project: Res<Project>,
+        keys: Res<crate::keys::Live>,
+        input: Res<ButtonInput<KeyCode>>,
+    ) {
+        if crate::keys::just_pressed(&input, *keys, crate::keys::Action::PickComposition) {
+            picker.active = !picker.active;
+            let said = if picker.active {
+                "the arrows walk the compositions — Enter arms one"
+            } else {
+                "the arrows walk the palette"
+            };
+            state.status.note(said.to_owned());
+            return;
+        }
+        if !picker.active {
+            return;
+        }
+        if !crate::keys::just_pressed(&input, *keys, crate::keys::Action::ArmComposition) {
+            return;
+        }
+        arm_row(picker.selected, &project, &mut armed, &mut state.status);
+    }
+
+    /// A click on a row arms it.
+    ///
+    /// **`Option` on the resources, because this is a GLOBAL observer** — it fires for any
+    /// `Activate` anywhere in the application, and in Bevy 0.19 a missing `Res<T>` panics at param
+    /// validation rather than skipping. See `crate::compose::on_comp_row_click` for the whole
+    /// argument; the ratchet is `every_resource_says_what_a_door_does_to_it.rs`.
+    pub fn on_row_click(
+        activate: On<bevy::ui_widgets::Activate>,
+        rows: Query<&PickerRow>,
+        project: Option<Res<Project>>,
+        armed: Option<ResMut<Armed>>,
+        mut state: Option<ResMut<crate::editor::EditorState>>,
+    ) {
+        let (Some(project), Some(mut armed), Some(state)) = (project, armed, state.as_mut()) else {
+            return;
+        };
+        let Ok(row) = rows.get(activate.entity) else {
+            return;
+        };
+        arm_row(row.0, &project, &mut armed, &mut state.status);
     }
 }
 
@@ -2867,6 +3672,7 @@ mod paint_tests {
             stamps: Vec::new(),
             locations: Vec::new(),
             note: None,
+            ..Default::default()
         };
         let stamps = vec![Stamped { id: "s".to_owned(), of: "bay".to_owned(), ..Default::default() }];
         let out = bevy_emerge_core::composition::expand(&map, &stamps, &[comp], &lib)

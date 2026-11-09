@@ -393,7 +393,8 @@ fn unfinished(
 pub(crate) fn erect_booth(commands: &mut Commands, at: Vec3) -> Entity {
     // Point lights, so nothing outside their range is touched, and no shadows — a 128 px portrait
     // cannot show one and every shadow map costs a pass.
-    let booth = commands
+    
+    commands
         .spawn((
             Name::new("photo booth"),
             Transform::from_translation(at),
@@ -416,8 +417,7 @@ pub(crate) fn erect_booth(commands: &mut Commands, at: Vec3) -> Entity {
                 ));
             }
         })
-        .id();
-    booth
+        .id()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -529,44 +529,44 @@ fn bake(
         return;
     }
 
-    if let Some(cam_entity) = thumbs.camera {
-        if let Ok((mut tf, mut proj, mut target)) = cams.get_mut(cam_entity) {
-            // **Frame what is actually there, not what the descriptor claims.**
-            //
-            // Aiming from `extent.footprint`/`height` assumes the geometry sits at the origin with
-            // its base at zero, and plenty of meshes do not: `lamp_tall` is a ceiling fitting and
-            // `wall_light` is a wall plate, both authored where they hang. Framing them from the
-            // origin pointed the camera at empty air and baked two blank tiles — the same *symptom*
-            // as the render-target race, from a completely different cause, which is the argument for
-            // measuring rather than assuming twice over.
-            let Some((lo, hi)) = subject_bounds(model, &children, &bounds) else {
-                // Unreachable behind `has_mesh` above: a drawable mesh has an `Aabb`. Loud rather
-                // than guessed, because the alternative is a camera aimed at a number the descriptor
-                // claims and a baked picture of nothing — the exact failure the paragraph above says
-                // measuring exists to prevent, reintroduced on the branch that gives up measuring.
-                error!(
-                    "`{}` passed the readiness gate with nothing measurable under it; no preview",
-                    d.id
-                );
-                return;
-            };
-            let (centre, extent) = aim_and_span(lo, hi);
-            *tf = Transform::from_translation(centre + Vec3::new(1.0, 0.85, 1.0) * extent * FRAMING)
-                .looking_at(centre, Vec3::Y);
-            *proj = Projection::from(OrthographicProjection {
-                scaling_mode: ScalingMode::FixedVertical {
-                    viewport_height: extent * 1.35,
-                },
-                ..OrthographicProjection::default_3d()
-            });
-            *target = RenderTarget::Image(ImageRenderTarget {
-                handle: match thumbs.images.get(&d.id) {
-                    Some(h) => h.clone(),
-                    None => return,
-                },
-                scale_factor: 1.0,
-            });
-        }
+    if let Some(cam_entity) = thumbs.camera
+        && let Ok((mut tf, mut proj, mut target)) = cams.get_mut(cam_entity)
+    {
+        // **Frame what is actually there, not what the descriptor claims.**
+        //
+        // Aiming from `extent.footprint`/`height` assumes the geometry sits at the origin with
+        // its base at zero, and plenty of meshes do not: `lamp_tall` is a ceiling fitting and
+        // `wall_light` is a wall plate, both authored where they hang. Framing them from the
+        // origin pointed the camera at empty air and baked two blank tiles — the same *symptom*
+        // as the render-target race, from a completely different cause, which is the argument for
+        // measuring rather than assuming twice over.
+        let Some((lo, hi)) = subject_bounds(model, &children, &bounds) else {
+            // Unreachable behind `has_mesh` above: a drawable mesh has an `Aabb`. Loud rather
+            // than guessed, because the alternative is a camera aimed at a number the descriptor
+            // claims and a baked picture of nothing — the exact failure the paragraph above says
+            // measuring exists to prevent, reintroduced on the branch that gives up measuring.
+            error!(
+                "`{}` passed the readiness gate with nothing measurable under it; no preview",
+                d.id
+            );
+            return;
+        };
+        let (centre, extent) = aim_and_span(lo, hi);
+        *tf = Transform::from_translation(centre + Vec3::new(1.0, 0.85, 1.0) * extent * FRAMING)
+            .looking_at(centre, Vec3::Y);
+        *proj = Projection::from(OrthographicProjection {
+            scaling_mode: ScalingMode::FixedVertical {
+                viewport_height: extent * 1.35,
+            },
+            ..OrthographicProjection::default_3d()
+        });
+        *target = RenderTarget::Image(ImageRenderTarget {
+            handle: match thumbs.images.get(&d.id) {
+                Some(h) => h.clone(),
+                None => return,
+            },
+            scale_factor: 1.0,
+        });
     }
 
     thumbs.settled += 1;
@@ -595,13 +595,13 @@ fn bake(
     }
 
     // Park on the scratch target BEFORE letting go of the subject — see the module note.
-    if let Some(cam_entity) = thumbs.camera {
-        if let Ok((_, _, mut target)) = cams.get_mut(cam_entity) {
-            *target = RenderTarget::Image(ImageRenderTarget {
-                handle: thumbs.scratch.clone(),
-                scale_factor: 1.0,
-            });
-        }
+    if let Some(cam_entity) = thumbs.camera
+        && let Ok((_, _, mut target)) = cams.get_mut(cam_entity)
+    {
+        *target = RenderTarget::Image(ImageRenderTarget {
+            handle: thumbs.scratch.clone(),
+            scale_factor: 1.0,
+        });
     }
     commands.entity(model).despawn();
     thumbs.model = None;

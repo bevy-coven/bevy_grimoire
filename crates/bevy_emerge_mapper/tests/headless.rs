@@ -83,6 +83,40 @@ fn tap_key(app: &mut App, logical: bevy::input::keyboard::Key, code: KeyCode) {
     app.update();
 }
 
+/// **One keystroke with the platform's command modifier held** — the same call [`tap_key`]
+/// makes, plus the modifier.
+///
+/// The modifier is what makes a chord a chord: `bevy_emerge_mapper::keys::MOD_KEYS` says which
+/// keys count, and a binding with `needs_mod` fires only while one of them is down. The key itself
+/// arrives through the message stream, because that is where every text handler reads from.
+fn press_with_mod(app: &mut App, key: KeyCode) {
+    let modifier = bevy_emerge_mapper::keys::MOD_KEYS[0];
+    app.world_mut()
+        .resource_mut::<bevy::input::ButtonInput<KeyCode>>()
+        .press(modifier);
+    for state in [
+        bevy::input::ButtonState::Pressed,
+        bevy::input::ButtonState::Released,
+    ] {
+        app.world_mut()
+            .write_message(bevy::input::keyboard::KeyboardInput {
+                key_code: key,
+                logical_key: bevy::input::keyboard::Key::Unidentified(
+                    bevy::input::keyboard::NativeKey::Unidentified,
+                ),
+                state,
+                text: None,
+                repeat: false,
+                window: Entity::PLACEHOLDER,
+            });
+    }
+    app.update();
+    app.world_mut()
+        .resource_mut::<bevy::input::ButtonInput<KeyCode>>()
+        .release(modifier);
+    app.update();
+}
+
 /// The `KeyCode` a lowercase letter arrives on.
 ///
 /// [`tap_key`] writes only the message stream, which every text handler in this crate matches on
@@ -1336,7 +1370,13 @@ mod stepped {
             "a colliding candidate must not be written — not as a second row, and not over the first"
         );
         let state = app.world().resource::<bevy_emerge_mapper::tiles::ImportState>();
-        let said = state.status.note_text();
+        // **The refusal is a `problem`, not a note.** The `Status` type's own rule: a note is for
+        // *"a refusal the author is not owed an alarm about"*, and this is a refusal — the editor
+        // could not import the candidate. **And a note is one dim row that the next receipt
+        // erases**, so a refusal in the note slot is a refusal the author never sees. The
+        // 2026-10-21 run moved this one out of the note slot, and this test is the ratchet for
+        // it: it reads the **problem**, which is where a refusal lives.
+        let said = state.status.problem_text();
         assert!(
             said.contains("already in the library"),
             "the refusal must say why: `{said}`"
@@ -1949,7 +1989,9 @@ mod compose {
         }
 
         let before = app.world().resource::<OpenMap>().map.placements.len();
-        app.world_mut().resource_mut::<ComposeState>().armed = Some("break_table".to_owned());
+        app.world_mut()
+            .resource_mut::<bevy_emerge_mapper::compose::Armed>()
+            .0 = Some("break_table".to_owned());
 
         // Through the same call the click makes, so this cannot pass while the click path is broken.
         {
@@ -1957,15 +1999,13 @@ mod compose {
             world.resource_scope(|world, mut project: bevy::prelude::Mut<Project>| {
                 world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
                 let mut state = world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
-                let mut compose = ComposeState {
-                    armed: Some("break_table".to_owned()),
-                    ..Default::default()
-                };
+                let mut armed =
+                    bevy_emerge_mapper::compose::Armed(Some("break_table".to_owned()));
                 bevy_emerge_mapper::editor::stamp_here_for_test(
                     &mut project,
                     &mut open,
                     &mut state,
-                    &mut compose,
+                    &mut armed,
                     (2.0, 2.0),
                 );
                 });
@@ -2009,7 +2049,7 @@ mod compose {
     /// sunk member, and that the authored lift is not it.
     #[test]
     fn a_stamp_previews_at_the_height_it_will_land_at() {
-        use bevy_emerge_mapper::compose::ComposeState;
+        
         use bevy_emerge_mapper::project::{OpenMap, Project};
 
         let root = Fixture::new("stamp-sunk")
@@ -2028,15 +2068,12 @@ mod compose {
             world.resource_scope(|world, mut project: bevy::prelude::Mut<Project>| {
                 world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
                     let mut state = world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
-                    let mut compose = ComposeState {
-                        armed: Some("room".to_owned()),
-                        ..Default::default()
-                    };
+                    let mut armed = bevy_emerge_mapper::compose::Armed(Some("room".to_owned()));
                     bevy_emerge_mapper::editor::stamp_here_for_test(
                         &mut project,
                         &mut open,
                         &mut state,
-                        &mut compose,
+                        &mut armed,
                         (2.0, 2.0),
                     );
                 });
@@ -2330,15 +2367,12 @@ mod compose {
             world.resource_scope(|world, mut project: bevy::prelude::Mut<Project>| {
                 world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
                 let mut state = world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
-                let mut compose = ComposeState {
-                    armed: Some("break_table".to_owned()),
-                    ..Default::default()
-                };
+                let mut armed = bevy_emerge_mapper::compose::Armed(Some("break_table".to_owned()));
                 bevy_emerge_mapper::editor::stamp_here_for_test(
                     &mut project,
                     &mut open,
                     &mut state,
-                    &mut compose,
+                    &mut armed,
                     (2.0, 2.0),
                 );
                 });
@@ -2405,10 +2439,17 @@ mod compose {
         // marked the resource changed and let the redraw fire for a reason the app has not got.
         {
             let world = app.world_mut();
-            world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
-                let mut state = world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
-                bevy_emerge_mapper::editor::delete_stamp_for_test(&stamp_id, &mut open, &mut state);
-            });
+            world.resource_scope(
+                |world, project: bevy::prelude::Mut<bevy_emerge_mapper::project::Project>| {
+                    world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
+                        let mut state =
+                            world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
+                        bevy_emerge_mapper::editor::delete_stamp_for_test(
+                            &stamp_id, &project, &mut open, &mut state,
+                        );
+                    });
+                },
+            );
         }
         for _ in 0..3 {
             app.update();
@@ -2484,15 +2525,12 @@ mod compose {
             world.resource_scope(|world, mut project: bevy::prelude::Mut<Project>| {
                 world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
                 let mut state = world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
-                let mut compose = ComposeState {
-                    armed: Some("break_table".to_owned()),
-                    ..Default::default()
-                };
+                let mut armed = bevy_emerge_mapper::compose::Armed(Some("break_table".to_owned()));
                 bevy_emerge_mapper::editor::stamp_here_for_test(
                     &mut project,
                     &mut open,
                     &mut state,
-                    &mut compose,
+                    &mut armed,
                     (2.0, 2.0),
                 );
                 });
@@ -2649,15 +2687,12 @@ mod compose {
                 project.compositions.compositions.push(comp.clone());
                 world.resource_scope(|world, mut open: bevy::prelude::Mut<OpenMap>| {
                 let mut state = world.resource_mut::<bevy_emerge_mapper::editor::EditorState>();
-                let mut compose = ComposeState {
-                    armed: Some("mess_corner".to_owned()),
-                    ..Default::default()
-                };
+                let mut armed = bevy_emerge_mapper::compose::Armed(Some("mess_corner".to_owned()));
                 bevy_emerge_mapper::editor::stamp_here_for_test(
                     &mut project,
                     &mut open,
                     &mut state,
-                    &mut compose,
+                    &mut armed,
                     (4.0, 4.0),
                 );
                 });
@@ -2997,7 +3032,7 @@ fn the_open_journal_answers_the_over_ui_question() {
                 .world_mut()
                 .query_filtered::<(&ComputedNode, &UiGlobalTransform), bevy::prelude::With<bevy::picking::hover::Hovered>>();
             q.iter(app.world())
-                .map(|(n, tf)| (n.clone(), *tf))
+                .map(|(n, tf)| (*n, *tf))
                 .collect()
         };
         let borrowed: Vec<(&ComputedNode, &UiGlobalTransform)> =
@@ -3246,7 +3281,7 @@ fn the_under_readout_is_blank_while_the_pointer_is_on_a_panel() {
     };
 
     // Over the world, pointing at something: the line names it and the key that acts on it.
-    let said = under_readout(false, Some(&piece));
+    let said = under_readout(false, Some(&piece), None);
     assert!(
         said.contains("crate@7"),
         "the readout must name the piece: `{said}`"
@@ -3260,12 +3295,12 @@ fn the_under_readout_is_blank_while_the_pointer_is_on_a_panel() {
     );
     // Over a panel, with the very same piece behind it: silent.
     assert_eq!(
-        under_readout(true, Some(&piece)),
+        under_readout(true, Some(&piece), None),
         "",
         "a panel is drawn over the map, so the block must not promise an edit to what is behind it"
     );
     // And bare floor stays blank, or the row is never empty and the eye stops reading it.
-    assert_eq!(under_readout(false, None), "");
+    assert_eq!(under_readout(false, None, None), "");
 }
 
 /// **"Is the pointer on a panel" answered against the real layout.**
@@ -3316,7 +3351,7 @@ fn the_pointer_is_over_the_panel_when_it_is_over_a_row() {
                 .world_mut()
                 .query_filtered::<(&ComputedNode, &UiGlobalTransform), bevy::prelude::With<bevy::picking::hover::Hovered>>();
             q.iter(app.world())
-                .map(|(n, tf)| (n.clone(), *tf))
+                .map(|(n, tf)| (*n, *tf))
                 .collect()
         };
         let borrowed: Vec<(&ComputedNode, &UiGlobalTransform)> =
@@ -4542,7 +4577,7 @@ fn a_tile_survives_a_save_and_a_reopen() {
         owned: false,
         owned_because: None,
     };
-    let open = bevy_emerge_mapper::project::OpenMap::open(&project, "m")
+    let open = bevy_emerge_mapper::project::OpenMap::open(project, "m")
         .unwrap_or_else(|e| panic!("{e}"));
     let out = bevy_emerge_core::composition::expand(
         &open.map,
@@ -5223,6 +5258,78 @@ fn the_map_palette_walks_from_the_keyboard() {
         brush(&app),
         before,
         "up must undo what down did — the two keys walk one list"
+    );
+}
+
+/// **An arrow that arms a piece is the same operation a palette click is (gap 1).**
+///
+/// The walk used to set the brush and the tool directly, so the operation log never heard of it: an
+/// agent reading `emerge_read_oplog` saw no record of what the person armed, and the arm could not
+/// be told apart from nothing having happened. The walk now dispatches `brush_arm` as the person,
+/// the same as a click, so the line it writes names the piece that ended up armed.
+#[test]
+fn the_palette_walk_arms_through_the_operation_as_a_person() {
+    use bevy_emerge_mapper::editor::EditorState;
+    use bevy_emerge_mapper::project::Project;
+
+    let root = Fixture::new("palette_walk_op")
+        .descriptor("wall", "alpha")
+        .descriptor("floor", "beta")
+        .build("test_map");
+    let mut app = harness::build_headless(&root, "test_map", None)
+        .unwrap_or_else(|e| panic!("the fixture project must open: {e}"));
+    app.update();
+
+    let step = |app: &mut bevy::prelude::App, key: bevy::prelude::KeyCode| {
+        app.add_systems(
+            bevy::prelude::Update,
+            bevy::prelude::IntoScheduleConfigs::before(
+                move |mut keys: bevy::prelude::ResMut<
+                    bevy::input::ButtonInput<bevy::prelude::KeyCode>,
+                >,
+                      mut done: bevy::prelude::Local<bool>| {
+                    if !*done {
+                        keys.release_all();
+                        keys.press(key);
+                        *done = true;
+                    }
+                },
+                bevy_emerge_mapper::keys::Phase::Act,
+            ),
+        );
+        app.update();
+    };
+
+    let key = bevy_emerge_mapper::keys::binding(bevy_emerge_mapper::keys::Action::PaletteNext).key;
+    step(&mut app, key);
+
+    let project = app.world().resource::<Project>().clone();
+    let armed = {
+        let state = app.world().resource::<EditorState>();
+        state
+            .brush
+            .and_then(|i| project.library.descriptors.get(i))
+            .map(|d| d.id.clone())
+            .expect("the walk arms something")
+    };
+    let text = std::fs::read_to_string(bevy_emerge_mapper::ops::oplog_path(&project))
+        .unwrap_or_default();
+    let arms: Vec<serde_json::Value> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).expect("a log line is JSON"))
+        .filter(|l: &serde_json::Value| l["op"] == "brush_arm")
+        .collect();
+    assert_eq!(
+        arms.len(),
+        1,
+        "one arrow arms one piece, so the log holds one brush_arm line: {arms:?}"
+    );
+    assert_eq!(arms[0]["source"], "human", "the person armed it, not an agent: {}", arms[0]);
+    assert_eq!(
+        arms[0]["params"]["descriptor"], armed,
+        "the logged arm names the piece the walk left armed: {}",
+        arms[0]
     );
 }
 
@@ -7659,17 +7766,17 @@ fn the_corner_tile_feedback_script_can_actually_be_followed() {
     );
 }
 
-/// **Retired 2026-08-15 — superseded, and its replacement is stricter.**
-///
-/// `the_feedback_script_still_matches_the_shipped_kit` held one guide script to the corpus: it
-/// checked that `guides/tile_feedback.json` could still send an author to `site/floor` and identify
-/// `site/tile_4`. That job now belongs to
-/// `every_piece_a_shipped_guide_names_exists_in_the_shipped_kit`, which does it for **all six**
-/// scripts instead of one, by scanning the card text every author actually reads.
-///
-/// Worth recording that the note replaced here claimed *"the scripts were rewritten to author from
-/// scratch"*. **They were not** — that is precisely what the new ratchet caught, and what it took
-/// to notice the kit itself had gone missing.
+// **Retired 2026-08-15 — superseded, and its replacement is stricter.**
+//
+// `the_feedback_script_still_matches_the_shipped_kit` held one guide script to the corpus: it
+// checked that `guides/tile_feedback.json` could still send an author to `site/floor` and identify
+// `site/tile_4`. That job now belongs to
+// `every_piece_a_shipped_guide_names_exists_in_the_shipped_kit`, which does it for **all six**
+// scripts instead of one, by scanning the card text every author actually reads.
+//
+// Worth recording that the note replaced here claimed *"the scripts were rewritten to author from
+// scratch"*. **They were not** — that is precisely what the new ratchet caught, and what it took
+// to notice the kit itself had gone missing.
 
 /// **A tile that is too big says which member made it too big.**
 ///
@@ -9088,9 +9195,16 @@ fn the_map_script_can_actually_be_followed() {
     );
 
     let (name, with) = guide_step(file, "save the map");
+    // **The guide's step is still true, and it is now true before the key rather than after it.**
+    // `layout_accept` saves, so keeping a proposal leaves the map clean — the checkpoint the script
+    // names ("the map is saved") holds the moment `Enter` lands. This assertion used to read
+    // `!checkpoint(..)` as *"keeping a proposal dirties the map"*, which was the behaviour until
+    // S-001: an operation that changed the map and left the file behind would have been the one bug
+    // in this series that could lose work, so it saves and says so.
     assert!(
-        !checkpoint(&mut app, &name, with.clone()),
-        "keeping a proposal dirties the map"
+        checkpoint(&mut app, &name, with.clone()),
+        "keeping a proposal must leave the map saved — `layout_accept` writes the file, so the \
+         guide's \"save the map\" step is already true when it is reached"
     );
     press(
         &mut app,
@@ -9629,7 +9743,7 @@ fn a_named_tile_is_a_row_on_the_tiles_page_before_it_is_saved() {
         "the named tile is in hand"
     );
     assert_eq!(
-        page_len(&app.world().resource::<bevy_emerge_mapper::project::Project>(), build),
+        page_len(app.world().resource::<bevy_emerge_mapper::project::Project>(), build),
         2,
         "the page counts the draft AND the `+ New Tile` row — the walk clamps to both"
     );
@@ -9675,7 +9789,7 @@ fn a_named_tile_is_a_row_on_the_tiles_page_before_it_is_saved() {
         "Cmd+S commits the draft — the row survives, the draft marker does not"
     );
     assert_eq!(
-        page_len(&app.world().resource::<bevy_emerge_mapper::project::Project>(), &app.world().resource::<Build>()),
+        page_len(app.world().resource::<bevy_emerge_mapper::project::Project>(), app.world().resource::<Build>()),
         2,
         "after the save it is still one tile — two page rows, with `+ New Tile` above it"
     );
@@ -9742,14 +9856,17 @@ fn f_focuses_the_filter_and_enter_hands_the_keyboard_back() {
     for _ in 0..2 {
         app.update();
     }
-    press(&mut app, key(Action::FocusFilter));
+    // **`Cmd+F`, not `F`.** The filter chord is the platform's own "find" and is the same on every
+    // tab, because the box is on every tab and the tab decides *which* one. `F` is the Map's fill
+    // and the Tiles tab's cell cursor, so it could not be the filter's chord.
+    press_with_mod(&mut app, key(Action::FocusFilter));
     for _ in 0..2 {
         app.update();
     }
     assert_eq!(
         focus(&app),
         Some(Pane::Candidates),
-        "`F` puts the cursor in the box"
+        "`Cmd+F` puts the cursor in the box"
     );
     // **One more frame before typing.** Every field here drains the message stream while it is shut,
     // so the keystroke that opens it cannot become its first character (`keys.rs`, the `xseam` bug).
@@ -9905,14 +10022,15 @@ fn the_list_still_walks_while_its_filter_box_holds_the_keys() {
     for _ in 0..2 {
         app.update();
     }
-    press(&mut app, key(Action::FocusFilter));
+    // **`Cmd+F`, not `F`** — the filter chord is the platform's own "find", the same on every tab.
+    press_with_mod(&mut app, key(Action::FocusFilter));
     for _ in 0..2 {
         app.update();
     }
     assert_eq!(
         app.world().resource::<Filters>().focus_pane(),
         Some(Pane::Candidates),
-        "`F` puts the cursor in the box"
+        "`Cmd+F` puts the cursor in the box"
     );
     // The drain frame — the keystroke that opens a field must not become its first character.
     app.update();
@@ -10724,9 +10842,9 @@ fn leaving_a_door_survives_the_frames_after_it() {
 
     let root = Fixture::new("leave-door").descriptor("floor", "alpha").build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    // The harness inserts `Screen::Editor` and omits the plugin that owns the way out, so without
-    // this nothing ever drops the `Project`, which is the state the real binary reaches.
-    app.add_plugins(bevy_emerge_mapper::screen::ScreenPlugin);
+    // **The harness registers `ScreenPlugin` now** — 2026-10-21, when the door switch's own test
+    // went green while the door's working state survived the crossing, because the teardown had
+    // never run. So the plugin is here, and this test does not add it.
     for _ in 0..3 {
         app.update();
     }
@@ -12568,6 +12686,93 @@ fn a_badge_in_a_band_is_level_with_its_control() {
         checked >= TABS.len(),
         "only {checked} banded badge(s) were measured across {} tabs; the rule is being enforced \
          against nothing",
+        TABS.len()
+    );
+}
+
+/// **Every chord cluster in a band is one chip high, on every tab.**
+///
+/// A band cannot hang a stack below its control, so a band cluster that wraps is clamped off its
+/// control and sits off its middle (B-035). This measures the chips themselves, so it holds on any
+/// platform whatever its label widths: the cluster is no taller than its tallest chip, and every chip
+/// shares one row.
+#[test]
+fn every_band_cluster_is_one_chip_high() {
+    use bevy::ui::{ComputedNode, UiGlobalTransform};
+    use bevy_emerge_mapper::badges::BadgeCluster;
+    use bevy_emerge_mapper::keys::Home;
+
+    let root = Fixture::new("bandrow")
+        .descriptor("floor", "alpha")
+        .build("m");
+
+    let mut stacked = Vec::new();
+    let mut checked = 0usize;
+    let mut most_chips = 0usize;
+    for mode in TABS {
+        let mut app = badges_up(&root, mode);
+        let clusters: Vec<(String, Rect, Vec<Rect>)> = {
+            let mut q = app.world_mut().query::<(
+                &BadgeCluster,
+                &ComputedNode,
+                &UiGlobalTransform,
+                &Visibility,
+                &Children,
+            )>();
+            let world = app.world();
+            q.iter(world)
+                .filter(|(c, _, _, v, _)| {
+                    matches!(c.0, Home::Control(id) if id.in_a_band()) && **v != Visibility::Hidden
+                })
+                .filter(|(_, n, _, _, _)| n.size() != Vec2::ZERO)
+                .map(|(c, n, tf, _, kids)| {
+                    let chips: Vec<Rect> = kids
+                        .iter()
+                        .filter_map(|k| {
+                            let cn = world.get::<ComputedNode>(k)?;
+                            let ct = world.get::<UiGlobalTransform>(k)?;
+                            (cn.size() != Vec2::ZERO)
+                                .then(|| Rect::from_center_size(ct.translation, cn.size()))
+                        })
+                        .collect();
+                    let Home::Control(id) = c.0 else { unreachable!() };
+                    (
+                        format!("{} {id:?}", mode.label()),
+                        Rect::from_center_size(tf.translation, n.size()),
+                        chips,
+                    )
+                })
+                .collect()
+        };
+        for (label, cluster, chips) in clusters {
+            if chips.is_empty() {
+                continue;
+            }
+            checked += 1;
+            most_chips = most_chips.max(chips.len());
+            let tallest = chips.iter().map(|r| r.height()).fold(0.0_f32, f32::max);
+            let first_row = chips[0].center().y;
+            let one_row = chips.iter().all(|r| (r.center().y - first_row).abs() <= 1.0);
+            if cluster.height() > tallest + 1.0 || !one_row {
+                stacked.push(format!(
+                    "{label}: cluster {} px tall, tallest chip {tallest} px, {} chip(s) at y {:?}",
+                    cluster.height(),
+                    chips.len(),
+                    chips.iter().map(|r| r.center().y).collect::<Vec<_>>(),
+                ));
+            }
+        }
+    }
+    assert!(
+        stacked.is_empty(),
+        "these band clusters are more than one chip high, so a band cannot hang them level with \
+         their control:\n  {}",
+        stacked.join("\n  ")
+    );
+    assert!(
+        checked >= 1 && most_chips >= 2,
+        "no band cluster with two or more chords was measured across {} tabs (clusters: {checked}, \
+         most chips: {most_chips}); the rule is being enforced against nothing",
         TABS.len()
     );
 }
@@ -15457,13 +15662,20 @@ fn every_empty_shelf_says_why() {
     let said = one_sentence(&mut app, "empty judged library");
     assert!(said.contains("no mesh is judged yet"), "{said}");
 
-    // A filter that matches nothing — on the same shelf, since `F` is the Tiles tab's key and the
-    // page has been left (`F` is not bound on the Tiles page, N16).
-    step(&mut app, binding(Action::FocusFilter).key, 3);
+    // A filter that matches nothing — on the same shelf. **`Cmd+F`**, the platform's own "find",
+    // is the filter's chord on every tab; `F` is the Map's fill and the Tiles tab's cell cursor.
+    step_chord(
+        &mut app,
+        vec![
+            bevy_emerge_mapper::keys::MOD_KEYS[0],
+            binding(Action::FocusFilter).key,
+        ],
+        3,
+    );
     assert_eq!(
         app.world().resource::<Filters>().focus_pane(),
         Some(Pane::Candidates),
-        "`F` puts the cursor in the box"
+        "`Cmd+F` puts the cursor in the box"
     );
     // The drain frame — the keystroke that opens a field must not become its first character.
     app.update();
@@ -15668,6 +15880,34 @@ mod replace_and_dirty {
             "both come back, in order, under their own ids"
         );
         assert!(!dirty(&app));
+    }
+
+    /// **A successful undo is an answer, not a refusal.** The restore receipt went to
+    /// `Status::problem`, so every Cmd+Z that put a piece back raised a red toast reading
+    /// "restored 1 placement(s)" (B-022). A problem is for a refusal or a partial act; this one
+    /// did all it was asked.
+    #[test]
+    fn a_successful_undo_is_reported_as_a_note_not_a_problem() {
+        let mut app = booted(
+            "undo_receipt",
+            Fixture::new("undo_receipt")
+                .descriptor("tile_a", "alpha")
+                .descriptor("tile_b", "alpha")
+                .place("tile_a", (0.5, 0.5)),
+        );
+        place_for_test(app.world_mut(), "tile_b", (0.5, 0.5));
+        undo_for_test(app.world_mut());
+        let status = &app.world().resource::<EditorState>().status;
+        assert!(
+            status.problems().is_empty(),
+            "a successful undo raised a problem: {:?}",
+            status.problems().iter().map(|p| p.text.as_str()).collect::<Vec<_>>()
+        );
+        assert!(
+            said(&app).contains("restored 1 placement(s)"),
+            "said: {}",
+            said(&app)
+        );
     }
 }
 
@@ -16227,4 +16467,246 @@ mod patched_placements {
         assert_eq!(count, 2, "nothing was in the way: {}", said(&app));
         assert!(said(&app).contains("placed"), "said: {}", said(&app));
     }
+}
+
+/// **The readout says which layer the piece it names actually took** — E-059.
+///
+/// `Mount::OnSurfaceOrFloor` is the one mount whose answer is a property of the *placement*, not of
+/// the descriptor: dropped on a bench it seats there, dropped on open floor it stands on the deck.
+/// The map file records which (`Placed::on`), and the kit door's mount row can only ever show the
+/// *declaration* — `on support or floor` — because a library entry has no placement.
+///
+/// So the readout that names a specific piece is the one place the per-placement answer belongs, and
+/// it did not have it: hovering a horseshoe pile said `smithy_horseshoes — Cmd+Delete edits it`,
+/// with nothing about the bench it was standing on. This pins the two answers and, just as
+/// importantly, that a piece with no two-way mount keeps the line it had.
+#[test]
+fn the_under_readout_says_which_layer_a_two_way_piece_took() {
+    use bevy_emerge_mapper::editor::under_readout;
+
+    let placed = |id: &str, on: Option<&str>| bevy_emerge_core::map::Placed {
+        paint: 0,
+        id: id.to_owned(),
+        descriptor: "kit/dress_horseshoe_pile".to_owned(),
+        at: (1.0, 1.0),
+        yaw: 0.0,
+        lift: 0.0,
+        tip: (0, 0),
+        on: on.map(str::to_owned),
+        owned: false,
+        owned_because: None,
+        patch: None,
+        note: None,
+    };
+    let two_way = bevy_emerge_core::descriptor::Descriptor {
+        id: "kit/dress_horseshoe_pile".into(),
+        mount: Some(bevy_emerge_core::descriptor::Mount::OnSurfaceOrFloor {
+            class: "support".into(),
+        }),
+        ..Default::default()
+    };
+
+    // Seated on a host: the line names the host, which is the fact the map file records.
+    let seated = placed("pile@1", Some("smithy_workbench"));
+    let said = under_readout(false, Some(&seated), Some(&two_way));
+    assert!(
+        said.contains("smithy_workbench"),
+        "a piece seated on a host must say which host, or the author cannot tell it from one on \
+         the floor: `{said}`"
+    );
+
+    // Standing on the floor: the other half of the same mount, said plainly.
+    let floored = placed("pile@2", None);
+    let said = under_readout(false, Some(&floored), Some(&two_way));
+    assert!(
+        said.contains("floor"),
+        "a two-way piece that took the floor must say so: `{said}`"
+    );
+
+    // **A plain `OnSurface` piece is not two-way either, even when it is seated.** It has a host
+    // too — so a widened check (`OnSurface | OnSurfaceOrFloor`) would pass every case above — and
+    // the layer is settled by its descriptor, which the kit row already states. This is the case
+    // that pins the check to the variant and not to "some mount with a host".
+    let surface_only = bevy_emerge_core::descriptor::Descriptor {
+        id: "kit/lamp".into(),
+        mount: Some(bevy_emerge_core::descriptor::Mount::OnSurface {
+            class: "worktop".into(),
+        }),
+        ..Default::default()
+    };
+    let said = under_readout(false, Some(&placed("lamp@1", Some("desk"))), Some(&surface_only));
+    assert!(
+        !said.contains("on `desk`") && !said.contains("floor"),
+        "a seated `OnSurface` piece has the same `on` as a two-way one, so only the variant can \
+         tell them apart: `{said}`"
+    );
+
+    // **And a piece that is not two-way keeps exactly the line it had.** The floor is not news for
+    // an `OnFloor` piece, and saying it on every one of them would be the always-non-blank row the
+    // readout's own doc refuses.
+    let plain = bevy_emerge_core::descriptor::Descriptor {
+        id: "kit/crate".into(),
+        mount: Some(bevy_emerge_core::descriptor::Mount::OnFloor),
+        ..Default::default()
+    };
+    let said = under_readout(false, Some(&placed("crate@7", None)), Some(&plain));
+    assert!(
+        !said.contains("floor"),
+        "an ordinary floor piece does not need the floor announced: `{said}`"
+    );
+    // Unknown descriptor: no claim either way.
+    let said = under_readout(false, Some(&placed("x@1", None)), None);
+    assert!(!said.contains("floor"), "no descriptor, no claim: `{said}`");
+}
+
+/// **B-047 does not reproduce: a chip click writes the piece and lights the chip it clicked.**
+///
+/// Reported from a GIF (2026-10-23, kit door, `barrel`): clicking the unlit `KIND` chip `decor` set
+/// the labels row to `by hand set kind` and the status to `kind tags updated`, but the clicked chip
+/// did not visibly light while `container` stayed lit.
+///
+/// **It could never be settled because nothing in the suite fired a chip's `Activate`** (E-041
+/// records the gap; the tag route under test was the keyboard's `take_the_one_match`, a different
+/// function). This drives the click itself — the same `Activate` a person's press sends — and then
+/// reads the chip colours back. On the first version that could do so, **the pane agrees with the
+/// file**: the clicked token is in the descriptor and its chip is the lit one.
+///
+/// So the cycle-5 observation was something else. The likeliest is the one the item already guesses
+/// for B-041's sibling frame — the cursor ring sat over the chip (`the cursor ring sat over it`, its
+/// own evidence), and a `Hovered` fill is painted by `style_list_rows` over the held fill, so a
+/// screenshot taken under the ring cannot settle which state the chip was in.
+///
+/// This test stays as the guard: it is the first thing in the suite to click a tag chip, so a future
+/// change that made the pane read a different value than the click wrote would fail here.
+#[test]
+fn clicking_a_tag_chip_writes_the_kind_and_lights_the_clicked_chip() {
+    use bevy::prelude::*;
+
+    let root = Fixture::new("b047-chip-click")
+        .descriptor("crate", "alpha")
+        // Two kind tokens, so the click moves the lit chip from one to the other — the reported
+        // symptom is about which chip is lit, so one token would prove nothing.
+        .kind_tokens(&["container", "decor"])
+        .build("m");
+    let mut app = harness::build_headless_at(
+        &root,
+        "m",
+        None,
+        bevy_emerge_mapper::tiles::Mode::Meshes,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..4 {
+        app.update();
+    }
+
+    let id = app
+        .world()
+        .resource::<bevy_emerge_mapper::project::Project>()
+        .library
+        .descriptors
+        .first()
+        .map(|d| d.id.clone())
+        .unwrap_or_else(|| panic!("the fixture must carry a descriptor"));
+    app.world_mut()
+        .resource_mut::<bevy_emerge_mapper::tiles::ImportState>()
+        .selected_library_id = Some(id.clone());
+    for _ in 0..4 {
+        app.update();
+    }
+
+    // `container` is the descriptor's kind, so its chip starts lit and `decor` starts dark.
+    assert_eq!(
+        bevy_emerge_mapper::tiles::lit_kind_chips(app.world_mut()),
+        vec!["prop".to_owned()],
+        "the fixture's kind chip must start where the descriptor says (`prop`)"
+    );
+
+    // The click, through the observer a person's press fires.
+    bevy_emerge_mapper::tiles::click_tag_chip_for_test(app.world_mut(), "kind", "decor");
+    for _ in 0..4 {
+        app.update();
+    }
+
+    // The write landed…
+    let kinds = app
+        .world()
+        .resource::<bevy_emerge_mapper::project::Project>()
+        .measured
+        .descriptors
+        .iter()
+        .find(|d| d.id == id)
+        .map(|d| d.kind.clone())
+        .unwrap_or_default();
+    assert_eq!(
+        kinds,
+        vec!["prop".to_owned(), "decor".to_owned()],
+        "a chip click toggles one token, so `decor` joins `prop`"
+    );
+
+    // …and the chip the person clicked is the one that is lit.
+    assert_eq!(
+        bevy_emerge_mapper::tiles::lit_kind_chips(app.world_mut()),
+        vec!["decor".to_owned(), "prop".to_owned()],
+        "the clicked chip must be lit too, or the pane is showing the state before the click"
+    );
+}
+
+/// **A held chip carries a shape, so a hover cannot be mistaken for it** — the cause B-047 was
+/// reported as a symptom of.
+///
+/// The palette's own rule is that a chosen thing is told apart by **shape**, because `ROW_HOVER`
+/// sits only ΔL\* 3.89 under `ROW_SELECTED` (`chrome.rs`). Chips never got that shape. Measured on
+/// the running editor: rest `(42,39,34)`, hovered `(54,50,44)` — 60% of the way to held — held
+/// `(63,59,51)`, and **all three drew the same 1 px dark border**. So the cycle-5 GIF, taken with
+/// "the cursor ring over it", could not say which state the chip was in; the pane was right and the
+/// picture was unreadable.
+///
+/// This pins the shape: a held chip's border is `ACCENT`, an unheld one has none, and a proposal
+/// still wins on the border because a ghost is a question.
+#[test]
+fn a_held_tag_chip_carries_an_accent_edge_and_an_unheld_one_does_not() {
+    use bevy::prelude::*;
+
+    let root = Fixture::new("b047-chip-shape")
+        .descriptor("crate", "alpha")
+        .kind_tokens(&["container", "decor"])
+        .build("m");
+    let mut app = harness::build_headless_at(
+        &root,
+        "m",
+        None,
+        bevy_emerge_mapper::tiles::Mode::Meshes,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..4 {
+        app.update();
+    }
+    let id = app
+        .world()
+        .resource::<bevy_emerge_mapper::project::Project>()
+        .library
+        .descriptors
+        .first()
+        .map(|d| d.id.clone())
+        .unwrap_or_else(|| panic!("the fixture must carry a descriptor"));
+    app.world_mut()
+        .resource_mut::<bevy_emerge_mapper::tiles::ImportState>()
+        .selected_library_id = Some(id);
+    for _ in 0..4 {
+        app.update();
+    }
+
+    let (held_edge, unheld_edge) =
+        bevy_emerge_mapper::tiles::kind_chip_edges_for_test(app.world_mut());
+    assert_eq!(
+        held_edge,
+        bevy_emerge_mapper::chrome::ACCENT,
+        "the held chip must carry the accent edge; without it a hover one ΔL* away is \
+         indistinguishable from it"
+    );
+    assert_eq!(
+        unheld_edge,
+        Color::NONE,
+        "an unheld chip must carry no edge, or every chip looks chosen"
+    );
 }

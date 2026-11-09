@@ -103,7 +103,7 @@ fn no_source_file_reaches_for_an_engine() {
     let mut files = Vec::new();
     rust_sources(&src, &mut files);
     assert!(
-        files.len() >= 1,
+        !files.is_empty(),
         "expected to scan the whole crate, found only {} file(s) — has the layout moved?",
         files.len()
     );

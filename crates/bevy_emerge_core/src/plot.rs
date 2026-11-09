@@ -78,7 +78,7 @@ impl Raster {
     /// consecutive columns joined by vertical spans so a steep curve stays connected. Non-finite
     /// samples and a degenerate range draw nothing — a blank is honest, a made-up line is not.
     pub fn curve(&mut self, ys: &[f32], lo: f32, hi: f32, c: [u8; 4]) {
-        if ys.is_empty() || !(hi > lo) || self.w == 0 || self.h == 0 {
+        if ys.is_empty() || !matches!(hi.partial_cmp(&lo), Some(std::cmp::Ordering::Greater)) || self.w == 0 || self.h == 0 {
             return;
         }
         let (w, h) = (self.w, self.h);

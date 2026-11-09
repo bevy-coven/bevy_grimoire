@@ -810,7 +810,7 @@ pub fn preference_rules(
         return Err(format!("constraints: {bad} is not a usable selection weight"));
     }
     let total: f64 = weights.iter().sum();
-    if !(total > 0.0) {
+    if !matches!(total.partial_cmp(&0.0), Some(std::cmp::Ordering::Greater)) {
         return Err(
             "constraints: every prototype has weight zero, so there is nothing to draw from"
                 .to_owned(),
@@ -1078,10 +1078,10 @@ pub fn enclosure_rules(
             // R1. Every border cell is outside, unconditionally and regardless of what sits there —
             // `range::reached_from_border` seeds them all, because there is no cell beyond the region
             // to start from.
-            if x == 0 || z == 0 || x + 1 == w || z + 1 == h {
-                if let Some(&o) = outside.get(z * w + x) {
-                    p.add_clause(&[o]);
-                }
+            if (x == 0 || z == 0 || x + 1 == w || z + 1 == h)
+                && let Some(&o) = outside.get(z * w + x)
+            {
+                p.add_clause(&[o]);
             }
         }
     }
@@ -1295,7 +1295,7 @@ mod tests {
     /// The tests below check the encodings against this rather than against any back-end, so an
     /// encoding and a solver that are wrong in the same direction cannot agree with each other.
     fn models(p: &Problem) -> Vec<Vec<bool>> {
-        fn search(p: &Problem, val: &mut Vec<Option<bool>>, out: &mut Vec<Vec<bool>>) {
+        fn search(p: &Problem, val: &mut [Option<bool>], out: &mut Vec<Vec<bool>>) {
             if !propagate(p, val) {
                 return;
             }
@@ -1308,7 +1308,7 @@ mod tests {
                 }
                 Some(next) => {
                     for guess in [true, false] {
-                        let mut branch = val.clone();
+                        let mut branch = val.to_vec();
                         branch[next] = Some(guess);
                         search(p, &mut branch, out);
                     }
@@ -2047,7 +2047,7 @@ mod tests {
         // visible from one side of the seam.
         let kit = room_kit();
         let mut grid = sealed_room_grid();
-        grid[1 * 5 + 2] = 0; // the north wall of the ring becomes Empty
+        grid[5 + 2] = 0; // the north wall of the ring becomes Empty
         // **Not zero.** The seven remaining solid cells are still unreachable, and under the
         // composition adapter a solid tile IS floor (`Faces::floor(p) == (p != 0)`), so the metric
         // reports 7/8 = 0.875. What the breach actually costs is the CENTRE, which the fill now
@@ -2073,7 +2073,7 @@ mod tests {
         // that is the difference between the editor showing a red banner and showing a room.
         let kit = room_kit();
         let mut grid = sealed_room_grid();
-        grid[1 * 5 + 2] = 0;
+        grid[5 + 2] = 0;
         let pinned: Vec<u32> = grid.iter().map(|&p| 1u32 << p).collect();
         let mut gp = GridProblem::encode(&anything_goes(3), &pinned, 5, 5, 3).expect("encodes");
         let faces = crate::range::Faces::new(&kit, "wall", 0.5);
@@ -2232,7 +2232,7 @@ mod tests {
         let apart = vec![0b01u32, 0b10];
         let support = [apart.clone(), apart.clone(), apart.clone(), apart];
         let mut gp = GridProblem::encode(&support, &vec![0b11u32; w * h], w, h, 2).expect("encodes");
-        preference_rules(&mut gp.problem, &gp.place, &vec![1.0, 1.0], 3).expect("wishes");
+        preference_rules(&mut gp.problem, &gp.place, &[1.0, 1.0], 3).expect("wishes");
         let s = gp.problem.solve(0).expect("solves");
         let grid = gp.read(&s).expect("reads");
         // The support permits only the two uniform grids, so every cell must agree.

@@ -1,0 +1,29 @@
+{
+  "name": "hero",
+  "fps": 15,
+  "scale": 2,
+  "width": 600,
+  "crop": [470, 64, 950, 690],
+  "setup": [{"mcp": "emerge_frame_view", "args": {"target": {"rect": [-30, -40, 60, 10]}}}],
+  "chunks": [
+    {"seconds": 6},
+    {"seconds": 2.5, "operation": {"name": "placement_remove", "parameters": {"id": "block_3_1"}}},
+    {"seconds": 2.5, "operation": {"name": "placement_remove", "parameters": {"id": "block_4_1"}}},
+    {"seconds": 3}
+  ],
+  "steps": [
+    {"at": 0.4, "caption": "person: ⌘\\ arms the snip tool"},
+    {"at": 0.8, "key": "Backslash", "mods": ["SuperLeft"]},
+    {"at": 1.6, "caption": "person: drag a box round the two houses"},
+    {"at": 1.8, "drag": [600, 380, 900, 600], "secs": 1.6},
+    {"at": 3.6, "caption": "person: type a note, Enter saves"},
+    {"at": 3.8, "type": "remove these houses"},
+    {"at": 5.2, "key": "Enter"},
+    {"at": 5.5, "mcp": "emerge_list_snips", "args": {"limit": 1}, "caption": "agent: reads the snip"},
+    {"at": 6.0, "caption": "agent: placement_remove block_3_1"},
+    {"at": 8.5, "caption": "agent: placement_remove block_4_1"},
+    {"at": 11.0, "caption": "person: ⌘Z takes the newest change back"},
+    {"at": 11.5, "key": "KeyZ", "mods": ["SuperLeft"]},
+    {"at": 12.5, "key": "KeyZ", "mods": ["SuperLeft"], "caption": "person: ⌘Z again, the first house is back"}
+  ]
+}

@@ -1,0 +1,47 @@
+# Before this run: the MCP server's four tools, and what an agent could NOT do
+
+Measured 2026-10-21, on the commit before this run
+(`git show HEAD:crates/bevy_emerge_mcp/src/main.rs`), against a live editor
+with Sanctuary's `town` map open (727 placements, 300 x 20 x 1120 m).
+
+    $ git show HEAD:crates/bevy_emerge_mcp/src/main.rs | grep -oE 'name = "emerge_[a-z_]+"'
+    name = "emerge_apply_operation"
+    name = "emerge_list_operations"
+    name = "emerge_preview_operation"
+    name = "emerge_read_oplog"
+
+## What each of them could do
+
+| tool | what it returns |
+|---|---|
+| `emerge_list_operations` | the operation registry's schema |
+| `emerge_preview_operation` | **a summary string** — what the operation *would* do |
+| `emerge_apply_operation` | **a summary string** — what the operation *did* |
+| `emerge_read_oplog` | the log, newest last |
+
+## What an agent could NOT do
+
+- **See the editor.** No tool returned an image. The agent's only observation of the
+  editor was a *string the editor wrote about itself*.
+- **Read the state.** There was no way to ask "what map is open, how many placements
+  does it have, what is armed, what has gone wrong". The agent had to keep its own
+  model of the editor, and nothing checked it.
+- **See *when* its action landed.** `emerge_apply_operation` returned
+  `"map is 300 x 20 x 1120 m, and the file was written"` — a **claim** about the
+  result, made by the same code that made the change. An agent that applied
+  `map_set_settings` and was told "done" had learned one thing: that the editor did
+  not refuse.
+
+## The consequence, in the editor's own terms
+
+**A refusal is a refusal; a success is a claim.** The previous run (2026-10-21-02) gave
+the editor a third door — an agent dispatches operations over MCP — and the editor
+answers with prose. The agent can act but cannot *verify*, and an agent that cannot
+verify cannot be trusted with an edit a human would check.
+
+**And the ordering was unprovable.** Even a before/after pair would not have shown
+*when* the change landed. A frame captured after the apply is a frame of the new
+state, and a frame captured before is a frame of the old state, and the agent would
+have to time two round trips to get both — with no ordering between them, because the
+screenshot reads the **rendered** frame and the readback lands a frame or two after
+the request.

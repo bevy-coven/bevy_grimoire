@@ -409,24 +409,6 @@ fn dim_ink(rank: usize) -> [u8; 4] {
     [ink[0] / 3, ink[1] / 3, ink[2] / 3, 255]
 }
 
-#[cfg(test)]
-mod hover_tests {
-    use super::*;
-
-    #[test]
-    fn hover_bins_cover_the_node_and_refuse_the_outside() {
-        let bins = bevy_emerge_core::clips::PHASE_BINS;
-        // The node's left edge is centered -0.5, its right edge +0.5.
-        assert_eq!(hover_bin(-0.5), Some(0));
-        assert_eq!(hover_bin(0.0), Some(bins / 2));
-        assert_eq!(hover_bin(0.499), Some(bins - 1));
-        // The right edge itself still lands on the last bin, never past it.
-        assert_eq!(hover_bin(0.5), Some(bins - 1));
-        assert_eq!(hover_bin(0.51), None);
-        assert_eq!(hover_bin(-0.51), None);
-    }
-}
-
 /// Push a finished raster into the image asset. `get_mut` marks the asset changed, which is what
 /// re-uploads the texture.
 fn commit(handle: &Handle<Image>, raster: Raster, images: &mut Assets<Image>) {
@@ -447,7 +429,7 @@ fn range(slots: &[SlotCurves], pick: impl Fn(&SlotCurves) -> &[f32]) -> (f32, f3
             }
         }
     }
-    if !(hi > lo) {
+    if !matches!(hi.partial_cmp(&lo), Some(std::cmp::Ordering::Greater)) {
         return (0.0, 1.0);
     }
     let pad = (hi - lo) * 0.05;
@@ -463,10 +445,10 @@ fn paint_height(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: 
     r.hline(PLOT_H as usize - 1, GRID);
     for s in slots {
         // Dim = at the measured offset, under the declared curve — the plots' half of the ghost.
-        if ab {
-            if let Some(m) = &s.measured {
-                r.curve(&m.height, lo, hi, dim_ink(s.rank));
-            }
+        if ab
+            && let Some(m) = &s.measured
+        {
+            r.curve(&m.height, lo, hi, dim_ink(s.rank));
         }
         r.curve(&s.height, lo, hi, slot_color(s.rank));
         // Contact ticks: one two-pixel row per slot, stacked up from the bottom edge.
@@ -492,10 +474,10 @@ fn paint_speed(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &
     let (_, hi) = range(slots, |s| &s.speed);
     r.hline(PLOT_H as usize - 1, GRID);
     for s in slots {
-        if ab {
-            if let Some(m) = &s.measured {
-                r.curve(&m.speed, 0.0, hi.max(1.0e-3), dim_ink(s.rank));
-            }
+        if ab
+            && let Some(m) = &s.measured
+        {
+            r.curve(&m.speed, 0.0, hi.max(1.0e-3), dim_ink(s.rank));
         }
         r.curve(&s.speed, 0.0, hi.max(1.0e-3), slot_color(s.rank));
     }
@@ -518,10 +500,10 @@ fn paint_drift(
     let threshold_row = ((1.0 - threshold / hi) * (PLOT_H - 1) as f32) as usize;
     r.hline(threshold_row.min(PLOT_H as usize - 1), DANGER_INK);
     for s in slots {
-        if ab {
-            if let Some(m) = &s.measured {
-                r.curve(&m.drift, 0.0, hi, dim_ink(s.rank));
-            }
+        if ab
+            && let Some(m) = &s.measured
+        {
+            r.curve(&m.drift, 0.0, hi, dim_ink(s.rank));
         }
         r.curve(&s.drift, 0.0, hi, slot_color(s.rank));
     }
@@ -550,10 +532,10 @@ fn paint_trace(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &
         let v = (s.body_velocity[0].powi(2) + s.body_velocity[1].powi(2)).sqrt();
         if v > 1.0e-6 {
             reach = reach.max(s.declared_cycle);
-            if ab {
-                if let Some(m) = &s.measured {
-                    reach = reach.max(m.cycle);
-                }
+            if ab
+                && let Some(m) = &s.measured
+            {
+                reach = reach.max(m.cycle);
             }
         }
     }
@@ -600,11 +582,11 @@ fn paint_trace(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &
             let dir = [s.body_velocity[0] / v, s.body_velocity[1] / v];
             // The A/B: a dimmed second arrow at the MEASURED cycle distance — the declared arrow
             // keeps full ink, so which number fits the footprints is a glance.
-            if ab {
-                if let Some(m) = &s.measured {
-                    let m_tip = [dir[0] * m.cycle, dir[1] * m.cycle];
-                    r.line(to_px([0.0, 0.0]), to_px(m_tip), dim);
-                }
+            if ab
+                && let Some(m) = &s.measured
+            {
+                let m_tip = [dir[0] * m.cycle, dir[1] * m.cycle];
+                r.line(to_px([0.0, 0.0]), to_px(m_tip), dim);
             }
             let tip = [dir[0] * s.declared_cycle, dir[1] * s.declared_cycle];
             let (a, b) = (to_px([0.0, 0.0]), to_px(tip));
@@ -622,4 +604,22 @@ fn paint_trace(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &
         }
     }
     commit(handle, r, images);
+}
+
+#[cfg(test)]
+mod hover_tests {
+    use super::*;
+
+    #[test]
+    fn hover_bins_cover_the_node_and_refuse_the_outside() {
+        let bins = bevy_emerge_core::clips::PHASE_BINS;
+        // The node's left edge is centered -0.5, its right edge +0.5.
+        assert_eq!(hover_bin(-0.5), Some(0));
+        assert_eq!(hover_bin(0.0), Some(bins / 2));
+        assert_eq!(hover_bin(0.499), Some(bins - 1));
+        // The right edge itself still lands on the last bin, never past it.
+        assert_eq!(hover_bin(0.5), Some(bins - 1));
+        assert_eq!(hover_bin(0.51), None);
+        assert_eq!(hover_bin(-0.51), None);
+    }
 }

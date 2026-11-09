@@ -76,7 +76,10 @@ use crate::placement::ir::Guard;
 /// than read with them ignored — which is the loud failure this schema's rules are for. **`6`
 /// replaced `palette` with [`Map::bash`]** — the ad-hoc per-map list became a combination declared
 /// once in `kits.ron`, so two maps can draw on the same one and it is validated in one place.
-pub const MAP_VERSION: u32 = 6;
+/// **`7` added [`Map::enclosure`]** — how much of a generated region should close into rooms was a
+/// constant in the editor, so the author who wanted more enclosed rooms edited Rust (E-005). Its
+/// default is the pair of numbers the editor shipped, so an older map generates exactly as it did.
+pub const MAP_VERSION: u32 = 7;
 
 /// One authored world.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -147,8 +150,46 @@ pub struct Map {
     pub locations: Vec<Location>,
     /// What this map is and why it is laid out this way — the header prose, as data. See the module
     /// docs on why this is a field rather than a comment.
+    ///
+    /// **Written even when absent, unlike every field of [`Placed`].** A map has one of these, so the
+    /// line costs a dozen bytes once per file and buys a reader a visible place to write — the whole
+    /// reason the field exists instead of a comment. `Placed::note` is the opposite case: it is per
+    /// row, so 720 copies of `note: None` is 17 KB of saying nothing.
     #[serde(default)]
     pub note: Option<String>,
+    /// **How much of a generated region should close into rooms, and what that wish is worth.**
+    ///
+    /// **Authored, because it is a taste.** The editor used to hold `0.25` and `200` as constants in
+    /// `editor.rs`, so a developer who wanted more enclosed rooms — a keep, a cellar, a maze — had to
+    /// edit Rust and rebuild (E-005). What an author means by "rooms" differs per map, and it is
+    /// exactly the kind of number someone tunes while looking at a result.
+    ///
+    /// Absent means [`Enclosure::default`], which is the pair the editor shipped, so a map written
+    /// before this field existed generates exactly as it did.
+    #[serde(default)]
+    pub enclosure: Enclosure,
+}
+
+/// **The enclosure wish a generator aims at, and its weight against everything else.**
+///
+/// A *soft* wish: a region that cannot reach the target returns its best arrangement and says so
+/// rather than refusing, which is what makes a tuned number safe.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Enclosure {
+    /// **The fraction of a generated region that should close into rooms**, `0.0..=1.0`.
+    pub wish: f32,
+    /// **What that wish is worth** against the other terms of the solve. Any positive value makes it
+    /// decisive, because it is the only soft constraint in play; the number leaves room for a second
+    /// wish to be weighed against it later.
+    pub weight: u32,
+}
+
+impl Default for Enclosure {
+    /// The pair `editor.rs` held as constants before E-005: a quarter of the region, weighted 200.
+    fn default() -> Self {
+        Enclosure { wish: 0.25, weight: 200 }
+    }
 }
 
 impl Default for Map {
@@ -170,12 +211,18 @@ impl Default for Map {
             stamps: Vec::new(),
             locations: Vec::new(),
             note: None,
+            enclosure: Enclosure::default(),
         }
     }
 }
 
-/// serde's `skip_serializing_if` needs a function, and these two say the only thing they exist to
-/// say: an absent field and its default are the same fact, so a default is not written.
+/// serde's `skip_serializing_if` needs a function, and each of these says the only thing it exists
+/// to say: **an absent field and its default are the same fact, so a default is not written.**
+///
+/// Every field of [`Placed`] that has a `#[serde(default)]` needs one, because `default` is only half
+/// the promise — it says what an absent field *means*, and `skip_serializing_if` is what stops the
+/// writer stating it. Without the pair, a map carries a line per placement per default, which on the
+/// real town map was 41 % of the file (E-057).
 fn lift_is_zero(v: &f32) -> bool {
     *v == 0.0
 }
@@ -186,6 +233,17 @@ fn tip_is_zero(v: &(u8, u8)) -> bool {
 
 fn paint_is_zero(v: &i8) -> bool {
     *v == 0
+}
+
+/// A placement is not owned unless it says so, so `owned: false` is a line that states the assumption.
+fn not_owned(v: &bool) -> bool {
+    !*v
+}
+
+/// `Option::is_none`, named for the same reason the others are: a default and an absent field are
+/// one fact, and a writer that states a default has written nothing.
+fn absent<T>(v: &Option<T>) -> bool {
+    v.is_none()
 }
 
 /// A new map's size before anyone has said otherwise: 32 m square and one storey, so an author opens
@@ -255,22 +313,31 @@ pub struct Placed {
     ///
     /// `None` for everything that stands on the floor, hangs from the ceiling or fills a doorway —
     /// those layers derive their height from the map, not from a neighbour.
-    #[serde(default)]
+    ///
+    /// # And it is the record of which mount a two-way piece took
+    ///
+    /// For a [`Descriptor`](crate::descriptor::Descriptor) mounted
+    /// [`Mount::OnSurfaceOrFloor`](crate::descriptor::Mount::OnSurfaceOrFloor), this field **is** the
+    /// answer to "did it take the surface or the floor": `Some(host)` says the surface, `None` says the
+    /// floor. That is why the variant needs no second field — [`crate::stack::resolve_y`] already
+    /// derives the height from `on`, so the two seatings reproduce on a reload without anything else
+    /// being stored.
+    #[serde(default, skip_serializing_if = "absent")]
     pub on: Option<String>,
     /// **Owned by the author** — a generator must route around it rather than through it.
     ///
     /// This is the lock in Smelik et al.'s sense and the `initial` domain in WFC's: an owned cell is a
     /// unary constraint, a cell whose domain is narrowed to one prototype before propagation. See
     /// `docs/2026-08-03-kitbash-editor.md`.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "not_owned")]
     pub owned: bool,
     /// Why it is owned. A **reason, never a bool** — the same call `PropPlacement::waive` makes, and
     /// for the same argument: a bool lets "I could not be bothered" and "this is the cell block's only
     /// entrance" look identical in a diff.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "absent")]
     pub owned_because: Option<String>,
     /// Per-instance overrides layered over the descriptor. Absence inherits.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "absent")]
     pub patch: Option<Descriptor>,
     /// **Paint order among things at the same spot** — higher draws in front.
     ///
@@ -293,7 +360,7 @@ pub struct Placed {
     ///
     /// Distinct from [`Self::owned_because`], which answers a narrower question a generator has to
     /// respect. This one is for the reader.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "absent")]
     pub note: Option<String>,
 }
 
@@ -387,6 +454,83 @@ impl Map {
         let map: Map = ron::from_str(text).map_err(|e| format!("map: {e}"))?;
         map.validate()?;
         Ok(map)
+    }
+
+    /// **The map as a consumer sees it**: the same map, with every stamp's rows in
+    /// [`Self::placements`].
+    ///
+    /// # Why this exists
+    ///
+    /// A map holds **references** to compositions, never the rows they stand for — that is what
+    /// makes editing a group change every map that stamped it. But a consumer that reads
+    /// [`Self::placements`] and finds only the hand-authored rows is reading a *different level*
+    /// from the one the author drew: the editor showed the group, the game does not have it.
+    ///
+    /// That was measured, not supposed. Sanctuary's `town.map.ron` was stamped once with
+    /// `town/house_cottage_plaster`; the editor drew its 18 members, and the game, loading the
+    /// same file through [`crate::project_data::load`], received 728 placements where the editor
+    /// had 746. The 18 missing rows were the house.
+    ///
+    /// So the expansion is not optional for a consumer, and this is where it happens. The map's
+    /// [`Self::stamps`] are **kept** — the reference survives, so saving the expanded map writes
+    /// the reference and not the rows, and editing the group still moves every stamp.
+    ///
+    /// # One expander
+    ///
+    /// This is [`crate::composition::expand_map`] — the same function the editor's ghost and the
+    /// editor's save gate call. There is no second implementation, so the editor's picture and the
+    /// game's world cannot disagree about what a stamp means.
+    ///
+    /// # A refusal, not a degradation
+    ///
+    /// A stamp that does not expand — a group the project no longer defines, a member the library
+    /// lacks, a member with nowhere to rest — fails **here**, and the error names the stamp. The
+    /// map is not returned with its rows missing: a level that quietly lacks a house is the exact
+    /// failure this method exists to remove.
+    pub fn expanded(
+        &self,
+        compositions: &[crate::composition::Composition],
+        library: &crate::library::Library,
+    ) -> Result<Map, String> {
+        if self.stamps.is_empty() {
+            return Ok(self.clone());
+        }
+        let expansion = crate::composition::expand_map(self, compositions, library)?;
+        let mut out = self.clone();
+        // **The rows, in the order `expand` emits them** — stamp id order, then member-path order.
+        // A total order, so two runs and two readers agree on which row is which.
+        out.placements.extend(expansion.placements);
+        // A stamp's locations come with it, or the group's affordances vanish: a location governs
+        // props by id, and those ids are the stamped ones.
+        out.locations.extend(expansion.locations);
+        Ok(out)
+    }
+
+    /// **The stamp a row belongs to**, and the member within it — `None` for a hand-placed row.
+    ///
+    /// A consumer reading an expanded map has a mixture of rows: the ones the author placed and
+    /// the ones a group brought. Which is which is not a matter of taste — a game that validates
+    /// every row against the descriptors it knows has to skip the rows a group brought, because
+    /// the group is the *game's* business (a house's wall panels are chosen by the house, not by
+    /// the town), while the map's own rows are the town's.
+    ///
+    /// # The id alone is not enough
+    ///
+    /// A placement id is an authored string and nothing shape-checks it — `fridge@1` ships, and
+    /// `mess_a/table` is legal too. So a `/` in an id does **not** make a row a stamped one; the
+    /// map's own stamp list is what says so. A hand-placed row named `mess_a/table` on a map with
+    /// no such stamp is a hand-placed row, and answering otherwise would hand a consumer a
+    /// classification it cannot check.
+    ///
+    /// The id *shape* comes from the one convention [`crate::composition::stamped_id`] writes, so
+    /// the two cannot drift; the *membership* is this map's own.
+    pub fn stamp_of<'a>(&self, placement_id: &'a str) -> Option<(&'a str, &'a str)> {
+        let (stamp, member) = crate::composition::split_stamped_id(placement_id)?;
+        // **The stamp must be one this map holds.** The id says the shape; the map says the fact.
+        if !self.stamps.iter().any(|s| s.id == stamp) {
+            return None;
+        }
+        Some((stamp, member))
     }
 
     /// Everything that must hold before a map is usable.
@@ -772,6 +916,7 @@ mod tests {
                 }],
             }],
             note: Some("a galley, for the schema tests".into()),
+            ..Default::default()
         }
     }
 
@@ -863,6 +1008,96 @@ mod tests {
         let m = table_map();
         let text =
             ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+        assert_eq!(Map::parse(&text).expect("parses"), m);
+    }
+
+    /// **A map's file is not padded with defaults it does not need** (E-057).
+    ///
+    /// A save of the real town map wrote 226,923 bytes to say 739 placements, and **four of the
+    /// fields on every one of them were a default**: `on: None`, `owned: false`, `owned_because:
+    /// None`, `patch: None`, `note: None`. Measured on that file, dropping those lines is **41 % of
+    /// it** — and nothing is lost, because an absent field in RON deserializes to exactly the value
+    /// the line stated, which is what `#[serde(default)]` already promises.
+    ///
+    /// **The assertion is on both facts at once, and it has to be.** A test that only measured the
+    /// size would pass with a writer that dropped a *meaningful* field; a test that only round-tripped
+    /// would pass today, with every default written out. So this one weighs the text AND parses it
+    /// back to the same map, so the saving cannot be bought with data.
+    #[test]
+    fn a_default_field_is_not_written_and_nothing_is_lost() {
+        let mut m = Map { name: "sparse".to_owned(), ..Map::default() };
+        for i in 0..20 {
+            m.placements.push(Placed {
+                id: format!("piece_{i}"),
+                descriptor: "kit/fence".to_owned(),
+                at: (i as f32, 0.0),
+                ..Placed::default()
+            });
+        }
+        let text =
+            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+
+        // The lines that used to be written for every placement, none of which says anything when
+        // it holds its default. **`note` is counted on the placement rows only**: the map's own
+        // header `note` is written even when absent, on purpose — one line per file buys a reader a
+        // visible place to write, which is why the field exists.
+        for padding in [
+            "on: None",
+            "owned: false",
+            "owned_because: None",
+            "patch: None",
+        ] {
+            assert!(
+                !text.contains(padding),
+                "`{padding}` is a default and is still being written {} times; \
+                 the file is padded with facts its reader already assumes:\n{text}",
+                text.matches(padding).count()
+            );
+        }
+        assert_eq!(
+            text.matches("note:").count(),
+            1,
+            "only the map's own header note is written; 20 placement rows must not say `note: None`"
+        );
+        assert_eq!(
+            Map::parse(&text).expect("the sparse file still parses"),
+            m,
+            "dropping the defaults must not change the map that comes back"
+        );
+    }
+
+    /// **And a field that is NOT its default is still written**, which is the half a size test alone
+    /// would not catch: the point of skipping a default is that a stated value survives.
+    #[test]
+    fn a_stated_field_is_still_written() {
+        let mut m = Map { name: "stated".to_owned(), ..Map::default() };
+        m.placements.push(Placed {
+            id: "owned_1".to_owned(),
+            descriptor: "kit/gate".to_owned(),
+            at: (1.0, 2.0),
+            yaw: 90.0,
+            // **A host that is not in the map is refused by `parse`**, so the fixture states a real
+            // one: `owned_1` stands on the piece below it, which is what `on` means.
+            on: None,
+            owned: true,
+            owned_because: Some("the gate the level starts at".to_owned()),
+            note: Some("swings both ways".to_owned()),
+            paint: 3,
+            ..Placed::default()
+        });
+        let text =
+            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+        for stated in [
+            "owned: true",
+            "the gate the level starts at",
+            "swings both ways",
+            "paint: 3",
+        ] {
+            assert!(
+                text.contains(stated),
+                "`{stated}` is a stated value and must be written:\n{text}"
+            );
+        }
         assert_eq!(Map::parse(&text).expect("parses"), m);
     }
 

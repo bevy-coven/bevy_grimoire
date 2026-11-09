@@ -182,17 +182,31 @@ pub enum Stance {
     /// `docs/tiles_tab_contract.md` recorded exactly why — *"There is one list on this tab, so there
     /// is nothing to switch between."* There are two pages now, so the reservation is spent.
     Browsing,
+    /// **The composition picker has the arrows** — they walk the compositions, not the palette.
+    ///
+    /// The fifth phase, and it exists because the Map door's picker would otherwise be **mouse
+    /// only**, which in this editor is not a route at all. The editor's own brief says it: *"this
+    /// should be done by the keyboard, as key strokes are faster"*, and the crate's own palette
+    /// test drives the palette from the keyboard for the same reason.
+    ///
+    /// It is a stance rather than a flag for the same reason `Proposed` and `Browsing` are: while it
+    /// is on, **the arrows mean something different**, and a key list that did not say so would be
+    /// lying. The `Map` context's arrows are `PalettePrev`/`PaletteNext` at
+    /// [`Stance::Idle`], so they can be re-bound to the picker at this stance without a second key
+    /// and without a collision.
+    Picking,
 }
 
 impl Stance {
     /// **Every stance a binding could be judged against**, in one place because two things read it:
     /// [`Stances::overlaps`] asks whether two requirements can ever hold together, and the badge
     /// tests sweep it. A fifth stance therefore costs one edit here rather than two that must agree.
-    pub const ALL: [Stance; 4] = [
+    pub const ALL: [Stance; 5] = [
         Stance::Idle,
         Stance::Holding,
         Stance::Proposed,
         Stance::Browsing,
+        Stance::Picking,
     ];
 
     /// Can these two be live at the same moment? A stance is exactly one thing at a time, so this is
@@ -393,6 +407,13 @@ enumerated! {
         Detail,
         /// The id headline of the piece being defined — the thing `I` types.
         IdField,
+        /// **The COMPOSE tab's list of composition names** — the thing its `I` renames.
+        ///
+        /// **Its own id, and the ratchet is why.** The Meshes tab's `I` badge is on `IdField`, and
+        /// `every_control_the_census_homes_a_verb_at_is_on_screen` **fails on two visible nodes
+        /// claiming one id** — so the COMPOSE tab's badge cannot share it. The names are where the
+        /// name being renamed is, so the badge belongs on them.
+        ComposeNames,
         /// The `mount` row, which `M` cycles.
         Mount,
         /// The subgrid's own lattice of cells: what the cell cursor walks and what solid/edge/clear
@@ -413,7 +434,9 @@ enumerated! {
         /// The Map's YAW row — the facing the turn cluster writes.
         Yaw,
         /// The Map's UNDER row — the piece under the cursor, which the piece-verbs act on and the row
-        /// exists to name.
+        /// exists to name. Home is bound here for where it sits on the Map, not for that piece:
+        /// `FrameView` frames the locked placement or the whole map and never reads the piece under
+        /// the cursor.
         Under,
         /// The TILE card in the Tiles pane — the tile being assembled, open or not: its heading is on
         /// screen in every branch, including the one that says "press N to start one".
@@ -462,6 +485,7 @@ impl ControlId {
             ControlId::DoorStrip | ControlId::Title | ControlId::Back | ControlId::Hint => true,
             ControlId::Detail
             | ControlId::IdField
+            | ControlId::ComposeNames
             | ControlId::Mount
             | ControlId::CellGrid
             | ControlId::Tags
@@ -479,9 +503,16 @@ impl ControlId {
     }
 }
 
-/// Everything the editor can be asked to do.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action {
+enumerated! {
+    /// Everything the editor can be asked to do.
+    ///
+    /// **Generated with the enum by [`enumerated!`], so the count and the list cannot disagree** —
+    /// the same mechanism `ControlId` uses, and for the same reason: a hand-typed list of a
+    /// hundred-and-twenty-eight variants is a list that goes stale. **The parity test needs `ALL`**
+    /// to say that every action is either migrated or on the unmigrated list, and a list that
+    /// cannot be checked against the enum is a list that is not checked.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Action {
     /// Jump to this door's first, second or third panel. **Three, because the widest door holds
     /// three** — Kit is Meshes/Tiles/Compose. A fourth would be a fourth row here and a fourth in
     /// every context's list, which is what the twelve-row cap is for.
@@ -494,6 +525,42 @@ pub enum Action {
     ComposeNext,
     /// Arm the selected composition on the map, so a click stamps it.
     ComposeArm,
+    /// **Rename the composition this tab is showing** — type a new name, and every map that stamps
+    /// it follows.
+    ///
+    /// The same verb as [`Action::TypeId`], on a different subject: *"say what this thing is
+    /// called"*. The Meshes tab's `I` renames a *candidate*'s id; this renames a *composition*'s.
+    /// **One verb, two subjects, two contexts** — and the contexts never overlap, so the same key
+    /// serves both.
+    RenameComposition,
+    /// **Take the arrows to the composition picker** — the Map door's list of compositions.
+    ///
+    /// A `Stance` and not a context, because the picker is a *list on the Map tab* rather than a tab
+    /// of its own, and the arrows are already bound on the Map tab — to the palette. See
+    /// [`Stance::Picking`].
+    PickComposition,
+    /// Walk the composition picker: the previous composition, or the next.
+    CompositionPrev,
+    CompositionNext,
+    /// **Arm the composition the picker is on** — the Map door's half of the arm.
+    ///
+    /// The same verb as [`Action::ComposeArm`] and a different action, because the census allows one
+    /// binding per action and the two doors' contexts never overlap. One writer underneath:
+    /// `Armed::toggle`.
+    ArmComposition,
+    /// **Cross to the other door** — the Kit door and the Map door, without the menu.
+    ///
+    /// **The same verb on both sides.** Braem & Egner's *Getting a grip on cognitive flexibility*
+    /// (2018, `10.1177/0963721418787475`) is the instruction: a cue that is associated with
+    /// switching should be *"a general readiness to switch between tasks rather than to switch to
+    /// one particular alternative task"*. So this says **"the other door"** and never names a
+    /// direction — a key that meant "the Map door" would mean the opposite thing on the Map door,
+    /// which is a mode error wearing a chord.
+    ///
+    /// It is **not** the menu's route. `Action::MainMenu` opens the chooser, and the chooser opens
+    /// a door; this *changes* which door is open. Different acts, different actions, and the
+    /// census can tell them apart.
+    SwitchDoor,
     /// Walk the selected group's members. A second cursor, under the one that walks the groups.
     ComposeMemberPrev,
     ComposeMemberNext,
@@ -502,6 +569,12 @@ pub enum Action {
     CarouselPrev,
     CarouselNext,
     Save,
+    /// **Snip an area of the editor** — arm it, drag a rectangle over the window, type a one-line
+    /// note, and Enter saves a crop of that area with a file of what was under it. Escape cancels.
+    ///
+    /// It is a **capture**, not a registry operation: its output is a file a person and an agent
+    /// read, and it changes no map, so it has no operation name. See `snip`.
+    Snip,
     /// **Back to the chooser** — leave this map and pick another.
     ///
     /// `Cmd+O` because "open something else" is what every editor binds it to, and this screen has
@@ -554,6 +627,9 @@ pub enum Action {
     LiftDown,
     Fill,
     Remove,
+    /// Frame the view: the locked placement when there is one, otherwise the whole map. Camera
+    /// state, not a document change, so it has no operation.
+    FrameView,
     /// Arm the move tool: click a piece to pick it up, click again to put it down.
     MoveMode,
     RenameMap,
@@ -651,6 +727,13 @@ pub enum Action {
     /// Arm the clone tool: drag a box to take a copy of every placement inside it, then click to
     /// stamp the whole set somewhere else — as many times as it is held.
     CloneMode,
+    /// Arm the run tool: drag a line and the armed piece repeats along it, at its own pitch.
+    ///
+    /// The fourth verb on the `B` family, and the one the other three could not be. A flood lays a
+    /// grid — one piece, one yaw, one pitch, over a region — so it cannot draw a fence that turns
+    /// and cannot draw one with a gap in it, and the grid's pitch is the *project's* lattice rather
+    /// than the piece's.
+    RunMode,
     /// The Tiles tab's own history. Separate from [`Action::Undo`] because the two stacks are
     /// separate — see `ImportState::undo`.
     UndoTile,
@@ -755,6 +838,9 @@ pub enum Action {
     ToggleGhost,
     /// The stage camera's framing: figure / feet / side / ground.
     CycleCamPreset,
+    }
+    /// Every action, so a ratchet can enumerate them.
+    ALL;
 }
 
 impl Action {
@@ -788,6 +874,35 @@ impl Action {
                 (0..panels).filter_map(Action::tab_slot).any(|a| a == self)
             }
             _ => true,
+        }
+    }
+
+    /// **The registered operation this action dispatches, or `None` if it has not been migrated.**
+    ///
+    /// **An action that names an operation is migrated** (E-025, decided 2026-10-22): its key
+    /// dispatches a registered operation, so an agent can do the same thing. The parity test checks
+    /// each name against the registry and checks that the UI path dispatches it. The action stays
+    /// in this enum, so the Typing guard still applies to it.
+    pub fn operation(self) -> Option<&'static str> {
+        match self {
+            Action::OwnToggle => Some("placement_set_pin"),
+            Action::TurnPieceLeft | Action::TurnPieceRight => Some("placement_set_yaw"),
+            Action::PalettePrev | Action::PaletteNext => Some("brush_arm"),
+            Action::RenameMap => Some("map_rename"),
+            Action::Remove => Some("placement_remove"),
+            Action::SwitchDoor | Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
+                Some("door_open")
+            }
+            // **The three generate sources and the commit door** (S-001). Each key dispatches the
+            // same operation an agent calls: `propose_layout` for the three, `accept_layout` for
+            // Enter. `Action::Cancel` stays unmigrated — it peels several things.
+            Action::Generate | Action::GenerateDeclared | Action::GenerateComposed => {
+                Some("layout_propose")
+            }
+            Action::AcceptProposal => Some("layout_accept"),
+            Action::Fill => Some("fill"),
+            Action::Save => Some("map_save"),
+            _ => None,
         }
     }
 }
@@ -1064,6 +1179,15 @@ pub const BINDINGS: &[Binding] = &[
     )
     .at(Home::Control(ControlId::Title)),
     b(
+        Action::Snip,
+        KeyCode::Backslash,
+        true,
+        Context::Global,
+        "\\",
+        "snip an area",
+    )
+    .at(Home::Control(ControlId::Title)),
+    b(
         Action::MainMenu,
         KeyCode::KeyO,
         true,
@@ -1072,6 +1196,39 @@ pub const BINDINGS: &[Binding] = &[
         "back to the menu",
     )
     .at(Home::Control(ControlId::Back)),
+    // **The door switch, and the key is `=`.**
+    //
+    // **The key has to be global** — the crossing must work from both doors — and `Context::Global`
+    // overlaps every tab, so **every letter is taken**: `C` in Tiles and Anim, `I` and `L` in Meshes,
+    // and so on. The free bare keys are `Digit4`–`Digit0`, `Minus`, `Equal`, `Semicolon`, `Quote`,
+    // `Backquote`, `Backslash` and `Tab`.
+    //
+    // **And it has to be legible**, which is the half the census cannot measure. The backquote was
+    // the first choice — it is the industry's cue for "the other place" (`Cmd+\`` is VS Code's
+    // *toggle terminal*, `Ctrl+\`` is Blender's *toggle console*) — and **it was measured at 11 px
+    // and read as a speck**: a grave accent is a small mark at any size, and a key the author cannot
+    // see is a key they will not press. `Quote` is the same problem in a different glyph.
+    //
+    // **`=` is the widest mark on the keyboard and the most legible of the free ones**, and it is
+    // also the shape of a toggle — which is what the crossing is: the same key, the other door. The
+    // rest are worse for one reason each: `Tab` is Bevy's focus traversal, the digits are **the
+    // most learned keys in this editor** (`1`/`2`/`3` are the door-relative panel slots), `;` and `-`
+    // are punctuation the author reads as punctuation, and `\` is the shell's "leave this level" —
+    // a meaning this key does not have.
+    //
+    // **The home is the door strip**, because the strip is where the editor already says which door
+    // is open — and Braem & Egner, on Crump & Logan (2010): *"switch costs can be reduced for stimuli
+    // that are presented at a screen location associated with a higher likelihood of task
+    // switches."* The cue belongs beside the door's name.
+    b(
+        Action::SwitchDoor,
+        KeyCode::Equal,
+        false,
+        Context::Global,
+        "=",
+        "the other door",
+    )
+    .at(Home::Control(ControlId::DoorStrip)),
     // **`Cmd+E` for the errors, and the legend is where it lives** — the panel it opens is not on
     // screen to carry a badge, which is exactly the case `Home::Legend` is for.
     //
@@ -1202,6 +1359,48 @@ pub const BINDINGS: &[Binding] = &[
     )
     .also_filtered()
     .at(Home::Control(ControlId::Palette)),
+    // **The composition picker, and the arrows it takes.**
+    //
+    // `P` is free on the Map tab — it belongs to Meshes (`RotateMeshZ`) and Compose
+    // (`CarouselNext`), and neither of those contexts ever overlaps Map. The two arrow rows are the
+    // palette's own, re-bound at [`Stance::Picking`], so **the picker costs one new key and no new
+    // arrow**: the same two keys, meaning something different while the picker has them.
+    //
+    // **A keyboard route is not a convenience here — it is the route.** `bevy_picking` reads the
+    // mouse from the `WindowEvent` stream (`bevy_picking-0.20.0/src/input.rs:153`), and the editor's
+    // own brief says the work is to be done *"by the keyboard, as key strokes are faster"* — so a
+    // picker that could only be reached with the pointer would be a picker the editor's own
+    // doctrine rejects.
+    bp(
+        Action::PickComposition,
+        KeyCode::KeyP,
+        false,
+        Stance::Idle,
+        Context::Map,
+        "P",
+        "take the arrows to the compositions",
+    )
+    .at(Home::Control(ControlId::Detail)),
+    bp(
+        Action::CompositionPrev,
+        KeyCode::ArrowUp,
+        false,
+        Stance::Picking,
+        Context::Map,
+        "up",
+        "walk the compositions / Shift: x5",
+    )
+    .at(Home::Control(ControlId::Detail)),
+    bp(
+        Action::CompositionNext,
+        KeyCode::ArrowDown,
+        false,
+        Stance::Picking,
+        Context::Map,
+        "down",
+        "walk the compositions / Shift: x5",
+    )
+    .at(Home::Control(ControlId::Detail)),
     // **A separate cluster from the aim keys, on purpose.** `Z`/`C` turn the BRUSH and must keep
     // doing only that: binding them to the selection is what made rotation feel broken before,
     // because placing selects, so the next press turned the piece just put down while the ghost —
@@ -1309,6 +1508,18 @@ pub const BINDINGS: &[Binding] = &[
         "removal mode",
     )
     .at(Home::Control(ControlId::Under)),
+    // **Home frames the view.** The locked placement when there is one, otherwise the whole map —
+    // the same framing `emerge_frame_view` uses. It is camera state, not a document change: it has
+    // no operation, so it is one of the unmigrated actions (E-025), and it writes no undo entry.
+    b(
+        Action::FrameView,
+        KeyCode::Home,
+        false,
+        Context::Map,
+        "Home",
+        "frame the view",
+    )
+    .at(Home::Control(ControlId::Under)),
     // **`B` is the last free key under the left hand.** The cluster an author's hand already rests on
     // is `Q W E R T / A S D F G / Z X C V B`, and every other letter in it is spoken for — pan, turn
     // view, aim, aim-reset, turn-piece, fill, remove. `B` is bound in the Tiles tab too (`ScanMesh`),
@@ -1325,7 +1536,7 @@ pub const BINDINGS: &[Binding] = &[
         false,
         Context::Map,
         "B",
-        "move / Shift: clone / M: keep as a composition",
+        "move / Shift: clone / Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     bs(
@@ -1335,7 +1546,28 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Map,
         "B",
-        "move / Shift: clone / M: keep as a composition",
+        "move / Shift: clone / Cmd: run / M: keep as a composition",
+    )
+    .at(Home::Legend),
+    // **The fourth verb on the family, and the one the other three could not be.**
+    //
+    // `Cmd+B` arms the run tool: drag a line and the armed piece repeats along it, at its own
+    // pitch. It shares the family's `does`, so `rows()` still collapses the four into one line —
+    // the Map context is AT its twelve-row ceiling and this costs **no row**.
+    //
+    // **The modifier, not another letter.** `B` is the last free key under the left hand (the
+    // row above says why), the cluster is full, and the run needs the *command* modifier anyway
+    // because the plain `B` is a gesture the author reaches for while moving things around — the
+    // run is a deliberate act, and `Cmd` is the modifier the editor already uses for the
+    // deliberate ones (`Cmd+S` saves, `Cmd+Z` undoes, `Cmd+Delete` edits a piece).
+    bs(
+        Action::RunMode,
+        KeyCode::KeyB,
+        true,
+        false,
+        Context::Map,
+        "B",
+        "move / Shift: clone / Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     // **A third verb on a state that already exists.** `Shift+B` drags a box and leaves a set in
@@ -1349,7 +1581,7 @@ pub const BINDINGS: &[Binding] = &[
         false,
         Context::Map,
         "M",
-        "move / Shift: clone / M: keep as a composition",
+        "move / Shift: clone / Cmd: run / M: keep as a composition",
     )
     .at(Home::Legend),
     b(
@@ -1444,6 +1676,26 @@ pub const BINDINGS: &[Binding] = &[
         "keep this layout / Esc throws it away",
     )
     .at(Home::Legend),
+    // **The Map door's own `Enter` — arm the composition the picker is on.**
+    //
+    // The COMPOSE tab's arm is `Action::ComposeArm` on `Enter` in `Context::Compose`. This is the
+    // **same verb on the Map door**, and it is a *different action* because the census allows one
+    // binding per action and the two contexts never overlap. Two actions, one meaning, one writer:
+    // both call `Armed::toggle`, so there is one answer to "what is armed".
+    //
+    // **`Enter` is free here**, and it is free *because of the stance*: `AcceptProposal` holds `Enter`
+    // at `Stance::Proposed` and the picker holds it at `Stance::Picking`, and those two stances
+    // never hold together. The collision test is what says so.
+    bp(
+        Action::ArmComposition,
+        KeyCode::Enter,
+        false,
+        Stance::Picking,
+        Context::Map,
+        "Enter",
+        "arm this composition for the map",
+    )
+    .at(Home::Control(ControlId::Detail)),
     // **The camera is Global — pan included.** This briefly moved to `Context::Map` to free
     // `W, A, S, D` for the Tiles lattice cursor, on the argument that panning off a staged tile has
     // no way back. That argument was wrong in practice: an author on any tab reaches for these keys
@@ -1914,15 +2166,32 @@ pub const BINDINGS: &[Binding] = &[
     // candidate packs, and that page draws neither — so `F` narrowed a list nobody could see and
     // swallowed the keyboard when typed into (N16). `tiles::hide_filter_on_the_tiles_page` hides
     // the box itself for the same reason.
+    // **`Cmd+F` finds, on every tab.**
+    //
+    // It was `F` on the Tiles tab only, which left the Map tab's PLACE palette and the Rigs
+    // tab's rig list with a filter box **no keyboard could reach** — and a box the author cannot
+    // reach by keyboard is a box they will miss, and a click that misses it falls through to the
+    // map and *edits the level*. Measured on Sanctuary's project: reaching one row in a
+    // 211-descriptor palette took **~90 keystrokes** of `Shift+Down`, and the walk wraps — the
+    // fence is in `KIT · FENCE` and the `town` kit's groups come after it, so an over-long walk
+    // lands in the wrong kit.
+    //
+    // **`Cmd+F` and not `F`.** `F` is the Map's *fill* and the Tiles tab's *cell cursor*, and both
+    // are spoken for. `Cmd+F` is the platform's own "find" chord, it is free on every tab, and it
+    // is free on every tab because it is the same idea everywhere: **narrow the list you are
+    // looking at.** The tab decides *which* box, and the chord is the same — one key, one idea,
+    // three lists.
+    //
+    // **Global, because the box is on every tab.** A per-tab row would have cost three keys and
+    // taught three chords for one idea.
     b(
         Action::FocusFilter,
         KeyCode::KeyF,
-        false,
-        Context::Tiles,
+        true,
+        Context::Global,
         "F",
         "filter the list",
     )
-    .unless(Stance::Browsing)
     .at(Home::Control(ControlId::Filter)),
     bp(
         Action::TileListPrev,
@@ -2310,7 +2579,6 @@ pub const BINDINGS: &[Binding] = &[
         "suggest / all / abandon",
     )
     .at(Home::Control(ControlId::Tags)),
-
     bs(
         Action::DiscardAllSuggestions,
         KeyCode::KeyY,
@@ -2406,15 +2674,49 @@ pub const BINDINGS: &[Binding] = &[
         "walk the focused list / Shift: x5",
     )
     .at(Home::Control(ControlId::Detail)),
+    // **The arm, and it stays in `Context::Compose` — the census says a `Global` row would
+    // collide seven ways.**
+    //
+    // The Map door's own picker arms a composition too, and the obvious answer was to make this row
+    // `Global` so one row served both. The census refused it: `Enter` is bound in *every* tab
+    // context (`Accept` on Meshes, `TileOpen` and `BuildDrop` on Tiles, `AdoptMeasured` on Anim,
+    // `AcceptProposal` on Map), and `Context::Global` overlaps all of them, so the row would have
+    // taken `Enter` away from six other verbs. **The census was right and the plan was wrong.**
+    //
+    // So the Map door's picker reads `Enter` off the **message stream** instead — the same shape
+    // `crate::tiles::take_the_one_match` uses for the tag block, and for the same reason: a
+    // *narrowed* list's `Enter` takes the one match rather than committing a walk, and the census
+    // has no way to say that. One writer, in `compose::Armed::toggle`.
     b(
         Action::ComposeArm,
         KeyCode::Enter,
         false,
         Context::Compose,
         "Enter",
-        "arm this composition for the Map",
+        "arm this composition for the map",
     )
     .at(Home::Control(ControlId::Detail)),
+    // **The rename, on `I` — the same key as the Meshes tab's id field.**
+    //
+    // **One verb, two subjects.** `I` says *"say what this thing is called"*, and the Meshes tab
+    // already owns it for a *candidate*'s id. A composition is the same kind of thing to name, and
+    // the two contexts — `Meshes` and `Compose` — never overlap, so the same key serves both
+    // without a collision.
+    //
+    // **The home is the COMPOSE tab's own list**, and the badge is on the name it renames. The
+    // Meshes tab's `I` badge is on `ControlId::IdField` — the line it types into — and a second
+    // visible node claiming one id is a bug: `every_control_the_census_homes_a_verb_at_is_on_screen`
+    // fails on it. So the COMPOSE tab's badge needs a home of its own, and the list is where the
+    // name is.
+    b(
+        Action::RenameComposition,
+        KeyCode::KeyI,
+        false,
+        Context::Compose,
+        "I",
+        "rename this composition",
+    )
+    .at(Home::Control(ControlId::ComposeNames)),
     // Symmetric with the pair above: `up`/`down` walk the groups, `left`/`right` walk the members of
     // the one you are on. Costs no letter, and the two cursors read as one idea.
     b(
@@ -2917,7 +3219,8 @@ impl Plugin for KeysPlugin {
             // `chain()` makes the sets run in the order listed
             // (`bevy-0.19.0/examples/ecs/ecs_guide.rs:330`).
             .configure_sets(Update, (Phase::Sense, Phase::Text, Phase::Act).chain())
-            .add_systems(Update,
+            .add_systems(
+                Update,
                 (crate::editor::sense_context.in_set(Phase::Sense))
                     .run_if(in_state(crate::screen::Screen::Editor)),
             );
@@ -2981,15 +3284,7 @@ pub enum Holder {
 /// sets both — `Context::Typing` at `.0` and [`Holder::Filter`] at `.2` — and the tab is preserved
 /// through `Holder::Filter`'s own `b.context.overlaps` clause rather than through `.0`.
 pub fn live(tab: Context, typing: bool, stance: Stance, holder: Holder) -> Live {
-    Live(
-        if typing {
-            Context::Typing
-        } else {
-            tab
-        },
-        stance,
-        holder,
-    )
+    Live(if typing { Context::Typing } else { tab }, stance, holder)
 }
 
 /// May an action bound to `want` fire, given who owns the keyboard?
@@ -3048,6 +3343,14 @@ fn allowed(b: &Binding, keys: &ButtonInput<KeyCode>, live: Live) -> bool {
 /// the project holds to: the modifier IS `MOD_KEYS`, and [`MOD_NAME`] is what it is called.
 pub fn mod_held(keys: &ButtonInput<KeyCode>) -> bool {
     MOD_KEYS.iter().any(|k| keys.pressed(*k))
+}
+
+/// The keyboard and the live context, as one system parameter. A system that gates a key on
+/// [`just_pressed`] takes this rather than the two resources, so the pair cannot be wired apart.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct KeyInput<'w> {
+    pub(crate) keyboard: Res<'w, ButtonInput<KeyCode>>,
+    pub(crate) live: Res<'w, Live>,
 }
 
 /// Was this action just pressed, in a context where it is allowed to fire?
@@ -3255,12 +3558,18 @@ mod tests {
             Action::ComposePrev,
             Action::ComposeNext,
             Action::ComposeArm,
+            Action::RenameComposition,
+            Action::PickComposition,
+            Action::CompositionPrev,
+            Action::CompositionNext,
+            Action::ArmComposition,
             Action::ComposeMemberPrev,
             Action::ComposeMemberNext,
             Action::CarouselPrev,
             Action::CarouselNext,
             Action::Save,
             Action::MainMenu,
+            Action::SwitchDoor,
             Action::Undo,
             Action::Redo,
             Action::Shortcuts,
@@ -3271,6 +3580,7 @@ mod tests {
             Action::Remove,
             Action::MoveMode,
             Action::CloneMode,
+            Action::RunMode,
             Action::RenameMap,
             Action::OwnToggle,
             Action::Generate,
@@ -3372,6 +3682,8 @@ mod tests {
             Action::FocusFilter,
             Action::FocusTagFilter,
             Action::ShowErrors,
+            Action::Snip,
+            Action::FrameView,
         ];
         assert_eq!(
             actions.len(),
@@ -3566,7 +3878,6 @@ mod tests {
         }
     }
 
-
     /// **The composition verb names its own key**, because it was reported missing twice while on
     /// screen.
     ///
@@ -3584,9 +3895,13 @@ mod tests {
     /// itself. What was actually wrong here is one unrelated key hiding in a family row.
     #[test]
     fn the_composition_verb_names_its_key_in_the_map_census() {
+        // **The row that keeps a selection as a composition** — named by its action, not by a word
+        // in its prose. The Map census has more than one row that mentions a composition now (the
+        // picker's own row says "take the arrows to the compositions"), and a search by prose finds
+        // whichever comes first in the table, which is not the row this test is about.
         let row = badges(Context::Map, Stance::Idle)
             .into_iter()
-            .find(|r| r.does.contains("composition"))
+            .find(|r| r.actions.contains(&Action::GroupFromSet))
             .unwrap_or_else(|| panic!("the Map census no longer offers a composition verb at all"));
         let chord = chord_text(binding(Action::GroupFromSet));
         assert!(
@@ -3623,6 +3938,13 @@ mod tests {
         Context::Compose,
     ];
 
+    /// The ceiling is retired: a renderer of `keys::rows` that comes back is caught when the crate
+    /// builds, so the test below has nothing left to check at run time.
+    const _: () = assert!(
+        crate::badges::RENDERS_NO_ROWS,
+        "if something renders `keys::rows` again, this ceiling has to come back with it"
+    );
+
     /// **Retired, and this is the record of why.**
     ///
     /// It capped a context at ~12 *rows* — Zheng et al. 2018 on a vocabulary of about a dozen being
@@ -3640,10 +3962,8 @@ mod tests {
     /// ratchet that vanishes without a reason gets reinvented at the wrong value.
     #[test]
     fn the_row_ceiling_has_no_rendering_left_to_guard() {
-        assert!(
-            crate::badges::RENDERS_NO_ROWS,
-            "if something renders `keys::rows` again, this ceiling has to come back with it"
-        );
+        // The check is a `const` above this item, so it is made when the crate is built: a
+        // renderer of `keys::rows` that comes back fails the build, not this test.
     }
 
     /// **A collapsed row must name what each of its chords does.**
@@ -3724,7 +4044,7 @@ mod tests {
     /// [`Stance::ALL`] rather than a copy of it: `Stances::overlaps` decides key collisions by
     /// enumerating the same list, and two lists of the stances is exactly the drift that would let a
     /// fifth one be exclusive to the collision test and invisible to the badges.
-    const STANCES: [Stance; 4] = Stance::ALL;
+    const STANCES: [Stance; 5] = Stance::ALL;
 
     /// **Nothing falls off the badge overlay.**
     ///
@@ -3750,7 +4070,11 @@ mod tests {
             drawn.sort_by_key(|a| format!("{a:?}"));
             live.sort_by_key(|a| format!("{a:?}"));
             drawn.dedup();
-            assert_eq!(drawn.len(), live.len(), "{context:?}/{stance:?}: a badge repeats an action");
+            assert_eq!(
+                drawn.len(),
+                live.len(),
+                "{context:?}/{stance:?}: a badge repeats an action"
+            );
         }
     }
 
@@ -3892,7 +4216,42 @@ mod tests {
             // into the three door-relative slots (`1`/`2`/`3`, "the kit stops being the project")
             // and `ShowErrors` arrived. Two keys of headroom nobody granted, closed on the day it
             // was noticed.
-            (Context::Global, 16),
+            // 17 -> 18: `SwitchDoor`, on the backquote. The Kit door and the Map door are one
+            // application and one project, and there was no way to cross between them except the
+            // menu: `Cmd+O`, walk a column, `Enter` — three keystrokes and a **full project
+            // reload** each way, re-reading `kits.ron`, `vocab.ron` and `rules.ron`, re-validating
+            // 332 library descriptors and 16 compositions, and **re-measuring every GLB's triangle
+            // count** from its JSON chunk. Nothing in any of that changes when the author walks from
+            // one door to the other to look at the thing they just made.
+            //
+            // The `Ownership` table already says the project is *"reloaded when the kit is not"*;
+            // this is the crossing that obeys the table.
+            //
+            // **It is `Global` because it must work from both doors**, and `Context::Map` is only
+            // live on the Map door — so a `Map` row would leave the Kit door with no way back. That
+            // costs this one row in every context's budget, which is what the pin is for.
+            //
+            // **The backquote, and why that key.** It is the industry's cue for "the other place"
+            // (`Cmd+\`` is VS Code's *toggle terminal*, `Ctrl+\`` is Blender's *toggle console*, and
+            // `` ` `` is Emacs's *other window*), and it is the only free bare key that is not a
+            // letter: every letter is bare-bound in some tab, and `Global` overlaps every tab.
+            // 18 -> 19: `Snip`, on `Cmd+\`. **A snip is the person's gesture from either door**: a
+            // crop of the Kit door is as much a snip as one of the Map door, so it is `Global`, like
+            // Save. `Backslash` is bound in no context, so the chord is free everywhere it is live.
+            (Context::Global, 19),
+            // 16 -> 17: `FocusFilter`, on `Cmd+F`. **The filter box was mouse-only on every tab
+            // but one.** `FocusFilter` was `Context::Tiles`, so the Map tab's PLACE palette and the
+            // Rigs tab's rig list had no keyboard route to their own filter at all — and a box the
+            // author cannot reach by keyboard is a box they will miss, and a click that misses it
+            // falls through to the map and *edits the level*. Measured on Sanctuary's project:
+            // reaching one row in a 211-descriptor palette took **~90 keystrokes** of `Shift+Down`,
+            // and the walk wraps — the fence is in `KIT · FENCE` and the `town` kit's groups come
+            // after it, so an over-long walk lands in the wrong kit.
+            //
+            // `Cmd+F` is the platform's own "find" chord, and it is free on every tab — which is
+            // what makes one Global row the right shape: the tab decides *which* box, and the
+            // chord is the same everywhere. A per-tab row would have cost three keys and taught
+            // three chords for one idea.
             // 25 -> 26: `AcceptProposal`, the generate commit door. Bought deliberately, and it
             // costs no *row* — the four region-fills are `Stance::Idle` and this is
             // `Stance::Proposed`, so the two never share a list. See [`Stance::Proposed`].
@@ -3900,7 +4259,40 @@ mod tests {
             // never re-measured — with `AcceptProposal` in, the table holds 24 `Context::Map` rows.
             // A one-directional assert cannot catch a stale-high pin, so this one is corrected by
             // counting rather than by arithmetic on its predecessor.
-            (Context::Map, 24),
+            //
+            // **24 -> 25: `RunMode`, on `Cmd+B`.** The run tool — drag a line and the armed piece
+            // repeats along it at **its own pitch**. It is the fourth placement gesture, and the
+            // other three could not be it: a flood lays a *grid*, so it cannot draw a fence that
+            // turns and cannot draw one with a gap in it, and the grid's pitch is the *project's*
+            // lattice rather than the piece's — Sanctuary's fence posts stand 2.032 m apart and
+            // the lattice's rungs are 1.000, 0.333 and 0.111 m, so a fill lays them 3.000, 2.333
+            // or 2.111 m apart, never 2.032.
+            //
+            // It **costs no *row*** — it shares the `B` family's `does`, so the badge shows one
+            // line — but the ratchet counts *bindings*, and a family of four is four keys. So the
+            // count goes up by one, deliberately, with the reason here.
+            // 25 -> 28: `PickComposition`, `CompositionPrev`/`CompositionNext` and
+            // `ArmComposition` — the composition picker's four rows. The Map door's picker is the
+            // only way to arm a composition *on the Map door*, and it was mouse-only, which in this
+            // editor is not a route: `bevy_picking` reads the mouse from the `WindowEvent` stream
+            // (`bevy_picking-0.20.0/src/input.rs:153`) and the editor's own brief says the work is to
+            // be done *"by the keyboard, as key strokes are faster"*. The crate's own palette test
+            // drives the palette from the keyboard for the same reason.
+            //
+            // **Three of the four cost no new key.** `P` is free on the Map tab (it belongs to
+            // Meshes and Compose, which never overlap Map), and the two arrow rows are the palette's
+            // own, re-bound at `Stance::Picking` — the same two keys, meaning something different
+            // while the picker has them. `Enter` is likewise free, because `AcceptProposal` holds it
+            // at `Stance::Proposed` and the two stances never hold together.
+            //
+            // 29 -> 30: `FrameView`, on Home. It is camera state with no document change, so it has
+            // no operation, and E-025 counts it unmigrated (with `LiftUp`, `Fill` and `MoveMode`, which
+            // are unmigrated for their own reasons). It frames the
+            // locked placement, or the whole map, through the `resolve_frame` + `apply_frame` that
+            // `emerge/frame_view` uses, and it writes no undo entry. Home is bound on the Control's
+            // anchor, not the legend, which already carries eight badges.
+            // **One new key, deliberately:** `P`.
+            (Context::Map, 30),
             // 31 -> 32: `ExcludePack`. The importer scans every `.glb` under `assets/`, which is
             // right for finding art and wrong for offering it — a labelling batch spent its tenth
             // call of 778 describing `characters/cipher_field`, a character rig that could not be
@@ -3969,7 +4361,13 @@ mod tests {
             // `no_home_carries_more_than_it_can_show` allows.
             (Context::Tiles, 31),
             (Context::Anim, 11),
-            (Context::Compose, 7),
+            // 7 -> 8: `RenameComposition`, on `I`. The COMPOSE tab could *read* a group in rich
+            // detail and *write* a new one, and it could not change a group's **name** — which is the
+            // one edit every author needs, and the one the file's own format makes trivial (one
+            // line). `I` is the same key as the Meshes tab's id field, and it is the same verb: *"say
+            // what this thing is called"*. The two contexts never overlap, so one key serves both
+            // and no new letter is learned.
+            (Context::Compose, 8),
         ];
         let mut grown = Vec::new();
         for (context, was) in pinned {
@@ -4096,7 +4494,11 @@ mod tests {
         input.press(binding(Action::Shortcuts).key);
         for tab in [Context::Map, Context::Meshes, Context::Anim] {
             assert!(
-                pressed(&input, Live(tab, Stance::Idle, Holder::Tab), Action::Shortcuts),
+                pressed(
+                    &input,
+                    Live(tab, Stance::Idle, Holder::Tab),
+                    Action::Shortcuts
+                ),
                 "the shortcuts overlay must be reachable from {tab:?}"
             );
         }
@@ -4155,18 +4557,30 @@ mod tests {
         let mut input = ButtonInput::<KeyCode>::default();
         input.press(KeyCode::KeyK);
         assert!(
-            just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Shortcuts),
+            just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Shortcuts
+            ),
             "K did not fire Shortcuts"
         );
         assert!(
-            !just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Cancel),
+            !just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Cancel
+            ),
             "K fired an unrelated action"
         );
 
         let mut input = ButtonInput::<KeyCode>::default();
         input.press(KeyCode::Escape);
         assert!(
-            just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Cancel),
+            just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Cancel
+            ),
             "Escape did not fire Cancel"
         );
     }
@@ -4186,12 +4600,20 @@ mod tests {
         }
         for b in BINDINGS {
             assert!(
-                !just_pressed(&input, Live(Context::Typing, Stance::Idle, Holder::Tab), b.action),
+                !just_pressed(
+                    &input,
+                    Live(Context::Typing, Stance::Idle, Holder::Tab),
+                    b.action
+                ),
                 "{:?} fired while a text field owned the keyboard",
                 b.action
             );
             assert!(
-                !pressed(&input, Live(Context::Typing, Stance::Idle, Holder::Tab), b.action),
+                !pressed(
+                    &input,
+                    Live(Context::Typing, Stance::Idle, Holder::Tab),
+                    b.action
+                ),
                 "{:?} read as held while a text field owned the keyboard",
                 b.action
             );
@@ -4240,7 +4662,8 @@ mod tests {
                 let want =
                     b.while_filtering && b.context.overlaps(tab) && stance_ok(b, Stance::Idle);
                 assert_eq!(
-                    fires, want,
+                    fires,
+                    want,
                     "{:?} {} while a filter box owned the keyboard on {tab:?} — a row that did not \
                      call `Draft::also_filtered` must stay suppressed, a walk that did must stay \
                      live, and neither may reach across tabs",
@@ -4308,7 +4731,8 @@ mod tests {
             let fires = just_pressed(&input, live, b.action);
             let want = b.while_journal && b.needs_mod && stance_ok(b, Stance::Idle);
             assert_eq!(
-                fires, want,
+                fires,
+                want,
                 "{:?} must {}fire while the journal owned the keyboard",
                 b.action,
                 if want { "" } else { "not " }
@@ -4379,7 +4803,11 @@ mod tests {
             Action::PanBack
         ));
         assert!(
-            !just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Save),
+            !just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Save
+            ),
             "bare S must not save"
         );
 
@@ -4390,11 +4818,19 @@ mod tests {
         input.press(MOD_KEYS[0]);
         input.press(KeyCode::KeyS);
         assert!(
-            just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Save),
+            just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Save
+            ),
             "{MOD_NAME}+S must save"
         );
         assert!(
-            !just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::PanBack),
+            !just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::PanBack
+            ),
             "{MOD_NAME}+S must not also pan"
         );
     }
@@ -4413,7 +4849,11 @@ mod tests {
         input.press(MOD_KEYS[0]);
         input.press(KeyCode::KeyZ);
         assert!(
-            just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Undo),
+            just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Undo
+            ),
             "{MOD_NAME}+Z must undo"
         );
         assert!(
@@ -4436,7 +4876,11 @@ mod tests {
             "bare Z must mark the lattice cell solid"
         );
         assert!(
-            !just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), Action::Undo),
+            !just_pressed(
+                &input,
+                Live(Context::Map, Stance::Idle, Holder::Tab),
+                Action::Undo
+            ),
             "bare Z must not undo"
         );
     }
@@ -4468,7 +4912,8 @@ mod tests {
                 Action::GenerateDeclared,
                 Action::GenerateComposed,
             ] {
-                let fired = just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), other);
+                let fired =
+                    just_pressed(&input, Live(Context::Map, Stance::Idle, Holder::Tab), other);
                 assert_eq!(
                     fired,
                     other == wanted,
@@ -4499,8 +4944,8 @@ mod tests {
         assert_eq!(fills.len(), 1, "four bindings, one row: {fills:?}");
         let chords: Vec<&str> = fills[0].chord.split(" · ").collect();
         assert_eq!(chords.len(), 4, "all four chords are on it: {:?}", fills[0]);
-        assert!(chords.iter().any(|c| *c == "F"), "{chords:?}");
-        assert!(chords.iter().any(|c| *c == "G"), "{chords:?}");
+        assert!(chords.contains(&"F"), "{chords:?}");
+        assert!(chords.contains(&"G"), "{chords:?}");
         assert!(chords.iter().any(|c| c.starts_with("Shift")), "{chords:?}");
         assert!(chords.iter().any(|c| c.starts_with(MOD_NAME)), "{chords:?}");
 
@@ -4596,6 +5041,13 @@ mod tests {
         ));
     }
 
+    /// The floor is faster than the opening interval, or the ramp has nothing to ramp down to. A
+    /// constant, so it is checked when the crate is built rather than when the test runs.
+    const _: () = assert!(
+        REPEAT_FAST_SECS < REPEAT_SECS,
+        "the floor must be faster than the opening interval, or there is no ramp"
+    );
+
     /// **The ramp runs from [`REPEAT_SECS`] to [`REPEAT_FAST_SECS`] and never turns back.**
     ///
     /// The behavioural test below can only ever measure the curve through sixty frames of
@@ -4603,10 +5055,6 @@ mod tests {
     /// rather than statistically.
     #[test]
     fn the_ramp_only_ever_speeds_up() {
-        assert!(
-            REPEAT_FAST_SECS < REPEAT_SECS,
-            "the floor must be faster than the opening interval, or there is no ramp"
-        );
         // Approximate, because the lerp lands a float ULP off its endpoint (0.030000001 vs 0.03)
         // and pinning that would be pinning f32 rounding rather than the curve.
         let near = |a: f32, b: f32| (a - b).abs() < 1e-5;
@@ -4629,7 +5077,10 @@ mod tests {
         let mut prev = interval_after(0.0);
         for i in 1..=100 {
             let now = interval_after(REPEAT_RAMP_SECS * i as f32 / 100.0);
-            assert!(now <= prev, "the interval grew at step {i}: {prev} -> {now}");
+            assert!(
+                now <= prev,
+                "the interval grew at step {i}: {prev} -> {now}"
+            );
             prev = now;
         }
     }
@@ -4687,7 +5138,13 @@ mod tests {
         repeating(&input, live, Action::TurnPieceLeft, &mut repeat, 1.0 / 60.0);
         input.clear_just_released(key);
         input.press(key);
-        assert!(repeating(&input, live, Action::TurnPieceLeft, &mut repeat, 0.0));
+        assert!(repeating(
+            &input,
+            live,
+            Action::TurnPieceLeft,
+            &mut repeat,
+            0.0
+        ));
         input.clear_just_pressed(key);
         let mut after = 0usize;
         for _ in 0..30 {

@@ -81,12 +81,12 @@ fn colour(colours: usize) -> Result<Option<Vec<usize>>, String> {
     match s.solve(&[], Budget::conflicts(100_000))? {
         Answer::Satisfied(m) => {
             let mut out = Vec::with_capacity(REGIONS.len());
-            for r in 0..REGIONS.len() {
+            for (r, region) in REGIONS.iter().enumerate() {
                 match (0..colours).find(|&c| m.get(var(r, c, colours).unsigned_abs())) {
                     Some(c) => out.push(c),
                     // Cannot happen — the at-least-one clause forbids it — but reading a missing
                     // colour as 0 would print a plausible map that the solver never chose.
-                    None => return Err(format!("the model left {} uncoloured", REGIONS[r])),
+                    None => return Err(format!("the model left {} uncoloured", region)),
                 }
             }
             Ok(Some(out))

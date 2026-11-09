@@ -324,6 +324,13 @@ pub const RADIUS_ROW: f32 = 3.0;
 /// established in this same interface — a tinted left edge means *this line is special*.
 pub const SELECT_RAIL_W: f32 = 2.0;
 
+/// The snip's drag-rectangle border. It is heavier than the rail's 2 px on purpose: at 2 px a drag
+/// measured about 1% of a 600 px-wide capture and was hard to find, so the box gets 3 px.
+pub const SNIP_EDGE_W: f32 = 3.0;
+/// The snip's wash over the rectangle: the accent, translucent enough that the map under it still
+/// reads. At 0.08 it was too faint to find; 0.28 is a clear amber tint without hiding the pieces.
+pub const SNIP_WASH: Color = Color::srgba(0.950, 0.710, 0.300, 0.28);
+
 /// A chrome colour scaled toward black, for a quieter sibling of a named colour — so the derived
 /// value cannot drift from its parent the way `compose`'s hand-halved ACCENT could have.
 pub const fn scaled(colour: Color, k: f32) -> Color {
@@ -390,6 +397,45 @@ pub const CONTROLS_W: f32 = 380.0;
 /// rather than two text columns. Both panels together leave a little under half the screen for the
 /// map at `UiScale(1.2)`, which is the thing the right edge was chosen to protect.
 pub const LIST_W: f32 = 264.0;
+
+/// **The narrowest a panel may be squeezed to before the viewport gets the rest** — B-014.
+///
+/// The two widths above are *preferred* widths, and a panel took its own whatever the window could
+/// afford, because [`panel_root`] set `width: Val::Px(width)` and nothing could give it back. At a
+/// 900 logical px window that left the map **69 px** — measured from the real layout in
+/// `the_viewport_keeps_a_usable_width_in_a_narrow_window`, and the same number the item filed
+/// ("about 70 logical px at 1800 x 1406 physical").
+///
+/// Two things make the overhead bigger than the constants suggest. `EDITOR_UI_SCALE` multiplies
+/// every `Val::Px`, so `CONTROLS_W` 380 is 456 on screen at 1.2 before the panel's own `MARGIN` and
+/// border; measured, the left dock was **485** and the right **346**. And a dock is as wide as its
+/// widest *visible* panel, so it cannot answer for the sum.
+///
+/// The floor is not zero: a panel narrowed past this stops being a panel, its rows wrap and its tag
+/// chips stack into a column of single words. So panels shrink **down to** this and no further, and
+/// the viewport is guaranteed the remainder — see [`fit_docks_to_the_window`].
+pub const DOCK_MIN_W: f32 = LIST_W * 0.6;
+
+/// **The width the viewport is owed before either dock gets more than its floor** — B-014.
+///
+/// The docks were never *overflowing* a 900 px window; measured, they took 835 of it and the map got
+/// the 65 that was left. So the defect is not "the panels do not fit", it is **"nothing reserved the
+/// viewport"**: the map was the leftover of two fixed panels, and at a narrow window that leftover is
+/// a sliver. Below this width the docks give ground down to [`DOCK_MIN_W`] each, because a map
+/// narrower than two palette rows is not a map you can place a piece on.
+///
+/// It is a floor with a reason rather than a round number: `LIST_W` plus room for a piece of the
+/// largest tile class and the ghost's footprint beside it, which is what the author needs to see to
+/// judge where a piece will land.
+///
+/// **It is a reserve, not a guarantee, and the distinction is honest.** A window can be too narrow
+/// for this *and* two readable docks at once — at 900 logical px, `1.2` scaling makes the pair owe
+/// `(158 + 24) * 1.2 * 2 = 438` even at their floors, and 438 + 504 of viewport is more than the
+/// window has. When that happens [`DOCK_MIN_W`] wins and the viewport takes the remainder: a panel
+/// squeezed past its floor is a column of single words with nothing to read, while a viewport
+/// smaller than this is merely cramped and still shows the map. Measured at a 900 px window, the map
+/// went from **69 px to 379**: the sliver is gone, and the panels are still panels.
+pub const VIEWPORT_MIN_W: f32 = 420.0;
 
 // ── the widget layer ─────────────────────────────────────────────────────────────────────────────
 
@@ -577,6 +623,12 @@ pub fn font(role: text::Role) -> TextFont {
 /// the size changes. If the face ever goes proportional, layouts drift; they do not break.
 pub const BODY_CHAR_W: f32 = 6.6;
 
+/// **One line of [`text::BODY`], logical pixels**: Bevy 0.20's default `LineHeight`, which is
+/// `RelativeToFont(1.2)` (`bevy_text` `text.rs`, `impl Default for LineHeight`). For reserving room
+/// for text that comes and goes, so its arrival does not move what sits below it. A metric, beside
+/// [`BODY_CHAR_W`], for the same reason that one is not a type role.
+pub const BODY_LINE_H: f32 = text::BODY.px() * 1.2;
+
 // ── spacing ──────────────────────────────────────────────────────────────────────────────────────
 //
 // **A scale, used as a set.** van den Berg, Cornelissen & Roerdink 2009 (`10.1167/9.4.24`) find that
@@ -675,7 +727,7 @@ pub fn section<'a>(parent: &'a mut ChildSpawnerCommands, label: &str) -> EntityC
 }
 
 /// Which edge a panel is pinned to.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Side {
     Left,
     Right,
@@ -701,6 +753,20 @@ pub enum Side {
 /// row by a pixel dropped a piece behind the panel. `Hovered` is true for an entity **or any
 /// descendant** (`bevy_picking-0.19.0/src/hover.rs:322`), so one on the root answers for the whole
 /// surface. The frame above it deliberately carries none — see [`Frame`].
+/// **What width a panel would like, so the frame can answer how much it may have.**
+///
+/// The pair is the whole of B-014's fix: `preferred` is what the panel's own constant asks for and
+/// stays the width on any window that can afford it, while [`fit_docks_to_the_window`] lowers the
+/// *applied* width toward [`DOCK_MIN_W`] on a window that cannot. Stored as data rather than
+/// recomputed from `Node` so the system never has to guess which of `Node`'s widths was the wish.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct PanelWidth {
+    pub preferred: f32,
+    /// Which dock it lives in. Carried rather than inferred from the node's margin: the margin is a
+    /// layout detail that could be anything, and the question this answers is which side of the row.
+    pub side: Side,
+}
+
 pub fn panel_root<'a>(
     commands: &'a mut Commands,
     frame: &Frame,
@@ -738,6 +804,7 @@ pub fn panel_root<'a>(
     let panel = commands
         .spawn((
             node,
+            PanelWidth { preferred: width, side },
             BackgroundColor(PANEL_BG),
             Ground(PANEL_BG),
             // The edge and the corner are what make this read as a surface rather than as a
@@ -792,11 +859,14 @@ pub fn panel_root<'a>(
 ///
 /// # What the frame must not carry
 ///
-/// **No `Hovered`, and `Pickable::IGNORE` throughout.** `view::over_ui` and `view::drive` both ask
-/// "is the pointer on the interface" by looking for a true `Hovered`, and a frame node carrying one
-/// would answer yes for the entire window — the map would stop taking clicks and the wheel would
-/// stop zooming, everywhere, with nothing to point at. `Hovered` belongs on the panels, which is
-/// where [`panel_root`] puts it.
+/// **No `Hovered`, and `Pickable::IGNORE` throughout: on the frame and on every node inside it.**
+/// `view::over_ui` and `view::drive` both ask "is the pointer on the interface" by looking for a
+/// true `Hovered`, and `Hovered` is true for an entity
+/// *or any descendant*. So one pickable child inside a non-hoverable row (a label, a value, a
+/// glyph) turns that row's `Hovered` on, and the frame's with it, and the answer is yes for the
+/// entire window: the map would stop taking clicks and the wheel would stop zooming, everywhere,
+/// with nothing to point at. `Hovered` belongs on the panels, which is where [`panel_root`] puts
+/// it, and on the one node a row exposes as a button (`Pickable::default()` with `Hovered`).
 #[derive(Resource)]
 pub struct Frame {
     pub root: Entity,
@@ -874,6 +944,86 @@ fn light_the_focused_panel(mut panels: Query<(&mut BorderColor, Has<Focused>), W
         let want = focus_edge(focused);
         if border.top != want {
             *border = BorderColor::all(want);
+        }
+    }
+}
+
+/// **How wide each panel should be, given the window** — B-014.
+///
+/// The frame's contract is that *a panel says how wide it wants to be, and the frame answers how much
+/// room there is*. The answer was missing: every panel was `width: Val::Px(preferred)` and nothing
+/// could take it back, so a 900 px window gave the two docks 485 + 346 and the map **69 px**.
+///
+/// **The arithmetic is over every visible panel, not the docks.** A dock is as wide as its widest
+/// visible child, so the row's demand is the sum of the widest panel on each side, and that is what
+/// has to fit. One panel per door is visible at a time (`Display::None` is how the rest hide, which
+/// is also why they lay out to nothing and are skipped here).
+///
+/// **Both sides are squeezed by the same fraction**, so the pair keeps the proportion its two
+/// constants chose rather than one side winning a negotiation it started with a wider number. When
+/// the fraction is 1 nothing is written at all, which is the common case and the reason this costs
+/// nothing on an ordinary window.
+///
+/// The floor is [`DOCK_MIN_W`] per side. A window narrower than the two floors can afford does not
+/// get a smaller interface, it gets the viewport it has left — the docks cannot lie about their
+/// content by becoming narrower than a row.
+fn fit_docks_to_the_window(
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
+    mut panels: Query<(&PanelWidth, &mut Node, &ComputedNode), Without<ViewportSlot>>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let scale = ui_scale.0.max(f32::EPSILON);
+    // The row's room in `Val::Px` units — the units the constants above are written in. `Window`'s
+    // width is already logical, and `UiScale` multiplies every `Val::Px`, so dividing takes the
+    // logical width back to the units the panel widths are expressed in.
+    let room = window.resolution.width() / scale;
+
+    // **The row's demand is the widest *visible* panel on each side** — a dock is as wide as its
+    // widest visible child, which is the dock's own definition, and the rest are `Display::None` and
+    // lay out to nothing. Two per door are visible on no door, so the two slots below are exactly
+    // the two docks.
+    let mut widest = [0.0f32; 2];
+    for (want, node, computed) in &panels {
+        if node.display == Display::None || computed.size().x <= 0.0 {
+            continue;
+        }
+        let side = usize::from(want.side == Side::Right);
+        widest[side] = widest[side].max(want.preferred);
+    }
+
+    // Each dock is its panel plus the margin that panel carries, **measured rather than derived**:
+    // `(380 + 2 * 12) * 1.2 = 484.8`, against a real left dock of 485, and `(264 + 24) * 1.2 = 345.6`
+    // against a right dock of 346. The border is inside that width, so it is not added here.
+    let overhead: f32 = 2.0 * MARGIN;
+    let sides: Vec<f32> = widest.iter().copied().filter(|w| *w > 0.0).collect();
+    if sides.is_empty() {
+        return;
+    }
+    let sum_pref: f32 = sides.iter().sum();
+    let sum_overhead = overhead * sides.len() as f32;
+
+    // **The viewport is paid first.** The docks were not overflowing a 900 px window — measured, they
+    // took 835 of it and left the map 65 — so the question is not "do they fit" but "what is the map
+    // owed". `squeeze` is the fraction of its preferred width each panel keeps.
+    let squeeze = if room - (sum_pref + sum_overhead) >= VIEWPORT_MIN_W {
+        1.0
+    } else {
+        let affordable = room - VIEWPORT_MIN_W - sum_overhead;
+        (affordable / sum_pref).clamp(0.0, 1.0)
+    };
+    // **No panel narrower than the floor**, which binds hardest on the *narrowest* side: the two
+    // sides scale by one fraction, so the fraction that keeps the smaller panel at `DOCK_MIN_W` is
+    // the one that keeps both usable.
+    let floor_fraction = DOCK_MIN_W / sides.iter().copied().fold(f32::INFINITY, f32::min);
+    let squeeze = squeeze.max(floor_fraction.min(1.0));
+
+    for (want, mut node, _) in &mut panels {
+        let width = want.preferred * squeeze;
+        if node.width != Val::Px(width) {
+            node.width = Val::Px(width);
         }
     }
 }
@@ -1149,6 +1299,28 @@ impl Status {
     /// This is the right call for a refusal the author is not owed an alarm about — clicking bare
     /// ground with the remove tool armed, dragging a box round nothing. Those are answers, not
     /// failures, and a red block for each would teach an author to stop reading red blocks.
+    ///
+    /// # The line between an answer and a refusal
+    ///
+    /// **The test is whether the editor did what was asked.**
+    ///
+    /// | | the slot |
+    /// |---|---|
+    /// | the author asked for nothing in particular — clicked bare ground, dragged a box round nothing | **a note.** The editor answered, and the answer is "there was nothing here" |
+    /// | the author asked for something and the editor **could not do it** | **a problem.** A piece that mounts on a surface cannot be flood filled; a map that cannot be written is not saved |
+    /// | the author asked for something and the editor **did only part of it** | **a problem.** A fill that stopped at the cap laid some of what was asked |
+    ///
+    /// **Three refusals were in this slot and in the wrong one** — the fill's three (`editor.rs`,
+    /// the box fill, the riders and the flood), whose own comments said *"a refusal is the answer,
+    /// not a failure"*. **That sentence read the rule from the wrong half of this contract**: the
+    /// half that says *an answer* is about a no-op the author can see was a no-op, and **a fill that
+    /// could not be laid is not a no-op** — the author asked for a floor and did not get one.
+    ///
+    /// **And the difference is not cosmetic.** A `note` is one dim row, and it is erased by the next
+    /// receipt and by a tab switch ([`Status::clear_note`]). A `problem` reaches the toast and the
+    /// journal, and survives both. NN/g's Error-Message Guidelines: *"the very worst error messages
+    /// are those that don't exist."* **Measured:** a fill that was refused said nothing anywhere the
+    /// author looks, while the ghost's refusal for the same piece was plainly visible.
     pub fn note(&mut self, text: impl Into<String>) {
         self.note = text.into();
     }
@@ -1163,11 +1335,11 @@ impl Status {
         let text = text.into();
         // Counted before the fold, because a repeat is a thing that happened — see [`Self::raised`].
         self.raised += 1;
-        if let Some(last) = self.problems.last_mut() {
-            if last.text == text {
-                last.count += 1;
-                return;
-            }
+        if let Some(last) = self.problems.last_mut()
+            && last.text == text
+        {
+            last.count += 1;
+            return;
         }
         self.problems.push(Problem { text, count: 1 });
         if self.problems.len() > MAX_PROBLEMS {
@@ -1794,7 +1966,7 @@ pub fn scroll_list<'a>(
                 overflow: Overflow::scroll_y(),
                 ..default()
             },
-            ScrollArea::default(),
+            ScrollArea,
             marker,
         ))
         .id();
@@ -1922,17 +2094,48 @@ pub fn list_heading(parent: &mut ChildSpawnerCommands, text: &str) {
 /// that does not fit push its own value right instead of painting on it. Short labels line up at
 /// exactly the column, which is the whole point, and no call site changes.
 pub fn row_label(row: &mut ChildSpawnerCommands, width: f32, label: &str) {
+    row_label_with(row, width, label, ());
+}
+
+/// [`row_label`] with a marker on its label, for a label that changes while the row is on screen.
+pub fn row_label_with(
+    row: &mut ChildSpawnerCommands,
+    width: f32,
+    label: &str,
+    marker: impl Bundle,
+) -> Entity {
     row.spawn((
         Node {
             min_width: Val::Px(width),
             flex_shrink: 0.0,
+            // **And a gap of its own, so the value never starts at the label's last glyph.**
+            //
+            // The row's `column_gap` is a **flex** gap: it is the space between two flex items, and
+            // a flex item's box is its `min_width` **at least**. So a label *shorter* than its
+            // column gets the gap — its box is the column, and the value starts one gap later. But
+            // a label *longer* than its column **pushes its own box wider**, and the value starts
+            // immediately at the label's last glyph, with **no gap at all**.
+            //
+            // Measured on the menu's KIT INFO panel, in the capture: the row `new work lands here`
+            // / `no` had a **5 px** gap between the label and the value, and the rows above it —
+            // `pieces` / `166` and `excluded` / `4 pack(s)` — had **133 px**. So the one row whose
+            // label is longer than its column read as a single phrase, *"new work lands here no"*,
+            // while the others read as two things.
+            //
+            // **The gap is the label's, not the row's**, because the row's gap only applies between
+            // items and this is the space a *long* label would otherwise swallow. It is a `margin`,
+            // so it is outside the label's box and the value starts after it however wide the
+            // label turned out to be.
+            margin: UiRect::right(Val::Px(GAP_ROW)),
             ..default()
         },
         Text::new(label.to_owned()),
         TextColor(LABEL),
         font(text::LABEL),
         TextLayout::new(Justify::Left, LineBreak::NoWrap),
-    ));
+        marker,
+    ))
+    .id()
 }
 
 /// **The value beside a [`row_label`]** — 11 px, one step louder than its label, which is the
@@ -2076,6 +2279,14 @@ fn row_shape(selected: bool) -> impl Bundle {
     )
 }
 
+/// The row's non-background parts, as [`style_list_rows`] reads them.
+type RowState = (
+    &'static RowRest,
+    &'static Hovered,
+    Has<bevy::ui::Pressed>,
+    Has<bevy::ui::InteractionDisabled>,
+);
+
 /// **The five states, once, for every row / chip / button in the editor.**
 ///
 /// Disabled beats pressed beats selected beats hover beats rest. Before 2026-09-03 the middle two
@@ -2091,16 +2302,10 @@ fn row_shape(selected: bool) -> impl Bundle {
 /// primary button is the same fact one layer down, and it is what the author actually did.
 fn style_list_rows(
     mouse: Res<ButtonInput<MouseButton>>,
-    mut rows: Query<(
-        &RowRest,
-        &Hovered,
-        Has<bevy::ui::Pressed>,
-        Has<bevy::ui::InteractionDisabled>,
-        &mut BackgroundColor,
-    )>,
+    mut rows: Query<(RowState, &mut BackgroundColor)>,
 ) {
     let held = mouse.pressed(MouseButton::Left);
-    for (rest, hovered, pressed, disabled, mut bg) in &mut rows {
+    for ((rest, hovered, pressed, disabled), mut bg) in &mut rows {
         let want = if disabled {
             // Not a fill of its own: a disabled control drops back to the panel it sits on, so it
             // reads as part of the surface rather than as a thing that is merely quiet today.
@@ -2457,6 +2662,9 @@ fn spawn_name_box(mut commands: Commands) {
         });
 }
 
+/// One of the name box's three text lines, narrowed by the filter that tells them apart.
+type NameLine<'w, 's, F> = Query<'w, 's, &'static mut Text, F>;
+
 /// **Show the live tab's name field, or nothing.**
 ///
 /// Reads the Map's own state rather than a shared projection, and formats the value the way the Map
@@ -2464,31 +2672,11 @@ fn spawn_name_box(mut commands: Commands) {
 fn paint_name_box(
     editor: Res<crate::editor::EditorState>,
     build: Res<crate::build::Build>,
+    compose: Res<crate::compose::ComposeState>,
     mut roots: Query<&mut Node, With<NameBox>>,
-    mut titles: Query<
-        &mut Text,
-        (
-            With<NameBoxTitle>,
-            Without<NameBoxValue>,
-            Without<NameBoxHint>,
-        ),
-    >,
-    mut values: Query<
-        &mut Text,
-        (
-            With<NameBoxValue>,
-            Without<NameBoxTitle>,
-            Without<NameBoxHint>,
-        ),
-    >,
-    mut hints: Query<
-        &mut Text,
-        (
-            With<NameBoxHint>,
-            Without<NameBoxTitle>,
-            Without<NameBoxValue>,
-        ),
-    >,
+    mut titles: NameLine<'_, '_, (With<NameBoxTitle>, Without<NameBoxValue>, Without<NameBoxHint>)>,
+    mut values: NameLine<'_, '_, (With<NameBoxValue>, Without<NameBoxTitle>, Without<NameBoxHint>)>,
+    mut hints: NameLine<'_, '_, (With<NameBoxHint>, Without<NameBoxTitle>, Without<NameBoxValue>)>,
 ) {
     // **`grouping.is_some()` and the box being visible are the same condition**, and that is the
     // invariant rather than a description of the code.
@@ -2523,6 +2711,24 @@ fn paint_name_box(
                     "NAME THIS TILE",
                     format!("{}_", bevy_emerge_core::naming::to_snake_case(&prompt.raw)),
                     "Enter opens it.   Esc leaves things as they are.".to_owned(),
+                )
+            })
+        })
+        .or_else(|| {
+            // **The COMPOSE tab's own question.** A third field, not a third condition on one of
+            // the two above — this function's own note asked for exactly that: *"if a second tab
+            // ever asks again the answer is another field, not another condition on this one."* The
+            // tabs are never live together, so the chain picks the one that is asking.
+            compose.renaming.as_ref().map(|rename| {
+                (
+                    "RENAME THIS COMPOSITION",
+                    // **The same spelling the commit will write** — `to_id`, not `to_snake_case`,
+                    // because a composition's id may carry a `/` namespace. A field that shows one
+                    // spelling and writes another is a lie the author finds out about after the
+                    // rename.
+                    format!("{}_", bevy_emerge_core::naming::to_id(&rename.raw)),
+                    "Enter keeps it, and every map that stamps it follows.   Esc leaves it alone."
+                        .to_owned(),
                 )
             })
         });
@@ -2634,6 +2840,14 @@ impl Plugin for ChromePlugin {
             // before it would show the box one character behind what has been typed.
             .add_systems(Update,
                 (paint_name_box.after(keys::Phase::Text))
+                    .run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            // B-014: the docks answer to the window. Editor-only, because the menu's own columns
+            // go straight into `body` and carry no `PanelWidth`.
+            .add_systems(
+                Update,
+                fit_docks_to_the_window
+                    .after(FrameSystems)
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             .add_systems(Update,
@@ -3256,9 +3470,12 @@ fn dim_the_ground(
     }
 }
 
+/// The back button's hover state, as the lift reads it.
+type BackButtonRow = (&'static Hovered, &'static mut BackgroundColor);
+
 /// Lift the button while the pointer is on it, so it reads as pressable before it is pressed.
 pub fn light_the_back_button(
-    mut buttons: Query<(&Hovered, &mut BackgroundColor), (With<BackButton>, Changed<Hovered>)>,
+    mut buttons: Query<BackButtonRow, (With<BackButton>, Changed<Hovered>)>,
 ) {
     for (hovered, mut bg) in &mut buttons {
         bg.0 = if hovered.get() { ROW_SELECTED } else { SLOT_BG };

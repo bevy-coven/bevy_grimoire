@@ -181,7 +181,7 @@ pub fn manifest_from_descriptor(d: &Descriptor) -> Result<ManifestItem, String> 
     let role = match &d.mount {
         Some(Mount::OnFloor) => Role::Freestanding,
         Some(Mount::Tiled) => Role::Tiled,
-        Some(Mount::OnSurface { class }) => Role::Scatter {
+        Some(Mount::OnSurface { class } | Mount::OnSurfaceOrFloor { class }) => Role::Scatter {
             surface: class.clone(),
         },
         Some(Mount::OnWall { .. }) => Role::Anchor { host: Host::Wall },

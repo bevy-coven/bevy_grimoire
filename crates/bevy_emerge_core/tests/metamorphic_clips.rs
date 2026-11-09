@@ -551,8 +551,8 @@ fn add_root_ramp(glb: &mut Glb, clip: usize, node: usize, drift_per_sec: f32) ->
     let new_output = append_accessor(glb, &ramped);
     glb.json["animations"][clip]["samplers"][sampler_ix]["output"] =
         serde_json::json!(new_output);
-    let span = times.last().map_or(0.0, |t| t[0]) - times.first().map_or(0.0, |t| t[0]);
-    span
+
+    times.last().map_or(0.0, |t| t[0]) - times.first().map_or(0.0, |t| t[0])
 }
 
 /// Append rows as a fresh FLOAT accessor + bufferView over bytes appended to `bin`.

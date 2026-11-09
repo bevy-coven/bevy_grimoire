@@ -176,6 +176,8 @@ fn paint_is_zero(v: &i8) -> bool {
 /// act on.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+// Boxing the Descriptor variant's `patch` would change a public field's type, which breaks Sanctuary's path dependency.
+#[allow(clippy::large_enum_variant)]
 pub enum Body {
     Descriptor {
         /// A [`crate::descriptor::Descriptor`] id.
@@ -526,6 +528,8 @@ fn find<'a>(compositions: &'a [Composition], id: &str, who: &str) -> Result<&'a 
     })
 }
 
+type Flattened = (Vec<Flat>, Vec<Location>, Vec<OpenSlot>);
+
 /// Flatten one composition into world-independent members, folding nested transforms in.
 ///
 /// `overrides` apply at the top level only — see [`Override::member`].
@@ -535,7 +539,7 @@ fn flatten(
     overrides: &[Override],
     stack: &mut Vec<String>,
     depth: u32,
-) -> Result<(Vec<Flat>, Vec<Location>, Vec<OpenSlot>), String> {
+) -> Result<Flattened, String> {
     if stack.contains(&comp.id) {
         stack.push(comp.id.clone());
         return Err(format!(
@@ -832,10 +836,7 @@ impl Composition {
         for start in &self.members {
             let mut chain: Vec<&str> = vec![start.id.as_str()];
             let mut at = start;
-            loop {
-                let Body::Descriptor { on: Some(host), .. } = &at.body else {
-                    break;
-                };
+            while let Body::Descriptor { on: Some(host), .. } = &at.body {
                 let Some(next) = self.members.iter().find(|m| &m.id == host) else {
                     break; // dangling; already reported above
                 };
@@ -1029,6 +1030,10 @@ pub fn descriptor_fingerprint(d: &Descriptor) -> u64 {
         // would silently repoint every fingerprint already recorded against a stamp.
         Some(Mount::OnFace { class, height }) => {
             f.tag(8).str(class).f32(*height);
+        }
+        // Tag 9, appended for the same reason.
+        Some(Mount::OnSurfaceOrFloor { class }) => {
+            f.tag(9).str(class);
         }
     }
     f.u32(d.clearance.len() as u32);
@@ -1239,6 +1244,37 @@ pub fn stale_members(
 // Expansion
 // ---------------------------------------------------------------------------------------------
 
+/// **The id a stamp's row carries** — `<stamp id>/<member path>`.
+///
+/// **The one place the convention is written down.** A row a stamp brought has this id, and
+/// nothing else does, because a placement id is an authored string and nothing stops an author
+/// typing a `/` into one — so this cannot be *guessed* from an id at a call site. It is stated
+/// here, in the module that mints the ids, and read back through [`crate::map::Map::stamp_of`].
+///
+/// The member path is the flattened path, so a member of a nested group reads
+/// `outer/inner/member` and the id is `stamp/outer/inner/member` — the whole chain, because a
+/// consumer that names a row has to be able to say which group and which member it was.
+pub fn stamped_id(stamp: &str, member: &str) -> String {
+    format!("{stamp}/{member}")
+}
+
+/// **The stamp a row belongs to**, and the member within it — or `None` for a hand-placed row.
+///
+/// The inverse of [`stamped_id`], and the answer a consumer needs when a map's rows are a mixture
+/// of the two: a game reading a level has to know which rows it was handed and which it owns.
+///
+/// It is a **prefix test on the id**, which is sound because [`stamped_id`] mints every stamped
+/// row and no other id in the schema contains a `/` at that position — a hand-placed id is an
+/// authored string, and a stamped id is `<stamp>/<member>`. The stamp id is the part before the
+/// first `/`; the member path is everything after it.
+pub fn split_stamped_id(id: &str) -> Option<(&str, &str)> {
+    let (stamp, member) = id.split_once('/')?;
+    if stamp.is_empty() || member.is_empty() {
+        return None;
+    }
+    Some((stamp, member))
+}
+
 /// **Turn a map's stamps into the rows and locations they stand for.**
 ///
 /// The one expander. The editor's ghost, the editor's save and the game's loader all come through
@@ -1353,7 +1389,7 @@ pub fn expand(
         let mut hosts: Vec<Option<String>> = Vec::with_capacity(flats.len());
         for f in &flats {
             match &f.on {
-                Some(sibling) => hosts.push(Some(format!("{}/{}", s.id, sibling))),
+                Some(sibling) => hosts.push(Some(stamped_id(&s.id, sibling))),
                 None => {
                     let base = library.get(&f.descriptor).ok_or_else(|| {
                         format!(
@@ -1377,7 +1413,7 @@ pub fn expand(
 
         for (f, on) in flats.into_iter().zip(hosts) {
             let at = rotate_xz(f.at, s.yaw);
-            let id = format!("{}/{}", s.id, f.path);
+            let id = stamped_id(&s.id, &f.path);
             if hand_placed.contains(id.as_str()) {
                 return Err(format!(
                     "map: stamp `{}` expands to a row named `{id}`, and the map already places one \
@@ -1410,8 +1446,8 @@ pub fn expand(
 
         for l in locs {
             out.locations.push(Location {
-                id: format!("{}/{}", s.id, l.id),
-                props: l.props.iter().map(|p| format!("{}/{}", s.id, p)).collect(),
+                id: stamped_id(&s.id, &l.id),
+                props: l.props.iter().map(|p| stamped_id(&s.id, p)).collect(),
                 interactions: l.interactions,
                 note: l.note,
             });
@@ -1426,7 +1462,7 @@ pub fn expand(
         for sl in slots {
             let at = rotate_xz(sl.at, s.yaw);
             out.slots.push(OpenSlot {
-                id: format!("{}/{}", s.id, sl.id),
+                id: stamped_id(&s.id, &sl.id),
                 accepts: sl.accepts,
                 at: (s.at.0 + at.0, s.at.1 + at.1),
                 yaw: add_yaw(sl.yaw, s.yaw),
@@ -1435,6 +1471,20 @@ pub fn expand(
         }
     }
     Ok(out)
+}
+
+/// **A map's own stamps, expanded** — the door a loader comes through.
+///
+/// [`expand`] takes the stamps as an argument because the editor also expands a *proposal*
+/// (a trial map, before a stamp is kept). A consumer does not have that case: it has a map, and
+/// the map's stamps are the ones it holds. This is that call, named, so there is one way to ask
+/// the question rather than a spelling of [`expand`]'s arguments repeated at every call site.
+pub fn expand_map(
+    map: &Map,
+    compositions: &[Composition],
+    library: &Library,
+) -> Result<Expansion, String> {
+    expand(map, &map.stamps, compositions, library)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1511,6 +1561,8 @@ pub fn interface(
         stamps: Vec::new(),
         locations: Vec::new(),
         note: None,
+        // A scratch map that exists to answer mounts, never to generate, so no wish is in play.
+        enclosure: crate::map::Enclosure::default(),
     };
     for f in &flats {
         scratch.placements.push(Placed {
@@ -1798,6 +1850,206 @@ pub fn record_fingerprints(
     Ok(changed)
 }
 
+/// **Rename a composition, and every map that stamps it.**
+///
+/// # What it touches, and what it does not
+///
+/// | | |
+/// |---|---|
+/// | `compositions.ron` | the composition's own `id` |
+/// | every map that stamps it | that stamp's `of` |
+/// | the composition's **members** | **nothing** — a member's id is its own name |
+/// | the members' `of_fingerprint` | **nothing** — those record the *descriptor's* fingerprint, and the descriptors did not change |
+/// | the `note` fields | **nothing** — a note is prose about the group, and a rename does not rewrite prose |
+///
+/// **The fingerprint of the composition itself does change** — `composition_fingerprint` folds the
+/// id in — and **nothing compares against it**. `Stamped::of_fingerprint` is *"what the composition
+/// looked like when this was stamped"*, and no code writes it; the `Stale` badge reads
+/// `Member::of_fingerprint`, which is the *member's* body. So a rename strands exactly one thing:
+/// the stamps that name the old id.
+///
+/// # Why the maps are edited and not rewritten
+///
+/// A map's writer **expands every one-line placement into six lines** — measured on Sanctuary's
+/// `town.map.ron`, 75,089 bytes becomes 228,856. That is the editor's existing save behaviour, so it
+/// is not a regression; but a *rename* that reformats 229 KB of a hand-authored map is a large
+/// diff for a one-word change, and the map is the author's. **So the maps are edited in place**, one
+/// leaf at a time, and everything around the leaf is left exactly as it was.
+///
+/// # The paths are the point
+///
+/// A rename is not *"find the string"* — it is *"find the leaf at this path"*. `scan_ron_leaves`
+/// gives every leaf its path, so this says **which** leaf it means and touches nothing it did not
+/// name. `stamps[0].of` is the path; `compositions[3].id` is the path.
+///
+/// # Every refusal happens before anything is written
+///
+/// The function returns **all** the new texts, and the caller writes them only if every one
+/// succeeded. A rename that updates the composition and leaves one map behind is a **partial
+/// rename**, and a partial rename is a project that will not open.
+pub fn rename_composition(
+    // The text of `compositions.ron`.
+    compositions_text: &str,
+    // The texts of every map, paired with the name the caller knows them by.
+    map_texts: &[(String, String)],
+    // The id being renamed.
+    from: &str,
+    // The id it is becoming.
+    to: &str,
+) -> Result<RenamedComposition, String> {
+    // **The new name must be a legal id**, and the crate's rule is that the *author* is told
+    // rather than the file being corrected: `naming::is_id` — *"must start with a lowercase letter,
+    // must not end in `_`, and must not contain `__`"*.
+    if !crate::naming::is_id(to) {
+        return Err(format!(
+            "`{to}` is not a usable composition id. Ids are lowercase, separated by `/`, and each \
+             part starts with a letter, has no `__`, and does not end in `_`."
+        ));
+    }
+    if from == to {
+        return Err(format!("`{from}` is already its own name."));
+    }
+
+    // **The old name must exist.** A rename of something that is not there is a refusal, not a
+    // silent success.
+    let set = Compositions::parse(compositions_text)?;
+    if !set.compositions.iter().any(|c| c.id == from) {
+        return Err(format!(
+            "there is no composition called `{from}` to rename."
+        ));
+    }
+    // **And the new name must be free.** Two compositions sharing an id is a project the editor
+    // cannot open, so this is refused **by name** — the author needs to know *which* name is taken.
+    if set.compositions.iter().any(|c| c.id == to) {
+        return Err(format!(
+            "`{to}` is already a composition, so renaming `{from}` to it would give two \
+             compositions the same name."
+        ));
+    }
+
+    // **The composition's own line**, addressed by its path rather than by a search.
+    let index = set
+        .compositions
+        .iter()
+        .position(|c| c.id == from)
+        .expect("the composition was found above");
+    let new_compositions = replace_leaf(
+        compositions_text,
+        &format!("compositions[{index}].id"),
+        from,
+        to,
+        "the composition's id",
+    )?;
+
+    // **And every map that names it.**
+    let mut maps = Vec::with_capacity(map_texts.len());
+    for (name, text) in map_texts {
+        // **A map that does not stamp this composition is left alone, byte for byte.** Not
+        // rewritten — *untouched* — so the rename cannot reformat a map that had nothing to do with
+        // it.
+        if !text.contains(from) {
+            maps.push((name.clone(), text.clone()));
+            continue;
+        }
+        let mut edited = text.clone();
+        // **Every stamp that names it**, one at a time, because the leaves are found by their path
+        // and the paths move as the text is edited.
+        let mut guard = 0usize;
+        loop {
+            guard += 1;
+            if guard > 4096 {
+                return Err(format!(
+                    "map `{name}` names `{from}` more times than a map can hold; refusing rather \
+                     than editing forever."
+                ));
+            }
+            let leaves = crate::ron_surgery::scan_ron_leaves(&edited)?;
+            // **The leaf's text carries its quotes** — `ron_surgery` documents a string leaf as
+            // `"bathroom"`, quotes and all — so the comparison is against the *quoted* form.
+            let wanted = ron_string(from);
+            let Some(leaf) = leaves.iter().find(|l| {
+                l.path.starts_with("stamps[") && l.path.ends_with(".of") && l.text == wanted
+            }) else {
+                break;
+            };
+            let start = leaf.span.start;
+            let end = leaf.span.end;
+            edited = format!("{}{}{}", &edited[..start], ron_string(to), &edited[end..]);
+        }
+        maps.push((name.clone(), edited));
+    }
+
+    Ok(RenamedComposition {
+        compositions: new_compositions,
+        maps,
+        from: from.to_owned(),
+        to: to.to_owned(),
+    })
+}
+
+/// **A renamed composition, and the maps that followed it.**
+///
+/// Every text is here, and **nothing is written until the caller writes all of them** — a partial
+/// rename is a project that will not open.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenamedComposition {
+    /// The new text of `compositions.ron`.
+    pub compositions: String,
+    /// The new text of every map, paired with the name the caller knows it by.
+    pub maps: Vec<(String, String)>,
+    /// The id it was.
+    pub from: String,
+    /// The id it is.
+    pub to: String,
+}
+
+/// **One leaf, replaced, and the file around it untouched.**
+///
+/// The path is the whole point: `compositions[3].id` names *which* value, and a file with two
+/// `id` fields — the composition's and every member's — has the right one.
+fn replace_leaf(
+    text: &str,
+    path: &str,
+    // What the leaf must say now, and what it becomes.
+    expect: &str,
+    value: &str,
+    what: &str,
+) -> Result<String, String> {
+    let leaves = crate::ron_surgery::scan_ron_leaves(text)?;
+    let leaf = leaves
+        .iter()
+        .find(|l| l.path == path)
+        .ok_or_else(|| format!("the file has no `{path}` — so {what} is not there to rename."))?;
+    // **The leaf must be the one we mean.** A path says *which* value, and a file with two `id`
+    // fields — the composition's and every member's — has the right one only by its path. So the
+    // leaf's own value is checked too, and a file that has been edited under us is refused rather
+    // than written over.
+    let expected = ron_string(expect);
+    if leaf.text != expected {
+        return Err(format!(
+            "the file's `{path}` says `{}` and not `{expect}` — so it is not the thing being \
+             renamed. Nothing was changed.",
+            leaf.text
+        ));
+    }
+    let start = leaf.span.start;
+    let end = leaf.span.end;
+    Ok(format!(
+        "{}{}{}",
+        &text[..start],
+        ron_string(value),
+        &text[end..]
+    ))
+}
+
+/// **A RON string literal, quoted and escaped.**
+///
+/// The crate's own escape, so a name with a quote in it cannot break the file. `ron::ser` is the
+/// authority, and it is already a dependency.
+fn ron_string(value: &str) -> String {
+    ron::ser::to_string(value).unwrap_or_else(|_| format!("\"{value}\""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1943,6 +2195,7 @@ mod tests {
             stamps: Vec::new(),
             locations: Vec::new(),
             note: None,
+            ..Default::default()
         }
     }
 
@@ -1976,8 +2229,8 @@ mod tests {
 
     /// Write down what every member's body currently looks like — what an editor does the moment a
     /// composition is authored, and what makes anything later a measurable change rather than a guess.
-    fn record_all(comps: &mut Vec<Composition>, lib: &Library) {
-        let snapshot = comps.clone();
+    fn record_all(comps: &mut [Composition], lib: &Library) {
+        let snapshot = comps.to_vec();
         for c in comps.iter_mut() {
             super::record_fingerprints(c, &snapshot, lib).expect("records");
         }
@@ -2080,7 +2333,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let out = expand(&empty_map(), &[stamp("a1", "lit_desk", (0.0, 0.0), 0.0)], &vec![comp], &lib)
+        let out = expand(&empty_map(), &[stamp("a1", "lit_desk", (0.0, 0.0), 0.0)], &[comp], &lib)
             .expect("expands");
         let lamp = out.placements.iter().find(|p| p.id == "a1/lamp").expect("lamp");
         assert_eq!(lamp.on.as_deref(), Some("a1/desk"));
@@ -2102,7 +2355,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let err = expand(&empty_map(), &[stamp("a1", "floating", (0.0, 0.0), 0.0)], &vec![comp], &lib)
+        let err = expand(&empty_map(), &[stamp("a1", "floating", (0.0, 0.0), 0.0)], &[comp], &lib)
             .expect_err("refuses");
         assert!(err.contains("a1"), "{err}");
         assert!(err.contains("lamp"), "{err}");
@@ -2183,7 +2436,7 @@ mod tests {
             }],
             ..stamp("a1", "stack", (0.0, 0.0), 0.0)
         };
-        let out = expand(&empty_map(), &[s], &vec![comp], &lib).expect("expands");
+        let out = expand(&empty_map(), &[s], &[comp], &lib).expect("expands");
         let patch = out.placements[0].patch.as_ref().expect("carries a patch");
         // The override wins its own field...
         assert_eq!(patch.look, ["scorched"]);
@@ -2564,7 +2817,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let iface = interface(&comp, &vec![comp.clone()], &lib, 1)
+        let iface = interface(&comp, std::slice::from_ref(&comp), &lib, 1)
             .expect("derives")
             .expect("bounded");
         assert!(iface.is_clean(), "{:?}", iface.faults);
@@ -2621,7 +2874,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let iface = interface(&comp, &vec![comp.clone()], &lib, 1)
+        let iface = interface(&comp, std::slice::from_ref(&comp), &lib, 1)
             .expect("derives")
             .expect("bounded");
         assert!(iface.is_clean(), "a gap is not a disagreement: {:?}", iface.faults);
@@ -2657,7 +2910,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let iface = interface(&comp, &vec![comp.clone()], &lib, 1)
+        let iface = interface(&comp, std::slice::from_ref(&comp), &lib, 1)
             .expect("derives")
             .expect("bounded");
         let east: Vec<_> = iface.faces[E].iter().map(|b| (b.y, b.token.as_deref())).collect();
@@ -2682,7 +2935,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let iface = interface(&comp, &vec![comp.clone()], &lib, 1)
+        let iface = interface(&comp, std::slice::from_ref(&comp), &lib, 1)
             .expect("derives")
             .expect("bounded");
         assert_eq!(iface.faces[W].len(), 1, "west read {:?}", iface.faces[W]);
@@ -2712,7 +2965,7 @@ mod tests {
             locations: Vec::new(),
             note: None,
         };
-        let iface = interface(&comp, &vec![comp.clone()], &lib, 1)
+        let iface = interface(&comp, std::slice::from_ref(&comp), &lib, 1)
             .expect("derives")
             .expect("bounded");
         assert!(!iface.is_clean());
@@ -2794,7 +3047,7 @@ mod tests {
         without.members.retain(|m| !matches!(m.body, Body::Slot { .. }));
 
         let read = |c: &Composition| {
-            interface(c, &vec![c.clone()], &lib, 1).expect("derives").expect("bounded")
+            interface(c, std::slice::from_ref(c), &lib, 1).expect("derives").expect("bounded")
         };
         let (a, b) = (read(&with), read(&without));
         assert!(a.is_clean(), "{:?}", a.faults);
@@ -2817,12 +3070,12 @@ mod tests {
         ] {
             let mut c = base.clone();
             c.members[0] = slot("fixture", "wall-fixture", at, lift);
-            let err = validate(&vec![c], &lib).expect_err(&format!("{why} must be refused"));
+            let err = validate(&[c], &lib).expect_err(&format!("{why} must be refused"));
             assert!(err.contains("slot `fixture`"), "{why}: {err}");
             assert!(err.contains("envelope"), "{why}: {err}");
         }
         // And the interior one this varies from is accepted.
-        validate(&vec![base], &lib).expect("an interior slot is fine");
+        validate(&[base], &lib).expect("an interior slot is fine");
     }
 
     /// A hole survives the stamp and lands under its transform, exactly as a row does.

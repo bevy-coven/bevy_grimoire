@@ -171,7 +171,33 @@ fn is_id_segment(s: &str) -> bool {
     s.starts_with(|c: char| c.is_ascii_lowercase())
         && !s.ends_with('_')
         && !s.contains("__")
-        && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && s.chars().all(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// **Force a string into the one spelling an id is allowed.**
+///
+/// [`to_snake_case`] is the wrong tool here, and using it is a bug that reads as a feature. An id's
+/// `/` is a **namespace** — *which kit* and *which piece* — and `to_snake_case` drops every
+/// character that is not a letter or a digit, so `site/wall_corner` comes out as
+/// `site_wall_corner`: a different id, in a different namespace, that collides with nothing and
+/// means nothing.
+///
+/// **So the rule is applied per segment**, exactly as [`is_id`] reads it: each `/`-separated part is
+/// forced with [`to_snake_case`], and the separators are kept.
+///
+/// An empty part is **dropped**, not kept: `site//wall` and `/wall` are not two ids, they are one
+/// id with a stray separator, and a stray separator is the author's typo rather than a name.
+///
+/// Returns an empty string when nothing survives, which callers must treat as *"no name yet"* —
+/// never as a substitute, because two compositions called `untitled` is the collision
+/// [`is_id`] exists to prevent.
+pub fn to_id(s: &str) -> String {
+    s.split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(to_snake_case)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[cfg(test)]
@@ -193,5 +219,55 @@ mod id_tests {
         for bad in ["", "Wall Corner", "siteWall", "_leading", "trailing_", "double__bar", "9lives", "site//wall", "/wall"] {
             assert!(!is_id(bad), "`{bad}` should not be a valid id");
         }
+    }
+
+    /// **The namespace survives.** This is the whole reason `to_id` exists: `to_snake_case` on
+    /// `site/wall_corner` gives `site_wall_corner`, which is a *different id* — a different kit, a
+    /// different piece — and it collides with nothing, so nothing would ever say it was wrong.
+    #[test]
+    fn the_namespace_survives_the_forcing() {
+        assert_eq!(to_id("site/wall_corner"), "site/wall_corner");
+        assert_eq!(to_id("town/house_cottage_plaster"), "town/house_cottage_plaster");
+        // **And the spelling is still forced**, per segment.
+        assert_eq!(to_id("Town/House Cottage Plaster"), "town/house_cottage_plaster");
+        assert_eq!(to_id("Site/Wall-Corner"), "site/wall_corner");
+    }
+
+    /// A stray separator is a typo, not a name — it is dropped rather than kept.
+    #[test]
+    fn a_stray_separator_is_dropped() {
+        assert_eq!(to_id("site//wall"), "site/wall");
+        assert_eq!(to_id("/wall"), "wall");
+        assert_eq!(to_id("site/"), "site");
+    }
+
+    /// Whatever comes out must be a legal id, or the forcing has not forced anything.
+    #[test]
+    fn anything_non_empty_out_is_a_valid_id() {
+        for s in [
+            "site/wall",
+            "Site 67",
+            "---",
+            "a",
+            "ALLCAPS",
+            "trailing___",
+            "2nd floor",
+            "site//wall",
+            "/wall",
+            "site/",
+        ] {
+            let out = to_id(s);
+            if !out.is_empty() {
+                assert!(is_id(&out), "{s:?} produced invalid {out:?}");
+            }
+        }
+    }
+
+    /// Nothing survivable means no id — never a substitute, because two compositions sharing a name
+    /// is the collision `is_id` exists to prevent.
+    #[test]
+    fn nothing_survivable_yields_no_id() {
+        assert_eq!(to_id(""), "");
+        assert_eq!(to_id("!!! ???"), "");
     }
 }

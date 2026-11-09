@@ -165,6 +165,10 @@ struct BenchLine;
 
 pub struct AnimTabPlugin;
 
+// One follower query, aliased, so `RigList` and its `ScrollPosition` sit on one line.
+// `every_list_follows_its_selection` reads this file as text and checks exactly that.
+type RigFollower<'w, 's> = Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition), (With<RigList>, Without<RigRow>)>;
+
 /// **The rig list follows its selection**, the same way the palette and the mesh lists do.
 ///
 /// It was the one scrollable list with no follower at all: the arrows moved `BenchState::selected`
@@ -178,10 +182,7 @@ pub struct AnimTabPlugin;
 fn keep_rig_selection_on_screen(
     state: Res<BenchState>,
     rows: Query<(&RigRow, &ComputedNode, &UiGlobalTransform)>,
-    mut lists: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (With<RigList>, Without<RigRow>),
-    >,
+    mut lists: RigFollower<'_, '_>,
     mut follow: Local<crate::chrome::Follow<usize>>,
 ) {
     if !follow.should_scroll(Some(state.selected)) {
@@ -827,14 +828,14 @@ fn slot_measured_line(
     if let Some(cd) = m.cycle_distance {
         line.push_str(&format!("  {:.3}m", cd * scale));
     }
-    if let Some(sk) = skate {
-        if sk.max_skate > bevy_emerge_core::rig_check::SKATE_FLOOR {
-            line.push_str(&format!(
-                "  skate up to {:.2} u/s over {:.0}% of drive",
-                sk.max_skate,
-                sk.skating_ratio * 100.0
-            ));
-        }
+    if let Some(sk) = skate
+        && sk.max_skate > bevy_emerge_core::rig_check::SKATE_FLOOR
+    {
+        line.push_str(&format!(
+            "  skate up to {:.2} u/s over {:.0}% of drive",
+            sk.max_skate,
+            sk.skating_ratio * 100.0
+        ));
     }
     line
 }
@@ -1131,25 +1132,24 @@ fn rebuild_slots(
                 }
                 // **Declared above, measured below** — the module's own promise, kept structurally
                 // rather than buried in finding prose. Only gaits carry measured numbers.
-                if matches!(slot.playback, Playback::Gait { .. }) {
-                    if let Some(r) = report {
-                        if let Some(m) = r.slots.iter().find(|m| m.slot == i) {
-                            let skate = r.skates.iter().find(|s| s.slot == i);
-                            let mut line = slot_measured_line(m, skate, rig.scale);
-                            if excluded.contains(&i) {
-                                line.push_str(" | excluded from adopt");
-                            }
-                            p.spawn((
-                                Text::new(line),
-                                TextColor(DIM),
-                                crate::chrome::font(crate::chrome::text::HINT),
-                                Node {
-                                    margin: UiRect::left(Val::Px(SLOT_COL)),
-                                    ..default()
-                                },
-                            ));
-                        }
+                if matches!(slot.playback, Playback::Gait { .. })
+                    && let Some(r) = report
+                    && let Some(m) = r.slots.iter().find(|m| m.slot == i)
+                {
+                    let skate = r.skates.iter().find(|s| s.slot == i);
+                    let mut line = slot_measured_line(m, skate, rig.scale);
+                    if excluded.contains(&i) {
+                        line.push_str(" | excluded from adopt");
                     }
+                    p.spawn((
+                        Text::new(line),
+                        TextColor(DIM),
+                        crate::chrome::font(crate::chrome::text::HINT),
+                        Node {
+                            margin: UiRect::left(Val::Px(SLOT_COL)),
+                            ..default()
+                        },
+                    ));
                 }
             }
 
@@ -1410,12 +1410,13 @@ mod write_back_tests {
             .keys()
             .position(|k| k == "valkyrie")
             .unwrap_or_else(|| panic!("no valkyrie"));
-        let mut bench = BenchState::default();
-        bench.rigs = Some(rigs);
-        bench.text = Some(text);
-        bench.selected = selected;
-        bench.loaded = true;
-        bench
+        BenchState {
+            rigs: Some(rigs),
+            text: Some(text),
+            selected,
+            loaded: true,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -1488,8 +1489,10 @@ mod write_back_tests {
                 .map(str::to_owned)
                 .unwrap_or_else(|| panic!("no walk line"))
         };
-        let mut exclude = AdoptExclude::default();
-        exclude.rig = Some("valkyrie".to_owned());
+        let mut exclude = AdoptExclude {
+            rig: Some("valkyrie".to_owned()),
+            ..Default::default()
+        };
         exclude.slots.insert(2);
         let said = adopt(&dir, &mut bench, &exclude).unwrap_or_else(|e| panic!("{e}"));
         assert!(said.contains("1 skipped"), "{said}");
@@ -1503,16 +1506,20 @@ mod write_back_tests {
 
         // A mismatched rig key means nothing is excluded — the set cannot leak across rigs.
         let mut bench = bench_for(&dir);
-        let mut foreign = AdoptExclude::default();
-        foreign.rig = Some("crab".to_owned());
+        let mut foreign = AdoptExclude {
+            rig: Some("crab".to_owned()),
+            ..Default::default()
+        };
         foreign.slots.insert(2);
         let said = adopt(&dir, &mut bench, &foreign).unwrap_or_else(|e| panic!("{e}"));
         assert!(!said.contains("skipped"), "{said}");
 
         // Excluding every gait slot refuses the write outright.
         let mut bench = bench_for(&dir);
-        let mut all = AdoptExclude::default();
-        all.rig = Some("valkyrie".to_owned());
+        let mut all = AdoptExclude {
+            rig: Some("valkyrie".to_owned()),
+            ..Default::default()
+        };
         all.slots.extend([2usize, 3, 4, 5, 6, 7]);
         let refused = adopt(&dir, &mut bench, &all);
         assert!(refused.is_err(), "{refused:?}");

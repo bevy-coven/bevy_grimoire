@@ -195,8 +195,8 @@ pub fn learn(map: &Map, cell: f32) -> Result<Grammar, String> {
     // **Empty must be able to meet empty.** A one-piece map teaches only "piece beside empty", and a
     // solver that cannot put two empties side by side then has to fill every other cell — which is
     // not what a map with one crate in it looks like.
-    for dir in 0..4 {
-        support[dir][0] |= 1;
+    for row in &mut support {
+        row[0] |= 1;
     }
 
     Ok(Grammar {
@@ -998,7 +998,7 @@ mod tests {
         assert_eq!(a.grammar.support, b.grammar.support, "four holes moved the adjacency table");
     }
 
-    /// **Swapping the rule changes the grammar** — driven through the learner, not just asserted of
+    // **Swapping the rule changes the grammar** — driven through the learner, not just asserted of
     // ── solve_constrained, against the shipped kit ───────────────────────────────────────────────
 
     /// **A four-tile kit, built here rather than read off disk.**
@@ -1487,36 +1487,36 @@ mod tests {
 // The declared half
 // ---------------------------------------------------------------------------------------------
 
-/// **A grammar built from what tiles DECLARE, rather than from what an author has already drawn.**
-///
-/// [`learn`] answers *"more of what is here"* and cannot answer anything on an empty map — there are
-/// no observed pairs to generalise from. This answers *"whatever the kit says may meet"*, which is
-/// the other half of the same algorithm and needs no example at all.
-///
-/// # Two sources, one solver, and neither is a fallback for the other
-///
-/// Karth & Smith (*Addressing the Fundamental Tension of PCGML with Discriminative Learning*, FDG
-/// 2019) name the distinction exactly. Gumin's WFC *"simply allows any tile-compatible overlapping
-/// patterns to be placed adjacent to one another, even if they were never seen adjacent in the single
-/// source image"* — they call this **Most General Generalization**, the inverse of learning from
-/// observation. That is precisely what this function does over the token relation, and what [`learn`]
-/// deliberately does not.
-///
-/// So the author picks a source and gets what that source can express. Neither silently substitutes
-/// for the other: a library with no tokens produces no prototypes here and says so, rather than
-/// quietly falling through to the learned grammar and generating something the author did not ask
-/// for.
-///
-/// # Matching is equality, including the length of a face
-///
-/// `support[dir][p]` holds `q` when `p`'s `dir` face is *the same sequence* as `q`'s facing one —
-/// Merrell & Manocha 2009 §4.3's rule, which [`crate::adjacency`] already applies to a finished map.
-/// Two pieces whose lattices are different sizes present faces of different lengths, and those never
-/// match. That is **conservative rather than permissive**: the pair is refused, not allowed, so this
-/// cannot invent an adjacency the tokens do not state.
-///
-/// An unlabelled cell is `None`, and `None` equals only `None`. It is not a wildcard — which is what
-/// lets a doorway's open middle meet only another open middle, and is why a kit with a single token
+// **A grammar built from what tiles DECLARE, rather than from what an author has already drawn.**
+//
+// [`learn`] answers *"more of what is here"* and cannot answer anything on an empty map — there are
+// no observed pairs to generalise from. This answers *"whatever the kit says may meet"*, which is
+// the other half of the same algorithm and needs no example at all.
+//
+// # Two sources, one solver, and neither is a fallback for the other
+//
+// Karth & Smith (*Addressing the Fundamental Tension of PCGML with Discriminative Learning*, FDG
+// 2019) name the distinction exactly. Gumin's WFC *"simply allows any tile-compatible overlapping
+// patterns to be placed adjacent to one another, even if they were never seen adjacent in the single
+// source image"* — they call this **Most General Generalization**, the inverse of learning from
+// observation. That is precisely what this function does over the token relation, and what [`learn`]
+// deliberately does not.
+//
+// So the author picks a source and gets what that source can express. Neither silently substitutes
+// for the other: a library with no tokens produces no prototypes here and says so, rather than
+// quietly falling through to the learned grammar and generating something the author did not ask
+// for.
+//
+// # Matching is equality, including the length of a face
+//
+// `support[dir][p]` holds `q` when `p`'s `dir` face is *the same sequence* as `q`'s facing one —
+// Merrell & Manocha 2009 §4.3's rule, which [`crate::adjacency`] already applies to a finished map.
+// Two pieces whose lattices are different sizes present faces of different lengths, and those never
+// match. That is **conservative rather than permissive**: the pair is refused, not allowed, so this
+// cannot invent an adjacency the tokens do not state.
+//
+// An unlabelled cell is `None`, and `None` equals only `None`. It is not a wildcard — which is what
+// lets a doorway's open middle meet only another open middle, and is why a kit with a single token
 
 /// **A composition turned about its own anchor**, for deriving what it presents at that yaw.
 ///
@@ -1673,7 +1673,7 @@ pub fn from_compositions(
             // spend two of the solver's thirty-two saying one thing. Across compositions it would be
             // wrong — identical faces make two tiles interchangeable to the propagator, not the same
             // tile.
-            if seen_faces.iter().any(|f| *f == iface.faces) {
+            if seen_faces.contains(&iface.faces) {
                 continue;
             }
             seen_faces.push(iface.faces.clone());
@@ -1824,7 +1824,7 @@ pub fn declared(library: &Library, per_tile: u32, cell: f32) -> Result<Grammar, 
             let sig = [read(N), read(E), read(S), read(W)];
             // Same faces, same tile. Skipping here is what keeps a symmetric piece from spending two
             // of the solver's thirty-two slots saying one thing.
-            if faces[mine..].iter().any(|f| *f == sig) {
+            if faces[mine..].contains(&sig) {
                 continue;
             }
             prototypes.push(Prototype::Piece {

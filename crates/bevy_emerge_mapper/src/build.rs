@@ -456,9 +456,21 @@ pub fn host_for(
     at: (f32, f32),
     span: (f32, f32),
 ) -> Result<Option<String>, String> {
-    let Some(want) = crate::editor::mount_class(guest) else {
+    // **The strict mount decides whether a host is REQUIRED; the permissive one whether one is
+    // TAKEN.** A `Mount::OnSurfaceOrFloor` piece that touches a sibling offering the class belongs
+    // *on* it — that is the mount's first reading — and one that touches nothing is fine on the
+    // floor. Reading `mount_class` alone here made a two-way member save `on: None` whatever it was
+    // dropped against, and `rebind_hosts` then reset a hand-authored seating on the next edit.
+    //
+    // The two questions are asked separately on purpose: `mount_class` is the *required* host and
+    // covers surfaces and faces; `may_take_surface` is the *offered* one and covers the two-way
+    // mount. A piece that answers neither takes no host at all.
+    let Some(want) =
+        crate::editor::mount_class(guest).or_else(|| stack::may_take_surface(guest))
+    else {
         return Ok(None);
     };
+    let required = stack::needs_surface(guest).is_some() || stack::needs_face(guest).is_some();
 
     let mut found: Vec<&str> = Vec::new();
     for m in members {
@@ -484,6 +496,11 @@ pub fn host_for(
 
     match found.as_slice() {
         [] => {
+            // **A piece that may take a surface and finds none stand on the floor.** No host, no
+            // refusal — the same answer the click path gives.
+            if !required {
+                return Ok(None);
+            }
             // **Name what would work.** The refusal knew what was missing and not what to do about
             // it, so an author was left to guess which of seventy-five rows offers a `support` —
             // and the editor has that list. `docs/2026-08-11-editor-visual-inspection.md` records
@@ -799,9 +816,7 @@ pub fn refit(
     library: &bevy_emerge_core::library::Library,
     height: f32,
 ) -> Option<(f32, f32, f32)> {
-    let Some(comp) = build.open.as_ref() else {
-        return None;
-    };
+    let comp = build.open.as_ref()?;
     let want = fit_envelope(&comp.members, library, height);
     let now = match comp.envelope {
         Envelope::Bounded { size } => size,
@@ -1792,7 +1807,7 @@ pub fn build_keys(
         let Some(span) = span else {
             state
                 .status
-                .note("a hole has no width to put flush — nudge it instead".to_owned());
+                .problem("a hole has no width to put flush — nudge it instead".to_owned());
             return;
         };
         let was = build
@@ -2148,7 +2163,6 @@ pub fn build_keys(
             // the stage, and no verb in the tab could put it back.
             Err(e) => state.status.problem(e),
         }
-        return;
     }
 
 }
@@ -2461,10 +2475,8 @@ pub fn drive_build_preview(
         if let Some(e) = crate::editor::spawn_piece(
             &mut commands,
             &assets,
-            &d,
+            crate::editor::Pose { d: &d, yaw: 0.0, tip: (0, 0) },
             at,
-            0.0,
-            (0, 0),
             (stage.x, stage.y, stage.z),
             lift,
         ) {
@@ -2553,10 +2565,8 @@ pub fn drive_build_preview(
         if let Some(e) = crate::editor::spawn_piece(
             &mut commands,
             &assets,
-            &d,
+            crate::editor::Pose { d: &d, yaw: p.yaw, tip: p.tip },
             p.at,
-            p.yaw,
-            p.tip,
             (stage.x, stage.y, stage.z),
             y,
         ) {

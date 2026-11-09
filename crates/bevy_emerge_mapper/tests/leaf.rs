@@ -50,6 +50,10 @@ const ALLOWED: &[(&str, &str)] = &[
     ("ureq", "the VLM transport — one blocking POST from a task-pool thread"),
     ("base64", "data-URI image parts for the booth renders"),
     ("image", "encodes the booth's RGBA readback to PNG"),
+    (
+        "bevy_emerge_snip",
+        "the one crop, shared by the editor's snip and the MCP's emerge_snip, so a picture from either door is cut the same way",
+    ),
     ("arboard", "Cmd+C copies the live tab's text, problems first, for handing to an agent"),
     (
         "bevy_debugger_bevy",

@@ -1,0 +1,321 @@
+{
+ "name": "agent_drives",
+ "fps": 10,
+ "scale": 2,
+ "crop": [
+  0,
+  0,
+  1280,
+  703
+ ],
+ "width": 1200,
+ "title": null,
+ "frames": [
+  {
+   "t": 0.049,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f000_t0.00s.png"
+  },
+  {
+   "t": 0.124,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f001_t0.10s.png"
+  },
+  {
+   "t": 0.237,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f002_t0.20s.png"
+  },
+  {
+   "t": 0.326,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_0/f003_t0.30s.png"
+  },
+  {
+   "t": 0.596,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f000_t0.00s.png"
+  },
+  {
+   "t": 0.709,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f001_t0.10s.png"
+  },
+  {
+   "t": 0.817,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f002_t0.20s.png"
+  },
+  {
+   "t": 0.879,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_1/f003_t0.30s.png"
+  },
+  {
+   "t": 1.286,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f000_t0.00s.png"
+  },
+  {
+   "t": 1.394,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f001_t0.10s.png"
+  },
+  {
+   "t": 1.494,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f002_t0.20s.png"
+  },
+  {
+   "t": 1.6,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_2/f003_t0.30s.png"
+  },
+  {
+   "t": 1.904,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f000_t0.00s.png"
+  },
+  {
+   "t": 1.988,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f001_t0.10s.png"
+  },
+  {
+   "t": 2.1,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f002_t0.20s.png"
+  },
+  {
+   "t": 2.191,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f003_t0.30s.png"
+  },
+  {
+   "t": 2.357,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f004_t0.40s.png"
+  },
+  {
+   "t": 2.393,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f005_t0.50s.png"
+  },
+  {
+   "t": 2.508,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f006_t0.60s.png"
+  },
+  {
+   "t": 2.597,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f007_t0.70s.png"
+  },
+  {
+   "t": 2.694,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f008_t0.80s.png"
+  },
+  {
+   "t": 2.782,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f009_t0.90s.png"
+  },
+  {
+   "t": 2.925,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f010_t1.00s.png"
+  },
+  {
+   "t": 3.024,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f011_t1.10s.png"
+  },
+  {
+   "t": 3.084,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f012_t1.20s.png"
+  },
+  {
+   "t": 3.24,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f013_t1.30s.png"
+  },
+  {
+   "t": 3.292,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f014_t1.40s.png"
+  },
+  {
+   "t": 3.416,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f015_t1.50s.png"
+  },
+  {
+   "t": 3.513,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f016_t1.60s.png"
+  },
+  {
+   "t": 3.585,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f017_t1.70s.png"
+  },
+  {
+   "t": 3.688,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f018_t1.80s.png"
+  },
+  {
+   "t": 3.806,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f019_t1.90s.png"
+  },
+  {
+   "t": 3.916,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f020_t2.00s.png"
+  },
+  {
+   "t": 4.003,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f021_t2.10s.png"
+  },
+  {
+   "t": 4.118,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f022_t2.20s.png"
+  },
+  {
+   "t": 4.22,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f023_t2.30s.png"
+  },
+  {
+   "t": 4.336,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f024_t2.40s.png"
+  },
+  {
+   "t": 4.431,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f025_t2.50s.png"
+  },
+  {
+   "t": 4.491,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f026_t2.60s.png"
+  },
+  {
+   "t": 4.615,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f027_t2.70s.png"
+  },
+  {
+   "t": 4.703,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f028_t2.80s.png"
+  },
+  {
+   "t": 4.805,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f029_t2.90s.png"
+  },
+  {
+   "t": 4.912,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f030_t3.00s.png"
+  },
+  {
+   "t": 4.983,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f031_t3.10s.png"
+  },
+  {
+   "t": 5.117,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f032_t3.20s.png"
+  },
+  {
+   "t": 5.239,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f033_t3.30s.png"
+  },
+  {
+   "t": 5.315,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f034_t3.40s.png"
+  },
+  {
+   "t": 5.455,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f035_t3.50s.png"
+  },
+  {
+   "t": 5.496,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f036_t3.60s.png"
+  },
+  {
+   "t": 5.64,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f037_t3.70s.png"
+  },
+  {
+   "t": 5.753,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f038_t3.80s.png"
+  },
+  {
+   "t": 5.82,
+   "path": "/tmp/gifs/agent-drives/proj/target/loop/captures/demo_agent_drives_3/f039_t3.90s.png"
+  }
+ ],
+ "chunks": [
+  {
+   "index": 0,
+   "label": "demo_agent_drives_0",
+   "start": 0.022,
+   "operation_applied_t_s": null,
+   "operation_result": null,
+   "planned_s": 0.4,
+   "captured_s": 0.304
+  },
+  {
+   "index": 1,
+   "label": "demo_agent_drives_1",
+   "start": 0.565,
+   "operation_applied_t_s": 0.0545654296875,
+   "operation_result": {
+    "outcome": "applied",
+    "saved": true,
+    "summary": "turned abbey to 90 deg",
+    "waiting_on": null
+   },
+   "planned_s": 0.4,
+   "captured_s": 0.314
+  },
+  {
+   "index": 2,
+   "label": "demo_agent_drives_2",
+   "start": 1.257,
+   "operation_applied_t_s": 0.05457496643066406,
+   "operation_result": {
+    "outcome": "applied",
+    "saved": true,
+    "summary": "removed abbey_table and 3 on it",
+    "waiting_on": null
+   },
+   "planned_s": 0.4,
+   "captured_s": 0.343
+  },
+  {
+   "index": 3,
+   "label": "demo_agent_drives_3",
+   "start": 1.88,
+   "operation_applied_t_s": null,
+   "operation_result": null,
+   "planned_s": 4.0,
+   "captured_s": 3.941
+  }
+ ],
+ "events": [
+  {
+   "t": 0.049,
+   "type": "caption",
+   "text": "agent: emerge_frame_view placements abbey, well (71 x 52 m), before recording",
+   "t_stamp": 0.022142041940242052
+  },
+  {
+   "t": 0.709,
+   "type": "caption",
+   "text": "agent: emerge_apply_operation placement_set_yaw abbey, yaw 90",
+   "t_stamp": 0.6156515829497948
+  },
+  {
+   "t": 1.394,
+   "type": "caption",
+   "text": "agent: emerge_apply_operation placement_remove abbey_table (and the items on it)",
+   "t_stamp": 1.308771749958396
+  },
+  {
+   "t": 2.191,
+   "type": "key",
+   "keys": [
+    "SuperLeft",
+    "KeyZ"
+   ],
+   "t_stamp": 2.1766173749929294
+  },
+  {
+   "t": 2.357,
+   "type": "caption",
+   "text": "person: \u2318Z takes back the newest change, the agent's removal",
+   "t_stamp": 2.2521403749706224
+  },
+  {
+   "t": 3.24,
+   "type": "key",
+   "keys": [
+    "SuperLeft",
+    "KeyZ"
+   ],
+   "t_stamp": 3.1578224999830127
+  },
+  {
+   "t": 3.292,
+   "type": "caption",
+   "text": "person: \u2318Z takes back the yaw turn",
+   "t_stamp": 3.2735438329400495
+  }
+ ]
+}

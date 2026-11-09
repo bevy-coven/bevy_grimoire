@@ -39,6 +39,27 @@ use bevy_emerge_core::map::{Map, Placed};
 /// The most placements one fill may create. See the module note on why it is loud.
 pub const MAX_CELLS: usize = 4096;
 
+/// **What an author does when a fill stops at the cap** — the same sentence for both fills.
+///
+/// The flood's cap message used to say *"fill again to continue"*, and **the second fill could not
+/// continue**: the flood will not start on a cell that already holds something, and the cell the
+/// author clicks is exactly the cell the first fill filled. So the author was told to do a thing
+/// that was refused — and, because the refusal went to the receipt slot, **they were told nothing
+/// at all**.
+///
+/// **The route that works is a fill from a new cell.** The flood stops at anything already placed,
+/// and the first fill's pieces are anything already placed, so a flood from a different empty cell
+/// covers the ground that is left. **Measured:** 4,096 more, and it truncates again.
+///
+/// **It is one sentence in one place because the two fills are one operation.** The box fill's
+/// message and the flood's message used to differ — one said *"stopped at the cap"* and the other
+/// said *"fill again to continue"* — and **a message that differs between two ways of doing the
+/// same thing is a message one of them got wrong.** AIP-158's rule for a resumable cursor is the
+/// same shape: the token *"must be limited to providing an indication of where to continue"*, and
+/// the end of the collection *"must"* be signalled explicitly, so a stopped fill never looks like a
+/// finished one.
+pub const CAP_ROUTE: &str = "Fill from another empty cell to carry on — this cell is full.";
+
 /// The smallest cell a fill will step on, metres — the authoring snap. A piece with no recorded
 /// footprint gets this rather than a zero step, which would be an infinite loop wearing a fill's
 /// clothes.
@@ -814,6 +835,67 @@ mod tests {
             .unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(f.placements.len(), MAX_CELLS);
         assert!(f.truncated, "must report that it stopped short");
+    }
+
+    /// **The cap's promise is false, and this is the test that says so.**
+    ///
+    /// The editor's message, when a fill is truncated by the cap, reads:
+    ///
+    /// > *"filled 4096 and STOPPED at the 4096 cell cap — fill again to continue"*
+    ///
+    /// **And the second fill cannot continue.** The flood refuses to start on a cell that already
+    /// holds something — `starting_on_something_is_refused` above is that rule — and the cell the
+    /// author clicks is exactly the cell the first fill filled. So the second fill is refused with
+    /// *"there is already something here"*, and the author is told to do the thing that cannot be
+    /// done.
+    ///
+    /// **The two tests above are both true and neither asks this.** One says a fill truncates and
+    /// says so; the other says a fill starting on something is refused. **The gap between them is
+    /// the promise**, and the promise is the author's only route past the cap.
+    #[test]
+    fn the_caps_promise_cannot_be_kept_by_a_second_fill() {
+        let mut m = map((200.0, 3.0, 200.0));
+        let first = flood(&m, &brush(0.5), (0.25, 0.25), 0.0, UPRIGHT, TILE, ids())
+            .unwrap_or_else(|e| panic!("the first fill must succeed: {e}"));
+        assert!(first.truncated, "the first fill must hit the cap");
+        assert_eq!(first.placements.len(), MAX_CELLS);
+
+        // --- **The map now holds what the fill laid.**
+        m.placements.extend(first.placements.iter().cloned());
+
+        // --- **And the second fill, in the same cell, is refused.**
+        let second = flood(&m, &brush(0.5), (0.25, 0.25), 0.0, UPRIGHT, TILE, ids());
+        let refused = second.err().unwrap_or_default();
+        assert!(
+            refused.contains("already something here"),
+            "the second fill did not refuse with the reason the author will read. It said \
+             `{refused}`"
+        );
+    }
+
+    /// **And the route the message names works**: a flood from a *different* empty cell lays more.
+    ///
+    /// **This is the half of the promise that is kept**, and the reason the message can name it.
+    /// The flood stops at anything already placed, and the first fill's pieces are anything already
+    /// placed — so a flood from a cell the first fill did not reach covers the ground that is left.
+    ///
+    /// **Measured: 4,096 more, and it truncates again.** And the flood from the *same* cell is
+    /// refused — which is `the_caps_promise_cannot_be_kept_by_a_second_fill` above.
+    #[test]
+    fn a_flood_from_a_new_cell_carries_on() {
+        let mut m = map((200.0, 3.0, 200.0));
+        let first = flood(&m, &brush(0.5), (0.25, 0.25), 0.0, UPRIGHT, TILE, ids())
+            .unwrap_or_else(|e| panic!("the first fill must succeed: {e}"));
+        assert!(first.truncated, "the first fill must hit the cap");
+        m.placements.extend(first.placements.iter().cloned());
+
+        // --- A second flood, from a cell far away and empty.
+        let second = flood(&m, &brush(0.5), (90.25, 0.25), 0.0, UPRIGHT, TILE, ids())
+            .unwrap_or_else(|e| panic!("the second flood must succeed: {e}"));
+        assert!(
+            !second.placements.is_empty(),
+            "the second flood placed nothing, so the route the cap's message names does not work"
+        );
     }
 
     /// **The axes step independently**, which is the striping guard: a first version used the larger

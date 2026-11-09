@@ -171,7 +171,12 @@ impl Plugin for SurfacePlugin {
             // for one camera's extracted target info can meet a colour attachment allocated for
             // another's. The world camera is the one spawned late — `view::setup` at
             // `OnEnter(Editor)` — which fits the startup-path evidence exactly.
-            .add_systems(Update, fit_surface_to_window)
+            // **In `PreUpdate`, not `Update`.** The resize has to be *announced* before
+            // `camera_system` reads the message stream in `PostUpdate` — and a message written
+            // in `Update` is read in the same frame's `PostUpdate`, while one written in
+            // `PreUpdate` is read by a `PostUpdate` that has not read the stream yet. The
+            // difference is the whole crash; see the resize's own note.
+            .add_systems(PreUpdate, fit_surface_to_window)
             // **After layout, because it reads it.** `PostUpdate` is where `ComputedNode` becomes
             // true for this frame; asking in `Update` would chase the previous one, which is the
             // same one-frame lag `chrome::Follow` exists to name.
@@ -201,9 +206,7 @@ impl Plugin for SurfacePlugin {
     }
 }
 
-/// A starting size only — [`fit_surface_to_window`] owns it from the first frame that has a window.
-/// Headless runs keep it, because there is no window to ask and an image of zero has no valid
-/// texture.
+/// A starting size for a run with **no window** — a headless harness, which has none.
 ///
 /// **Window-shaped, deliberately.** It was a 1024 square, and the square told a comfortable lie:
 /// with both docks at their fixed widths, a square surface leaves a stage too narrow for the badge
@@ -220,6 +223,41 @@ fn spawn_surface(world: &mut World) {
     let ground = world
         .get_resource::<ClearColor>()
         .map_or(Color::BLACK, |c| c.0);
+    // **The window's physical size, if there is a window.**
+    //
+    // This is the whole fix for the startup crash, and it is here — at *creation* — rather than in
+    // `fit_surface_to_window`, because of where the crash comes from. The world camera is 3-D and
+    // so is the only camera with a depth attachment, and `prepare_core_3d_depth_textures` sizes
+    // that depth from `camera.computed.target_info.physical_size` — the size of the image **as it
+    // was when the camera last refreshed**. A camera refreshes on the image's `AssetEvent`, and
+    // that event is flushed in `PostUpdate` *after* `camera_system` has already read the message
+    // stream, so a resize is always one frame late at the camera.
+    //
+    // The frame in between is the one that assembles the pass: the depth texture sized for the
+    // old extent, the colour attachment the new one, and wgpu refuses a pass whose attachments
+    // differ. It is fatal by default, so the application exits rather than dropping a frame —
+    // and it happens on the *first* frame with a window, which is why booting straight into a
+    // door dies inside two seconds and booting through the chooser never does.
+    //
+    // So the image is **created at the window's size** and never has to be resized at startup:
+    // there is no resize, so there is no event to be late, so there is no frame in which the two
+    // can disagree. `WindowPlugin::build` spawns the primary window, and `DefaultPlugins` is
+    // added before the editor's plugins in both entry points, so the window is there to ask.
+    //
+    // **A headless run has no window** and keeps the placeholder — which is what
+    // `harness::resize_surface` then resizes, and what the headless ratchets measure.
+    //
+    // Read before the `Assets<Image>` borrow below: the query needs the world, and `images` holds
+    // it.
+    let window_size = {
+        let mut q = world.query_filtered::<&Window, With<bevy::window::PrimaryWindow>>();
+        q.iter(world).next().map(|w| {
+            (
+                w.resolution.physical_width().max(1),
+                w.resolution.physical_height().max(1),
+            )
+        })
+    };
     let Some(mut images) = world.get_resource_mut::<Assets<Image>>() else {
         // Loud, because the alternative is `view::setup` panicking one schedule later on a
         // parameter whose absence says nothing about the cause. `AssetPlugin` is in `DefaultPlugins`
@@ -227,9 +265,10 @@ fn spawn_surface(world: &mut World) {
         error!("no `Assets<Image>` when the surface was built — add the editor's plugins after `DefaultPlugins`");
         return;
     };
+    let (width, height) = window_size.unwrap_or((INITIAL_W, INITIAL_H));
     let size = Extent3d {
-        width: INITIAL_W,
-        height: INITIAL_H,
+        width,
+        height,
         depth_or_array_layers: 1,
     };
     let mut image = Image {
@@ -291,6 +330,12 @@ fn spawn_surface(world: &mut World) {
             ..default()
         },
         target(),
+        // **No layers: this camera draws the interface, and UI is not filtered by layers** (Bevy's
+        // UI renderer never reads `RenderLayers`). Without this it sat on layer 0, where gizmos
+        // draw by default, and drew the world's bounds box flat over the interface through its 2D
+        // projection: a 300 x 38 px rectangle at the window's centre on a 300 x 38 m map, wherever
+        // the Map's camera was looking (B-011).
+        RenderLayers::none(),
     ));
 
     world.spawn((
@@ -370,41 +415,6 @@ const REFERENCE_W: f32 = 1600.0;
 /// monitor should be buying *viewport*, which is the thing an editor actually runs out of.
 const MAX_GROWTH: f32 = 1.25;
 
-#[cfg(test)]
-mod scale_tests {
-    use super::{ui_scale_for, MAX_GROWTH, REFERENCE_W};
-    use crate::chrome::EDITOR_UI_SCALE;
-
-    /// **A small window keeps the density the design was drawn at**, which is the half a larger
-    /// constant broke. 1280 x 800 is the size every headless test lays out at, and the badge packer
-    /// measures its stage in exactly those pixels.
-    #[test]
-    fn a_small_window_is_not_scaled_up() {
-        assert_eq!(ui_scale_for(1280.0, 1.0), EDITOR_UI_SCALE);
-        assert_eq!(ui_scale_for(REFERENCE_W, 1.0), EDITOR_UI_SCALE);
-    }
-
-    /// **A large one grows, and stops.**
-    #[test]
-    fn a_large_window_grows_to_the_cap() {
-        let wide = ui_scale_for(3396.0, 1.0);
-        assert_eq!(wide, EDITOR_UI_SCALE * MAX_GROWTH);
-        assert!(
-            wide > ui_scale_for(REFERENCE_W, 1.0),
-            "a window twice the reference width reads at a larger size, or F2 is not fixed"
-        );
-        // Halfway up the ramp, so the clamp is not the only thing being tested.
-        assert!((ui_scale_for(1800.0, 1.0) - EDITOR_UI_SCALE * 1.125).abs() < 1e-5);
-    }
-
-    /// **Density still multiplies on top**, because a 2x display is a separate question from a wide
-    /// one and the target is sized in physical pixels either way.
-    #[test]
-    fn the_display_factor_still_multiplies() {
-        assert_eq!(ui_scale_for(1280.0, 2.0), EDITOR_UI_SCALE * 2.0);
-    }
-}
-
 /// **Fit the surface to the window, and carry the display's density in `UiScale`.**
 ///
 /// The target is sized in **physical** pixels, and that is what makes the type sharp. Reported at the
@@ -426,6 +436,7 @@ fn fit_surface_to_window(
     mut mirror: Query<&mut Transform, With<Mirror>>,
     mut ui_scale: ResMut<UiScale>,
     mut images: ResMut<Assets<Image>>,
+    mut events: MessageWriter<bevy::asset::AssetEvent<Image>>,
 ) {
     // No window is a headless run: there is nothing to fit to, and the initial 16:9 stands.
     let (Ok(window), Some(surface), Ok(mut mirror)) =
@@ -467,6 +478,37 @@ fn fit_surface_to_window(
             width: iw,
             height: ih,
             depth_or_array_layers: 1,
+        });
+        // **Announce the resize, in the frame the camera reads it.**
+        //
+        // This is the whole fix, and it is here for a reason that took reading the engine to see.
+        //
+        // The world camera is 3-D, and so is the only camera with a **depth attachment**.
+        // `prepare_core_3d_depth_textures` sizes that depth from
+        // `camera.computed.target_info.physical_size` — the image's size **as it was when the
+        // camera last refreshed**. A camera refreshes on the image's `AssetEvent::Modified`, and
+        // `camera_system` reads that from the **message** stream.
+        //
+        // The message is written by `Assets::asset_events`, which is scheduled in `PostUpdate` **in
+        // `AssetEventSystems`** — and `camera_system` is scheduled `.before(AssetEventSystems)`. So
+        // within one `PostUpdate` the camera reads the stream **before** the flush writes to it, and
+        // learns about the resize **one frame late**. The frame in between is the one that
+        // assembles the pass: a depth texture sized for the old extent and a colour attachment for
+        // the new one. wgpu refuses a pass whose attachments differ, and `bevy_render`'s default
+        // error handler treats that as fatal — so the application exits rather than dropping a
+        // frame. That is the crash the ui_audit records, and it is why it bit the **startup**
+        // path: the surface is resized on the first frame that has a window, and the world camera
+        // has just been spawned.
+        //
+        // **So the editor writes the event itself**, in `PreUpdate` — before `camera_system` reads
+        // the stream in `PostUpdate`. The camera then refreshes its `target_info` in the *same*
+        // frame the image changed size, and the pass is assembled with one size.
+        //
+        // The event is written **by hand** because `Assets::asset_events` is the only writer of
+        // that stream and it is scheduled after the reader. `AssetEvent` is a `Message`, so an
+        // application may write one; and the editor is an application.
+        events.write(bevy::asset::AssetEvent::Modified {
+            id: surface.image.id(),
         });
     }
 }
@@ -687,5 +729,40 @@ fn retarget_pointer(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod scale_tests {
+    use super::{ui_scale_for, MAX_GROWTH, REFERENCE_W};
+    use crate::chrome::EDITOR_UI_SCALE;
+
+    /// **A small window keeps the density the design was drawn at**, which is the half a larger
+    /// constant broke. 1280 x 800 is the size every headless test lays out at, and the badge packer
+    /// measures its stage in exactly those pixels.
+    #[test]
+    fn a_small_window_is_not_scaled_up() {
+        assert_eq!(ui_scale_for(1280.0, 1.0), EDITOR_UI_SCALE);
+        assert_eq!(ui_scale_for(REFERENCE_W, 1.0), EDITOR_UI_SCALE);
+    }
+
+    /// **A large one grows, and stops.**
+    #[test]
+    fn a_large_window_grows_to_the_cap() {
+        let wide = ui_scale_for(3396.0, 1.0);
+        assert_eq!(wide, EDITOR_UI_SCALE * MAX_GROWTH);
+        assert!(
+            wide > ui_scale_for(REFERENCE_W, 1.0),
+            "a window twice the reference width reads at a larger size, or F2 is not fixed"
+        );
+        // Halfway up the ramp, so the clamp is not the only thing being tested.
+        assert!((ui_scale_for(1800.0, 1.0) - EDITOR_UI_SCALE * 1.125).abs() < 1e-5);
+    }
+
+    /// **Density still multiplies on top**, because a 2x display is a separate question from a wide
+    /// one and the target is sized in physical pixels either way.
+    #[test]
+    fn the_display_factor_still_multiplies() {
+        assert_eq!(ui_scale_for(1280.0, 2.0), EDITOR_UI_SCALE * 2.0);
     }
 }

@@ -498,13 +498,13 @@ pub fn validate(alphabet: &Alphabet, rules: &BlockRules, grid: &[usize]) -> Opti
                 if (cell_yaw - yaw).abs() > 1.0 || part != part_index(u, v, w, d) {
                     return None;
                 }
-                if v == 0 {
-                    if let Some(front) = &rule.front {
-                        let (fc, fr) = rect.in_front_of(cc, cr, rows)?;
-                        let (descriptor, _) = alphabet.piece_at(*grid.get(fr * cols + fc)?)?;
-                        if descriptor != front {
-                            return None;
-                        }
+                if v == 0
+                    && let Some(front) = &rule.front
+                {
+                    let (fc, fr) = rect.in_front_of(cc, cr, rows)?;
+                    let (descriptor, _) = alphabet.piece_at(*grid.get(fr * cols + fc)?)?;
+                    if descriptor != front {
+                        return None;
                     }
                 }
             }

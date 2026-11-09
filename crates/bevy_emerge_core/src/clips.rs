@@ -998,10 +998,10 @@ pub fn contact_candidates(glb: &Glb, clip: usize) -> Vec<(String, f32)> {
         };
         // Candidates always derive their threshold: the suggestion list exists precisely when the
         // configuration is in doubt, so a declared override has nothing to say here.
-        if let Some(t) = contact_core(&r, None) {
-            if t.stance_fraction >= MIN_STANCE_FRACTION {
-                named.push((name.to_owned(), t.stance_fraction, low));
-            }
+        if let Some(t) = contact_core(&r, None)
+            && t.stance_fraction >= MIN_STANCE_FRACTION
+        {
+            named.push((name.to_owned(), t.stance_fraction, low));
         }
     }
     if lows.is_empty() {

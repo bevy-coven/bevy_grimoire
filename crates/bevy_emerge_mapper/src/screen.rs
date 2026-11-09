@@ -28,12 +28,27 @@
 //! that survives into the next door. A reload cannot be wrong; a partial teardown can be, silently,
 //! and the bug lands weeks later looking like something else.
 //!
-//! # Doors are still reached through the menu
+//! # Doors are reached through the menu — and now also through a key
 //!
-//! No direct Kit↔Map key. It became affordable once the process boundary went — the design doc had
-//! rejected it when it meant a relaunch — and it was declined anyway: with full teardown the saving
-//! is the menu round-trip rather than the reload, and a second way to do one thing is the pattern
-//! this crate spends its refusals on.
+//! **The menu is still the way a door is _opened_**, and it is still the only one. A key does not
+//! open a door; it **changes** which door is open, from inside one.
+//!
+//! It was declined once, on a premise that has expired. The note said: *"It became affordable once
+//! the process boundary went — the design doc had rejected it when it meant a relaunch — and it was
+//! declined anyway: with full teardown the saving is the menu round-trip rather than the reload."*
+//! **The relaunch is gone** — the menu and the editor are one application — and so is the reload it
+//! was weighed against: a crossing **keeps the project** (see [`cross`]), which is what the
+//! [`Ownership`] table has always said a same-kit door change should do.
+//!
+//! Measured on 2026-10-21: the round trip was **three keystrokes and a full project reload** each
+//! way — `Cmd+O`, walk a column, `Enter` — re-reading `kits.ron`, `vocab.ron` and `rules.ron`,
+//! re-validating 332 library descriptors and 16 compositions, and **re-measuring every GLB's
+//! triangle count** from its JSON chunk. None of that changes when the author walks from one door
+//! to the other to look at the thing they just made.
+//!
+//! **And the two are different acts**, which is why they are different actions: the menu *opens* a
+//! door, and the crossing *changes* one. A second way to do one thing is the pattern this crate
+//! spends its refusals on; this is not that.
 
 use bevy::prelude::*;
 
@@ -95,10 +110,216 @@ fn open_the_door(world: &mut World) {
 /// each marker is a list that goes stale the first time somebody adds a camera. The resources are
 /// named, because there is no such reachability rule for them and a stale `Project` is precisely the
 /// thing that must not survive into the next door.
-fn close_the_door(world: &mut World) {
+///
+/// **`pub` so a test can drive the teardown.** The headless harness does **not** register
+/// [`ScreenPlugin`] — it inserts the state directly, because a harness that stands up a door is not
+/// a harness that changes one — so `OnExit(Editor)` never runs in a test, and this teardown had
+/// **no test at all** until 2026-10-21. That is the crate's most delicate machinery: it is what
+/// keeps a stale value from surviving into the next door, and it was the one thing a test could not
+/// reach. `tests/the_arm_crosses_the_door.rs` calls it directly, which is the only way to ask *"what
+/// does a door change do to this resource?"* without standing up a second application.
+pub fn close_the_door(world: &mut World) {
     despawn_scene(world);
+    // **A crossing is in flight: the door's own resources stay.**
+    //
+    // The crossing has *already* put the new door's `Project`, `OpenMap`, `Door` and `Mode` into
+    // the world — it is a state change, not a place the project is kept. So the teardown must not
+    // take them away, or it would undo the crossing.
+    //
+    // **What the teardown still does, unchanged:** the entity sweep and the door's own working
+    // state. The teardown is a teardown; only the *door's own* resources are spared, and they are
+    // spared because they now belong to the *next* door.
+    if world.remove_resource::<Crossing>().is_some() {
+        // **The receipt is carried over the reset (cycle 8, gap 7).** The reset puts `EditorState`
+        // back empty, which erased the receipt of whoever asked for this door: the window changed
+        // doors with no word of who did it. The receipt is what the person reads on arrival, so it is
+        // kept. A problem is not: the journal already holds it.
+        let receipt = world
+            .get_resource::<crate::editor::EditorState>()
+            .map(|state| state.status.note_text().to_owned());
+        reset_door_state(world);
+        if let Some(receipt) = receipt.filter(|r| !r.is_empty())
+            && let Some(mut state) = world.get_resource_mut::<crate::editor::EditorState>()
+        {
+            state.status.note(receipt);
+        }
+        return;
+    }
     crate::args::Opened::remove_from(world);
     reset_door_state(world);
+}
+
+/// **A door change is in flight** — the teardown is part of a crossing, not of a leave.
+///
+/// The mark is what tells [`close_the_door`] that the `Project` and the `OpenMap` in the world are
+/// already the **new** door's, and must survive the teardown that is about to run.
+#[derive(Resource)]
+pub struct Crossing;
+
+/// **Cross to the other door, keeping the project.**
+///
+/// # What it replaces
+///
+/// The round trip. Measured on 2026-10-21: **`Cmd+O`, `right`, `Enter`** each way — three
+/// keystrokes and a **full project reload**, to move between two halves of one project. The reload
+/// re-reads `kits.ron`, `vocab.ron` and `rules.ron`, re-validates every bound kit's
+/// `library.ron`, and **re-measures the triangle count of every GLB** by reading its JSON chunk.
+/// Nothing in any of that changes when the author walks from one door to the other.
+///
+/// The [`crate::screen::Ownership`] table already says so: `Project` is *"reloaded when the kit is
+/// not"*. **This is the crossing that obeys the table.**
+///
+/// # How it crosses
+///
+/// **`NextState::set(Screen::Editor)`, while already in `Screen::Editor`.** Bevy 0.20 runs
+/// `OnExit` and `OnEnter` for a same-state transition — `NextState::set` is `Pending`, and only
+/// `PendingIfDifferent` suppresses the schedules. So `OnExit(Editor)` runs [`close_the_door`] — the
+/// teardown, unchanged — and `OnEnter(Editor)` runs the spawns.
+///
+/// **And the chooser never appears.** A same-state transition runs neither `OnExit(Menu)` nor
+/// `OnEnter(Menu)`, so `ChooserPlugin`'s `build_chooser` / `spawn_screen` / `spawn_menu_bars` never
+/// run. The author sees the editor tear down and the other door build, in one frame.
+///
+/// The alternative — hopping through `Screen::Menu` — would build the whole chooser UI and tear it
+/// down, which is a flash of the wrong screen on every crossing.
+///
+/// # The `Project` never leaves the world
+///
+/// **The first version of this took the `Project` out of the world** and put it back in
+/// `Chosen` — which is what `close_the_door` removes and `open_the_door` restores. **And the live
+/// test found it in one frame:** twenty editor systems ran with no `Project` to read, and Bevy 0.19
+/// **panics a system whose `Res<T>` is missing** rather than skipping it. The crossing tore the
+/// door down and left the editor without a project for the rest of the frame.
+///
+/// So the `Project` is **moved, not copied** — it is not `Clone` — and it is moved **into the new
+/// door's place**: the crossing takes it out and puts it straight back, so the world holds a
+/// project at every moment of the crossing, and the *teardown* is what removes it, exactly as it
+/// does today.
+///
+/// The crossing therefore does the swap itself, rather than letting `close_the_door` and
+/// `open_the_door` do it in two schedules with a gap between them.
+pub fn cross(world: &mut World, to: crate::tiles::Door) -> Result<(), String> {
+    // **The project is TAKEN, not copied** — it is not `Clone`.
+    let Some(mut project) = world.remove_resource::<crate::project::Project>() else {
+        return Err("there is no project open to carry across".to_owned());
+    };
+    // **The map's name, carried across.** The Kit door has no map — so without this, crossing back
+    // to the Map door has nothing to open, and the refusal it gives is *true* and useless: the
+    // author was on a map a moment ago.
+    //
+    // **The name is the project's own**, because it is the author's intent about which map they are
+    // working on, and it outlives the door it was opened in — the same argument the armed
+    // composition makes.
+    let carried = world
+        .get_resource::<crate::project::OpenMap>()
+        .map(|m| m.map.name.clone())
+        .or_else(|| project.open_map_name.clone());
+    // **The target's resources, built from the project that is already loaded.** The Kit door needs
+    // a project and no map; the Map door needs a project and a map — and the *map* is re-read,
+    // because a map is a map and the Map door's subject is the one the author is editing.
+    let (open_map, mode) = match to {
+        crate::tiles::Door::Map => {
+            let Some(name) = carried else {
+                world.insert_resource(project);
+                return Err("the Map door needs a map, and none has been open".to_owned());
+            };
+            // **Through the registry, and that is what makes an agent's `map_open` and a person's
+            // crossing one thing.** This read the file itself (`OpenMap::open`) while `map_open`
+            // did the same — two answers to "what does opening a map mean", which is the second
+            // front end the parity rule forbids. The context is built from clones and the result is
+            // written back, the way `ops_brp::take`/`put_back` do it: a crossing is not a place to
+            // move the `Project` into a context and hope.
+            let mut ctx = crate::ops::Ctx {
+                project: Some(project.clone()),
+                root: None,
+                open: None,
+                source: crate::ops::Source::Human,
+                session: crate::ops::session_id(),
+                ..crate::ops::Ctx::default()
+            };
+            match crate::ops::dispatch(&mut ctx, "map_open", &serde_json::json!({"name": name})) {
+                Ok(crate::ops::Applied::Done { outcome, .. })
+                    if outcome.after.as_ref().is_some_and(|a| a.get("map").is_some()) =>
+                {
+                    // **And the project remembers it**, so the next crossing back knows.
+                    project.open_map_name = Some(name.clone());
+                    let fresh = ctx.open.clone();
+                    (fresh, crate::tiles::Mode::Map)
+                }
+                Ok(crate::ops::Applied::Done { .. }) => {
+                    world.insert_resource(project);
+                    return Err(format!("`{name}` could not be opened"));
+                }
+                Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                    // **The project goes back.** The crossing failed and the editor is untouched.
+                    world.insert_resource(project);
+                    return Err(e.0);
+                }
+            }
+        }
+        other => {
+            // **The project keeps the name when no map is open.** A rename changes the open map's
+            // name and not the project's, so without this a Kit → Map crossing asks for the old
+            // name — and `OpenMap::open` makes a new, empty map under a name it cannot find.
+            project.open_map_name = carried;
+            (None, other.opens_on())
+        }
+    };
+    // **And it goes straight back in.** The world holds a project at every instant of the
+    // crossing: the editor's systems run in the same frame as the keypress, and **twenty** of
+    // them take a `Res<Project>`, and Bevy 0.19 **panics a system whose `Res<T>` is missing**
+    // rather than skipping it. The first version of this function left the world without a
+    // project for the rest of the frame, and the live test found it in one frame.
+    world.insert_resource(project);
+    match open_map {
+        Some(m) => {
+            world.insert_resource(m);
+        }
+        None => {
+            world.remove_resource::<crate::project::OpenMap>();
+        }
+    }
+    world.insert_resource(to);
+    world.insert_resource(mode);
+    // **And a `Chosen` for the teardown to give back.**
+    //
+    // `close_the_door` — which the transition runs — **removes** the `Project`, and something has
+    // to put the new door's back. `install_the_door` is that something, and it reads a `Chosen`.
+    //
+    // **But the `Project` is not `Clone`, and it is already in the world.** So the `Chosen` cannot
+    // hold it as well.
+    //
+    // **The answer is that the teardown does not need to take the project away at all.** The
+    // crossing has *already* put the new door's resources in the world — the project, the map, the
+    // door and the mode. What the teardown has to do is take away everything else the old door
+    // made, and reset the door's own working state. The project and the map are **the new door's**
+    // by then, and taking them away would be undoing the crossing.
+    //
+    // So the crossing **marks** the transition, and `close_the_door` reads the mark: a crossing is
+    // in flight, so the door's *own* resources stay and only the old door's entities and working
+    // state go.
+    world.insert_resource(crate::screen::Crossing);
+    // **And the transition does the teardown and the rebuild.**
+    //
+    // **`NextState::set(Screen::Editor)`, while already in `Screen::Editor`.** Bevy 0.20 runs
+    // `OnExit` and `OnEnter` for a same-state transition — `NextState::set` is `Pending`, and only
+    // `PendingIfDifferent` suppresses the schedules. So `OnExit(Editor)` runs [`close_the_door`] —
+    // the teardown, unchanged — and `OnEnter(Editor)` runs the spawns.
+    //
+    // **The project is put back by `install_the_door`**, which reads the `Chosen` the crossing
+    // left behind. That is the one thing `close_the_door` cannot do on its own: it *removes* the
+    // project, and something has to put the new door's back.
+    //
+    // **The chooser never appears.** A same-state transition runs neither `OnExit(Menu)` nor
+    // `OnEnter(Menu)`, so `ChooserPlugin`'s `build_chooser` / `spawn_screen` / `spawn_menu_bars`
+    // never run. The author sees the editor tear down and the other door build, in one frame.
+    //
+    // **The alternative — hopping through `Screen::Menu` — would build the whole chooser UI and
+    // tear it down**, which is a flash of the wrong screen on every crossing.
+    if let Some(mut next) = world.get_resource_mut::<NextState<Screen>>() {
+        next.set(Screen::Editor);
+    }
+    Ok(())
 }
 
 /// **Put every [`Ownership::Door`] resource back to its opening value.**
@@ -149,13 +370,17 @@ door_state![
     crate::build::TileHistory,
     crate::build::Build,
     crate::editor::EditorState,
+    crate::editor::MapFraming,
     crate::editor::CloneDrag,
     crate::editor::MoveDrag,
     crate::editor::PlaceDrag,
     crate::editor::RemovalDrag,
+    crate::editor::RunDrag,
+    crate::editor::RunGhostDrag,
     crate::editor::FineAnchor,
     crate::editor::Proposal,
     crate::editor::Rung,
+    crate::snip::SnipEdit,
     crate::editor::SizeEdit,
     crate::editor::Folded,
     crate::editor::StampPicture,
@@ -168,6 +393,11 @@ door_state![
     crate::tiles::DerivedEdges,
     crate::tiles::HeightEdit,
     crate::tiles::LatticePick,
+    // **A question belongs to the door it was asked on.** A presentation names the operations it
+    // covers, and the undo it offers walks them on the *open* map — so carried across a door
+    // change it would answer about a map the person never saw, which is the stale-value class
+    // this list exists for.
+    crate::present::Presenting,
     crate::tiles::MapView,
     crate::tiles::NoteEdit,
     crate::tiles::ScaleEdit,
@@ -296,33 +526,60 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_emerge_mapper::tiles::Mode", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_emerge_mapper::thumbs::Thumbnails", Ownership::Project),
-    ("bevy_emerge_mapper::thumbs::ThumbGeneration", Ownership::Project),
-    ("bevy_emerge_mapper::labels::Suggestions", Ownership::Project),
+    (
+        "bevy_emerge_mapper::thumbs::ThumbGeneration",
+        Ownership::Project,
+    ),
+    (
+        "bevy_emerge_mapper::labels::Suggestions",
+        Ownership::Project,
+    ),
     // **`Project`, because the model is read off the project's own `.env`.** A different project may
     // configure a different endpoint, and the resource latches that it has read one — so carrying it
     // across would leave the band naming a model this project never asked for. The link state goes
     // with it, which is right: it is evidence about a round trip that was made for that project.
     ("bevy_emerge_mapper::labels::Labeler", Ownership::Project),
-    ("bevy_emerge_mapper::anim_watch::BenchReports", Ownership::Project),
-    ("bevy_emerge_mapper::anim_watch::RigWatch", Ownership::Project),
-
+    (
+        "bevy_emerge_mapper::anim_watch::BenchReports",
+        Ownership::Project,
+    ),
+    (
+        "bevy_emerge_mapper::anim_watch::RigWatch",
+        Ownership::Project,
+    ),
+    // **The file watcher's stamps, and they are `Project` because the files are the project's.**
+    // A door change can land on a different project — the chooser's own door is a different
+    // project — and the stamps are the watcher's memory of *those* files. Carried across, the
+    // watcher's first tick on the new project would compare the new files' stamps against the
+    // old project's and see every one of them as changed.
+    ("bevy_emerge_mapper::watch::Watched", Ownership::Project),
+    // **And the tick's own scratch, for the same reason** — it names the files that changed
+    // since the last tick, and those are the previous project's files.
+    ("bevy_emerge_mapper::watch::Due", Ownership::Project),
     // **`Session`, and that is the whole point of it.** Every other problem list in this editor is a
     // tab's working state, capped and cleared by `Esc`; this one answers *"what has gone wrong since
     // the application started"*, which a value thrown away with the door cannot.
     ("bevy_emerge_mapper::chrome::Journal", Ownership::Session),
-
     // ── The door's own working state ────────────────────────────────────────────────────────────
     // The undo stack is the one this list was written for: `docs/2026-08-17-one-application.md` §1
     // names it as the value that survives into the next kit today.
     ("bevy_emerge_mapper::build::TileHistory", Ownership::Door),
     ("bevy_emerge_mapper::build::Build", Ownership::Door),
     ("bevy_emerge_mapper::editor::EditorState", Ownership::Door),
+    ("bevy_emerge_mapper::editor::MapFraming", Ownership::Door),
     ("bevy_emerge_mapper::editor::CloneDrag", Ownership::Door),
     ("bevy_emerge_mapper::editor::MoveDrag", Ownership::Door),
     ("bevy_emerge_mapper::editor::PlaceDrag", Ownership::Door),
     ("bevy_emerge_mapper::editor::RemovalDrag", Ownership::Door),
+    ("bevy_emerge_mapper::editor::RunDrag", Ownership::Door),
+    ("bevy_emerge_mapper::editor::RunGhostDrag", Ownership::Door),
     ("bevy_emerge_mapper::editor::FineAnchor", Ownership::Door),
     ("bevy_emerge_mapper::editor::Proposal", Ownership::Door),
+    // **`Session`, and that is the entire reason the resource exists.** `EditorState` — where the
+    // counter used to live as `seed` — is rebuilt on every door crossing, while the thing comparing
+    // against it (`sync_proposal_ghosts`' `Local`) is not. A counter that a door can reset is a
+    // counter that eventually reports a proposal as already drawn. See `ProposalClock`'s own doc.
+    ("bevy_emerge_mapper::editor::ProposalClock", Ownership::Session),
     ("bevy_emerge_mapper::editor::Rung", Ownership::Door),
     ("bevy_emerge_mapper::editor::SizeEdit", Ownership::Door),
     ("bevy_emerge_mapper::editor::Folded", Ownership::Door),
@@ -338,6 +595,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_emerge_mapper::tiles::DerivedEdges", Ownership::Door),
     ("bevy_emerge_mapper::tiles::HeightEdit", Ownership::Door),
     ("bevy_emerge_mapper::tiles::LatticePick", Ownership::Door),
+    ("bevy_emerge_mapper::present::Presenting", Ownership::Door),
     ("bevy_emerge_mapper::tiles::MapView", Ownership::Door),
     ("bevy_emerge_mapper::tiles::NoteEdit", Ownership::Door),
     ("bevy_emerge_mapper::tiles::ScaleEdit", Ownership::Door),
@@ -352,15 +610,31 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_emerge_mapper::tiles::DrawnRows", Ownership::Door),
     ("bevy_emerge_mapper::compose::ComposeState", Ownership::Door),
     ("bevy_emerge_mapper::compose::Budget", Ownership::Door),
-    ("bevy_emerge_mapper::compose::StagedCarousel", Ownership::Door),
+    (
+        "bevy_emerge_mapper::compose::StagedCarousel",
+        Ownership::Door,
+    ),
     ("bevy_emerge_mapper::anim_tab::BenchState", Ownership::Door),
-    ("bevy_emerge_mapper::anim_tab::AdoptExclude", Ownership::Door),
+    (
+        "bevy_emerge_mapper::anim_tab::AdoptExclude",
+        Ownership::Door,
+    ),
     ("bevy_emerge_mapper::anim_stage::BenchAb", Ownership::Door),
-    ("bevy_emerge_mapper::anim_stage::BenchCamera", Ownership::Door),
-    ("bevy_emerge_mapper::anim_stage::BenchScrub", Ownership::Door),
-    ("bevy_emerge_mapper::anim_watch::MeasureQueue", Ownership::Door),
+    (
+        "bevy_emerge_mapper::anim_stage::BenchCamera",
+        Ownership::Door,
+    ),
+    (
+        "bevy_emerge_mapper::anim_stage::BenchScrub",
+        Ownership::Door,
+    ),
+    (
+        "bevy_emerge_mapper::anim_watch::MeasureQueue",
+        Ownership::Door,
+    ),
     ("bevy_emerge_mapper::labels::LabelQueue", Ownership::Door),
     ("bevy_emerge_mapper::filter::Filters", Ownership::Door),
+    ("bevy_emerge_mapper::snip::SnipEdit", Ownership::Door),
     ("bevy_emerge_mapper::notice::Showing", Ownership::Door),
     // **`Door`, because it is what is on screen right now.** A toast is an event's tail — carrying
     // one into the next kit would announce a refusal about a door the author has already left.
@@ -379,12 +653,33 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_emerge_mapper::view::Rig", Ownership::Door),
     // A half-typed token draft is the door's working state — a draft naming a token for one
     // kit's vocabulary is meaningless standing in another.
-    ("bevy_emerge_mapper::token_prompt::TokenPrompt", Ownership::Door),
-
+    (
+        "bevy_emerge_mapper::token_prompt::TokenPrompt",
+        Ownership::Door,
+    ),
     // ── True for as long as the application runs ────────────────────────────────────────────────
     // The surface is how this application DRAWS — see `crate::surface`, and `scene_roots`, which
     // excludes its entities for the same reason.
     ("bevy_emerge_mapper::surface::Surface", Ownership::Session),
+    // **The sequencer's own state is `Session`, and the reason is the same as the surface's.**
+    // A capture in flight is bound to *this* application — to the renderer that can read the
+    // pixels back and to the clock that is counting the frames. **A door change does not
+    // invalidate it**: the run carries on, and the frames it takes are of the editor as it is,
+    // which is the point of the run. The run's *work* — the operation it applies — is dispatched
+    // through the operation registry against the map that is open, and the map is `Project`, so
+    // the map it acts on is the one the door change reloads.
+    (
+        "bevy_emerge_mapper::sequencer::Sequencer",
+        Ownership::Session,
+    ),
+    // **And whether this application can write a frame at all** — settled once, at startup, from
+    // the render world's presence. It cannot change while the application runs, so it is
+    // `Session` for the same reason: a door change does not make a headless editor able to
+    // render.
+    (
+        "bevy_emerge_mapper::sequencer::CanRender",
+        Ownership::Session,
+    ),
     ("bevy_emerge_mapper::keys::Live", Ownership::Session),
     ("bevy_emerge_mapper::keys::Repeat", Ownership::Session),
     // **The one prompt outlives a door on purpose**, because it is asked on both sides of one:
@@ -396,14 +691,51 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_emerge_mapper::view::Pointer", Ownership::Session),
     // Persisted to disk under `target/`, so that STALE is truthful at startup rather than after the
     // bench's first audit.
-    ("bevy_emerge_mapper::anim_cache::BenchCache", Ownership::Session),
-    ("bevy_emerge_mapper::anim_watch::BenchGeneration", Ownership::Session),
-    ("bevy_emerge_mapper::anim_plots::BenchPlots", Ownership::Session),
-    ("bevy_emerge_mapper::anim_stage::GhostMaterial", Ownership::Session),
-    ("bevy_emerge_mapper::label_booth::ShotRig", Ownership::Session),
-    ("bevy_emerge_mapper::labels::LabelGeneration", Ownership::Session),
+    (
+        "bevy_emerge_mapper::anim_cache::BenchCache",
+        Ownership::Session,
+    ),
+    (
+        "bevy_emerge_mapper::anim_watch::BenchGeneration",
+        Ownership::Session,
+    ),
+    (
+        "bevy_emerge_mapper::anim_plots::BenchPlots",
+        Ownership::Session,
+    ),
+    (
+        "bevy_emerge_mapper::anim_stage::GhostMaterial",
+        Ownership::Session,
+    ),
+    (
+        "bevy_emerge_mapper::label_booth::ShotRig",
+        Ownership::Session,
+    ),
+    (
+        "bevy_emerge_mapper::labels::LabelGeneration",
+        Ownership::Session,
+    ),
     // In-flight vision-model work. Dropping it mid-request would strand the task, not cancel it.
     ("bevy_emerge_mapper::labels::LabelTasks", Ownership::Session),
+    // **The armed composition, and the same answer.** It is the author's intent — *which
+    // composition the next click stamps* — and it is a name, not a cursor. Measured on 2026-10-21:
+    // the COMPOSE tab armed a house and said *"the map tab stamps it"*, and there was no map tab
+    // in that process, because the door is chosen at startup. The author's only route to a stamp
+    // was to leave, come back through the menu, re-open the map, and **re-arm the composition by
+    // hand** — the arm had been reset with the rest of the door's working state. Sixteen house
+    // compositions were defined in Sanctuary's project and not one was stamped on either map.
+    //
+    // `Door` here would be the class that matches what a full teardown does, and the teardown is
+    // right about everything *except* this: a door change is not a new author. See
+    // `compose::Armed`.
+    ("bevy_emerge_mapper::compose::Armed", Ownership::Session),
+    // **The composition picker's cursor, and the same answer.** It is the author's cursor in the
+    // author's list, and it is where the arm is going to be taken from — so it belongs with the arm
+    // rather than with the door's own working state.
+    (
+        "bevy_emerge_mapper::compose::picker::Picker",
+        Ownership::Session,
+    ),
 ];
 
 /// What a door change does to this resource, or `None` if nobody has said.

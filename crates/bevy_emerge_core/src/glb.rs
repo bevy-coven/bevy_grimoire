@@ -186,14 +186,14 @@ const IDENTITY: [f32; 16] = [
 /// A node's local transform: its `matrix` if it has one, else its TRS composed in glTF's order
 /// (translation * rotation * scale).
 fn node_matrix(node: &Value) -> [f32; 16] {
-    if let Some(m) = node.get("matrix").and_then(|m| m.as_array()) {
-        if m.len() == 16 {
-            let mut out = IDENTITY;
-            for (i, v) in m.iter().enumerate() {
-                out[i] = v.as_f64().unwrap_or(0.0) as f32;
-            }
-            return out;
+    if let Some(m) = node.get("matrix").and_then(|m| m.as_array())
+        && m.len() == 16
+    {
+        let mut out = IDENTITY;
+        for (i, v) in m.iter().enumerate() {
+            out[i] = v.as_f64().unwrap_or(0.0) as f32;
         }
+        return out;
     }
     let arr = |key: &str, fallback: [f32; 4]| -> [f32; 4] {
         node.get(key)
@@ -550,7 +550,7 @@ impl Glb {
                     },
                     None => (0..placed.len() as u32).collect(),
                 };
-                for tri in idx.chunks_exact(3) {
+                for tri in idx.as_chunks::<3>().0 {
                     let get = |n: u32| placed.get(n as usize).copied();
                     if let (Some(a), Some(b), Some(c)) = (get(tri[0]), get(tri[1]), get(tri[2])) {
                         out.push([a, b, c]);
@@ -767,11 +767,11 @@ mod tests {
     /// Build a minimal container so the reader is exercised without shipping a fixture asset.
     fn synth(json: &str, bin: &[u8]) -> Vec<u8> {
         let mut j = json.as_bytes().to_vec();
-        while j.len() % 4 != 0 {
+        while !j.len().is_multiple_of(4) {
             j.push(b' ');
         }
         let mut b = bin.to_vec();
-        while b.len() % 4 != 0 {
+        while !b.len().is_multiple_of(4) {
             b.push(0);
         }
         let total = 12 + 8 + j.len() + 8 + b.len();

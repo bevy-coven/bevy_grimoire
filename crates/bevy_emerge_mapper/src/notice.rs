@@ -111,6 +111,40 @@ impl Plugin for NoticePlugin {
     }
 }
 
+/// The four tabs' status sources, read together. Only the live tab's is looked at.
+#[derive(bevy::ecs::system::SystemParam)]
+struct TabStatuses<'w> {
+    editor: Res<'w, crate::editor::EditorState>,
+    import: Res<'w, crate::tiles::ImportState>,
+    bench: Res<'w, crate::anim_tab::BenchState>,
+    compose: Res<'w, crate::compose::ComposeState>,
+}
+
+/// The same four, for writing: `copy_out` answers the live tab's status by dismissing it.
+#[derive(bevy::ecs::system::SystemParam)]
+struct TabStatusesMut<'w> {
+    editor: ResMut<'w, crate::editor::EditorState>,
+    import: ResMut<'w, crate::tiles::ImportState>,
+    bench: ResMut<'w, crate::anim_tab::BenchState>,
+    compose: ResMut<'w, crate::compose::ComposeState>,
+}
+
+/// The UI nodes `copy_out` reads text from: the copy panes, their children, their text and layout.
+#[derive(bevy::ecs::system::SystemParam)]
+struct UiTree<'w, 's> {
+    panes: Query<'w, 's, (Entity, &'static CopyPane)>,
+    children: Query<'w, 's, &'static Children>,
+    texts: Query<'w, 's, &'static Text>,
+    nodes: Query<'w, 's, &'static Node>,
+}
+
+/// The roots `copy_out` walks, the frame first. See the note on the param.
+#[derive(bevy::ecs::system::SystemParam)]
+struct UiRoots<'w, 's> {
+    frame: Option<Res<'w, crate::chrome::Frame>>,
+    other_roots: Query<'w, 's, Entity, (With<Node>, Without<ChildOf>)>,
+}
+
 /// **Both views of the live tab's problems: the banner and the log.**
 ///
 /// One system rather than four, and one for both views rather than two, because they are one list —
@@ -121,10 +155,7 @@ impl Plugin for NoticePlugin {
 /// `Display::None`, so the other three panels are not on screen to be wrong.
 fn paint_notices(
     mode: Res<Mode>,
-    editor: Res<crate::editor::EditorState>,
-    import: Res<crate::tiles::ImportState>,
-    bench: Res<crate::anim_tab::BenchState>,
-    compose: Res<crate::compose::ComposeState>,
+    tabs: TabStatuses,
     mut showing: ResMut<Showing>,
     mut toast: ResMut<Toast>,
     // **No `Node` here any more.** Whether the toast is on screen is its clock's answer, not this
@@ -132,6 +163,7 @@ fn paint_notices(
     mut banners: Query<&mut Text, With<crate::chrome::ProblemBanner>>,
     journals: Query<&Node, With<crate::chrome::JournalPanel>>,
 ) {
+    let TabStatuses { editor, import, bench, compose } = tabs;
     let tab = *mode;
     let status = match tab {
         Mode::Map => &editor.status,
@@ -319,24 +351,20 @@ fn copy_out(
     // other, and a clipboard that works four times in five is worse than none — inherited from the
     // Tiles-only verb this replaces, where it was learned.
     _main_thread: bevy::ecs::system::NonSendMarker,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    live: Res<keys::Live>,
+    input: keys::KeyInput,
     mode: Res<Mode>,
-    mut editor: ResMut<crate::editor::EditorState>,
-    mut import: ResMut<crate::tiles::ImportState>,
-    mut bench: ResMut<crate::anim_tab::BenchState>,
-    mut compose: ResMut<crate::compose::ComposeState>,
-    panes: Query<(Entity, &CopyPane)>,
-    children: Query<&Children>,
-    texts: Query<&Text>,
-    nodes: Query<&Node>,
+    tabs: TabStatusesMut,
+    tree: UiTree,
     // **The frame first, then every other root.** `Frame::root` is the window's own column and
     // therefore reads top-to-bottom; the overlays (the shortcut card, the name box, a guide step)
     // are roots of their own and belong after it rather than interleaved. `Option` because
     // `Screen::Editor` can run a pass before the door is built, and a missing `Res` panics in 0.19.
-    frame: Option<Res<crate::chrome::Frame>>,
-    other_roots: Query<Entity, (With<Node>, Without<ChildOf>)>,
+    screen_roots: UiRoots,
 ) {
+    let keys::KeyInput { keyboard, live } = input;
+    let TabStatusesMut { mut editor, mut import, mut bench, mut compose } = tabs;
+    let UiTree { panes, children, texts, nodes } = tree;
+    let UiRoots { frame, other_roots } = screen_roots;
     if !keys::just_pressed(&keyboard, *live, Action::CopyInfo) {
         return;
     }
@@ -375,30 +403,6 @@ fn copy_out(
             status.note(format!("copied {count} line(s) — the whole {} screen", tab.label()));
         }
         Err(e) => status.problem(format!("could not reach the clipboard: {e}")),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::chrome::Status;
-
-    /// The rule `copy_out` turns on, stated where it can be checked without an `App`: a copy that
-    /// worked takes the block down, and a copy that failed must not.
-    #[test]
-    fn only_a_copy_that_worked_takes_the_block_down() {
-        let mut ok = Status::default();
-        ok.problem("NOT SAVED: read-only file system");
-        ok.dismiss();
-        ok.note("copied 9 line(s) from the map tab");
-        assert!(!ok.has_problem());
-
-        let mut failed = Status::default();
-        failed.problem("NOT SAVED: read-only file system");
-        failed.problem("could not reach the clipboard: no display");
-        assert!(
-            failed.has_problem(),
-            "a failed copy is the one moment the text must stay on screen"
-        );
     }
 }
 
@@ -621,5 +625,29 @@ fn paint_journal(
                 crate::chrome::problem_log_line(p, line, colour);
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::chrome::Status;
+
+    /// The rule `copy_out` turns on, stated where it can be checked without an `App`: a copy that
+    /// worked takes the block down, and a copy that failed must not.
+    #[test]
+    fn only_a_copy_that_worked_takes_the_block_down() {
+        let mut ok = Status::default();
+        ok.problem("NOT SAVED: read-only file system");
+        ok.dismiss();
+        ok.note("copied 9 line(s) from the map tab");
+        assert!(!ok.has_problem());
+
+        let mut failed = Status::default();
+        failed.problem("NOT SAVED: read-only file system");
+        failed.problem("could not reach the clipboard: no display");
+        assert!(
+            failed.has_problem(),
+            "a failed copy is the one moment the text must stay on screen"
+        );
     }
 }

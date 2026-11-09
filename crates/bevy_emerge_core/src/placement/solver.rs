@@ -95,12 +95,10 @@ fn predicate_locality(p: &Predicate) -> Locality {
 
 /// Does a backend's `Capabilities` cover a group's `Requirement`?
 fn covers(cap: &Capabilities, req: &Requirement) -> bool {
-    let hardness_ok = match (cap.hardness, req.hardness) {
-        (Hardness::Both, _) => true,
-        (Hardness::Hard, Hardness::Hard) => true,
-        (Hardness::Soft, Hardness::Soft) => true,
-        _ => false,
-    };
+    let hardness_ok = matches!(
+        (cap.hardness, req.hardness),
+        (Hardness::Both, _) | (Hardness::Hard, Hardness::Hard) | (Hardness::Soft, Hardness::Soft)
+    );
     // A backend with wider locality can serve a narrower need (Global ≥ Relational ≥ Local).
     let locality_ok = cap.locality >= req.locality;
     let cardinality_ok = !req.cardinality || cap.cardinality;

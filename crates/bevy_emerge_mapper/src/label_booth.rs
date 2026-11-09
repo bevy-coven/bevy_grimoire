@@ -341,7 +341,7 @@ fn drive_shots(
                 handle: targets[angle].clone(),
                 scale_factor: 1.0,
             });
-            if held + 1 <= SETTLE_FRAMES {
+            if held < SETTLE_FRAMES {
                 rig.phase = Phase::Settling { angle, held: held + 1 };
                 return;
             }

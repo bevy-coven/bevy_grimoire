@@ -646,32 +646,32 @@ pub fn check_rig(glb: &Glb, rig: &Rig, provenance_current: bool) -> RigCheck {
     // ceiling or beneath the slowest gait's clamp floor. (Direction is pooled: back and strafe
     // gaits count toward coverage they can only provide when travel points their way — a
     // direction-aware coverage note is a known refinement.)
-    if !skates.is_empty() {
-        if let Some((lo, hi)) = rig.drive_speed {
-            let top = skates.iter().map(|s| s.onset_high).fold(f32::MIN, f32::max);
-            let bottom = skates.iter().map(|s| s.onset_low).fold(f32::MAX, f32::min);
-            if hi > top + SKATE_FLOOR {
-                let fastest = skates
-                    .iter()
-                    .map(|s| s.authored_speed)
-                    .fold(f32::MIN, f32::max);
-                findings.push(Finding::note(format!(
-                    "no gait covers the top of the drive range: fastest authored {fastest:.2} u/s \
-                     x2 = {top:.2} < drive max {hi:.1} — everything above {top:.2} u/s skates \
-                     regardless of blend"
-                )));
-            }
-            if lo < bottom - SKATE_FLOOR {
-                let slowest = skates
-                    .iter()
-                    .map(|s| s.authored_speed)
-                    .fold(f32::MAX, f32::min);
-                findings.push(Finding::note(format!(
-                    "no gait covers the bottom of the drive range: slowest authored {slowest:.2} \
-                     u/s x0.5 = {bottom:.2} > drive min {lo:.1} — everything below {bottom:.2} u/s \
-                     skates regardless of blend"
-                )));
-            }
+    if !skates.is_empty()
+        && let Some((lo, hi)) = rig.drive_speed
+    {
+        let top = skates.iter().map(|s| s.onset_high).fold(f32::MIN, f32::max);
+        let bottom = skates.iter().map(|s| s.onset_low).fold(f32::MAX, f32::min);
+        if hi > top + SKATE_FLOOR {
+            let fastest = skates
+                .iter()
+                .map(|s| s.authored_speed)
+                .fold(f32::MIN, f32::max);
+            findings.push(Finding::note(format!(
+                "no gait covers the top of the drive range: fastest authored {fastest:.2} u/s \
+                 x2 = {top:.2} < drive max {hi:.1} — everything above {top:.2} u/s skates \
+                 regardless of blend"
+            )));
+        }
+        if lo < bottom - SKATE_FLOOR {
+            let slowest = skates
+                .iter()
+                .map(|s| s.authored_speed)
+                .fold(f32::MAX, f32::min);
+            findings.push(Finding::note(format!(
+                "no gait covers the bottom of the drive range: slowest authored {slowest:.2} \
+                 u/s x0.5 = {bottom:.2} > drive min {lo:.1} — everything below {bottom:.2} u/s \
+                 skates regardless of blend"
+            )));
         }
     }
 
@@ -799,28 +799,26 @@ pub fn clip_list_diff(recorded: &[String], live: &[ClipInfo]) -> Vec<String> {
         if s.is_empty() { "(unnamed)".to_owned() } else { s.clone() }
     };
     // One insertion: everything before k matches, and the old tail reappears after the new entry.
-    if live_names.len() == recorded.len() + 1 {
-        if let Some(k) = (0..live_names.len())
+    if live_names.len() == recorded.len() + 1
+        && let Some(k) = (0..live_names.len())
             .find(|&k| recorded.get(k) != live_names.get(k))
             .filter(|&k| recorded[k..] == live_names[k + 1..])
-        {
-            return vec![format!(
-                "{} added at index {k}; every clip index after it shifted up by one",
-                show(&live_names[k])
-            )];
-        }
+    {
+        return vec![format!(
+            "{} added at index {k}; every clip index after it shifted up by one",
+            show(&live_names[k])
+        )];
     }
     // One removal: the mirror case.
-    if recorded.len() == live_names.len() + 1 {
-        if let Some(k) = (0..recorded.len())
+    if recorded.len() == live_names.len() + 1
+        && let Some(k) = (0..recorded.len())
             .find(|&k| recorded.get(k) != live_names.get(k))
             .filter(|&k| live_names[k..] == recorded[k + 1..])
-        {
-            return vec![format!(
-                "{} removed at index {k}; every clip index after it shifted down by one",
-                show(&recorded[k])
-            )];
-        }
+    {
+        return vec![format!(
+            "{} removed at index {k}; every clip index after it shifted down by one",
+            show(&recorded[k])
+        )];
     }
     // Same count, renames only.
     if recorded.len() == live_names.len() {

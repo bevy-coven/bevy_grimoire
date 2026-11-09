@@ -38,10 +38,12 @@ use bevy::asset::AssetId;
 use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::*;
 use bevy_emerge_core::descriptor::Descriptor;
+use bevy_emerge_core::draw_order::{self, Ground};
 use bevy_emerge_core::kits::Lattice;
 use bevy_emerge_core::library::Library;
-use bevy_emerge_core::map::Map;
+use bevy_emerge_core::map::{Map, Placed};
 use bevy_emerge_core::smart::{self, Actor, Booking, Cast, RoleMasks, Seat, Unfilled};
+use bevy_emerge_core::stack::descriptor_of;
 use bevy_emerge_core::vocab::{Masks, Vocabularies};
 
 /// The library, map and vocabulary a world was built from.
@@ -276,6 +278,43 @@ fn apply_paint(
     }
 }
 
+/// Where a footprint marker's visual part rests before the draw-level lift is added. See
+/// [`lift_flat_markers`].
+#[derive(Component, Clone, Copy, Debug)]
+struct FootprintPart {
+    rest_y: f32,
+}
+
+/// Any change to a marker's draw level or to its children, the two things the lift depends on.
+type RootChanged = Or<(Changed<Paint>, Changed<Children>)>;
+
+/// **Lift a flat marker by its draw level, in world height, so overlapping markers never share a
+/// top.**
+///
+/// The level arrives as [`Paint`]: authored paint plus the draw level from
+/// `bevy_emerge_core::draw_order`. Each step is `bevy_emerge_core::draw_order::LEVEL_LIFT` of world
+/// height, not a depth bias. A bias step is smaller than a field-sized quad's interpolation error at
+/// the Map camera's depth range, which is why the B-015 crossing
+/// (`target/loop/2026-10-21-98be109/look/B-015-pair.png`) stayed striped.
+///
+/// Only the marker's visual parts move, the children that carry a [`FootprintPart`]. The placement's
+/// own transform and the data `stack::resolve_y` reads are untouched, so picking and stacking do not
+/// see the lift. Runs on `Changed<Paint>` and `Changed<Children>`, so it covers the spawn and the
+/// editor's relevel; a painted root with no footprint children matches the query and is a no-op.
+fn lift_flat_markers(
+    roots: Query<(&Paint, &Children), RootChanged>,
+    mut parts: Query<(&FootprintPart, &mut Transform)>,
+) {
+    for (paint, children) in &roots {
+        let lift = paint.0 as f32 * bevy_emerge_core::draw_order::LEVEL_LIFT;
+        for child in children.iter() {
+            if let Ok((part, mut transform)) = parts.get_mut(child) {
+                transform.translation.y = part.rest_y + lift;
+            }
+        }
+    }
+}
+
 pub struct EmergePlugin;
 
 impl Plugin for EmergePlugin {
@@ -288,7 +327,7 @@ impl Plugin for EmergePlugin {
             )
             // Not gated on the world resource: a scene's materials land frames after the spawn, and
             // the editor spawns pieces without an `EmergeWorld` at all.
-            .add_systems(Update, apply_paint);
+            .add_systems(Update, (apply_paint, lift_flat_markers));
     }
 }
 
@@ -330,6 +369,56 @@ pub fn draw_yaw(d: &Descriptor, authored: f32) -> f32 {
 pub fn tip_quat(tip: (u8, u8)) -> Quat {
     Quat::from_rotation_z((tip.1 as f32 * 90.0).to_radians())
         * Quat::from_rotation_x((tip.0 as f32 * 90.0).to_radians())
+}
+
+/// The floor footprint a placement covers, for [`bevy_emerge_core::draw_order`]: the four corners of
+/// its rectangle on the floor, turned by the way the piece is drawn, and its area. `None` for a piece
+/// with no footprint, and for a tipped piece, which does not lie flat and is ordered by its authored
+/// paint alone.
+///
+/// The footprint is post-scale already (`extent.footprint`), so the corners use it unscaled.
+pub fn ground_of(d: &Descriptor, p: &Placed) -> Option<Ground> {
+    if p.tip != (0, 0) {
+        return None;
+    }
+    let (w, depth) = d.extent.footprint?;
+    let turn = Quat::from_rotation_y(draw_yaw(d, p.yaw).to_radians());
+    let half = [
+        (-w / 2.0, -depth / 2.0),
+        (w / 2.0, -depth / 2.0),
+        (w / 2.0, depth / 2.0),
+        (-w / 2.0, depth / 2.0),
+    ];
+    let corners = half.map(|(x, z)| {
+        let v = turn * Vec3::new(x, 0.0, z);
+        (p.at.0 + v.x, p.at.1 + v.z)
+    });
+    Some(Ground {
+        corners,
+        area: w * depth,
+        paint: p.paint,
+    })
+}
+
+/// The paint each placement of `map` is drawn with: its authored [`Placed::paint`], raised by the
+/// level [`bevy_emerge_core::draw_order::draw_levels`] gives it among the flat pieces it overlaps.
+/// Index-aligned with `map.placements`.
+///
+/// The authored paint is the first key of the order and the level is added to it, so an author's
+/// explicit paint always outranks the automatic order (a painted piece stays above an unpainted one
+/// whatever their areas).
+pub fn drawn_paints(map: &Map, library: &Library) -> Vec<i8> {
+    let ground: Vec<Option<Ground>> = map
+        .placements
+        .iter()
+        .map(|p| descriptor_of(library, p).and_then(|d| ground_of(&d, p)))
+        .collect();
+    let levels = draw_order::draw_levels(&ground);
+    map.placements
+        .iter()
+        .zip(levels)
+        .map(|(p, level)| p.paint.saturating_add(level))
+        .collect()
 }
 
 /// How far a tipped piece must rise so its bounds rest **on** the resolved height instead of
@@ -375,6 +464,8 @@ pub fn tip_seat(d: &Descriptor, tip: (u8, u8)) -> f32 {
 ///
 /// Returns `None` only for a descriptor with neither a mesh nor a footprint — which is not an
 /// error: a descriptor may exist to carry tags before anyone has given it geometry.
+// Public entry point; folding these arguments into a struct would change its signature for every caller.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_descriptor(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -460,6 +551,9 @@ fn spawn_footprint_marker(
             ..default()
         })),
         Transform::from_xyz(0.0, MARKER_SLAB * 0.5, 0.0),
+        FootprintPart {
+            rest_y: MARKER_SLAB * 0.5,
+        },
     );
     let notch = (
         Mesh3d(assets.add(Mesh::from(Cuboid::new(
@@ -473,6 +567,9 @@ fn spawn_footprint_marker(
             ..default()
         })),
         Transform::from_xyz(0.0, MARKER_NOTCH.y * 0.5, depth * 0.5 - 0.2),
+        FootprintPart {
+            rest_y: MARKER_NOTCH.y * 0.5,
+        },
     );
     commands.spawn(parent).with_child(slab).with_child(notch).id()
 }

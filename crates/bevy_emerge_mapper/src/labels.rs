@@ -243,9 +243,9 @@ impl Labeler {
         match (self.read_for.is_some(), self.model.as_deref(), self.link) {
             (false, ..) => ("", ""),
             (true, None, _) => ("labeler: not configured", ""),
-            (true, Some(m), Link::Untried) => ("labeler: ", m),
-            (true, Some(m), Link::Live) => ("connected: ", m),
-            (true, Some(m), Link::Down) => ("unreachable: ", m),
+            (true, Some(m), Link::Untried) => ("labeler: ", model_short(m)),
+            (true, Some(m), Link::Live) => ("connected: ", model_short(m)),
+            (true, Some(m), Link::Down) => ("unreachable: ", model_short(m)),
         }
     }
 
@@ -334,6 +334,31 @@ impl Plugin for LabelsPlugin {
     }
 }
 
+/// **What a photo request did, and whether the editor could do it.**
+///
+/// **A typed answer, and not a bare `String`, because the two are not interchangeable.** The
+/// no-mesh branch is a **refusal** — the editor could not photograph a piece that has no mesh — and
+/// the crate's rule is that a refusal reaches the toast and the journal, while an answer is one
+/// dim receipt row. Returning one `String` made both go to the same slot, and the refusal was
+/// erased by the next receipt. The two callers now route by this enum.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Asked {
+    /// The request went through, or there was nothing to do. One dim row.
+    Said(String),
+    /// The editor could not do what was asked. The toast and the journal.
+    Refused(String),
+}
+
+impl Asked {
+    /// The line itself, whatever kind of answer it is.
+    #[allow(dead_code, reason = "the shape is the point; the accessor is for the next caller")]
+    pub fn line(&self) -> &str {
+        match self {
+            Asked::Said(s) | Asked::Refused(s) => s,
+        }
+    }
+}
+
 /// Queue one target for its photo shoot — the shared tail of the `L` key, the sentinel, and the
 /// righting-turn relabel, so there is exactly one way a labeling request begins.
 pub(crate) fn request_photos(
@@ -341,12 +366,12 @@ pub(crate) fn request_photos(
     d: &bevy_emerge_core::descriptor::Descriptor,
     tasks: &LabelTasks,
     rig: &mut ShotRig,
-) -> String {
+) -> Asked {
     if tasks.holds(&target) {
-        return format!("`{}` is already at the model", name_of(&target));
+        return Asked::Said(format!("`{}` is already at the model", name_of(&target)));
     }
     let Some(mesh) = d.mesh.clone() else {
-        return "this piece has no mesh — nothing to photograph".to_owned();
+        return Asked::Refused("this piece has no mesh — nothing to photograph".to_owned());
     };
     let scale = d.align.scale.unwrap_or(1.0);
     let said = format!("photographing `{}` for labels...", name_of(&target));
@@ -355,7 +380,7 @@ pub(crate) fn request_photos(
         mesh,
         scale,
     });
-    said
+    Asked::Said(said)
 }
 
 /// **Everything the labeler holds, dropped at once** — pending suggestions, the batch queue, the
@@ -408,8 +433,10 @@ pub(crate) fn suggest_labels(
     }
     let Some(project) = project else { return };
     // The config check is the verb's gate: fail here, loudly, not after a photo shoot.
+    // **A refusal, so a problem** — the editor could not label anything, and the remedy has to
+    // outlive the next receipt.
     if let Err(remedy) = VlmConfig::load(&project.root) {
-        state.status.note(remedy);
+        state.status.problem(remedy);
         return;
     }
     let Some(target) = state.target() else {
@@ -422,7 +449,10 @@ pub(crate) fn suggest_labels(
         return;
     };
     let asked = request_photos(target, &d.clone(), &tasks, &mut rig);
-    state.status.note(asked);
+    match asked {
+        Asked::Said(said) => state.status.note(said),
+        Asked::Refused(why) => state.status.problem(why),
+    }
 }
 
 /// **Script driving, the devshot way**: `echo wall_light > labels.request` queues that library
@@ -461,7 +491,7 @@ pub(crate) fn watch_sentinel(
     }
     let Some(project) = project else { return };
     if let Err(remedy) = VlmConfig::load(&project.root) {
-        state.status.note(remedy);
+        state.status.problem(remedy);
         warn!("labels sentinel: {}", state.status.line());
         return;
     }
@@ -472,12 +502,10 @@ pub(crate) fn watch_sentinel(
         warn!("{}", state.status.line());
         return;
     };
-    state.status.note(request_photos(
-        EditTarget::Library(content),
-        &d,
-        &tasks,
-        &mut rig,
-    ));
+    match request_photos(EditTarget::Library(content), &d, &tasks, &mut rig) {
+        Asked::Said(said) => state.status.note(said),
+        Asked::Refused(why) => state.status.problem(why),
+    }
     info!("labels sentinel: {}", state.status.line());
 }
 
@@ -528,11 +556,18 @@ pub(crate) fn spawn_request(
     }
 }
 
+/// What a finished request lands into: the in-flight tasks, the answers, and the generation that
+/// says whether an answer is still wanted. Written together, so one parameter names the set.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct Landing<'w> {
+    tasks: ResMut<'w, LabelTasks>,
+    suggestions: ResMut<'w, Suggestions>,
+    generation: ResMut<'w, LabelGeneration>,
+}
+
 /// Land finished requests — behind the stale guards, because minutes may have passed.
 pub(crate) fn poll_tasks(
-    mut tasks: ResMut<LabelTasks>,
-    mut suggestions: ResMut<Suggestions>,
-    mut generation: ResMut<LabelGeneration>,
+    landing: Landing,
     mut state: ResMut<crate::tiles::ImportState>,
     project: Option<Res<Project>>,
     // A walk that has lost its endpoint is stopped rather than burned through — see the `Err` arm.
@@ -542,6 +577,7 @@ pub(crate) fn poll_tasks(
     // have happened. See [`Labeler`].
     mut labeler: ResMut<Labeler>,
 ) {
+    let Landing { mut tasks, mut suggestions, mut generation } = landing;
     let Some(project) = project else { return };
     let mut finished = Vec::new();
     for (i, inflight) in tasks.0.iter_mut().enumerate() {
@@ -664,10 +700,10 @@ fn prompt_ctx(
                 rooms_in_use.push(r.clone());
             }
         }
-        if let Some(g) = &other.placement.group {
-            if !groups_in_use.contains(g) {
-                groups_in_use.push(g.clone());
-            }
+        if let Some(g) = &other.placement.group
+            && !groups_in_use.contains(g)
+        {
+            groups_in_use.push(g.clone());
         }
     }
     rooms_in_use.sort();
@@ -939,22 +975,29 @@ pub(crate) fn judged_enough_to_build_with(d: &bevy_emerge_core::descriptor::Desc
     !d.kind.is_empty() && d.note.is_some()
 }
 
+/// The walk's queue, and what it reads to skip what is already judged or in flight.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct Walk<'w> {
+    queue: ResMut<'w, LabelQueue>,
+    suggestions: Res<'w, Suggestions>,
+    tasks: Res<'w, LabelTasks>,
+}
+
 /// `Shift+L`: walk everything missing judgement fields through the labeler — or, when a walk is
 /// already running, cancel it. One key, both directions, stated in the status line.
 pub(crate) fn suggest_all(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    live: Res<crate::keys::Live>,
+    input: crate::keys::KeyInput,
     project: Option<Res<Project>>,
     mut state: ResMut<crate::tiles::ImportState>,
-    suggestions: Res<Suggestions>,
-    tasks: Res<LabelTasks>,
-    mut queue: ResMut<LabelQueue>,
+    walk: Walk,
     // **The walk takes what the list is showing.** See the note where the targets are gathered.
     filters: Res<crate::filter::Filters>,
     // For `arm_batch`, which stamps the warm-up's start so the wait can count itself.
     time: Res<Time>,
     mut confirm: ResMut<crate::confirm::Confirm>,
 ) {
+    let crate::keys::KeyInput { keyboard, live } = input;
+    let Walk { mut queue, suggestions, tasks } = walk;
     if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::SuggestAll) {
         return;
     }
@@ -985,7 +1028,7 @@ pub(crate) fn suggest_all(
     let cfg = match VlmConfig::load(&project.root) {
         Ok(cfg) => cfg,
         Err(remedy) => {
-            state.status.note(remedy);
+            state.status.problem(remedy);
             return;
         }
     };
@@ -1296,10 +1339,10 @@ pub(crate) fn paint_labels_badge(
             continue;
         }
         for child in children {
-            if let Ok(mut text) = labels.get_mut(*child) {
-                if text.0 != want {
-                    text.0 = want.clone();
-                }
+            if let Ok(mut text) = labels.get_mut(*child)
+                && text.0 != want
+            {
+                text.0 = want.clone();
             }
         }
     }
@@ -1389,13 +1432,7 @@ pub(crate) fn settled_effects(
     vocab: &bevy_emerge_core::vocab::Vocabularies,
 ) -> Vec<String> {
     let want = vocab.implied_effects(kind);
-    let derived = |e: &str| {
-        vocab
-            .kind
-            .tokens
-            .iter()
-            .any(|t| t.implies.iter().any(|i| i == e))
-    };
+    let derived = |e: &str| is_derived(vocab, e);
     let mut out: Vec<String> = effects
         .iter()
         .filter(|e| !derived(e) || want.contains(e))
@@ -1410,6 +1447,13 @@ pub(crate) fn settled_effects(
     // the library shows real changes only (`tiles::on_tag_chip`'s rule).
     out.sort_by_key(|t| vocab.effects.names().position(|n| n == t).unwrap_or(usize::MAX));
     out
+}
+
+/// **Whether some kind implies this effect** — the derived half of `effects`, the tokens
+/// [`settle_implied_effects`] owns. A write of one of these onto a kind that does not imply it is
+/// refused in `ops::label_set`, because the next settle would drop it.
+pub(crate) fn is_derived(vocab: &bevy_emerge_core::vocab::Vocabularies, effect: &str) -> bool {
+    vocab.kind.tokens.iter().any(|t| t.implies.iter().any(|i| i == effect))
 }
 
 pub fn apply_fields(
@@ -1444,7 +1488,9 @@ pub fn apply_fields(
         origin.by = if was.model.as_deref() == Some(stamp.model.as_str()) {
             was.by
         } else {
-            let by_hand = |b: Option<By>| b.filter(|b| *b == By::Human);
+            // An agent's claim names no model, so a different model's arrival does not make it
+            // wrong: it carries forward with a person's, as the author's word.
+            let by_hand = |b: Option<By>| b.filter(|b| matches!(b, By::Human | By::Agent));
             AxisOrigin {
                 kind: by_hand(was.by.kind),
                 effects: by_hand(was.by.effects),
@@ -1534,15 +1580,54 @@ pub(crate) fn stamp_human(
     d: &mut bevy_emerge_core::descriptor::Descriptor,
     axis: bevy_emerge_core::descriptor::Axis,
 ) {
-    use bevy_emerge_core::descriptor::{By, LabelOrigin};
+    stamp_by(d, axis, bevy_emerge_core::descriptor::By::Human);
+}
+
+/// **Stamp one axis with the provenance of whoever wrote it** (E-042). A person writes `By::Human`
+/// and an agent writes `By::Agent`; the two are never folded together, because an agent's claim is
+/// unconfirmed until a person looks. `at` moves to today for either.
+pub(crate) fn stamp_by(
+    d: &mut bevy_emerge_core::descriptor::Descriptor,
+    axis: bevy_emerge_core::descriptor::Axis,
+    by: bevy_emerge_core::descriptor::By,
+) {
+    use bevy_emerge_core::descriptor::LabelOrigin;
 
     let today = date_today();
     let record = d.labels.get_or_insert_with(|| LabelOrigin {
         at: today.clone(),
         ..Default::default()
     });
+    // A record written before `model_at` existed keeps the model's date only in `at`. Pin it
+    // before `at` moves, or this write's date would be read as the model's.
+    if record.model.is_some() && record.model_at.is_none() {
+        record.model_at = Some(record.at.clone());
+    }
     record.at = today;
-    record.by.set(axis, By::Human);
+    record.by.set(axis, by);
+}
+
+/// **The model's name as a person reads it on a row**: its last path segment with the weight-file
+/// extension dropped. A path such as `/Users/me/models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf` reads as
+/// `Qwen3-VL-8B-Instruct-Q4_K_M`, and a bare name passes through unchanged.
+///
+/// Display only. The full path stays in the record and in `emerge/pieces`, so this can never be the
+/// thing that identifies a model. The extension list is closed, because a model name may contain a
+/// dot (`qwen2.5-7b`) that is not an extension and must not be cut.
+pub fn model_short(model: &str) -> &str {
+    const WEIGHT_FILES: [&str; 4] = [".gguf", ".safetensors", ".bin", ".onnx"];
+    let segment = model.rsplit(['/', '\\']).next().unwrap_or(model);
+    let stem = WEIGHT_FILES
+        .iter()
+        .find_map(|ext| {
+            segment
+                .len()
+                .checked_sub(ext.len())
+                .filter(|&at| segment.is_char_boundary(at) && segment[at..].eq_ignore_ascii_case(ext))
+                .map(|at| &segment[..at])
+        })
+        .unwrap_or(segment);
+    if stem.is_empty() { model } else { stem }
 }
 
 #[cfg(test)]
@@ -1828,14 +1913,16 @@ mod tests {
         suggestions.insert(&EditTarget::Library("a".to_owned()), entry(&root));
         suggestions.insert(&EditTarget::Candidate("kit/b.glb".to_owned()), entry(&root));
         let mut generation = LabelGeneration::default();
-        let mut queue = LabelQueue::default();
-        queue.total = 2;
-        queue.queue = vec![
-            EditTarget::Library("c".to_owned()),
-            EditTarget::Library("d".to_owned()),
-        ]
-        .into_iter()
-        .collect();
+        let mut queue = LabelQueue {
+            total: 2,
+            queue: vec![
+                EditTarget::Library("c".to_owned()),
+                EditTarget::Library("d".to_owned()),
+            ]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        };
         let mut tasks = LabelTasks::default();
         let mut rig = crate::label_booth::ShotRig::default();
         rig.push_unique(crate::label_booth::ShotJob {
@@ -1880,7 +1967,7 @@ mod tests {
             why: "cooktops are not worktops".to_owned(),
         };
         // First write: fresh file with the readme and one row.
-        let text = merge_proposals(None, &[hob.clone()], "kitchen_stove", "stub", "2026-08-06")
+        let text = merge_proposals(None, std::slice::from_ref(&hob), "kitchen_stove", "stub", "2026-08-06")
             .unwrap_or_else(|e| panic!("{e}"))
             .unwrap_or_else(|| panic!("nothing written"));
         assert!(
@@ -1891,7 +1978,7 @@ mod tests {
         // Second sighting from another asset: the row grows, no duplicate.
         let text2 = merge_proposals(
             Some(&text),
-            &[hob.clone()],
+            std::slice::from_ref(&hob),
             "camp_stove",
             "stub",
             "2026-08-07",
@@ -2042,15 +2129,17 @@ mod tests {
     /// remaining queue intact, and a *fresh* walk is never born held.
     #[test]
     fn a_held_walk_keeps_its_queue_and_a_fresh_one_starts_running() {
-        let mut q = LabelQueue::default();
-        q.total = 3;
-        q.queue = vec![
-            EditTarget::Library("a".to_owned()),
-            EditTarget::Library("b".to_owned()),
-            EditTarget::Library("c".to_owned()),
-        ]
-        .into_iter()
-        .collect();
+        let mut q = LabelQueue {
+            total: 3,
+            queue: vec![
+                EditTarget::Library("a".to_owned()),
+                EditTarget::Library("b".to_owned()),
+                EditTarget::Library("c".to_owned()),
+            ]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        };
         let _ = q.queue.pop_front();
 
         q.paused = true;
@@ -2084,11 +2173,13 @@ mod tests {
     /// suggestion does not carry is untouched.
     #[test]
     fn apply_replaces_axes_and_touches_only_what_the_suggestion_carries() {
-        let mut d = bevy_emerge_core::descriptor::Descriptor::default();
-        d.kind = vec!["table".to_owned()];
-        d.look = vec!["worn".to_owned()];
-        d.note = Some("hand-written".to_owned());
-        d.mount = Some(bevy_emerge_core::descriptor::Mount::OnFloor);
+        let mut d = bevy_emerge_core::descriptor::Descriptor {
+            kind: vec!["table".to_owned()],
+            look: vec!["worn".to_owned()],
+            note: Some("hand-written".to_owned()),
+            mount: Some(bevy_emerge_core::descriptor::Mount::OnFloor),
+            ..Default::default()
+        };
         d.placement.rooms = vec!["office".to_owned()];
         d.placement.group = Some("desk_set".to_owned());
 
@@ -2143,7 +2234,7 @@ mod tests {
             why: "standing on its head".to_owned(),
         });
         let before_align_rotate = d.align.rotate;
-        let before_extent = d.extent.clone();
+        let before_extent = d.extent;
         apply_fields(&mut d, &s, &stamp(), &vocab());
         assert_eq!(d.align.front, Some(bevy_emerge_core::descriptor::Face::South));
         assert_eq!(d.align.rotate, before_align_rotate, "no rotation applied");
@@ -2392,5 +2483,32 @@ mod tests {
         assert_eq!(s.pending(), 1);
         assert!(s.remove(&lib).is_some());
         assert_eq!(s.pending(), 0);
+    }
+
+    #[test]
+    fn a_model_reads_by_its_file_stem_and_keeps_its_dots() {
+        use super::model_short;
+        assert_eq!(
+            model_short("/Users/me/models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf"),
+            "Qwen3-VL-8B-Instruct-Q4_K_M"
+        );
+        assert_eq!(model_short("https://host.lan/models/x.onnx"), "x");
+        assert_eq!(model_short("C:\\models\\m.safetensors"), "m");
+        // A dot that is not an extension is part of the name, and must not be cut.
+        assert_eq!(model_short("qwen2.5-7b"), "qwen2.5-7b");
+        assert_eq!(model_short("gemma-x"), "gemma-x");
+        assert_eq!(model_short(".gguf"), ".gguf");
+    }
+
+    #[test]
+    fn the_status_line_names_the_model_by_its_file_stem() {
+        let mut l = super::Labeler {
+            read_for: Some(std::path::PathBuf::from("/kit")),
+            ..Default::default()
+        };
+        l.model = Some("/Users/me/models/Qwen3-VL-8B.gguf".into());
+        assert_eq!(l.line(), "labeler: Qwen3-VL-8B");
+        l.answered("/Users/me/models/Qwen3-VL-8B.gguf");
+        assert_eq!(l.line(), "connected: Qwen3-VL-8B");
     }
 }

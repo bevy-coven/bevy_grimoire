@@ -132,6 +132,25 @@ pub fn load(emerge_dir: &Path, maps: &[&str]) -> Result<ProjectData, String> {
                 map.name
             ));
         }
+        // **The stamps are expanded here, and the map that is returned is the expanded one.**
+        //
+        // A map holds references to compositions, so the rows a group stands for are not in
+        // `placements` — they are derived, and somebody has to derive them. When that somebody
+        // was the editor only, the game got a level missing whatever the groups brought: the
+        // editor drew a house, the game had no house, and nothing said so. Measured on
+        // Sanctuary's `town.map.ron` — 728 rows reached the game where the editor had 746.
+        //
+        // So the loader is that somebody. It is the one door every consumer goes through, which
+        // makes "forgot to expand" impossible rather than merely discouraged, and it is the same
+        // expander the editor calls, so the two cannot disagree about what a stamp means.
+        //
+        // **A stamp that does not expand refuses the load**, by name. The alternative — a map
+        // missing rows — is the exact failure this removes.
+        let map = map
+            .expanded(&bound.compositions.compositions, &bound.library)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        // Validated **after** the expansion, so a stamped row naming a descriptor the library
+        // lacks is caught here rather than at the game's first spawn.
         map.validate_against(&ids)
             .map_err(|e| format!("{}: {e}", path.display()))?;
         loaded.insert((*name).to_owned(), map);

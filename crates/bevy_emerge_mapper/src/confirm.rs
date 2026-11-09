@@ -68,8 +68,23 @@ pub enum Asked {
     QuitApp,
     /// The editor is leaving a map with unsaved edits.
     LeaveMap,
+    /// **The editor is crossing to the other door with unsaved edits.**
+    ///
+    /// A question of its own rather than a reuse of [`Asked::LeaveMap`], because the two answers
+    /// go to **different places**: leaving goes to the menu, and crossing goes to the other door.
+    /// One question with two destinations would need the answer to know which question it was
+    /// answering, and the panel does not know that.
+    SwitchDoor,
     /// A labelling walk found pieces in scope that already carry labels.
     RelabelJudged,
+    /// **The agent has finished a turn and is handing the result back** (S1.7).
+    ///
+    /// Its answers are the two the brief asks for: **Keep** (the default, and what `Esc` gives) or
+    /// **Undo all** (every operation the presentation listed, newest first). The affirmative is the
+    /// destructive one, so the button is red and `Enter` deliberately answers nothing — the same
+    /// rule the leave question follows, because a turn's worth of changes must not be discarded by
+    /// reflex.
+    Presentation,
 }
 
 impl Asked {
@@ -83,14 +98,17 @@ impl Asked {
     fn destructive(self) -> bool {
         match self {
             // The whole kit directory, or the map file.
-            Asked::DeleteEntry => true,
+            Asked::DeleteEntry | Asked::Presentation => true,
             // **Yes overwrites labels a human confirmed** with what a model proposes. Nothing is
             // deleted from disk, and judgement is work: the affirmative here is `All 732`, which
             // is the one keystroke in the labelling walk that cannot be got back.
             Asked::RelabelJudged => true,
             // Quitting keeps everything saved; leaving a map saves it on the way out. Both are
             // ordinary, and the affirmative is simply the obvious thing to do.
-            Asked::QuitApp | Asked::LeaveMap => false,
+            //
+            // **And crossing saves the map on the way out too** — the same rule, the same reason:
+            // nothing is thrown away, so the affirmative is not destructive and must not look it.
+            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor => false,
         }
     }
 }

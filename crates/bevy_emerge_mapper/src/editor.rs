@@ -96,6 +96,21 @@ pub fn ground_drop(project: &Project,
     -deepest + BOUNDS_FILL_CLEARANCE
 }
 
+/// **The ghost's hint over bare floor, short enough for the INSPECTOR's LAST slot.**
+///
+/// A surface piece's refusal is the core's sentence, which runs to three body lines in a slot two lines
+/// tall, and the slot's extra height then moves MAP SIZE down under the pointer. The ghost writes the
+/// short sentence for that one refusal, with the piece's id left out so it fits two lines. Every other
+/// refusal (a datum error, or a piece that has its surface) passes through unchanged.
+pub fn ghost_hint(d: &bevy_emerge_core::descriptor::Descriptor, refusal: &str) -> String {
+    match bevy_emerge_core::stack::needs_surface(d) {
+        Some(class) if refusal == bevy_emerge_core::stack::no_surface_sentence(d, class) => {
+            format!("goes on a `{class}` surface — none here")
+        }
+        _ => refusal.to_owned(),
+    }
+}
+
 /// The removal marker. Red because it is the one destructive tool here, and translucent because the
 /// thing it covers is the thing being asked about — an opaque marker would hide the answer.
 const REMOVE_TINT: Color = Color::srgba(0.86, 0.20, 0.16, 0.38); // CHROME-OK: world ink — a translucent tool tint over geometry, not panel text
@@ -168,13 +183,13 @@ pub struct EditorState {
     /// Advanced on every solve, so pressing `G` twice offers a different arrangement rather than the
     /// same one — a generator that cannot be asked again is one you have to undo to disagree with.
     seed: u64,
-    /// A pin waiting for its reason: the placement index, and what has been typed so far.
+    /// A pin waiting for its reason: the placement id, and what has been typed so far.
     ///
     /// `Placed::owned_because` is *a reason, never a bool*, on the schema's own argument: a bool lets
     /// "I could not be bothered" and "this is the cell block's only entrance" look identical in a
     /// diff. A canned reason supplied by the editor would be that bool wearing a sentence, so pinning
     /// asks.
-    pinning: Option<(usize, String)>,
+    pinning: Option<(String, String)>,
     /// **The name being typed for a group being captured**, or `None`.
     ///
     /// `pinning`'s shape and for the same reason: a group's name is the author's, and a canned one
@@ -206,6 +221,12 @@ pub struct EditorState {
     /// and neither can reach the other's, so leaving a tab is not a reason to forget what you did on
     /// it.
     redo: Vec<Undo>,
+    /// Refusals of the top undo entry in a row. The first keeps the entry (B-026); the second drops
+    /// it, because an entry that refuses twice will not apply and would sit above every older change.
+    /// Any applied change and any new edit reset it. See [`EditorState::refused_entry`].
+    refused_undo: u8,
+    /// The same count for the redo stack.
+    refused_redo: u8,
     /// Which tool the next click belongs to. See [`Tool`].
     ///
     /// **The tool here and the drag in [`RemovalDrag`] / [`MoveDrag`]**, not one struct:
@@ -226,14 +247,61 @@ pub struct EditorState {
     /// editor, and a question about discarding work must not be answerable by reflex. That is the
     /// same rule the chooser's delete prompt follows, where `Y` agrees and `Enter` does not.
     pub leaving: bool,
+    /// **A door an operation asked for, waiting to be crossed to.** `door_open` sets it, from the keys
+    /// and from an agent alike. It is taken by the crossing, or held while the leaving question is up.
+    pub door_request: Option<DoorRequest>,
 }
 
 impl EditorState {
+    /// **The solver's seed for the next proposal**, advanced by exactly one.
+    ///
+    /// A generator that cannot be asked again is one the author has to undo to disagree with, so
+    /// every press advances this. It lives on the state rather than in the proposer so that a
+    /// proposal made by an agent (which supplies its own seed) and one made by a key behave the
+    /// same way on the *next* press.
+    pub fn next_seed(&mut self) -> u64 {
+        self.seed = self.seed.wrapping_add(1);
+        self.seed
+    }
+
     /// **How many steps back are available**, for a test that needs to assert an act recorded
     /// *nothing* — discarding a proposal, for one, which writes nothing and so must take nothing
     /// back. The stack itself stays private: this answers a question, it does not hand over the rows.
     pub fn undo_depth(&self) -> usize {
         self.undo.len()
+    }
+
+    /// **The newest undo, named**, for the INSPECTOR's UNDO row and `emerge/state`.
+    pub fn undo_next(&self, map: &bevy_emerge_core::map::Map) -> Option<String> {
+        self.undo.last().map(|op| op.describe(map, false))
+    }
+
+    /// **The newest redo, named the same way**, for the REDO row and `emerge/state`.
+    pub fn redo_next(&self, map: &bevy_emerge_core::map::Map) -> Option<String> {
+        self.redo.last().map(|op| op.describe(map, true))
+    }
+
+    /// **How many redos are stacked**, for the REDO row's ` (+N)`.
+    pub fn redo_depth(&self) -> usize {
+        self.redo.len()
+    }
+
+    /// **The whole history, oldest first (E-018)**, for the history list: the undo stack, then the
+    /// redo stack in the order redo would replay it. Row `n` is the entry at position `n`, and a
+    /// jump to position `n` leaves that entry applied.
+    pub fn history(&self) -> Vec<HistoryRow> {
+        let undone = self.redo.iter().rev().map(|op| (op, true));
+        self.undo
+            .iter()
+            .map(|op| (op, false))
+            .chain(undone)
+            .enumerate()
+            .map(|(i, (op, redo))| HistoryRow {
+                position: i + 1,
+                agent: op.by_agent(),
+                label: op.kind(redo),
+            })
+            .collect()
     }
 
     /// **Record an edit**, and drop anything that was waiting to be redone.
@@ -245,6 +313,148 @@ impl EditorState {
     fn record(&mut self, op: Undo) {
         self.undo.push(op);
         self.redo.clear();
+        self.settle();
+    }
+
+    /// **No entry is being refused any more**: an applied change, or a new edit, moved the stacks on.
+    fn settle(&mut self) {
+        self.refused_undo = 0;
+        self.refused_redo = 0;
+    }
+
+    /// **A refused entry goes back, and a second refusal in a row drops it (gap 3).** The first keeps
+    /// the entry, so the author sees why and can try again (B-026). An entry that refuses twice will
+    /// not apply, and left on the stack it would sit above every older change for good, so the second
+    /// refusal drops it and says so.
+    fn refused_entry(&mut self, op: Undo, redo_side: bool) {
+        let count = if redo_side {
+            &mut self.refused_redo
+        } else {
+            &mut self.refused_undo
+        };
+        *count += 1;
+        if *count < 2 {
+            let stack = if redo_side {
+                &mut self.redo
+            } else {
+                &mut self.undo
+            };
+            stack.push(op);
+        } else {
+            *count = 0;
+            self.status.problem(
+                "that entry refused twice, so it is dropped and cannot be taken back",
+            );
+        }
+    }
+
+    /// **Record a change another front end made through the registry**, by its operation-log line, so
+    /// it sits in the one history Cmd+Z walks (B-019). Clears redo like any edit.
+    pub(crate) fn record_logged(&mut self, line: String, phrase: String, agent: bool) {
+        self.record(Undo::Logged {
+            line,
+            phrase,
+            agent,
+        });
+    }
+
+    /// **An agent's change, on the person's receipt (B-020).**
+    ///
+    /// **One line naming the operation and what it did.** The receipt row is where a person looks
+    /// after an edit. A receipt left from their own last edit says nothing happened while the map
+    /// says it did, so the agent's change replaces it.
+    pub(crate) fn receipt_agent_change(&mut self, operation: &str, summary: &str) {
+        self.status.note(format!("agent: {operation}: {summary}"));
+    }
+
+    /// **An agent's refusal, in the journal (B-020).** A refusal is an alarm, so it is a problem and
+    /// not a note: it reaches the toast and the journal, and it does not overwrite the person's
+    /// receipt.
+    pub(crate) fn problem_agent_refusal(&mut self, operation: &str, refusal: &str) {
+        self.status.problem(format!("agent: {operation}: {refusal}"));
+    }
+
+    /// **Forget the entries for a change an agent's undo took back.** Once the log no longer has that
+    /// line in effect, a Cmd+Z that reached it would only refuse; dropping it means Cmd+Z takes back the
+    /// newest change still in effect.
+    pub(crate) fn forget_line(&mut self, line: &str) {
+        /// **Groups too.** A box's removals are children of one group, so the entry for one of them sits
+        /// inside it. A group left with no children goes with its last child.
+        fn forget_in(history: &mut Vec<Undo>, line: &str) {
+            history.retain_mut(|op| match op {
+                Undo::Logged { line: l, .. }
+                | Undo::Pin { line: l, .. }
+                | Undo::Settings { line: l, .. } => l.as_str() != line,
+                Undo::Group { ops } => {
+                    forget_in(ops, line);
+                    !ops.is_empty()
+                }
+                _ => true,
+            });
+        }
+        forget_in(&mut self.undo, line);
+        forget_in(&mut self.redo, line);
+    }
+
+    /// The entries above a registry line's entry, leaves only, in stack order. **Groups are walked
+    /// too.** A box's removals sit inside one group, so the line can be a leaf of it, and a group's
+    /// children are taken in the order they run. If the line has no entry on the stack, every entry
+    /// counts: the conservative answer when the stack cannot say where the line sits.
+    fn entries_above(&self, line: &str) -> Vec<&Undo> {
+        fn leaves<'a>(ops: &'a [Undo], out: &mut Vec<&'a Undo>) {
+            for op in ops {
+                match op {
+                    Undo::Group { ops } => leaves(ops, out),
+                    leaf => out.push(leaf),
+                }
+            }
+        }
+        let mut all: Vec<&Undo> = Vec::new();
+        leaves(&self.undo, &mut all);
+        let start = all
+            .iter()
+            .position(|op| matches!(op, Undo::Logged { line: l, .. } if l == line))
+            .map_or(0, |at| at + 1);
+        all.split_off(start)
+    }
+
+    /// **Is a change recorded by row number sitting above a registry line's entry?** An undo of a
+    /// `placement_remove` puts a row back or takes one out, and every row-recorded change above it
+    /// names its piece by a number the undo has just moved. `Added` names its pieces from the tail,
+    /// which a row landing before them leaves alone, so it does not count. Stamps index `map.stamps`,
+    /// not placements, so they are [`EditorState::stamp_recorded_above`]'s business.
+    pub(crate) fn row_recorded_above(&self, line: &str) -> bool {
+        fn by_row(op: &Undo) -> bool {
+            match op {
+                Undo::RemovedMany { .. }
+                | Undo::Moved { .. }
+                | Undo::RemoveAt { .. }
+                | Undo::Turned { .. }
+                | Undo::Lifted { .. }
+                | Undo::Tipped { .. } => true,
+                Undo::Group { ops } => ops.iter().any(by_row),
+                Undo::Added { .. }
+                | Undo::Stamped { .. }
+                | Undo::UnstampedMany { .. }
+                | Undo::UnstampAt { .. }
+                | Undo::MovedStamp { .. }
+                | Undo::Pin { .. }
+                | Undo::Settings { .. }
+                | Undo::Logged { .. } => false,
+            }
+        }
+        self.entries_above(line).into_iter().any(by_row)
+    }
+
+    /// **Is a stamp change recorded by place sitting above a registry line's entry?** `UnstampAt` and
+    /// `UnstampedMany` name stamps by their index in `map.stamps`, so an undo of a `stamp_remove` that
+    /// puts a stamp back in the middle moves them. `Stamped` drains from the tail, which such an undo
+    /// leaves alone, and `MovedStamp` names its stamp by id, so neither counts. The same fallback as
+    /// [`EditorState::row_recorded_above`] when the line has no entry.
+    pub(crate) fn stamp_recorded_above(&self, line: &str) -> bool {
+        self.entries_above(line)
+            .into_iter()
+            .any(|op| matches!(op, Undo::UnstampAt { .. } | Undo::UnstampedMany { .. }))
     }
 
     /// Where the id mint stands — read-only, so the harness can check [`next_id_after`]'s seed
@@ -271,6 +481,21 @@ pub enum Tool {
     /// Drag a box to take a copy of everything inside it; click to stamp the set — as many times
     /// as it is held. See [`CloneDrag`].
     Clone,
+    /// **Drag a line and the armed piece repeats along it**, at its own pitch.
+    ///
+    /// The fourth tool, and the one the other three could not do. A flood lays a *grid* — one
+    /// piece, one yaw, one pitch, over a region — so it cannot draw a fence that turns and cannot
+    /// draw one with a gap in it. And the grid's pitch is the *project's* lattice, which is not
+    /// the piece's: Sanctuary's fence posts stand 2.032 m apart, and the lattice's rungs are
+    /// 1.000, 0.333 and 0.111 m, so a fill lays them 3.000, 2.333 or 2.111 m apart — never
+    /// 2.032, and 8 cm out at best, which is a visible gap in every joint.
+    ///
+    /// A run's pitch is the **piece's own**, and the corners are the same piece turned.
+    ///
+    /// A mode, and Raskin's objection is a mode you can *forget* — so it is drawn: the inspector
+    /// names it, and the posts it would lay stand on the map as a ghost while the drag is in
+    /// progress. A click leaves it, like every other tool.
+    Run,
 }
 
 impl Tool {
@@ -281,6 +506,7 @@ impl Tool {
             Tool::Remove => "removal mode",
             Tool::Move => "move mode",
             Tool::Clone => "clone mode",
+            Tool::Run => "run mode",
         }
     }
 }
@@ -483,6 +709,14 @@ pub struct CloneDrag {
 #[derive(Resource, Default)]
 pub struct TargetLock(Option<(String, (f32, f32))>);
 
+impl TargetLock {
+    /// The id of the placement the lock holds, if it holds one. The agent's `"selection"` frame
+    /// target reads the lock through here, so "what is selected" has one answer.
+    pub fn placement_id(&self) -> Option<&str> {
+        self.0.as_ref().map(|(id, _)| id.as_str())
+    }
+}
+
 /// The locked target's highlight — a third marker quad beside removal's red and clone's blue,
 /// because three tools making three different promises must not share a colour.
 ///
@@ -512,6 +746,7 @@ impl CloneDrag {
 /// `Turned` and `Pinned` each invert to themselves carrying the other value. So [`apply`] does the
 /// work and *returns the inverse*, and undo and redo are the same function reading opposite stacks —
 /// rather than a second body that has to be kept in step with the first.
+#[derive(Clone)]
 enum Undo {
     /// Remove the last `count` placements — the inverse of a place or a fill.
     Added { count: usize },
@@ -572,12 +807,280 @@ enum Undo {
     /// By id rather than index, because [`Undo::UnstampAt`] can reorder the list between the move
     /// and the undo, and an index would then move somebody else.
     MovedStamp { id: String, from: (f32, f32) },
-    /// Put a placement's pin back, reason included. Its own inverse.
-    Pinned {
-        index: usize,
+    /// **Take back, or put back, a pin**, by its operation-log line. Like [`Undo::Settings`], a pin
+    /// goes through the registry, so its undo does too and Cmd+Z and the agent's undo share one
+    /// history.
+    ///
+    /// `owned` is the pin this entry puts back, so the phrase reads `pin` or `unpin` the way the
+    /// author will say it. `id` is the placement's id, not its row, for the reason on
+    /// [`Undo::MovedStamp`]: the list can change between the pin and the undo.
+    Pin {
+        line: String,
+        id: String,
         owned: bool,
-        because: Option<String>,
     },
+    /// **Take back, or put back, a settings change the size field made**, by its operation-log line.
+    ///
+    /// **Not a delta of its own.** A settings change goes through the registry and the log, so its
+    /// undo does too: [`crate::ops::undo`] is the same function `emerge_undo_operation` reaches, which
+    /// keeps the person's Cmd+Z and the agent's undo **one history**. Without this entry the stack
+    /// never heard of a resize, and Cmd+Z after one took back an older placement instead. The inverse
+    /// is another `Settings` naming the line the undo wrote, so redo is the same arm.
+    Settings {
+        line: String,
+        /// **The size this entry puts back**, captured when the change was recorded, so describing
+        /// it never reads a file.
+        bounds: (f32, f32, f32),
+    },
+    /// **Take back, or put back, a change another front end made through the registry**, by its
+    /// operation-log line: an agent's turn, pin or size, or a turn the person made by key.
+    ///
+    /// **Why this entry exists (B-019).** An agent's change went to the log and never reached this
+    /// stack, so Cmd+Z after an agent's turn took back the person's older change and left the agent's
+    /// standing. Recording it here puts the agent's change in the same history. Its undo is
+    /// [`crate::ops::undo`], the function `emerge_undo_operation` reaches, so the two cannot disagree.
+    /// `phrase` is the outcome's summary, captured when the change was made, so the INSPECTOR names it
+    /// without reading the log.
+    /// `agent` is `true` when an agent made the change, over BRP or the capture sequencer, so the
+    /// history list can say who.
+    Logged {
+        line: String,
+        phrase: String,
+        agent: bool,
+    },
+}
+
+/// **One row of the history list (E-018).** `position` is how many entries are applied when this row
+/// is the one the editor stands on, so a row is a jump target. `agent` says who made the change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryRow {
+    pub position: usize,
+    pub agent: bool,
+    pub label: String,
+}
+
+impl Undo {
+    /// **The short name of an entry for the history list (E-018).** Counts, not piece names: an entry
+    /// further down names a map that no longer stands, so naming pieces here would name the wrong ones.
+    /// It names the change the entry stands for, on either side of an undo; `phrase` names what Cmd+Z will do.
+    fn kind(&self, redo: bool) -> String {
+        let again = if redo { " again" } else { "" };
+        // Undo side: the entry undoes the change, so the verb names the change it reverses. Redo side:
+        // applying the entry is the change, so the verb names what applying it does. One change has one
+        // label, whichever side of the undo it sits on.
+        match self {
+            Undo::Added { count } if redo => format!("remove {count}{again}"),
+            Undo::Added { count } => format!("place {count}"),
+            Undo::RemovedMany { items } if redo => format!("place {}{again}", items.len()),
+            Undo::RemovedMany { items } => format!("remove {}", items.len()),
+            Undo::RemoveAt { indices } if redo => format!("remove {}{again}", indices.len()),
+            Undo::RemoveAt { indices } => format!("place {}", indices.len()),
+            Undo::Moved { moved } => format!("move {}{again}", moved.was.len()),
+            Undo::Turned { .. } => format!("turn{again}"),
+            Undo::Lifted { .. } => format!("lift{again}"),
+            Undo::Tipped { .. } => format!("tip{again}"),
+            Undo::Group { ops } => format!("{} changes{again}", ops.len()),
+            Undo::Stamped { count } if redo => format!("remove {count} stamps{again}"),
+            Undo::Stamped { count } => format!("stamp {count}"),
+            Undo::UnstampedMany { items } if redo => format!("stamp {}{again}", items.len()),
+            Undo::UnstampedMany { items } => format!("remove {} stamps", items.len()),
+            Undo::UnstampAt { indices } if redo => {
+                format!("remove {} stamps{again}", indices.len())
+            }
+            Undo::UnstampAt { indices } => format!("stamp {}", indices.len()),
+            Undo::MovedStamp { .. } => format!("move a stamp{again}"),
+            Undo::Pin { .. } => format!("pin{again}"),
+            Undo::Settings { .. } => format!("settings{again}"),
+            Undo::Logged { phrase, .. } => phrase.clone(),
+        }
+    }
+
+    /// **Whether an agent made this change (E-018).** A group is an agent's if any part of it is.
+    fn by_agent(&self) -> bool {
+        match self {
+            Undo::Logged { agent, .. } => *agent,
+            Undo::Group { ops } => ops.iter().any(Undo::by_agent),
+            _ => false,
+        }
+    }
+
+    /// **What applying this entry does, named in the author's words.** The INSPECTOR's UNDO and REDO
+    /// rows and `emerge/state` both show this phrase, so the two cannot disagree. It reads the map as
+    /// it is now and no file, and names only pieces the map holds: an entry that can no longer act
+    /// says `cannot: …` rather than naming a piece it will not touch.
+    ///
+    /// `redo` says which stack the entry sits on. A redo-stack entry is the inverse an undo produced,
+    /// so the same change reads "turn X back" on the undo stack and "turn X again" on the redo stack.
+    fn describe(&self, map: &bevy_emerge_core::map::Map, redo: bool) -> String {
+        clamp_phrase(self.phrase(map, redo))
+    }
+
+    /// The phrase before it is clamped. A group joins its parts from here, so [`join_parts`] can
+    /// count what did not fit and keep every part's words whole.
+    fn phrase(&self, map: &bevy_emerge_core::map::Map, redo: bool) -> String {
+        let name_at = |i: usize| {
+            map.placements
+                .get(i)
+                .map_or("piece", |p| p.descriptor.as_str())
+        };
+        let gone = |i: usize| map.placements.get(i).is_none();
+        // `back` on the undo stack, `again` on the redo stack. A pin takes neither word on the undo
+        // stack: `pin crate` and `unpin crate` are what applying does, and `unpin crate back` is not
+        // English.
+        let back = if redo { " again" } else { " back" };
+        let pin_again = if redo { " again" } else { "" };
+        match self {
+            Undo::Added { count } => {
+                let names: Vec<&str> = map
+                    .placements
+                    .iter()
+                    .rev()
+                    .take(*count)
+                    .map(|p| p.descriptor.as_str())
+                    .collect();
+                format!("remove {}", piece_count(&names))
+            }
+            Undo::RemovedMany { items } => {
+                let names: Vec<&str> = items.iter().map(|(_, p)| p.descriptor.as_str()).collect();
+                format!("restore {}", piece_count(&names))
+            }
+            Undo::Moved { moved } => {
+                let names: Vec<&str> = moved.was.iter().map(|(i, _, _)| name_at(*i)).collect();
+                format!("move {}{back}", piece_count(&names))
+            }
+            Undo::RemoveAt { indices } => {
+                // Apply skips an index past the end, so the phrase names only what it will take out.
+                let present: Vec<&str> = indices
+                    .iter()
+                    .filter(|i| !gone(**i))
+                    .map(|i| name_at(*i))
+                    .collect();
+                match (present.is_empty(), indices.first()) {
+                    (true, Some(first)) => format!("cannot: piece {first} is gone"),
+                    (true, None) => "nothing".to_owned(),
+                    (false, _) => format!("remove {}", piece_count(&present)),
+                }
+            }
+            Undo::Turned { index, .. } if gone(*index) => format!("cannot: piece {index} is gone"),
+            Undo::Turned { index, .. } => format!("turn {}{back}", name_at(*index)),
+            Undo::Lifted { index, .. } if gone(*index) => format!("cannot: piece {index} is gone"),
+            Undo::Lifted { index, .. } => format!("lift {}{back}", name_at(*index)),
+            Undo::Tipped { index, .. } if gone(*index) => format!("cannot: piece {index} is gone"),
+            Undo::Tipped { index, .. } => format!("tip {}{back}", name_at(*index)),
+            Undo::Pin { id, .. } if !map.placements.iter().any(|p| p.id == *id) => {
+                format!("cannot: {id} is gone")
+            }
+            Undo::Pin { id, owned, .. } => {
+                let verb = if *owned { "pin" } else { "unpin" };
+                format!("{verb} {id}{pin_again}")
+            }
+            Undo::Group { ops } => {
+                let parts: Vec<String> = ops.iter().map(|op| op.phrase(map, redo)).collect();
+                if parts.is_empty() {
+                    "nothing".to_owned()
+                } else {
+                    join_parts(&parts)
+                }
+            }
+            Undo::Stamped { count } => format!("remove {}", stamps(*count)),
+            Undo::UnstampedMany { items } => format!("restore {}", stamps(items.len())),
+            Undo::UnstampAt { indices } => {
+                // Apply skips an index past the end and refuses when none are left, so count
+                // what it will take.
+                let present = indices
+                    .iter()
+                    .filter(|i| stamp_is_present(map, **i))
+                    .count();
+                match (present, indices.first()) {
+                    (0, Some(first)) => format!("cannot: stamp {first} is gone"),
+                    (0, None) => "nothing".to_owned(),
+                    (n, _) => format!("remove {}", stamps(n)),
+                }
+            }
+            Undo::MovedStamp { id, .. } if !map.stamps.iter().any(|s| s.id == *id) => {
+                format!("cannot: stamp {id} is gone")
+            }
+            Undo::MovedStamp { id, .. } => format!("move {id}{back}"),
+            Undo::Settings {
+                bounds: (x, y, z), ..
+            } => {
+                let to = if redo {
+                    "map size to"
+                } else {
+                    "map size back to"
+                };
+                format!("{to} {x} x {y} x {z}")
+            }
+            // **The summary the change was made under**, so an agent's turn reads in the INSPECTOR the
+            // way the person's own does.
+            Undo::Logged { phrase, .. } => phrase.clone(),
+        }
+    }
+}
+
+/// **The noun of a phrase**: `8 fence` for a run of one name, `3 pieces` for a mix.
+fn piece_count(names: &[&str]) -> String {
+    match names {
+        [] => "pieces".to_owned(),
+        [first, rest @ ..] if rest.iter().all(|n| n == first) => {
+            format!("{} {first}", names.len())
+        }
+        _ => format!("{} pieces", names.len()),
+    }
+}
+
+fn stamps(n: usize) -> String {
+    if n == 1 {
+        "1 stamp".to_owned()
+    } else {
+        format!("{n} stamps")
+    }
+}
+
+/// Whether a stamp index still names a stamp on the map. An undo entry can outlive the stamp it
+/// pointed at, so the phrase checks before it promises a removal. This is an index check against
+/// the map's own stamp list, not a count the census owns; the phrase only needs yes or no.
+fn stamp_is_present(map: &bevy_emerge_core::map::Map, index: usize) -> bool {
+    index < map.stamps.len()
+}
+
+/// **Joins a group's parts in the order they apply, within the phrase budget.** A part is never cut
+/// mid-phrase: the parts that fit are named, and the rest are counted as `, +N more`, so no part
+/// disappears without a trace. A first part too long on its own is clamped by [`clamp_phrase`] like
+/// any other phrase.
+fn join_parts(parts: &[String]) -> String {
+    let mut out = String::new();
+    for (i, part) in parts.iter().enumerate() {
+        let joined = if out.is_empty() {
+            part.clone()
+        } else {
+            format!("{out}, {part}")
+        };
+        let left = parts.len() - i - 1;
+        let tail = if left == 0 {
+            0
+        } else {
+            format!(", +{left} more").chars().count()
+        };
+        if out.is_empty() || joined.chars().count() + tail <= PHRASE_MAX {
+            out = joined;
+        } else {
+            return format!("{out}, +{} more", parts.len() - i);
+        }
+    }
+    out
+}
+
+/// **The longest phrase a row shows.** The value column holds about 42 characters on one line, and
+/// the ` (+N)` a stacked row adds fits in what is left.
+const PHRASE_MAX: usize = 36;
+
+fn clamp_phrase(phrase: String) -> String {
+    if phrase.chars().count() <= PHRASE_MAX {
+        return phrase;
+    }
+    let kept: String = phrase.chars().take(PHRASE_MAX - 1).collect();
+    format!("{kept}…")
 }
 
 impl Default for EditorState {
@@ -598,8 +1101,11 @@ impl Default for EditorState {
             renaming: None,
             undo: Vec::new(),
             redo: Vec::new(),
+            refused_undo: 0,
+            refused_redo: 0,
             tool: Tool::default(),
             leaving: false,
+            door_request: None,
         }
     }
 }
@@ -619,18 +1125,23 @@ impl Axis {
             Axis::Z => "Z",
         }
     }
+    /// **The axis, as the operation names it.**
+    ///
+    /// **The editor's `Axis` and the operation's `Axis` are two types that mean the same thing**,
+    /// and this is the one line that says so. The operation owns the vocabulary — an agent reads
+    /// its schema — and the editor's own axis is the UI's half of the same three letters.
+    fn op_axis(self) -> crate::ops::map_set_settings::Axis {
+        match self {
+            Axis::X => crate::ops::map_set_settings::Axis::X,
+            Axis::Y => crate::ops::map_set_settings::Axis::Y,
+            Axis::Z => crate::ops::map_set_settings::Axis::Z,
+        }
+    }
     fn get(self, b: (f32, f32, f32)) -> f32 {
         match self {
             Axis::X => b.0,
             Axis::Y => b.1,
             Axis::Z => b.2,
-        }
-    }
-    fn set(self, b: &mut (f32, f32, f32), v: f32) {
-        match self {
-            Axis::X => b.0 = v,
-            Axis::Y => b.1 = v,
-            Axis::Z => b.2 = v,
         }
     }
 }
@@ -685,6 +1196,14 @@ struct CategoryHeader(String);
 #[derive(Component, Clone, Copy)]
 struct PaletteRow(usize);
 
+/// The Map palette's scrollable list, read for its geometry and written for its scroll position.
+type PaletteListQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition),
+    (With<PaletteList>, Without<PaletteRow>),
+>;
+
 /// **Scroll the palette so the armed brush is on screen** — `tiles::keep_selection_on_screen`'s
 /// shape, for the Map's own list.
 ///
@@ -700,10 +1219,7 @@ struct PaletteRow(usize);
 fn keep_palette_selection_on_screen(
     state: Res<EditorState>,
     rows: Query<(&PaletteRow, &ComputedNode, &UiGlobalTransform)>,
-    mut lists: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (With<PaletteList>, Without<PaletteRow>),
-    >,
+    mut lists: PaletteListQuery,
     mut follow: Local<crate::chrome::Follow<usize>>,
 ) {
     // **Keyed on the brush, not on `EditorState::is_changed`.** See `chrome::Follow` — the
@@ -740,6 +1256,15 @@ fn keep_palette_selection_on_screen(
 #[derive(Component)]
 pub struct Placement(pub String);
 
+/// **A proposed piece's ghost**, so a preview can be taken down without touching the map's own rows.
+///
+/// Its own marker rather than `Ghost` alone, because the two have different lifetimes and different
+/// owners: `Ghost` is the *look* (translucent, no shadow — see `fade_ghost`), and this is the
+/// *bookkeeping* of a proposal that has not been committed. `sync_proposal_ghosts` despawns by this
+/// and nothing else, so discarding a layout cannot take an armed brush's ghost with it.
+#[derive(Component)]
+pub struct ProposalGhost;
+
 /// **The grid step the map is read on**, metres.
 ///
 /// Shared by `generate` and `check_edges` on purpose: the learned grammar and the edge check must
@@ -747,20 +1272,23 @@ pub struct Placement(pub String);
 /// the solver does not think touch.
 const CELL: f32 = grid::TILE;
 
-/// How much of a generated region should close into rooms, and what that wish is worth.
+/// How much of a generated region should close into rooms, and what that wish is worth — **as
+/// shipped, and as the defaults of [`Enclosure`]** (E-005).
 ///
-/// **Constants rather than controls, deliberately for now.** This crate has no slider widget of any
-/// kind, so a knob is a marker, a resource, an observer, a keystroke filter and a repaint system —
-/// real work that should follow evidence about what an author actually wants to turn, not precede it.
-/// The wish being *soft* is what makes a fixed number safe: a region that cannot reach the target
+/// **These are defaults now, not the only answer.** A developer who wants more enclosed rooms edits
+/// the map's `enclosure` block, or asks an agent to set it in the running editor; nothing here needs
+/// a rebuild. The values stay because a map written before the setting existed has to mean something,
+/// and the meaning it had is this one.
+///
+/// The wish being *soft* is what makes a fixed default safe: a region that cannot reach the target
 /// returns its best arrangement and says so, rather than refusing.
 ///
 /// The weight is what the wish is worth against everything else asked of the solve. It is the only
 /// soft constraint in play — the per-cell texture is a preference and costs nothing — so any positive
 /// value makes it decisive; this one is round and leaves room for a second wish to be weighed against
 /// it later.
-const ENCLOSURE_WISH: f32 = 0.25;
-const ENCLOSURE_WEIGHT: u32 = 200;
+pub const ENCLOSURE_WISH: f32 = 0.25;
+pub const ENCLOSURE_WEIGHT: u32 = 200;
 
 /// The see-through preview of the armed brush.
 ///
@@ -783,6 +1311,15 @@ struct Ghosted;
 #[derive(Component)]
 struct StatusBlock;
 
+/// **Lines the receipt row (`Field::Last`) keeps even when empty**, so a receipt arriving does not
+/// push the blocks below it down. Two covers 165 of the 174 receipt sites (B-009).
+const RECEIPT_LINES: f32 = 2.0;
+
+/// The receipt row's label. It reads `LAST` while the receipt speaks and `HINT` while a hint does,
+/// so the words in the slot always name what they are.
+#[derive(Component)]
+struct ReceiptLabel;
+
 /// The live cost readout. In the chrome bar, in a reserved column — see [`COST_COL`], and
 /// `the_triangle_count_does_not_shove_the_maps_name` for what happens without one. `pub` so that
 /// test can drive it.
@@ -797,15 +1334,16 @@ enum Field {
     Brush,
     Yaw,
     Map,
-    /// The last thing that happened — the only line that is prose.
-    Last,
-    /// **What the cursor is telling you right now**, as opposed to what just happened.
+    /// **What Cmd+Z will take back**, named, so the author reads it before pressing the chord.
     ///
-    /// Its own line because the ghost writes it EVERY FRAME while a surface piece hovers over bare
-    /// floor, and sharing [`Self::Last`] meant every message an action produced was erased before it
-    /// could be read. Two different questions — "what did I just do" and "why can't I place this" —
-    /// so two lines.
-    Hint,
+    /// The newest entry on the undo stack, read against the map as it is now. UNDO and REDO are two
+    /// rows, not one, because the author compares them.
+    Undo,
+    /// **What Cmd+Shift+Z will put back**, named the same way. An empty history reads `nothing`.
+    Redo,
+    /// The last thing that happened — the only line that is prose. While a hint is set it takes this
+    /// slot instead (B-013), labelled `HINT`, and the receipt returns when the hint clears.
+    Last,
     /// **What the piece-verbs would act on**, and the chord that opens it for editing.
     ///
     /// The readout the panel was missing. `BRUSH` says what a click would *place*; nothing said what
@@ -845,8 +1383,9 @@ impl Field {
             Field::Yaw => "YAW",
             Field::Map => "MAP",
             Field::Under => "UNDER",
-            Field::Last => "",
-            Field::Hint => "",
+            Field::Undo => "UNDO",
+            Field::Redo => "REDO",
+            Field::Last => "LAST",
         }
     }
 }
@@ -856,6 +1395,7 @@ pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EditorState>()
+            .init_resource::<MapFraming>()
             .init_resource::<RemovalDrag>()
             // Registered in the same commit as `drive_move` and `keys` read it — a missing `ResMut`
             // panics its system in Bevy 0.19 rather than skipping it (`CLAUDE.md`).
@@ -872,8 +1412,18 @@ impl Plugin for EditorPlugin {
             // nobody registered it.
             .init_resource::<Rung>()
             .init_resource::<Proposal>()
+            // **A resource, not a field on `EditorState`.** `EditorState` is rebuilt on every door
+            // crossing and the sync's `Local` is not, so a counter living there disagreed with the
+            // thing comparing against it — see [`ProposalClock`].
+            .init_resource::<ProposalClock>()
             .init_resource::<FineAnchor>()
             .init_resource::<PlaceDrag>()
+            // Read by `drive_run`, so this plugin owns it — a missing `ResMut` panics its system in
+            // Bevy 0.19 rather than skipping it (`CLAUDE.md`).
+            .init_resource::<RunDrag>()
+            // Read by `drive_run_ghost`, so this plugin owns it — a missing `ResMut` panics its
+            // system in Bevy 0.19 rather than skipping it (`CLAUDE.md`).
+            .init_resource::<RunGhostDrag>()
             // **This plugin reads it, so this plugin registers it** (CLAUDE.md's rule, and the
             // documented 0.19 trap: every run condition is evaluated, and `rebuild_palette`'s
             // `resource_changed::<ThumbGeneration>` panics if only ThumbsPlugin — which also inits
@@ -884,6 +1434,7 @@ impl Plugin for EditorPlugin {
             // Shared by both tabs' lists, so it is registered once here rather than by whichever
             // plugin happens to build first.
             .init_resource::<crate::filter::Filters>();
+        app.add_plugins(crate::snip::SnipPlugin);
 
         // **The filter box works on every door**, so it is registered above the gate below.
         //
@@ -916,6 +1467,17 @@ impl Plugin for EditorPlugin {
                 )
                     .run_if(in_state(crate::screen::Screen::Editor)),
             );
+        // **The Map opens framed on the whole map, once** (backlog E-022). The rig's default is an
+        // 18 m close-up of the origin, so a person who launched on a 1120 m town saw ground and had
+        // to zoom out to find the map. It runs once, when the map and the viewport both exist.
+        app.add_systems(
+            Update,
+            frame_map_on_open.run_if(in_state(crate::screen::Screen::Editor)),
+        );
+        app.add_systems(
+            Update,
+            frame_on_home.run_if(in_state(crate::screen::Screen::Editor)),
+        );
 
         // **Resources always; systems only on the door that has a map** — as a run condition, not
         // a check here. See `Door::map_door_is_open` for what reading the door at build time cost.
@@ -947,6 +1509,40 @@ impl Plugin for EditorPlugin {
                     answer_the_leaving_prompt.before(keys::Phase::Act),
                 )
                     .run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            // **The door switch, and it is on every door.** The key says *"the other door"*, so it
+            // has to be live in both — and the crossing takes the project out of the world, which is
+            // why it is an exclusive system.
+            //
+            // **In `PreUpdate`, and that is the whole design.**
+            //
+            // **The live test found why.** The editor's Map-door systems are gated by
+            // `Door::map_door_is_open` — a **run condition on the tuple**, and Bevy evaluates a
+            // *set's* conditions **once per schedule** (`schedule/executor/multi_threaded.rs`:
+            // `evaluated_sets`). So a crossing that ran inside `Update` left that condition
+            // evaluated against the *old* door, and four systems that take a `Res<OpenMap>` ran on
+            // the Kit door — which has no map — and Bevy 0.19 **panics a system whose `Res<T>` is
+            // missing** rather than skipping it.
+            //
+            // **`PreUpdate` runs before `StateTransition`, which runs before `Update`.** So the
+            // crossing reads the key in `PreUpdate`, sets the pending state, and the transition —
+            // the teardown and the rebuild — happens before any `Update` system evaluates its
+            // conditions against the new door.
+            .add_systems(
+                PreUpdate,
+                switch_door.run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            // **The door switch's own answer**, and it is in `PreUpdate` for the same reason the
+            // switch is: it crosses.
+            .add_systems(
+                PreUpdate,
+                answer_the_switch_prompt.run_if(in_state(crate::screen::Screen::Editor)),
+            )
+            // **A door an agent asked for (`door_open` over BRP)** is crossed in the frame after the
+            // request, when the editor is not asking a question.
+            .add_systems(
+                PreUpdate,
+                apply_pending_door.run_if(in_state(crate::screen::Screen::Editor)),
             )
             .add_systems(
                 OnEnter(crate::screen::Screen::Editor),
@@ -992,10 +1588,19 @@ impl Plugin for EditorPlugin {
                     keys.in_set(keys::Phase::Act),
                     // These two stay gated: they read the MOUSE, which the census does not model, so
                     // context is not their guard. Mode is.
-                    drive_place.run_if(not_typing).run_if(in_map_mode),
-                    drive_removal.run_if(not_typing).run_if(in_map_mode),
-                    drive_move.run_if(not_typing).run_if(in_map_mode),
-                    drive_clone.run_if(not_typing).run_if(in_map_mode),
+                    // **Nested, because this tuple is at Bevy 0.19's cap of 20.** The four
+                    // placement tools are one idea — a click or a drag belongs to whichever is
+                    // armed — and they read the MOUSE, which the census does not model, so mode is
+                    // their guard.
+                    (
+                        drive_place,
+                        drive_removal,
+                        drive_move,
+                        drive_clone,
+                        drive_run,
+                    )
+                        .run_if(not_typing)
+                        .run_if(in_map_mode),
                     // Nested for the same reason the pair below is: the tuple is at 20.
                     // `sense_under_cursor` is gated on the mode for `drive_target_marker`'s reason —
                     // it reads the MOUSE, which the census does not model, so context is not its
@@ -1006,7 +1611,13 @@ impl Plugin for EditorPlugin {
                     // two previews: one piece keyed by library index, and a whole set. Not folded
                     // into one system — that would be one system with two subjects and two
                     // lifetimes.
-                    (drive_ghost, drive_clone_ghost, drive_stamp_ghost).run_if(in_map_mode),
+                    (
+                        drive_ghost,
+                        drive_clone_ghost,
+                        drive_stamp_ghost,
+                        drive_run_ghost,
+                    )
+                        .run_if(in_map_mode),
                     // **Not gated on the map.** The stamped rows are part of the map, so they stay
                     // drawn while an author is on Tiles or Compose looking at the group that made
                     // them — a world that empties out when you change tabs would read as the stamp
@@ -1021,15 +1632,32 @@ impl Plugin for EditorPlugin {
                     (
                         arm_palette_rows,
                         redraw_edited,
+                        // **In `Act`, and not in the default set.** The watcher's `adopt_changes`
+                        // raises the flag in `Phase::Sense`, and a system in no set has **no
+                        // ordering** against that chain — Bevy may run it before or after. Here it
+                        // ran before, every frame of the test, so the flag was always false when it
+                        // looked. `Phase::Act` is chained after `Phase::Sense`, which is the order.
+                        redraw_the_map.in_set(keys::Phase::Act),
                         cycle_grid.in_set(keys::Phase::Act),
                         walk_palette.in_set(keys::Phase::Act),
                         // `apply_proposal` after `keys`, so the `Enter` that accepts cannot be seen
                         // by the same frame's `Esc` peel — the two halves of one door must not both
                         // fire on one press.
                         apply_proposal.in_set(keys::Phase::Act).after(keys),
+                        // **After `keys`, so a proposal is drawn on the frame it was made and taken
+                        // down on the frame it was thrown away or kept** — a ghost that outlived its
+                        // proposal would show a layout the map does not hold (B-046).
+                        sync_proposal_ghosts
+                            .in_set(keys::Phase::Act)
+                            .after(keys)
+                            // **After the commit door**, or the two race: `apply_proposal` takes
+                            // the proposal and `sync` reads it, and with no order between them the
+                            // sync can run first and leave `drawn` pointing at a proposal that is
+                            // already gone — so the next `G` of equal generation goes undrawn.
+                            .after(apply_proposal),
                         draw_proposal,
                     ),
-                    refresh_status,
+                    (refresh_status, refresh_history),
                     // Nested as a pair — the tuple is at its twenty-system cap, and these two are
                     // one rule: the list the arrows rearm must be the list on screen.
                     (
@@ -1069,6 +1697,15 @@ impl Plugin for EditorPlugin {
                     check_edges.run_if(resource_exists_and_changed::<Project>.or_eager(run_once)),
                     draw_edge_faults.run_if(in_map_mode),
                 ),)
+                    .run_if(in_state(crate::screen::Screen::Editor))
+                    .run_if(crate::tiles::Door::map_door_is_open),
+            )
+            // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
+            // different piece is laid, so this runs on every map change and redraws only what went
+            // stale. Gated like the rest of the Map door, because it takes `Res<OpenMap>`.
+            .add_systems(
+                Update,
+                relevel_placements
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::tiles::Door::map_door_is_open),
             )
@@ -1288,6 +1925,46 @@ fn back_to_the_menu(
     }
 }
 
+/// **Cross to the other door, keeping the project.**
+///
+/// **The same verb on both doors.** The key says *"the other door"* and never names a direction — a
+/// key that meant "the Map door" would mean the opposite thing on the Map door, which is a mode
+/// error wearing a chord. Braem & Egner's *Getting a grip on cognitive flexibility* (2018) is the
+/// instruction: a switching cue should be *"a general readiness to switch between tasks rather
+/// than to switch to one particular alternative task"*.
+///
+/// **It asks before it goes, exactly as the menu route does.** Leaving the Map door for the Kit
+/// door leaves the map, and the map may hold unsaved edits — so the same question is raised, and
+/// the same answer path saves it.
+///
+/// **A refusal is a refusal.** A crossing that cannot complete says so and **stays put**: the same
+/// door, the same project, the same map, the same arm. See [`crate::screen::cross`].
+fn switch_door(world: &mut World) {
+    // **The key first, and it is read the way every other verb reads it.**
+    let pressed = {
+        let keyboard = world.resource::<ButtonInput<KeyCode>>();
+        let live = *world.resource::<keys::Live>();
+        keys::just_pressed(keyboard, live, Action::SwitchDoor)
+    };
+    if !pressed {
+        return;
+    }
+    // **A prompt still owns the keyboard while it is up.**
+    if world.resource::<EditorState>().leaving {
+        return;
+    }
+    let Some(door) = world.get_resource::<crate::tiles::Door>().copied() else {
+        return;
+    };
+    let to = match door {
+        crate::tiles::Door::Map => crate::tiles::Door::Kit,
+        _ => crate::tiles::Door::Map,
+    };
+    // **The crossing is the operation's**, so the key and the agent take one path. `open_door` runs
+    // `door_open`, asks the leaving question when the map is unsaved, and crosses.
+    open_door(world, to, None);
+}
+
 /// **Answer the leaving question, and nothing else.**
 ///
 /// The keys are `crate::confirm`'s now — `Y` proceeds, `N` stops, `Esc` a synonym for `N` — so this
@@ -1328,6 +2005,253 @@ fn answer_the_leaving_prompt(
         &mut state,
         &mut next,
     );
+}
+
+/// **Answer the door switch's own question** — and it goes to the **other door**, not the menu.
+///
+/// **A question of its own**, because the two answers go to different places: leaving goes to the
+/// menu and crossing goes to the other door, and one question with two destinations would need
+/// the answer to know which question it was answering.
+///
+/// **Saving is the going**, exactly as it is on the menu's route — so a refused save keeps the
+/// author here with the reason, rather than crossing on a map that was never written.
+fn answer_the_switch_prompt(world: &mut World) {
+    let Some(agreed) = world
+        .resource_mut::<crate::confirm::Confirm>()
+        .answer(crate::confirm::Asked::SwitchDoor)
+    else {
+        return;
+    };
+    // **The request waits in `door_request` while the question is up**, so it is taken here whatever
+    // the answer: a decline drops it, and an agreed save crosses to it.
+    let request = world.resource_mut::<EditorState>().door_request.take();
+    world.resource_mut::<EditorState>().leaving = false;
+    if !agreed {
+        world
+            .resource_mut::<EditorState>()
+            .status
+            .note("staying on this map".to_owned());
+        return;
+    }
+    // **Save first, and only cross if the save worked.** A refused save must not cross — the
+    // author would arrive on the other door with their work still unsaved and now somewhere else.
+    //
+    // **The map and the project are taken out of the world for the save**, because `OpenMap::save`
+    // wants the project and the world will not lend both at once — and `Project` is **not
+    // `Clone`**, so it is moved rather than copied. Both go back, whatever the save says.
+    let saved = match world.remove_resource::<OpenMap>() {
+        Some(mut open) => {
+            let project = world.remove_resource::<Project>();
+            let result = match &project {
+                Some(p) => open.save(p),
+                None => Ok(()),
+            };
+            // **The project goes back first**, and the map second — so a failure leaves the editor
+            // exactly as it was.
+            if let Some(p) = project {
+                world.insert_resource(p);
+            }
+            match result {
+                Ok(()) => {
+                    world.insert_resource(open);
+                    true
+                }
+                Err(e) => {
+                    // **The map goes back**, and the author stays on it with the reason.
+                    world.insert_resource(open);
+                    world
+                        .resource_mut::<EditorState>()
+                        .status
+                        .problem(format!("NOT SAVED: {e} — staying on this map"));
+                    false
+                }
+            }
+        }
+        None => true,
+    };
+    if !saved {
+        return;
+    }
+    if let Some(request) = request {
+        enter_door(world, request);
+    }
+}
+
+/// **A door an operation asked for, waiting to be crossed to.**
+///
+/// `door_open` answers with a door and, optionally, a tab. The keys reach the crossing through
+/// [`open_door`] at once; an agent's request over BRP is stored in [`EditorState::door_request`] and
+/// crossed in the next frame by [`apply_pending_door`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct DoorRequest {
+    pub door: crate::tiles::Door,
+    pub tab: Option<crate::tiles::Mode>,
+}
+
+/// **The words for a door that cannot be crossed to yet.** The keys and the agent get the same
+/// sentence, so a person and an agent read the same reason.
+pub const LEAVING_QUESTION_REFUSAL: &str = "the editor is asking the person a question first (\"Leave this map?\"). The person answers it, then the door can be asked for again.";
+/// **A door is already waiting.** The editor crosses to it first; a second request would replace it.
+pub const DOOR_ALREADY_WAITING_REFUSAL: &str = "another door is already waiting to be crossed to. The editor crosses to it first, then this door can be asked for.";
+
+/// **Why a door may not be asked for right now, or `None` when it may.** `asking` is whether any
+/// question is on screen, the leaving question or another.
+pub fn door_refusal(state: &EditorState, asking: bool) -> Option<&'static str> {
+    if asking || state.leaving {
+        Some(LEAVING_QUESTION_REFUSAL)
+    } else if state.door_request.is_some() {
+        Some(DOOR_ALREADY_WAITING_REFUSAL)
+    } else {
+        None
+    }
+}
+
+/// **Take the door an operation answered with.** A request the editor cannot take is refused with its
+/// reason, and nothing is stored over the request already waiting.
+pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) {
+    if let Some(why) = door_refusal(state, false) {
+        state.status.problem(why.to_owned());
+        return;
+    }
+    let Some(after) = after else {
+        return;
+    };
+    let door = after
+        .get("door")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|d| {
+            crate::tiles::Door::ALL
+                .into_iter()
+                .find(|x| x.label().eq_ignore_ascii_case(d))
+        });
+    let tab = after
+        .get("tab")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|t| {
+            crate::tiles::Mode::ALL
+                .iter()
+                .copied()
+                .find(|m| m.label().eq_ignore_ascii_case(t))
+        });
+    if let Some(door) = door {
+        state.door_request = Some(DoorRequest { door, tab });
+    }
+}
+
+/// **Open a door through the registered `door_open` operation.** The keys and the tab shortcuts call
+/// this, so a key and an agent get the same answer about what may be opened.
+pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate::tiles::Mode>) {
+    let params = serde_json::json!({
+        "door": door.label().to_lowercase(),
+        "tab": tab.map(|m| m.label().to_lowercase()),
+    });
+    // **Copies, not the world's own.** A door press changes no document. Taking the resources out and
+    // putting them back marked both changed, so every watcher of the map saw an edit on each tab press.
+    let project = world.get_resource::<Project>().cloned();
+    let open = world.get_resource::<OpenMap>().cloned();
+    let mut ctx = crate::ops::Ctx {
+        project,
+        open,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let applied = crate::ops::dispatch(&mut ctx, "door_open", &params);
+    match applied {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            request_door(
+                &mut world.resource_mut::<EditorState>(),
+                outcome.after.as_ref(),
+            );
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            world.resource_mut::<EditorState>().status.problem(e.0);
+        }
+    }
+    apply_pending_door(world);
+}
+
+/// **Carry out the door an agent asked for**, when the editor is not asking a question.
+fn apply_pending_door(world: &mut World) {
+    // **A question on screen owns the frame (gap 6).** A crossing taken under any question acts on an
+    // answer the person has not given, so the stored door waits until the question is answered.
+    let asking = world
+        .get_resource::<crate::confirm::Confirm>()
+        .is_some_and(|c| c.is_open());
+    let pending = world
+        .get_resource::<EditorState>()
+        .is_some_and(|s| s.door_request.is_some() && !s.leaving);
+    if pending && !asking {
+        apply_door_request(world);
+    }
+}
+
+/// **Cross to the requested door, or ask the leaving question first** when the map is unsaved.
+fn apply_door_request(world: &mut World) {
+    let Some(request) = world.resource_mut::<EditorState>().door_request.take() else {
+        return;
+    };
+    let Some(current) = world.get_resource::<crate::tiles::Door>().copied() else {
+        return;
+    };
+    let dirty = world.get_resource::<OpenMap>().is_some_and(|o| o.dirty());
+    if request.door != current && dirty {
+        // **The request waits for the answer**, and the leaving question owns the next frame.
+        world.resource_mut::<EditorState>().door_request = Some(request);
+        world.resource_mut::<EditorState>().leaving = true;
+        world.resource_mut::<crate::confirm::Confirm>().ask(
+            crate::confirm::Asked::SwitchDoor,
+            "Leave this map?",
+            "It has unsaved edits. Leaving saves them first.",
+            "Save and go",
+            "Stay",
+        );
+        return;
+    }
+    enter_door(world, request);
+}
+
+/// **Cross to a door and enter the tab it was asked for.** A refused crossing stops here, so a tab is
+/// never entered on a door the author did not reach.
+fn enter_door(world: &mut World, request: DoorRequest) {
+    // **The receipt is carried across a crossing (cycle 8, gap 7).** The crossing resets
+    // `EditorState`, which erased the receipt of whoever asked for the door: an agent's `door_open`
+    // changed the window's door with no word of who did it. It is posted again once the tab is
+    // entered, so it stays the last word the person reads. Problems are not carried: the journal holds
+    // them already. A tab switch with no crossing still clears the note, as it always has.
+    let receipt = world.resource::<EditorState>().status.note_text().to_owned();
+    let mut crossed = false;
+    if world.get_resource::<crate::tiles::Door>().copied() != Some(request.door) {
+        match crate::screen::cross(world, request.door) {
+            Ok(()) => {
+                crossed = true;
+                world
+                    .resource_mut::<EditorState>()
+                    .status
+                    .note(format!("the {} door", request.door.label().to_lowercase()));
+            }
+            Err(e) => {
+                world
+                    .resource_mut::<EditorState>()
+                    .status
+                    .problem(format!("cannot cross: {e}"));
+                return;
+            }
+        }
+    }
+    if let Some(tab) = request.tab {
+        use bevy::ecs::system::RunSystemOnce;
+        if let Err(e) = world.run_system_once_with(crate::tiles::go_to_tab, tab) {
+            world
+                .resource_mut::<EditorState>()
+                .status
+                .problem(format!("cannot enter that tab: {e}"));
+        }
+    }
+    if crossed && !receipt.is_empty() {
+        world.resource_mut::<EditorState>().status.note(receipt);
+    }
 }
 
 /// **Give every back button its click, wherever a panel put one.**
@@ -1438,24 +2362,77 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     Field::Yaw,
                     Field::Map,
                     Field::Under,
+                    // **The hint is the receipt's second line** (B-013), not a row of its own. The
+                    // receipt's row already reserves two lines, so a hint takes a line that is
+                    // there and nothing below it moves while no hint shows.
                     Field::Last,
-                    Field::Hint,
+                    // **After the receipt, not above it.** The receipt carries its own LAST label now,
+                    // so it no longer needs the row above to lend it one. The pair still reads as what
+                    // happened (the receipt) and then what Cmd+Z / Cmd+Shift+Z would do about it.
+                    Field::Undo,
+                    Field::Redo,
                     Field::Edges,
                 ] {
+                    // **The history list sits under REDO and above EDGES (E-018).** Its rows are
+                    // fixed in number, so the block keeps one height whatever the history holds.
+                    if field == Field::Edges {
+                        history_block(s);
+                    }
                     let mut spawned = s.spawn(Node {
                         flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
+                        // The receipt starts under the row above it, not floating mid-box when it
+                        // is one line inside its two-line room.
+                        align_items: match field {
+                            Field::Last => AlignItems::FlexStart,
+                            _ => AlignItems::Center,
+                        },
+                        // **The receipt row keeps its room when it is empty** (B-009). It was zero
+                        // tall until a note arrived and then grew to the note, so every receipt
+                        // moved MAP SIZE, the size fields and the composition list down two lines
+                        // and back, often under the pointer that had just typed into a field.
+                        // Two lines, because 165 of the editor's 174 receipt sites are 80
+                        // characters or fewer and the value column holds about 42 per line. A
+                        // longer receipt still grows rather than being cut short: the words matter
+                        // more than the stillness.
+                        // Rounded up to a whole pixel: the text's measured box is rounded up, and
+                        // an exact reserve laid out one pixel short of a two-line receipt.
+                        min_height: match field {
+                            Field::Last => {
+                                Val::Px((RECEIPT_LINES * crate::chrome::BODY_LINE_H).ceil())
+                            }
+                            _ => Val::Auto,
+                        },
                         ..default()
                     });
                     if let Some(id) = field.control() {
                         spawned.insert(crate::chrome::Control(id));
                     }
                     spawned.with_children(|row| {
-                        // `COL_LABEL`: these hold an ordinary word (`brush`, `under`, `edges`). It
-                        // was a bare 62 — one of the six unnamed label columns the audit counted,
-                        // which is why no two panels in this editor lined their values up (F8).
-                        crate::chrome::row_label(row, crate::chrome::COL_LABEL, field.label());
-                        crate::chrome::row_value(row, "", TEXT, field);
+                        if field == Field::Last {
+                            // **The hint takes the receipt's slot while it speaks** (B-013). The label
+                            // is the one that changes with it: `LAST` for a receipt, `HINT` for a hint.
+                            crate::chrome::row_label_with(
+                                row,
+                                crate::chrome::COL_LABEL,
+                                field.label(),
+                                ReceiptLabel,
+                            );
+                            row.spawn(Node {
+                                flex_direction: FlexDirection::Column,
+                                flex_grow: 1.0,
+                                min_width: Val::Px(0.0),
+                                ..default()
+                            })
+                            .with_children(|col| {
+                                crate::chrome::row_value(col, "", TEXT, Field::Last);
+                            });
+                        } else {
+                            // `COL_LABEL`: these hold an ordinary word (`brush`, `under`, `edges`). It
+                            // was a bare 62 — one of the six unnamed label columns the audit counted,
+                            // which is why no two panels in this editor lined their values up (F8).
+                            crate::chrome::row_label(row, crate::chrome::COL_LABEL, field.label());
+                            crate::chrome::row_value(row, "", TEXT, field);
+                        }
                     });
                 }
             });
@@ -1500,6 +2477,41 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     });
                 }
             });
+
+            // **The composition picker** — the Map door's own way to arm a composition.
+            //
+            // It is here, in the INSPECTOR panel, because the INSPECTOR is the panel that says
+            // *what is in hand* — the brush, the yaw, the thing under the cursor — and the arm is
+            // exactly that: what the next click will put down. Before this, the arm was reachable
+            // only from the COMPOSE tab, which is on the Kit door, while the click that stamps is
+            // on the Map door; the two never met. See `compose::picker` for the measurement.
+            p.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            })
+            .with_children(|s| {
+                crate::chrome::section(s, "COMPOSITIONS");
+                // **No scroll list of its own.** The panel's own body is already a scroll area, and
+                // a scroll inside a scroll is two wheels fighting over one gesture — the author
+                // scrolls the picker and the panel does not move, which reads as a stuck panel.
+                // The picker's rows are part of the panel's flow, and the panel scrolls them.
+                //
+                // **No `ControlId` of its own, and that is the ratchet's doing.** The panel's
+                // status block already claims `ControlId::Detail`, and
+                // `every_control_the_census_homes_a_verb_at_is_on_screen` fails on *two* visible
+                // nodes claiming one id — so a second `Detail` here would take the badge away from
+                // the block that has it. The picker's verbs are the panel's verbs; one control, one
+                // badge, one answer to "what can I do here".
+                s.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                        ..default()
+                    },
+                    crate::compose::picker::PickerBody,
+                ));
+            });
         });
     });
 }
@@ -1540,6 +2552,16 @@ fn spawn_palette_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
     });
 }
 
+/// What the Map palette is built from, read as one param so the palette systems stay within Bevy's
+/// parameter ceiling. `palette_indices` and `palette_categories` take these four resources.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PaletteSource<'w> {
+    project: Res<'w, Project>,
+    open: Res<'w, OpenMap>,
+    filters: Res<'w, crate::filter::Filters>,
+    fold: Res<'w, Folded>,
+}
+
 /// **The palette, grouped.**
 ///
 /// Forty-one rows is a list you scroll past; grouped by what a thing IS it becomes a handful of
@@ -1552,11 +2574,8 @@ fn spawn_palette_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
 /// reshuffles as a map fills is one nobody builds a memory of.
 fn rebuild_palette(
     mut commands: Commands,
-    project: Res<Project>,
-    open: Res<OpenMap>,
+    palette: PaletteSource,
     thumbs: Option<Res<crate::thumbs::Thumbnails>>,
-    filters: Res<crate::filter::Filters>,
-    fold: Res<Folded>,
     // Read for one fact only — which row is armed — so the row spawns already selected rather than
     // waiting a frame for [`arm_palette_rows`]. It is deliberately NOT in the run condition above:
     // arming a brush must not respawn a hundred and eighty rows.
@@ -1564,6 +2583,12 @@ fn rebuild_palette(
     lists: Query<Entity, With<PaletteList>>,
     order: Option<ResMut<crate::thumbs::ThumbOrder>>,
 ) {
+    let PaletteSource {
+        project,
+        open,
+        filters,
+        fold,
+    } = palette;
     // **The booth bakes what the palette shows, in the order it shows it**, so the rows an author is
     // looking at fill in before the ones under a folded heading. Written here and only here: this
     // runs when the palette is rebuilt, which is exactly when that order can have changed.
@@ -1723,7 +2748,7 @@ fn palette_categories(project: &Project,
     // the same question — "is this row offered right now" — and two passes over one list would be
     // two places to forget. `Project::palette_namespaces` has already folded in whatever the map
     // uses, so nothing on screen can vanish from under a placement.
-    let offered = open.palette_namespaces(&project);
+    let offered = open.palette_namespaces(project);
     for (_, members) in out.iter_mut() {
         // **The filter narrows; it never reorders.** Rows that survive keep the positions they had,
         // so what an author learned about where a piece sits is still true — Samp 2011, via
@@ -1762,7 +2787,7 @@ pub fn palette_indices(
     fold: &Folded,
     filters: &crate::filter::Filters,
 ) -> Vec<usize> {
-    palette_categories(project, &*open, filters)
+    palette_categories(project, open, filters)
         .into_iter()
         .filter(|(category, _)| !fold.0.contains(category))
         .flat_map(|(_, members)| members)
@@ -1871,12 +2896,15 @@ fn walk_palette(
     live: Res<keys::Live>,
     time: Res<Time>,
     mut repeat: ResMut<keys::Repeat>,
-    project: Res<Project>,
-    open: Res<OpenMap>,
-    filters: Res<crate::filter::Filters>,
-    fold: Res<Folded>,
     mut state: ResMut<EditorState>,
+    palette: PaletteSource,
 ) {
+    let PaletteSource {
+        project,
+        open,
+        filters,
+        fold,
+    } = palette;
     let dt = time.delta_secs();
     // One `repeating` call per direction, never two OR'd together: `Repeat` carries a single
     // countdown, so asking it about two actions in one frame has the second reset the first's
@@ -1912,17 +2940,13 @@ fn walk_palette(
     let Some(&next) = visible.get(want.min(visible.len().saturating_sub(1))) else {
         return;
     };
-    state.brush = Some(next);
-    // **Arming from the keyboard returns to placing**, for the reason `on_row_click` gives below:
-    // picking something to place is an unambiguous statement that you are done deleting or moving.
-    state.tool = Tool::Place;
-    let name = project
-        .library
-        .descriptors
-        .get(next)
-        .map(|d| d.id.clone())
-        .unwrap_or_else(|| "?".to_owned());
-    state.status.note(format!("`{name}` armed"));
+    // **The walk is the `brush_arm` operation, the same one a click is** (gap 1). It used to set the
+    // brush and the tool itself, so the log never heard of it. `arm_piece` dispatches the arm as the
+    // person, applies its answer, and returns to placing, exactly as a click does.
+    let Some(id) = project.library.descriptors.get(next).map(|d| d.id.clone()) else {
+        return;
+    };
+    arm_piece(&mut state, &project, Some(&*open), &id);
 }
 
 /// One observer for the whole palette. `Activate` carries the entity, so the index lives on the row
@@ -1945,6 +2969,7 @@ fn on_row_click(
     project: Option<Res<Project>>,
     state: Option<ResMut<EditorState>>,
     filters: Option<ResMut<crate::filter::Filters>>,
+    open: Option<Res<crate::project::OpenMap>>,
 ) {
     let Ok(row) = rows.get(activate.entity) else {
         return;
@@ -1952,28 +2977,164 @@ fn on_row_click(
     let (Some(project), Some(mut state), Some(mut filters)) = (project, state, filters) else {
         return;
     };
-    state.brush = Some(row.0);
-    // **Arming a piece returns to placing.** Picking something to place is an unambiguous statement
-    // that you are done deleting or moving, and a tool is otherwise only escapable by a key — which a
-    // borderless-fullscreen window can have taken from it before Bevy ever sees it. A mode you can
-    // enter with a click and only leave with a keystroke is a trap.
-    let was = std::mem::take(&mut state.tool);
-    // **And it takes the keyboard back from the filter box.**
-    //
-    // `filter::blur_on_world_click` already does this for a click on the world, for the reason the
-    // status doc records: `drive_place` is gated on `not_typing`, so leaving the box focused made
-    // *the most natural way to find a piece* — type a few letters — the way to break placing it, with
-    // no message. Clicking the row you just filtered for is the other half of that same click, and it
-    // did not blur. So the search that finds a piece could still be the search that stops you using
-    // it.
+    // **And it takes the keyboard back from the filter box.** `drive_place` is gated on `not_typing`,
+    // so leaving the box focused made *the most natural way to find a piece* — type a few letters —
+    // the way to break placing it, with no message. Clicking the row you filtered for blurs it, as a
+    // click on the world already does.
     filters.blur();
-    if let Some(d) = project.library.descriptors.get(row.0) {
-        state.status.note(if was == Tool::Place {
-            format!("{} armed", d.id)
-        } else {
-            format!("{} armed — {} off", d.id, was.label())
-        });
+    let Some(d) = project.library.descriptors.get(row.0) else {
+        return;
+    };
+    // **The click is the `brush_arm` operation**, the one an agent calls. See [`arm_piece`].
+    arm_piece(&mut state, &project, open.as_deref(), &d.id);
+}
+
+/// **Arm a piece from the library**, through the operation `brush_arm` — the one an agent calls.
+///
+/// **One path for both front ends.** The palette click used to set the brush itself, so the editor
+/// and an agent could hold different pieces with no record of either. Now the click dispatches the
+/// operation, and both front ends apply its answer through [`apply_armed`].
+///
+/// **Arming returns to placing.** Picking something to place is an unambiguous statement that you are
+/// done deleting or moving, and a tool is otherwise only escapable by a key — which a borderless
+/// fullscreen window can have taken from it before Bevy ever sees it. A refusal puts the tool back and
+/// says why in `Status::problem`.
+/// **The open map is what the palette filters by**, so the arm refuses a piece the map's bash hides
+/// (gap 5). `None` only when no map is open, and then there is no bash to honour.
+pub fn arm_piece(
+    state: &mut EditorState,
+    project: &Project,
+    open: Option<&crate::project::OpenMap>,
+    descriptor: &str,
+) {
+    let was = std::mem::take(&mut state.tool);
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: open.cloned(),
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let params = serde_json::json!({"descriptor": descriptor});
+    match crate::ops::dispatch(&mut ctx, "brush_arm", &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            apply_armed(state, project, outcome.after.as_ref());
+            state.status.note(if was == Tool::Place {
+                format!("{descriptor} armed")
+            } else {
+                format!("{descriptor} armed — {} off", was.label())
+            });
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            state.tool = was;
+            state.status.problem(e.0);
+        }
     }
+}
+
+/// **The brush an armed outcome names.** The library holds the piece by its index, so the id is
+/// resolved against the library here, once, for both front ends. Both call this with the operation's
+/// `after`: a name arms that piece, `null` puts the brush down (Esc's answer), and an outcome that
+/// names neither changes nothing.
+pub fn apply_armed(state: &mut EditorState, project: &Project, after: Option<&serde_json::Value>) {
+    match after.and_then(|a| a.get("armed")) {
+        Some(serde_json::Value::Null) => state.brush = None,
+        Some(armed) => {
+            let Some(id) = armed.as_str() else {
+                return;
+            };
+            if let Some(ix) = project.library.descriptors.iter().position(|d| d.id == id) {
+                state.brush = Some(ix);
+                state.tool = Tool::Place;
+            }
+        }
+        None => {}
+    }
+}
+
+/// **The Meshes shelf's selection, as an operation answers it (E-044).** A click and `piece_select`
+/// both land here, so the answer names the piece and the shelf holds it as a click holds it: through
+/// `focus_on`, which keeps the highlight and the focused pack in step.
+pub fn apply_selected(import: &mut crate::tiles::ImportState, after: Option<&serde_json::Value>) {
+    let Some(id) = after
+        .and_then(|a| a.get("selected"))
+        .and_then(serde_json::Value::as_str)
+    else {
+        return;
+    };
+    import.focus_on(&crate::tiles::EditTarget::Library(id.to_string()));
+}
+
+/// **A click on a shelf row selects that piece (E-044).** It is the same operation an agent calls,
+/// so a click and an agent cannot disagree about what selecting a piece does. The note names the
+/// removal chord, because the row is where a person goes to remove a piece.
+pub fn select_piece(import: &mut crate::tiles::ImportState, project: &Project, id: &str) {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let params = serde_json::json!({"id": id});
+    match crate::ops::dispatch(&mut ctx, "piece_select", &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            apply_selected(import, outcome.after.as_ref());
+            import.status.note(format!(
+                "`{id}` selected — {} removes it",
+                keys::chord(Action::RemoveTile)
+            ));
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => import.status.problem(e.0),
+    }
+}
+
+/// **Set one library piece's label axis through the operation** (E-042). The chip calls this for a
+/// piece in the library, so a person's light goes to the operation log and is undone with the rest.
+/// `Source::Human` stamps the label as a person's decision. Returns `true` when the write landed,
+/// so the caller records the change only then; a refusal goes to the status row.
+pub fn set_label(
+    import: &mut crate::tiles::ImportState,
+    project: &mut crate::project::Project,
+    id: &str,
+    axis: &str,
+    tokens: &[String],
+) -> bool {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let params = serde_json::json!({"id": id, "axis": axis, "tokens": tokens});
+    match crate::ops::dispatch(&mut ctx, "label_set", &params) {
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(fresh) = ctx.project {
+                adopt_library(project, &fresh);
+            }
+            true
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            import.status.problem(e.0);
+            false
+        }
+    }
+}
+
+/// **Carry the library a label operation changed onto the live project.** Only the fields a
+/// library write touches move: the measured library and the layers the Map draws from it. A
+/// clone is not the live state, so without this the write would reach the file and not the screen.
+pub fn adopt_library(live: &mut crate::project::Project, fresh: &crate::project::Project) {
+    live.measured = fresh.measured.clone();
+    live.library = fresh.library.clone();
+    live.masks = fresh.masks.clone();
+    live.kits = fresh.kits.clone();
+    live.triangles = fresh.triangles.clone();
+    live.touched = fresh.touched.clone();
 }
 
 /// Grow or shrink one axis. Clamped at one cell rather than at zero: a map has to enclose something,
@@ -2019,6 +3180,7 @@ fn size_edit_keys(
     mut edit: ResMut<SizeEdit>,
 
     mut open: ResMut<OpenMap>,
+    project: Option<ResMut<Project>>,
     mut state: ResMut<EditorState>,
 ) {
     if edit.active.is_none() {
@@ -2055,17 +3217,61 @@ fn size_edit_keys(
                     ));
                     return;
                 }
-                let mut bounds = open.map.bounds;
-                axis.set(&mut bounds, want);
-                if bounds != open.map.bounds {
-                    open.map.bounds = bounds;
-                }
-                state.status.note(format!(
-                    "map is {} x {} x {} m",
-                    trim_metres(bounds.0),
-                    trim_metres(bounds.1),
-                    trim_metres(bounds.2)
+                // **The size before this change**, so the entry on the undo stack can name what Cmd+Z
+                // puts back.
+                let was_bounds = open.map.bounds;
+                // **Through the registry, and not around it.** The size field and an agent's
+                // `map_set_settings` call are **one operation**, so they cannot drift: the same
+                // validation, the same write to the file, the same line in the operation log, and
+                // the same refusal text. **A UI path that changed the map's bounds without
+                // dispatching the operation would be a second way to do one thing** — and the
+                // brief's rule is that a UI path which changes editor state without dispatching a
+                // registered operation is a must-fix bug.
+                //
+                // **The map is *taken*, not copied** — the operation edits it, and a copy would
+                // leave the editor's own map behind the change. **And it comes back either way**,
+                // so a refusal cannot leave the editor holding an empty map.
+                let mut taken_open = Some(std::mem::replace(
+                    &mut *open,
+                    OpenMap::new(bevy_emerge_core::map::Map::default(), std::path::PathBuf::new()),
                 ));
+                let mut ctx = crate::ops::Ctx {
+                    project: project.as_deref().cloned(),
+                    open: taken_open.take(),
+                    source: crate::ops::Source::Human,
+                    root: None,
+                    session: crate::ops::session_id(),
+                    proposal: None,
+                };
+                let outcome = crate::ops::dispatch(
+                    &mut ctx,
+                    "map_set_settings",
+                    &serde_json::json!({
+                        "axis": axis.op_axis(),
+                        "axis_value": want,
+                    }),
+                );
+                if let Some(fresh) = ctx.open.take() {
+                    *open = fresh;
+                }
+                match outcome {
+                    Ok(crate::ops::Applied::Done {
+                        outcome,
+                        operation_id,
+                        ..
+                    }) => {
+                        state.status.note(outcome.summary);
+                        // **On the undo stack, so Cmd+Z takes the resize back** and not an older
+                        // edit underneath it.
+                        state.record(Undo::Settings {
+                            line: operation_id,
+                            bounds: was_bounds,
+                        });
+                    }
+                    Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                        state.status.problem(e.0);
+                    }
+                }
             }
             Key::Escape => {
                 edit.active = None;
@@ -2240,12 +3446,16 @@ pub struct Rung(pub SnapLevel);
 
 /// **A generated layout that has not been written to the map.**
 ///
-/// See [`keys::Stance::Proposed`] for why this is a phase rather than a flag, and `generate_from`
-/// for the measured reason it exists at all.
+/// See [`keys::Stance::Proposed`] for why this is a phase rather than a flag, and [`propose`] for
+/// the measured reason it exists at all.
 ///
-/// It holds only what the solver produced. What the layout would *clear* is decided by
-/// [`apply_proposal`] against the live map, because an index captured now and used later is a bug
-/// waiting for the first author who places a piece while a proposal is up.
+/// It holds only what the solver produced. What the layout would *clear* is decided when it is
+/// taken, against the live map, because an index captured now and used later is a bug waiting for
+/// the first author who places a piece while a proposal is up.
+///
+/// **`PartialEq` because a proposal is compared, not just drawn**: `layout_propose` answers a test
+/// with two layouts and the question "did the same seed lay the same thing" has to be answerable.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Proposed {
     /// True when the source was `Composed`, which lays stamps rather than placements — and therefore
     /// clears the unpinned stamps rather than the unpinned placements.
@@ -2260,6 +3470,33 @@ pub struct Proposed {
     /// itself, so writing them into the map would make a second, stale copy of its answer.
     /// [`apply_proposal`] refuses one and leaves it standing.
     pub preview_only: bool,
+    /// **Which generate made this**, monotonic for the life of the process.
+    ///
+    /// The preview's own identity, and the reason it is a number rather than something derived from
+    /// the rows: pressing `G` twice in a row is ordinary, and a key built from the layout would make
+    /// the second proposal of the same length go undrawn. See [`sync_proposal_ghosts`].
+    ///
+    /// **Not `state.seed`.** That is a door-scoped field (`EditorState` is rebuilt on every door
+    /// crossing, `seed: 1`), and the sync's `Local` survives the reset — so the two disagreed after
+    /// a crossing and a proposal could be mistaken for the one already drawn. [`ProposalClock`] is a
+    /// resource, so it outlives the door exactly as the `Local` does.
+    pub generation: u64,
+}
+
+/// **A counter that never resets**, for telling one proposal from the next.
+///
+/// Its own resource rather than a field on `EditorState`, because `EditorState` is rebuilt every time
+/// a door is crossed and the thing it is compared against ([`sync_proposal_ghosts`]'s `Local`) is
+/// not. A counter with a different lifetime from its reader is a counter that will eventually lie.
+#[derive(Resource, Default)]
+pub struct ProposalClock(pub u64);
+
+impl ProposalClock {
+    /// The next proposal's number. Wrapping is fine: two proposals 2^64 apart are not a case.
+    pub fn tick(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(1);
+        self.0
+    }
 }
 
 /// The proposal in hand, or `None`. `None` is a real state: it is what makes the Map's key list show
@@ -2426,6 +3663,292 @@ pub fn map_bounds(open: &OpenMap) -> (Vec3, Vec3) {
     )
 }
 
+/// **What a frame is asked to look at**: the whole map, the locked placement, placements by id, or a
+/// rectangle. Every target resolves through [`resolve_frame`], so a name means one thing.
+pub enum FrameTarget {
+    Map,
+    Selection,
+    Placements(Vec<String>),
+    /// A map-space rectangle `[x0, z0, x1, z1]`, in metres.
+    Rect([f32; 4]),
+}
+
+/// **What a frame resolved to**: the box to see, in world metres, and how many placements lie in it.
+pub struct Framing {
+    /// Named the way the receipt and the reply both say it.
+    pub what: String,
+    pub centre: Vec3,
+    pub size: Vec3,
+}
+
+/// **One placement's drawn box**: the axis-aligned box round its eight corners, carried through the same
+/// yaw, tip and seat the editor draws it with (`bevy_emerge::spawn_descriptor`). `None` for an unmeasured
+/// piece, which has no box to frame. `ys` is the resolved heights, indexed as the placements are.
+fn placed_box(project: &Project, open: &OpenMap, ys: &[f32], i: usize) -> Option<(Vec3, Vec3)> {
+    let p = open.map.placements.get(i)?;
+    let d = descriptor_of(&project.library, p)?;
+    let (w, h, depth) = bevy_emerge_core::descriptor::tipped_extents(&d, p.tip)?;
+    let base = bevy_emerge::origin_of(
+        p.at,
+        open.map.origin,
+        *ys.get(i)? + bevy_emerge::tip_seat(&d, p.tip),
+    );
+    let turn = Quat::from_rotation_y(bevy_emerge::draw_yaw(&d, p.yaw).to_radians())
+        * bevy_emerge::tip_quat(p.tip);
+    let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    for sx in [-0.5, 0.5] {
+        for sz in [-0.5, 0.5] {
+            for sy in [0.0, 1.0] {
+                let corner = base + turn * Vec3::new(sx * w, sy * h, sz * depth);
+                lo = lo.min(corner);
+                hi = hi.max(corner);
+            }
+        }
+    }
+    Some(((lo + hi) * 0.5, hi - lo))
+}
+
+/// The one box round a set of boxes: their union, as a centre and a size. `None` for an empty set.
+fn enclose(boxes: impl IntoIterator<Item = (Vec3, Vec3)>) -> Option<(Vec3, Vec3)> {
+    let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    let mut any = false;
+    for (c, s) in boxes {
+        any = true;
+        lo = lo.min(c - s * 0.5);
+        hi = hi.max(c + s * 0.5);
+    }
+    any.then(|| ((lo + hi) * 0.5, hi - lo))
+}
+
+/// **One placement's drawn box, by index.** Framing one piece and the resolver both read a box this way.
+pub fn placement_bounds(project: &Project, open: &OpenMap, index: usize) -> Option<(Vec3, Vec3)> {
+    let ys = heights(project, open).ok()?;
+    placed_box(project, open, &ys, index)
+}
+
+/// The box round the named placements, each by its id. A name the map does not hold is refused by name.
+fn named_box(
+    project: &Project,
+    open: &OpenMap,
+    ys: &[f32],
+    ids: &[String],
+) -> Result<(Vec3, Vec3), String> {
+    let mut boxes = Vec::with_capacity(ids.len());
+    for id in ids {
+        let i = open
+            .map
+            .placements
+            .iter()
+            .position(|p| &p.id == id)
+            .ok_or_else(|| format!("no placement `{id}` on this map"))?;
+        let b = placed_box(project, open, ys, i)
+            .ok_or_else(|| format!("`{id}` has no measured size, so there is no box to frame"))?;
+        boxes.push(b);
+    }
+    enclose(boxes).ok_or_else(|| "no placements to frame".to_string())
+}
+
+/// **Resolve a frame target to the box it means.** The one place a name is read, so no caller can read
+/// a target differently. `lock` is the placement the target lock holds: the Map has no
+/// multi-select, so "the selection" is that one piece. A refusal says what to change, and nothing is
+/// framed on one.
+pub fn resolve_frame(
+    target: &FrameTarget,
+    project: &Project,
+    open: &OpenMap,
+    lock: Option<&str>,
+) -> Result<Framing, String> {
+    let ys = heights(project, open)?;
+    let (what, centre, size) = match target {
+        FrameTarget::Map => {
+            let (c, s) = map_bounds(open);
+            ("the whole map".to_string(), c, s)
+        }
+        FrameTarget::Selection => {
+            let id = lock.ok_or(
+                "nothing is selected: click a placement on the Map to lock it, or name placements or a rectangle",
+            )?;
+            let (c, s) = named_box(project, open, &ys, &[id.to_string()])?;
+            (format!("the selected placement `{id}`"), c, s)
+        }
+        FrameTarget::Placements(ids) => {
+            if ids.is_empty() {
+                return Err("no placements named: give at least one placement id".to_string());
+            }
+            let (c, s) = named_box(project, open, &ys, ids)?;
+            let names = ids
+                .iter()
+                .map(|id| format!("`{id}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let noun = if ids.len() == 1 {
+                "placement"
+            } else {
+                "placements"
+            };
+            (format!("{noun} {names}"), c, s)
+        }
+        FrameTarget::Rect(rect) => {
+            let [x0, z0, x1, z1] = *rect;
+            if rect.iter().any(|v| !v.is_finite()) || x1 <= x0 || z1 <= z0 {
+                return Err(format!(
+                    "a rectangle needs finite numbers with x0 < x1 and z0 < z1, in map metres; got [{x0}, {z0}, {x1}, {z1}]"
+                ));
+            }
+            let o = open.map.origin;
+            // A rectangle is ground: its footprint is the rectangle, and its height is what stands inside
+            // it. A tall piece elsewhere on the map must not raise the frame (cycle-3 item 1).
+            let ground = Vec3::new(o.0 + (x0 + x1) * 0.5, o.1, o.2 + (z0 + z1) * 0.5);
+            let plan = Vec3::new(x1 - x0, 0.0, z1 - z0);
+            let inside = (0..open.map.placements.len())
+                .filter_map(|i| placed_box(project, open, &ys, i))
+                .filter(|(c, s)| {
+                    c.x + s.x * 0.5 > o.0 + x0
+                        && c.x - s.x * 0.5 < o.0 + x1
+                        && c.z + s.z * 0.5 > o.2 + z0
+                        && c.z - s.z * 0.5 < o.2 + z1
+                });
+            let (centre, size) = match enclose(inside) {
+                Some((c, s)) => (
+                    Vec3::new(ground.x, c.y, ground.z),
+                    Vec3::new(plan.x, s.y, plan.z),
+                ),
+                None => (ground, plan),
+            };
+            (
+                format!("the rectangle [{x0}, {z0}, {x1}, {z1}] m"),
+                centre,
+                size,
+            )
+        }
+    };
+    Ok(Framing { what, centre, size })
+}
+
+/// **The aspect of a camera's viewport**, width over height, or `None` before the viewport has a size.
+pub fn aspect_of(camera: &Camera) -> Option<f32> {
+    let size = camera.logical_viewport_size()?;
+    (size.y > 0.0).then(|| size.x / size.y)
+}
+
+/// **Frame the Map camera on a resolved box.** The one place a frame is written to the rig, so every caller
+/// frames the same way. Camera state only: the map does not change, so this is
+/// not an operation and nothing is logged or undone.
+pub fn apply_frame(
+    rig: &mut crate::view::Rig,
+    framing: &Framing,
+    aspect: f32,
+    open: &OpenMap,
+) -> (Vec3, f32) {
+    let (focus, height) = crate::view::frame_box(
+        rig,
+        framing.centre,
+        framing.size,
+        aspect,
+        crate::view::max_zoom(Some(open), aspect),
+    );
+    rig.focus = focus;
+    rig.height = height;
+    (focus, height)
+}
+
+/// **Whether the Map has been framed for this door** (backlog E-022). A door resource, so a crossing
+/// or a leave resets it with the rest of the door's state (`screen::door_state!`) and the next Map
+/// opens framed. `done` makes the framing one-shot: after it, the person's own camera moves are never
+/// overwritten. `last_size` is the viewport size seen on the previous update.
+#[derive(Resource, Default)]
+pub struct MapFraming {
+    done: bool,
+    last_size: Option<Vec2>,
+}
+
+/// **Frame the whole map once, when the Map opens.** A map that cannot be framed is a refusal and goes
+/// in a problem, not a silent retry on every frame.
+fn frame_map_on_open(
+    mut framing: ResMut<MapFraming>,
+    mut state: ResMut<EditorState>,
+    mut rig: ResMut<crate::view::Rig>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
+    cameras: Query<&Camera, With<MainCamera>>,
+) {
+    if framing.done {
+        return;
+    }
+    let (Some(project), Some(open)) = (project, open) else {
+        return;
+    };
+    let Ok(camera) = cameras.single() else {
+        return;
+    };
+    // **Wait for the layout.** The first viewport size is the window's guess, not the laid-out one, and
+    // the Map is framed against the aspect it will be drawn at. So the frame waits until the size has
+    // stopped changing across two updates.
+    let size = camera.logical_viewport_size();
+    if size != framing.last_size {
+        framing.last_size = size;
+        return;
+    }
+    let Some(aspect) = aspect_of(camera) else {
+        return;
+    };
+    framing.done = true;
+    match resolve_frame(&FrameTarget::Map, &project, &open, None) {
+        Ok(frame) => {
+            apply_frame(&mut rig, &frame, aspect, &open);
+        }
+        Err(e) => state.status.problem(e),
+    }
+}
+
+/// **Home frames the view: the locked placement if there is one, otherwise the whole map.** The same
+/// `resolve_frame` + `apply_frame` as `emerge/frame_view`, so the key and the agent's method cannot
+/// disagree about what the map or the selection is. A refusal goes in a problem.
+#[allow(clippy::too_many_arguments)]
+fn frame_on_home(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    live: Res<keys::Live>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
+    lock: Option<Res<TargetLock>>,
+    mut rig: ResMut<crate::view::Rig>,
+    cameras: Query<&Camera, With<MainCamera>>,
+    mut state: ResMut<EditorState>,
+) {
+    if !keys::just_pressed(&keyboard, *live, keys::Action::FrameView) {
+        return;
+    }
+    let (Some(project), Some(open)) = (project, open) else {
+        return;
+    };
+    let locked = lock
+        .as_deref()
+        .and_then(|l| l.placement_id().map(str::to_owned));
+    let target = if locked.is_some() {
+        FrameTarget::Selection
+    } else {
+        FrameTarget::Map
+    };
+    let frame = match resolve_frame(&target, &project, &open, locked.as_deref()) {
+        Ok(frame) => frame,
+        Err(why) => {
+            state.status.problem(why);
+            return;
+        }
+    };
+    let Some(aspect) = cameras.single().ok().and_then(aspect_of) else {
+        state.status.problem(
+            "the Map camera has no viewport yet, so there is nothing to frame against".to_owned(),
+        );
+        return;
+    };
+    apply_frame(&mut rig, &frame, aspect, &open);
+    state.status.note(format!(
+        "framed {} ({:.0} x {:.0} m)",
+        frame.what, frame.size.x, frame.size.z,
+    ));
+}
+
 fn draw_bounds(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
@@ -2485,13 +4008,195 @@ fn arm_palette_rows(
     }
 }
 
+/// **One line of the UNDO or REDO row**: the newest entry's name, with ` (+N)` for the entries
+/// stacked behind it, or a dim `nothing` when the stack is empty.
+fn stack_row(next: Option<String>, depth: usize) -> (String, Color) {
+    match next {
+        Some(phrase) if depth > 1 => (format!("{phrase} (+{})", depth - 1), TEXT),
+        Some(phrase) => (phrase, TEXT),
+        None => ("nothing".to_owned(), DIM),
+    }
+}
+
+/// **How many history rows show on each side of the current position (E-018).** The list is
+/// `2 * HISTORY_EACH_WAY + 1` rows, always, so it never changes height and the rows below stay put.
+const HISTORY_EACH_WAY: isize = 3;
+
+/// **One row of the history list (E-018 option C).** `offset` is the row's distance from the
+/// current position, fixed at spawn. `refresh_history` writes the rest each time the history
+/// changes. A click jumps to `position` as one undo group (`jump`). The keyboard route to the same
+/// row is `|offset|` presses of Cmd+Z (rows behind) or Cmd+Shift+Z (rows ahead); see
+/// `docs/guide/building-maps.md`.
+#[derive(Component)]
+pub struct HistorySlot {
+    pub offset: isize,
+    /// The history position this row jumps to; `None` when the row is spare.
+    pub position: Option<usize>,
+    /// The row for the position the stacks are at now. A click on it does nothing.
+    pub current: bool,
+}
+
+/// The text of one history row.
+#[derive(Component)]
+struct HistoryText;
+
+/// **The history list under REDO (E-018).** Rows run from the redo side at the top to the undo side
+/// at the bottom.
+fn history_block(s: &mut ChildSpawnerCommands) {
+    for offset in (-HISTORY_EACH_WAY..=HISTORY_EACH_WAY).rev() {
+        // **Exactly one line, clipped (E-018).** A label that wrapped grew its row, and every row
+        // below it, MAP SIZE included, moved down: `a_receipt_does_not_move_the_panel` caught it.
+        // So the row is one line tall, its text does not wrap, and what runs past the panel is
+        // clipped rather than pushing anything. The wrapper holds the row's own top and bottom inset
+        // as well as its line, or the line's far edge is cut.
+        s.spawn(Node {
+            height: Val::Px((crate::chrome::BODY_LINE_H + 2.0 * crate::chrome::GAP_TIGHT).ceil()),
+            overflow: bevy::ui::Overflow::clip(),
+            ..default()
+        })
+        .with_children(|wrap| {
+            let mut row = crate::chrome::quiet_row(
+                wrap,
+                false,
+                HistorySlot {
+                    offset,
+                    position: None,
+                    current: false,
+                },
+            );
+            row.observe(history_row_clicked);
+            // A spare or current row is not a pointer target: `refresh_history` sets this on each change.
+            row.insert(bevy::picking::Pickable::default());
+            row.with_children(|line| {
+                line.spawn((
+                    Text::new(""),
+                    TextColor(TEXT),
+                    crate::chrome::font(crate::chrome::text::BODY),
+                    bevy::text::TextLayout::new(
+                        bevy::text::Justify::Left,
+                        bevy::text::LineBreak::NoWrap,
+                    ),
+                    HistoryText,
+                    // Ignored, so the pointer hits the row and not its text (see `refresh_history`).
+                    bevy::picking::Pickable::IGNORE,
+                ));
+            });
+        });
+    }
+}
+
+/// What a history row needs to jump: the same resources the keyboard's undo system takes.
+#[derive(bevy::ecs::system::SystemParam)]
+struct HistoryJump<'w, 's> {
+    commands: Commands<'w, 's>,
+    assets: Res<'w, AssetServer>,
+    project: ResMut<'w, Project>,
+    open: ResMut<'w, OpenMap>,
+    state: ResMut<'w, EditorState>,
+    placed: Query<'w, 's, (Entity, &'static Placement)>,
+    /// **A drawn piece's own transform**, which is how the sweep tells a piece standing where the
+    /// map wants it from one that is not (B-048).
+    transforms: Query<'w, 's, &'static Transform>,
+}
+
+/// **A click on a history row jumps there, as one group (E-018).** Refused while the leaving
+/// question is up, as the undo chord is: a jump edits the map the question is asking about.
+fn history_row_clicked(
+    click: On<bevy::picking::events::PointerClick>,
+    slots: Query<&HistorySlot>,
+    mut jump_to: HistoryJump,
+) {
+    let Ok(slot) = slots.get(click.entity) else {
+        return;
+    };
+    if jump_to.state.leaving || slot.current {
+        return;
+    }
+    let Some(position) = slot.position else {
+        return;
+    };
+    let j = &mut jump_to;
+    jump(
+        &mut j.commands,
+        &j.assets,
+        &mut j.project,
+        &mut j.open,
+        &mut j.state,
+        &j.placed,
+        &j.transforms,
+        position,
+    );
+}
+
+/// **The history list's text (E-018).** Runs on the same change as the UNDO and REDO rows. Each row
+/// reads the history as it stands now, so a click means the row's current position.
+fn refresh_history(
+    state: Res<EditorState>,
+    open: Res<OpenMap>,
+    mut slots: Query<(&mut HistorySlot, &Children, &mut bevy::picking::Pickable)>,
+    mut texts: Query<(&mut Text, &mut TextColor), With<HistoryText>>,
+) {
+    if !state.is_changed() && !open.is_changed() {
+        return;
+    }
+    let depth = state.undo_depth();
+    let rows = state.history();
+    for (mut slot, children, mut pickable) in &mut slots {
+        let position = usize::try_from(depth as isize + slot.offset)
+            .ok()
+            .filter(|&p| p <= rows.len());
+        slot.position = position;
+        slot.current = position == Some(depth);
+        // **A spare or current row is not a pointer target** (the click observer refuses it), so it
+        // must not light up on hover either. `Hovered` is read from the pointer's hit, and an ignored
+        // entity is never hit, so the row goes non-pickable here and stays pickable when it is live.
+        let target = slot.position.is_some() && !slot.current;
+        let pick = if target {
+            bevy::picking::Pickable::default()
+        } else {
+            bevy::picking::Pickable::IGNORE
+        };
+        if *pickable != pick {
+            *pickable = pick;
+        }
+        let (want, tint) = match position {
+            None => (String::new(), TEXT),
+            Some(p) => {
+                let (what, who) = if p == 0 {
+                    ("before the first change".to_owned(), "")
+                } else {
+                    let row = &rows[p - 1];
+                    (row.label.clone(), if row.agent { "agent" } else { "you" })
+                };
+                let now = if slot.current { "now: " } else { "" };
+                let who = if who.is_empty() {
+                    String::new()
+                } else {
+                    format!("  \u{b7} {who}")
+                };
+                let tint = if p > depth { DIM } else { TEXT };
+                (format!("{now}{what}{who}"), tint)
+            }
+        };
+        for child in children.iter() {
+            if let Ok((mut text, mut colour)) = texts.get_mut(child) {
+                if text.0 != want {
+                    text.0 = want.clone();
+                }
+                colour.0 = tint;
+            }
+        }
+    }
+}
+
 fn refresh_status(
     project: Res<Project>,
     open: Res<OpenMap>,
     faults: Res<EdgeFaults>,
     state: Res<EditorState>,
     under: Res<UnderCursor>,
-    mut fields: Query<(&Field, &mut Text, &mut TextColor)>,
+    mut fields: Query<(&Field, &mut Text, &mut TextColor), Without<ReceiptLabel>>,
+    mut labels: Query<&mut Text, With<ReceiptLabel>>,
 ) {
     // `none` covers both "nothing armed" and "the armed index no longer exists", which read the same
     // to an author and want the same word.
@@ -2501,7 +4206,24 @@ fn refresh_status(
         .map(|d| d.id.as_str())
         .unwrap_or("none");
 
+    // **The label follows the words in the slot** (B-013): `HINT` while a hint speaks, `LAST` otherwise.
+    let label = if state.hint.is_empty() { "LAST" } else { "HINT" };
+    for mut text in &mut labels {
+        if text.0 != label {
+            text.0 = label.to_owned();
+        }
+    }
+
     for (field, mut text, mut colour) in &mut fields {
+        // **The undo rows are only read when the history or the map changed**, and once when they
+        // spawn (their text starts empty). Recomputing two strings every frame is the cost this avoids.
+        if matches!(field, Field::Undo | Field::Redo)
+            && !text.0.is_empty()
+            && !state.is_changed()
+            && !open.is_changed()
+        {
+            continue;
+        }
         let (want, tint) = match field {
             // Silent when the map agrees with itself, which is the common case and the one a standing
             // line must not shout about. `docs/ui.md` §1.2: more information helps, noise does not.
@@ -2533,23 +4255,64 @@ fn refresh_status(
             Field::Map => (
                 // Counted by `bevy_emerge_core::census`, never here — see
                 // `tests/census_is_the_one_counter.rs` for why a rendered count is the one that
-                // drifts. Stamps are named separately because a stamp is one reference however many
-                // rows it stands for, and folding them into "placed" would make the number disagree
-                // with what is on screen.
+                // drifts. The stamp's rows are counted **inside** the total, because the total is
+                // what the consumer has — the game spawns the group's rows too, so a number that
+                // left them out would disagree with the world the author is authoring.
                 {
-                    let counted = bevy_emerge_core::census::of_map(&open.map);
-                    let stamps = match counted.stamps {
-                        0 => String::new(),
-                        n => format!(", {n} stamped"),
-                    };
-                    let unsaved = if open.dirty() { ", unsaved" } else { "" };
-                    format!("{} placed{stamps}{unsaved}", counted.placements)
+                    // **The count the consumer will have**, not the count of hand-authored rows.
+                    //
+                    // A stamp is a reference, so the rows it stands for are derived — and a panel
+                    // saying "728 placed" beside a game holding 746 is a panel lying. The
+                    // census expands, so this is the same number `project_data::load` produces.
+                    //
+                    // **A map whose stamps do not expand says so**, rather than showing a number
+                    // that quietly omits a house.
+                    match bevy_emerge_core::census::of_map(
+                        &open.map,
+                        &project.compositions.compositions,
+                        &project.library,
+                    ) {
+                        Ok(counted) => {
+                            // **The total first, then where it came from.**
+                            //
+                            // "745 placed (727 hand, 18 group(s))" reads as if the 18 were on top
+                            // of the 745, which they are not — the 745 already counts them. So the
+                            // breakdown says what is *included*, and the author can add the two
+                            // numbers and get the number they read.
+                            //
+                            // **Short, because this row is one line.** The inspector's rows are
+                            // labels and values on a single line each, and a value that wraps
+                            // pushes the rows below it out of the panel — the "MAP" label sat
+                            // beside two lines of value, which reads as two rows and is neither.
+                            // Measured at the narrowest panel: the value column holds about 40
+                            // characters before it wraps, so the breakdown has to fit in that.
+                            //
+                            // The number of **references** is not here. It is in the log line the
+                            // map prints when it opens, and the reference count is not what the
+                            // author is reading this row for — the row count is.
+                            let stamps = match counted.stamps {
+                                0 => String::new(),
+                                _n => format!(
+                                    " ({} hand, {} group(s))",
+                                    counted.placements, counted.stamped
+                                ),
+                            };
+                            let unsaved = if open.dirty() { ", unsaved" } else { "" };
+                            format!("{} placed{stamps}{unsaved}", counted.total())
+                        }
+                        Err(e) => format!("cannot count this map: {e}"),
+                    }
                 },
                 if open.dirty() { ACCENT } else { TEXT },
             ),
-            // A refusal has to read differently from a success, or "NOT SAVED" scrolls past as if it
-            // were a receipt.
-            Field::Hint => (state.hint.clone(), ACCENT),
+            // **What the next Cmd+Z and Cmd+Shift+Z will do**, named from the two stacks. See
+            // [`stack_row`].
+            Field::Undo => stack_row(state.undo_next(&open.map), state.undo_depth()),
+            Field::Redo => stack_row(state.redo_next(&open.map), state.redo_depth()),
+            // **The hint takes the receipt's slot while it speaks** (B-013), in the refusal colour: a
+            // refusal has to read differently from a success, or "NOT SAVED" scrolls past as if it were a
+            // receipt. The receipt comes back when the hint clears.
+            Field::Last if !state.hint.is_empty() => (state.hint.clone(), ACCENT),
             // **The receipt only, and never coloured by guessing.** This read
             // `status.starts_with("NOT SAVED")`, which made exactly one refusal red and left every
             // other one — `stamp refused:`, `is not a number of metres`, every `cannot draw it:` —
@@ -2602,6 +4365,26 @@ pub struct Fields<'w> {
     /// The vocabulary prompt, added with the tag block's `+` chip (2026-08-22). While it is open,
     /// typing a name containing `n` must not rotate the mesh — the guard this list exists to give.
     pub token: Res<'w, crate::token_prompt::TokenPrompt>,
+    /// The COMPOSE tab's rename prompt, added 2026-10-21. **The same reason as `build` above, and
+    /// the same one the `grouping` line records**: the `Enter` that confirms a name is also
+    /// `ComposeArm`, so without this line the same keypress named the composition *and* armed it —
+    /// and the arm's message overwrote the rename's receipt, so the author was told the composition
+    /// was armed and never heard that every map that stamped it follows.
+    pub compose: Res<'w, crate::compose::ComposeState>,
+    /// The snip's one-line note, added with E-014. Without this line, typing a note would also
+    /// fire every action its letters are bound to.
+    pub snip: Res<'w, crate::snip::SnipEdit>,
+}
+
+/// What the tabs can be holding or waiting on. Read as one param by [`sense_context`], which folds
+/// these into the `Stance` the keyboard census answers from.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct InHand<'w> {
+    move_drag: Res<'w, MoveDrag>,
+    clone_drag: Res<'w, CloneDrag>,
+    proposal: Res<'w, Proposal>,
+    derived: Res<'w, crate::tiles::DerivedEdges>,
+    picker: Res<'w, crate::compose::picker::Picker>,
 }
 
 impl Fields<'_> {
@@ -2620,6 +4403,8 @@ impl Fields<'_> {
             || self.height.typing()
             || self.build.naming.is_some()
             || self.token.open.is_some()
+            || self.compose.renaming.is_some()
+            || self.snip.pending.is_some()
     }
 }
 
@@ -2647,16 +4432,20 @@ pub fn sense_context(
     mode: Res<crate::tiles::Mode>,
     fields: Fields,
     filters: Res<crate::filter::Filters>,
-    move_drag: Res<MoveDrag>,
-    clone_drag: Res<CloneDrag>,
-    proposal: Res<Proposal>,
-    derived: Res<crate::tiles::DerivedEdges>,
+    held: InHand,
     mut live: ResMut<keys::Live>,
     // The panel, so the journal can be told it owns the keyboard. A `Query` rather than a resource
     // because `Display::None` on the node *is* the open/closed state — `notice::toggle_journal`
     // writes exactly that, and a second flag beside it would be a second answer.
     journal: Query<&Node, With<crate::chrome::JournalPanel>>,
 ) {
+    let InHand {
+        move_drag,
+        clone_drag,
+        proposal,
+        derived,
+        picker,
+    } = held;
     // **The filter box is a text field with a named exemption, not a context of its own.** Every
     // other field here makes the whole census quiet ([`keys::Context::Typing`]); a filter box narrows
     // a list that must keep walking while it holds the keys, so it also sets [`keys::Holder::Filter`]
@@ -2708,6 +4497,10 @@ pub fn sense_context(
         keys::Context::Map if move_drag.held.is_some() || clone_drag.held.is_some() => {
             keys::Stance::Holding
         }
+        // **The composition picker has the arrows.** It is asked *after* the proposal, because a
+        // proposal is the door's own state and it owns `Enter`; the picker is the author's, and the
+        // author can always `Esc` out of a proposal first.
+        keys::Context::Map if picker.active => keys::Stance::Picking,
         _ => keys::Stance::Idle,
     };
     // **Journal over filter over tab**, because that is the drawing order. The tab is carried in
@@ -2740,25 +4533,17 @@ pub fn sense_context(
 /// panicked on the first `Update` after `Esc` took the author back to the menu, even though the
 /// `in_state(Editor)` condition beside it had already answered false. Same shape as
 /// `Door::map_door_is_open`, and for the same reason.
-fn in_map_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
+pub(crate) fn in_map_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
     mode.is_some_and(|m| *m == crate::tiles::Mode::Map)
 }
 
 /// Type a name. Snake case is applied to what is shown and to what is committed, so the illegal state
 /// is never reachable rather than merely being rejected at the end.
-/// A metre count with no trailing `.0` — `32` rather than `32.0`, `3.5` as itself.
-fn trim_metres(m: f32) -> String {
-    if (m - m.round()).abs() < 1e-4 {
-        format!("{m:.0}")
-    } else {
-        format!("{m:.1}")
-    }
-}
-
 fn rename_keys(
     mut events: MessageReader<KeyboardInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<keys::Live>,
+    mut project: Option<ResMut<Project>>,
 
     mut open: ResMut<OpenMap>,
     mut state: ResMut<EditorState>,
@@ -2794,22 +4579,7 @@ fn rename_keys(
         match &event.logical_key {
             Key::Enter => {
                 let raw = state.renaming.take().unwrap_or_default();
-                let name = bevy_emerge_core::naming::to_snake_case(&raw);
-                if name.is_empty() {
-                    state
-                        .status
-                        .note("a map needs a name; nothing was changed".to_owned());
-                } else if name != open.map.name {
-                    let was = std::mem::replace(&mut open.map.name, name.clone());
-                    // The file follows the name on the next save, and the old one stays where it is
-                    // — deleting it here would destroy a file on a keystroke.
-                    // The modifier from the census, not typed: this sentence naming a key the build
-                    // does not read is the same failure as the panel doing it.
-                    state.status.note(format!(
-                        "renamed `{was}` to `{name}` ({}+S writes the new file)",
-                        keys::MOD_NAME
-                    ));
-                }
+                rename_map(project.as_deref_mut(), &mut open, &mut state, &raw);
             }
             Key::Escape => {
                 state.renaming = None;
@@ -2896,7 +4666,7 @@ pub fn with_thousands(n: usize) -> String {
     let s = n.to_string();
     let mut out = String::with_capacity(s.len() + s.len() / 3);
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -2955,6 +4725,11 @@ pub fn brush_span(d: &bevy_emerge_core::descriptor::Descriptor, yaw: f32, tip: (
 /// resurrected by a second mount kind the guard had never heard of. A third one must not be able to
 /// do it again, so "does this need a host" has exactly one answer here.
 ///
+/// **`OnSurfaceOrFloor` is deliberately not one of them**, and this is the one place that distinction
+/// has to be written down. A brush that *may* take a surface can be laid on open floor — that is the
+/// whole of its mount — so a flood or a box fill with one is legal and seats every piece on the deck.
+/// Asking `stack::may_take_surface` here instead would refuse the gesture the feature exists for.
+///
 /// [`bevy_emerge_core::stack`] keeps the two apart deliberately — they answer different questions and a
 /// caller that wants the datum needs to know which — so this composes them rather than replacing
 /// them.
@@ -2976,16 +4751,16 @@ pub fn mount_class(d: &bevy_emerge_core::descriptor::Descriptor) -> Option<&str>
 /// no tile and is furniture by `from_compositions`'s own rule, so it rides the ladder like any prop.
 pub fn stamp_snap(
     project: &Project,
-    compose: &crate::compose::ComposeState,
+    armed: &crate::compose::Armed,
     keyboard: &ButtonInput<KeyCode>,
     rung: SnapLevel,
 ) -> (SnapLevel, (f32, f32)) {
-    let armed = compose.armed.as_ref().and_then(|id| {
+    let armed = armed.id().and_then(|id| {
         project
             .compositions
             .compositions
             .iter()
-            .find(|c| &c.id == id)
+            .find(|c| c.id == id)
     });
     match armed.map(|c| &c.envelope) {
         Some(bevy_emerge_core::composition::Envelope::Bounded { size }) => {
@@ -3127,17 +4902,26 @@ pub fn brush_at(
     rung: SnapLevel,
     anchor: &FineAnchor,
     hit: Vec3,
-    d: &bevy_emerge_core::descriptor::Descriptor,
-    yaw: f32,
-    tip: (u8, u8),
+    piece: Pose<'_>,
 ) -> (f32, f32) {
-    map_at(project, &*open,
+    map_at(project, open,
         hit,
         keys::alt_held(keyboard),
         anchor,
         snap_level(keyboard, rung),
-        brush_span(d, yaw, tip),
+        brush_span(piece.d, piece.yaw, piece.tip),
     )
+}
+
+/// A piece as it is being laid: its descriptor, its authored yaw, and its tip. [`brush_span`] reads
+/// all three together, so they travel together.
+pub struct Pose<'a> {
+    /// The descriptor being laid.
+    pub d: &'a bevy_emerge_core::descriptor::Descriptor,
+    /// The authored yaw, in degrees.
+    pub yaw: f32,
+    /// The authored tip.
+    pub tip: (u8, u8),
 }
 
 /// The rectangle being dragged out to fill, in map space. Its own resource on the same argument
@@ -3149,6 +4933,24 @@ pub struct PlaceDrag {
     from: Option<(f32, f32)>,
 }
 
+/// **The line being dragged out to run a piece along**, in map space.
+///
+/// Its own resource on the same argument [`PlaceDrag`] makes: written every frame of a drag, and
+/// `rebuild_palette` watches [`EditorState`] rather than this.
+#[derive(Resource, Default)]
+pub struct RunDrag {
+    /// Where the button went down, or `None` while only hovering.
+    from: Option<(f32, f32)>,
+}
+
+/// The three map resources a placement writes: the project, the open map, and the editor's state.
+/// They always travel together, so a placement helper takes them as one.
+struct MapEdit<'a> {
+    project: &'a mut Project,
+    open: &'a mut OpenMap,
+    state: &'a mut EditorState,
+}
+
 /// Fill a dragged box with the brush, as one act.
 ///
 /// Split out of [`drive_place`] so the release path reads as the two things it chooses between —
@@ -3157,13 +4959,12 @@ fn box_fill_between(
     commands: &mut Commands,
     assets: &AssetServer,
     placed: &Query<(Entity, &Placement)>,
-    project: &mut Project,
-    open: &mut OpenMap,
-    state: &mut EditorState,
+    edit: MapEdit,
     brush: &bevy_emerge_core::descriptor::Descriptor,
     corners: ((f32, f32), (f32, f32)),
     pitch: f32,
 ) {
+    let MapEdit { project, open, state } = edit;
     let mut n = state.next_id;
     let short = short_id(&brush.id).to_owned();
     let filled = match crate::fill::box_fill(
@@ -3179,9 +4980,23 @@ fn box_fill_between(
         },
     ) {
         Ok(f) => f,
-        // A refusal is the answer, not a failure — the same call `flood_from_cursor` makes.
+        // **A refusal is a `problem`, not a receipt.** The `Status` type's own doc says where a
+        // refusal goes: *"the editor could not do what was asked, or did only part of it… a refusal
+        // handed back by `bevy_emerge_core`"*. This one is handed back by the core, and it is about
+        // a piece that cannot be laid at all — *"mounts to a `support`, so it cannot be box filled"*.
+        //
+        // **The comment this replaces said the opposite** — *"a refusal is the answer, not a
+        // failure"* — and it was wrong, because it read the rule from the wrong half of the
+        // contract. The half that says *an answer* is for *"clicking bare ground with the remove
+        // tool armed, dragging a box round nothing"*: a no-op the author can see was a no-op. **A
+        // fill that could not be laid is not a no-op** — the author asked for a floor and did not
+        // get one.
+        //
+        // **And the difference is not cosmetic.** A `problem` reaches the toast and the journal; a
+        // `note` is one dim row, and it is erased by the next receipt and by a tab switch. NN/g's
+        // Error-Message Guidelines: *"the very worst error messages are those that don't exist."*
         Err(e) => {
-            state.status.note(e);
+            state.status.problem(e);
             return;
         }
     };
@@ -3211,7 +5026,11 @@ fn box_fill_between(
     doomed.dedup();
     if let Err(e) = riders_refuse(&open.map, &doomed) {
         // Refused whole: a fill that stopped at the first host would leave a half-painted box.
-        state.status.note(e);
+        //
+        // **And it is a `problem`**, for the same reason as the refusal above: the editor could
+        // not do what was asked, and the author needs to know *before* they look at the map and
+        // wonder why the box is short.
+        state.status.problem(e);
         return;
     }
     state.next_id = n;
@@ -3236,12 +5055,72 @@ fn box_fill_between(
     };
     if filled.truncated {
         state.status.problem(format!(
-            "filled {count}{over} — stopped at the {} cell cap",
-            crate::fill::MAX_CELLS
+            "filled {count}{over} — stopped at the {} cell cap. {}",
+            crate::fill::MAX_CELLS,
+            crate::fill::CAP_ROUTE
         ));
     } else {
         state.status.note(format!("filled {count}{over}"));
     }
+}
+
+/// **Open the map's size field for one axis, the way a click on it does** — by triggering the
+/// same `Activate` the button sends, so the field's own observer runs. `axis` is `'x'`, `'y'` or
+/// `'z'`. What is typed next goes through the real `KeyboardInput` path. Panics when the field is
+/// not on screen, because a test that silently typed into nothing would pass for the wrong reason.
+pub fn size_field_for_test(world: &mut World, axis: char) {
+    let want = match axis {
+        'x' => Axis::X,
+        'y' => Axis::Y,
+        'z' => Axis::Z,
+        other => panic!("size_field_for_test: `{other}` is not an axis"),
+    };
+    let mut fields = world.query::<(Entity, &SizeField)>();
+    let Some(entity) = fields
+        .iter(world)
+        .find(|(_, f)| f.0 == want)
+        .map(|(e, _)| e)
+    else {
+        panic!(
+            "size_field_for_test: no {} size field is on screen",
+            want.label()
+        )
+    };
+    world.trigger(Activate { entity });
+    world.flush();
+}
+
+/// **A run of `descriptor` between two points**, reachable from `tests/headless.rs`.
+///
+/// The release path of the run tool, without the mouse — the same split `fill_for_test` makes. The
+/// mouse path is not drivable headless, and a test that re-implemented the body would pass while
+/// the real one was broken.
+pub fn run_for_test(world: &mut World, descriptor: &str, from: (f32, f32), to: (f32, f32)) {
+    use bevy::ecs::system::RunSystemOnce;
+    let descriptor = descriptor.to_owned();
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  assets: Res<AssetServer>,
+                  mut project: ResMut<Project>,
+                  mut open: ResMut<OpenMap>,
+                  mut state: ResMut<EditorState>| {
+                let Some(d) = project.library.get(&descriptor).cloned() else {
+                    panic!("run_for_test: no descriptor `{descriptor}` in the library");
+                };
+                state.brush_yaw = 0.0;
+                state.brush_tip = (0, 0);
+                run_between(
+                    &mut commands,
+                    &assets,
+                    MapEdit { project: &mut project, open: &mut open, state: &mut state },
+                    &d,
+                    from,
+                    to,
+                );
+            },
+        )
+        .unwrap_or_else(|e| panic!("run_for_test: {e}"));
 }
 
 /// The clone tool's marker quad — [`spawn_removal_tile`]'s twin in the clone tint, and spawned
@@ -3265,6 +5144,223 @@ fn spawn_clone_tile(
     ));
 }
 
+/// **The run tool** — [`drive_place`]'s gesture with a different payload.
+///
+/// The gesture is the fill's gesture: press, drag, release, with the same [`CLICK_EPS`] that tells
+/// a click from a drag and the same `Alt` modifier that means "place one, exactly here". The
+/// difference is what the drag draws: a **line of repeated pieces** rather than a **grid of them**.
+///
+/// **The line is the piece's own pitch, not the project's lattice.** That is the whole reason the
+/// tool exists: Sanctuary's fence posts stand 2.032 m apart, and the lattice's rungs are 1.000,
+/// 0.333 and 0.111 m, so a fill lays them 3.000, 2.333 or 2.111 m apart — never 2.032, and 8 cm
+/// out at best.
+///
+/// Preview and commit live in one system for the reason `drive_place` gives: the line drawn IS the
+/// line committed, and computing it twice is how a preview comes to disagree with what it does.
+#[allow(clippy::too_many_arguments)]
+fn drive_run(
+    mut commands: Commands,
+    mouse: Res<ButtonInput<MouseButton>>,
+    // Held, the platform modifier drops the grid snap — see `map_at`.
+    keyboard: Res<ButtonInput<KeyCode>>,
+    assets: Res<AssetServer>,
+    hovered_ui: Query<&Hovered>,
+    pointer: Res<crate::view::Pointer>,
+    snip: Res<crate::snip::SnipEdit>,
+    camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
+    mut project: ResMut<Project>,
+    mut open: ResMut<OpenMap>,
+    mut state: ResMut<EditorState>,
+    mut drag: ResMut<RunDrag>,
+    mut ghost_drag: ResMut<RunGhostDrag>,
+    mut gizmos: Gizmos,
+    placed: Query<(Entity, &Placement)>,
+) {
+    if state.tool != Tool::Run {
+        // Read, never write, unless something happened — `rebuild_palette` watches `EditorState`
+        // and `drag` is deliberately not on it, but the same discipline applies.
+        if drag.from.is_some() {
+            drag.from = None;
+        }
+        ghost_drag.line = None;
+        return;
+    }
+    let Some(camera) = camera else {
+        return;
+    };
+    let (cam, cam_tf) = *camera;
+    let over_ui = hovered_ui.iter().any(|h| h.0);
+    // A snip owns the pointer while it is armed or being drawn: a press it takes starts no run.
+    let snipping = snip.claims_pointer();
+    let Some(hit) = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !snipping) else {
+        // **A release ends the drag wherever it happens** — the defect `drive_removal` records.
+        if mouse.just_released(MouseButton::Left) {
+            drag.from = None;
+        }
+        return;
+    };
+    // **A drag that started on the world owns the pointer until it is let go** — the same rule
+    // `drive_place` states, and for the same reason: a fill box dragged across the palette used to
+    // tear the gesture in half.
+    if ui_blocks_gesture(over_ui, drag.from.is_some()) {
+        return;
+    }
+
+    // **Nothing armed places nothing** — and says so, because `F` with nothing armed used to be
+    // indistinguishable from `F` not being bound.
+    let Some(d) = state
+        .brush
+        .and_then(|ix| project.library.descriptors.get(ix))
+        .cloned()
+    else {
+        if drag.from.is_some() {
+            drag.from = None;
+        }
+        if mouse.just_released(MouseButton::Left) {
+            state
+                .status
+                .note("nothing armed to run with — pick a piece from the palette".to_owned());
+        }
+        return;
+    };
+
+    // **The line's ends are the author's own points, not the lattice's.** A run's posts stand at the
+    // piece's pitch, so snapping the ends to the project's lattice would put the first post a
+    // third of a metre off where the author pointed. The ends are the cursor, in map space.
+    let at = open.map.to_map_space((hit.x, hit.z));
+    if mouse.just_pressed(MouseButton::Left) {
+        drag.from = Some(at);
+    }
+
+    // **The line, while it is being dragged.** A gizmo, not a quad: the run is a *line* and a
+    // rectangle would draw a shape the tool does not make.
+    //
+    // **And the posts it would lay**, on their own ghost — because a line is the *instruction* to
+    // lay, not the landing. The author has to see the fence before they let go.
+    if let Some(from) = drag.from {
+        let dragging = (from.0 - at.0).abs() > CLICK_EPS || (from.1 - at.1).abs() > CLICK_EPS;
+        ghost_drag.line = dragging.then_some((from, at));
+        if dragging {
+            gizmos.line(
+                Vec3::new(
+                    open.map.origin.0 + from.0,
+                    open.map.origin.1 + MARKER_LIFT,
+                    open.map.origin.2 + from.1,
+                ),
+                Vec3::new(
+                    open.map.origin.0 + at.0,
+                    open.map.origin.1 + MARKER_LIFT,
+                    open.map.origin.2 + at.1,
+                ),
+                ACCENT,
+            );
+        }
+    }
+
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(from) = drag.from.take() else {
+        return;
+    };
+    // **The ghost goes with the drag** — the posts are about to be real, and a ghost of them would
+    // be a second copy.
+    ghost_drag.line = None;
+    // **A click places one; a drag runs.** The same threshold the removal tool uses, so a hand that
+    // moved a hair while clicking is still a click in both.
+    //
+    // **Never while the modifier is held** — the same rule `drive_place` states, and for the same
+    // reason: holding it means "place one, exactly here".
+    let free = keys::alt_held(&keyboard);
+    if free || ((from.0 - at.0).abs() <= CLICK_EPS && (from.1 - at.1).abs() <= CLICK_EPS) {
+        // **A click in run mode places one piece**, which is what the author meant by a click and
+        // what the mode's own name promises not to swallow.
+        place_one(
+            &mut commands,
+            &assets,
+            &placed,
+            &project,
+            &mut open,
+            &mut state,
+            &d,
+            at,
+            free,
+        );
+        return;
+    }
+    run_between(
+        &mut commands,
+        &assets,
+        MapEdit { project: &mut project, open: &mut open, state: &mut state },
+        &d,
+        from,
+        at,
+    );
+}
+
+/// **The run tool's posts, laid along a dragged line** — one act.
+///
+/// The fourth placement tool, and the one the other three could not be. A flood lays a *grid*: one
+/// piece, one yaw, one pitch, over a region. A run lays a *line*: the piece repeated along it at
+/// **its own pitch**, which is not the project's lattice.
+///
+/// The drag is the fill's drag — press, drag, release — and the line is the one the author drew.
+/// The corners are not drawn: a corner is a *turn*, and a turn is the same piece turned 90°. So a
+/// run of a straight line carries no corners, and the corner rule belongs to the group that the
+/// author makes of four runs.
+fn run_between(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    edit: MapEdit,
+    brush: &bevy_emerge_core::descriptor::Descriptor,
+    from: (f32, f32),
+    to: (f32, f32),
+) {
+    let MapEdit { project, open, state } = edit;
+    let run = bevy_emerge_core::run::Run {
+        descriptor: brush.id.clone(),
+        pitch: None,
+        from,
+        to,
+        corners: Vec::new(),
+        gaps: Vec::new(),
+    };
+    let posts = match bevy_emerge_core::run::lay(&run, &project.library) {
+        Ok(p) => p,
+        // **A refusal is the answer, not a failure** — the same call `flood_from_cursor` makes,
+        // and for the same reason: a fence with a hole in it is worse than no fence.
+        Err(e) => {
+            state.status.problem(e);
+            return;
+        }
+    };
+
+    // **The rows, as ordinary placements.** A run's posts are rows like any other, so the map file
+    // gains rows and nothing else, the game's loader needs no change, and the inspector's count
+    // already includes them.
+    let mut n = state.next_id;
+    let short = short_id(&brush.id).to_owned();
+    let first = open.map.placements.len();
+    for post in &posts {
+        n += 1;
+        open.map.placements.push(Placed {
+            id: format!("{short}@{n}"),
+            descriptor: brush.id.clone(),
+            at: post.at,
+            yaw: post.yaw,
+            ..Placed::default()
+        });
+    }
+    state.next_id = n;
+
+    // Into the map first, drawn second: how high a piece sits is a question about the finished map.
+    spawn_range(commands, assets, project, &*open, state, first);
+    // **One entry for the whole run**, the rule `RemovedMany` states: one act the author performed
+    // is one act to take back.
+    state.record(record_added(posts.len(), Vec::new()));
+    state.status.note(format!("ran {} piece(s) along the line", posts.len()));
+}
+
 /// **The clone tool** — [`drive_removal`]'s shape with the opposite payload: the box takes a COPY
 /// of everything whose centre it contains, and every later click stamps the whole set at the
 /// cursor, fresh ids and all.
@@ -3280,6 +5376,7 @@ fn drive_clone(
     rung: Res<Rung>,
     hovered_ui: Query<&Hovered>,
     pointer: Res<crate::view::Pointer>,
+    snip: Res<crate::snip::SnipEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     mut marker: Query<(&mut Transform, &mut Visibility), With<CloneTile>>,
     mut drag: ResMut<CloneDrag>,
@@ -3306,7 +5403,9 @@ fn drive_clone(
         return;
     };
     let (cam, cam_tf) = *camera;
-    let hit = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !hovered_ui.iter().any(|h| h.0));
+    let snipping = snip.claims_pointer();
+    let hit = cursor_ground(pointer.0, cam, cam_tf)
+        .filter(|_| !snipping && !hovered_ui.iter().any(|h| h.0));
     let Some(hit) = hit else {
         // A release off the world ends the drag — the defect `drive_removal` records.
         if mouse.just_released(MouseButton::Left) {
@@ -3583,8 +5682,14 @@ fn stamp_set(
             CloneHost::Layer => None,
             CloneHost::InSet(h) => Some(new_ids[*h].clone()),
             CloneHost::Outside => {
+                // **A piece that may take a surface or the floor answers by where it lands.** A
+                // paste over a bench seats on it; a paste on open floor takes the floor. Refusing
+                // when `host_under` finds nothing was right for a strict `OnSurface` and is the
+                // wrong answer for this mount — the click path accepts the same piece at the same
+                // spot, and a paste that disagrees with a click is two answers to one question.
                 match bevy_emerge_core::stack::host_under(&open.map, &project.library, &ys, d, at) {
                     Some((host, _)) => Some(host.id.clone()),
+                    None if bevy_emerge_core::stack::needs_surface(d).is_none() => None,
                     None => {
                         state.status.problem(format!(
                             "stamp refused: `{}` needs a surface and nothing offers one where it \
@@ -3764,23 +5869,21 @@ fn sense_fine_anchor(
 pub(crate) fn spawn_piece(
     commands: &mut Commands,
     assets: &AssetServer,
-    d: &bevy_emerge_core::descriptor::Descriptor,
+    piece: Pose<'_>,
     at: (f32, f32),
-    yaw: f32,
-    tip: (u8, u8),
     origin: (f32, f32, f32),
     y: f32,
 ) -> Option<Entity> {
     bevy_emerge::spawn_descriptor(
         commands,
         assets,
-        d,
+        piece.d,
         // The editor draws before tags matter; the runtime resolves them from the library. Defaulting
         // here keeps the signature honest rather than pretending the editor knows.
         bevy_emerge_core::vocab::Masks::default(),
         at,
-        yaw,
-        tip,
+        piece.yaw,
+        piece.tip,
         // The editor authors in the map's own space, so the origin it draws at is the map's own.
         origin,
         y,
@@ -3809,7 +5912,7 @@ fn spawn_range(
     state: &mut EditorState,
     first: usize,
 ) {
-    let ys = match heights(project, &*open) {
+    let ys = match heights(project, open) {
         Ok(ys) => ys,
         Err(e) => {
             state.status.problem(e.clone());
@@ -3817,6 +5920,7 @@ fn spawn_range(
             return;
         }
     };
+    let paints = bevy_emerge::drawn_paints(&open.map, &project.library);
     for (i, p) in open.map.placements.iter().enumerate().skip(first) {
         let (Some(d), Some(&y)) = (descriptor_of(&project.library, p), ys.get(i)) else {
             continue;
@@ -3824,14 +5928,16 @@ fn spawn_range(
         if let Some(e) = spawn_piece(
             commands,
             assets,
-            &d,
+            Pose { d: &d, yaw: p.yaw, tip: p.tip },
             p.at,
-            p.yaw,
-            p.tip,
             open.map.origin,
             y,
         ) {
             commands.entity(e).insert(Placement(p.id.clone()));
+            let paint = paints[i];
+            if paint != 0 {
+                commands.entity(e).insert(bevy_emerge::Paint(paint));
+            }
         }
     }
 }
@@ -3876,6 +5982,7 @@ fn drive_removal(
     mouse: Res<ButtonInput<MouseButton>>,
     hovered_ui: Query<&Hovered>,
     pointer: Res<crate::view::Pointer>,
+    snip: Res<crate::snip::SnipEdit>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     placed: Query<(Entity, &Placement)>,
     mut marker: Query<(&mut Transform, &mut Visibility), With<RemovalTile>>,
@@ -3912,7 +6019,9 @@ fn drive_removal(
     // **Unless a box is already being dragged**, in which case the pointer is captured and the panel
     // has no claim on it — see `drive_place`'s note, and the same keyboard report. A removal box
     // swept across the palette used to vanish and then discard itself on release.
-    let blocked = ui_blocks_gesture(hovered_ui.iter().any(|h| h.0), drag.from.is_some());
+    // A snip being drawn or typed owns the pointer, and blocks the box the way a panel does.
+    let blocked = snip.claims_pointer()
+        || ui_blocks_gesture(hovered_ui.iter().any(|h| h.0), drag.from.is_some());
     let hit = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !blocked);
     let Some(hit) = hit else {
         // **A release ends the drag wherever it happens.** This used to return before the
@@ -3985,12 +6094,12 @@ fn drive_removal(
     if (from.0 - at.0).abs() <= CLICK_EPS && (from.1 - at.1).abs() <= CLICK_EPS {
         match pick_subject(&project, &open, &picture, at) {
             Some(Subject::Placement(i)) => {
-                delete_index(&mut commands, i,  &mut open, &mut state, &placed)
+                delete_index(&mut commands, &project, i, &mut open, &mut state, &placed)
             }
             // **The instance, whole.** A click landed on one member of it; removing that member is
             // reaching *through* the stamp, which is the thing `composition.rs`'s encapsulation rule
             // forbids and which the missing `Placement` used to prevent by making it unreachable.
-            Some(Subject::Stamp(id)) => delete_stamp(&id,  &mut open, &mut state),
+            Some(Subject::Stamp(id)) => delete_stamp(&id, &project, &mut open, &mut state),
             None => state.status.note("nothing here to remove"),
         }
         return;
@@ -4031,48 +6140,70 @@ fn drive_removal(
         return;
     }
 
-    // **Taken back to front.** Removing an earlier row shifts every later one down, so a forward
-    // pass would delete the wrong pieces the moment the box held more than one.
-    let mut items: Vec<(usize, Box<Placed>)> = Vec::with_capacity(doomed.len());
-    for i in doomed.iter().rev() {
-        let removed = open.map.placements.remove(*i);
+    // **Each piece goes through the registry, back to front.** Removing an earlier row shifts every
+    // later one down, so a forward pass would delete the wrong pieces the moment the box held more
+    // than one. The stamps follow, back to front by index, for the same reason.
+    // **Each piece is taken by id, not by row.** A removal shifts every later row down, and a stack
+    // goes whole: taking a host takes the riders on it, which can sit at a lower row than the host.
+    // A row the box found a moment ago may therefore hold a different piece by its turn. The ids are
+    // collected from the rows the box found, before anything moves, and an id already gone is skipped.
+    let doomed_ids: Vec<String> = doomed
+        .iter()
+        .filter_map(|i| open.map.placements.get(*i).map(|p| p.id.clone()))
+        .collect();
+    let mut logged: Vec<Undo> = Vec::with_capacity(doomed_ids.len() + stamps.len());
+    let (mut n, mut m) = (0usize, 0usize);
+    for id in doomed_ids.iter().rev() {
+        if !open.map.placements.iter().any(|p| &p.id == id) {
+            continue;
+        }
+        let Some((line, summary, ids)) = remove_placement(&project, &mut open, &mut state, id) else {
+            continue;
+        };
         for (entity, mark) in &placed {
-            if mark.0 == removed.id {
+            if ids.contains(&mark.0) {
                 commands.entity(entity).despawn();
             }
         }
-        items.push((*i, Box::new(removed)));
+        logged.push(Undo::Logged {
+            line,
+            phrase: summary,
+            agent: false,
+        });
+        n += ids.len();
     }
-    // Ascending again, which is the order `Undo::RemovedMany` puts them back in.
-    items.reverse();
-
-    // Descending here too, and after the placements: taking a stamp off `map.stamps` does not shift
-    // `map.placements`, so the two lists are independent — but within the stamp list the same rule
-    // applies, and getting it wrong is silent.
-    let mut taken: Vec<(usize, Box<bevy_emerge_core::composition::Stamped>)> =
-        Vec::with_capacity(stamps.len());
     for i in stamps.iter().rev() {
-        taken.push((*i, Box::new(open.map.stamps.remove(*i))));
+        let Some(stamp) = open.map.stamps.get(*i) else {
+            continue;
+        };
+        let id = stamp.id.clone();
+        let Some((line, summary, _)) = remove_stamp(&project, &mut open, &mut state, &id) else {
+            continue;
+        };
+        logged.push(Undo::Logged {
+            line,
+            phrase: summary,
+            agent: false,
+        });
+        m += 1;
     }
-    taken.reverse();
-
-    let n = items.len();
-    let m = taken.len();
-    // **One keypress, one undo.** A box that caught both leaves two edits behind, and `Undo::Group`
-    // exists so they come back together — its own doc: "two separate entries would make one keypress
-    // two undos". Inverses run in reverse order, which is what keeps the enum closed under
-    // inversion, so the stamps go on last and come back first.
-    let op = match (items.is_empty(), taken.is_empty()) {
-        (false, true) => Undo::RemovedMany { items },
-        (true, false) => Undo::UnstampedMany { items: taken },
-        _ => Undo::Group {
-            ops: vec![
-                Undo::RemovedMany { items },
-                Undo::UnstampedMany { items: taken },
-            ],
-        },
-    };
-    state.record(op);
+    if logged.is_empty() {
+        return;
+    }
+    // **Undo applies its list in order**, and the removals ran back to front, so the list is reversed:
+    // each kind ends up lowest index first, which is the order a put-back needs to find every index
+    // still in range. Placements and stamps are separate lists, so how they interleave does not matter.
+    logged.reverse();
+    // **One keypress, one undo.** A box that caught several pieces leaves several entries behind, and
+    // `Undo::Group` exists so they come back together: "two separate entries would make one keypress
+    // two undos".
+    if logged.len() == 1 {
+        if let Some(only) = logged.pop() {
+            state.record(only);
+        }
+    } else {
+        state.record(Undo::Group { ops: logged });
+    }
     // The whole chord, rendered by the census — naming just the modifier told the author to press
     // `Cmd`, which is not a thing anyone can do.
     let what = match (n, m) {
@@ -4086,34 +6217,23 @@ fn drive_removal(
     ));
 }
 
-/// **Take a stamp off the map, whole.**
+/// **Take a stamp off the map, whole, through the operation registry** (`stamp_remove`), so it is
+/// saved, logged and taken back the way a placement is.
 ///
 /// FVS-R-14's Delete arm: *"Delete removes the **instance**."* Named by [`Stamped::id`] and never by
-/// an index, because the caller picked it a frame ago and the list can have moved since — the rule
-/// [`MoveDrag`] states for placements and which applies here for the same reason.
+/// an index, because the caller picked it a frame ago and the list can have moved since.
 ///
 /// The entities are not despawned here. `redraw_stamps` rebuilds the whole stamped set from
-/// `map.stamps`, so there is one place that turns a stamp list into pictures rather than two that
-/// could disagree about what is on screen — the same argument the undo arms make.
-fn delete_stamp(id: &str,
-    open: &mut OpenMap, state: &mut EditorState) {
-    let Some(index) = open.map.stamps.iter().position(|s| s.id == id) else {
-        // Not an error worth a banner: the author clicked something that has since gone, which undo
-        // and a second click can both produce.
-        state
-            .status
-            .note(format!("`{id}` is not on this map any more"));
+/// `map.stamps` on every change, so there is one place that turns a stamp list into pictures.
+fn delete_stamp(id: &str, project: &Project, open: &mut OpenMap, state: &mut EditorState) {
+    let Some((line, summary, _)) = remove_stamp(project, open, state, id) else {
         return;
     };
-    let removed = open.map.stamps.remove(index);
-    let of = removed.of.clone();
-    state.record(Undo::UnstampedMany {
-        items: vec![(index, Box::new(removed))],
-    });
     state.status.note(format!(
-        "removed `{id}` — the whole `{of}`, not a piece of it. {} puts it back",
+        "{summary} — the whole stamp, not a piece of it. {} puts it back",
         keys::chord_text(keys::binding(Action::Undo))
     ));
+    state.record_logged(line, summary, false);
 }
 
 /// Bring up whatever the map already holds.
@@ -4152,6 +6272,7 @@ fn spawn_existing(
             return;
         }
     };
+    let paints = bevy_emerge::drawn_paints(&open.map, &project.library);
     for (i, p) in open.map.placements.iter().enumerate() {
         let Some(d) = descriptor_of(&project.library, p) else {
             // Loud, not silent: a placement naming a descriptor the library does not have is a hole
@@ -4166,14 +6287,16 @@ fn spawn_existing(
         if let Some(e) = spawn_piece(
             &mut commands,
             &assets,
-            &d,
+            Pose { d: &d, yaw: p.yaw, tip: p.tip },
             p.at,
-            p.yaw,
-            p.tip,
             open.map.origin,
             y,
         ) {
             commands.entity(e).insert(Placement(p.id.clone()));
+            let paint = paints[i];
+            if paint != 0 {
+                commands.entity(e).insert(bevy_emerge::Paint(paint));
+            }
         }
     }
 }
@@ -4196,8 +6319,7 @@ fn drive_place(
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
     assets: Res<AssetServer>,
-    hovered_ui: Query<&Hovered>,
-    pointer: Res<crate::view::Pointer>,
+    claim: PointerClaim,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     mut project: ResMut<Project>,
     mut open: ResMut<OpenMap>,
@@ -4205,7 +6327,12 @@ fn drive_place(
     anchor: Res<FineAnchor>,
     mut drag: ResMut<PlaceDrag>,
     mut gizmos: Gizmos,
-    mut compose: ResMut<crate::compose::ComposeState>,
+    // **The arm is its own resource** — see `compose::Armed`. It is the author's intent and it
+    // crosses a door change, which is why it is not on `ComposeState`.
+    //
+    // `ResMut` because a stamp that cannot be resolved **clears** the arm by name — see
+    // `stamp_here`. Reading it does not mark it changed, so the picker is not rebuilt every frame.
+    mut armed: ResMut<crate::compose::Armed>,
     placed: Query<(Entity, &Placement)>,
 ) {
     // Placing is one tool among three, and a click belongs to whichever is armed. While removal is
@@ -4223,11 +6350,18 @@ fn drive_place(
     let Some(camera) = camera else {
         return;
     };
+    let PointerClaim {
+        hovered_ui,
+        pointer,
+        snip,
+    } = claim;
     let (cam, cam_tf) = *camera;
     // A click on a control is not a click on the world. Without this, arming a piece from the palette
     // also dropped one wherever the panel happened to be over.
     let over_ui = hovered_ui.iter().any(|h| h.0);
-    let Some(hit) = cursor_ground(pointer.0, cam, cam_tf) else {
+    // A snip owns the pointer while it is armed or being drawn: a press it takes places nothing.
+    let snipping = snip.claims_pointer();
+    let Some(hit) = cursor_ground(pointer.0, cam, cam_tf).filter(|_| !snipping) else {
         // **A release ends the drag wherever it happens** — the defect `drive_removal` records: a
         // release over a panel used to leave `from` set, and the box then followed the cursor with no
         // button held, claiming an edit nobody was making.
@@ -4260,7 +6394,7 @@ fn drive_place(
     // piece *and* a composition in one gesture. Arming a composition is the later, more deliberate act, so it
     // wins — and a composition stamps one at a time, never by the box, because a dragged rectangle of
     // nurse stations is not a gesture anybody makes by accident.
-    if compose.armed.is_some() {
+    if armed.0.is_some() {
         if drag.from.is_some() {
             drag.from = None;
         }
@@ -4271,7 +6405,7 @@ fn drive_place(
             // placing one off the cell lattice would author a state no solve could reproduce — and
             // `to_cell` would floor it into a cell it half covers. `Anchored` groups claim no tile
             // (`from_compositions` skips them by name as furniture), so they get the ladder.
-            let (level, span) = stamp_snap(&project, &compose, &keyboard, rung.0);
+            let (level, span) = stamp_snap(&project, &armed, &keyboard, rung.0);
             let at = map_at(&project, &open,
                 hit,
                 keys::alt_held(&keyboard),
@@ -4279,7 +6413,7 @@ fn drive_place(
                 level,
                 span,
             );
-            stamp_here(&mut project, &mut open, &mut state, &mut compose, at);
+            stamp_here(&mut project, &mut open, &mut state, &mut armed, at);
         }
         return;
     }
@@ -4300,9 +6434,7 @@ fn drive_place(
         rung.0,
         &anchor,
         hit,
-        &d,
-        state.brush_yaw,
-        state.brush_tip,
+        Pose { d: &d, yaw: state.brush_yaw, tip: state.brush_tip },
     );
 
     if mouse.just_pressed(MouseButton::Left) {
@@ -4366,8 +6498,7 @@ fn drive_place(
             &mut commands,
             &assets,
             &placed,
-            &mut project, &mut open,
-            &mut state,
+            MapEdit { project: &mut project, open: &mut open, state: &mut state },
             &d,
             (from, at),
             pitch,
@@ -4392,86 +6523,48 @@ fn place_one(
     at: (f32, f32),
     free: bool,
 ) {
-    // **What it lands on.** A piece that mounts on a surface must find one under the cursor; the same
-    // question the ghost has been answering while the author moved the mouse here, asked once more at
-    // the moment it matters.
-    let ys = match heights(&project, &open) {
-        Ok(ys) => ys,
-        Err(e) => {
-            state.status.problem(e);
-            return;
-        }
-    };
-    let (y, host) =
-        match bevy_emerge_core::stack::placement_at(&open.map, &project.library, &ys, &d, at) {
-            Ok(found) => found,
-            // Refused, not floored. Dropping it at floor level is the behaviour this replaced: the
-            // piece appears, in the wrong place, and looks like an authoring mistake.
-            Err(e) => {
-                state.status.note(e);
-                return;
-            }
-        };
-    let on = host.map(|h| h.id.clone());
-
-    // **Occupied space is replaced, and the author is told what went.** Flush is fine — kitbashing
-    // lays pieces end to end, and `stack::OVERLAP_EPS` is what keeps "touching" from reading as
-    // "overlapping" — but a piece INSIDE another is an accident that otherwise surfaces as a doubled
-    // draw call nobody can see. Same-layer only: the floor a crate stands on is not in its way.
-    //
-    // It used to refuse, which made repainting a tile a two-step (remove, then place) on every cell.
-    // Replacing is one act and one undo. What still refuses is a piece that carries another: taking
-    // it away would strand its rider, so the author removes the rider first.
-    let blockers = bevy_emerge_core::stack::blockers(
-        &open.map,
-        &project.library,
-        &d,
+    // **The click is the operation's own reasoning, called with the click's own numbers.** Everything
+    // up to the write is `plan_placement`; what follows is the entity work an operation does not own.
+    // This used to be the other way round — the plan existed only here — which is why an agent could
+    // not place a piece at all (S2.1).
+    state.next_id += 1;
+    let planned = match plan_placement(
+        project,
+        open,
+        d,
         at,
         state.brush_yaw,
         state.brush_tip,
-        on.as_deref(),
-    );
-    if let [only] = blockers.as_slice()
-        && let Some(p) = open.map.placements.get(*only)
-        && p.descriptor == d.id
-        && p.patch.is_none()
-        && p.at == at
-        && p.yaw == state.brush_yaw
-        && p.tip == state.brush_tip
-    {
-        // Exactly what is there: replacing it would mint a new id and change the file for no change on screen.
-        state.status.note(format!("`{}` is already there", p.id));
-        return;
-    }
-    if let Err(e) = riders_refuse(&open.map, &blockers) {
-        state.status.note(e);
-        return;
-    }
+        state.next_id,
+    ) {
+        Ok(p) => p,
+        // **"Already there" is a note; everything else is a problem.** The distinction is the
+        // crate's own: clicking a cell that already holds this exact piece is an answer, and a piece
+        // whose host is missing is a refusal the author has to act on.
+        Err(e) => {
+            if e.ends_with("is already there") {
+                state.status.note(e);
+            } else {
+                state.status.problem(e);
+            }
+            return;
+        }
+    };
+    let y = planned.y;
+    let on = planned.placed.on.clone();
+    let blockers = planned.replaces.clone();
     let removed = take_rows(commands, placed, &mut open.map, &blockers);
 
-    state.next_id += 1;
-    let id = format!("{}@{}", short_id(&d.id), state.next_id);
-
-    let placed_row = Placed {
-        id: id.clone(),
-        descriptor: d.id.clone(),
-        at,
-        yaw: state.brush_yaw,
-        tip: state.brush_tip,
-        on: on.clone(),
-        ..Placed::default()
-    };
-    open.map.placements.push(placed_row);
+    let id = planned.placed.id.clone();
+    open.map.placements.push(planned.placed);
     let replaced: Vec<String> = removed.iter().map(|(_, p)| p.id.clone()).collect();
     state.record(record_added(1, removed));
 
     if let Some(e) = spawn_piece(
         commands,
-        &assets,
-        &d,
+        assets,
+        Pose { d, yaw: state.brush_yaw, tip: state.brush_tip },
         at,
-        state.brush_yaw,
-        state.brush_tip,
         open.map.origin,
         y,
     ) {
@@ -4488,6 +6581,76 @@ fn place_one(
         (Some(host), true) => format!("placed {id} on {host}{how}"),
         (None, true) => format!("placed {id} at ({:.2}, {:.2}){how}", at.0, at.1),
     });
+}
+
+/// **What a placement would be, before anything is written** — the click's own reasoning, split out
+/// so an agent's `placement_add` and a person's click cannot disagree (S2.1).
+///
+/// It is the first half of `place_one`, moved rather than copied: which layer the piece lands on, what
+/// is already in its way, whether it carries a rider, and the id it would take. **Nothing here writes**
+/// — no row is pushed, no entity despawned, no id counter advanced — which is what lets it answer a
+/// `dry_run` and what lets the operation own the write.
+pub(crate) struct PlannedPlacement {
+    /// The row that would be appended.
+    pub placed: Placed,
+    /// The rows it would replace, ascending. Occupied space is replaced rather than refused; a piece
+    /// that carries another is still refused, and that happens here.
+    pub replaces: Vec<usize>,
+    /// **The height it would sit at.** The solver lays pieces on the floor grid; how high one ends up
+    /// is a question about the finished map, so the click needs this to draw it and the operation
+    /// needs it to report.
+    pub y: f32,
+}
+
+pub(crate) fn plan_placement(
+    project: &Project,
+    open: &OpenMap,
+    d: &bevy_emerge_core::descriptor::Descriptor,
+    at: (f32, f32),
+    yaw: f32,
+    tip: (u8, u8),
+    n: u32,
+) -> Result<PlannedPlacement, String> {
+    // **What it lands on.** A piece that mounts on a surface must find one under the cursor; the same
+    // question the ghost has been answering while the author moved the mouse here, asked once more at
+    // the moment it matters.
+    let ys = heights(project, open)?;
+    let (y, host) = bevy_emerge_core::stack::placement_at(&open.map, &project.library, &ys, d, at)?;
+    let on = host.map(|h| h.id.clone());
+
+    // **Occupied space is replaced, and the author is told what went.** Flush is fine — kitbashing
+    // lays pieces end to end, and `stack::OVERLAP_EPS` is what keeps "touching" from reading as
+    // "overlapping" — but a piece INSIDE another is an accident that otherwise surfaces as a doubled
+    // draw call nobody can see. Same-layer only: the floor a crate stands on is not in its way.
+    let blockers =
+        bevy_emerge_core::stack::blockers(&open.map, &project.library, d, at, yaw, tip, on.as_deref());
+    if let [only] = blockers.as_slice()
+        && let Some(p) = open.map.placements.get(*only)
+        && p.descriptor == d.id
+        && p.patch.is_none()
+        && p.at == at
+        && p.yaw == yaw
+        && p.tip == tip
+    {
+        // Exactly what is there: replacing it would mint a new id and change the file for no change
+        // on screen. This is a note rather than a problem — the click path says so too.
+        return Err(format!("`{}` is already there", p.id));
+    }
+    riders_refuse(&open.map, &blockers)?;
+
+    Ok(PlannedPlacement {
+        placed: Placed {
+            id: format!("{}@{n}", short_id(&d.id)),
+            descriptor: d.id.clone(),
+            at,
+            yaw,
+            tip,
+            on,
+            ..Placed::default()
+        },
+        replaces: blockers,
+        y,
+    })
 }
 
 /// `` `a`, `b` `` — ids for a status line.
@@ -4573,10 +6736,10 @@ fn record_added(count: usize, removed: Vec<(usize, Box<Placed>)>) -> Undo {
 fn stamp_here(project: &mut Project,
     open: &mut OpenMap,
     state: &mut EditorState,
-    compose: &mut crate::compose::ComposeState,
+    armed: &mut crate::compose::Armed,
     at: (f32, f32),
 ) {
-    let Some(of) = compose.armed.clone() else {
+    let Some(of) = armed.id().map(str::to_owned) else {
         return;
     };
     let comps = project.compositions.compositions.clone();
@@ -4584,7 +6747,7 @@ fn stamp_here(project: &mut Project,
         state.status.problem(format!(
             "`{of}` is armed but the project no longer defines it"
         ));
-        compose.armed = None;
+        armed.0 = None;
         return;
     }
     state.next_id += 1;
@@ -4744,10 +6907,8 @@ fn redraw_stamps(
         if let Some(e) = spawn_piece(
             &mut commands,
             &assets,
-            &d,
+            Pose { d: &d, yaw: p.yaw, tip: p.tip },
             p.at,
-            p.yaw,
-            p.tip,
             open.map.origin,
             y,
         ) {
@@ -4778,7 +6939,13 @@ fn redraw_stamps(
                     parent
                 }
             };
-            commands.entity(e).insert((StampedPiece, ChildOf(parent)));
+            commands.entity(e).insert((
+                StampedPiece {
+                    stamp: stamp_id.clone(),
+                    row: p.id.clone(),
+                },
+                ChildOf(parent),
+            ));
             if p.paint != 0 {
                 commands.entity(e).insert(bevy_emerge::Paint(p.paint));
             }
@@ -4794,17 +6961,22 @@ fn redraw_stamps(
             drawn += 1;
         }
     }
-    let counted = bevy_emerge_core::census::of_map(&open.map);
+    let stamps = open.map.stamps.len();
     info!(
-        "bevy_emerge_mapper: redrew {drawn} stamped row(s) from {} stamp(s)",
-        counted.stamps
+        "bevy_emerge_mapper: redrew {drawn} stamped row(s) from {stamps} stamp(s)"
     );
 }
 
-/// A drawn row belonging to a stamp. Carries no id: the stamp list is the truth and this is a
-/// picture of it, rebuilt whole.
+/// A drawn row belonging to a stamp. It names the stamp it is drawn for and the row it expands, so
+/// a snip can list it with an id an agent can act on (`stamp_remove` takes the stamp's id). Still
+/// not a [`Placement`]: the stamp list is the truth and this is a picture of it, rebuilt whole.
 #[derive(Component)]
-struct StampedPiece;
+pub struct StampedPiece {
+    /// The [`Stamped::id`] this row is drawn for.
+    pub stamp: String,
+    /// The expanded row's id, as the picture names it.
+    pub row: String,
+}
 
 /// **The stamp as one thing** — a parent entity per [`Stamped`] row, with the pieces it expands to
 /// as children.
@@ -4889,6 +7061,32 @@ pub enum Subject {
 /// reading opposite stacks, and a test that drove a copy of them would pass while the real pair was
 /// broken. `RunSystemError` is surfaced rather than swallowed — a test whose driver silently did
 /// nothing is a test that always passes.
+/// **Draw the whole map again**, the way a logged undo and an agent's undo both ask for — B-048.
+///
+/// The release path is `redraw_the_map`, which runs on `Due::map_replaced`; this calls the function
+/// that does the work, so a test asks the editor's own question. Reachable from
+/// `tests/a_full_redraw_leaves_the_standing_pieces_standing.rs`, which is about whether that
+/// function despawns pieces the map still holds — a still cannot see the frame that is missing.
+pub fn redraw_all_for_test(world: &mut World) {
+    use bevy::ecs::system::RunSystemOnce;
+    world
+        .run_system_once(
+            |mut commands: Commands,
+             assets: Res<AssetServer>,
+             project: Res<Project>,
+             open: Res<OpenMap>,
+             placed: Query<(Entity, &Placement)>,
+             transforms: Query<&Transform>| {
+                if let Err(e) =
+                    draw_every_placement(&mut commands, &assets, &project, &open, &placed, &transforms)
+                {
+                    panic!("redraw_all_for_test: {e}");
+                }
+            },
+        )
+        .unwrap_or_else(|e| panic!("redraw_all_for_test: {e}"));
+}
+
 pub fn undo_for_test(world: &mut World) {
     use bevy::ecs::system::RunSystemOnce;
     world
@@ -4898,8 +7096,9 @@ pub fn undo_for_test(world: &mut World) {
              mut project: ResMut<Project>,
              mut open: ResMut<OpenMap>,
              mut state: ResMut<EditorState>,
-             placed: Query<(Entity, &Placement)>| {
-                undo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed);
+             placed: Query<(Entity, &Placement)>,
+             transforms: Query<&Transform>| {
+                undo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed, &transforms);
             },
         )
         .unwrap_or_else(|e| panic!("undo_for_test: {e}"));
@@ -4914,11 +7113,69 @@ pub fn redo_for_test(world: &mut World) {
              mut project: ResMut<Project>,
              mut open: ResMut<OpenMap>,
              mut state: ResMut<EditorState>,
-             placed: Query<(Entity, &Placement)>| {
-                redo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed);
+             placed: Query<(Entity, &Placement)>,
+             transforms: Query<&Transform>| {
+                redo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed, &transforms);
             },
         )
         .unwrap_or_else(|e| panic!("redo_for_test: {e}"));
+}
+
+/// **Jump the history to a position, for a test (E-018).** See [`jump`].
+pub fn jump_for_test(world: &mut World, position: usize) {
+    use bevy::ecs::system::RunSystemOnce;
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  assets: Res<AssetServer>,
+                  mut project: ResMut<Project>,
+                  mut open: ResMut<OpenMap>,
+                  mut state: ResMut<EditorState>,
+                  placed: Query<(Entity, &Placement)>,
+                  transforms: Query<&Transform>| {
+                jump(
+                    &mut commands,
+                    &assets,
+                    &mut project,
+                    &mut open,
+                    &mut state,
+                    &placed,
+                    &transforms,
+                    position,
+                );
+            },
+        )
+        .unwrap_or_else(|e| panic!("jump_for_test: {e}"));
+}
+
+/// Plant an undo entry whose stamp is no longer on the map, so a test can drive a **stale** entry
+/// through the real `undo` (B-026). Recorded the way an edit is recorded: pushed, and redo cleared.
+pub fn plant_stale_move_for_test(world: &mut World, id: &str) {
+    world
+        .resource_mut::<EditorState>()
+        .record(Undo::MovedStamp {
+            id: id.to_owned(),
+            from: (0.0, 0.0),
+        });
+}
+
+/// Plant a stamp-index entry — `UnstampAt` for the stamp at `index` — the way a person's stamp
+/// change leaves it on the stack, so a test can make an agent's stamp undo meet one above it (gap 4).
+/// Recorded the way an edit is recorded: pushed, and redo cleared.
+pub fn plant_unstamp_for_test(world: &mut World, index: usize) {
+    world.resource_mut::<EditorState>().record(Undo::UnstampAt {
+        indices: vec![index],
+    });
+}
+
+/// Plant a redo entry whose stamp is no longer on the map, so a test can drive a **stale** entry
+/// through the real `redo` (the refused-redo path). Pushed straight onto the redo stack, which is the
+/// one place a redo entry is ever written: an undo's inverse.
+pub fn plant_stale_redo_for_test(world: &mut World, id: &str) {
+    world.resource_mut::<EditorState>().redo.push(Undo::MovedStamp {
+        id: id.to_owned(),
+        from: (0.0, 0.0),
+    });
 }
 
 /// One click of the place tool with `descriptor` as the brush, reachable from `tests/headless.rs`.
@@ -4966,7 +7223,7 @@ pub fn fill_for_test(world: &mut World, descriptor: &str, corners: ((f32, f32), 
                 };
                 state.brush_yaw = 0.0;
                 state.brush_tip = (0, 0);
-                box_fill_between(&mut commands, &assets, &placed, &mut project, &mut open, &mut state, &d, corners, pitch);
+                box_fill_between(&mut commands, &assets, &placed, MapEdit { project: &mut project, open: &mut open, state: &mut state }, &d, corners, pitch);
             },
         )
         .unwrap_or_else(|e| panic!("fill_for_test: {e}"));
@@ -5004,18 +7261,17 @@ pub fn stamp_here_for_test(
     project: &mut Project,
     open: &mut OpenMap,
     state: &mut EditorState,
-    compose: &mut crate::compose::ComposeState,
+    armed: &mut crate::compose::Armed,
     at: (f32, f32),
 ) {
-    stamp_here(project, &mut *open, state, compose, at);
+    stamp_here(project, &mut *open, state, armed, at);
 }
 
 /// FVS-R-14's Delete arm, reachable from `tests/headless.rs` — the same split, and for the same
 /// reason: the mouse path is not drivable headless, and a test that re-implemented the body would
 /// pass while the real one was broken.
-pub fn delete_stamp_for_test(id: &str,
-    open: &mut OpenMap, state: &mut EditorState) {
-    delete_stamp(id,  &mut *open, state);
+pub fn delete_stamp_for_test(id: &str, project: &Project, open: &mut OpenMap, state: &mut EditorState) {
+    delete_stamp(id, project, open, state);
 }
 
 /// **Turn the set in hand, if there is one** — and report the angle it came to rest at.
@@ -5087,9 +7343,36 @@ pub fn send_to_tiles_for_test(
 
 /// The tail of a descriptor id, so a generated placement id reads as `crate@7` rather than
 /// `kenney_prototype-kit/crate@7`.
-fn short_id(descriptor_id: &str) -> &str {
+pub fn short_id(descriptor_id: &str) -> &str {
     descriptor_id.rsplit('/').next().unwrap_or(descriptor_id)
 }
+
+/// The placement tools' drag and lock state, plus the composition arm, as one `keys` param.
+type ToolsParam<'w> = (
+    ResMut<'w, MoveDrag>,
+    ResMut<'w, CloneDrag>,
+    ResMut<'w, TargetLock>,
+    ResMut<'w, Proposal>,
+    Res<'w, crate::compose::Armed>,
+    // **The proposal counter rides here for the same reason** the parameter list is full: it is a
+    // `ResMut` and there is no seventeenth slot. See [`ProposalClock`].
+    ResMut<'w, ProposalClock>,
+);
+
+/// The Tiles tab's state as one `keys` param.
+type TilesParam<'w, 's> = (
+    ResMut<'w, crate::tiles::Mode>,
+    ResMut<'w, crate::tiles::ImportState>,
+    // **The prompt rides in this tuple for the reason the tuple exists**: the parameter list is
+    // at Bevy's sixteen and a seventeenth is a compile error, so a new `ResMut` has to join an
+    // existing one. It is not tiles state, and the name says `tiles`, which is the honest cost
+    // of a full signature — the alternative was splitting the `Esc` cascade into a second
+    // system, and that cascade only works because every layer of it is peeled in one place.
+    ResMut<'w, crate::confirm::Confirm>,
+    // **The transform query rides here** for the reason this tuple exists: the parameter list is at
+    // Bevy's sixteen. `undo` needs it to tell a drawn piece from a stale one (B-048).
+    Query<'w, 's, &'static Transform>,
+);
 
 #[allow(clippy::too_many_arguments)]
 fn keys(
@@ -5131,26 +7414,15 @@ fn keys(
     // `ComposeState` rides here too, and read-only: the rotate cluster asks whether a composition
     // is armed to decide whether `R`/`T`/`Y`/`U`/`V` address the ghost or the piece under the
     // cursor (`ghost_is_armed`). Sixteen parameters is the ceiling and a tuple counts as one.
-    mut tools: (
-        ResMut<MoveDrag>,
-        ResMut<CloneDrag>,
-        ResMut<TargetLock>,
-        ResMut<Proposal>,
-        Res<crate::compose::ComposeState>,
-    ),
+    //
+    // **The arm rides here as [`crate::compose::Armed`], not `ComposeState`** — it is the author's
+    // intent and it outlives a door change, which is why it is its own resource. The tuple's size
+    // is unchanged: one in, one out.
+    mut tools: ToolsParam,
     // **The Tiles tab's state, as one param.** `EditTile` sends a piece over to be defined. A Bevy
     // system takes at most sixteen parameters and this one is full, so they travel as a tuple, which
     // counts as one.
-    mut tiles: (
-        ResMut<crate::tiles::Mode>,
-        ResMut<crate::tiles::ImportState>,
-        // **The prompt rides in this tuple for the reason the tuple exists**: the parameter list is
-        // at Bevy's sixteen and a seventeenth is a compile error, so a new `ResMut` has to join an
-        // existing one. It is not tiles state, and the name says `tiles`, which is the honest cost
-        // of a full signature — the alternative was splitting the `Esc` cascade into a second
-        // system, and that cascade only works because every layer of it is peeled in one place.
-        ResMut<crate::confirm::Confirm>,
-    ),
+    mut tiles: TilesParam,
 ) {
     // **Every other verb stands down while the leaving question is up.** `S` and `D` answer it and
     // both mean something else on a map; a question that could be answered *and* acted on by one
@@ -5158,8 +7430,11 @@ fn keys(
     if state.leaving {
         return;
     }
-    let (mode, import, confirm) = &mut tiles;
-    let (move_drag, clone_drag, target, proposal, compose) = &mut tools;
+    let (mode, import, confirm, transforms) = &mut tiles;
+    let (move_drag, clone_drag, target, proposal, compose, clock) = &mut tools;
+    // `proposal` is a `&mut ResMut<Proposal>` here; the two layout helpers take a plain
+    // `&mut Proposal`, so the deref happens at the call rather than at the binding.
+    let proposal: &mut Proposal = &mut *proposal;
     // One clock for every key that repeats while held — see `keys::repeating`.
     let dt = time.delta_secs();
 
@@ -5176,12 +7451,12 @@ fn keys(
     );
 
     if keys::just_pressed(&keyboard, *live, Action::Undo) {
-        undo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed);
+        undo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed, transforms);
         return;
     }
 
     if keys::just_pressed(&keyboard, *live, Action::Redo) {
-        redo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed);
+        redo(&mut commands, &assets, &mut project, &mut open, &mut state, &placed, transforms);
         return;
     }
 
@@ -5275,6 +7550,28 @@ fn keys(
         return;
     }
 
+    // **The run tool.** The `B` family's command-modified sibling: drag a line and the armed piece
+    // repeats along it, at **its own pitch** — not the project's lattice, which is the whole
+    // reason the tool exists.
+    if keys::just_pressed(&keyboard, *live, Action::RunMode) {
+        state.tool = if state.tool == Tool::Run {
+            Tool::Place
+        } else {
+            Tool::Run
+        };
+        let said = if state.tool == Tool::Run {
+            "run mode: drag a line and the armed piece repeats along it, at its own pitch. \
+             Esc to stop."
+                .to_owned()
+        } else {
+            "run mode off".to_owned()
+        };
+        state.status.note(said);
+        move_drag.held = None;
+        clone_drag.held = None;
+        return;
+    }
+
     // **One Esc, and it undoes the most specific thing first.**
     //
     // The problem block, then a piece in hand, then an armed tool, then the armed piece. Each press
@@ -5299,10 +7596,8 @@ fn keys(
         // waiting for an answer: a generate can clear every unpinned row on the map. Discarding it
         // is not an undo — nothing was written — so there is nothing to record and nothing to put
         // back. That is the whole point of the door.
-        if proposal.0.take().is_some() {
-            state
-                .status
-                .note("layout thrown away — the map is as it was".to_owned());
+        if proposal.0.is_some() {
+            discard_layout(&mut open, &mut state, proposal);
             return;
         }
         if move_drag.held.is_some() {
@@ -5383,18 +7678,7 @@ fn keys(
     // tab that only committed the composition answered "saved" to an author who had twenty unsaved
     // Map edits behind them.
     if keys::just_pressed(&keyboard, *live, Action::Save) && live.0 != keys::Context::Tiles {
-        match open.save(&project) {
-            Ok(()) => {
-                let path = open.map_path.display().to_string();
-                state.status.note(format!("saved {path}"));
-                info!("saved {path}");
-            }
-            // The save refuses on an invalid map rather than writing one, and says which rule.
-            Err(e) => {
-                state.status.problem(format!("NOT SAVED: {e}"));
-                error!("{e}");
-            }
-        }
+        save_map(&project, &mut open, &mut state);
         return;
     }
 
@@ -5427,7 +7711,7 @@ fn keys(
         // **Then the ghost, if one is armed** — the thing being steered, and the thing on screen
         // showing a facing. Not over-UI-gated: this is a keyboard verb about an armed brush, and a
         // mouse resting over a panel says nothing about it.
-        if ghost_is_armed(state.tool, state.brush, compose.armed.is_some()) {
+        if ghost_is_armed(state.tool, state.brush, compose.0.is_some()) {
             state.brush_yaw = (state.brush_yaw + step).rem_euclid(360.0);
             return;
         }
@@ -5435,10 +7719,8 @@ fn keys(
             turn_under_cursor(
                 &mut commands,
                 &assets,
-                *pointer,
-                camera,
-                &mut project, &mut open,
-                &mut state,
+                (*pointer, camera),
+                MapEdit { project: &mut project, open: &mut open, state: &mut state },
                 &placed,
                 target.as_mut(),
                 step,
@@ -5462,7 +7744,7 @@ fn keys(
         }
         // The same subject rule the turn keys follow — the ghost carries a tip now, so `Y`/`U` can
         // answer about the thing being steered instead of only about a piece already down.
-        if ghost_is_armed(state.tool, state.brush, compose.armed.is_some()) {
+        if ghost_is_armed(state.tool, state.brush, compose.0.is_some()) {
             let tip = &mut state.brush_tip;
             if about_x {
                 tip.0 = (tip.0 + 1) % 4;
@@ -5522,17 +7804,17 @@ fn keys(
     // **G continues the layout.** Learn the grammar from what is already placed, then fill the free
     // cells with more of it — see `bevy_emerge_core::grammar`.
     if keys::just_pressed(&keyboard, *live, Action::GenerateDeclared) {
-        generate_from(&project, &open, &mut state, proposal, Source::Declared);
+        propose_layout(&project, &mut open, &mut state, proposal, clock, LayoutSource::Declared);
     }
     // The three arms need no `return` between them and no ordering: `just_pressed` refuses a binding
     // whose modifier state does not match exactly (`keys.rs`, `b.needs_mod != mod_held || !shift_ok`),
     // so bare, Shift and the platform modifier are mutually exclusive by construction. `keys`'
     // `the_three_generate_sources_do_not_shadow_each_other` is what keeps that true.
     if keys::just_pressed(&keyboard, *live, Action::GenerateComposed) {
-        generate_from(&project, &open, &mut state, proposal, Source::Composed);
+        propose_layout(&project, &mut open, &mut state, proposal, clock, LayoutSource::Composed);
     }
     if keys::just_pressed(&keyboard, *live, Action::Generate) {
-        generate(&project, &open, &mut state, proposal);
+        propose_layout(&project, &mut open, &mut state, proposal, clock, LayoutSource::Learned);
         return;
     }
 
@@ -5545,8 +7827,7 @@ fn keys(
             &assets,
             *pointer,
             camera,
-            &mut project, &mut open,
-            &mut state,
+            MapEdit { project: &mut project, open: &mut open, state: &mut state },
             pitch,
         );
         return;
@@ -5557,7 +7838,7 @@ fn keys(
     // straight in one direction and three in the other, and nobody keeps count. The only absolute in
     // the cluster.
     if keys::just_pressed(&keyboard, *live, Action::Straighten) {
-        if ghost_is_armed(state.tool, state.brush, compose.armed.is_some()) {
+        if ghost_is_armed(state.tool, state.brush, compose.0.is_some()) {
             state.brush_yaw = 0.0;
             state.brush_tip = (0, 0);
             state.status.note("brush straight again".to_owned());
@@ -5573,8 +7854,82 @@ fn keys(
                 target.as_mut(),
             );
         }
-        return;
     }
+}
+
+/// **Remove through the operation registry**, so the removal is saved and logged the way an agent's
+/// is. Returns the log line, the receipt and the ids taken; `None` when the registry refused, and the
+/// refusal is a problem where the author looks.
+fn remove_through(
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    operation: &str,
+    params: serde_json::Value,
+) -> Option<(String, String, Vec<String>)> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(
+            &mut *open,
+            OpenMap::new(
+                bevy_emerge_core::map::Map::default(),
+                std::path::PathBuf::new(),
+            ),
+        )),
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, operation, &params);
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            // **What was taken**, as the registry recorded it: the piece and what stood on it, or the stamp.
+            let ids = outcome
+                .after
+                .as_ref()
+                .and_then(|a| a.get("ids"))
+                .and_then(serde_json::Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some((operation_id, outcome.summary, ids))
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            state.status.problem(e.0);
+            None
+        }
+    }
+}
+
+/// **One placement, and what stands on it.** See [`remove_through`].
+fn remove_placement(
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    id: &str,
+) -> Option<(String, String, Vec<String>)> {
+    remove_through(project, open, state, "placement_remove", serde_json::json!({"id": id}))
+}
+
+/// **One stamp, whole.** See [`remove_through`].
+fn remove_stamp(
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    id: &str,
+) -> Option<(String, String, Vec<String>)> {
+    remove_through(project, open, state, "stamp_remove", serde_json::json!({"id": id}))
 }
 
 /// Remove the placement nearest the cursor, within a piece's own reach.
@@ -5585,8 +7940,8 @@ fn keys(
 /// at" means the same distance as "place one here".
 fn delete_index(
     commands: &mut Commands,
+    project: &Project,
     index: usize,
-
     open: &mut OpenMap,
     state: &mut EditorState,
     placed: &Query<(Entity, &Placement)>,
@@ -5595,42 +7950,24 @@ fn delete_index(
         state.status.note("nothing here to remove".to_owned());
         return;
     }
-    // **A stack goes whole.** `Placed::on` is a hard reference, so removing a host on its own left
-    // its riders pointing at a placement that no longer existed — and `resolve_y` then refused the
-    // whole map with *"rests on `table@3`, which does not exist"*. The editor could not draw it, the
-    // file could not be reloaded, and the only thing an author had done was delete a table.
-    //
-    // The same set the move tool carries, from the same function, so "this piece and what it holds up"
-    // means one thing in both verbs.
-    let group = bevy_emerge_core::stack::group_of(&open.map, index);
-    let head = open.map.placements[index].id.clone();
-
-    // **Back to front.** Removing an earlier row shifts every later one down, so a forward pass would
-    // take the wrong pieces the moment the composition held more than one — the rule the box removal below
-    // already follows, and now the single delete needs it too.
-    let mut ordered = group.clone();
-    ordered.sort_unstable();
-    let mut items: Vec<(usize, Box<Placed>)> = Vec::with_capacity(ordered.len());
-    for i in ordered.iter().rev() {
-        let removed = open.map.placements.remove(*i);
-        for (entity, marker) in placed {
-            if marker.0 == removed.id {
-                commands.entity(entity).despawn();
-            }
+    let id = open.map.placements[index].id.clone();
+    // **Through the registry**, so the removal is saved and logged the way an agent's is, and an
+    // agent's removal can be taken back with the same Cmd+Z this key feeds. A stack goes whole: the
+    // registry takes what stands on the piece with it, and reports every id it took.
+    let Some((line, summary, ids)) = remove_placement(project, open, state, &id) else {
+        return;
+    };
+    for (entity, marker) in placed {
+        if ids.contains(&marker.0) {
+            commands.entity(entity).despawn();
         }
-        items.push((*i, Box::new(removed)));
     }
-    // Ascending, which is the order `Undo::RemovedMany` puts them back in — an earlier row returning
-    // first shifts the later ones into place.
-    items.reverse();
-    state.status.note(match items.len() {
-        1 => format!("removed {head}"),
-        n => format!("removed {head} and {} on it", n - 1),
-    });
-    state.record(Undo::RemovedMany { items });
+    state.status.note(summary.clone());
+    state.record_logged(line, summary, false);
 }
 
 /// Take back the last edit.
+#[allow(clippy::too_many_arguments)]
 fn undo(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -5638,17 +7975,28 @@ fn undo(
     open: &mut OpenMap,
     state: &mut EditorState,
     placed: &Query<(Entity, &Placement)>,
+    transforms: &Query<&Transform>,
 ) {
     let Some(op) = state.undo.pop() else {
         state.status.note("nothing to undo".to_owned());
         return;
     };
-    if let Some(inverse) = apply(commands, assets, project, &mut *open, state, placed, op) {
-        state.redo.push(inverse);
+    // **Kept until it is known to have applied.** A refusal puts the entry back where it was: a
+    // refused undo is a refusal, not a spent one, so the author sees why and the stack is as it was
+    // (B-026). Only a stranded entry is dropped, because the map moved and there is nothing to put back.
+    let kept = op.clone();
+    match apply(commands, assets, project, &mut *open, state, placed, transforms, op) {
+        Reversal::Done(inverse) => {
+            state.settle();
+            state.redo.push(inverse);
+        }
+        Reversal::Refused => state.refused_entry(kept, false),
+        Reversal::Stranded => state.settle(),
     }
 }
 
 /// Take back the last thing undone.
+#[allow(clippy::too_many_arguments)]
 fn redo(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -5656,6 +8004,7 @@ fn redo(
     open: &mut OpenMap,
     state: &mut EditorState,
     placed: &Query<(Entity, &Placement)>,
+    transforms: &Query<&Transform>,
 ) {
     let Some(op) = state.redo.pop() else {
         state.status.note("nothing to redo".to_owned());
@@ -5665,16 +8014,101 @@ fn redo(
     // and exactly wrong here: redoing the first of five undone steps would throw away the other four,
     // so a redo could never be repeated. Redo moves an entry between the stacks; it does not author
     // anything.
-    if let Some(inverse) = apply(commands, assets, project, &mut *open, state, placed, op) {
-        state.undo.push(inverse);
+    let kept = op.clone();
+    match apply(commands, assets, project, &mut *open, state, placed, transforms, op) {
+        Reversal::Done(inverse) => {
+            state.settle();
+            state.undo.push(inverse);
+        }
+        Reversal::Refused => state.refused_entry(kept, true),
+        Reversal::Stranded => state.settle(),
     }
 }
 
-/// **Perform one reversal, and hand back the reversal of it.**
+/// **Move the history to a position in one step (E-018).** `position` is how many entries are
+/// applied: below the undo depth the newest entries are taken back, above it the next ones are given
+/// again.
 ///
-/// The single body behind both stacks — see [`Undo`] on why the enum is closed under inversion. A
-/// `None` return means the operation could not be applied and nothing should be pushed anywhere,
-/// which is how a half-applied edit is kept out of the other stack.
+/// **One jump is one group.** Each entry is applied as undo and redo apply it, so a refusal stops the
+/// jump where it is and says how far it got. The inverses that applied go on the other stack as ONE
+/// `Undo::Group`, so a single Cmd+Z reverses the whole jump. Redo replays the last one applied first,
+/// so the group is written in reverse.
+#[allow(clippy::too_many_arguments)]
+fn jump(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &mut Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    placed: &Query<(Entity, &Placement)>,
+    transforms: &Query<&Transform>,
+    position: usize,
+) {
+    let depth = state.undo.len();
+    let redo_side = position > depth;
+    let steps = position.abs_diff(depth);
+    let mut applied: Vec<Undo> = Vec::new();
+    for _ in 0..steps {
+        let op = if redo_side {
+            state.redo.pop()
+        } else {
+            state.undo.pop()
+        };
+        let Some(op) = op else { break };
+        let kept = op.clone();
+        match apply(commands, assets, project, &mut *open, state, placed, transforms, op) {
+            Reversal::Done(inverse) => {
+                state.settle();
+                applied.push(inverse);
+            }
+            Reversal::Refused => {
+                state.refused_entry(kept, redo_side);
+                state.status.problem(format!(
+                    "the jump stopped after {} of {} steps",
+                    applied.len(),
+                    steps
+                ));
+                break;
+            }
+            Reversal::Stranded => {
+                state.settle();
+                break;
+            }
+        }
+    }
+    if applied.is_empty() {
+        return;
+    }
+    applied.reverse();
+    let entry = if applied.len() == 1 {
+        applied.remove(0)
+    } else {
+        Undo::Group { ops: applied }
+    };
+    if redo_side {
+        state.undo.push(entry);
+    } else {
+        state.redo.push(entry);
+    }
+}
+
+/// What [`apply`] did with one reversal. Undo and redo both read it, so the rule is written once.
+enum Reversal {
+    /// Applied. The inverse goes on the other stack.
+    Done(Undo),
+    /// Refused with the map untouched. The entry goes back on the stack it came from.
+    Refused,
+    /// The map moved but could not be drawn. Nothing goes on either stack: offering to undo or redo a
+    /// state the author cannot see would compound it.
+    Stranded,
+}
+
+/// **Perform one reversal, and say what became of it.**
+///
+/// The single body behind both stacks — see [`Undo`] on why the enum is closed under inversion. The
+/// [`Reversal`] says whether the map changed and where the inverse goes. A refusal keeps the entry on
+/// the stack it came from, so refusing is never the same as spending the undo (B-026).
+#[allow(clippy::too_many_arguments)]
 fn apply(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -5682,8 +8116,9 @@ fn apply(
     open: &mut OpenMap,
     state: &mut EditorState,
     placed: &Query<(Entity, &Placement)>,
+    transforms: &Query<&Transform>,
     op: Undo,
-) -> Option<Undo> {
+) -> Reversal {
     let inverse = match op {
         Undo::Added { count } => {
             let keep = open.map.placements.len().saturating_sub(count);
@@ -5700,6 +8135,7 @@ fn apply(
                     commands.entity(entity).despawn();
                 }
             }
+            persist(open, project, state);
             state
                 .status
                 .note(format!("undid {} placement(s)", gone.len()));
@@ -5725,6 +8161,7 @@ fn apply(
             // replays exactly the `(at, on)` pairs the move displaced, rather than recomputing where
             // things "should" go and hoping the two agree.
             bevy_emerge_core::stack::restore_moved(&mut open.map, &moved);
+            persist(open, project, state);
             let ids: Vec<String> = moved
                 .was
                 .iter()
@@ -5750,7 +8187,7 @@ fn apply(
                             continue;
                         };
                         if let Some(e) =
-                            spawn_piece(commands, assets, &d, at, yaw, tip, open.map.origin, y)
+                            spawn_piece(commands, assets, Pose { d: &d, yaw, tip }, at, open.map.origin, y)
                         {
                             commands.entity(e).insert(Placement(id));
                         }
@@ -5765,7 +8202,7 @@ fn apply(
                     // happened to the drawing.
                     // Nothing goes on the other stack: the map moved but could not be drawn, and
                     // offering to redo a state the author cannot see would compound it.
-                    return None;
+                    return Reversal::Stranded;
                 }
             }
             state
@@ -5784,6 +8221,7 @@ fn apply(
                 open.map.placements.insert(at, *p);
                 at_indices.push(at);
             }
+            persist(open, project, state);
             let at_indices_for_inverse = at_indices.clone();
             match heights(project, &*open) {
                 Ok(ys) => {
@@ -5800,17 +8238,15 @@ fn apply(
                         if let Some(e) = spawn_piece(
                             commands,
                             assets,
-                            &d,
+                            Pose { d: &d, yaw: pyaw, tip: ptip },
                             pat,
-                            pyaw,
-                            ptip,
                             open.map.origin,
                             y,
                         ) {
                             commands.entity(e).insert(Placement(id));
                         }
                     }
-                    state.status.problem(format!("restored {n} placement(s)"));
+                    state.status.note(format!("restored {n} placement(s)"));
                 }
                 Err(e) => {
                     state
@@ -5849,7 +8285,10 @@ fn apply(
         }
         Undo::Turned { index, yaw } => {
             let Some(p) = open.map.placements.get_mut(index) else {
-                return None;
+                state.status.problem(
+                    "cannot take back that turn: the piece it turned is no longer on the map",
+                );
+                return Reversal::Refused;
             };
             let was = std::mem::replace(&mut p.yaw, yaw);
             let (id, at, tip, descriptor, patch) =
@@ -5867,13 +8306,11 @@ fn apply(
                 Ok(ys) => {
                     if let (Some(d), Some(&y)) =
                         (descriptor_with(&project.library, &descriptor, patch.as_ref()), ys.get(index))
-                    {
-                        if let Some(e) =
-                            spawn_piece(commands, assets, &d, at, yaw, tip, open.map.origin, y)
+                        && let Some(e) =
+                            spawn_piece(commands, assets, Pose { d: &d, yaw, tip }, at, open.map.origin, y)
                         {
                             commands.entity(e).insert(Placement(id.clone()));
                         }
-                    }
                     state.status.problem(format!("{id} back to {yaw:.0} deg"));
                 }
                 Err(e) => {
@@ -5887,7 +8324,10 @@ fn apply(
         }
         Undo::Lifted { index, lift } => {
             let Some(p) = open.map.placements.get_mut(index) else {
-                return None;
+                state.status.problem(
+                    "cannot take back that lift: the piece it lifted is no longer on the map",
+                );
+                return Reversal::Refused;
             };
             let was = std::mem::replace(&mut p.lift, lift);
             let id = p.id.clone();
@@ -5913,7 +8353,10 @@ fn apply(
         }
         Undo::Tipped { index, tip } => {
             let Some(p) = open.map.placements.get_mut(index) else {
-                return None;
+                state.status.problem(
+                    "cannot take back that tilt: the piece it tipped is no longer on the map",
+                );
+                return Reversal::Refused;
             };
             let was = std::mem::replace(&mut p.tip, tip);
             let id = p.id.clone();
@@ -5940,13 +8383,21 @@ fn apply(
             // could not apply contributes nothing; if none could, there is nothing to put on the
             // other stack.
             let mut inverses = Vec::with_capacity(ops.len());
+            let mut stranded = false;
             for op in ops {
-                if let Some(inv) = apply(commands, assets, project, &mut *open, state, placed, op) {
-                    inverses.push(inv);
+                match apply(commands, assets, project, &mut *open, state, placed, transforms, op) {
+                    Reversal::Done(inv) => inverses.push(inv),
+                    Reversal::Refused => {}
+                    // A sub-op that moved the map and could not draw it still moved it.
+                    Reversal::Stranded => stranded = true,
                 }
             }
             if inverses.is_empty() {
-                return None;
+                return if stranded {
+                    Reversal::Stranded
+                } else {
+                    Reversal::Refused
+                };
             }
             inverses.reverse();
             Undo::Group { ops: inverses }
@@ -5966,7 +8417,10 @@ fn apply(
                 .map(|(k, st)| (from + k, Box::new(st)))
                 .collect();
             if items.is_empty() {
-                return None;
+                state
+                    .status
+                    .problem("cannot take back those stamps: none are on the map");
+                return Reversal::Refused;
             }
             state
                 .status
@@ -6005,7 +8459,10 @@ fn apply(
                 items.push((*i, Box::new(open.map.stamps.remove(*i))));
             }
             if items.is_empty() {
-                return None;
+                state
+                    .status
+                    .problem("those stamps are not on this map any more");
+                return Reversal::Refused;
             }
             items.reverse();
             state
@@ -6018,7 +8475,7 @@ fn apply(
                 state
                     .status
                     .problem(format!("`{id}` is not on this map any more"));
-                return None;
+                return Reversal::Refused;
             };
             let now = st.at;
             st.at = from;
@@ -6030,29 +8487,185 @@ fn apply(
             // other stamp arm here makes.
             Undo::MovedStamp { id, from: now }
         }
-        Undo::Pinned {
-            index,
-            owned,
-            because,
-        } => {
-            let Some(p) = open.map.placements.get_mut(index) else {
-                return None;
+        Undo::Pin { line, id, .. } => {
+            // **Whether the piece is pinned now**, read before the undo runs. The entry it leaves on
+            // the other stack names the pin that redo would put back.
+            let was_owned = open
+                .map
+                .placements
+                .iter()
+                .find(|p| p.id == id)
+                .is_some_and(|p| p.owned);
+            // **Through the registry**, as the settings arm does: the map is taken into the
+            // operation's context and comes back either way.
+            let mut ctx = crate::ops::Ctx {
+                project: Some(project.clone()),
+                open: Some(std::mem::replace(
+                    &mut *open,
+                    OpenMap::new(
+                        bevy_emerge_core::map::Map::default(),
+                        std::path::PathBuf::new(),
+                    ),
+                )),
+                source: crate::ops::Source::Human,
+                root: None,
+                session: crate::ops::session_id(),
+                proposal: None,
             };
-            let was_owned = std::mem::replace(&mut p.owned, owned);
-            let was_because = std::mem::replace(&mut p.owned_because, because);
-            state.status.note(format!(
-                "{} {}",
-                p.id,
-                if owned { "pinned again" } else { "unpinned" }
-            ));
-            Undo::Pinned {
-                index,
-                owned: was_owned,
-                because: was_because,
+            let undone = crate::ops::undo(&mut ctx, Some(&line));
+            if let Some(fresh) = ctx.open.take() {
+                *open = fresh;
+            }
+            carry_changes(project, &mut ctx);
+            match undone {
+                Ok((
+                    _,
+                    crate::ops::Applied::Done {
+                        outcome,
+                        operation_id,
+                        ..
+                    },
+                )) => {
+                    state.status.note(outcome.summary);
+                    Undo::Pin {
+                        line: operation_id,
+                        id,
+                        owned: was_owned,
+                    }
+                }
+                // **A refusal is a refusal, where the author looks** — the agent may already have
+                // taken this pin back, or the piece may be gone. Nothing goes on the other stack.
+                Ok((_, crate::ops::Applied::Refused(e))) | Err(e) => {
+                    state
+                        .status
+                        .problem(format!("cannot undo the pin: {}", e.0));
+                    return Reversal::Refused;
+                }
+            }
+        }
+        Undo::Settings { line, .. } => {
+            // **Where the size is now**, read before the undo runs. The entry it leaves on the other
+            // stack names the size that redo would put back.
+            let was_bounds = open.map.bounds;
+            // **Through the registry**: the map is taken into the operation's context and comes back
+            // either way, as the size field does it.
+            let mut ctx = crate::ops::Ctx {
+                project: Some(project.clone()),
+                open: Some(std::mem::replace(
+                    &mut *open,
+                    OpenMap::new(
+                        bevy_emerge_core::map::Map::default(),
+                        std::path::PathBuf::new(),
+                    ),
+                )),
+                source: crate::ops::Source::Human,
+                root: None,
+                session: crate::ops::session_id(),
+                proposal: None,
+            };
+            let undone = crate::ops::undo(&mut ctx, Some(&line));
+            if let Some(fresh) = ctx.open.take() {
+                *open = fresh;
+            }
+            carry_changes(project, &mut ctx);
+            match undone {
+                Ok((
+                    _,
+                    crate::ops::Applied::Done {
+                        outcome,
+                        operation_id,
+                        ..
+                    },
+                )) => {
+                    state.status.note(format!("size back: {}", outcome.summary));
+                    Undo::Settings {
+                        line: operation_id,
+                        bounds: was_bounds,
+                    }
+                }
+                // **A refusal is a refusal, where the author looks** — the agent may already have
+                // taken this change back, or the map may have changed outside the log. Nothing goes
+                // on the other stack, because nothing changed.
+                Ok((_, crate::ops::Applied::Refused(e))) | Err(e) => {
+                    state
+                        .status
+                        .problem(format!("cannot undo the size change: {}", e.0));
+                    return Reversal::Refused;
+                }
+            }
+        }
+
+        // **A change made through the registry, by its operation-log line** — an agent's turn, or a
+        // turn the person made by key (B-019). The same registry undo as `Pin` and `Settings`, so
+        // Cmd+Z and the agent's undo share one history. A refusal is a refusal, where the author looks:
+        // the agent may have taken the change back, or the map may have moved outside the log.
+        Undo::Logged {
+            line,
+            phrase,
+            agent,
+        } => {
+            let mut ctx = crate::ops::Ctx {
+                project: Some(project.clone()),
+                open: Some(std::mem::replace(
+                    &mut *open,
+                    OpenMap::new(
+                        bevy_emerge_core::map::Map::default(),
+                        std::path::PathBuf::new(),
+                    ),
+                )),
+                source: crate::ops::Source::Human,
+                root: None,
+                session: crate::ops::session_id(),
+                proposal: None,
+            };
+            let undone = crate::ops::undo(&mut ctx, Some(&line));
+            if let Some(fresh) = ctx.open.take() {
+                *open = fresh;
+            }
+            carry_changes(project, &mut ctx);
+            match undone {
+                Ok((
+                    _,
+                    crate::ops::Applied::Done {
+                        outcome,
+                        operation_id,
+                        ..
+                    },
+                )) => {
+                    // **The turn is on screen as well as in the map.** An undo that only changed the
+                    // map left the piece drawn at the angle it had before (B-019).
+                    if let Err(e) = draw_every_placement(commands, assets, project, open, placed, transforms) {
+                        state
+                            .status
+                            .problem(format!("cannot draw the map after undoing {phrase}: {e}"));
+                    }
+                    state.status.note(outcome.summary);
+                    Undo::Logged {
+                        line: operation_id,
+                        phrase,
+                        agent,
+                    }
+                }
+                Ok((_, crate::ops::Applied::Refused(e))) | Err(e) => {
+                    state
+                        .status
+                        .problem(format!("cannot undo {phrase}: {}", e.0));
+                    return Reversal::Refused;
+                }
             }
         }
     };
-    Some(inverse)
+    Reversal::Done(inverse)
+}
+
+/// **A change to the map is written before the next frame reads the file.** The file watcher treats
+/// a file that differs from memory as an outside edit (B-044), so an undo that changes the map and
+/// leaves the file behind is an undo the watcher can take back. A failed write stays loud: the
+/// change stays in memory and the author is told the file does not match it.
+fn persist(open: &mut OpenMap, project: &Project, state: &mut EditorState) {
+    if let Err(e) = open.save(project) {
+        state.status.problem(format!("changed, but not written: {e}"));
+    }
 }
 
 /// Pin or unpin the placement nearest the cursor.
@@ -6070,25 +8683,201 @@ fn toggle_pin(
         state.status.note("nothing here to pin".to_owned());
         return;
     };
-    let Some(p) = open.map.placements.get_mut(index) else {
+    let Some(p) = open.map.placements.get(index) else {
         return;
     };
+    let id = p.id.clone();
     if p.owned {
-        let because = p.owned_because.clone();
-        p.owned = false;
-        p.owned_because = None;
-        state.record(Undo::Pinned {
-            index,
-            owned: true,
-            because,
-        });
-        state.status.note(format!("unpinned {}", p.id));
+        set_pin(project, open, state, &id, false, None);
     } else {
-        let id = p.id.clone();
-        state.pinning = Some((index, String::new()));
+        state.pinning = Some((id.clone(), String::new()));
         state.status.note(format!(
             "why is {id} pinned? Enter to keep it, Esc to cancel"
         ));
+    }
+}
+
+/// **Set or clear one placement's pin through the registry**, the way the size field resizes the
+/// map. The O key and the pin-reason field both come here, so the rule (a pin has a reason) and
+/// the refusal live in one place: `placement_set_pin`.
+///
+/// **The undo entry names the pin the placement had before**, so Cmd+Z puts that back and the
+/// phrase reads `pin` or `unpin` the way the author will say it.
+fn set_pin(
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    id: &str,
+    pinned: bool,
+    because: Option<String>,
+) {
+    let was_owned = open
+        .map
+        .placements
+        .iter()
+        .find(|p| p.id == id)
+        .is_some_and(|p| p.owned);
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(
+            &mut *open,
+            OpenMap::new(
+                bevy_emerge_core::map::Map::default(),
+                std::path::PathBuf::new(),
+            ),
+        )),
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let outcome = crate::ops::dispatch(
+        &mut ctx,
+        "placement_set_pin",
+        &serde_json::json!({"id": id, "pinned": pinned, "because": because}),
+    );
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            state.status.note(outcome.summary);
+            state.record(Undo::Pin {
+                line: operation_id,
+                id: id.to_owned(),
+                owned: was_owned,
+            });
+        }
+        // **A refusal is a refusal, where the author looks** — a pin with no reason is the common one.
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            state.status.problem(e.0);
+        }
+    }
+}
+
+/// **Carry an operation's changes back into the project.** A rename rewrites `rules.ron`'s examples,
+/// and generate reads them from the Project resource; a label write changes the measured library,
+/// which the Map draws from. Either must go back in, or the file and the screen disagree until the
+/// watcher re-opens the map. Each is compared first and written only when it changed, so a
+/// change-detected resource is not marked changed by an operation that left it alone (cycle 9 gap 2).
+pub(crate) fn carry_changes(project: &mut Project, ctx: &mut crate::ops::Ctx) {
+    let Some(fresh) = ctx.project.take() else {
+        return;
+    };
+    if project.rules != fresh.rules {
+        project.rules = fresh.rules.clone();
+    }
+    if project.measured != fresh.measured {
+        adopt_library(project, &fresh);
+    }
+}
+
+/// **Rename the open map through the registry**, the way the size field resizes it. The N key's Enter
+/// comes here, so the name rule (snake case, not empty, no other map holds it) and the move of the file
+/// live in `map_rename`, and the receipt says where the file went.
+fn rename_map(
+    project: Option<&mut Project>,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    raw: &str,
+) {
+    // **The same name is nothing to do.** The operation would refuse it as a problem, but the author
+    // asked for no change, so the answer is the Escape answer.
+    if bevy_emerge_core::naming::to_snake_case(raw) == open.map.name {
+        state.status.note("name unchanged".to_owned());
+        return;
+    }
+    let mut ctx = crate::ops::Ctx {
+        project: project.as_ref().map(|p| (**p).clone()),
+        open: Some(std::mem::replace(
+            open,
+            OpenMap::new(
+                bevy_emerge_core::map::Map::default(),
+                std::path::PathBuf::new(),
+            ),
+        )),
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, "map_rename", &serde_json::json!({"name": raw}));
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    if let Some(project) = project {
+        carry_changes(project, &mut ctx);
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            // **The game reads this map by name**, so the receipt says the new file is the one it needs.
+            state.status.note(format!(
+                "{} — the game reads this map by name, so it needs the new one.",
+                outcome.summary
+            ));
+            // **On the undo stack**, so Cmd+Z puts the old name back and the file with it.
+            state.record(Undo::Logged {
+                line: operation_id,
+                phrase: format!("rename to `{}`", open.map.name),
+                agent: false,
+            });
+        }
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            state.status.problem(format!("cannot rename the map: {}", e.0));
+        }
+    }
+}
+
+/// **Turn one placement to a facing through the operation registry**, so a turn is validated, saved
+/// and logged the way an agent's is. Returns whether it was applied. A refusal is a problem, where
+/// the author looks; the turn's own note is written by the caller.
+fn set_yaw(
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    id: &str,
+    yaw: f32,
+) -> Option<(String, String)> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(
+            &mut *open,
+            OpenMap::new(
+                bevy_emerge_core::map::Map::default(),
+                std::path::PathBuf::new(),
+            ),
+        )),
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    let outcome = crate::ops::dispatch(
+        &mut ctx,
+        "placement_set_yaw",
+        &serde_json::json!({"id": id, "yaw": yaw}),
+    );
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => Some((operation_id, outcome.summary)),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            state.status.problem(e.0);
+            None
+        }
     }
 }
 
@@ -6158,34 +8947,48 @@ fn straighten_under_cursor(
     }
 }
 
+/// The pointer and the main camera it is aimed through, as `turn_under_cursor` takes them.
+type CameraAim<'w, 's, 'c, 'g> = (
+    crate::view::Pointer,
+    Option<Single<'w, 's, (&'c Camera, &'g GlobalTransform), With<MainCamera>>>,
+);
+
 fn turn_under_cursor(
     commands: &mut Commands,
     assets: &AssetServer,
-    pointer: crate::view::Pointer,
-    camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
-    project: &mut Project,
-    open: &mut OpenMap,
-    state: &mut EditorState,
+    aim: CameraAim<'_, '_, '_, '_>,
+    edit: MapEdit,
     placed: &Query<(Entity, &Placement)>,
     lock: &mut TargetLock,
     step: f32,
 ) {
+    let (pointer, camera) = aim;
+    let MapEdit { project, open, state } = edit;
     let Some(index) = under_cursor_target(lock, pointer, camera, project, &*open) else {
         state.status.note("nothing here to turn".to_owned());
         return;
     };
-    let Some(p) = open.map.placements.get_mut(index) else {
+    let Some(p) = open.map.placements.get(index) else {
         return;
     };
     // Recorded before it moves — the entry carries the angle to go back to.
-    let was_yaw = p.yaw;
-    p.yaw = (p.yaw + step).rem_euclid(360.0);
-    let (id, at, yaw, tip, descriptor, patch) =
-        (p.id.clone(), p.at, p.yaw, p.tip, p.descriptor.clone(), p.patch.clone());
-    state.record(Undo::Turned {
-        index,
-        yaw: was_yaw,
-    });
+    let (id, was_yaw) = (p.id.clone(), p.yaw);
+    // **Through the registry**, so the turn is saved and logged the way an agent's is.
+    let Some((line, summary)) = set_yaw(
+        project,
+        open,
+        state,
+        &id,
+        (was_yaw + step).rem_euclid(360.0),
+    ) else {
+        return;
+    };
+    let Some(p) = open.map.placements.get(index) else {
+        return;
+    };
+    let (at, yaw, tip, descriptor, patch) =
+        (p.at, p.yaw, p.tip, p.descriptor.clone(), p.patch.clone());
+    state.record_logged(line, summary, false);
 
     for (entity, marker) in placed {
         if marker.0 == id {
@@ -6196,13 +8999,11 @@ fn turn_under_cursor(
     match heights(project, &*open) {
         Ok(ys) => {
             if let (Some(d), Some(&y)) = (descriptor_with(&project.library, &descriptor, patch.as_ref()), ys.get(index))
-            {
-                if let Some(e) =
-                    spawn_piece(commands, assets, &d, at, yaw, tip, open.map.origin, y)
+                && let Some(e) =
+                    spawn_piece(commands, assets, Pose { d: &d, yaw, tip }, at, open.map.origin, y)
                 {
                     commands.entity(e).insert(Placement(id.clone()));
                 }
-            }
         }
         Err(e) => {
             state
@@ -6235,7 +9036,8 @@ fn redraw_placements(
             commands.entity(entity).despawn();
         }
     }
-    let ys = heights(project, &*open)?;
+    let ys = heights(project, open)?;
+    let paints = bevy_emerge::drawn_paints(&open.map, &project.library);
     for &i in indices {
         let Some(p) = open.map.placements.get(i) else {
             continue;
@@ -6246,10 +9048,195 @@ fn redraw_placements(
         if let Some(e) = spawn_piece(
             commands,
             assets,
-            &d,
+            Pose { d: &d, yaw: p.yaw, tip: p.tip },
             p.at,
-            p.yaw,
-            p.tip,
+            open.map.origin,
+            y,
+        ) {
+            commands.entity(e).insert(Placement(p.id.clone()));
+            if let Some(&paint) = paints.get(i).filter(|paint| **paint != 0) {
+                commands.entity(e).insert(bevy_emerge::Paint(paint));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// **A map edit can change the drawn paint of a piece it did not touch.** A larger field laid under
+/// existing roads makes each road the smaller piece, so the road's level rises while the road itself
+/// is unedited, and its standing entity keeps the paint it was spawned with. This redraws exactly the
+/// standing pieces whose drawn paint no longer matches, by the same despawn and respawn
+/// [`redraw_placements`] does. It reads the map rather than the edit, so every change reaches it.
+fn relevel_placements(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    project: Res<Project>,
+    open: Res<OpenMap>,
+    placed: Query<(Entity, &Placement)>,
+    painted: Query<&bevy_emerge::Paint>,
+) {
+    if !open.is_changed() {
+        return;
+    }
+    let paints = bevy_emerge::drawn_paints(&open.map, &project.library);
+    let standing: std::collections::HashMap<&str, i8> = placed
+        .iter()
+        .map(|(e, m)| (m.0.as_str(), painted.get(e).map_or(0, |p| p.0)))
+        .collect();
+    let stale: Vec<usize> = open
+        .map
+        .placements
+        .iter()
+        .enumerate()
+        .filter(|(i, p)| {
+            standing
+                .get(p.id.as_str())
+                .is_some_and(|now| *now != paints[*i])
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if stale.is_empty() {
+        return;
+    }
+    if let Err(e) = redraw_placements(&mut commands, &assets, &project, &open, &placed, &stale) {
+        error!("{e}");
+    }
+}
+
+/// **A map edited on disk reaches the pieces already standing on the map.**
+///
+/// **This is E-007, and the shape of the bug is what makes it worth naming.** The file watcher
+/// read the map file and put the new map into [`OpenMap`] — and the pieces on screen are
+/// *entities*, spawned once, when the editor opened. So a person editing `town.map.ron` in a
+/// text editor got:
+///
+/// - **the inspector's numbers updated** — the bounds, the count, the note, all read from the
+///   map every frame;
+/// - **the world unchanged** — the pieces on screen were the ones spawned at startup, in the
+///   places they were then.
+///
+/// **That is the worst shape a bug can have: the editor looks like it took the edit.** The
+/// number says the map is 55 m deep and the ground in the viewport is 26 m deep, and a
+/// developer who trusts the number is wrong about the picture — and the picture is what they
+/// are authoring.
+///
+/// **So the whole map is redrawn**, and not a subset of it: a placement that moved may have
+/// something resting on it, and the heights are resolved over the finished map, so a partial
+/// redraw would leave the stack half-resolved.
+///
+/// **The id counter is re-seeded too.** It is seeded past the largest `@n` in the file, and a
+/// file edited in a text editor can carry an id the editor has never minted — so a counter left
+/// where it was would mint an id the file already holds, and the map would hold two placements
+/// with one name. **Undo despawns by id match**, so taking one back would sweep the other off
+/// the screen with it.
+#[allow(clippy::too_many_arguments)]
+fn redraw_the_map(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    project: Res<Project>,
+    open: Res<OpenMap>,
+    mut state: ResMut<EditorState>,
+    mut due: ResMut<crate::watch::Due>,
+    placed: Query<(Entity, &Placement)>,
+    transforms: Query<&Transform>,
+) {
+    if !due.map_replaced {
+        return;
+    }
+    // **The flag is taken, not read.** A redraw that ran twice would respawn every piece twice,
+    // and the map would show every piece twice.
+    due.map_replaced = false;
+
+    // **Everything standing is swept**, and everything in the map is spawned again. A map whose
+    // stacking will not resolve is a map the author has to be told about, and the last good screen
+    // stays, which is why the sweep happens after the heights are resolved and not before.
+    if let Err(e) = draw_every_placement(&mut commands, &assets, &project, &open, &placed, &transforms) {
+        state
+            .status
+            .problem(format!("the map on disk does not resolve: {e}"));
+        return;
+    }
+    // **And the counter is re-seeded**, so the next id the editor mints cannot be one the file
+    // already carries.
+    state.next_id = next_id_after(&open.map);
+}
+
+/// **Every placement on the map, drawn again from the open map.** The heights resolve before
+/// anything is swept, so a map whose stacking will not resolve leaves the last good screen up.
+fn draw_every_placement(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &Project,
+    open: &OpenMap,
+    placed: &Query<(Entity, &Placement)>,
+    transforms: &Query<&Transform>,
+) -> Result<(), String> {
+    let ys = heights(project, open)?;
+    // **A piece already drawn where the map wants it is left alone** — B-048.
+    //
+    // This swept every standing entity and then spawned the map again, so for one frame the screen
+    // had **no placements at all**. Measured on the town map at 15 fps: the undo frame (`f009`,
+    // t=0.60 s) had **0 green field pixels** where its neighbours have 143,694. The person's `Cmd+Z`
+    // on a key removal never blanked — it takes the targeted path — so the defect was this sweep,
+    // which the logged undo and an agent's undo both reach.
+    //
+    // **"Standing" is a claim about the picture, not about the id.** Two things must both hold for an
+    // entity to be left alone, and each was found the hard way: its row must still be in the map (a
+    // removal goes through the registry and despawns nothing, so a removed piece's entity outlives
+    // its row), and it must be drawn **where that row says** (`a_map_edited_on_disk_reaches_the_screen`
+    // caught the cheaper version: a piece moved on disk kept its entity and stayed at the old
+    // place). Whatever fails either test is despawned and spawned again below.
+    let live: std::collections::HashSet<&str> =
+        open.map.placements.iter().map(|p| p.id.as_str()).collect();
+    let mut keep: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for (entity, marker) in placed.iter() {
+        let drawn_right = live.contains(marker.0.as_str())
+            && open
+                .map
+                .placements
+                .iter()
+                .position(|p| p.id == marker.0)
+                .is_some_and(|i| {
+                let p = &open.map.placements[i];
+                let (Some(d), Some(&y)) = (descriptor_of(&project.library, p), ys.get(i)) else {
+                    return false;
+                };
+                // **Position AND facing**, because a turn moves neither the row's `at` nor the
+                // piece's translation — it only spins it. `an_agent_turn_stands_on_the_screen` is the
+                // test that caught a translation-only version: the file and the map said 90
+                // degrees, the piece on screen stayed at 0.
+                let want_at =
+                    bevy_emerge::origin_of(p.at, open.map.origin, y + bevy_emerge::tip_seat(&d, p.tip));
+                let want_rot = Quat::from_rotation_y(bevy_emerge::draw_yaw(&d, p.yaw).to_radians())
+                    * bevy_emerge::tip_quat(p.tip);
+                let Ok(got) = transforms.get(entity) else {
+                    return false;
+                };
+                got.translation.distance(want_at) < 1e-3 && got.rotation.angle_between(want_rot) < 1e-3
+            });
+        if drawn_right {
+            keep.insert(marker.0.as_str());
+        } else {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (i, p) in open.map.placements.iter().enumerate() {
+        if keep.contains(p.id.as_str()) {
+            continue;
+        }
+        let Some(d) = descriptor_of(&project.library, p) else {
+            warn!(
+                "placement `{}` names descriptor `{}`, which this library does not have",
+                p.id, p.descriptor
+            );
+            continue;
+        };
+        let Some(&y) = ys.get(i) else { continue };
+        if let Some(e) = spawn_piece(
+            commands,
+            assets,
+            Pose { d: &d, yaw: p.yaw, tip: p.tip },
+            p.at,
             open.map.origin,
             y,
         ) {
@@ -7155,7 +10142,7 @@ fn hide_carried(
     };
 
     for (marker, mut vis) in &mut placed {
-        let want = if carried.iter().any(|id| *id == marker.0) {
+        let want = if carried.contains(&marker.0) {
             Visibility::Hidden
         } else {
             // Nothing else in this crate manages a placement's visibility — `spawn_descriptor` gives
@@ -7354,6 +10341,9 @@ pub(crate) fn brush_ghost_subject(
         // Move armed with nothing picked up: the honest preview of "click to pick something up" is
         // no ghost.
         (None, Tool::Move) => None,
+        // **The run tool draws its own line**, and a brush ghost beside it would be a second
+        // preview for a drag that repeats the piece rather than placing one.
+        (None, Tool::Run) => None,
         // **A composition outranks the brush**, because `drive_place` stamps it and returns: the
         // click puts the group down, so previewing the palette piece would be a promise about a
         // placement that is not going to happen. `drive_stamp_ghost` draws what will land.
@@ -7363,25 +10353,91 @@ pub(crate) fn brush_ghost_subject(
     }
 }
 
+/// The map resources a system writes, as one system parameter: the project, the open map and the
+/// editor's state. They always travel together, so a placing or editing system takes one parameter.
+#[derive(bevy::ecs::system::SystemParam)]
+struct MapWrite<'w> {
+    project: ResMut<'w, Project>,
+    open: ResMut<'w, OpenMap>,
+    state: ResMut<'w, EditorState>,
+}
+
+/// The same three map resources, read only. A system that previews a placement reads them and never writes.
+#[derive(bevy::ecs::system::SystemParam)]
+struct MapRead<'w> {
+    project: Res<'w, Project>,
+    open: Res<'w, OpenMap>,
+    state: Res<'w, EditorState>,
+}
+
+/// What `drive_move` reads from the keyboard, the mouse and the editor's settings.
+#[derive(bevy::ecs::system::SystemParam)]
+struct MoveInput<'w> {
+    mouse: Res<'w, ButtonInput<MouseButton>>,
+    // Held, the platform modifier drops the grid snap — see `map_at`.
+    keyboard: Res<'w, ButtonInput<KeyCode>>,
+    rung: Res<'w, Rung>,
+    assets: Res<'w, AssetServer>,
+    anchor: Res<'w, FineAnchor>,
+    picture: Res<'w, StampPicture>,
+    compose: Res<'w, crate::compose::Armed>,
+}
+
+/// Where the cursor is, and which UI node it is over.
+#[derive(bevy::ecs::system::SystemParam)]
+struct Aim<'w, 's> {
+    hovered_ui: Query<'w, 's, &'static Hovered>,
+    pointer: Res<'w, crate::view::Pointer>,
+    snip: Res<'w, crate::snip::SnipEdit>,
+}
+
+/// The pointer as the placing and removing drivers read it: where it is, what UI it is over, and
+/// whether a snip has claimed it. One bundle, because `drive_place` is at Bevy's parameter limit.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PointerClaim<'w, 's> {
+    hovered_ui: Query<'w, 's, &'static Hovered>,
+    pointer: Res<'w, crate::view::Pointer>,
+    snip: Res<'w, crate::snip::SnipEdit>,
+}
+
+/// What `drive_stamp_ghost` reads to draw the stamp preview.
+#[derive(bevy::ecs::system::SystemParam)]
+struct GhostInput<'w> {
+    keyboard: Res<'w, ButtonInput<KeyCode>>,
+    rung: Res<'w, Rung>,
+    armed: Res<'w, crate::compose::Armed>,
+    anchor: Res<'w, FineAnchor>,
+    pointer: Res<'w, crate::view::Pointer>,
+}
+
 fn drive_move(
     mut commands: Commands,
-    mouse: Res<ButtonInput<MouseButton>>,
-    // Held, the platform modifier drops the grid snap — see `map_at`.
-    keyboard: Res<ButtonInput<KeyCode>>,
-    rung: Res<Rung>,
-    assets: Res<AssetServer>,
-    hovered_ui: Query<&Hovered>,
-    pointer: Res<crate::view::Pointer>,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     placed: Query<(Entity, &Placement)>,
-    mut project: ResMut<Project>,
-    mut open: ResMut<OpenMap>,
-    mut state: ResMut<EditorState>,
     mut drag: ResMut<MoveDrag>,
-    anchor: Res<FineAnchor>,
-    picture: Res<StampPicture>,
-    compose: Res<crate::compose::ComposeState>,
+    input: MoveInput,
+    aim: Aim,
+    map: MapWrite,
 ) {
+    let MoveInput {
+        mouse,
+        keyboard,
+        rung,
+        assets,
+        anchor,
+        picture,
+        compose,
+    } = input;
+    let Aim {
+        hovered_ui,
+        pointer,
+        snip,
+    } = aim;
+    let MapWrite {
+        mut project,
+        mut open,
+        mut state,
+    } = map;
     // **A clear cursor moves by clicking.** `Tool::Move` (`B`) stays the deliberate arm — it works
     // with a brush still armed, and `Shift+B`'s set-clone rides the same key — but when nothing is
     // armed at all the click has no other meaning: `drive_place`'s own comment is *"nothing armed
@@ -7393,7 +10449,7 @@ fn drive_move(
     // drop, and the same `Esc` peel putting it back — a second entry to the verb, never a second
     // verb. Arming anything mid-carry (a palette row, a composition) makes the cursor un-clear and
     // the cancel arm below releases the piece, which never left the map in the first place.
-    let clear_cursor = cursor_is_clear(state.tool, state.brush, compose.armed.is_some());
+    let clear_cursor = cursor_is_clear(state.tool, state.brush, compose.0.is_some());
     // Read, never write, unless something happened: `state` is watched by `rebuild_palette`, and an
     // unconditional deref here rebuilds all forty-odd rows every frame. Same rule as `drive_removal`.
     if state.tool != Tool::Move && !clear_cursor {
@@ -7406,7 +10462,8 @@ fn drive_move(
         return;
     }
     // A click on a control is not a click on the world.
-    if hovered_ui.iter().any(|h| h.0) {
+    // A snip that owns the pointer takes the click too.
+    if hovered_ui.iter().any(|h| h.0) || snip.claims_pointer() {
         return;
     }
     let Some(camera) = camera else {
@@ -7586,7 +10643,7 @@ fn drop_piece(
                 else {
                     continue;
                 };
-                if let Some(e) = spawn_piece(commands, assets, &d, at, yaw, tip, open.map.origin, y) {
+                if let Some(e) = spawn_piece(commands, assets, Pose { d: &d, yaw, tip }, at, open.map.origin, y) {
                     commands.entity(e).insert(Placement(id));
                 }
             }
@@ -7858,7 +10915,7 @@ fn nearest_placement(
     let (cam, cam_tf) = *camera;
     let hit = cursor_ground(pointer.0, cam, cam_tf)?;
     // Both sides in map space: `at` is authored there and the cursor answers in world metres.
-    pick_at(project, &*open, open.map.to_map_space((hit.x, hit.z)))
+    pick_at(project, open, open.map.to_map_space((hit.x, hit.z)))
 }
 
 /// **What the piece-verbs would act on right now**, already written as the readout line.
@@ -7910,7 +10967,12 @@ fn sense_under_cursor(
     );
     let picked = under_cursor_target(&mut lock, *pointer, camera, &project, &open)
         .and_then(|i| open.map.placements.get(i));
-    let want = under_readout(on_ui, picked);
+    // **The descriptor comes from the piece, through the same resolver every other question uses**,
+    // because the layer a two-way placement took is only readable next to the mount that asked
+    // (E-059). A piece the library has dropped answers `None` and the line keeps the words it had.
+    let described = picked
+        .and_then(|p| bevy_emerge_core::stack::descriptor_of(&project.library, p));
+    let want = under_readout(on_ui, picked, described.as_deref());
     if under.0 != want {
         under.0 = want;
     }
@@ -7923,7 +10985,11 @@ fn sense_under_cursor(
 /// blank whatever the rule does, and **passes with the gate deleted**. That is not a hypothetical:
 /// the first version of this test was written that way, mutation-tested, and found to assert
 /// nothing. The rule lives here so it can be asked directly.
-pub fn under_readout(on_ui: bool, picked: Option<&Placed>) -> String {
+pub fn under_readout(
+    on_ui: bool,
+    picked: Option<&Placed>,
+    descriptor: Option<&bevy_emerge_core::descriptor::Descriptor>,
+) -> String {
     // A panel is drawn over the map, so a pointer on one is not over the piece behind it — and this
     // line ends "edits it" about a key that acts on the PLACE selection there.
     if on_ui {
@@ -7933,13 +10999,43 @@ pub fn under_readout(on_ui: bool, picked: Option<&Placed>) -> String {
         // The chord comes from the census, never retyped — `keys.rs`'s one rule, and the reason
         // this line cannot come to name a key the build does not read.
         Some(p) => format!(
-            "{}  — {} edits it",
+            "{}  — {}{} edits it",
             p.id,
+            layer_of(p, descriptor),
             keys::chord_text(keys::binding(Action::EditTile))
         ),
         // Empty over bare floor. A row saying "nothing" would be a row that is never blank, and the
         // eye stops reading a line that always has something in it.
         None => String::new(),
+    }
+}
+
+/// **Which of its two layers this placement took, when that is a question** — E-059.
+///
+/// [`Mount::OnSurfaceOrFloor`](bevy_emerge_core::descriptor::Mount::OnSurfaceOrFloor) is the one
+/// mount whose answer belongs to the *placement*: dropped on a bench it seats there, dropped on open
+/// floor it stands on the deck, and `Placed::on` is the map file's record of which. Every other
+/// mount is settled by the descriptor, so the kit door's row already answers it and this says
+/// nothing — an ordinary crate announcing "on floor" on every hover would be the always-non-blank
+/// row this readout's own doc refuses.
+///
+/// Returns a phrase ready to sit before the chord, or `""`.
+///
+/// **The host is named, not just counted.** "on a host" was the first version and a test it was
+/// written against refused it: the map records *which* piece (`Placed::on`), and a line that says
+/// only that there is one leaves the author to hover the furniture to find out. It is the same
+/// argument [`crate::editor::under_readout`] makes for naming the piece at all.
+fn layer_of(
+    p: &Placed,
+    descriptor: Option<&bevy_emerge_core::descriptor::Descriptor>,
+) -> String {
+    use bevy_emerge_core::descriptor::Mount;
+    if !matches!(descriptor.map(|d| &d.mount), Some(Some(Mount::OnSurfaceOrFloor { .. }))) {
+        return String::new();
+    }
+    match &p.on {
+        Some(host) => format!("on `{host}`  — "),
+        None => "on the floor  — ".to_owned(),
     }
 }
 
@@ -7965,10 +11061,9 @@ fn under_cursor_target(
             snap_point(project, at.0, SnapLevel::Tile),
             snap_point(project, at.1, SnapLevel::Tile),
         ) == *cell
+            && let Some(i) = open.map.placements.iter().position(|p| &p.id == id)
         {
-            if let Some(i) = open.map.placements.iter().position(|p| &p.id == id) {
-                return Some(i);
-            }
+            return Some(i);
         }
         lock.0 = None;
     }
@@ -7980,7 +11075,7 @@ fn under_cursor_target(
     // the honest thing: the verbs above say "nothing here" rather than acting on a guess.
     let ys = bevy_emerge_core::stack::resolve_y(&open.map, &project.library).ok()?;
     let (origin, dir) = crate::view::cursor_ray(pointer.0, cam, cam_tf)?;
-    ray_pick(project, &*open, &ys, origin, dir)
+    ray_pick(project, open, &ys, origin, dir)
 }
 
 /// **`H`: step the target through the stack under the cursor**, bottom to top, wrapping.
@@ -8011,7 +11106,7 @@ fn cycle_target(
         snap_point(project, at.0, SnapLevel::Tile),
         snap_point(project, at.1, SnapLevel::Tile),
     );
-    let ys = heights(project, &*open).unwrap_or_default();
+    let ys = heights(project, open).unwrap_or_default();
     let mut stack: Vec<(usize, f32)> = open
         .map
         .placements
@@ -8172,7 +11267,9 @@ fn group_name_keys(
     open: Res<OpenMap>,
     mut state: ResMut<EditorState>,
     mut clone_drag: ResMut<CloneDrag>,
-    mut compose: ResMut<crate::compose::ComposeState>,
+    // **The arm is its own resource** — see `compose::Armed`. Capturing a set arms it, and the arm
+    // outlives a door change.
+    mut armed: ResMut<crate::compose::Armed>,
 ) {
     if state.grouping.is_none() {
         // Drain before leaving, or the keystroke that OPENED this field is read as its first
@@ -8219,7 +11316,7 @@ fn group_name_keys(
                         };
                         // Armed, so the next click on the map stamps what was just made. The whole
                         // point of capturing is to place it again.
-                        compose.armed = Some(id.clone());
+                        armed.0 = Some(id.clone());
                         clone_drag.held = None;
                         state.grouping = None;
                         state.replacing = None;
@@ -8361,6 +11458,7 @@ fn pin_reason_keys(
 
     mut open: ResMut<OpenMap>,
     mut state: ResMut<EditorState>,
+    project: Option<Res<Project>>,
 ) {
     if state.pinning.is_none() {
         // **Drain before leaving.** The reader's cursor only advances when `read()` is called, so
@@ -8376,30 +11474,22 @@ fn pin_reason_keys(
         }
         match &event.logical_key {
             Key::Enter => {
-                let Some((index, reason)) = state.pinning.take() else {
+                // **Named by its id, not its row**, and the id is held from the moment the field
+                // opened: the list can change while the field is open (an agent can remove a lower
+                // row), and a row would then name a different piece. A piece removed while the field
+                // was open is the registry's to refuse, and it reaches the toast.
+                let Some((id, reason)) = state.pinning.take() else {
                     return;
                 };
-                let reason = reason.trim().to_owned();
-                if reason.is_empty() {
+                let Some(project) = project.as_deref() else {
                     state
                         .status
-                        .note("a pin needs a reason; nothing was pinned".to_owned());
+                        .problem("no project is open, so nothing was pinned.".to_owned());
                     return;
-                }
-                // Unpinned is what it was — this field only opens for a piece being pinned.
-                state.record(Undo::Pinned {
-                    index,
-                    owned: false,
-                    because: None,
-                });
-                let pinned_id = open.map.placements.get_mut(index).map(|p| {
-                    p.owned = true;
-                    p.owned_because = Some(reason.clone());
-                    p.id.clone()
-                });
-                if let Some(id) = pinned_id {
-                    state.status.note(format!("pinned {id}: {reason}"));
-                }
+                };
+                // **The reason is the registry's to refuse** — an empty one is a refusal there, and
+                // it reaches the toast, where the author looks, not a dim note.
+                set_pin(project, &mut open, &mut state, &id, true, Some(reason));
             }
             Key::Escape => {
                 state.pinning = None;
@@ -8433,9 +11523,11 @@ fn pin_reason_keys(
 /// observed pairs — and `Declared` cannot answer for a library nobody has tokened. Each says so
 /// rather than quietly deferring to the other, because a generator that silently changed which
 /// grammar it used would produce output the author cannot account for.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Source {
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LayoutSource {
     /// Learned from what is already placed. Continues the author's own corner of the room.
+    #[default]
     Learned,
     /// Read off the kit's declared edge tokens. Works on an empty map.
     Declared,
@@ -8447,49 +11539,208 @@ enum Source {
     Composed,
 }
 
-fn generate(project: &Project,
-    open: &OpenMap, state: &mut EditorState, proposal: &mut Proposal) {
-    generate_from(project, &*open, state, proposal, Source::Learned);
+/// **The wishes a generation asks for, read off the map** — E-005.
+///
+/// It was `ENCLOSURE_WISH` / `ENCLOSURE_WEIGHT`, constants in this file, so an author who wanted a
+/// keep's worth of rooms edited Rust and rebuilt. The map carries the pair now, which is what makes
+/// it something a developer tunes while looking at a result: an agent sets it through
+/// `map_set_settings` and a file edit sets the same field.
+///
+/// **Public so the reading is testable without a generator.** `propose` needs a project and a map;
+/// what an author can get wrong is *which number the generator is told*, and that is this function's
+/// whole job. A test that had to run a solve to check it would be proving the solver rather than the
+/// wiring.
+pub fn enclosure_wishes(map: &bevy_emerge_core::map::Map) -> bevy_emerge_core::grammar::Wishes {
+    bevy_emerge_core::grammar::Wishes {
+        enclosure: map.enclosure.wish,
+        enclosure_weight: Some(map.enclosure.weight),
+    }
 }
 
-fn generate_from(project: &Project,
-    open: &OpenMap,
+/// **Every generate key's one line: propose, then put the answer where the editor reads it.**
+///
+/// The key path and the agent's `layout_propose` run the same [`propose`]; this is the half that
+/// needs a running editor — a seed from the state, a generation number from the clock, the receipt,
+/// and one problem per refusal the proposer did not treat as fatal.
+fn propose_layout(
+    project: &Project,
+    open: &mut OpenMap,
     state: &mut EditorState,
     proposal: &mut Proposal,
-    source: Source,
+    clock: &mut ProposalClock,
+    source: LayoutSource,
 ) {
-    // **The project's rules answer first when they apply**, and only for `Learned` — `Declared` and
-    // `Composed` read other things and a rule has nothing to say to them. When a rule applies it
-    // is the whole answer, refusals included: falling back to the 1 m learned path after a rule
-    // refused would show the author a layout the game will never build.
-    if source == Source::Learned && generate_by_rules(project, open, state, proposal) {
-        return;
+    // **Through the registry, like `set_yaw` and every other migrated key.** The three generate keys
+    // dispatch `layout_propose` — the same operation an agent calls — so the seed, the receipts and
+    // the refusals are one implementation with two front ends rather than two that agree by habit.
+    // The one thing the key owns that the operation does not is *which seed*: the person's next press
+    // advances the state's counter, so two presses differ.
+    let seed = state.next_seed();
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(open, empty_map_for_take())),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        proposal: proposal.0.take(),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = crate::ops::dispatch(
+        &mut ctx,
+        "layout_propose",
+        &serde_json::json!({"source": source, "seed": seed}),
+    );
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
     }
+    // **The operation's answer is the editor's new state**: the proposal it made goes back into the
+    // resource the outline and the ghosts read.
+    let carried = ctx.proposal.take().map(|mut p| {
+        p.generation = clock.tick();
+        p
+    });
+    if carried.is_some() || proposal.0.is_none() {
+        proposal.0 = carried;
+    }
+    match applied {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            state.status.note(outcome.summary);
+            // **The warnings are problems**, not notes: a composition the kit cannot make a tile of
+            // is a refusal of part of the request, and it was shown that way before this was an
+            // operation.
+            if let Some(after) = outcome.after.as_ref()
+                && let Some(warnings) = after.get("warnings").and_then(|w| w.as_array())
+            {
+                for warning in warnings.iter().filter_map(|w| w.as_str()) {
+                    state.status.problem(warning.to_owned());
+                }
+            }
+        }
+        Ok(_) => {}
+        Err(e) => {
+            // **Logged as well as shown**, because the status line lives in a UI panel and the panel
+            // is the one thing neither an offscreen mirror capture nor an unfocused devshot can see —
+            // so without this an agent driving the editor cannot tell a refusal from a keystroke that
+            // never arrived, which are opposite diagnoses.
+            error!("bevy_emerge_mapper: {}", e.0);
+            state.status.problem(e.0);
+        }
+    }
+}
+
+/// **The three things a proposer answers with.**
+///
+/// Nothing is written: a layout is *offered*, and whether it becomes rows on the map is
+/// [`crate::ops::layout_accept`]'s decision (or the person's `Enter`). This struct is what makes the
+/// offering one function instead of three that each wrote to a different place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Laid {
+    /// The layout itself — placements, stamps, preview-only, and the cell it is drawn at.
+    pub proposed: Proposed,
+    /// The one line the receipt shows: what was offered, replacing what, and the two chords that
+    /// answer it.
+    pub note: String,
+    /// **Refusals that are not failures.** A composition the kit cannot make a tile of is named and
+    /// the rest of the layout still stands, so these are shown one per line rather than taking the
+    /// whole proposal down.
+    pub warnings: Vec<String>,
+}
+
+/// **One pure layout proposer behind every generate key, every source, and the agent's
+/// `layout_propose`.**
+///
+/// It was five functions — `generate`, `generate_from`, `generate_by_rules`,
+/// `generate_example_block`, `generate_region_blocks` — each of which read `EditorState` for a seed
+/// and an id counter, wrote the receipt with `state.status`, and stored the result in a `Proposal`
+/// resource. So *what a layout is* was only reachable through *who asked for it*, and an agent could
+/// not ask: the operation registry has no `&mut EditorState` and no viewport.
+///
+/// This is that logic with the three side effects turned into arguments and return values. It reads
+/// a `Project` and an `OpenMap` and nothing else, which is what makes it testable without an `App`
+/// and callable from an operation.
+///
+/// `seed` is the caller's, not the state's: `layout_propose` names it so the same seed on the same
+/// map lays the same layout, and the key path passes [`EditorState::next_seed`] so two presses
+/// differ. The id counter is seeded from the map (`next_id_after`), so a proposal cannot mint an id
+/// that is already taken.
+pub fn propose(
+    project: &Project,
+    open: &OpenMap,
+    source: LayoutSource,
+    seed: u64,
+) -> Result<Laid, String> {
+    // **A rule answers first, and only for `Learned`.** `Declared` and `Composed` read other things
+    // and a rule has nothing to say to them. When a rule applies it is the whole answer, refusals
+    // included: falling back to the 1 m learned path after a rule refused would show the author a
+    // layout the game will never build.
+    if source == LayoutSource::Learned
+        && let Some(laid) = propose_by_rules(project, open, seed)?
+    {
+        return Ok(laid);
+    }
+    propose_from_grammar(project, open, source, seed)
+}
+
+/// **`G` under the project's block rules**, for the one case where they apply.
+///
+/// `Ok(None)` means "no rule is about this map" and the ordinary path runs unchanged — the
+/// distinction the `bool` return used to carry, made explicit so `propose` reads as the decision it
+/// is.
+fn propose_by_rules(
+    project: &Project,
+    open: &OpenMap,
+    seed: u64,
+) -> Result<Option<Laid>, String> {
+    if let Some(rule) = project
+        .rules
+        .blocks
+        .iter()
+        .find(|r| r.example == open.map.name)
+    {
+        return propose_example_block(rule, open, seed).map(Some);
+    }
+    let asks = open
+        .map
+        .placements
+        .iter()
+        .any(|p| project.rules.blocks.iter().any(|r| r.regions.contains(&p.descriptor)));
+    if asks {
+        return propose_region_blocks(project, open).map(Some);
+    }
+    Ok(None)
+}
+
+/// The ordinary path: build a grammar from the source, solve, and offer the result.
+fn propose_from_grammar(
+    project: &Project,
+    open: &OpenMap,
+    source: LayoutSource,
+    seed: u64,
+) -> Result<Laid, String> {
     // One metre: the tile the kits are authored on, and coarse enough that a 32 m map is a grid the
     // solver finishes rather than 4,096 cells of half-metre noise.
 
     // `from_compositions` also reports what it could not make a tile of, by name. `learn` and
     // `declared` refuse whole or succeed whole, so they carry an empty report rather than a different
-    // shape — one type here, and the refusals reach the status line either way.
+    // shape — one type here, and the refusals reach the warnings either way.
     //
     // **The interfaces travel with the grammar**, and that is what makes rooms possible. Only
     // `from_compositions` derives them, and `solve_constrained` needs them to know which face of a
     // tile presents a wall — so an enclosure wish is expressible for the composition source and for
-    // no other. `learn` and `declared` carry an empty list rather than a different shape.
+    // no other.
     type Built = (
         bevy_emerge_core::grammar::Grammar,
         Vec<String>,
         Vec<Option<bevy_emerge_core::composition::Interface>>,
     );
     let built: Result<Built, String> = match source {
-        Source::Learned => {
+        LayoutSource::Learned => {
             bevy_emerge_core::grammar::learn(&open.map, CELL).map(|g| (g, Vec::new(), Vec::new()))
         }
-        Source::Declared => {
+        LayoutSource::Declared => {
             bevy_emerge_core::grammar::declared(&project.library, project.lattice.face_bands, CELL)
                 .map(|g| (g, Vec::new(), Vec::new()))
         }
-        Source::Composed => bevy_emerge_core::grammar::from_compositions(
+        LayoutSource::Composed => bevy_emerge_core::grammar::from_compositions(
             &project.compositions.compositions,
             &project.library,
             project.lattice.face_bands,
@@ -8498,128 +11749,71 @@ fn generate_from(project: &Project,
         )
         .map(|c| (c.grammar, c.skipped, c.faces)),
     };
-    let (grammar, skipped, faces) = match built {
-        Ok(g) => g,
-        Err(e) => {
-            // **Logged as well as shown, and that is not belt-and-braces.** The status line lives in
-            // a UI panel, and the panel is the one thing neither an offscreen mirror capture nor an
-            // unfocused devshot can see — so without this an agent driving the editor cannot tell a
-            // refusal from a keystroke that never arrived, which are opposite diagnoses.
-            // `redraw_stamps` has paired the two since it was written; this path had not.
-            error!("bevy_emerge_mapper: {e}");
-            state.status.problem(e);
-            return;
-        }
-    };
-    state.seed = state.seed.wrapping_add(1);
-    let mut n = state.next_id;
+    let (grammar, skipped, faces) = built?;
+
+    let mut n = next_id_after(&open.map);
 
     // **The solver has to see the stamps, or an owned group protects nothing.**
     //
     // `solve` builds its pinned set from `map.placements.iter().filter(|p| p.owned)`, and stamped
-    // rows are deliberately never in `placements` — so a composition an author marked owned, whose whole
-    // documented meaning is *"a generator routes around the whole group"*, was invisible and the
-    // collapser filled straight through it. Expanding into a scratch map is what makes the pin real:
-    // `expand` already propagates `Stamped::owned` to every row it produces, so the cells come back
-    // as the unary constraints they were always supposed to be.
+    // rows are deliberately never in `placements` — so a composition an author marked owned, whose
+    // whole documented meaning is *"a generator routes around the whole group"*, was invisible and
+    // the collapser filled straight through it. Expanding into a scratch map is what makes the pin
+    // real: `expand` already propagates `Stamped::owned` to every row it produces.
     //
-    // A scratch copy rather than the real map, because the expansion must not become authored rows —
-    // that invariant is what keeps the reference model a reference.
+    // A scratch copy rather than the real map, because the expansion must not become authored rows.
     let mut scratch = open.map.clone();
     if !scratch.stamps.is_empty() {
-        match bevy_emerge_core::composition::expand(
+        let expanded = bevy_emerge_core::composition::expand(
             &open.map,
             &open.map.stamps,
             &project.compositions.compositions,
             &project.library,
-        ) {
-            Ok(e) => scratch.placements.extend(e.placements),
-            Err(e) => {
-                error!("bevy_emerge_mapper: cannot generate around the stamps: {e}");
-                state
-                    .status
-                    .problem(format!("cannot generate around the stamps: {e}"));
-                return;
-            }
-        }
+        )
+        .map_err(|e| format!("cannot generate around the stamps: {e}"))?;
+        scratch.placements.extend(expanded.placements);
     }
+
     // **The composition source solves under constraints; the other two collapse.**
     //
     // Not two ways to do one thing — two sources with different information. A grammar learned from
     // placements derives no interfaces, so it has no walls to close and nothing to ask for; the
-    // composition grammar does, and asking is the whole point. `docs/research/2026-08-10-expressive-range.md`
-    // measured the collapse at zero enclosed regions in 128 solves and falsified both the vocabulary
-    // and the weight explanations for it — a closed boundary is a property over distance, and local
-    // adjacency has no term for it.
+    // composition grammar does. `docs/research/2026-08-10-expressive-range.md` measured the collapse
+    // at zero enclosed regions in 128 solves and falsified both the vocabulary and the weight
+    // explanations for it.
     let mut mint = || {
         n += 1;
         format!("gen@{n}")
     };
-    let outcome = match source {
-        Source::Composed => {
-            let wishes = bevy_emerge_core::grammar::Wishes {
-                enclosure: ENCLOSURE_WISH,
-                enclosure_weight: Some(ENCLOSURE_WEIGHT),
-            };
-            bevy_emerge_core::grammar::solve_constrained(
-                &scratch, &grammar, &faces, &wishes, CELL, state.seed, &mut mint,
-            )
+    let enclosure = enclosure_wishes(&open.map);
+    let solved = match source {
+        LayoutSource::Composed => bevy_emerge_core::grammar::solve_constrained(
+            &scratch, &grammar, &faces, &enclosure, CELL, seed, &mut mint,
+        ),
+        LayoutSource::Learned | LayoutSource::Declared => {
+            bevy_emerge_core::grammar::solve(&scratch, &grammar, CELL, seed, &mut mint)
         }
-        Source::Learned | Source::Declared => {
-            bevy_emerge_core::grammar::solve(&scratch, &grammar, CELL, state.seed, &mut mint)
-        }
-    };
-    let solved = match outcome {
-        Ok(s) => s,
-        Err(e) => {
-            error!("bevy_emerge_mapper: {e}");
-            state.status.problem(e);
-            return;
-        }
-    };
-    state.next_id = n;
+    }?;
 
-    // Everything unpinned is the sketch; the solve is the drawing. Despawn it and rebuild —
-    // **keeping what was removed, with its indices**, because this is an edit like any other and the
-    // history must be able to put it back. This used a bare `retain()` and recorded only the solver
-    // rows, which was two defects in one line: the author's sketch was unrecoverable (Cmd+Z drained
-    // the solver output and stopped, with a success message), and every index-based entry already on
-    // the stack — Moved, Turned, Pinned, RemoveAt — was left pointing at rows that had shifted, so a
-    // second Cmd+Z rewrote whatever now sat at those indices with the dead sketch's data.
-    // **A solve replaces the sketch in the medium it draws in.** A grammar over descriptors lays
-    // placements, so it clears the unpinned placements; a grammar over compositions lays stamps, so it
-    // clears the unpinned stamps and must leave the author's placements alone. Clearing both would
-    // make `Shift+G` silently delete every group an author had stamped.
-    let composes = matches!(source, Source::Composed);
-
-    // **Nothing is written. The layout becomes a proposal, and the author decides.**
-    //
-    // `G` used to rewrite the map on the keypress. Alvarez et al. 2018 (FDG,
-    // `10.1145/3235765.3235815`) put a two-step commit into the Evolutionary Dungeon Designer for
-    // exactly that, and said why: apply-on-click was **"occasionally causing work loss due to
-    // accidental replacements"**. A generate here can clear every unpinned row on the map, which is
-    // the largest single act the editor has — and it was the one with no way back except undo.
-    //
-    // **What to clear is decided at apply time, not here.** Holding indices captured now and using
-    // them later would be a stale-index bug waiting for the first author who places something while
-    // a proposal is up; `apply_proposal` reads the live map instead.
     let shortfall = if solved.unmet > 0 {
         format!(
             " — but does not reach the {}% enclosure it aims for; the kit's rules do not allow more \
              here",
-            (ENCLOSURE_WISH * 100.0).round() as u32
+            (enclosure.enclosure * 100.0).round() as u32
         )
     } else {
         String::new()
     };
-    for s in &skipped {
-        state.status.problem(format!("not a tile: {s}"));
-    }
 
+    // **A solve replaces the sketch in the medium it draws in.** A grammar over descriptors lays
+    // placements, so it clears the unpinned placements; a grammar over compositions lays stamps, so
+    // it clears the unpinned stamps and must leave the author's placements alone. Clearing both
+    // would make `Shift+G` silently delete every group an author had stamped.
+    let composes = matches!(source, LayoutSource::Composed);
     let count = solved.placements.len();
     let stamped = solved.stamps.len();
-    // **The delta, not the absolute** — `docs/ui.md` §3.2, and the same thing EDD's suggestion panel
-    // shows: what would change if this were taken, next to what is there now.
+    // **The delta, not the absolute** — what would change if this were taken, next to what is there
+    // now. `layout_accept` recomputes it against the live map at the moment of commitment.
     let replaces = if composes {
         open.map.stamps.iter().filter(|s| !s.owned).count()
     } else {
@@ -8630,64 +11824,27 @@ fn generate_from(project: &Project,
     } else {
         format!("{count} piece(s)")
     };
-    state.status.note(format!(
-        "proposed: {laid} replacing {replaces}, around {} pinned cell(s), from {} prototype(s)\
-         {shortfall} — {} keeps it, {} throws it away",
-        solved.owned_cells,
-        grammar.len() - 1,
-        keys::chord(Action::AcceptProposal),
-        keys::chord(Action::Cancel),
-    ));
-
-    proposal.0 = Some(Proposed {
-        composes,
-        placements: solved.placements,
-        stamps: solved.stamps,
-        cell: CELL,
-        preview_only: false,
-    });
-}
-
-/// **`G` under the project's block rules**, for the one case where they apply. Returns whether it
-/// handled the press — proposed, or refused by name — so `false` means "no rule is about this map"
-/// and the ordinary learned path runs unchanged.
-///
-/// Two shapes, both through `bevy_emerge_core::rules`, the same code the game runs, so what is drawn
-/// here is what the game builds:
-///
-/// - **The example.** The open map *is* a rule's example. Learn from it at the rule's cell, pin its
-///   owned cells, solve one block centred on the map, and propose the result like any other
-///   generate — Enter replaces the unowned rows.
-/// - **Regions.** The map holds placements a rule names in `regions`, each asking for a block. Learn
-///   from the example map on disk, solve every block around its region, and propose all of them as
-///   a **preview only**: the game lays these blocks out itself.
-fn generate_by_rules(
-    project: &Project,
-    open: &OpenMap,
-    state: &mut EditorState,
-    proposal: &mut Proposal,
-) -> bool {
-    if let Some(rule) = project
-        .rules
-        .blocks
-        .iter()
-        .find(|r| r.example == open.map.name)
-    {
-        generate_example_block(rule, open, state, proposal);
-        return true;
-    }
-    let asks = open.map.placements.iter().any(|p| {
-        project
-            .rules
-            .blocks
-            .iter()
-            .any(|r| r.regions.contains(&p.descriptor))
-    });
-    if asks {
-        generate_region_blocks(project, open, state, proposal);
-        return true;
-    }
-    false
+    Ok(Laid {
+        note: format!(
+            "proposed: {laid} replacing {replaces}, around {} pinned cell(s), from {} prototype(s)\
+             {shortfall} — {} keeps it, {} throws it away",
+            solved.owned_cells,
+            grammar.len() - 1,
+            keys::chord(Action::AcceptProposal),
+            keys::chord(Action::Cancel),
+        ),
+        warnings: skipped.iter().map(|s| format!("not a tile: {s}")).collect(),
+        proposed: Proposed {
+            composes,
+            placements: solved.placements,
+            stamps: solved.stamps,
+            cell: CELL,
+            preview_only: false,
+            // Filled by the caller, which owns the clock: this function is a function of its
+            // arguments, so a clock here would be a fifth thing it depends on.
+            generation: 0,
+        },
+    })
 }
 
 /// What a rule's example lays: the new placements, the pinned cells it kept and the prototypes it
@@ -8714,41 +11871,35 @@ fn solve_example_block(
     Ok((placed, pins.len(), alphabet.grammar.len().saturating_sub(1)))
 }
 
-fn generate_example_block(
+fn propose_example_block(
     rule: &bevy_emerge_core::rules::BlockRules,
     open: &OpenMap,
-    state: &mut EditorState,
-    proposal: &mut Proposal,
-) {
+    seed: u64,
+) -> Result<Laid, String> {
     // Seeded like the ordinary path — every press a different layout — but from the rule's own seed.
-    state.seed = state.seed.wrapping_add(1);
-    let seed_base = rule.seed.wrapping_add(state.seed.wrapping_mul(1000));
-    let mut n = state.next_id;
-    match solve_example_block(rule, open, seed_base, &mut n) {
-        Ok((placements, pinned, prototypes)) => {
-            state.next_id = n;
-            let replaces = open.map.placements.iter().filter(|p| !p.owned).count();
-            state.status.note(format!(
-                "proposed: {} piece(s) replacing {replaces}, around {pinned} pinned cell(s), from \
-                 {prototypes} prototype(s), by the rules for `{}` — {} keeps it, {} throws it away",
-                placements.len(),
-                rule.example,
-                keys::chord(Action::AcceptProposal),
-                keys::chord(Action::Cancel),
-            ));
-            proposal.0 = Some(Proposed {
-                composes: false,
-                placements,
-                stamps: Vec::new(),
-                cell: rule.cell,
-                preview_only: false,
-            });
-        }
-        Err(e) => {
-            error!("bevy_emerge_mapper: {e}");
-            state.status.problem(e);
-        }
-    }
+    let seed_base = rule.seed.wrapping_add(seed.wrapping_mul(1000));
+    let mut n = next_id_after(&open.map);
+    let (placements, pinned, prototypes) = solve_example_block(rule, open, seed_base, &mut n)?;
+    let replaces = open.map.placements.iter().filter(|p| !p.owned).count();
+    Ok(Laid {
+        note: format!(
+            "proposed: {} piece(s) replacing {replaces}, around {pinned} pinned cell(s), from \
+             {prototypes} prototype(s), by the rules for `{}` — {} keeps it, {} throws it away",
+            placements.len(),
+            rule.example,
+            keys::chord(Action::AcceptProposal),
+            keys::chord(Action::Cancel),
+        ),
+        warnings: Vec::new(),
+        proposed: Proposed {
+            composes: false,
+            placements,
+            stamps: Vec::new(),
+            cell: rule.cell,
+            preview_only: false,
+            generation: 0,
+        },
+    })
 }
 
 /// What every region on the open map lays: the placements, the number of blocks, the blocks that
@@ -8791,8 +11942,9 @@ fn solve_region_blocks(
             let path = project
                 .maps_dir
                 .join(bevy_emerge_core::naming::map_file_name(&rule.example));
-            let text = std::fs::read_to_string(&path)
-                .map_err(|e| format!("the example map for `{}`: {}: {e}", region.id, path.display()))?;
+            let text = std::fs::read_to_string(&path).map_err(|e| {
+                format!("the example map for `{}`: {}: {e}", region.id, path.display())
+            })?;
             let example = bevy_emerge_core::map::Map::parse(&text)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
             slot.insert(rules::learn(rule, &example)?);
@@ -8817,49 +11969,39 @@ fn solve_region_blocks(
     Ok((placements, blocks, failed, cell.unwrap_or(CELL)))
 }
 
-fn generate_region_blocks(
-    project: &Project,
-    open: &OpenMap,
-    state: &mut EditorState,
-    proposal: &mut Proposal,
-) {
-    // Not `state.seed`: the game seeds a region from its id, so a second press must show the same
-    // layout, or the preview would stop being a preview of anything.
-    match solve_region_blocks(project, open, state.next_id) {
-        Ok((placements, blocks, failed, cell)) => {
-            let laid = blocks - failed.len();
-            if !failed.is_empty() {
-                let message = format!(
-                    "no layout for {} of {blocks} block(s): {}",
-                    failed.len(),
-                    failed.join("; ")
-                );
-                error!("bevy_emerge_mapper: {message}");
-                state.status.problem(message);
-            } else {
-                state.status.note(format!(
-                    "previewing {} piece(s) in {blocks} block(s) by the rules — the game lays \
-                     these out itself, so {} will not keep them; {} clears the preview",
-                    placements.len(),
-                    keys::chord(Action::AcceptProposal),
-                    keys::chord(Action::Cancel),
-                ));
-            }
-            if laid > 0 {
-                proposal.0 = Some(Proposed {
-                    composes: false,
-                    placements,
-                    stamps: Vec::new(),
-                    cell,
-                    preview_only: true,
-                });
-            }
-        }
-        Err(e) => {
-            error!("bevy_emerge_mapper: {e}");
-            state.status.problem(e);
-        }
+fn propose_region_blocks(project: &Project, open: &OpenMap) -> Result<Laid, String> {
+    // Not the state's seed: the game seeds a region from its id, so a second press must show the
+    // same layout, or the preview would stop being a preview of anything.
+    let (placements, blocks, failed, cell) =
+        solve_region_blocks(project, open, next_id_after(&open.map))?;
+    let laid = blocks - failed.len();
+    // **No layout at all is a refusal**, not a receipt for an empty preview: there is nothing on
+    // screen to answer, and `Enter` on it would say "kept" about nothing.
+    if laid == 0 {
+        return Err(format!(
+            "no layout for {} of {blocks} block(s): {}",
+            failed.len(),
+            failed.join("; ")
+        ));
     }
+    Ok(Laid {
+        note: format!(
+            "previewing {} piece(s) in {blocks} block(s) by the rules — the game lays \
+             these out itself, so {} will not keep them; {} clears the preview",
+            placements.len(),
+            keys::chord(Action::AcceptProposal),
+            keys::chord(Action::Cancel),
+        ),
+        warnings: failed.iter().map(|f| format!("no layout for {f}")).collect(),
+        proposed: Proposed {
+            composes: false,
+            placements,
+            stamps: Vec::new(),
+            cell,
+            preview_only: true,
+            generation: 0,
+        },
+    })
 }
 
 /// **What the proposal would put down, drawn where it would go.**
@@ -8902,122 +12044,328 @@ fn draw_proposal(project: Res<Project>,
     }
 }
 
-/// **Take the proposal, or leave it** — the other half of the commit door.
+/// **Draw the proposal's pieces, before anyone is asked to keep them** — B-046.
 ///
-/// The write `generate_from` used to do inline. It reads the live map to decide what to clear, so a
-/// piece placed between the proposal and the acceptance is accounted for rather than being addressed
-/// by an index that has since moved.
-fn apply_proposal(
+/// `G` proposes a layout and then asks a yes/no question about it. Until this system existed the
+/// answer was asked over an unchanged viewport: `draw_proposal` outlined each proposed cell in a
+/// 1-px gizmo on the ground plane, and measured on `town_block` (289 rows) pressing `G` changed
+/// **0.37% of the viewport's pixels, every one a hairline**. An author cannot judge a layout from
+/// that, which makes `Enter` a coin toss over something wide in scope — the brief's own rule about
+/// previewing wide operations, broken by the operation it names.
+///
+/// **The same meshes the commit will lay.** Each proposed row goes through [`spawn_piece`], the
+/// function `redraw_placements` uses, and its height comes from the same [`resolve_y`] the commit
+/// runs — so what is on screen is the seating that will land, not an approximation of it. The
+/// entities carry [`Ghost`] so [`fade_ghost`] makes them translucent, and [`ProposalGhost`] so they
+/// can be taken down without disturbing the map's own rows or an armed brush's ghost.
+///
+/// **Rebuilt only when the proposal changes.** The height of one proposed piece can be another's
+/// (a mug on a tray), so the rows are resolved as a group against a map that holds them: a scratch
+/// copy of the open map with the proposal appended. Doing that every frame would resolve 289 rows
+/// per frame for a layout that has not moved.
+///
+/// Runs after `keys` so a proposal made this frame is drawn this frame, and so a proposal `Esc` or
+/// `Enter` took is cleared this frame — the ghost must never outlive its proposal.
+fn sync_proposal_ghosts(
     mut commands: Commands,
     assets: Res<AssetServer>,
+    project: Res<Project>,
+    open: Res<OpenMap>,
+    proposal: Res<Proposal>,
+    mut drawn: Local<Option<(u64, u32, u32)>>,
+    ghosts: Query<Entity, With<ProposalGhost>>,
+) {
+    // **Keyed on the proposal's generation AND the map it stands on.** The generation alone is not
+    // enough: a proposal outlives a change to the map under it, and the ghosts captured the origin
+    // they were spawned at. An agent's `map_set_settings` (or a `Cmd+Z` of one, or a file edit the
+    // watcher adopts) moves every real piece and every `draw_proposal` outline while the ghosts stay
+    // where they were — and `Enter` then lays the pieces somewhere the preview never showed. The
+    // origin is the only map fact a ghost's position depends on; the rows come from the proposal.
+    let key = proposal
+        .0
+        .as_ref()
+        .map(|p| (p.generation, open.map.origin.0.to_bits(), open.map.origin.2.to_bits()));
+    if *drawn == key {
+        return;
+    }
+    *drawn = key;
+
+    // Take the old ghosts down first, always: a proposal that shrank must not leave the tail behind.
+    for e in &ghosts {
+        commands.entity(e).despawn();
+    }
+    let Some(p) = proposal.0.as_ref() else {
+        return;
+    };
+
+    // **The rows resolved against a map that holds them.** A proposal's pieces can rest on each
+    // other, and `resolve_y` answers a guest from its host — so the scratch map is the open one plus
+    // the proposal, which is precisely the map `Enter` will commit.
+    let mut scratch = open.map.clone();
+    scratch.placements.extend(p.placements.iter().cloned());
+    let ys = match bevy_emerge_core::stack::resolve_y(&scratch, &project.library) {
+        Ok(ys) => ys,
+        // A proposal that does not resolve is one the commit would refuse too. Drawing nothing is
+        // the honest answer; the status line already carries the refusal that made it.
+        Err(_) => return,
+    };
+    let offset = open.map.placements.len();
+    for (i, row) in p.placements.iter().enumerate() {
+        let Some(d) = bevy_emerge_core::stack::descriptor_of(&project.library, row) else {
+            continue;
+        };
+        let Some(&y) = ys.get(offset + i) else {
+            continue;
+        };
+        if let Some(e) = spawn_piece(
+            &mut commands,
+            &assets,
+            Pose { d: &d, yaw: row.yaw, tip: row.tip },
+            row.at,
+            open.map.origin,
+            y,
+        ) {
+            commands.entity(e).insert((ProposalGhost, Ghost));
+        }
+    }
+    // **Stamps are not drawn piece by piece, and that is a scope decision stated rather than
+    // hidden.** A stamp is a composition reference whose rows are expanded by `composition::expand`
+    // against the map it lands in; drawing its members here would duplicate that expansion's
+    // placement rules. The cell outline `draw_proposal` draws still covers them, and the count in the
+    // status line says how many. Logged as E-061.
+}
+
+/// **Take the proposal, or leave it** — the other half of the commit door.
+///
+/// The write `generate_from` used to do inline, and since S-001 it is an operation like every other
+/// verb: `layout_accept` clears the unpinned rows, appends the layout, saves, and hands back the
+/// inverse that takes all of it back. This system is the key half — it decides *when*, and the
+/// operation decides *what*, which is the rule the whole registry exists to keep.
+fn apply_proposal(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<keys::Live>,
-    mut project: ResMut<Project>,
-    mut open: ResMut<OpenMap>,
-    mut state: ResMut<EditorState>,
+    map: MapWrite,
     mut proposal: ResMut<Proposal>,
-    placed: Query<(Entity, &Placement)>,
 ) {
+    let MapWrite { project, mut open, mut state } = map;
     if !keys::just_pressed(&keyboard, *live, Action::AcceptProposal) {
         return;
     }
+    accept_layout(&project, &mut open, &mut state, &mut proposal);
+}
+
+/// **`Enter`'s half, dispatchable without a system's argument budget.**
+///
+/// One function so the key and anything else that keeps a layout cannot come to disagree, and so the
+/// system above stays inside Bevy's parameter limit.
+fn accept_layout(
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    proposal: &mut Proposal,
+) {
     // **A preview is refused before it is taken**, so it is still on screen to be looked at and
-    // cleared with Esc. Taking it first would throw it away on the very key that was meant to keep it.
+    // cleared with Esc. Taking it first would throw it away on the very key that was meant to keep
+    // it — and the operation makes the same refusal, so the sentence is written once.
     if proposal.0.as_ref().is_some_and(|p| p.preview_only) {
-        state.status.note(
-            "preview only — the game lays these blocks out itself. Esc clears it; to fix a cell, \
-             place a tile there and pin it with O."
-                .to_owned(),
-        );
+        state
+            .status
+            .note(crate::ops::layout_accept::PREVIEW_ONLY.to_owned());
         return;
     }
-    let Some(taken) = proposal.0.take() else {
-        return;
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(open, empty_map_for_take())),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        proposal: proposal.0.take(),
+        ..crate::ops::Ctx::default()
     };
-    let composes = taken.composes;
-
-    // **A grammar over descriptors lays placements, so it clears the unpinned placements; a grammar
-    // over compositions lays stamps, so it clears the unpinned stamps** and must leave the author's
-    // placements alone. Clearing both would make `Cmd+G` silently delete every piece hand-placed.
-    let removed: Vec<(usize, Box<Placed>)> = if composes {
-        Vec::new()
-    } else {
-        open
-            .map
-            .placements
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| !p.owned)
-            .map(|(i, p)| (i, Box::new(p.clone())))
-            .collect()
-    };
-    let unstamped: Vec<(usize, Box<bevy_emerge_core::composition::Stamped>)> = if composes {
-        open
-            .map
-            .stamps
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| !s.owned)
-            .map(|(i, s)| (i, Box::new(s.clone())))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    for (entity, marker) in &placed {
-        if removed.iter().any(|(_, p)| p.id == marker.0) {
-            commands.entity(entity).despawn();
+    let applied = crate::ops::dispatch(&mut ctx, "layout_accept", &serde_json::json!({}));
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    // **Whatever the operation did with the proposal goes back**, so a refusal that restored it
+    // leaves the outlines on screen.
+    if ctx.proposal.is_some() || proposal.0.is_none() {
+        proposal.0 = ctx.proposal.take();
+    }
+    match applied {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            state.record_logged(operation_id, outcome.summary.clone(), false);
+            state.status.note(outcome.summary);
+        }
+        Ok(_) => {}
+        Err(e) => {
+            error!("bevy_emerge_mapper: {e}");
+            state.status.problem(e.0);
         }
     }
-    // Descending, so removing an earlier row cannot shift a later one out from under us.
-    for (i, _) in removed.iter().rev() {
-        open.map.placements.remove(*i);
-    }
-    for (i, _) in unstamped.iter().rev() {
-        open.map.stamps.remove(*i);
-    }
+}
 
-    // **Into the map first, drawn second.** The solver lays pieces on the floor grid; how high each
-    // one ends up is a question about the finished map, so the map has to be finished before it is
-    // asked.
-    let count = taken.placements.len();
+/// **`Cmd+S`'s half**: dispatch `map_save` and report what it said.
+///
+/// The save itself is `OpenMap::save`, unchanged — it validates and expands the stamps the way the
+/// game does, so a map the game could not load is refused here rather than written. What changed is
+/// that the act has a name an agent can call, and that the two front ends cannot drift.
+fn save_map(project: &Project, open: &mut OpenMap, state: &mut EditorState) {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(open, empty_map_for_take())),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = crate::ops::dispatch(&mut ctx, "map_save", &serde_json::json!({}));
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    match applied {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
+            state.status.note(outcome.summary.clone());
+            info!("{}", outcome.summary);
+        }
+        Ok(_) => {}
+        // The save refuses on an invalid map rather than writing one, and says which rule.
+        Err(e) => {
+            state.status.problem(e.0.clone());
+            error!("{}", e.0);
+        }
+    }
+}
+
+/// **`F`'s half**: dispatch `fill` from the cursor's map-space point.
+///
+/// The brush, its facing and its tip are the key path's; the flood, its refusals and the cap's route
+/// are the operation's. The pieces are spawned here rather than by the operation, because an
+/// operation does not own entities — the same split every placement operation makes.
+// The same budget note as `flood_from_cursor`: the six things a fill needs are genuinely six — the
+// entities to spawn, the map and project to change, the state for the receipt, the brush it is
+// about, and where. Bundling them into a struct would hide them from the ratchet tests that read
+// system signatures, which is the reason `keys` keeps its own `SystemParam`s named in the source.
+#[allow(clippy::too_many_arguments)]
+fn fill_at(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    project: &Project,
+    open: &mut OpenMap,
+    state: &mut EditorState,
+    brush: &bevy_emerge_core::descriptor::Descriptor,
+    at: (f32, f32),
+    pitch: f32,
+) {
     let first = open.map.placements.len();
-    open.map.placements.extend(taken.placements);
-    spawn_range(&mut commands, &assets, &mut project, &open, &mut state, first);
-
-    // **Stamps need no spawn call.** `redraw_stamps` rebuilds the whole stamped picture from
-    // `map.stamps` whenever it changes, so writing the rows is the whole job — unlike the placement
-    // path above, which owns its entities.
-    let stamped = taken.stamps.len();
-    open.map.stamps.extend(taken.stamps);
-
-    // One act, one entry: undoing a generate first strips the solver rows (the `Added`/`Stamped`),
-    // then puts the sketch back at its own indices (the `RemovedMany`/`UnstampedMany`) —
-    // [`Undo::Group`] applies in order and inverts by reversing.
-    let mut ops = Vec::new();
-    if count > 0 {
-        ops.push(Undo::Added { count });
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: Some(std::mem::replace(open, empty_map_for_take())),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = crate::ops::dispatch(
+        &mut ctx,
+        "fill",
+        &serde_json::json!({
+            "piece": brush.id,
+            "at": [at.0, at.1],
+            "yaw": state.brush_yaw,
+            "tip": [state.brush_tip.0, state.brush_tip.1],
+            "pitch": pitch,
+        }),
+    );
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
     }
-    if stamped > 0 {
-        ops.push(Undo::Stamped { count: stamped });
-    }
-    if !removed.is_empty() {
-        ops.push(Undo::RemovedMany { items: removed });
-    }
-    if !unstamped.is_empty() {
-        ops.push(Undo::UnstampedMany { items: unstamped });
-    }
-    if !ops.is_empty() {
-        state.record(Undo::Group { ops });
-    }
-
-    state.status.note(format!(
-        "kept the layout: {}",
-        if composes {
-            format!("{stamped} stamped")
-        } else {
-            format!("{count} placed")
+    match applied {
+        Ok(crate::ops::Applied::Done {
+            outcome,
+            operation_id,
+            ..
+        }) => {
+            spawn_range(commands, assets, project, open, state, first);
+            state.next_id = next_id_after(&open.map);
+            state.record_logged(operation_id, outcome.summary.clone(), false);
+            // **A capped fill is a problem, not a receipt**: it looks exactly like a finished one,
+            // and the only thing that tells them apart is this sentence.
+            let truncated = outcome
+                .after
+                .as_ref()
+                .and_then(|a| a.get("truncated"))
+                .and_then(|t| t.as_bool())
+                .unwrap_or(false);
+            if truncated {
+                state.status.problem(outcome.summary);
+            } else {
+                state.status.note(outcome.summary);
+            }
         }
-    ));
+        Ok(_) => {}
+        Err(e) => {
+            error!("bevy_emerge_mapper: {}", e.0);
+            state.status.problem(e.0);
+        }
+    }
+}
+
+/// **`Esc`'s half**: dispatch `layout_discard` and report what it said.
+///
+/// The map is untouched by a proposal, so this writes nothing and records nothing to take back. It is
+/// a verb because *dropping the offer* is an act with a receipt, and because an agent that proposed a
+/// layout and thought better of it needs a way to say so.
+fn discard_layout(open: &mut OpenMap, state: &mut EditorState, proposal: &mut Proposal) {
+    let mut ctx = crate::ops::Ctx {
+        open: Some(std::mem::replace(open, empty_map_for_take())),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        proposal: proposal.0.take(),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = crate::ops::dispatch(&mut ctx, "layout_discard", &serde_json::json!({}));
+    if let Some(fresh) = ctx.open.take() {
+        *open = fresh;
+    }
+    // **A refusal puts the proposal back**, so `Esc` that could not dispatch does not silently eat
+    // the layout it was asked to clear.
+    proposal.0 = ctx.proposal.take();
+    match applied {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => state.status.note(outcome.summary),
+        Ok(_) => {}
+        Err(e) => {
+            error!("bevy_emerge_mapper: {e}");
+            state.status.problem(e.0);
+        }
+    }
+}
+
+/// **A map to swap out of an `OpenMap` while an operation holds the real one.**
+///
+/// `Ctx` takes the map **by value** — that is what makes the registry hold more than one operation —
+/// so a caller that wants to keep its own copy has to put something there.
+///
+/// # The rule this placeholder keeps, and the review that found it
+///
+/// **Every caller of this function MUST put `ctx.open` back before returning**, including on the
+/// refusal path — and the consequence of forgetting is that the placeholder becomes the author's map.
+/// `layout_discard` changes no map at all, so its context carried the placeholder straight back; that
+/// it happened to be harmless is because `commit` receives `ctx.open` and hands the same value on.
+/// **A future operation whose `commit` does not touch `ctx.open` would empty the map on `Esc`.**
+///
+/// So the placeholder is **small and identifiable rather than empty**: a default map with a name no
+/// map may have. If one ever reaches the editor, `assert!` in the callers' write-back says so by name
+/// instead of showing an empty world. `tests/an_agent_can_generate_a_layout.rs::
+/// discarding_a_proposal_does_not_wipe_the_map` is the guard on the path that has this shape today.
+fn empty_map_for_take() -> OpenMap {
+    // **A name `naming::is_id` refuses**, so a file written from this could never be opened and a
+    // `map_save` on it would fail at validate rather than overwrite a real map.
+    let map = bevy_emerge_core::map::Map {
+        name: "the-placeholder-an-operation-holds".to_owned(),
+        ..bevy_emerge_core::map::Map::default()
+    };
+    OpenMap::new(map, std::path::PathBuf::new())
 }
 
 /// The `F` handler, split out so `keys` stays readable.
@@ -9026,11 +12374,10 @@ fn flood_from_cursor(
     assets: &AssetServer,
     pointer: crate::view::Pointer,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
-    project: &mut Project,
-    open: &mut OpenMap,
-    state: &mut EditorState,
+    edit: MapEdit,
     pitch: f32,
 ) {
+    let MapEdit { project, open, state } = edit;
     let Some(camera) = camera else {
         return;
     };
@@ -9050,54 +12397,23 @@ fn flood_from_cursor(
             .note("nothing armed to fill with — pick a piece from the palette".to_owned());
         return;
     };
-
-    let start_id = state.next_id;
-    let mut n = start_id;
-    let short = short_id(&brush.id).to_owned();
-    let filled = match crate::fill::flood(
-        &open.map,
+    // **The brush, the facing and the tip are the key's; the flood is the operation's.** One
+    // function for both front ends, so an agent's fill and a person's cannot disagree about what a
+    // fill is, what it refuses, or where the cap's route leads.
+    // **The point is read before the map is handed over**, because `fill_at` takes the `OpenMap`
+    // mutably and holding a read of it across the call is the borrow conflict this line avoids.
+    let at = open.map.to_map_space((hit.x, hit.z));
+    // `project`, `open` and `state` are already `&`/`&mut` here, so no re-borrow.
+    fill_at(
+        commands,
+        assets,
+        project,
+        open,
+        state,
         &brush,
-        open.map.to_map_space((hit.x, hit.z)),
-        state.brush_yaw,
-        state.brush_tip,
+        at,
         pitch,
-        || {
-            n += 1;
-            format!("{short}@{n}")
-        },
-    ) {
-        Ok(f) => f,
-        // A refusal is the answer, not a failure: "outside the map" and "something is already here"
-        // are both things the author needs told rather than worked around.
-        Err(e) => {
-            state.status.note(e);
-            return;
-        }
-    };
-    state.next_id = n;
-
-    let count = filled.placements.len();
-    let first = open.map.placements.len();
-    open.map.placements.extend(filled.placements);
-    spawn_range(commands, assets, project, &*open, state, first);
-    // **One undo entry for the whole fill.** A fill is one act to the person who performed it, and an
-    // undo stack that made them press Ctrl+Z 1,408 times would be a stack that models the code rather
-    // than the work.
-    if count > 0 {
-        state.record(Undo::Added { count });
-    }
-    // A cap that stopped the fill has to say so — a truncated fill looks exactly like a finished one,
-    // which is the whole argument for it being the loud slot rather than the quiet one.
-    if filled.truncated {
-        state.status.problem(format!(
-            "filled {count} and STOPPED at the {} cell cap — fill again to continue",
-            crate::fill::MAX_CELLS
-        ));
-    } else {
-        state
-            .status
-            .note(format!("filled {count} with {}", brush.id));
-    }
+    );
 }
 
 // ── the ghost ────────────────────────────────────────────────────────────────────────────────────
@@ -9127,7 +12443,7 @@ fn drive_ghost(
     anchor: Res<FineAnchor>,
     // The arm `drive_place` honors: a composed set stamped on click outranks the brush, and the
     // ghost must answer the same question the click will.
-    compose: Res<crate::compose::ComposeState>,
+    compose: Res<crate::compose::Armed>,
 ) {
     let clear = |commands: &mut Commands| {
         for (e, _) in &ghosts {
@@ -9215,7 +12531,7 @@ fn drive_ghost(
         state.tool,
         carried,
         state.brush.map(|ix| (ix, state.brush_yaw, state.brush_tip)),
-        compose.armed.is_some(),
+        compose.0.is_some(),
     );
     let Some((brush_ix, want_yaw, want_tip)) = subject else {
         clear(&mut commands);
@@ -9237,7 +12553,8 @@ fn drive_ghost(
     // **The same expression the commit asks** — see [`brush_at`], which exists because this call site
     // and `drive_place`'s disagreed. `want_yaw` is the authored yaw for both tools: `state.brush_yaw`
     // under Place, the held piece's own under Move, which is exactly what `held_span` snaps by.
-    let at = brush_at(&project, &open, &keyboard, rung.0, &anchor, hit, d, want_yaw, want_tip,
+    let at = brush_at(&project, &open, &keyboard, rung.0, &anchor, hit,
+        Pose { d, yaw: want_yaw, tip: want_tip },
     );
     let yaw = bevy_emerge::draw_yaw(d, want_yaw);
 
@@ -9291,8 +12608,9 @@ fn drive_ghost(
             // surface piece armed, and `ResMut` marks the resource changed on every mutable deref —
             // `rebuild_palette` watches `resource_changed::<EditorState>`, so an unconditional write
             // here would tear down and rebuild the whole palette at frame rate.
-            if state.hint != e {
-                state.hint = e;
+            let hint = ghost_hint(d, &e);
+            if state.hint != hint {
+                state.hint = hint;
             }
             return;
         }
@@ -9324,10 +12642,8 @@ fn drive_ghost(
             if let Some(e) = spawn_piece(
                 &mut commands,
                 &assets,
-                d,
+                Pose { d, yaw: want_yaw, tip: (0, 0) },
                 at,
-                want_yaw,
-                (0, 0),
                 open.map.origin,
                 y,
             ) {
@@ -9381,18 +12697,14 @@ struct StampGhost {
 fn drive_stamp_ghost(
     mut commands: Commands,
     assets: Res<AssetServer>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    rung: Res<Rung>,
-    project: Res<Project>,
-    open: Res<OpenMap>,
-    state: Res<EditorState>,
-    compose: Res<crate::compose::ComposeState>,
-    anchor: Res<FineAnchor>,
-    pointer: Res<crate::view::Pointer>,
+    input: GhostInput,
+    map: MapRead,
     camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
     ui_nodes: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<Hovered>>,
     ghosts: Query<(Entity, &StampGhost)>,
 ) {
+    let GhostInput { keyboard, rung, armed, anchor, pointer } = input;
+    let MapRead { project, open, state } = map;
     let clear = |commands: &mut Commands| {
         for (e, _) in &ghosts {
             commands.entity(e).despawn();
@@ -9401,7 +12713,7 @@ fn drive_stamp_ghost(
 
     // Only the place tool stamps; anything else and the preview would be promising a click that does
     // something different.
-    let Some(armed) = compose.armed.clone().filter(|_| state.tool == Tool::Place) else {
+    let Some(armed_of) = armed.id().map(str::to_owned).filter(|_| state.tool == Tool::Place) else {
         clear(&mut commands);
         return;
     };
@@ -9421,7 +12733,7 @@ fn drive_stamp_ghost(
     // **Exactly the arithmetic the stamp uses**, through the same two calls — `stamp_snap` for the
     // rung and the span, `map_at` for the snap. Anything else here is a promise about a landing that
     // will not happen.
-    let (level, span) = stamp_snap(&project, &compose, &keyboard, rung.0);
+    let (level, span) = stamp_snap(&project, &armed, &keyboard, rung.0);
     let at = map_at(&project, &open,
         hit,
         keys::alt_held(&keyboard),
@@ -9432,10 +12744,10 @@ fn drive_stamp_ghost(
     let yaw = state.brush_yaw;
 
     // Already showing this composition, at this turn, in this cell — nothing to do.
-    if let Ok((_, g)) = ghosts.single() {
-        if g.of == armed && (g.yaw - yaw).abs() < 1e-3 && g.at == at {
-            return;
-        }
+    if let Ok((_, g)) = ghosts.single()
+        && g.of == armed_of && (g.yaw - yaw).abs() < 1e-3 && g.at == at
+    {
+        return;
     }
     clear(&mut commands);
 
@@ -9443,7 +12755,7 @@ fn drive_stamp_ghost(
     // produces them. Not written anywhere — `expand` takes the map by reference and answers.
     let scratch = bevy_emerge_core::composition::Stamped {
         id: "ghost".to_owned(),
-        of: armed.clone(),
+        of: armed_of.clone(),
         at,
         yaw,
         ..Default::default()
@@ -9471,7 +12783,7 @@ fn drive_stamp_ghost(
 
     let parent = commands
         .spawn((
-            StampGhost { of: armed, yaw, at },
+            StampGhost { of: armed_of, yaw, at },
             Transform::default(),
             Visibility::default(),
         ))
@@ -9487,10 +12799,8 @@ fn drive_stamp_ghost(
         if let Some(e) = spawn_piece(
             &mut commands,
             &assets,
-            &d,
+            Pose { d: &d, yaw: p.yaw, tip: p.tip },
             p.at,
-            p.yaw,
-            p.tip,
             open.map.origin,
             y,
         ) {
@@ -9512,6 +12822,121 @@ fn drive_stamp_ghost(
 /// The pieces carry [`Ghost`] so [`fade_ghost`] fades them through the one path that already exists,
 /// and **not** [`GhostOf`], which keys the brush ghost by library index — two pieces of one
 /// descriptor in a set would collide on it, and `drive_ghost`'s own clear would take them.
+///
+/// **The run's ghost** — the posts a drag would lay, standing where they would land.
+///
+/// The line alone was not enough, and the review caught it: the author sees a rule on the ground
+/// and has to *imagine* the fence on it. The editor's own rule is that a preview shows what will
+/// happen — *"a preview computing either differently is a promise about a landing that will not
+/// happen, which is the one thing this editor's previews are held to"* — and a line is not the
+/// landing, it is the instruction to land. So the posts stand there, translucent, in the piece's
+/// own pitch.
+#[derive(Component)]
+struct RunGhost;
+
+/// The posts a run would lay, and where.
+///
+/// Its own resource, like every other drag: written every frame of a drag, and
+/// `rebuild_palette` watches [`EditorState`] rather than this.
+#[derive(Resource, Default)]
+pub struct RunGhostDrag {
+    /// The line's two ends, in map space. `None` while nothing is being dragged.
+    pub line: Option<((f32, f32), (f32, f32))>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn drive_run_ghost(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    project: Res<Project>,
+    open: Res<OpenMap>,
+    state: Res<EditorState>,
+    drag: Res<RunGhostDrag>,
+    pointer: Res<crate::view::Pointer>,
+    camera: Option<Single<(&Camera, &GlobalTransform), With<MainCamera>>>,
+    ui_nodes: Query<(&bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<Hovered>>,
+    ghosts: Query<(Entity, &RunGhost)>,
+) {
+    let clear = |commands: &mut Commands| {
+        for (e, _) in &ghosts {
+            commands.entity(e).despawn();
+        }
+    };
+    if state.tool != Tool::Run {
+        clear(&mut commands);
+        return;
+    }
+    let Some((from, to)) = drag.line else {
+        clear(&mut commands);
+        return;
+    };
+    let Some(camera) = camera else {
+        clear(&mut commands);
+        return;
+    };
+    let (cam, cam_tf) = *camera;
+    let on_ui = crate::view::over_ui(
+        pointer.0,
+        cam.target_scaling_factor().unwrap_or(1.0),
+        ui_nodes.iter(),
+    );
+    if on_ui {
+        clear(&mut commands);
+        return;
+    }
+    let _ = cam_tf;
+
+    // **The brush, and the run it would lay.** The same descriptor the commit would use, and the
+    // same `run::lay` — so the preview and the commit cannot disagree.
+    let Some(d) = state
+        .brush
+        .and_then(|ix| project.library.descriptors.get(ix))
+        .cloned()
+    else {
+        clear(&mut commands);
+        return;
+    };
+    let run = bevy_emerge_core::run::Run {
+        descriptor: d.id.clone(),
+        pitch: None,
+        from,
+        to,
+        corners: Vec::new(),
+        gaps: Vec::new(),
+    };
+    let Ok(posts) = bevy_emerge_core::run::lay(&run, &project.library) else {
+        // A run that cannot be laid cannot be committed either, and the commit says so by name.
+        // Drawing nothing is the honest preview of a refusal.
+        clear(&mut commands);
+        return;
+    };
+
+    // **One parent, so the whole set goes at once** — the same lifetime trick the stamp ghost uses.
+    let parent = commands
+        .spawn((RunGhost, Transform::default(), Visibility::default()))
+        .id();
+    let mut drawn = 0usize;
+    for p in &posts {
+        // **At the floor**, because a run's posts stand on the ground: a fence post's height comes
+        // from the map's own datum, and the ghost is a picture of where the posts will be, not a
+        // piece of the map.
+        if let Some(e) = spawn_piece(
+            &mut commands,
+            &assets,
+            Pose { d: &d, yaw: p.yaw, tip: (0, 0) },
+            p.at,
+            open.map.origin,
+            0.0,
+        ) {
+            commands.entity(e).insert((Ghost, ChildOf(parent)));
+            drawn += 1;
+        }
+    }
+    if drawn == 0 {
+        commands.entity(parent).despawn();
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn drive_clone_ghost(
     mut commands: Commands,
@@ -9609,10 +13034,8 @@ fn drive_clone_ghost(
         if let Some(e) = spawn_piece(
             &mut commands,
             &assets,
-            &d,
+            Pose { d: &d, yaw: piece.yaw, tip: piece.tip },
             piece.offset,
-            piece.yaw,
-            piece.tip,
             (0.0, 0.0, 0.0),
             piece.lift,
         ) {
@@ -9692,27 +13115,27 @@ fn brighten_held(
     for root in &held {
         let mut queue = vec![root];
         while let Some(e) = queue.pop() {
-            if let Ok(handle) = painted.get(e) {
-                if let Some(base) = materials.get(&handle.0) {
-                    let mut lit = base.clone();
-                    let was = lit.emissive;
-                    lit.emissive = LinearRgba {
-                        red: was.red + HELD_LIFT,
-                        green: was.green + HELD_LIFT,
-                        blue: was.blue + HELD_LIFT,
-                        alpha: was.alpha,
-                    };
-                    let handle = materials.add(lit);
-                    // **`try_insert`, because the thing being marked is rebuilt underneath us.**
-                    // The staged tile is despawned and respawned wholesale on every `Build` change,
-                    // so an entity read this frame can be gone by the time the command applies —
-                    // and a plain `insert` on a despawned entity is a hard panic in Bevy 0.19, which
-                    // is exactly how this crashed the editor on launch. The lift is cosmetic; a
-                    // piece that stopped existing does not need one.
-                    commands
-                        .entity(e)
-                        .try_insert((MeshMaterial3d(handle), Brightened));
-                }
+            if let Ok(handle) = painted.get(e)
+                && let Some(base) = materials.get(&handle.0)
+            {
+                let mut lit = base.clone();
+                let was = lit.emissive;
+                lit.emissive = LinearRgba {
+                    red: was.red + HELD_LIFT,
+                    green: was.green + HELD_LIFT,
+                    blue: was.blue + HELD_LIFT,
+                    alpha: was.alpha,
+                };
+                let handle = materials.add(lit);
+                // **`try_insert`, because the thing being marked is rebuilt underneath us.**
+                // The staged tile is despawned and respawned wholesale on every `Build` change,
+                // so an entity read this frame can be gone by the time the command applies —
+                // and a plain `insert` on a despawned entity is a hard panic in Bevy 0.19, which
+                // is exactly how this crashed the editor on launch. The lift is cosmetic; a
+                // piece that stopped existing does not need one.
+                commands
+                    .entity(e)
+                    .try_insert((MeshMaterial3d(handle), Brightened));
             }
             if let Ok(kids) = children.get(e) {
                 queue.extend(kids.iter());
@@ -9731,22 +13154,22 @@ fn fade_ghost(
     for root in &ghosts {
         let mut queue = vec![root];
         while let Some(e) = queue.pop() {
-            if let Ok(handle) = painted.get(e) {
-                if let Some(base) = materials.get(&handle.0) {
-                    let mut faded = base.clone();
-                    faded.alpha_mode = AlphaMode::Blend;
-                    let a = faded.base_color.alpha() * GHOST_ALPHA;
-                    faded.base_color.set_alpha(a);
-                    let handle = materials.add(faded);
-                    // Same hazard as `brighten_held`, and the same answer: ghosts are despawned and
-                    // respawned by the systems that own them, so this races the same way. It had
-                    // simply not lost the race yet.
-                    commands.entity(e).try_insert((
-                        MeshMaterial3d(handle),
-                        Ghosted,
-                        bevy::light::NotShadowCaster,
-                    ));
-                }
+            if let Ok(handle) = painted.get(e)
+                && let Some(base) = materials.get(&handle.0)
+            {
+                let mut faded = base.clone();
+                faded.alpha_mode = AlphaMode::Blend;
+                let a = faded.base_color.alpha() * GHOST_ALPHA;
+                faded.base_color.set_alpha(a);
+                let handle = materials.add(faded);
+                // Same hazard as `brighten_held`, and the same answer: ghosts are despawned and
+                // respawned by the systems that own them, so this races the same way. It had
+                // simply not lost the race yet.
+                commands.entity(e).try_insert((
+                    MeshMaterial3d(handle),
+                    Ghosted,
+                    bevy::light::NotShadowCaster,
+                ));
             }
             if let Ok(kids) = children.get(e) {
                 queue.extend(kids.iter());
@@ -10065,6 +13488,8 @@ mod tests {
             emerge_dir: std::path::PathBuf::from("assets/emerge"),
             project_dir: std::path::PathBuf::from("assets/emerge"),
             maps_dir: std::path::PathBuf::from("assets/emerge/maps"),
+            // A test project has no map open.
+            open_map_name: None,
             kits: Vec::new(),
             // A test project declares no combinations; every map in it offers every bound kit.
             bashes: Vec::new(),
@@ -10188,7 +13613,7 @@ mod tests {
 
         {
             let mut state = app.world_mut().resource_mut::<EditorState>();
-            state.pinning = Some((0, String::new()));
+            state.pinning = Some(("site/wall".to_owned(), String::new()));
             state.renaming = Some("gal".to_owned());
             state.grouping = Some("bay".to_owned());
             state.replacing = Some("bay".to_owned());
@@ -10304,9 +13729,7 @@ mod snap_tests {
                 SnapLevel::Tile,
                 &anchor,
                 aim,
-                &tile,
-                0.0,
-                (0, 0),
+                Pose { d: &tile, yaw: 0.0, tip: (0, 0) },
             ),
             (0.5, 0.5),
         );
@@ -10323,9 +13746,7 @@ mod snap_tests {
                 SnapLevel::Tile,
                 &anchor,
                 aim,
-                &tile,
-                0.0,
-                (0, 0)
+                Pose { d: &tile, yaw: 0.0, tip: (0, 0) }
             ),
             centre_snapped,
             "if these agree the span is being ignored again"
@@ -10342,9 +13763,7 @@ mod snap_tests {
                 SnapLevel::Tile,
                 &anchor,
                 aim,
-                &wall,
-                0.0,
-                (0, 0),
+                Pose { d: &wall, yaw: 0.0, tip: (0, 0) },
             ),
             (0.05, 0.5),
         );
@@ -10358,9 +13777,7 @@ mod snap_tests {
                 SnapLevel::Tile,
                 &anchor,
                 aim,
-                &wall,
-                90.0,
-                (0, 0),
+                Pose { d: &wall, yaw: 90.0, tip: (0, 0) },
             ),
             (0.5, 1.05),
         );
@@ -10418,16 +13835,13 @@ mod snap_tests {
             },
             ..Default::default()
         }];
-        let compose = crate::compose::ComposeState {
-            armed: Some("site/tile_wall_n".into()),
-            ..Default::default()
-        };
+        let armed = crate::compose::Armed(Some("site/tile_wall_n".into()));
         // Every rung held at once — a stamp must ignore all of them.
         let mut held = ButtonInput::<KeyCode>::default();
         held.press(keys::SHIFT_KEYS[0]);
         held.press(keys::MOD_KEYS[0]);
 
-        let (level, span) = stamp_snap(&p, &compose, &held, SnapLevel::Tile);
+        let (level, span) = stamp_snap(&p, &armed, &held, SnapLevel::Tile);
         let place = |aim: f32| {
             map_at(
                 &p,
@@ -10494,10 +13908,7 @@ mod snap_tests {
             "the modifiers really do ask for the finest rung"
         );
 
-        let armed = |id: &str| crate::compose::ComposeState {
-            armed: Some(id.to_owned()),
-            ..Default::default()
-        };
+        let armed = |id: &str| crate::compose::Armed(Some(id.to_owned()));
 
         let (level, span) = stamp_snap(&p, &armed("tile_a"), &shifted, SnapLevel::Tile);
         assert_eq!(
@@ -10521,7 +13932,7 @@ mod snap_tests {
         // Nothing armed, or an id the kit no longer has: the ladder, and no invented footprint.
         let (level, span) = stamp_snap(
             &p,
-            &crate::compose::ComposeState::default(),
+            &crate::compose::Armed::default(),
             &shifted,
             SnapLevel::Tile,
         );

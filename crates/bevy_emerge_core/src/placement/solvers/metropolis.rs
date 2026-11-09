@@ -285,7 +285,7 @@ impl MetropolisSolver {
             (Scope::Pair(i, j), Predicate::MinDistance(min)) => {
                 if let (Some(a), Some(b)) = (objs.get(*i), objs.get(*j)) {
                     let d = ((a.x - b.x).powi(2) + (a.z - b.z).powi(2)).sqrt();
-                    w.w_min_distance * over(*min - d) as f64
+                    w.w_min_distance * over(*min - d)
                 } else {
                     0.0
                 }
@@ -316,7 +316,7 @@ impl MetropolisSolver {
                     let dx = (a.x - b.x).abs() - (ahw + bhw);
                     let dz = (a.z - b.z).abs() - (ahd + bhd);
                     let sep = dx.max(dz); // separation between footprints (negative = overlap)
-                    pen += over(gap - sep) as f64;
+                    pen += over(gap - sep);
                 }
                 w.w_clearance * pen
             }
@@ -365,7 +365,7 @@ impl MetropolisSolver {
                 // handled separately by the layout's overlap term, so this only needs the near side.
                 if let (Some(a), Some(b)) = (objs.get(*i), objs.get(*j)) {
                     let d = ((a.x - b.x).powi(2) + (a.z - b.z).powi(2)).sqrt();
-                    w.w_group * over(d - max) as f64
+                    w.w_group * over(d - max)
                 } else {
                     0.0
                 }
@@ -414,6 +414,11 @@ fn obj_bounds(o: &Obj, rx0: f32, rx1: f32, rz0: f32, rz1: f32) -> Bounds {
         zmax: (rz1 - hd).max(rz0 + hd),
     }
 }
+
+/// Bit-exact solver output for seed 11 — see `the_solved_layout_is_pinned_for_a_fixed_seed`.
+#[cfg(test)]
+const PINNED_LAYOUT_SEED_11: &[(u32, u32)] =
+    &[(1081317365, 1074081542), (1074665548, 1063516872)];
 
 #[cfg(test)]
 mod tests {
@@ -635,8 +640,3 @@ mod tests {
         );
     }
 }
-
-/// Bit-exact solver output for seed 11 — see `the_solved_layout_is_pinned_for_a_fixed_seed`.
-#[cfg(test)]
-const PINNED_LAYOUT_SEED_11: &[(u32, u32)] =
-    &[(1081317365, 1074081542), (1074665548, 1063516872)];

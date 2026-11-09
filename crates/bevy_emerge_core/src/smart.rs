@@ -340,11 +340,11 @@ pub fn allocate(
 /// Takes from the front of the shuffled pool, which is what makes the greedy pass greedy. An actor is
 /// consumed exactly once — `taken` is the reason nobody ends up in two roles of one scene, the same
 /// way [`Booking`] is the reason nobody ends up in two scenes.
-fn take_into<'a>(
+fn take_into(
     filled: &mut Vec<Filled>,
     pool: &[Actor],
     taken: &mut [bool],
-    free_seats: &mut Vec<&'a Seat>,
+    free_seats: &mut Vec<&Seat>,
     role: &RoleSlot,
     needs: u64,
     want: usize,
@@ -440,7 +440,7 @@ impl Booking {
     }
 
     /// The actors from `offered` who are free to take part.
-    pub fn free<'a>(&self, offered: &'a [Actor]) -> Vec<Actor> {
+    pub fn free(&self, offered: &[Actor]) -> Vec<Actor> {
         offered
             .iter()
             .copied()

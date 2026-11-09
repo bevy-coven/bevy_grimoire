@@ -164,15 +164,15 @@ impl Vocabulary {
             if t.name.trim().is_empty() {
                 return Err(format!("vocab: axis `{axis}` has an empty token at index {i}"));
             }
-            if let Some(j) = self.tokens.iter().position(|o| o.name == t.name) {
-                if j != i {
-                    return Err(format!(
-                        "vocab: axis `{axis}` declares `{}` twice (indices {j} and {i}). Tokens take \
-                         their bit from their position, so a duplicate is two different bits meaning \
-                         one thing.",
-                        t.name
-                    ));
-                }
+            if let Some(j) = self.tokens.iter().position(|o| o.name == t.name)
+                && j != i
+            {
+                return Err(format!(
+                    "vocab: axis `{axis}` declares `{}` twice (indices {j} and {i}). Tokens take \
+                     their bit from their position, so a duplicate is two different bits meaning \
+                     one thing.",
+                    t.name
+                ));
             }
         }
         Ok(())
@@ -420,8 +420,16 @@ impl Vocabularies {
         // differently — `OnSurface` takes the host's height, `OnFace` a distance up it — but the
         // token means the same thing either way, so a second axis would be a second place for
         // `worktop` to be spelled.
+        //
+        // `OnSurfaceOrFloor` needs its class here for the same reason: when the piece is dropped on
+        // a host the class is what matches, so it is *needed* even though the piece can also stand
+        // alone. A library with no piece offering it would then quietly never seat one.
         let requires = match &d.mount {
-            Some(Mount::OnSurface { class }) | Some(Mount::OnFace { class, .. }) => {
+            Some(
+                Mount::OnSurface { class }
+                | Mount::OnSurfaceOrFloor { class }
+                | Mount::OnFace { class, .. },
+            ) => {
                 let how = if matches!(d.mount, Some(Mount::OnFace { .. })) {
                     "is fixed to face class"
                 } else {
@@ -575,7 +583,9 @@ impl Vocabularies {
         for (d, m) in library.iter().zip(&masks) {
             if m.requires != 0 && (offered & m.requires) == 0 {
                 let class = match &d.mount {
-                    Some(Mount::OnSurface { class }) => class.clone(),
+                    Some(Mount::OnSurface { class } | Mount::OnSurfaceOrFloor { class }) => {
+                        class.clone()
+                    }
                     _ => String::new(),
                 };
                 return Err(format!(

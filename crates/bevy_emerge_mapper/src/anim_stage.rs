@@ -231,26 +231,39 @@ pub(crate) fn measured_rig(
     out
 }
 
+/// The optional bench resources the ghost reads: the A/B toggle, the bench, its measured reports,
+/// and the adopt exclusions.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct GhostSources<'w> {
+    ab: Option<Res<'w, BenchAb>>,
+    bench: Option<Res<'w, BenchState>>,
+    reports: Option<Res<'w, crate::anim_watch::BenchReports>>,
+    exclude: Option<Res<'w, crate::anim_tab::AdoptExclude>>,
+}
+
 /// **Spawn and retire the ghost.** Wants one iff: on the Anim tab, the toggle is on, the selected
 /// rig has gaits, and its report carries measured slots. Same shape as `drive_bench_stage`, keyed
 /// by [`BenchGhostOf`].
 pub(crate) fn drive_bench_ghost(
     mut commands: Commands,
     mode: Res<Mode>,
-    ab: Option<Res<BenchAb>>,
-    bench: Option<Res<BenchState>>,
-    reports: Option<Res<crate::anim_watch::BenchReports>>,
-    exclude: Option<Res<crate::anim_tab::AdoptExclude>>,
+    sources: GhostSources<'_>,
     assets: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     ghosts: Query<(Entity, &BenchGhostOf), With<BenchGhost>>,
 ) {
+    let GhostSources {
+        ab,
+        bench,
+        reports,
+        exclude,
+    } = sources;
     let want = (*mode == Mode::Anim && ab.as_ref().is_some_and(|a| a.0))
         .then(|| {
             let bench = bench.as_ref()?;
             let names = bench.names();
             let name = names.get(bench.selected)?;
-            let rig = bench.rigs.as_ref()?.get(*name)?;
+            let rig = bench.rigs.as_ref()?.get(name)?;
             if !rig.has_gaits() {
                 return None;
             }
@@ -508,6 +521,14 @@ pub(crate) fn drive_bench_stage(
         });
 }
 
+/// The creature drivers the bench scrub writes: the staged figure and its ghost.
+type Blenders<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut bevy_emerge_anim::PoseBlender, Has<BenchGhost>),
+    Or<(With<BenchStage>, With<BenchGhost>)>,
+>;
+
 /// **Drive the staged blender** — the bench's creature driver, ordered exactly like the game's
 /// (`.after(PoseAttachSet).before(PoseBlendSet)`).
 pub(crate) fn drive_bench_scrub(
@@ -516,10 +537,7 @@ pub(crate) fn drive_bench_scrub(
     time: Res<Time>,
     bench: Option<Res<BenchState>>,
     mut scrub: ResMut<BenchScrub>,
-    mut blenders: Query<
-        (&mut bevy_emerge_anim::PoseBlender, Has<BenchGhost>),
-        Or<(With<BenchStage>, With<BenchGhost>)>,
-    >,
+    mut blenders: Blenders<'_, '_>,
 ) {
     // Space toggles; the phase carries across the toggle in both directions.
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::PlayPause) {

@@ -328,25 +328,25 @@ impl Kits {
             // **Two directories bound to one namespace is the mistake binding exists to prevent**,
             // not a merge order to resolve. `site` and `site_greybox` are alternatives, and a
             // project picks one.
-            if let Some(j) = self.bind.iter().position(|o| o.namespace == b.namespace) {
-                if j != i {
-                    return Err(format!(
-                        "kits: `{}` is bound twice — to `{}` and to `{}`. A namespace is an \
-                         interface and a directory is one implementation of it, so a project binds \
-                         exactly one. Pick the skin this project uses.",
-                        b.namespace, self.bind[j].dir, b.dir
-                    ));
-                }
+            if let Some(j) = self.bind.iter().position(|o| o.namespace == b.namespace)
+                && j != i
+            {
+                return Err(format!(
+                    "kits: `{}` is bound twice — to `{}` and to `{}`. A namespace is an \
+                     interface and a directory is one implementation of it, so a project binds \
+                     exactly one. Pick the skin this project uses.",
+                    b.namespace, self.bind[j].dir, b.dir
+                ));
             }
-            if let Some(j) = self.bind.iter().position(|o| o.dir == b.dir) {
-                if j != i {
-                    return Err(format!(
-                        "kits: `{}` is bound twice, to `{}` and to `{}`. One directory provides one \
-                         namespace; a directory answering to two is a library that disagrees with \
-                         itself, which `Library::namespace` refuses at load.",
-                        b.dir, self.bind[j].namespace, b.namespace
-                    ));
-                }
+            if let Some(j) = self.bind.iter().position(|o| o.dir == b.dir)
+                && j != i
+            {
+                return Err(format!(
+                    "kits: `{}` is bound twice, to `{}` and to `{}`. One directory provides one \
+                     namespace; a directory answering to two is a library that disagrees with \
+                     itself, which `Library::namespace` refuses at load.",
+                    b.dir, self.bind[j].namespace, b.namespace
+                ));
             }
         }
         // **A bash names kits this project binds, and no id check comes with it.**

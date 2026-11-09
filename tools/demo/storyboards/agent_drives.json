@@ -1,0 +1,57 @@
+{
+  "name": "agent_drives",
+  "fps": 10,
+  "scale": 2,
+  "width": 1200,
+  "crop": [0, 0, 1280, 703],
+  "setup": [
+    {
+      "mcp": "emerge_frame_view",
+      "args": {"target": {"placements": ["abbey", "well"]}}
+    }
+  ],
+  "chunks": [
+    {"seconds": 0.4},
+    {
+      "seconds": 0.4,
+      "operation": {
+        "name": "placement_set_yaw",
+        "parameters": {"id": "abbey", "yaw": 90}
+      }
+    },
+    {
+      "seconds": 0.4,
+      "operation": {
+        "name": "placement_remove",
+        "parameters": {"id": "abbey_table"}
+      }
+    },
+    {"seconds": 4.0}
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "caption": "agent: emerge_frame_view placements abbey, well (71 x 52 m), before recording"
+    },
+    {
+      "at": 0.45,
+      "caption": "agent: emerge_apply_operation placement_set_yaw abbey, yaw 90"
+    },
+    {
+      "at": 0.85,
+      "caption": "agent: emerge_apply_operation placement_remove abbey_table (and the items on it)"
+    },
+    {
+      "at": 1.45,
+      "key": "KeyZ",
+      "mods": ["SuperLeft"],
+      "caption": "person: ⌘Z takes back the newest change, the agent's removal"
+    },
+    {
+      "at": 2.45,
+      "key": "KeyZ",
+      "mods": ["SuperLeft"],
+      "caption": "person: ⌘Z takes back the yaw turn"
+    }
+  ]
+}

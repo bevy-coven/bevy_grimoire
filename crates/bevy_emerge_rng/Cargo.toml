@@ -2,12 +2,13 @@
 name = "bevy_emerge_rng"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.97.1"
 description = "One deterministic RNG for a whole simulation: a seeded ChaCha8 stream plus the unbiased integer and float draws generators actually need, reproducible from a single u64 across platforms and thread counts."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ladvien/bevy_emerge"
 keywords = ["random", "deterministic", "reproducible", "chacha", "simulation"]
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE-*"]
 categories = ["algorithms", "simulation", "game-development"]
-publish = false
 
 # **Explicit versions, not `workspace = true`.** This crate is a leaf and is meant to be the thing
 # other crates can depend on without inheriting anything, so its manifest has to stand on its own.

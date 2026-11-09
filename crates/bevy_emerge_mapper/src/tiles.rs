@@ -255,10 +255,10 @@ pub struct ImportState {
     /// collision. `put_cursor` is the one writer, and it clears `focused_pack` on the way in and
     /// this on the way out, which is what keeps "one cursor" true.
     pub excluded_focused: bool,
-    /// **This tab's history**, most recent last. See [`Snapshot`].
-    pub undo: Vec<Snapshot>,
+    /// **This tab's history**, most recent last. See [`Step`].
+    pub undo: Vec<Step>,
     /// What has been undone here and can be put back. Cleared by any new edit on this tab.
-    pub redo: Vec<Snapshot>,
+    pub redo: Vec<Step>,
 }
 
 /// **Everything one Tiles-tab edit can change**, taken before it changes.
@@ -297,6 +297,17 @@ pub struct CursorMark {
 /// enough that it is not a limit anyone reaches by working normally.
 pub const TILE_HISTORY: usize = 64;
 
+/// **One step on the Meshes history.** A person's Meshes edit is a [`Snapshot`], restored whole. An
+/// agent's library write is a [`Step::Logged`]: the operation-log line that made it, undone through
+/// `ops::undo` the way the Map door undoes an agent's turn (cycle 9 gap 1). A snapshot restore can
+/// never erase a newer agent write, because that write is a step of its own and not part of a
+/// snapshot the person took before it.
+#[derive(Clone)]
+pub enum Step {
+    Snapshot(Snapshot),
+    Logged { line: String, phrase: String },
+}
+
 impl ImportState {
     /// The state as it stands, for the history.
     pub fn snapshot(&self, project: &Project) -> Snapshot {
@@ -317,11 +328,36 @@ impl ImportState {
     /// One place, so no edit site can forget the second half — the same rule `EditorState::record`
     /// follows on the map side, and for the same reason.
     pub fn record(&mut self, before: Snapshot) {
+        self.record_step(Step::Snapshot(before));
+    }
+
+    /// **Record a change an agent's operation made**, by its operation-log line (cycle 9 gap 1).
+    pub fn record_logged(&mut self, line: String, phrase: String) {
+        self.record_step(Step::Logged { line, phrase });
+    }
+
+    fn record_step(&mut self, step: Step) {
         if self.undo.len() >= TILE_HISTORY {
             self.undo.remove(0);
         }
-        self.undo.push(before);
+        self.undo.push(step);
         self.redo.clear();
+    }
+
+    /// Forget a logged step whose line is no longer in effect, on either stack.
+    pub fn forget_line(&mut self, line: &str) {
+        let gone = |s: &Step| matches!(s, Step::Logged { line: l, .. } if l == line);
+        self.undo.retain(|s| !gone(s));
+        self.redo.retain(|s| !gone(s));
+    }
+
+    /// Put an entry back on the undo stack (`undo`) or the redo stack, where it was taken from.
+    pub fn push_step(&mut self, undo: bool, step: Step) {
+        if undo {
+            self.undo.push(step);
+        } else {
+            self.redo.push(step);
+        }
     }
 }
 
@@ -349,27 +385,26 @@ fn stage_camera(
     mode: Res<Mode>,
     state: Res<ImportState>,
     project: Res<Project>,
-    preset: Option<Res<crate::anim_stage::BenchCamera>>,
-    carousel: Res<crate::compose::StagedCarousel>,
-    mut rig: ResMut<crate::view::Rig>,
-    mut saved: ResMut<MapView>,
-    mut staged: ResMut<StagedLift>,
-    // **The hole the world is drawn through**, whose shape decides how close the mesh stage can get.
-    // `surface::fit_viewport` hands this same rect to the camera as its viewport, so it is the frame
-    // the subject actually has to fit inside — not the window.
-    slot: Query<&bevy::ui::ComputedNode, With<crate::chrome::ViewportSlot>>,
-    // **The mesh as it is actually drawn**, which is the only honest source for how big it is.
-    // `staged_lift`, `align.rotate`, `align.scale` and a mesh whose origin is not its centre all
-    // move the art relative to what `extent` records — framing from the descriptor put a ceiling
-    // lamp half off the top of the hole, seen in a captured frame.
-    previews: Query<Entity, With<Preview>>,
-    kids: Query<&Children>,
-    boxes: Query<(&bevy::camera::primitives::Aabb, &GlobalTransform)>,
+    resources: StageResources<'_>,
+    measure: SubjectMeasure<'_, '_>,
     // What the hole and the subject last measured. Both re-frame: the hole for a first layout and a
     // window resize, the subject because a mesh loads asynchronously and is not there to measure on
     // the frame its row was selected.
     mut last: Local<(Vec2, Vec3, Vec3)>,
 ) {
+    let StageResources {
+        preset,
+        carousel,
+        mut rig,
+        mut saved,
+        mut staged,
+    } = resources;
+    let SubjectMeasure {
+        slot,
+        previews,
+        kids,
+        boxes,
+    } = measure;
     // **Re-centre when the piece moves up, as well as when the tab changes.** Raising a sconce to
     // 2.4 m would otherwise push it out of a view framed on the floor, and the author's own edit would
     // look like the preview breaking.
@@ -528,6 +563,34 @@ fn stage_camera(
             }
         }
     }
+}
+
+/// The camera's stage resources, bundled so `stage_camera` stays under the parameter cap. Each field
+/// is the parameter it was.
+#[derive(bevy::ecs::system::SystemParam)]
+struct StageResources<'w> {
+    preset: Option<Res<'w, crate::anim_stage::BenchCamera>>,
+    carousel: Res<'w, crate::compose::StagedCarousel>,
+    rig: ResMut<'w, crate::view::Rig>,
+    saved: ResMut<'w, MapView>,
+    staged: ResMut<'w, StagedLift>,
+}
+
+/// The entities `stage_camera` measures the stage against, bundled so it stays under the parameter
+/// cap. Each field is the query it was.
+#[derive(bevy::ecs::system::SystemParam)]
+struct SubjectMeasure<'w, 's> {
+    // **The hole the world is drawn through**, whose shape decides how close the mesh stage can get.
+    // `surface::fit_viewport` hands this same rect to the camera as its viewport, so it is the frame
+    // the subject actually has to fit inside — not the window.
+    slot: Query<'w, 's, &'static bevy::ui::ComputedNode, With<crate::chrome::ViewportSlot>>,
+    // **The mesh as it is actually drawn**, which is the only honest source for how big it is.
+    // `staged_lift`, `align.rotate`, `align.scale` and a mesh whose origin is not its centre all
+    // move the art relative to what `extent` records — framing from the descriptor put a ceiling
+    // lamp half off the top of the hole, seen in a captured frame.
+    previews: Query<'w, 's, Entity, With<Preview>>,
+    kids: Query<'w, 's, &'static Children>,
+    boxes: Query<'w, 's, (&'static bevy::camera::primitives::Aabb, &'static GlobalTransform)>,
 }
 
 /// Orthographic viewport height on the stage, metres. About three grid cells, so a 1-cell piece has
@@ -1254,9 +1317,16 @@ fn tile_history_keys(
     } else {
         state.redo.pop()
     };
-    let Some(want) = taken else {
+    let Some(step) = taken else {
         state.status.note(format!("nothing to {verb} on this tab"));
         return;
+    };
+    let want = match step {
+        Step::Snapshot(want) => want,
+        Step::Logged { line, phrase } => {
+            replay_logged(back, verb, line, phrase, &mut project, &mut state);
+            return;
+        }
     };
 
     // **The map gets a vote.** `commit_measured` validates the library against itself and never
@@ -1291,11 +1361,7 @@ fn tile_history_keys(
             // A project whose maps cannot be read cannot answer this, and guessing "nobody places
             // it" is how a guard stops guarding. Refuse and say which file.
             Err(e) => {
-                if back {
-                    state.undo.push(want);
-                } else {
-                    state.redo.push(want);
-                }
+                state.push_step(back, Step::Snapshot(want));
                 state.status.problem(format!("cannot {verb}: {e}"));
                 return;
             }
@@ -1304,11 +1370,7 @@ fn tile_history_keys(
     if !missing.is_empty() {
         let named = missing.join("`, `");
         // Back where it came from — refusing must not also cost the entry.
-        if back {
-            state.undo.push(want);
-        } else {
-            state.redo.push(want);
-        }
+        state.push_step(back, Step::Snapshot(want));
         state.status.problem(format!(
             "cannot {verb}: `{named}` still places it — remove or undo those placements first"
         ));
@@ -1338,20 +1400,72 @@ fn tile_history_keys(
             state.focused_pack = want.cursor.pack;
             state.excluded_focused = want.cursor.excluded;
             if back {
-                state.redo.push(now);
+                state.push_step(false, Step::Snapshot(now));
                 state.status.note("undid the last tile edit".to_owned());
             } else {
-                state.undo.push(now);
+                state.push_step(true, Step::Snapshot(now));
                 state.status.note("put the tile edit back".to_owned());
             }
         }
         Err(e) => {
-            if back {
-                state.undo.push(want);
-            } else {
-                state.redo.push(want);
-            }
+            state.push_step(back, Step::Snapshot(want));
             state.status.problem(format!("could not {verb}: {e}"));
+        }
+    }
+}
+
+/// **Undo or redo one logged change, as the Map door undoes an agent's turn (cycle 9 gap 1).**
+///
+/// The change is taken back by its operation-log line through `ops::undo`, so the log stays true: the
+/// line is no longer in effect, and `emerge_undo_operation` cannot be asked for it twice. The reversal
+/// is itself logged, and the entry it leaves on the other stack names that line, so redo is the same
+/// operation on the other side. A refusal puts the entry back, where the author looks.
+fn replay_logged(
+    back: bool,
+    verb: &str,
+    line: String,
+    phrase: String,
+    project: &mut Project,
+    state: &mut ImportState,
+) {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        root: None,
+        session: crate::ops::session_id(),
+        proposal: None,
+    };
+    match crate::ops::undo(&mut ctx, Some(&line)) {
+        Ok((
+            _,
+            crate::ops::Applied::Done {
+                outcome,
+                operation_id,
+                ..
+            },
+        )) => {
+            if let Some(fresh) = ctx.project.take() {
+                crate::editor::adopt_library(project, &fresh);
+            }
+            state.push_step(
+                !back,
+                Step::Logged {
+                    line: operation_id,
+                    phrase,
+                },
+            );
+            state.status.note(outcome.summary);
+        }
+        Ok((_, crate::ops::Applied::Refused(e))) | Err(e) => {
+            state.push_step(
+                back,
+                Step::Logged {
+                    line,
+                    phrase: phrase.clone(),
+                },
+            );
+            state.status.problem(format!("cannot {verb} {phrase}: {}", e.0));
         }
     }
 }
@@ -1608,7 +1722,7 @@ fn rotate_mesh(
     };
 
     // Taken before the write — the only moment the old value still exists.
-    let history_before = state.snapshot(&project);
+    let history_before = state.snapshot(project);
     let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
         return false;
     };
@@ -1687,18 +1801,6 @@ fn held_shift(keyboard: &ButtonInput<KeyCode>) -> bool {
     keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight)
 }
 
-/// **Mark every cell the mesh's geometry reaches, and say how many.**
-///
-/// The lattice is only worth authoring if occupancy comes off the mesh: at the shipped divisions a
-/// 3 m wall is 30 cells, and marking those by hand is not something anyone does twice.
-///
-/// `bevy_emerge_core::import::occupancy` explains the method and why it is vertices rather than a
-/// bounding box. Two rules live here rather than there:
-///
-/// * **`edge` and `anchor` survive.** Occupancy is a measurement; the tokens are an author's
-///   judgement, and a scan that erased them would make the button unusable on a tuned piece.
-/// * **The count is stated.** Vertex occupancy under-marks a large flat face with no vertex inside a
-///   cell — the middle of a tabletop — and "27 of 30 cells" is what tells an author to look.
 /// **Edge tokens read off the mesh, waiting for a yes.**
 ///
 /// The proposal half of FVS-R-26. `bevy_emerge_core::adjacency::derive_edges` does the reading; this holds
@@ -1751,6 +1853,19 @@ enum ScanKind {
     Automatic,
 }
 
+/// **Mark every cell the mesh's geometry reaches, and say how many.**
+///
+/// The lattice is only worth authoring if occupancy comes off the mesh: at the shipped divisions a
+/// 3 m wall is 30 cells, and marking those by hand is not something anyone does twice.
+///
+/// `bevy_emerge_core::import::occupancy` explains the method and why it is vertices rather than a
+/// bounding box. Two rules live here rather than there:
+///
+/// * **`edge` and `anchor` survive.** Occupancy is a measurement; the tokens are an author's
+///   judgement, and a scan that erased them would make the button unusable on a tuned piece.
+/// * **The count is stated.** Vertex occupancy under-marks a large flat face with no vertex inside a
+///   cell — the middle of a tabletop — and "27 of 30 cells" is what tells an author to look.
+///
 /// Returns the derivation for the caller to stage, or `None` when there was nothing to read.
 ///
 /// **The caller decides whether to stage it, and that is load-bearing.** `autoscan_candidate` runs
@@ -1766,9 +1881,7 @@ fn scan_mesh(project: &mut Project, state: &mut ImportState, kind: ScanKind) -> 
             return None;
         }
     };
-    let Some(d) = state.editing(&project.measured) else {
-        return None;
-    };
+    let d = state.editing(&project.measured)?;
     let Some(mesh) = d.mesh.clone() else {
         state
             .status
@@ -1806,9 +1919,7 @@ fn scan_mesh(project: &mut Project, state: &mut ImportState, kind: ScanKind) -> 
     // an edit: the snapshot is a whole library plus every candidate, which is not a thing to clone
     // per arrow press.
     let history_before = (kind == ScanKind::Asked).then(|| state.snapshot(project));
-    let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
-        return None;
-    };
+    let (d, where_to) = state.editing_mut(&mut project.measured)?;
     let grid = d.lattice_mut();
     for &at in &cells {
         grid.set_solid(at, div);
@@ -2123,7 +2234,7 @@ fn apply_verb_to(
     match verb {
         CellVerb::Solid => {
             // Taken before the write — the only moment the old value still exists.
-            let history_before = state.snapshot(&project);
+            let history_before = state.snapshot(project);
             let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
                 return;
             };
@@ -2148,7 +2259,7 @@ fn apply_verb_to(
         }
         CellVerb::Clear => {
             // Taken before the write — the only moment the old value still exists.
-            let history_before = state.snapshot(&project);
+            let history_before = state.snapshot(project);
             let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
                 return;
             };
@@ -2554,10 +2665,11 @@ fn cell_keys(
                     (n, true, _) => format!("{n} cells' tokens cleared"),
                     (n, false, _) => format!("{n} cells = `{token}`"),
                 };
-                // Nothing landed means nothing to write, and nothing to remember either.
-                // Nothing landed means nothing to write, and nothing to remember either.
+                // Nothing landed means nothing to write, and nothing to remember either — and it
+                // is a **refusal**: the editor could not put the token where it was asked to. The
+                // note slot is for answers, and this one was erased by the next receipt.
                 if wrote == 0 {
-                    state.status.note(said);
+                    state.status.problem(said);
                 } else {
                     state.record(history_before);
                     let wrote = persist(&mut project, where_to, said);
@@ -2701,61 +2813,26 @@ fn note_field_text(
 fn refresh_cells(
     state: Res<ImportState>,
     project: Res<Project>,
-    cell_edit: Res<CellEdit>,
-    note_edit: Res<NoteEdit>,
-    scale_edit: Res<ScaleEdit>,
+    edits: CellEdits<'_>,
     // **The proposals, because the box this repaints shows them.** `Option`, since the labeler is a
     // feature a project may never have used and a missing `Res<T>` panics its system in Bevy 0.19.
     suggestions: Option<Res<crate::labels::Suggestions>>,
     mut cells: Query<(&CellButton, &CellLayer, &mut crate::chrome::RowRest)>,
-    mut glyphs: Query<
-        (&CellGlyph, &CellLayer, &mut Text, &mut TextColor),
-        (
-            Without<SelectedCellLine>,
-            Without<NoteReadout>,
-            Without<ScaleReadout>,
-        ),
-    >,
-    mut lines: Query<
-        (&mut Text, &mut TextColor),
-        (
-            With<SelectedCellLine>,
-            Without<CellGlyph>,
-            Without<NoteReadout>,
-            Without<ScaleReadout>,
-        ),
-    >,
-    mut notes: Query<
-        (&mut Text, &mut TextColor),
-        (
-            With<NoteReadout>,
-            Without<CellGlyph>,
-            Without<SelectedCellLine>,
-            Without<ScaleReadout>,
-        ),
-    >,
-    mut widths: Query<
-        (&mut Text, &mut TextColor),
-        (
-            With<ScaleReadout>,
-            Without<CellGlyph>,
-            Without<SelectedCellLine>,
-            Without<NoteReadout>,
-            Without<MountHeightReadout>,
-        ),
-    >,
-    height_edit: Res<HeightEdit>,
-    mut heights: Query<
-        (&mut Text, &mut TextColor),
-        (
-            With<MountHeightReadout>,
-            Without<CellGlyph>,
-            Without<SelectedCellLine>,
-            Without<NoteReadout>,
-            Without<ScaleReadout>,
-        ),
-    >,
+    readouts: CellReadouts<'_, '_>,
 ) {
+    let CellEdits {
+        cell_edit,
+        note_edit,
+        scale_edit,
+        height_edit,
+    } = edits;
+    let CellReadouts {
+        mut glyphs,
+        mut lines,
+        mut notes,
+        mut widths,
+        mut heights,
+    } = readouts;
     // As placed, so the cells shown are the cells that exist. See [`ImportState::placed`].
     let Some(d) = state.placed(&project) else {
         return;
@@ -2887,6 +2964,89 @@ fn refresh_cells(
             colour.0 = height_tint;
         }
     }
+}
+
+/// The cell glyph column: each cell's character and tint.
+type GlyphQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static CellGlyph, &'static CellLayer, &'static mut Text, &'static mut TextColor),
+    (
+        Without<SelectedCellLine>,
+        Without<NoteReadout>,
+        Without<ScaleReadout>,
+    ),
+>;
+/// The selected cell's readout line.
+type SelectedLineQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Text, &'static mut TextColor),
+    (
+        With<SelectedCellLine>,
+        Without<CellGlyph>,
+        Without<NoteReadout>,
+        Without<ScaleReadout>,
+    ),
+>;
+/// The note readout line.
+type NoteQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Text, &'static mut TextColor),
+    (
+        With<NoteReadout>,
+        Without<CellGlyph>,
+        Without<SelectedCellLine>,
+        Without<ScaleReadout>,
+    ),
+>;
+/// The scale readout line.
+type WidthQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Text, &'static mut TextColor),
+    (
+        With<ScaleReadout>,
+        Without<CellGlyph>,
+        Without<SelectedCellLine>,
+        Without<NoteReadout>,
+        Without<MountHeightReadout>,
+    ),
+>;
+/// The mount-height readout line.
+type HeightQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Text, &'static mut TextColor),
+    (
+        With<MountHeightReadout>,
+        Without<CellGlyph>,
+        Without<SelectedCellLine>,
+        Without<NoteReadout>,
+        Without<ScaleReadout>,
+    ),
+>;
+
+/// The cell-grid text readouts `refresh_cells` repaints, bundled so the system stays under the
+/// parameter cap. Each field is the query the bare parameter was.
+#[derive(bevy::ecs::system::SystemParam)]
+struct CellReadouts<'w, 's> {
+    glyphs: GlyphQuery<'w, 's>,
+    lines: SelectedLineQuery<'w, 's>,
+    notes: NoteQuery<'w, 's>,
+    widths: WidthQuery<'w, 's>,
+    heights: HeightQuery<'w, 's>,
+}
+
+/// The cell-editing resources `refresh_cells` reads, bundled so the system stays under the
+/// parameter cap. Each field is the `Res` the bare parameter was.
+#[derive(bevy::ecs::system::SystemParam)]
+struct CellEdits<'w> {
+    cell_edit: Res<'w, CellEdit>,
+    note_edit: Res<'w, NoteEdit>,
+    scale_edit: Res<'w, ScaleEdit>,
+    height_edit: Res<'w, HeightEdit>,
 }
 
 /// Candidates grouped by the directory they came from, in scan order.
@@ -3126,7 +3286,7 @@ fn write_library(project: &mut Project) -> Result<std::path::PathBuf, String> {
 /// therefore byte-identical to what was already there, the change vanished, and the status line
 /// reported success: *"added `crate_b` — it is in the palette now"* about a palette that never gained
 /// it. A derived layer is not a place to keep anything; this is the only door to the one that is.
-fn commit_measured(
+pub(crate) fn commit_measured(
     project: &mut Project,
     measured: bevy_emerge_core::library::Library,
 ) -> Result<std::path::PathBuf, String> {
@@ -3368,10 +3528,10 @@ impl Axis {
             Axis::Surfaces => "OFFERS",
         }
     }
-    fn tokens<'a>(
+    fn tokens(
         self,
-        v: &'a bevy_emerge_core::vocab::Vocabularies,
-    ) -> &'a bevy_emerge_core::vocab::Vocabulary {
+        v: &bevy_emerge_core::vocab::Vocabularies,
+    ) -> &bevy_emerge_core::vocab::Vocabulary {
         match self {
             Axis::Kind => &v.kind,
             Axis::Effects => &v.effects,
@@ -3379,7 +3539,7 @@ impl Axis {
             Axis::Surfaces => &v.surfaces,
         }
     }
-    fn list<'a>(self, d: &'a mut bevy_emerge_core::descriptor::Descriptor) -> &'a mut Vec<String> {
+    fn list(self, d: &mut bevy_emerge_core::descriptor::Descriptor) -> &mut Vec<String> {
         match self {
             Axis::Kind => &mut d.kind,
             Axis::Effects => &mut d.effects,
@@ -3597,6 +3757,9 @@ impl Plugin for TilesPlugin {
                         paint_label_progress,
                         apply_what_arrives,
                         hide_filter_on_the_tiles_page.run_if(in_tiles_panel),
+                        // **The cue that names the other door.** It is written every frame it
+                        // changes, and the door is what changes it.
+                        name_the_other_door,
                     ),
                     (
                         rebuild_candidates
@@ -3832,7 +3995,103 @@ fn spawn_tab_strip(
                 })
                 .observe(click_tab);
             }
+            // **The other door, and the key that reaches it.**
+            //
+            // **The cue is a place, and the place is here.** Braem & Egner, *Getting a grip on
+            // cognitive flexibility* (2018, `10.1177/0963721418787475`), on Crump & Logan (2010):
+            // *"switch costs can be reduced for stimuli that are presented at a screen location
+            // associated with a higher likelihood of task switches."* The strip is where the editor
+            // already says which door is open, so it is where the author looks — and a cue that is
+            // always on screen costs nothing to read.
+            //
+            // **It says "the other door", and names it.** The key is a *readiness* to switch rather
+            // than a direction — the same finding's *"a general readiness to switch between tasks
+            // rather than to switch to one particular alternative task"* — so the same words and the
+            // same key mean the same thing on both doors. The strip says which way is other.
+            //
+            // **The name is here; the key is the badge's.** The strip's own convention is that a
+            // control states its key in its own text and the badge cluster repeats it — the tab
+            // chips print `1`, `2`, `3` and the badges print them again. So this prints the *name*
+            // and the badge prints the *key*, and the two are complementary rather than two
+            // statements of the same fact.
+            p.spawn((
+                Node {
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(crate::chrome::GAP_ROW),
+                    margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
+                    ..default()
+                },
+                OtherDoorMark,
+            ))
+            .with_children(|m| {
+                m.spawn((
+                    Text::new("the other door"),
+                    TextColor(MUTED),
+                    // **`BODY`, not `LABEL`.** `LABEL` is 10 px and the strip's own labels are
+                    // `TAB`'s 13 — so at `LABEL` the phrase is a whisper beside a shout. `BODY` is
+                    // 11 px, the readable default, and it is still a step below the panels: **the
+                    // panels are the strip's subject, and the cue is a sentence beside them.**
+                    crate::chrome::font(crate::chrome::text::BODY),
+                    Node {
+                        margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
+                        ..default()
+                    },
+                    OtherDoorLabel,
+                ));
+            });
         });
+}
+
+/// **The mark that names the other door** — the cue the crossing hangs on.
+///
+/// A component rather than plain text, because the *name* of the other door changes with the door
+/// that is open, and a text node that is written once cannot be written again without being
+/// rebuilt.
+#[derive(Component)]
+pub struct OtherDoorMark;
+
+/// The name, inside [`OtherDoorMark`].
+#[derive(Component)]
+pub struct OtherDoorLabel;
+
+/// **Name the other door**, so the cue says which way is other.
+///
+/// **The Rigs door is not a door the author crosses to.** It is the rig bench — a character asset
+/// rather than level content — and `screen.rs` says it *"crosses with neither"*. So the mark names
+/// the **Map** door from the Kit door and the **Kit** door from the Map door, and the Rigs door
+/// names nothing: there is nowhere for the author to go, and a cue that leads nowhere is a lie.
+fn name_the_other_door(
+    door: Option<Res<Door>>,
+    mut labels: Query<&mut Text, With<OtherDoorLabel>>,
+    mut marks: Query<&mut Node, With<OtherDoorMark>>,
+) {
+    let Some(door) = door else { return };
+    let other = match *door {
+        Door::Map => Some(Door::Kit),
+        Door::Kit => Some(Door::Map),
+        Door::Rigs => None,
+    };
+    for mut label in &mut labels {
+        let text = match other {
+            Some(d) => format!("the {} door", d.label().to_lowercase()),
+            None => String::new(),
+        };
+        if label.0 != text {
+            label.0 = text;
+        }
+    }
+    // **And the whole mark goes when there is no other door**, rather than showing an empty name
+    // beside a key that does nothing.
+    for mut node in &mut marks {
+        let want = if other.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if node.display != want {
+            node.display = want;
+        }
+    }
 }
 
 /// **The tab chips answer the pointer again, and this is the record of how.**
@@ -3914,12 +4173,28 @@ fn style_tabs(
 fn focus_filter(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
+    mode: Res<Mode>,
     mut filters: ResMut<crate::filter::Filters>,
 ) {
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusFilter) {
-        // The pane this tab's list is filtered by — the same one `rebuild_candidates` reads, so the
-        // box that takes the keys is the box above the rows they narrow.
-        filters.take_focus(crate::filter::Pane::Candidates);
+        // **The pane this tab's list is filtered by.** It was always `Candidates` — the Tiles tab's
+        // list — so the Map tab's PLACE filter was **mouse-only**, and the Rigs tab's was too.
+        //
+        // Measured on Sanctuary's project: reaching one row in a 211-descriptor palette took
+        // **~90 keystrokes** of `Shift+Down`, and the walk *wraps* — the fence is in `KIT · FENCE`
+        // and the `town` kit's groups come after it, so an over-long walk lands in the wrong kit.
+        // And a click that missed the box **fell through to the map and replaced a house block with
+        // a barrel**, because a box the author cannot reach by keyboard is a box they will miss.
+        //
+        // So the key focuses the box above the list the author is actually looking at, and the
+        // pane-per-tab mapping is the one the filter module already keeps.
+        let pane = match *mode {
+            Mode::Meshes | Mode::Tiles => crate::filter::Pane::Candidates,
+            Mode::Map => crate::filter::Pane::Palette,
+            Mode::Anim => crate::filter::Pane::Rigs,
+            Mode::Compose => crate::filter::Pane::Candidates,
+        };
+        filters.take_focus(pane);
     }
     if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusTagFilter) {
         filters.take_focus(crate::filter::Pane::Tags);
@@ -4196,25 +4471,37 @@ fn spawn_tiles_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
 ///
 /// `1` is this door's first panel, not the binary's — so on the Kit door `1` is Meshes. Everything
 /// reachable by mouse is reachable by keyboard (`docs/ui.md` §4.2), and the strip is what both read.
-fn tab_shortcuts(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    live: Res<crate::keys::Live>,
-    project: Res<Project>,
-    door: Res<Door>,
+fn tab_shortcuts(world: &mut World) {
+    let Some(door) = world.get_resource::<Door>().copied() else {
+        return;
+    };
+    // **The slot that was pressed**, read here and acted on below, so the `World` borrow ends first.
+    let want = {
+        let keyboard = world.resource::<ButtonInput<KeyCode>>();
+        let live = *world.resource::<crate::keys::Live>();
+        door.tabs().iter().enumerate().find_map(|(i, &want)| {
+            let action = Action::tab_slot(i)?;
+            keys::just_pressed(keyboard, live, action).then_some(want)
+        })
+    };
+    if let Some(want) = want {
+        crate::editor::open_door(world, door, Some(want));
+    }
+}
+
+/// **Enter a tab for the operation that asked for it** (`door_open` with a tab). It is the same entry
+/// as the slot key and the chip click, so the scan-on-arrival and the receipt clearing happen once.
+pub fn go_to_tab(
+    In(want): In<Mode>,
+    project: Option<Res<Project>>,
     mut mode: ResMut<Mode>,
     mut state: ResMut<ImportState>,
-    // Cleared when leaving the Tiles tab — see `enter_tab`.
     mut build: ResMut<crate::build::Build>,
 ) {
-    for (i, &want) in door.tabs().iter().enumerate() {
-        let Some(action) = Action::tab_slot(i) else {
-            continue;
-        };
-        if keys::just_pressed(&keyboard, *live, action) {
-            enter_tab(want, &project, &mut mode, &mut state, &mut build);
-            return;
-        }
-    }
+    let Some(project) = project else {
+        return;
+    };
+    enter_tab(want, &project, &mut mode, &mut state, &mut build);
 }
 
 /// **Go to a panel** — the one step, so the key and the click cannot come to mean different things.
@@ -4280,24 +4567,24 @@ fn enter_tab(
 /// that reading was one word too strong. It needs the chip to stop being a `Button`. A press is a
 /// press; `Enter` belongs to whatever has the keyboard, and a tab strip never should.
 ///
-/// So: no `Button`, no `Activate`, no focus — a `Pointer<Click>` observer that walks the same
-/// [`enter_tab`] the key does. It bubbles, so a click on the chip's chord or label reaches the chip.
-fn click_tab(
-    click: On<PointerClick>,
-    tabs: Query<&Tab>,
-    project: Option<Res<Project>>,
-    mode: Option<ResMut<Mode>>,
-    state: Option<ResMut<ImportState>>,
-    // `Option`, like every other door resource an observer takes: a global `Activate`/`Pointer`
-    // observer fires on any screen, and a missing `Res<T>` panics rather than skipping.
-    build: Option<ResMut<crate::build::Build>>,
-) {
-    let (Ok(tab), Some(project), Some(mut mode), Some(mut state), Some(mut build)) =
-        (tabs.get(click.entity), project, mode, state, build)
-    else {
+/// So: no `Button`, no `Activate`, no focus — a `Pointer<Click>` observer that goes through the same
+/// [`crate::editor::open_door`] the key does, so a click and a key log the same `door_open` line. It bubbles, so a click on the chip's chord or label reaches the chip.
+fn click_tab(click: On<PointerClick>, tabs: Query<&Tab>, mut commands: Commands) {
+    let Ok(tab) = tabs.get(click.entity) else {
         return;
     };
-    enter_tab(tab.0, &project, &mut mode, &mut state, &mut build);
+    let want = tab.0;
+    // Deferred, because `open_door` takes the whole `World`. A global `Pointer` observer fires on any
+    // screen, so the door and the editor state are checked where the command runs, not assumed here.
+    commands.queue(move |world: &mut World| {
+        let Some(door) = world.get_resource::<Door>().copied() else {
+            return;
+        };
+        if !world.contains_resource::<crate::editor::EditorState>() {
+            return;
+        }
+        crate::editor::open_door(world, door, Some(want));
+    });
 }
 
 /// **`R` rescans**, because meshes arrive while the editor is open — an importer that only sees what
@@ -4458,8 +4745,10 @@ mod pack_fold_tests {
             triangles: 0,
             findings: Vec::new(),
         };
-        let mut state = ImportState::default();
-        state.candidates = vec![mesh("alpha", "one"), mesh("beta", "two")];
+        let mut state = ImportState {
+            candidates: vec![mesh("alpha", "one"), mesh("beta", "two")],
+            ..Default::default()
+        };
         state.folded_packs.insert("beta".to_owned());
         // Where the author left the cursor: a library row, with the candidate list's own highlight
         // parked on a pack heading.
@@ -4511,6 +4800,41 @@ mod pack_fold_tests {
         }
     }
 
+    /// **A Map-door reversal that changed the library lands in the live project** (cycle 9 gap 2).
+    ///
+    /// The reversal runs `ops::undo` on a clone, and `carry_changes` used to move only the rules back.
+    /// A label write in the clone then left the live `measured` library stale until the watcher
+    /// re-opened the map about 250 ms later, so the Map drew the old look in the meantime.
+    #[test]
+    fn a_map_undo_that_changes_the_library_updates_the_live_project() {
+        let mut live = kit_holding(&["wall"]);
+        let mut fresh = live.clone();
+        for d in fresh.measured.descriptors.iter_mut().filter(|d| d.id == "wall") {
+            d.look = vec!["worn".to_owned()];
+        }
+        let mut ctx = crate::ops::Ctx {
+            project: Some(fresh),
+            open: None,
+            source: crate::ops::Source::Human,
+            root: None,
+            session: crate::ops::session_id(),
+            proposal: None,
+        };
+        crate::editor::carry_changes(&mut live, &mut ctx);
+        let look = live
+            .measured
+            .descriptors
+            .iter()
+            .find(|d| d.id == "wall")
+            .map(|d| d.look.clone())
+            .unwrap_or_default();
+        assert_eq!(
+            look,
+            vec!["worn".to_owned()],
+            "the live library kept the pre-undo look, so the Map would draw a stale piece"
+        );
+    }
+
     /// **A synthetic project — no files, no meshes, no shipped corpus.**
     ///
     /// A test that read the real `assets/` would fail the day somebody imports a kit, and importing
@@ -4540,6 +4864,8 @@ mod pack_fold_tests {
             emerge_dir: std::path::PathBuf::from("/nonexistent"),
             project_dir: std::path::PathBuf::from("/nonexistent"),
             maps_dir: std::path::PathBuf::from("/nonexistent/maps"),
+            // A test project has no map open.
+            open_map_name: None,
             kits: Vec::new(),
             bashes: Vec::new(),
             namespace: "nonexistent".to_owned(),
@@ -4586,12 +4912,14 @@ mod pack_fold_tests {
             triangles: 0,
             findings: Vec::new(),
         };
-        let mut state = ImportState::default();
-        state.candidates = vec![
-            mesh("alpha", "one"),   // 0 — in a FOLDED pack, like 157's neighbours above it
-            mesh("beta", "two"),    // 1 — the first open pack
-            mesh("beta", "three"),  // 2
-        ];
+        let mut state = ImportState {
+            candidates: vec![
+                mesh("alpha", "one"),   // 0 — in a FOLDED pack, like 157's neighbours above it
+                mesh("beta", "two"),    // 1 — the first open pack
+                mesh("beta", "three"),  // 2
+            ],
+            ..Default::default()
+        };
         state.folded_packs.insert("alpha".to_owned());
         let filters = crate::filter::Filters::default();
         let policy = Policy::default();
@@ -4662,13 +4990,15 @@ mod pack_fold_tests {
             triangles: 0,
             findings: Vec::new(),
         };
-        let mut state = ImportState::default();
-        state.candidates = vec![
-            mesh("alpha", "one"),   // 0
-            mesh("beta", "two"),    // 1  <- beta gets folded
-            mesh("beta", "three"),  // 2
-            mesh("gamma", "four"),  // 3
-        ];
+        let mut state = ImportState {
+            candidates: vec![
+                mesh("alpha", "one"),   // 0
+                mesh("beta", "two"),    // 1  <- beta gets folded
+                mesh("beta", "three"),  // 2
+                mesh("gamma", "four"),  // 3
+            ],
+            ..Default::default()
+        };
         let filters = crate::filter::Filters::default();
         let policy = Policy::default();
 
@@ -4711,12 +5041,14 @@ mod pack_fold_tests {
             triangles: 0,
             findings: Vec::new(),
         };
-        let mut state = ImportState::default();
-        state.candidates = vec![
-            mesh("alpha", "one"),   // 0
-            mesh("beta", "two"),    // 1  <- excluded, drawn last
-            mesh("gamma", "three"), // 2
-        ];
+        let mut state = ImportState {
+            candidates: vec![
+                mesh("alpha", "one"),   // 0
+                mesh("beta", "two"),    // 1  <- excluded, drawn last
+                mesh("gamma", "three"), // 2
+            ],
+            ..Default::default()
+        };
         let filters = crate::filter::Filters::default();
         let policy = Policy {
             exclude: vec!["beta".to_owned()],
@@ -4927,7 +5259,7 @@ pub(crate) fn scan(project: &Project, state: &mut ImportState) {
             // which is the exact thing the paragraph above forbids.
             match grouped
                 .iter()
-                .find(|(pack, _)| pack_is_open(&state, &project.policy, pack))
+                .find(|(pack, _)| pack_is_open(state, &project.policy, pack))
             {
                 Some((_, members)) => state.selected = members.first().copied().unwrap_or(0),
                 None => {
@@ -5007,7 +5339,7 @@ fn rename_candidate(
                 if id.is_empty() {
                     state
                         .status
-                        .note("an id cannot be empty; nothing was changed".to_owned());
+                        .problem("an id cannot be empty; nothing was changed".to_owned());
                 } else {
                     // The candidate this field was opened on, found by the mesh it names rather than
                     // by wherever the selection has since moved to.
@@ -5134,10 +5466,10 @@ fn step_mount(project: &mut Project, state: &mut ImportState) {
         })
         .map_or(0, |i| (i + 1) % options.len());
     let mut want = options[next].clone();
-    if let Some(h) = had {
-        if let Some(kept) = bevy_emerge_core::descriptor::with_mount_height(&want, h) {
-            want = kept;
-        }
+    if let Some(h) = had
+        && let Some(kept) = bevy_emerge_core::descriptor::with_mount_height(&want, h)
+    {
+        want = kept;
     }
     d.mount = Some(want);
     crate::labels::stamp_human(d, bevy_emerge_core::descriptor::Axis::Mount);
@@ -5157,15 +5489,18 @@ fn suggestion_keys(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
     mut state: ResMut<ImportState>,
-    mut suggestions: ResMut<crate::labels::Suggestions>,
-    mut generation: ResMut<crate::labels::LabelGeneration>,
-    mut label_queue: ResMut<crate::labels::LabelQueue>,
-    mut label_tasks: ResMut<crate::labels::LabelTasks>,
-    mut rig: ResMut<crate::label_booth::ShotRig>,
+    stores: LabelStores<'_>,
 ) {
     if !keys::just_pressed(&keyboard, *live, Action::DiscardAllSuggestions) {
         return;
     }
+    let LabelStores {
+        mut suggestions,
+        mut generation,
+        mut label_queue,
+        mut label_tasks,
+        mut rig,
+    } = stores;
     state.status.note(crate::labels::clear_all_labels(
         &mut suggestions,
         &mut generation,
@@ -5173,6 +5508,17 @@ fn suggestion_keys(
         &mut label_tasks,
         &mut rig,
     ));
+}
+
+/// The label stores the discard-all key clears together, bundled so the system stays under the
+/// parameter cap. Each field is the access the bare parameter had.
+#[derive(bevy::ecs::system::SystemParam)]
+struct LabelStores<'w> {
+    suggestions: ResMut<'w, crate::labels::Suggestions>,
+    generation: ResMut<'w, crate::labels::LabelGeneration>,
+    label_queue: ResMut<'w, crate::labels::LabelQueue>,
+    label_tasks: ResMut<'w, crate::labels::LabelTasks>,
+    rig: ResMut<'w, crate::label_booth::ShotRig>,
 }
 
 /// **A label that arrives is a label that lands**, one per frame.
@@ -5302,15 +5648,24 @@ pub(crate) fn apply_suggestion(
             }
             suggestions.remove(&target);
             generation.0 = generation.0.wrapping_add(1);
-            let Some(d) = state.placed_at_target(&target, &project).cloned() else {
+            let Some(d) = state.placed_at_target(&target, project).cloned() else {
                 return;
             };
             let said = crate::labels::request_photos(target, &d, label_tasks, rig);
-            state.status.note(format!(
-                "righted `{name}` {} quarter turn(s) about {} — {said}",
-                turn.turns,
-                turn.axis.to_uppercase()
-            ));
+            // **The righting itself happened, so the receipt is a receipt** — but the photo
+            // request inside it may have been refused, and a refusal does not ride in a note.
+            match said {
+                crate::labels::Asked::Said(said) => state.status.note(format!(
+                    "righted `{name}` {} quarter turn(s) about {} — {said}",
+                    turn.turns,
+                    turn.axis.to_uppercase()
+                )),
+                crate::labels::Asked::Refused(why) => state.status.problem(format!(
+                    "righted `{name}` {} quarter turn(s) about {} — {why}",
+                    turn.turns,
+                    turn.axis.to_uppercase()
+                )),
+            }
             return;
         }
         // **A righting that cannot happen drops the proposal**, and that is not tidiness: a refusal
@@ -5565,7 +5920,7 @@ fn commit_candidate(
     }
     let descriptor = candidate.proposed.clone();
     if descriptor.id.trim().is_empty() {
-        state.status.note("give it an id first (I)".to_owned());
+        state.status.problem("give it an id first (I)".to_owned());
         return;
     }
     // **A new id has to agree with the kit it is joining.**
@@ -5603,7 +5958,7 @@ fn commit_candidate(
         // authored, so "select it above to edit that tile" is false for a row that is not there:
         // the id belongs to another bound kit, and the way forward is a different one.
         let mine = project.measured.get(&descriptor.id).is_some();
-        state.status.note(if mine {
+        state.status.problem(if mine {
             format!(
                 "`{}` is already in the library — select it above to edit that tile, or rename \
                  this candidate (I). Accepting it here would replace the tile and take its tags \
@@ -5631,10 +5986,32 @@ fn commit_candidate(
     // in isolation would reject the pair that fixes each other.
     // `trial` is a clone, so `project.measured` is still the pre-edit state here.
     let before = state.snapshot(&project);
-    let mut trial = project.measured.clone();
-    trial.descriptors.push(descriptor.clone());
-    match commit_measured(&mut project, trial) {
-        Ok(path) => {
+    // **Through the registry** (S2.2). This wrote `commit_measured` on a trial library inline, and
+    // `piece_import` does the same thing for a mesh an agent names — so one of the two had to become
+    // the other. The operation takes the `.glb` path and re-measures, which is one extra mesh read on
+    // Enter and the price of having one door.
+    let mut ctx = crate::ops::Ctx {
+        project: Some((*project).clone()),
+        open: None,
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        ..crate::ops::Ctx::default()
+    };
+    let applied = crate::ops::dispatch(
+        &mut ctx,
+        "piece_import",
+        &serde_json::json!({
+            "glb": format!("assets/{}", candidate.mesh),
+            "id": descriptor.id,
+        }),
+    );
+    // **The library the operation wrote goes back into the resource.** `commit_measured` rewrites
+    // `measured` and every kit's layers, and this tab reads them from `Project`.
+    if let Some(fresh) = ctx.project.take() {
+        crate::editor::adopt_library(&mut project, &fresh);
+    }
+    match applied {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => {
             // Drop it from the candidate list: it is in the library now, and an importer that keeps
             // offering what you have already taken is one you cannot tell your progress from.
             let at = state.selected;
@@ -5642,19 +6019,82 @@ fn commit_candidate(
             state.selected = at.min(state.candidates.len().saturating_sub(1));
             state.summary = format!("{} mesh(es) left to import", state.candidates.len());
             state.record(before);
-            state.status.note(format!(
-                "added `{}` — it is in the palette now",
-                descriptor.id
-            ));
-            info!("added `{}` to {}", descriptor.id, path.display());
+            state.status.note(outcome.summary.clone());
+            info!("{}", outcome.summary);
         }
-        Err(e) => {
-            // Nothing was added and nothing was written — `commit_measured` refuses before it
-            // touches the disk — so this says the one thing that is true of both.
-            state.status.problem(format!("not added: {e}"));
-            error!("{e}");
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+            // Nothing was added and nothing was written — the operation refuses before it touches
+            // the disk — so this says the one thing that is true of both.
+            state.status.problem(format!("not added: {}", e.0));
+            error!("{}", e.0);
         }
     }
+}
+
+/// **The commit door's own four refusals, for a mesh an agent names** (S2.2).
+///
+/// Steps 9 to 12 of `commit_candidate` — policy exclusion, an empty id, the namespace the kit is bound
+/// as, and a duplicate id — extracted so `ops::piece_import` runs **the same four refusals** rather
+/// than a second copy that agrees by habit. The strings are unchanged, deliberately: they are what an
+/// author reads on the Meshes tab, and an agent importing a mesh must read the same words.
+///
+/// **`commit_candidate` still writes its own commit inline**, and that is a stated limit rather than
+/// an oversight: the operation takes a `.glb` path and re-measures, while the tab holds a measured
+/// candidate whose id an author has edited. Making them one dispatch needs a parameter a caller
+/// cannot supply, so the shared half is the refusals — which is where the two doors could actually
+/// disagree.
+///
+/// Returns the descriptor the door would have pushed, or the refusal. **It writes nothing.**
+pub(crate) fn admit_candidate(
+    project: &Project,
+    candidate: &bevy_emerge_core::import::Candidate,
+    id: &str,
+) -> Result<bevy_emerge_core::descriptor::Descriptor, String> {
+    if project.policy.excludes(&candidate.mesh) {
+        return Err(format!(
+            "`{}` is excluded from this kit, so it cannot be imported into it. Shift+R on its \
+             pack puts the pack back.",
+            leaf(&candidate.mesh)
+        ));
+    }
+    let mut descriptor = candidate.proposed.clone();
+    descriptor.id = id.to_owned();
+    if descriptor.id.trim().is_empty() {
+        return Err("give it an id first (I)".to_owned());
+    }
+    if let Some((ns, _)) = descriptor.id.split_once('/')
+        && ns != project.namespace
+    {
+        return Err(format!(
+            "`{}` would join this kit as `{ns}/*`, but it is bound as `{}`. Name it `{}` — or \
+             `{}/{}` if you mean to qualify it.",
+            descriptor.id,
+            project.namespace,
+            descriptor.id.rsplit('/').next().unwrap_or(&descriptor.id),
+            project.namespace,
+            descriptor.id.rsplit('/').next().unwrap_or(&descriptor.id),
+        ));
+    }
+    if project.library.get(&descriptor.id).is_some() {
+        let mine = project.measured.get(&descriptor.id).is_some();
+        return Err(if mine {
+            format!(
+                "`{}` is already in the library — select it above to edit that tile, or rename \
+                 this candidate (I). Accepting it here would replace the tile and take its tags \
+                 and lattice with it.",
+                descriptor.id
+            )
+        } else {
+            format!(
+                "`{}` is already defined by `{}`. Rename this candidate (I) to import the mesh \
+                 into `{}` as well.",
+                descriptor.id,
+                project.kit_of(&descriptor.id).unwrap_or("another kit"),
+                project.namespace
+            )
+        });
+    }
+    Ok(descriptor)
 }
 
 /// **Send a mesh back out of the library, and land on it where it lands.**
@@ -5687,8 +6127,7 @@ fn remove_tile(
     live: Res<crate::keys::Live>,
     mut project: ResMut<Project>,
     mut state: ResMut<ImportState>,
-    mut suggestions: ResMut<crate::labels::Suggestions>,
-    mut generation: ResMut<crate::labels::LabelGeneration>,
+    stale: StaleLabels<'_>,
     // See the refusal below — the same rule `commit_candidate` now holds.
     filters: Res<crate::filter::Filters>,
     mode: Res<Mode>,
@@ -5696,6 +6135,10 @@ fn remove_tile(
     if !keys::just_pressed(&keyboard, *live, Action::RemoveTile) {
         return;
     }
+    let StaleLabels {
+        mut suggestions,
+        mut generation,
+    } = stale;
     let Some(id) = state.selected_library_id.clone() else {
         state
             .status
@@ -5708,9 +6151,7 @@ fn remove_tile(
     // *"filtering after selecting could hide the selected tile while it stayed selected, and
     // `Delete` would still remove it"* — and then leaves the verb armed.
     let on_tiles = *mode == Mode::Tiles;
-    if !library_ids(&project, &filters, on_tiles, None)
-        .iter()
-        .any(|v| *v == id)
+    if !library_ids(&project, &filters, on_tiles, None).contains(&id)
     {
         state.status.problem(format!(
             "`{id}` is filtered out — clear the filter to remove it"
@@ -5763,14 +6204,30 @@ fn remove_tile(
             // **An entry with no mesh has nowhere to go back to**, and says so rather than claiming
             // a trip it did not make. Rare — every imported piece has one — but a library is a file
             // somebody can hand-edit.
-            state.status.note(match &mesh {
-                Some(_) => format!("sent `{id}` back to NOT IMPORTED — measured fresh, stripped"),
-                None => format!("removed `{id}` — it named no mesh, so nothing came back"),
-            });
+            //
+            // **And the no-mesh half is a refusal, not a receipt.** The removal happened, but the
+            // thing the author asked for — a piece back on the NOT IMPORTED shelf — did not, and
+            // "the editor did only part of it" is the crate's own definition of a problem. A note
+            // is one dim row that the next receipt erases; this one has to survive.
+            match &mesh {
+                Some(_) => state.status.note(format!(
+                    "sent `{id}` back to NOT IMPORTED — measured fresh, stripped"
+                )),
+                None => state.status.problem(format!(
+                    "removed `{id}` — it named no mesh, so nothing came back"
+                )),
+            }
             info!("sent `{id}` back out of {}", path.display());
         }
         Err(e) => state.status.problem(format!("not sent back: {e}")),
     }
+}
+
+/// The label stores a removal makes stale, bundled so `remove_tile` stays under the parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+struct StaleLabels<'w> {
+    suggestions: ResMut<'w, crate::labels::Suggestions>,
+    generation: ResMut<'w, crate::labels::LabelGeneration>,
 }
 
 /// The shared core of Delete and Shift+Delete: take `id` out of the measured layer, through the one
@@ -5787,7 +6244,7 @@ fn remove_tile(
 /// by the palette is the piece named here. `commit_measured` re-validates, which is what catches the
 /// interesting failure: removing a piece can strand another that rested on a surface only it
 /// offered, and it can leave a policy patch matching nothing.
-fn take_out_of_library(id: &str, project: &mut Project) -> Result<std::path::PathBuf, String> {
+pub(crate) fn take_out_of_library(id: &str, project: &mut Project) -> Result<std::path::PathBuf, String> {
     // **Every map in the project, not the one that happened to be open.** See
     // `Project::maps_that_place` for what the narrow version let through.
     let used = project.maps_that_place(id)?;
@@ -6056,6 +6513,25 @@ fn toggle_tag(axis: Axis, token_ix: usize, project: &mut Project, state: &mut Im
     let Some((d, where_to)) = state.editing_mut(&mut project.measured) else {
         return;
     };
+    // **A library entry goes through the operation** (E-042). The chip names one token, so the axis's
+    // whole new list is the old one with that token toggled. `label_set` sorts it and stamps it as a
+    // person's decision, and the write is logged, so it can be undone with the rest.
+    if where_to == Persist::Library {
+        let id = d.id.clone();
+        let mut next = axis.list(d).clone();
+        match next.iter().position(|t| *t == token) {
+            Some(i) => {
+                next.remove(i);
+            }
+            None => next.push(token.clone()),
+        }
+        if crate::editor::set_label(state, project, &id, wire_axis(axis), &next) {
+            state.record(history_before);
+            let said = format!("{} tags updated", axis.label().to_lowercase());
+            state.status.say(persist(project, where_to, said));
+        }
+        return;
+    }
     let list = axis.list(d);
     match list.iter().position(|t| *t == token) {
         Some(i) => {
@@ -6087,6 +6563,16 @@ fn toggle_tag(axis: Axis, token_ix: usize, project: &mut Project, state: &mut Im
     state.status.say(persist(project, where_to, said));
 }
 
+/// **The name an operation's `axis` field uses for one token axis** (E-042).
+fn wire_axis(axis: Axis) -> &'static str {
+    match axis {
+        Axis::Kind => "kind",
+        Axis::Effects => "effects",
+        Axis::Look => "look",
+        Axis::Surfaces => "surfaces",
+    }
+}
+
 // **No `Res<Build>` any more.** This system used to read `build.placing` to decide whether the arrows
 // were its business; the census answers that now, so the dependency went with the guard.
 fn move_selection(
@@ -6102,15 +6588,15 @@ fn move_selection(
     mode: Res<Mode>,
     time: Res<Time>,
     mut repeat: ResMut<crate::keys::Repeat>,
-    project: Res<Project>,
-    // The arrows walk what is on screen, which is what the filter decides.
-    filters: Res<crate::filter::Filters>,
     mut state: ResMut<ImportState>,
-    // A mesh whose judgement is still a proposal is not composable — see `composable`.
-    suggestions: Res<crate::labels::Suggestions>,
-    // Where `right` lands: the row you left, not the first one on the shelf.
-    cursor: Res<LibraryCursor>,
+    view: WalkView<'_>,
 ) {
+    let WalkView {
+        project,
+        filters,
+        suggestions,
+        cursor,
+    } = view;
     // **Read the keys before touching the focus.** Clearing `selected_library_id` unconditionally
     // would steal the focus back on the very next frame after a library row was clicked — the system
     // runs every frame, not only when an arrow arrives.
@@ -6225,11 +6711,15 @@ fn move_selection(
                 // nothing — no note, no move — until the box was cleared. Land on the row the
                 // cursor would land on, same shape as the seed arm below, and keep walking.
                 if let Some(land) = library_landing(&ids, &cursor) {
-                    state.status.note(format!(
-                        "`{land}` selected — {} removes it",
-                        crate::keys::binding(Action::RemoveTile).chord
-                    ));
-                    state.selected_library_id = Some(land);
+                    if tiles_tab {
+                        state.status.note(format!(
+                            "`{land}` selected — {} removes it",
+                            crate::keys::binding(Action::RemoveTile).chord
+                        ));
+                        state.selected_library_id = Some(land);
+                    } else {
+                        crate::editor::select_piece(&mut state, &project, &land);
+                    }
                 }
                 return;
             };
@@ -6239,11 +6729,19 @@ fn move_selection(
                 at.saturating_sub(stride)
             };
             if let Some(next) = ids.get(want.min(ids.len().saturating_sub(1))) {
-                state.selected_library_id = Some(next.clone());
-                state.status.note(format!(
-                    "`{next}` selected — {} removes it",
-                    keys::binding(Action::RemoveTile).chord
-                ));
+                // **On the Meshes shelf the walk is a selection, so it is the operation** (E-044):
+                // `piece_select` writes the log line a row click and an agent write. The Tiles tab
+                // keeps the direct write, because `piece_select` is a Meshes-shelf operation and
+                // that tab's walk picks a tile's source, which no operation names yet.
+                if tiles_tab {
+                    state.selected_library_id = Some(next.clone());
+                    state.status.note(format!(
+                        "`{next}` selected — {} removes it",
+                        keys::binding(Action::RemoveTile).chord
+                    ));
+                } else {
+                    crate::editor::select_piece(&mut state, &project, next);
+                }
             }
         }
         None => {
@@ -6292,6 +6790,19 @@ fn move_selection(
             }
         }
     }
+}
+
+/// What the arrows walk: the project and filter they read, the suggestions that decide what can be
+/// composed, and the row the cursor left. Bundled so `move_selection` stays under the parameter cap.
+#[derive(bevy::ecs::system::SystemParam)]
+struct WalkView<'w> {
+    project: Res<'w, Project>,
+    // The arrows walk what is on screen, which is what the filter decides.
+    filters: Res<'w, crate::filter::Filters>,
+    // A mesh whose judgement is still a proposal is not composable — see `composable`.
+    suggestions: Res<'w, crate::labels::Suggestions>,
+    // Where `right` lands: the row you left, not the first one on the shelf.
+    cursor: Res<'w, LibraryCursor>,
 }
 
 /// **What to say when the candidate shelf has no rows to walk.** Reachable from a filter that
@@ -6410,6 +6921,9 @@ fn candidate_rows(
     out
 }
 
+/// A pack's heading and the candidate indices under it, in drawn order.
+type PackList = Vec<(String, Vec<usize>)>;
+
 /// **The rows this panel draws, in the order it draws them** — offered packs first, then the
 /// `EXCLUDED` group. Both the list and the arrows are built from this, so "the next row" means the
 /// same thing to the eye and to the keyboard.
@@ -6430,10 +6944,10 @@ fn visible_packs(
     state: &ImportState,
     filters: &crate::filter::Filters,
     policy: &bevy_emerge_core::policy::Policy,
-) -> (Vec<(String, Vec<usize>)>, Vec<(String, Vec<usize>)>) {
+) -> (PackList, PackList) {
     let pane = crate::filter::Pane::Candidates;
-    let mut offered: Vec<(String, Vec<usize>)> = Vec::new();
-    let mut excluded: Vec<(String, Vec<usize>)> = Vec::new();
+    let mut offered: PackList = Vec::new();
+    let mut excluded: PackList = Vec::new();
     for (pack, mut members) in packs(&state.candidates) {
         // Narrowed, never reordered — the same rule the palette follows.
         members.retain(|ix| {
@@ -6483,6 +6997,15 @@ fn pack_is_open(
     !state.folded_packs.contains(pack)
 }
 
+/// The candidate list and the selection that scrolls it. `keep_selection_on_screen` is its
+/// follower; the marker and `ScrollPosition` stay together here so the follow ratchet can read them.
+type CandidateFollower<'w, 's> = Query<
+    'w,
+    's,
+    (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition),
+    (With<CandidateList>, Without<CandidateRow>, Without<LibraryRow>, Without<KitRow>),
+>;
+
 /// **Keep the candidate selection on a row that is showing.**
 ///
 /// [`keep_library_selection_visible`] for the other list, and it matters more here: filtering could
@@ -6507,22 +7030,17 @@ fn pack_is_open(
 fn keep_selection_on_screen(
     state: Res<ImportState>,
     build: Res<crate::build::Build>,
-    rows: Query<(&CandidateRow, &ComputedNode, &UiGlobalTransform)>,
-    library_rows: Query<(&LibraryRow, &ComputedNode, &UiGlobalTransform)>,
-    kit_rows: Query<(&KitRow, &ComputedNode, &UiGlobalTransform)>,
-    headers: Query<(&PackHeader, &ComputedNode, &UiGlobalTransform)>,
-    band: Query<(&ComputedNode, &UiGlobalTransform), With<ExcludedHeader>>,
-    mut lists: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (
-            With<CandidateList>,
-            Without<CandidateRow>,
-            Without<LibraryRow>,
-            Without<KitRow>,
-        ),
-    >,
+    boxes: RowBoxes<'_, '_>,
+    mut lists: CandidateFollower<'_, '_>,
     mut follow: Local<crate::chrome::Follow<Selected>>,
 ) {
+    let RowBoxes {
+        rows,
+        library_rows,
+        kit_rows,
+        headers,
+        band,
+    } = boxes;
     // **One frame late, on purpose.** A row that moves the cursor onto a heading or a new tab is
     // rebuilt by `rebuild_candidates` on the same frame, and its `ComputedNode`/`UiGlobalTransform`
     // only describe the new list after that rebuild's commands have applied and layout has run at
@@ -6585,6 +7103,17 @@ fn keep_selection_on_screen(
     }
 }
 
+/// The row and header boxes `keep_selection_on_screen` measures, bundled so the system stays under
+/// the parameter cap. Each field is the query the bare parameter was.
+#[derive(bevy::ecs::system::SystemParam)]
+struct RowBoxes<'w, 's> {
+    rows: Query<'w, 's, (&'static CandidateRow, &'static ComputedNode, &'static UiGlobalTransform)>,
+    library_rows: Query<'w, 's, (&'static LibraryRow, &'static ComputedNode, &'static UiGlobalTransform)>,
+    kit_rows: Query<'w, 's, (&'static KitRow, &'static ComputedNode, &'static UiGlobalTransform)>,
+    headers: Query<'w, 's, (&'static PackHeader, &'static ComputedNode, &'static UiGlobalTransform)>,
+    band: Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform), With<ExcludedHeader>>,
+}
+
 fn keep_candidate_selection_visible(
     filters: Res<crate::filter::Filters>,
     project: Res<Project>,
@@ -6628,6 +7157,105 @@ fn keep_candidate_selection_visible(
     if let Some(ix) = nearest {
         state.selected = ix;
     }
+}
+
+/// **Click one tag chip, the way a person's press does** — B-047, and E-041's gap.
+///
+/// Fires the same `Activate` the button sends, so [`on_tag_chip`]'s observer runs. Nothing in the
+/// suite could reach a chip until this existed: the tag route under test was the keyboard's
+/// (`take_the_one_match`), which is a different function with its own copy of the write.
+///
+/// Panics when the chip is not on screen, because a test that silently clicked nothing would pass
+/// for the wrong reason — `size_field_for_test` makes the same argument.
+pub fn click_tag_chip_for_test(world: &mut World, axis: &str, token: &str) {
+    let want = match axis {
+        "kind" => Axis::Kind,
+        "effects" => Axis::Effects,
+        "look" => Axis::Look,
+        "surfaces" => Axis::Surfaces,
+        other => panic!("click_tag_chip_for_test: `{other}` is not a tag axis"),
+    };
+    let names = world
+        .get_resource::<Project>()
+        .map(|p| match want {
+            Axis::Kind => p.vocab.kind.names(),
+            Axis::Effects => p.vocab.effects.names(),
+            Axis::Look => p.vocab.look.names(),
+            Axis::Surfaces => p.vocab.surfaces.names(),
+        })
+        .map(|n| {
+            n.map(str::to_owned)
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+    let Some(ix) = names.iter().position(|n| n == token) else {
+        panic!("click_tag_chip_for_test: `{token}` is not a {axis} token. The axis holds {names:?}");
+    };
+    let mut chips = world.query::<(Entity, &TagChip)>();
+    let Some(entity) = chips
+        .iter(world)
+        .find(|(_, c)| c.axis == want && c.token == ix)
+        .map(|(e, _)| e)
+    else {
+        panic!("click_tag_chip_for_test: no `{token}` chip on the {axis} row is on screen");
+    };
+    world.trigger(Activate { entity });
+    world.flush();
+}
+
+/// **The edges of one held `kind` chip and one unheld one**, for the shape assertion — B-047.
+///
+/// The fill alone cannot answer "is this chosen": `ROW_HOVER` is ΔL\* 3.89 under `ROW_SELECTED`, and
+/// the palette's answer to that is a **shape**. This reads the shape.
+pub fn kind_chip_edges_for_test(world: &mut World) -> (Color, Color) {
+    let mut chips = world.query::<(&TagChip, &BackgroundColor, &BorderColor)>();
+    let mut held: Option<Color> = None;
+    let mut unheld: Option<Color> = None;
+    for (c, bg, edge) in chips.iter(world) {
+        if c.axis != Axis::Kind {
+            continue;
+        }
+        if bg.0 == ROW_SELECTED {
+            held.get_or_insert(edge.top);
+        } else {
+            unheld.get_or_insert(edge.top);
+        }
+    }
+    (
+        held.unwrap_or_else(|| panic!("no held `kind` chip is on screen")),
+        unheld.unwrap_or_else(|| panic!("no unheld `kind` chip is on screen")),
+    )
+}
+
+/// **Which `kind` chips are lit, in row order** — what the pane says, read back.
+///
+/// A chip's colour is the pane's only statement about which tokens a piece holds, so a test that
+/// wants to know whether the panel agrees with the file has to read the colour and not the model.
+/// `chrome::chip` paints a held token in `TEXT` (or `UNCHECKED` when a model wrote it), and an
+/// unheld one in `LABEL`; those two are what is compared.
+pub fn lit_kind_chips(world: &mut World) -> Vec<String> {
+    let names: Vec<String> = world
+        .get_resource::<Project>()
+        .map(|p| p.vocab.kind.names().map(str::to_owned).collect())
+        .unwrap_or_default();
+    // **`RowRest`, not `BackgroundColor`.** `chrome::chip` sets both, and `style_list_rows` rewrites
+    // `BackgroundColor` every frame for hover and press — so reading the *painted* colour would let a
+    // held chip under a pressed mouse (`ROW_PRESSED`) read as unheld. `RowRest` is what the chip was
+    // spawned as and nothing mutates it, which is the question this asks: did the panel build this
+    // token as held?
+    let mut chips = world.query::<(&TagChip, &crate::chrome::RowRest)>();
+    let held: Vec<usize> = chips
+        .iter(world)
+        .filter(|(c, _)| c.axis == Axis::Kind)
+        .filter(|(_, rest)| rest.0 == ROW_SELECTED)
+        .map(|(c, _)| c.token)
+        .collect();
+    let mut out: Vec<String> = held
+        .into_iter()
+        .filter_map(|i| names.get(i).cloned())
+        .collect();
+    out.sort();
+    out
 }
 
 /// The library's ids in the order the panel lists them — declaration order, which is the order the
@@ -6765,7 +7393,7 @@ fn keep_library_selection_visible(
         return;
     };
     let visible = library_ids(&project, &filters, *mode == Mode::Tiles, Some(&suggestions));
-    if visible.iter().any(|v| *v == id) {
+    if visible.contains(&id) {
         return;
     }
     if let Some(first) = visible.first() {
@@ -6825,28 +7453,19 @@ fn on_library_click(
     activate: On<Activate>,
     rows: Query<&LibraryRow>,
     state: Option<ResMut<ImportState>>,
+    project: Option<Res<Project>>,
 ) {
     // **`Option`, because this is a GLOBAL observer** — it fires for any `Activate` anywhere in
     // the application, and in Bevy 0.19 a missing resource panics at param validation rather
     // than skipping. See [`on_cell_verb`] for the whole argument; the ratchet is
     // `every_resource_says_what_a_door_does_to_it.rs`.
-    let Some(mut state) = state else {
+    let (Some(mut state), Some(project)) = (state, project) else {
         return;
     };
+    // **A click is the operation an agent calls (E-044).** The highlight, the focused pack and the
+    // note are written in one place, `editor::select_piece`, so the two cannot drift apart.
     if let Ok(row) = rows.get(activate.entity) {
-        state.selected_library_id = Some(row.0.clone());
-        // The heading cursor is part of the same cursor; leaving it set is two highlights.
-        state.focused_pack = None;
-        // **The chord comes from the census.** It was `"Del removes it"` by hand, while every
-        // keyboard path on this tab formats `keys::binding(Action::RemoveTile).chord` — and
-        // `REMOVE_NAME` is `"Delete"` on macOS, so the click and the arrow named the same key two
-        // different ways (the audit's M14). `keys.rs`: *"nothing else in this crate is allowed to
-        // name a `KeyCode` for an action"*.
-        state.status.note(format!(
-            "`{}` selected — {} removes it",
-            row.0,
-            keys::chord(Action::RemoveTile)
-        ));
+        crate::editor::select_piece(&mut state, &project, &row.0);
     }
 }
 
@@ -6871,6 +7490,19 @@ fn on_candidate_click(
     }
 }
 
+/// Every panel's layout node, and the tab markers it may carry.
+type PanelQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Node,
+        Has<MapRoot>,
+        Has<TilesRoot>,
+        Has<AnimRoot>,
+        Has<ComposeRoot>,
+    ),
+>;
+
 /// Show one panel and hide the other. `Display::None` rather than `Visibility`, because a hidden-by-
 /// visibility UI node still occupies layout and still answers hover — which would leave the map
 /// panel's rows eating clicks aimed at the world.
@@ -6879,13 +7511,7 @@ fn apply_mode(
     // **One query with `Has`, not one per marker.** Three disjoint queries would each need `Without`
     // of both others, and a fourth tab would need three more — this asks each panel which tab it
     // belongs to instead.
-    mut panels: Query<(
-        &mut Node,
-        Has<MapRoot>,
-        Has<TilesRoot>,
-        Has<AnimRoot>,
-        Has<ComposeRoot>,
-    )>,
+    mut panels: PanelQuery<'_, '_>,
 ) {
     if !mode.is_changed() {
         return;
@@ -6935,19 +7561,9 @@ fn in_tiles_panel(mode: Option<Res<Mode>>) -> bool {
 fn drive_preview(
     mut commands: Commands,
     mode: Res<Mode>,
-
-    assets: Res<AssetServer>,
     mut state: ResMut<ImportState>,
     project: Res<Project>,
-    previews: Query<(Entity, &PreviewOf, &Children), With<Preview>>,
-    mut transforms: Query<&mut Transform>,
-    child_lists: Query<&Children>,
-    mesh_nodes: Query<(), With<Mesh3d>>,
-    // Ground truth for "is the scene here": the asset store itself. The server's load-state
-    // bookkeeping can answer "not loaded" FOREVER for a labeled sub-asset (`…#Scene0`) that is
-    // sitting in memory — which kept the watchdog disarmed while the author stared at an empty
-    // stage. `contains` is the same check the engine's own spawner gates on.
-    worlds: Res<Assets<WorldAsset>>,
+    stage: PreviewStage<'_, '_>,
     // What this system last said about which mesh's load, so each phase is spoken once.
     mut said: Local<Option<(String, &'static str)>>,
     // The watchdog's memory: which mesh, how long it has been loaded-but-empty, how many
@@ -6955,6 +7571,14 @@ fn drive_preview(
     // HEAL block below.
     mut heal: Local<Option<(String, u32, u8, bool)>>,
 ) {
+    let PreviewStage {
+        assets,
+        worlds,
+        previews,
+        mut transforms,
+        child_lists,
+        mesh_nodes,
+    } = stage;
     let clear = |commands: &mut Commands| {
         for (e, _, _) in &previews {
             commands.entity(e).despawn();
@@ -7133,13 +7757,13 @@ fn drive_preview(
             }
         }
     }
-    if respawn_now {
-        if let Some(e) = existing {
-            commands.entity(e).despawn();
-        }
+    if respawn_now
+        && let Some(e) = existing
+    {
+        commands.entity(e).despawn();
+    }
         // Falls through to the spawn below: a fresh root against the now-warm asset — the
         // author's own off-and-back, performed for them.
-    }
 
     // **Re-applied every frame, not written once at spawn.**
     //
@@ -7152,22 +7776,22 @@ fn drive_preview(
     //
     // Written only when it differs, because a `Transform` marked changed every frame re-propagates
     // the whole hierarchy.
-    if !respawn_now {
-        if let Some((e, _, children)) = previews.iter().find(|(_, of, _)| of.0 == mesh) {
-            if let Ok(mut tf) = transforms.get_mut(e) {
-                if *tf != want {
-                    *tf = want;
-                }
-            }
-            for child in children.iter() {
-                if let Ok(mut tf) = transforms.get_mut(child) {
-                    if tf.rotation != want_rot {
-                        tf.rotation = want_rot;
-                    }
-                }
-            }
-            return;
+    if !respawn_now
+        && let Some((e, _, children)) = previews.iter().find(|(_, of, _)| of.0 == mesh)
+    {
+        if let Ok(mut tf) = transforms.get_mut(e)
+            && *tf != want
+        {
+            *tf = want;
         }
+        for child in children.iter() {
+            if let Ok(mut tf) = transforms.get_mut(child)
+                && tf.rotation != want_rot
+            {
+                tf.rotation = want_rot;
+            }
+        }
+        return;
     }
 
     commands
@@ -7186,6 +7810,22 @@ fn drive_preview(
         // `draw_subgrid` redrew for the standing piece, and the mesh stayed lying down — offset by
         // the *rotated* pivot, so it also floated off its own footprint rectangle.
         .with_child((WorldAssetRoot(scene), Transform::from_rotation(want_rot)));
+}
+
+/// The asset store and the preview's scene tree, bundled so `drive_preview` stays under the
+/// parameter cap. Each field is the access the bare parameter had.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PreviewStage<'w, 's> {
+    assets: Res<'w, AssetServer>,
+    // Ground truth for "is the scene here": the asset store itself. The server's load-state
+    // bookkeeping can answer "not loaded" FOREVER for a labeled sub-asset (`…#Scene0`) that is
+    // sitting in memory — which kept the watchdog disarmed while the author stared at an empty
+    // stage. `contains` is the same check the engine's own spawner gates on.
+    worlds: Res<'w, Assets<WorldAsset>>,
+    previews: Query<'w, 's, (Entity, &'static PreviewOf, &'static Children), With<Preview>>,
+    transforms: Query<'w, 's, &'static mut Transform>,
+    child_lists: Query<'w, 's, &'static Children>,
+    mesh_nodes: Query<'w, 's, (), With<Mesh3d>>,
 }
 
 /// Draw the footprint the placement rules will reserve, and the grid cells it occupies.
@@ -7364,13 +8004,13 @@ fn refresh_lines(
     }
 }
 
-/// Rebuild the candidate list.
-///
-/// **The list's two tabs**, drawn as a strip so which one is showing is visible rather than inferred.
-///
-/// `left`/`right` switch them, which costs no key: they were unbound on this tab while nothing was in
-/// hand, and `docs/tiles_tab_contract.md` recorded exactly why — *"There is one list on this tab, so
-/// there is nothing to switch between."* There are two now.
+// Rebuild the candidate list.
+//
+// **The list's two tabs**, drawn as a strip so which one is showing is visible rather than inferred.
+//
+// `left`/`right` switch them, which costs no key: they were unbound on this tab while nothing was in
+// hand, and `docs/tiles_tab_contract.md` recorded exactly why — *"There is one list on this tab, so
+// there is nothing to switch between."* There are two now.
 
 /// **Which shelf the list is showing.** Three, in the order work moves through them.
 ///
@@ -7508,8 +8148,14 @@ fn shelf_strip(
     });
 }
 
+
 /// **A chip goes where its key goes**, through the same two fields the keys write — so the pointer
 /// and the keyboard cannot come to disagree about which shelf is up.
+// **Plain parameters, not a `SystemParam` bundle**, and the lint is allowed here on purpose: this is
+// a global observer, and `tests/the_sweep_is_finished.rs` and
+// `tests/every_resource_says_what_a_door_does_to_it.rs` check that every observer's resources are
+// `Option` by reading its signature. A bundle would hide them from both checks.
+#[allow(clippy::too_many_arguments)]
 fn on_shelf_click(
     click: On<PointerClick>,
     chips: Query<&ShelfChip>,
@@ -7580,7 +8226,7 @@ fn on_shelf_click(
         // one page where `+ New Tile` is the only thing to do (N5). The note stays for the empty
         // kit, because the page itself is nearly blank there.
         Shelf::Tiles => {
-            build.browsing = Some(crate::build::landing_row(&project, &build));
+            build.browsing = Some(crate::build::landing_row(&project, build));
             if kit_len == 0 {
                 state.status.note(format!(
                     "no tiles in the kit yet — {} on + New Tile names one",
@@ -7885,7 +8531,7 @@ fn list_ink(
                     row: rows + 1,
                     id: d.id.clone(),
                     members: d.members.len(),
-                    openable: crate::build::has_a_box(&d),
+                    openable: crate::build::has_a_box(d),
                     open: true,
                 });
             }
@@ -8739,22 +9385,41 @@ fn tag_filter_changed(filters: Res<crate::filter::Filters>, mut last: Local<Stri
     true
 }
 
-/// Rebuild the detail for whichever candidate is selected.
-fn rebuild_detail(
-    mut commands: Commands,
-    state: Res<ImportState>,
-    cell_edit: Res<CellEdit>,
-    note_edit: Res<NoteEdit>,
-    scale_edit: Res<ScaleEdit>,
-    height_edit: Res<HeightEdit>,
-    suggestions: Option<Res<crate::labels::Suggestions>>,
-    project: Res<Project>,
-    mode: Res<Mode>,
-    build: Res<crate::build::Build>,
+/// What the detail pane reads, bundled so the system stays under the parameter cap. Every field is
+/// the same access the bare parameter had; only the grouping is new.
+#[derive(bevy::ecs::system::SystemParam)]
+struct DetailInputs<'w, 's> {
+    commands: Commands<'w, 's>,
+    state: Res<'w, ImportState>,
+    cell_edit: Res<'w, CellEdit>,
+    note_edit: Res<'w, NoteEdit>,
+    scale_edit: Res<'w, ScaleEdit>,
+    height_edit: Res<'w, HeightEdit>,
+    suggestions: Option<Res<'w, crate::labels::Suggestions>>,
+    project: Res<'w, Project>,
+    mode: Res<'w, Mode>,
+    build: Res<'w, crate::build::Build>,
     // The tag block narrows by typing, so the pane that draws it has to know what was typed.
-    filters: Res<crate::filter::Filters>,
-    panes: Query<Entity, With<DetailPane>>,
-) {
+    filters: Res<'w, crate::filter::Filters>,
+    panes: Query<'w, 's, Entity, With<DetailPane>>,
+}
+
+/// Rebuild the detail for whichever candidate is selected.
+fn rebuild_detail(detail: DetailInputs<'_, '_>) {
+    let DetailInputs {
+        mut commands,
+        state,
+        cell_edit,
+        note_edit,
+        scale_edit,
+        height_edit,
+        suggestions,
+        project,
+        mode,
+        build,
+        filters,
+        panes,
+    } = detail;
     for pane in &panes {
         commands.entity(pane).despawn_related::<Children>();
         commands.entity(pane).with_children(|p| {
@@ -8887,7 +9552,7 @@ fn rebuild_detail(
                     // in the status band, by `labels::Labeler`. What stays here is what varies per
                     // proposal: when it was made, how many attempts it took, and how sure it was.
                     Text::new(format!(
-                        "PROPOSED {}{attempts}, confidence {:?}",
+                        "PROPOSED {}{attempts}, confidence {}",
                         p_.date, s.confidence
                     )),
                     TextColor(crate::chrome::SUGGEST),
@@ -9132,10 +9797,65 @@ fn rebuild_detail(
             // per-axis author already drives the tag-chip colour and is not duplicated as text.
             let (labels_text, labels_ink) = match &d.labels {
                 None => ("not labelled".to_owned(), LABEL),
-                Some(l) => match &l.model {
-                    Some(m) => (format!("{m} · {}", l.at), TEXT),
-                    None => (format!("by hand · {}", l.at), TEXT),
-                },
+                Some(l) => {
+                    // **How sure the model said it was**, read first on the row, so the word a person
+                    // scans for is the part a long model name cannot push past the panel's edge. A
+                    // hand-written record carries no confidence, so it has none to show.
+                    let sure = l.confidence.map(|c| format!("confidence {c}"));
+                    // **Who wrote each axis, by name.** A model's name and date belong only to the axes
+                    // it still owns. An agent's or a person's write is named by its axis and carries no
+                    // date: the record's `at` is the latest write of any source, and it cannot say which
+                    // source that was.
+                    const AXES: [(bevy_emerge_core::descriptor::Axis, &str); 6] = [
+                        (bevy_emerge_core::descriptor::Axis::Kind, "kind"),
+                        (bevy_emerge_core::descriptor::Axis::Effects, "effects"),
+                        (bevy_emerge_core::descriptor::Axis::Look, "look"),
+                        (bevy_emerge_core::descriptor::Axis::Surfaces, "surfaces"),
+                        (bevy_emerge_core::descriptor::Axis::Mount, "mount"),
+                        (bevy_emerge_core::descriptor::Axis::Note, "note"),
+                    ];
+                    let named = |by: bevy_emerge_core::descriptor::By| {
+                        AXES.iter()
+                            .filter(|(axis, _)| l.by.get(*axis) == Some(by))
+                            .map(|(_, name)| *name)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    };
+                    // The row's parts, in reading order, joined with the one separator the row uses.
+                    let joined = |parts: &[Option<String>]| {
+                        parts.iter().flatten().map(String::as_str).collect::<Vec<_>>().join(" · ")
+                    };
+                    if !l.by.any_unconfirmed() {
+                        // **Every axis is confirmed**: the row says when a person checked it.
+                        match &l.model {
+                            Some(m) => {
+                                let short = crate::labels::model_short(m).to_owned();
+                                (joined(&[sure, Some(short), Some(format!("checked {}", l.at))]), TEXT)
+                            }
+                            None => (joined(&[Some("by hand".to_owned()), Some(l.at.clone())]), TEXT),
+                        }
+                    } else {
+                        // **Some axis is unconfirmed**: the unchecked colour. The model's name and date
+                        // appear only while the model still owns an axis, then the agent's and the
+                        // person's axes follow, each named with its own verb.
+                        let model_axes = named(bevy_emerge_core::descriptor::By::Model);
+                        let agent_axes = named(bevy_emerge_core::descriptor::By::Agent);
+                        let human_axes = named(bevy_emerge_core::descriptor::By::Human);
+                        let mut parts: Vec<Option<String>> = Vec::new();
+                        if let (Some(m), false) = (&l.model, model_axes.is_empty()) {
+                            parts.push(sure);
+                            parts.push(Some(crate::labels::model_short(m).to_owned()));
+                            parts.push(Some(l.model_date().unwrap_or(&l.at).to_owned()));
+                        }
+                        if !agent_axes.is_empty() {
+                            parts.push(Some(format!("agent set {agent_axes}")));
+                        }
+                        if !human_axes.is_empty() {
+                            parts.push(Some(format!("by hand set {human_axes}")));
+                        }
+                        (joined(&parts), crate::chrome::UNCHECKED)
+                    }
+                }
             };
             p.spawn(Node {
                 flex_direction: FlexDirection::Row,
@@ -9145,6 +9865,8 @@ fn rebuild_detail(
             })
             .with_children(|row| {
                 crate::chrome::row_label(row, crate::chrome::COL_LABEL, "labels");
+                // **Wraps, like the mesh row above it.** The value used to be one no-wrap line clipped
+                // at the row's edge, so a long model stem cut the confidence word off the panel.
                 crate::chrome::row_value(row, labels_text, labels_ink, ());
             });
 
@@ -9237,7 +9959,8 @@ fn rebuild_detail(
             // own module note states the same rule for the three lists. A block whose chips changed
             // places as you typed would cost exactly what the filter is here to save.
             let needle = filters.text(crate::filter::Pane::Tags).to_owned();
-            let surviving: Vec<(Axis, usize, Vec<(usize, String)>)> =
+            type Surviving = Vec<(Axis, usize, Vec<(usize, String)>)>;
+            let surviving: Surviving =
                 [Axis::Kind, Axis::Effects, Axis::Look, Axis::Surfaces]
                     .into_iter()
                     .filter_map(|axis| {
@@ -9387,7 +10110,31 @@ fn rebuild_detail(
                                     LABEL
                                 },
                                 if on { ROW_SELECTED } else { ROW_BG },
-                                if ghost { crate::chrome::SUGGEST } else { Color::NONE },
+                                // **A held chip carries a SHAPE, not only a fill** — B-047.
+                                //
+                                // The palette is built so that a selected thing is told apart by
+                                // its leading rail, because `ROW_HOVER` sits only ΔL* 3.89 under
+                                // `ROW_SELECTED` (`chrome.rs`, "It steps only ΔL* 3.89 over
+                                // ROW_HOVER and does not need more, because … selection also
+                                // carries a shape"). **Chips never got that shape**: measured on
+                                // the running editor, rest is `(42,39,34)`, a hovered chip is
+                                // `(54,50,44)` — 60% of the way to held — and a held chip is
+                                // `(63,59,51)`, with the same `1 px` dark border on all three.
+                                // So a screenshot taken with the pointer resting on a chip cannot
+                                // say whether that chip is held, which is exactly how B-047 was
+                                // reported: *"the cursor ring sat over it"*.
+                                //
+                                // `ACCENT` on a held chip's own edge is the same remedy the rows
+                                // use, at the border the chip already draws — no new node, no
+                                // second layout. A proposal still wins, because a ghost is a
+                                // question and a held token is an answer.
+                                if ghost {
+                                    crate::chrome::SUGGEST
+                                } else if on {
+                                    crate::chrome::ACCENT
+                                } else {
+                                    Color::NONE
+                                },
                             );
                         }
                         // **The `+` chip — the mouse half of the vocabulary prompt.** Growing the
@@ -9906,7 +10653,7 @@ mod mount_cycle_tests {
         let options = mount_options(&[]);
         let authored = Mount::OnWall { height: 1.2 };
         assert!(
-            !options.iter().any(|o| *o == authored),
+            !options.contains(&authored),
             "if this ever passes, the offered list gained a 1.2 m entry and this test is stale"
         );
     }
@@ -10143,6 +10890,8 @@ mod write_library_tests {
             root: dir.to_path_buf(),
             emerge_dir: dir.to_path_buf(),
             project_dir: dir.to_path_buf(),
+            // A test project has no map open.
+            open_map_name: None,
             maps_dir: dir.join("maps"),
             // **One kit, itself.** Not empty: `merged_with` rebuilds the palette from these layers,
             // so a Project holding none would merge to nothing and the first import in a test would

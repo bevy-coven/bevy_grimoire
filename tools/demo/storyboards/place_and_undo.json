@@ -1,0 +1,82 @@
+{
+  "name": "place_and_undo",
+  "fps": 15,
+  "scale": 2,
+  "width": 600,
+  "crop": [
+    470,
+    64,
+    950,
+    690
+  ],
+  "setup": [
+    {
+      "mcp": "emerge_frame_view",
+      "args": {
+        "target": {
+          "rect": [
+            57,
+            -65,
+            71,
+            -55
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 3.5
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.2,
+      "click": [
+        1106,
+        133
+      ]
+    },
+    {
+      "at": 0.4,
+      "type": "house"
+    },
+    {
+      "at": 0.6,
+      "caption": "person: arms the gate house from the list"
+    },
+    {
+      "at": 0.8,
+      "click": [
+        1090,
+        203
+      ]
+    },
+    {
+      "at": 0.9,
+      "caption": "person: click the ground to place it"
+    },
+    {
+      "at": 1.0,
+      "click": [
+        710,
+        377
+      ]
+    },
+    {
+      "at": 1.5,
+      "clear_cursor": true
+    },
+    {
+      "at": 2.0,
+      "caption": "person: ⌘Z takes the gate house back"
+    },
+    {
+      "at": 2.2,
+      "key": "KeyZ",
+      "mods": [
+        "SuperLeft"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.gif"
+      - "**/*.png"
+      - "**/*.mp4"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.gif"
+      - "**/*.png"
+      - "**/*.mp4"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: 0
+jobs:
+  test:
+    name: test (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bevy Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev libx11-dev mesa-vulkan-drivers xvfb pkg-config clang
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - shell: bash
+        run: xvfb-run -a cargo test --workspace 2>&1 | tee test-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-output
+          path: test-output.txt

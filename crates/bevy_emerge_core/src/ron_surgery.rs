@@ -723,6 +723,13 @@ pub fn fmt_f32(v: f32) -> String {
 ///
 /// The caller is expected to re-load and re-validate afterwards; this only guarantees the bytes
 /// landed.
+///
+/// **And it replaces.** `fs::rename` is POSIX `rename()`, and the standard specifies that it
+/// removes an existing target: *"if the directory entry named by `new` exists, it shall be removed
+/// and `old` renamed to `new`"* (IEEE Std 1003.1-2024). So a save to a path that already holds a
+/// file **overwrites it, silently**. That is the right default for a save — the caller chose the
+/// path — and the wrong default for anything where the path is *derived* from a name the author
+/// typed. **Use [`save_atomic_no_replace`] there.**
 pub fn save_atomic(path: &Path, text: &str) -> Result<(), String> {
     let parent = path
         .parent()
@@ -733,6 +740,85 @@ pub fn save_atomic(path: &Path, text: &str) -> Result<(), String> {
     let tmp = std::path::PathBuf::from(tmp);
     std::fs::write(&tmp, text).map_err(|e| format!("ron: {}: {e}", tmp.display()))?;
     std::fs::rename(&tmp, path).map_err(|e| format!("ron: {}: {e}", path.display()))?;
+    Ok(())
+}
+
+/// **Write `text` to `path`, and refuse if something is already there.**
+///
+/// # Why the refusal is the kernel's
+///
+/// The obvious implementation is a check and then a write:
+///
+/// ```text
+/// if path.exists() { return Err(...) }
+/// save_atomic(path, text)
+/// ```
+///
+/// **and it is wrong, in a way that only shows up under a race.** The check and the write are two
+/// calls, and POSIX gives atomicity to the single call only: *"if the `rename()` function fails for
+/// any reason other than [EIO], any file named by `new` shall be unaffected"*. Between the check
+/// and the write, the target can appear — and then `save_atomic`'s `fs::rename` removes it, which
+/// is the exact failure this function exists to prevent.
+///
+/// **So the check and the write are one call.** The primitive is `link(2)`: creating a hard link at
+/// the target **fails with `EEXIST` if the target exists**, and it never modifies the target. It is
+/// POSIX, it is on every filesystem this crate runs on, and it is **not** `rename` — so the
+/// "replace" behaviour is not available to it at all.
+///
+/// # Why `link` and not `renameat2(RENAME_NOREPLACE)`
+///
+/// `renameat2` with `RENAME_NOREPLACE` is the exact primitive, and it is the right one **where it
+/// exists**. It is Linux-only, and the editor runs on macOS. `renamex_np(RENAME_EXCL)` is the
+/// macOS equivalent, and it is a libc call with an `unsafe` declaration — and this crate has no
+/// `unsafe` today and no `libc` dependency, and adding both for one call is a larger change than
+/// the problem needs.
+///
+/// **`link` is the portable primitive that has the property.** It creates the target as a second
+/// name for the same inode, atomically, and refuses if the name is taken.
+///
+/// # The one thing `link` cannot do
+///
+/// **A hard link cannot cross a filesystem**, and `EXDEV` says so. So this refuses rather than
+/// falling back — because a fallback is the defect this function exists to remove, and Lampson's
+/// rule is the whole of it: *"Make actions atomic or restartable."* **A refusal leaves both names
+/// standing; a fallback replaces one.**
+///
+/// The tmp file is written beside the target, so the link is always on the same filesystem as the
+/// target and `EXDEV` cannot happen for the link itself — only for a target that is already
+/// somewhere else, which is a refusal the author can act on.
+///
+/// # What it leaves behind
+///
+/// The tmp file is **removed** on every path, including the refusal, so a failed write does not
+/// leave `<name>.map.ron.tmp` in the project. The bytes are already in the target by then, so
+/// removing the tmp name is removing a *second name for the same inode*, not the data.
+pub fn save_atomic_no_replace(path: &Path, text: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("ron: {} has no parent directory", path.display()))?;
+    std::fs::create_dir_all(parent).map_err(|e| format!("ron: {}: {e}", parent.display()))?;
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = std::path::PathBuf::from(tmp);
+    std::fs::write(&tmp, text).map_err(|e| format!("ron: {}: {e}", tmp.display()))?;
+    // **The link is the check.** `link(2)` fails with `EEXIST` when the target is taken, and it
+    // never touches the target. There is no `exists()` before it, because a check and the write
+    // are two calls and only one of them can be atomic.
+    if let Err(e) = std::fs::hard_link(&tmp, path) {
+        // **The tmp name goes first, and the target is untouched either way.** A refusal leaves
+        // the author's file exactly as it was, which is the whole contract.
+        let _ = std::fs::remove_file(&tmp);
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            return Err(format!(
+                "ron: {} already exists, and this write refuses to replace it",
+                path.display()
+            ));
+        }
+        return Err(format!("ron: {}: {e}", path.display()));
+    }
+    // **And now the tmp name goes.** The bytes are in the target — the link made a second name
+    // for the same inode — so this removes a name, not the data.
+    std::fs::remove_file(&tmp).map_err(|e| format!("ron: {}: {e}", tmp.display()))?;
     Ok(())
 }
 

@@ -25,8 +25,60 @@
 #![allow(dead_code)] // Each test uses a different corner of the builder.
 
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::Once;
 
-/// A throwaway project directory, deleted when this is dropped.
+/// Remove the directories of exited test processes, once per process. A directory whose pid is
+/// alive belongs to a run in flight and is left alone, as is anything that does not parse.
+fn sweep_dead_fixtures() {
+    static SWEPT: Once = Once::new();
+    SWEPT.call_once(|| {
+        let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
+            return;
+        };
+        let mut alive: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(rest) = name
+                .to_str()
+                .and_then(|n| n.strip_prefix("emerge-fixture-"))
+            else {
+                continue;
+            };
+            let Some(pid) = rest.split('-').next().and_then(|p| p.parse::<u32>().ok()) else {
+                continue;
+            };
+            if pid == std::process::id() {
+                continue;
+            }
+            if !*alive.entry(pid).or_insert_with(|| pid_is_alive(pid)) {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
+        }
+    });
+}
+
+/// `kill -0` delivers no signal and only reports whether the pid exists. A spawn failure counts as
+/// alive, so an unexpected environment deletes nothing.
+fn pid_is_alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(true)
+}
+
+/// A throwaway project directory in the system temp dir, named `emerge-fixture-<pid>-<name>`.
+///
+/// **Nothing deletes it when the test ends.** [`Fixture::build`] hands the project root back as a
+/// plain `PathBuf`, so no value is left to drop it, and tests keep using that path after the
+/// fixture is gone. The leak is bounded instead: the first [`Fixture::new`] in each test process
+/// runs `sweep_dead_fixtures`, which removes the directories of processes that have exited. A
+/// failed test's directory therefore survives until the next run, which is when you want to look
+/// at it. Before this sweep every run left about 200 directories behind, several GB in all.
 pub struct Fixture {
     dir: PathBuf,
     descriptors: Vec<String>,
@@ -168,6 +220,7 @@ fn descriptor_row(root: &Path, id: &str, pack: &str, y_offset: f32) -> String {
 impl Fixture {
     /// An empty project: a vocabulary, an empty library, a policy, and the font.
     pub fn new(name: &str) -> Fixture {
+        sweep_dead_fixtures();
         // A unique directory per test, since these run in parallel. The process id and the test's
         // own name are enough — no clock, so a rerun is reproducible.
         let dir =
@@ -291,6 +344,50 @@ impl Fixture {
         self
     }
 
+    /// **A descriptor of a stated height**, for a test about what stands in a frame. [`Self::descriptor`]
+    /// writes a 0.5 m piece; this states the number, so a test can put a tall piece on the map.
+    pub fn tall_descriptor(mut self, id: &str, pack: &str, h: f32) -> Fixture {
+        self = self.descriptor(id, pack);
+        if let Some(last) = self.descriptors.last_mut() {
+            let was = "height: Some(0.5)";
+            assert!(
+                last.contains(was),
+                "the fixture's descriptor shape changed under this helper"
+            );
+            *last = last.replace(was, &format!("height: Some({h})"));
+        }
+        self
+    }
+
+    /// **A flat piece with NO mesh**, drawn as a footprint marker — the shape of the shipped
+    /// `town/road` and `town/field`: `mesh: None`, a stated footprint, a 0.05 m height, and no
+    /// `y_offset`. Two of these placed over one another are the case where their top faces are
+    /// coplanar and the editor has to decide which one draws.
+    pub fn flat_descriptor(mut self, id: &str, w: f32, d: f32) -> Fixture {
+        self.descriptors.push(format!(
+            r#"        (
+            id: "{id}",
+            mesh: None,
+            align: ( scale: None, stretch_y: None, y_offset: None, pivot: None, front: None ),
+            extent: ( footprint: Some(({w}, {d})), height: Some(0.05) ),
+            mount: Some(OnFloor),
+            clearance: [],
+            offers: ( surfaces: [], sockets: [] ),
+            kind: ["prop"],
+            effects: ["inert"],
+            look: ["plain"],
+            subgrid: None,
+            note: Some("a flat fixture piece"),
+            placement: ( rooms: [], group: None ),
+        ),"#
+        ));
+        match self.ids.iter_mut().find(|(k, _)| k == DEFAULT_KIT) {
+            Some((_, v)) => v.push(id.to_owned()),
+            None => self.ids.push((DEFAULT_KIT.to_owned(), vec![id.to_owned()])),
+        }
+        self
+    }
+
     /// **A piece with a HAND-AUTHORED lattice**, one edge token per cell down its run face.
     ///
     /// Every other descriptor this fixture writes carries `subgrid: None`, which is right for the
@@ -353,6 +450,28 @@ impl Fixture {
             *last = last.replace(
                 was,
                 &format!("mount: Some(OnSurface( class: \"{class}\" ))"),
+            );
+        }
+        self
+    }
+
+    /// **A piece that may sit on a support surface or on the floor** — issue #1's
+    /// `mount: Some(OnSurfaceOrFloor( class: "..." ))`.
+    ///
+    /// The third member of the surface family: `surface_descriptor` offers a top,
+    /// `mounted_descriptor` may only rest on one, and this may do either. A test that drops it in two
+    /// places is the only way to prove the two seatings are one mount rather than two descriptors.
+    pub fn two_way_descriptor(mut self, id: &str, pack: &str, class: &str) -> Fixture {
+        self = self.descriptor(id, pack);
+        if let Some(last) = self.descriptors.last_mut() {
+            let was = "mount: Some(OnFloor)";
+            assert!(
+                last.contains(was),
+                "the fixture's descriptor shape changed under this helper"
+            );
+            *last = last.replace(
+                was,
+                &format!("mount: Some(OnSurfaceOrFloor( class: \"{class}\" ))"),
             );
         }
         self
@@ -429,6 +548,29 @@ impl Fixture {
             rows.push(format!(r#"( name: "{n}", note: "how it reads" )"#));
         }
         let full = format!("look: (tokens: [{}]),", rows.join(", "));
+        std::fs::write(&at, was.replace(one, &full))
+            .unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
+        self
+    }
+
+    /// **Declare `kind` tokens**, so a test can move a piece's kind from one chip to another.
+    ///
+    /// The fixture ships `prop` alone, which is enough to observe *a* kind chip but not enough to
+    /// watch a click move the light from one chip to the next — the question B-047 asks.
+    pub fn kind_tokens(self, names: &[&str]) -> Fixture {
+        let at = self.dir.join("assets/emerge/vocab.ron");
+        let was =
+            std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
+        let one = r#"kind: (tokens: [( name: "prop", note: "a thing" )]),"#;
+        assert!(
+            was.contains(one),
+            "the fixture's kind axis must be the shipped one, or this is a no-op"
+        );
+        let mut rows = vec![r#"( name: "prop", note: "a thing" )"#.to_owned()];
+        for n in names {
+            rows.push(format!(r#"( name: "{n}", note: "a kind" )"#));
+        }
+        let full = format!("kind: (tokens: [{}]),", rows.join(", "));
         std::fs::write(&at, was.replace(one, &full))
             .unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
         self
@@ -543,6 +685,33 @@ impl Fixture {
         self
     }
 
+    /// A fully judged descriptor whose six fields were all written by `model` at `confidence`, a
+    /// Rust variant name (`High`, `Medium` or `Low`). For tests that read the labels row.
+    pub fn labelled_descriptor(self, id: &str, pack: &str, model: &str, confidence: &str) -> Fixture {
+        self.labelled_by(
+            id,
+            pack,
+            "(kind: Some(Model), effects: Some(Model), look: Some(Model))",
+            &format!(r#"model: Some("{model}"), at: "2026-10-20", confidence: Some({confidence})"#),
+        )
+    }
+
+    /// A library entry whose `labels` record is written verbatim: `by` is the per-axis author
+    /// (RON for an `AxisOrigin`) and `rest` is the record's remaining fields. For the tests that
+    /// need a human-confirmed axis or a record with no model, which `labelled_descriptor` cannot say.
+    pub fn labelled_by(self, id: &str, pack: &str, by: &str, rest: &str) -> Fixture {
+        let mut f = self.descriptor(id, pack);
+        if let Some(last) = f.descriptors.last_mut() {
+            *last = last.replace(
+                "placement: ( rooms: [], group: None ),",
+                &format!(
+                    "placement: ( rooms: [], group: None ),\n            labels: Some((by: {by}, {rest})),"
+                ),
+            );
+        }
+        f
+    }
+
     /// Place a descriptor already added by [`Fixture::descriptor`], minting `<id>@<n>`.
     pub fn place(self, id: &str, at: (f32, f32)) -> Fixture {
         let n = self.placements.len();
@@ -594,6 +763,30 @@ impl Fixture {
             at.0, at.1
         ));
         self
+    }
+
+    /// [`Fixture::place`] with an authored `paint`: the order the author set on the placement, which
+    /// outranks the automatic draw order where two flat pieces overlap.
+    pub fn place_painted(self, id: &str, at: (f32, f32), paint: i8) -> Fixture {
+        let mut f = self.place(id, at);
+        if let Some(last) = f.placements.last_mut() {
+            *last = last.replacen(
+                "lift: 0.0,",
+                &format!("lift: 0.0,\n            paint: {paint},"),
+                1,
+            );
+        }
+        f
+    }
+
+    /// [`Fixture::place`] standing on `host`, a placement already added: the rider a stack is made of.
+    /// A removal of the host has to take it too, or the map is left with a rider on nothing.
+    pub fn place_on(self, id: &str, host: &str, at: (f32, f32)) -> Fixture {
+        let mut f = self.place(id, at);
+        if let Some(last) = f.placements.last_mut() {
+            *last = last.replacen("on: None,", &format!("on: Some(\"{host}\"),"), 1);
+        }
+        f
     }
 
     /// **A reusable group of two members**, both descriptors already added.

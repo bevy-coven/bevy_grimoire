@@ -244,19 +244,19 @@ impl Rigs {
             // overflow" in debug, or wrapped to bit 0 in release and masked the wrong bone group —
             // which is worse, because it looks like the animation is merely wrong.
             for slot in &rig.slots {
-                if let Some(group) = slot.mask {
-                    if group >= MAX_MASK_GROUP {
-                        return Err(format!(
-                            "`{name}`'s slot masks to group {group}; a mask group is a bit index into \
-                             a 64-bit animation mask, so it must be below {MAX_MASK_GROUP}"
-                        ));
-                    }
+                if let Some(group) = slot.mask
+                    && group >= MAX_MASK_GROUP
+                {
+                    return Err(format!(
+                        "`{name}`'s slot masks to group {group}; a mask group is a bit index into \
+                         a 64-bit animation mask, so it must be below {MAX_MASK_GROUP}"
+                    ));
                 }
             }
             if rig.mesh.is_empty() {
                 return Err(format!("rig `{name}` names no mesh"));
             }
-            if !(rig.scale > 0.0) {
+            if !matches!(rig.scale.partial_cmp(&0.0), Some(std::cmp::Ordering::Greater)) {
                 return Err(format!(
                     "rig `{name}` has scale {}; the manifest's cycle distances are world units = \
                      file units × scale, so a non-positive scale makes every measurement \
@@ -304,7 +304,7 @@ impl Rigs {
                          reads is configuration that lies"
                     ));
                 }
-                if !(lo > 0.0) || !(hi >= lo) {
+                if !matches!(lo.partial_cmp(&0.0), Some(std::cmp::Ordering::Greater)) || !matches!(hi.partial_cmp(&lo), Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)) {
                     return Err(format!(
                         "rig `{name}`'s drive_speed ({lo}, {hi}) is not a positive (min, max) \
                          range — the skate check sweeps it, and an empty or negative range \
@@ -374,13 +374,13 @@ impl Rigs {
                         phase_offset,
                         cycle_distance,
                     } => {
-                        if !(duration > 0.0) {
+                        if !matches!(duration.partial_cmp(&0.0), Some(std::cmp::Ordering::Greater)) {
                             return Err(format!(
                                 "rig `{name}` slot {i} is a gait with duration {duration}; a gait \
                                  with no length has no phase to seek"
                             ));
                         }
-                        if !(cycle_distance > 0.0) {
+                        if !matches!(cycle_distance.partial_cmp(&0.0), Some(std::cmp::Ordering::Greater)) {
                             return Err(format!(
                                 "rig `{name}` slot {i} is a gait covering {cycle_distance} m per \
                                  cycle; cadence is speed / cycle_distance, so this would divide by \
@@ -400,7 +400,7 @@ impl Rigs {
                         }
                     }
                     Playback::Free { speed } | Playback::OneShot { speed } => {
-                        if !(speed > 0.0) {
+                        if !matches!(speed.partial_cmp(&0.0), Some(std::cmp::Ordering::Greater)) {
                             return Err(format!(
                                 "rig `{name}` slot {i} plays at speed {speed}"
                             ));
@@ -536,10 +536,10 @@ mod tests {
     #[test]
     fn a_tolerance_outside_the_unit_interval_or_off_a_gait_is_refused() {
         let mut m = one(gait());
-        if let Some(r) = m.rigs.get_mut("valkyrie") {
-            if let Some(s) = r.slots.get_mut(0) {
-                s.tolerance = Some(1.5);
-            }
+        if let Some(r) = m.rigs.get_mut("valkyrie")
+            && let Some(s) = r.slots.get_mut(0)
+        {
+            s.tolerance = Some(1.5);
         }
         let e = m.validate().err().unwrap_or_else(|| panic!("accepted"));
         assert!(e.contains("tolerance"), "{e}");

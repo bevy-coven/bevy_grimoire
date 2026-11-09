@@ -64,8 +64,8 @@ fn main() {
         base.weights[0]
     );
     println!(
-        "\n{:>7} {:>9} {:>9} {:>8} {:>9} {:>8} {:>8}  {}",
-        "w(empty)", "empty%", "med encl", "regions", "med open", "H/lnK", "maxbin", "rows that fire"
+        "\n{:>7} {:>9} {:>9} {:>8} {:>9} {:>8} {:>8}  rows that fire",
+        "w(empty)", "empty%", "med encl", "regions", "med open", "H/lnK", "maxbin"
     );
     println!("{}", "-".repeat(96));
 

@@ -1,0 +1,1346 @@
+{
+  "items": [
+    {
+      "id": "B-001",
+      "kind": "bug",
+      "area": "badges",
+      "title": "Badge leaders crossed on MESHES at 1680x1050, because the layout score counted box overlaps and not crossings",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "tests/headless.rs::no_two_leaders_cross was red from 2026-09-03; measured comfort score 1 (1 box overlap, 0 crossings) vs compact score 0 (0 overlaps, 3 crossing pairs)"
+      },
+      "status": "fixed",
+      "evidence": "tests/the_layout_score_counts_crossings.rs (2 tests, both fail on the unfixed code)",
+      "last_failure": "",
+      "first_seen": "2026-09-03"
+    },
+    {
+      "id": "B-002",
+      "kind": "bug",
+      "area": "status",
+      "title": "Twelve refusals were filed in Status::note, where the next receipt erases them",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "A note is one dim row, erased by the next receipt and by a tab switch (Status::clear_note). A refusal there is a refusal the author never sees."
+      },
+      "status": "fixed",
+      "evidence": "tests/every_refusal_is_in_a_problem.rs (2 tests; the first fails on the unfixed code with every site named)",
+      "last_failure": "",
+      "first_seen": "2026-10-20"
+    },
+    {
+      "id": "B-003",
+      "kind": "bug",
+      "area": "watch",
+      "title": "The file watcher took ResMut<Project> and ResMut<OpenMap> every frame, and Bevy's conflict resolution deferred the badge layout past the frame",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "The headless suite went from 189 pass / 0 fail to 2-4 failures whose set changed every run. Bisection: watcher disabled -> 189/0 twice; watcher as one system -> 2-4 fail, varying; watcher split into a tick and an act -> 189/0 twice."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/src/watch.rs (tick_watch and adopt_changes) and the headless suite",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-001",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "An agent can drive the editor through typed operations, over MCP, with the file changing under it",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Before: the editor's verbs were key handlers, so an agent could only synthesise keystrokes, and a data file edited on disk was invisible until a restart."
+      },
+      "status": "fixed",
+      "evidence": "tests/an_agent_can_drive_the_editor.rs (8 tests); crates/bevy_emerge_mcp/tests/an_agent_calls_the_server.rs (3 tests); crates/bevy_emerge_mcp/tests/docs_are_current.rs (4 tests); crates/bevy_emerge_mapper/tests/operations_have_two_front_ends.rs (5 tests)",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "B-004",
+      "kind": "bug",
+      "area": "vlm",
+      "title": "probe reports Ready for any non-loopback host without connecting, so a LAN endpoint that is down is reported ready",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "probe() answered Reach::Ready for any host not spelled localhost/127./::1, so a LAN endpoint on a closed port was reported ready without a connect. The LAN bind is the documented portable setup; no config makes the preflight run there."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/src/vlm.rs::tests::a_lan_host_that_is_down_is_not_reported_as_ready",
+      "last_failure": "",
+      "first_seen": "2026-09-03"
+    },
+    {
+      "id": "E-007",
+      "kind": "bug",
+      "area": "editor",
+      "title": "A map edited on disk reaches the editor's memory but not the screen: the placed pieces are spawned once, at open",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Wrong result on screen: the file says the piece moved, the editor's map agrees, the viewport does not (tests/a_map_edited_on_disk_reaches_the_screen.rs failed: 'piece on SCREEN is at Vec3(0.0, 0.0, 0.0)'). Common: editing the map file is the hot-reload path. Workaround: restart the editor."
+      },
+      "status": "fixed",
+      "evidence": "tests/a_map_edited_on_disk_reaches_the_screen.rs::a_piece_moved_on_disk_stands_in_its_new_place; docs/loop/iterations/assets/2026-10-21-d131ce7/E-007-{before,after}.gif",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-009",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "Undo is declared in the registry and performed by no tool",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "ops.rs declares Undo::Inverse and Undo::Snapshot, the tool list names the strategy, and no tool performs an undo. The tool descriptions now say so rather than promising one."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/tests/an_agent_can_take_its_own_change_back.rs (12 tests); crates/bevy_emerge_mcp/tests/an_agent_calls_the_server.rs::the_undo_tool_says_what_it_does_and_refuses_without_an_editor; docs/loop/iterations/assets/2026-10-21-556158d/enh-{before,after}.gif",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "bevy_emerge_core 73, mapper 155, rng 2, solver 2, bevy_emerge 1; core failed under clippy so downstream crates were never linted"
+      },
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-005",
+      "kind": "bug",
+      "area": "lint",
+      "status": "fixed",
+      "title": "cargo clippy --workspace --all-targets -D warnings was red (233 findings), so no iteration's gate could pass",
+      "evidence": "cargo clippy --workspace --all-targets -- -D warnings exits 0 (commits ada4a8d, 093e3b6)"
+    },
+    {
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "destructiveHint server=true docs=false, three descriptions differed; not must-fix, fixed because trivial and in files the enhancement touched"
+      },
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-006",
+      "kind": "bug",
+      "area": "mcp",
+      "status": "fixed",
+      "title": "docs/mcp-tools.md said emerge_apply_operation is not destructive; the reference was checked against a hand copy, by name only",
+      "evidence": "crates/bevy_emerge_mcp/tests/docs_are_current.rs::the_reference_names_the_servers_own_tools (now compares descriptions and hints)"
+    },
+    {
+      "must_fix": {
+        "blocks": true,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "wrong result reported as success; schema says null clears"
+      },
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-007",
+      "kind": "bug",
+      "area": "ops",
+      "status": "fixed",
+      "title": "map_set_settings answered applied to \"note\": null and left the note set, because serde reads null as absent",
+      "evidence": "crates/bevy_emerge_mapper/tests/an_agent_can_drive_the_editor.rs::a_null_clears_the_note_and_the_bash"
+    },
+    {
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": ""
+      },
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-010",
+      "kind": "enhancement",
+      "area": "editor",
+      "status": "fixed",
+      "title": "The human cannot undo a map-settings change: Cmd+Z takes back placements only, and no UI reverts by operation id",
+      "evidence": "Fixed with B-008 (5275c48): the size field records Undo::Settings and Cmd+Z/Cmd+Shift+Z dispatch ops::undo, the agent's undo path. Reverting an agent's change from the keyboard is E-013."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-008",
+      "kind": "bug",
+      "area": "editor",
+      "status": "fixed",
+      "title": "Cmd+Z after a map resize took back an older placement and left the resize",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "one_undo_takes_back_the_newest_change.rs failed with (bounds.y, placements) = (44, 0): fence run gone, resize kept; live reference: 'nothing to undo' with Y 44 on screen"
+      },
+      "evidence": "crates/bevy_emerge_mapper/tests/one_undo_takes_back_the_newest_change.rs (2 tests); docs/loop/iterations/assets/2026-10-21-5275c48/B-008-{before,after}.gif"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-009",
+      "kind": "bug",
+      "area": "chrome",
+      "status": "fixed",
+      "title": "The inspector's receipt row has no reserved height, so every receipt pushes MAP SIZE and the lists down two lines and back",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "B-008 sequences f002->f003 and f007->f008: MAP SIZE moves ~90 px when 'map is 300 x 44 x 1120 m, and the file was written' wraps to two lines under UNDER; docs/loop/iterations/assets/2026-10-21-5275c48/B-009-receipt-row-jump.png"
+      },
+      "evidence": "ef1dd7c; tests/a_receipt_does_not_move_the_panel.rs (32.0 px push before, 0 after); docs/loop/iterations/assets/2026-10-21-15be05c/B-009-before.gif, B-009-after.gif"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-010",
+      "kind": "bug",
+      "area": "view",
+      "status": "fixed",
+      "title": "The near part of a large map and every piece on it was not drawn: the Map camera kept Bevy's 0..1000 m depth range 20.8 m from its focus",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "full-window still of Sanctuary's 300 x 1120 m town: two ground corners 67 m and 240 m behind near = 0; the cut line projects to y = 758, where the slab ended (757)"
+      },
+      "evidence": "02cadc7; tests/the_whole_map_is_inside_the_cameras_depth.rs (corners at -625.8/-627.6 m before); docs/loop/iterations/assets/2026-10-21-15be05c/B-010-B-011-viewport.png"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-011",
+      "kind": "bug",
+      "area": "chrome",
+      "status": "fixed",
+      "title": "A rectangle the size of the map's front face sat at the window's centre: the interface camera drew the world's gizmos",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "300 x 38 px rectangle at window centre on every map; its height followed map_set_settings y 38 -> 80; zooming did not move it"
+      },
+      "evidence": "b097613; tests/world_gizmos_stay_in_the_world.rs (403v0 on RenderLayers([0]) before); docs/loop/iterations/assets/2026-10-21-15be05c/B-011-height-probe.png"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-016",
+      "kind": "enhancement",
+      "area": "editor",
+      "status": "fixed",
+      "title": "A labelled undo history (renzora's history panel): the stack is a count only",
+      "evidence": "bbca51b, c40d89f, 4a3ae38: the INSPECTOR's UNDO/REDO rows name what Cmd+Z and Cmd+Shift+Z will do, and emerge_state carries undo_next/undo_depth/redo_next/redo_depth; tests/the_next_undo_is_named.rs (5); docs/loop/iterations/assets/2026-10-21-63e6631/enh-after.gif. The full list with click-to-jump is E-018."
+    },
+    {
+      "last_failure": "Attempt 1 (depth bias, PAINT_STEP 1.0) passed headless tests but still z-fought in the live still at the lower crossing; attempt 2 (world-height lift) fixed it.",
+      "first_seen": "2026-10-21",
+      "id": "B-015",
+      "kind": "bug",
+      "area": "view",
+      "status": "fixed",
+      "title": "Roads and fields z-fought where they overlap: coplanar flat markers, authored paint ignored, and one depth-bias step below a big quad's interpolation error",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "pointed out by the developer 2026-10-21; town.road/town.field are mesh-less 0.05 m markers OnFloor, so every top sits at y = 0.05; stair-step edges at every crossing (window-default still, c40d89f)"
+      },
+      "evidence": "bd5116a (paint applied, draw_order::draw_levels: smaller footprint on top, then later placement) + 63e6631 (render-only 1 cm lift per level; bias alone failed in the live still); tests/roads_and_fields_do_not_z_fight.rs (4); docs/loop/iterations/assets/2026-10-21-63e6631/B-015-before-after.png, B-015-pan-sheet.png"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-017",
+      "kind": "enhancement",
+      "area": "mcp",
+      "status": "fixed",
+      "title": "The agent cannot frame or zoom the Map's camera; it had to inject wheel events through bevy_debugger/input",
+      "evidence": "8c97677: emerge_frame_view (map | selection | placements | rect), view::frame_box, and a zoom ceiling that can show the whole map (max_zoom = 1.25 x ground diagonal / aspect); tests/frame_the_view.rs (6); docs/loop/iterations/assets/2026-10-21-8c97677/enh-after.gif"
+    },
+    {
+      "id": "B-016",
+      "kind": "bug",
+      "area": "watch",
+      "status": "fixed",
+      "title": "A map file saved with a typo was refused silently on the Map door: the watcher wrote the refusal into the kit door's status",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "live 2026-10-21: `bounds: ((` in town.map.ron; after 6 s status unchanged, problems [], journal 0 (seq b016_before)"
+      },
+      "evidence": "d8b3d5e; tests/a_map_edited_on_disk_reaches_the_screen.rs::a_malformed_map_on_disk_is_refused_on_the_map_door; docs/loop/iterations/assets/2026-10-21-d8b3d5e/B-016-after.gif",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "B-017",
+      "kind": "bug",
+      "area": "mcp",
+      "title": "Capture labels could write outside the project, because the label was joined into the path unchecked",
+      "status": "fixed",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "../escape and /tmp/escape reached the write path; the still asked the editor before any check"
+      },
+      "evidence": "Fixed in 2bc8aef. Failing before: a_capture_label_that_leaves_the_project_is_refused_before_the_editor_is_asked panicked (label not refused). After: refused before the editor is asked; unit tests in capture_label_tests.",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-022",
+      "kind": "enhancement",
+      "area": "view",
+      "status": "fixed",
+      "title": "The Map opens on a 18 m close-up of the origin, not framed on the map",
+      "evidence": "Fixed in b51da72 (feat(view): the Map opens framed on the whole map). Failing before: tests/the_map_opens_framed.rs::the_map_opens_framed_on_the_whole_map on HEAD 1a3f571 (a corner of the 1120 m map is outside the camera's view); passes after. The reopen test (the_map_opens_framed_after_the_door_state_resets) cannot compile on HEAD because it names MapFraming, so it is not failing-before evidence; its door-list coverage is the existing ratchet screen::the_door_resets_what_it_says_it_owns. Before/after stills: docs/loop/iterations/assets/2026-10-21-b51da72/launch-{before,after}.png",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-025",
+      "kind": "enhancement",
+      "area": "mcp",
+      "status": "fixed",
+      "title": "Decide how a migrated keys::Action leaves the enum without bypassing the Typing guard (E-024 is blocked on this)",
+      "evidence": "Decided by the developer 2026-10-22: actions name their operation. A keys::Action counts as migrated when its binding dispatches a registered operation, checked mechanically (the action names its operation id; the parity test verifies the id against the registry and that the UI path dispatches it). The Typing guard stays, because the action stays in keys::Action. The parity test's definition of 'migrated' changes accordingly, and the allowlist keeps shrinking: lower UNMIGRATED_MAX by one per migrated action. the_allowlist_of_unmigrated_actions_only_shrinks asserts UNMIGRATED.len() == Action::ALL.len() and that every variant is listed by name (operations_have_two_front_ends.rs ~400-421). Action is generated by enumerated! (keys.rs ~504-833), so a migrated action must be removed from the enum for the ratchet to shrink. Options: (a) bind the key straight from KeyboardInput in editor.rs, which must re-create the keys::Context Typing guard; (b) let keymap bindings name an operation so the enum keeps only human-only verbs. Option (b) is the design the parity rule implies. Needs a developer decision before E-024 can ship.",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "B-023",
+      "kind": "bug",
+      "area": "mcp",
+      "status": "fixed",
+      "title": "An agent's saved change was never redrawn: the write-back did not tell the screen",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "an_agent_turn_stands_on_the_screen failed before a862342: 'the piece on SCREEN turned 0.0 degrees' while the file and the map said 90; the workaround was reopening the editor"
+      },
+      "evidence": "a862342; crates/bevy_emerge_mapper/tests/an_agent_can_drive_the_editor.rs::an_agent_turn_stands_on_the_screen. ops_brp.rs operation_apply and operation_undo now set watch::Due::map_replaced when the save lands. Pixels: 368,608 px changed on wall_02_2 after an agent turn (docs/loop/iterations/2026-10-22-yaw-6aa6185.md).",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-024",
+      "kind": "bug",
+      "area": "sequencer",
+      "status": "fixed",
+      "title": "An operation applied inside a capture sequence was never redrawn, so the sequence's frames hid it",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "live: wall_02_2 yaw 0 to 90 inside emerge_capture_sequence, all 11 frames after the turn identical to f000 (0 changed px); an agent verifying its own work with a sequence saw no change"
+      },
+      "evidence": "14fb80c; crates/bevy_emerge_mapper/tests/an_agent_turn_in_a_sequence_stands_on_the_screen.rs (failed before: the entity was never respawned, 763v0 on both sides). drive_sequencer now sets watch::Due::map_replaced. After: 368,607 px changed from f001 on.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-022",
+      "kind": "bug",
+      "area": "editor",
+      "status": "fixed",
+      "title": "A successful undo's receipt ('restored 1 placement(s)') is shown in the red problem toast, in the refusal slot",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Phase 1 judgment 2026-10-22: blocks no (the undo happened), common yes (every Cmd+Z), no_workaround no. One yes: not must-fix; fixed as the developer's first priority because the demo showed it."
+      },
+      "evidence": "Fixed in a74c897 (PR #16). Regression: replace_and_dirty::a_successful_undo_is_reported_as_a_note_not_a_problem failed before (problems == [\"restored 1 placement(s)\"]) and passes after.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-019",
+      "kind": "bug",
+      "area": "mcp",
+      "title": "An agent's placement_set_pin is not on the Cmd+Z stack, so Cmd+Z says 'nothing to undo' for a change the agent made",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Live 2026-10-22 (target/loop/2026-10-22-fcc4e02/live/agent-states.json, key 'cmdz'): after emerge_apply_operation placement_set_pin, Cmd+Z reports status 'nothing to undo' and the file keeps owned:true. The brief asks for both front ends to undo with Cmd+Z. emerge_undo_operation does undo it (oplog line 35 undoes line 34). Same shape for placement_set_yaw inside a capture sequence (yaw iteration 2026-10-22): three sequence applies were logged (seq 110-112), each turning wall_02_2 to 90 deg. A live undo of a sequence turn was not run; the undo path is shown only by tests/placement_set_yaw.rs. undo_depth stays 0 after the turn, so it is not on the Cmd+Z stack. Judgment: author no_workaround yes (2 of 3, must-fix); fresh reviewer no (disputed, flagged). Fixed in 4364dd4, 3630155; report docs/loop/iterations/2026-10-22-undo-4364dd4.md."
+      },
+      "status": "fixed",
+      "evidence": "target/loop/2026-10-22-fcc4e02/live/agent-states.json (cmdz); crates/bevy_emerge_mcp/src/docs.rs emerge_undo_operation. Regression: tests/one_undo_takes_back_the_newest_change.rs, 5/5 on HEAD; against ab98e7d's source it fails 2/5 (cmd_z_after_an_agents_turn_takes_back_the_turn_and_not_the_resize: 'it left the agent's change standing', 33.0 vs 0.0; cmd_z_after_an_agent_puts_back_a_turn_takes_that_turn_back_and_not_the_resize: 33.0 vs 0.0). Fixed in 4364dd4 + 3630155 (PR #19).",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-028",
+      "kind": "bug",
+      "area": "editor",
+      "title": "A rename whose old-file removal fails leaves both files on disk and the open map renamed, yet reports the rename as refused",
+      "must_fix": {
+        "blocks": true,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Finisher's judgment: blocks yes (the refusal reports failure after the rename already happened: a wrong result), common no (rename is rare, and old-file removal rarely fails), workaround yes (delete the old file by hand; the message names it since b382ccf). Main's judgment: blocks no (both files survive, nothing is lost). The judgments disagree, so per the brief it is must-fix IF reproduced. Found by reviewer reading in the 2026-10-22 snip iteration and logged before any reproduction, so it is unconfirmed."
+      },
+      "status": "fixed",
+      "evidence": "Confirmed through the registry 2026-10-22 (CiBuilder): with a directory at the old path, map_rename answered refused while the editor held `renamed` and the new file stayed on disk. Test crates/bevy_emerge_mapper/tests/a_rename_whose_old_file_cannot_go_changes_nothing.rs failed before the fix (target/loop/2026-10-22-ci-filter/b028-failing.txt). Fixed in project.rs OpenMap::save: the new file is taken back when the old one cannot be removed, so the refusal changes nothing; if the take-back also fails, the map follows the new file and the refusal says so. Commit 0a7ee4e. Passing: target/loop/2026-10-22-ci-filter/b028-fixed.txt.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-034",
+      "kind": "bug",
+      "area": "ci",
+      "title": "The palette-filter test pressed the macOS command chord on Linux, so the Linux CI run failed",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "CiFinisher's judgment: blocks yes (a red Linux run fails the workspace gate on every PR), common yes (every Linux run), no_workaround yes (no CI-side workaround; the test itself had to change)."
+      },
+      "status": "fixed",
+      "evidence": "Seen on main: CI run 39811701910 (head e643327, 2026-10-22 16:10-16:33Z) failed with the_map_tabs_palette_filter_takes_the_keyboard panicking at crates/bevy_emerge_mapper/tests/a_run_lays_a_line_of_pieces.rs:257. Root cause: that test pressed KeyCode::SuperLeft. keys.rs MOD_KEYS is Super on macOS and Control elsewhere, so on Linux the press was a bare F and tiles.rs focus_filter never fired. Fix in 13c7a5f: press MOD_KEYS[0], as tests/headless.rs does. Failing before: target/loop/2026-10-22-ci-filter/flip-old.txt (the same test panics at ci_probe_old_filter.rs:257, left None, right Some(Palette)). Passing after: flip-new.txt (4 passed).",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-021",
+      "kind": "enhancement",
+      "area": "keys",
+      "status": "fixed",
+      "title": "A frame key for the person (Home: the locked placement, or the whole map)",
+      "evidence": "Fixed in 900a6e0: Home (keys::Action::FrameView, bound at Home, Control(Under)) frames the locked placement, or the whole map. Test home_frames_the_view (1). Failing before: 'Home must frame the whole map, but the map's corners are still outside the view'. The locked-placement branch has no automated test. Review note 7 (8bda0f3) fixed the Under doc and the Fn+← line in keys.md."
+    },
+    {
+      "id": "B-020",
+      "kind": "bug",
+      "area": "mcp",
+      "title": "An agent's operation leaves the editor's status receipt and undo row stale",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Live 2026-10-22: after emerge_apply_operation the status still read 'unpinned block_5_3' (the previous human receipt) and undo_depth stayed 0. The author sees nothing where the editor looks, the same shape as the refusals that were in the wrong slot. The editor's in-memory map did change (O on the placement then unpinned it). Live 2026-10-22 (yaw iteration): placement_set_yaw inside a capture sequence turned wall_02_2 on screen (368,607 px changed between sequence frames f000 and f011; frames in target/loop/2026-10-22-a74c897/sequence/), yet the status receipt still read the framing receipt and the inspector's UNDER showed it too, so the turn was not announced."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 04516e0. An agent's apply writes the receipt (EditorState::receipt_agent_change) and a refusal goes to the problem slot (problem_agent_refusal). Tests: tests/an_agent_change_is_on_the_receipt.rs (3). Failing before: apply receipt still read 'a person's receipt'. Reviewer check: PASS.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-026",
+      "kind": "bug",
+      "area": "editor",
+      "title": "A refused undo of a stale entry drops that entry for good, so the next Cmd+Z reaches an older change",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "Judgment: 1 of 3 (no_workaround only), not must-fix. Reached when an agent changes a piece after the person, then the person undoes the older change; the entry is not in the editor stack afterwards (the oplog still has it for emerge_undo_operation)."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 1087941: a refused undo keeps its entry; refused twice, it is dropped and says why. Test a_refused_undo_keeps_its_entry (left 0, right 1, via test-only plant_stale_move_for_test). Review gap 3 (8f6ec50) added a_stale_entry_that_refuses_twice_is_dropped_and_the_entry_beneath_is_reached (left 2, right 1). Redo path: 911c7b9, tests/a_refused_redo_keeps_its_entry.rs (left 0, right 1). Reviewer check: PARTIAL before gaps 2-3; fixed.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-029",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "Migrate X's stamp delete and box removal into the operation registry, so Action::Remove can be honestly migrated",
+      "status": "fixed",
+      "evidence": "Fixed in 323965a: X's box and stamp removal go through registered operations (placement_remove per piece; stamp_remove added). Tests: tests/stamp_remove.rs, tests/a_person_removes_a_box_and_undoes_it.rs. Failing before: left [wall@0, wall@1, wall@2], right [wall@1]. Review gaps 1 (1351288), 2 (ff10040), 4 (64c6585) fixed. Trade-off: N saves and N oplog lines per box.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-033",
+      "kind": "bug",
+      "area": "editor",
+      "title": "The snip overlay label overlaps the top edge of the box",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Judgment: 0 of 3. Cosmetic; found in Main's check of the mid-drag still."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 85d86ce: TextLayout::default().with_no_wrap() on the snip label. Test the_snip_label_sits_above_the_box_and_never_over_it. Failing before: label bottom 307 px, box top 240 px. Captures /tmp/emerge_live/b033/narrow_held.png and narrow_held_crop.png.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-035",
+      "kind": "bug",
+      "area": "ci",
+      "title": "A badge in a band sits 12 px off its control on the hosted CI runner, so a_badge_in_a_band_is_level_with_its_control fails on Linux",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Hosted CI run 39857129899 (PR #26, merge 3ab4fca) fails this test on main. Judgment: blocks yes, because a red main CI fails every PR's gate. Local gate is green."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 58a0e2d (cycle 2, branch loop/2026-10-22-cycle2): band clusters are FlexWrap::NoWrap and CLUSTER_W is deleted, so a band cluster is one chip high on any platform. Superseded the 132->140 cap in 2807c87, which the reviewer rejected as a magic number. New test tests/headless.rs every_band_cluster_is_one_chip_high; a_badge_in_a_band_is_level_with_its_control is unchanged. Failing before: on the Mac, a temporary 100 px cap gave 'MAP Title: cluster 54 px tall, tallest chip 25 px, 3 chip(s) at y [12.5, 12.5, 41.5]'. Original Linux failure: 'MAP Title: badge centred at 27, control at 15'. Linux: 16/16 passing on big under xvfb. Main's hosted CI run 39861048027 (merge 3ab4fca) was red on this test; the loop does not wait on CI (E-031).",
+      "last_failure": "39861048027",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-027",
+      "kind": "bug",
+      "area": "editor",
+      "title": "An agent's placement_remove shifts rows under the person's live row references (the pin-reason field stores a row while the person types), so Enter can pin the wrong piece",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Unreproduced. Reviewer gap 1 in the 2026-10-22 remove iteration covered the out-of-turn undo (fixed in e0c1b00); the forward direction was left open by the fixer. Judgment: LIFO order and the gap-1 refusal cover the common path; not must-fix until a repro exists."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in b825045 (the pin-reason field stores the placement id, not a row) and d592cad (the field opens through O; pinning is private; a pin whose piece was removed before Enter is refused and the field closes). Failing before: b027_the_pin_reason_names_its_piece, 0 passed, 1 failed (b027_the_pin_reason_names_its_piece.rs:101); passing after: b027 1 passed, e024 4 passed, --lib editor 29 passed. The removed-piece test a_pin_whose_piece_was_removed_before_enter_is_refused_and_closes_the_field is characterisation (it passes on the fix; no failing-before). The live editor repro was not run; the bug was reproduced only as the failing test.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-032",
+      "kind": "enhancement",
+      "area": "tests",
+      "title": "Two review coverage gaps remain: a box's stamp half is not exercised live, and stamp_remove's undo-only rule has no dedicated test",
+      "status": "fixed",
+      "evidence": "Coverage only (3834a54). No bug found; both behaviours were already correct, so there is no failing-before. Tests: stamp_remove.rs a_stamp_put_back_is_refused_as_an_apply_and_only_its_undo_brings_the_stamp_back (6 passed in its file); a_person_removes_a_box_and_undoes_it.rs a_box_over_a_stamp_and_a_piece_removes_both_and_one_cmd_z_puts_both_back (5 passed). Scope cut: the stamp half of a box has a headless test, not a live capture.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-026",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "emerge_state reports each placement's pin, so a pin change is visible in a state dump",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "emerge_state reports placements as a count only (ops_brp.rs editor_state). The pins are reported only by the operation's own result and oplog. The E-024 brief asked for a dump showing the pin indicator changing; it could not be shown from emerge_state."
+      },
+      "status": "fixed",
+      "evidence": "Shipped in 9407d42 (the map block carries pinned and pinned_total), paged in d4b9be1 (pinned_from, pinned_next, how_to_narrow; cap 50, the oplog_read shape), and described in 06b9f3f (the MCP test the_state_tool_says_its_cap_and_how_to_page_it replaced a substring check); c2d9f63 fixed the guide; docs/mcp-tools.md regenerated. Failing before: e026_emerge_state_reports_each_pin, 0 passed, 3 failed (pinned null). Paging test emerge_state_pages_the_pin_list_past_the_cap (55 pins) has no captured failing-before: it asserts a key that did not exist before.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-23",
+      "id": "B-037",
+      "kind": "bug",
+      "area": "view",
+      "title": "A rectangle frame took the whole map's height (a 3 m rectangle framed at 164 m)",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Home frames the whole map, but a rectangle cannot be framed as asked."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 7c37ca0: the frame's height is the height of the pieces inside the rectangle, and ground level when nothing stands in it. Failing before: frame_the_view, 3 m rectangle framed at 164.4 m, 10 m rectangle at 165.3 m. Regression: a_rectangle_frames_what_stands_in_it (crates/bevy_emerge_mapper/tests/). Expected box in an_agent_frames_a_rectangle_in_map_space changed (justified in the commit body). Live captures: docs/loop/iterations/assets/2026-10-23-cycle3-52d7f84/cycle3_rect.gif and cycle3_rect-sheet.png."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-018",
+      "kind": "enhancement",
+      "area": "editor",
+      "status": "fixed",
+      "title": "The full undo history as a list, with click-to-jump (the rest of renzora's history panel)",
+      "evidence": "Shipped in cycle 3 (52d7f84): 36dc1b3 and af0af0e (history is a list; a row jump is one Undo::Group on the other stack, and the history says who made each change), 8144862 (a row is one clipped line; found by a_receipt_does_not_move_the_panel::the_size_receipt_does_not_push_map_size_down, failing at af0af0e), 5227a9c (each row names the change on both sides of undo; failing before a_native_row_names_the_change_on_both_sides_of_undo), 25d15df (the clip holds the inset and the line; failing before a_history_row_holds_its_inset_and_one_line), 855565c (rectangle pins and test fixture), 52d7f84 (a spare or current row is not a pointer target; failing before a_spare_or_current_row_is_not_a_pointer_target). Live captures from af0af0e: assets/2026-10-23-cycle3-52d7f84/cycle3_history_click.gif and cycle3_history_two_step.gif. Report: docs/loop/iterations/2026-10-23-cycle3-52d7f84.md."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-22",
+      "id": "B-036",
+      "kind": "bug",
+      "area": "capture",
+      "status": "fixed",
+      "title": "A 20 fps capture sequence hung once on a warm editor (not reproduced)",
+      "evidence": "Merged into B-038 in cycle 3 (52d7f84) and closed there: the same wait (a run never reports done when a screenshot is skipped), so B-038 carried it. The 20 fps hang itself was not re-observed and the same cause was not reproduced. Status `merged` became `fixed`, because the working list has no `merged`: B-038's fix is the fix for this one too."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-23",
+      "id": "B-038",
+      "kind": "bug",
+      "area": "capture",
+      "title": "The capture sequencer drops a screenshot ('Duplicate render target') and then never reports done",
+      "must_fix": {
+        "blocks": true,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Blocks any recording above 4 fps (the default 4 fps is unaffected). Blocks the video track's hero and agent_removes_then_undo clips, which cannot be recorded at all."
+      },
+      "status": "fixed",
+      "evidence": "Cycle 3 (52d7f84): the video track recorded at 15 fps; the editor logged 'Duplicate render target for screenshot, skipping' and the run never reported done. B-036 (a 20 fps hang, seen once) was merged in. Fixed in dec28db (cycle 4, report 0286624): drive_sequencer asks for one frame at a time; a due frame waits until the previous PNG has landed; a capture that does not land within CAPTURE_TIMEOUT_S (5 s) ends the run with a reason and its screenshot is despawned (0aadfc9); the MCP wait covers one landing per frame (d7d149e); the served description matches the reference (2ab298d). Failing before: a_frame_that_never_lands_ends_the_run_with_a_reason ('status running, written 0') and a_burst_of_due_frames_is_asked_for_one_at_a_time (panicked). Passing after: 2 passed. Live with an injected 300 ms SIGSTOP at 0.5 s, 15 fps: HEAD 10 s run 147/150 frames, status running, 3 'Duplicate render target' lines; fixed 10 s 150/150, done, 0 lines. CAVEAT: the stall is injected; eight unstalled HEAD runs (3-10 s) did not reproduce the drop, so the organic cause is not confirmed."
+    },
+    {
+      "last_failure": "39883493701",
+      "first_seen": "2026-10-23",
+      "id": "B-039",
+      "kind": "bug",
+      "area": "ci",
+      "title": "The surface-and-camera test read the macOS-only /Users/ladvien/sanctuary path, so hosted Linux CI failed",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Hosted CI run 39883493701 (ubuntu-latest) failed a_headless_run_keeps_its_placeholder_and_resizes on main, so every PR's gate was red. The local gate was green, so there was no local workaround."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 3b3c8ff (cycle 4, report 0286624): the test builds its own temporary project through fixtures::Fixture, as the other mapper tests do; assertions unchanged (1536x864, 800x600). Failing before on Linux (xvfb-run, big): 'kits.ron: No such file or directory' at line 226, 1 passed / 1 failed, exit 101. Passing after: Linux 2 passed, macOS 2 passed. The probe example probe_surface_resize hardcoded the same path; fixed in 0286624."
+    },
+    {
+      "id": "B-012",
+      "kind": "bug",
+      "area": "chrome",
+      "title": "The receipt sits in UNDER's value column, so it reads as the value of UNDER",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "docs/loop/iterations/assets/2026-10-21-15be05c/window-after.png: 'size back: map is 300 x 26 x 1120 m...' directly under the empty UNDER label"
+      },
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (9c6de9f): the LAST row is labelled, so the receipt is not read as UNDER's value. The label survived the redesign (376eca7). Failing before: the_receipt_row_is_labelled_so_it_is_not_taken_for_under (no drawn text read 'LAST'). Before still: assets/2026-10-23-cycle5/B-013-before.png (an unlabelled blank row under UNDER). Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "B-013",
+      "kind": "bug",
+      "area": "chrome",
+      "title": "The hint row (Field::Hint) is zero tall when empty, so a hint pushes EDGES, MAP SIZE and the lists down",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "editor.rs ghost: state.hint set while a surface/mounted piece is armed over floor it cannot stand on, cleared where it fits; same shape as B-009 (reviewer, 2026-10-21) Cycle 6 live stills (5f36e05): docs/loop/iterations/assets/2026-10-23-cycle6/B-013-after.png (hint in the LAST slot) and B-013-nohint.png (two-line receipt in the LAST slot), both taken through brush_arm dress_bar_bundle (E-037). UNDO at crop rows 372-388 in both; REDO 411-427. The live layout is now captured."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5. The hint takes the receipt's slot while it speaks and the receipt returns when it clears (376eca7). cbf3423's clip was rejected by Main: it cut receipts past two lines and broke B-009. Failing before on cbf3423: a_long_receipt_is_drawn_whole, the_receipt_returns_when_the_hint_clears. The surface hint is shortened to 'goes on a <class> surface — none here' (dea4fb4; failing before: 3.64 body lines in a two-line slot, MAP SIZE pushed 16.0 px). Not taken live: no MCP tool sets state.hint. Residual: long ghost hints (stack.rs ~236, about six lines) still grow the LAST row and move UNDO; Main's call. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-028",
+      "kind": "bug",
+      "area": "ops",
+      "title": "An agent turn that is saved but cannot be logged leaves the screen and the file disagreeing",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Found by code review of the yaw branch 2026-10-22, by reading, not reproduced. ops.rs dispatch_as commits the change (the file is saved) and then appends the oplog line; if the append fails it returns Err 'the operation was applied but the log could not be written', with the map and file already changed. placement_set_yaw's set_yaw then returns false with no Undo::Turned and no respawn, and ops_brp.rs operation_apply and sequencer.rs drive_sequencer set map_replaced only on Ok(Done), so the picture keeps the old facing while the file has the new one. Fixing it changes the commit-then-append order for every operation, so it is a design decision, not a one-line patch."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (f8df272), in the sweep though the triad is 0 of 3. take_back() in ops.rs commits the recorded inverse through op.commit when the log line cannot be written; the refusal says 'taken back and nothing was changed', or 'still in place' when there is no inverse or the take-back fails. Failing before: a_change_whose_log_line_cannot_be_written_is_taken_back (injected unwritable log; the rename stayed). Passing after: the test; one_undo_takes_back_the_newest_change (5); a_map_can_be_renamed_through_the_registry (7); ops:: lib (4). Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-029",
+      "kind": "bug",
+      "area": "editor",
+      "title": "A renamed map keeps a rules.ron example that points at a file the rename no longer creates",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Judgment: 0 of 3 (blocks no, common no: only maps whose rules.ron has an example; workaround: edit rules.ron)."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (0a78a5e; lint a4658ba), in the sweep though the triad is 0 of 3. Cause: map_rename never touched BlockRules.example, and Ctx cloned Project. Failing before: a_rename_carries_the_rules_example_with_it (rules.ron still named the old map: left 'm', right 'n'). Passing after: rename_carries (2); the rename tests (7, 1, 5, 2). Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-031",
+      "kind": "bug",
+      "area": "mcp",
+      "title": "A snip's placement list does not name the members of a stamped piece that lie under the rectangle",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Judgment: 1 of 3 (common only). The agent can still read the full placement list for the map; the snip record just omits stamp members."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (054f985): the snip record lists the stamped rows it covers. Failing before: a_snip_over_a_stamp_lists_its_rows_under_the_stamp (a snip over room@1 recorded []). Passing after: bevy_emerge_snip snip:: (5); a_person_snips_an_area_of_the_editor. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-034",
+      "kind": "enhancement",
+      "area": "chrome",
+      "title": "The frame's doc says Pickable::IGNORE throughout; say that a row's children need it too",
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (1c25b17, doc only): chrome.rs says every descendant of a row carries Pickable::IGNORE, since Hovered is true for a descendant too. Verified in chrome.rs. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-035",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "check.py: static runs must not count caption and cursor overlay frames; MCP view changes must count as change moments",
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (83bdf63, ee0f774): a frozen tail beyond FINAL_HOLD_S (1.5 s) counts as a static run; MCP emerge_frame_view counts as a change moment; CHANGE_WINDOW_S = 0.2 (a matching window, not a bar). Synthetic: frozen 5.5 s caption-only, old PASS to new FAIL (static 3.90 s); control PASS. Tests: tools/demo/test_check.py (+72 lines). Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-036",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "record.py: chunk 0 of hero runs about 9.8 s instead of 6 s, so captions move out of time",
+      "status": "fixed",
+      "evidence": "Largely fixed in cycle 5 (47f1099, 2b1c8f1, fe7f397, 834854e): MCP events are stamped at call start; steps are timed from each chunk's real start; events snap to the first captured frame. Worst delta for change-causing events 0.139 s (bound 0.2 s). Not fixed: the chunk overrun (agent_removes_then_undo chunk 0 planned 3 s, captured 5.356 s); cause not established. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-040",
+      "kind": "bug",
+      "area": "capture",
+      "title": "The capture sequencer waits for each PNG before the next frame is asked for, so readback latency sets the capture rate",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Derived in cycle 5: common yes (under load); blocks no; no workaround no (a lower frame rate is the workaround). 1 of 3, not must-fix."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in cycle 5 (9b94ac7): at most one new capture per update, up to MAX_IN_FLIGHT = 4 in flight, each on its own entity. Relaxes B-038's one-in-flight cap (disclosed). Failing before: a_due_frame_is_requested_while_the_one_before_is_still_out; a_burst_of_due_frames_is_asked_for_one_per_update. Passing after: a_capture_sequence_takes_one_frame_at_a_time (3). Live, idle, 3 s runs: 15 fps achieved 15.07 before, 15.09-15.25 after; 8 fps 8.03 before, 7.98 after; no idle gain. Under load (10-25) the video agent saw about 6.5 fps at a 15 fps plan; not measured against this commit. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-037",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "No operation arms a brush piece, so an agent cannot arm one and the hint state cannot be captured over MCP",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "1 of 3 (common). Blocks no: the person's palette arm still works. Agents had no way to arm a piece."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in f030b70: brush_arm arms a piece with Undo::None (logged and receipted, not in Cmd+Z history); the palette click dispatches it through editor::arm_piece. Failing before: tests/brush_arm_is_an_operation.rs did not compile on ab5ebf8 (E0432, unresolved editor::arm_piece). The old binary's live answer ('brush_arm is not an operation this editor knows...') is in the cycle 6 report from Main's brief; the builder notes do not record it. Passing after: brush_arm_is_an_operation 3/3; operations_have_two_front_ends 8/8. Live (town): brush_arm town/torch applied, operation 0045-5657, undo depth unchanged. Review gaps fixed: 1 (7e630cc; UNMIGRATED_MAX 125 to 123), 2 (94e2e65), 4 (c39c987, abc4419), 5 (579ae45), 7 (2098e21), 8 (e6854d9), 11 (a6b1122), 12 (855bfa2). Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-042",
+      "kind": "bug",
+      "area": "mcp",
+      "title": "emerge_list_snips right after Enter returns 0 snips, because the save lands about 0.3 s later",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "1 of 3 (common): an agent that lists right after Enter sees 0 snips and reads it as a failure. Blocks no; workaround: list again."
+      },
+      "status": "fixed",
+      "evidence": "Fixed in 315e184: confirm writes pending-<stem>.json synchronously; emerge_list_snips lists it under pending with status 'being saved' until the picture lands, then clears it. Failing before: an_agent_calls_the_server::a_snip_still_being_saved_is_listed_as_pending (line 782: left Null, right 'snip-3000'; total 0, no pending); compile red E0425 in bevy_emerge_snip. Passing after: bevy_emerge_snip 9/9; bevy_emerge_mcp 14/14; a_person_snips_an_area_of_the_editor 9/9. Review gaps fixed: 3 and 9 and 10 (9db260c), 6 (7f39d90, 96294cd: startup sweep), 13 (d6f62cf). The live race was not reproduced; shown in code only. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-043",
+      "kind": "bug",
+      "area": "editor",
+      "title": "The snip rectangle's outline is too faint to see in a demo at README size",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Cycle 7 judgment 2 of 3: blocks yes (a README clip could not show the box), common yes (every snip), no workaround no (the box reads at full size). Fixed in 435c765."
+      },
+      "status": "fixed",
+      "evidence": "Cycle 7 (435c765): snip drag box wash alpha 0.08 -> 0.28 and edge 2 -> 3 px (chrome::SNIP_WASH, chrome::SNIP_EDGE_W). Box fill (81,61,32) before, (139,104,46) after, over base (29,27,24). Stills: docs/loop/iterations/assets/2026-10-23-cycle7/B-043-before.png and -after.png. Test the_drag_box_is_plainly_visible fails on the old constants. Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-040",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "frame_the_map needs a crop or window aspect where the Home view fills at least 40% of the frame",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Cycle 7: criterion met is Main's call (whole-town Home framing at 32.2% is not covered by the shipped clip)."
+      },
+      "status": "fixed",
+      "evidence": "Cycle 6: Home on town gives scene 32.2% on both attempts (bar 40%); the town_block Home probe gives 36.9%. The whole 300x1120 m map fills about a third of the crop. Options: a landscape crop for a long, thin map. Moving the 40% bar is the developer's call. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md | Cycle 7 (900c8cf, f93ea8e): frame-the-map on town_block, crop fitted to the Home view: scene min 56.2%, Home change 58.7%, longest static 1.13 s, 0.37 MB. Whole-town Home framing (300x1120 m) at 32.2% is NOT covered. Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-042",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "label_set: a human-stamped label op for agents (parity with the Labels row)",
+      "status": "fixed",
+      "evidence": "Fixed in 46b88f8: label_set sets one axis's tokens through the vocabulary gate; a new core variant By::Agent marks agent writes and By::Human a person's; Model and Agent axes count as unconfirmed (descriptor.rs:279). The chip click dispatches it (5b91906, b2b8289). Undo restores the record exactly. Bug fixed while proving it: e49b39a (after an agent write the labels row credited the model with today's date; the_meshes_pane_says_how_sure_the_labels_are, 4 of 8 failed before). Review gaps fixed: 1 (c4edbd6, blocker), 2 (ddc46be), 3 (c7c670a), 6 (24465b9). Sanctuary: 0 callsites, 1,141 passed / 0 failed. Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-044",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "A select-a-piece operation (parity gap with the editor's selection)",
+      "status": "fixed",
+      "evidence": "Fixed in dbfc9c3: piece_select is an operation with Undo::None. It refuses outside the kit door's Meshes panel, for a filter-hidden or unmeasured piece, and for another kit's piece (naming that kit). A shelf row click, the arrow walk (5b91906) and agents select through it. Review gaps fixed: 4 (c4f6190, the sequencer runs the same checks) and 5 (d7df337). The right-arrow seed still selects directly: E-050. Stills: docs/loop/iterations/assets/2026-10-23-cycle9/piece-select.png. Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-005",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "Enclosure wish and weight are hard-coded in the editor, so an author who wants more enclosed rooms edits Rust",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "editor.rs ENCLOSURE_WISH = 0.25 and ENCLOSURE_WEIGHT = 200 are not in rules.ron, so they are not authored and cannot be tuned without a rebuild."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_core/src/map.rs Map::enclosure (MAP_VERSION 7) + ops::map_set_settings enclosure_wish/enclosure_weight + editor::enclosure_wishes; tests/the_enclosure_wish_is_the_maps_to_set.rs (5 tests); docs/guide/data-files.md",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-008",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "The chooser's new-map dialog writes name, bounds, origin and note directly, outside the registry",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "chooser.rs:5907-5910 (write_settings) and chooser.rs:662 (write_bash) write the map's settings without dispatching map_set_settings. They are a different subject -- a new map with no open map -- and the honest claim is that one operation has two front ends, not that every verb does."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/tests/an_agent_can_make_a_map.rs (5 tests)",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-013",
+      "kind": "enhancement",
+      "area": "editor",
+      "status": "shipped",
+      "title": "The person's Cmd+Z cannot reject an agent's change; only emerge_undo_operation can",
+      "evidence": "Agent applies go to the log but not to EditorState's stack. User problem: the developer sees an agent's change and wants it gone; frequency: every agent proposal they dislike; saving: one keystroke instead of asking the agent; risk: ordering the agent's lines against the person's stack, and a second front end for the same undo. Shipped in 4364dd4 (one undo history): Cmd+Z takes back an agent pin or turn. Report docs/loop/iterations/2026-10-22-undo-4364dd4.md."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-014",
+      "kind": "enhancement",
+      "area": "mcp",
+      "status": "shipped",
+      "title": "Snip: the developer drags a rectangle over the editor and the agent receives the crop plus where they were",
+      "evidence": "Asked for by the developer 2026-10-21. User problem: pointing at a visual problem means describing it in words; frequency: every visual review; saving: the agent gets the crop, map, camera, panel text and placements under the rectangle in one call; risk: a new gesture and a text field (register in editor::Fields), and snips are files in the project (confine and name them). Progress 2026-10-21 (556801e): the agent half shipped as emerge_snip { label, rect } (crop of a window-pixel rectangle, with path and state). Still open: the human drag gesture in the editor (UI state machine plus a registered operation that emits the snip). Iteration 2026-10-21-baseline-f7a8a9d did not take it: the human half needs (1) a note field registered in editor::Fields, (2) a windowed Screenshot crop inside bevy_emerge_mapper (the crop lives in bevy_emerge_mcp/src/snip.rs; move it to core rather than copy it), and (3) a decision whether a completed snip is a registry operation (it changes no map) or a documented gesture whose MCP front end is emerge_snip. Not a one-iteration slice without a reduction. Design settled 2026-10-21: a completed snip is a capture (like emerge_capture_still and emerge_snip), not a registry operation, since it changes no map state; the person's trigger is a new keys::Action plus a note field registered in editor::Fields, so it needs E-024 (one migration) first or in the same commit. Shipped in the 2026-10-22 snip iteration (a5b4dc0, branch loop/2026-10-22-snip): the person arms Cmd+\\, drags a rectangle, types a note and presses Enter; the agent reads it with emerge_list_snips. Report docs/loop/iterations/2026-10-22-snip-a5b4dc0.md.",
+      "shipped_in": "a5b4dc0"
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "B-014",
+      "kind": "bug",
+      "area": "chrome",
+      "status": "fixed",
+      "title": "In a narrow window (about 900 logical px) the viewport is a sliver between the two fixed-width panels",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "docs/loop/iterations/assets/2026-10-21-63e6631/window-narrow.png: about 70 logical px of viewport at 1800 x 1406 physical"
+      },
+      "evidence": "crates/bevy_emerge_mapper/tests/the_viewport_keeps_a_usable_width_in_a_narrow_window.rs::a_narrow_window_keeps_the_viewport_wide_enough_to_author_in (failed before at 69 px, passes after at 379 px); docs/loop/iterations/2026-10-24-chrome-b347dfe.md"
+    },
+    {
+      "id": "E-024",
+      "kind": "enhancement",
+      "area": "mcp",
+      "status": "shipped",
+      "title": "Migrate one unmigrated keys::Action into the operation registry, so an agent can do it and new human actions can be paid for",
+      "evidence": "Unblocked by E-025's decision: Decided by the developer 2026-10-22: actions name their operation. A keys::Action counts as migrated when its binding dispatches a registered operation, checked mechanically (the action names its operation id; the parity test verifies the id against the registry and that the UI path dispatches it). The Typing guard stays, because the action stays in keys::Action. The parity test's definition of 'migrated' changes accordingly, and the allowlist keeps shrinking: lower UNMIGRATED_MAX by one per migrated action. First migration: placement_set_pin (O key, Action::OwnToggle); work in progress preserved at target/loop/wip/e024-pin-wip.patch and target/loop/wip/e024-an_agent_can_pin_a_placement.rs (3 agent tests that failed before and passed with the patch). operations_have_two_front_ends::the_allowlist_of_unmigrated_actions_only_shrinks pins UNMIGRATED_MAX = 128 and says a new non-operation action must be paid for by migrating one in the same commit. It is what blocked E-021 (Home frame key, 2026-10-21 frame iteration) and E-014's human half (2026-10-21 baseline iteration). User problem: an agent cannot perform the migrated verb today, and the person's next actions cannot land; frequency: every new human verb; saving: unblocks E-014 and E-021 and adds one agent verb; risk: the verb's undo must go through the registry like map_set_settings (see B-008's Undo::Settings). Pick a small map-changing verb with a clear inverse.",
+      "last_failure": "2026-10-21 pin iteration (base 74f5085): chose placement_set_pin (O key, Action::OwnToggle). The pin verb itself passed its 3 agent tests and the editor's pin, unpin and reason paths dispatched it. Blocked by operations_have_two_front_ends: the_allowlist_of_unmigrated_actions_only_shrinks asserts UNMIGRATED == Action::ALL (every keys::Action variant is listed), so removing OwnToggle from UNMIGRATED fails unless the variant leaves the enum. Leaving the enum means rebinding O outside keys::Action, which drops the Typing-field guard (a name typed with O would pin); or redesigning the keymap so bindings name operations. Either is a design decision, not one verb. WIP patch kept outside the repo at /tmp/e024-pin-wip.patch.",
+      "first_seen": "2026-10-21",
+      "shipped_in": "8389191"
+    },
+    {
+      "id": "B-025",
+      "kind": "bug",
+      "area": "hot-reload",
+      "status": "rejected",
+      "title": "File edit-to-visible median rose 132 -> 245 ms across the yaw branch, on a path the branch does not touch",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "lat.py n=4 at 837bfc8 / 6aa6185 / a862342: 132 / 162 / 245 ms median, still well under the ~1 s target. Not interleaved, noisy machine; not reproduced. One yes: not must-fix."
+      },
+      "evidence": "Not a regression. Measured 93.1 / 174.2 / 195.6 / 271.6 ms across four runs at 60.5 fps — inside the 132-245 ms range the item recorded and an order of magnitude under the ~1 s target. The MCP path, measured by the same loop, held 26.4-29.7 ms across the same runs, so the spread is the poll interval, not the editor. The measurement tool was also lying: `lat.py` ended its yaw rewrite at the next `,` while this map closes a placement with `)`, so the rewritten file did not parse and `file_ms` came back null. Fixed in the tool (not in the repo).",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-030",
+      "kind": "enhancement",
+      "area": "mcp",
+      "status": "shipped",
+      "title": "An agent can remove one placement by id with placement_remove, undoable from the editor's stack",
+      "evidence": "Shipped in the 2026-10-22 remove iteration: docs/loop/iterations/2026-10-22-remove-12b8c26.md. Commits 12b8c26..57b48fe on loop/2026-10-22-remove (review gaps fixed in e0c1b00, 8f4737b, 844a0dc, 57b48fe). Gate: clippy -D warnings exit 0; workspace tests 1411 pass / 0 fail / 2 ignored.",
+      "last_failure": "",
+      "first_seen": "2026-10-22",
+      "shipped_in": "57b48fe"
+    },
+    {
+      "id": "B-032",
+      "kind": "bug",
+      "area": "editor",
+      "title": "Arming the snip over a button whose press is already in progress still presses it",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "Judgment: 1 of 3 (no_workaround only). Partly fixed in 233fc64: picking is disabled while armed. Workaround: release and press again."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/tests/a_person_snips_an_area_of_the_editor.rs::arming_the_snip_drops_a_press_that_was_already_in_flight (failed before, passes after); fix in snip::snip_gates_picking; docs/loop/iterations/2026-10-24-snip-<sha>.md",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-041",
+      "kind": "bug",
+      "area": "editor",
+      "title": "Removing ground block block_3_1 leaves the gate house on it translucent; undo makes it solid",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Not judged: unconfirmed. Set when reproduced."
+      },
+      "status": "rejected",
+      "evidence": "Does not reproduce. `block_3_1` is a `town/houses_plaster` — a 34 x 34 m, 0.05 m ground slab, not the gate house. A 15 fps sequence across its removal and undo on a scratch town copy shows the slab goes (its red field becomes the dark ground grid, which is what the cycle-5 evidence described and is correct) and the gate house does not change: its crop's mean brightness is 101.0 while the block is gone against 102.2 before and after, on all 45 frames. No translucent frame exists. The item's own hypothesis — the house was the armed brush's ghost under the cursor in that recording — is consistent with the measurement.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-044",
+      "kind": "bug",
+      "area": "tests",
+      "title": "one_undo_takes_back_the_newest_change fails under load on Linux CI (load-dependent flake)",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Cycle 7 judgment 2 of 3: blocks no, common yes, no workaround yes (red CI on main line, not a user-facing defect)."
+      },
+      "status": "fixed",
+      "fixed_in": "loop/2026-10-23-b044 (PR after #34)",
+      "root_cause": "Undo of Undo::Added, Undo::Moved and the put-back path in editor.rs apply() changed open.map in memory and never wrote the file. The 250 ms file watcher then read the stale file as an outside edit and adopted it, putting the undone run back. Under CPU oversubscription the watcher's poll lands between the undo and the next save, which is why only loaded runs failed. Fix: apply() persists the map after each of those changes (a failed write goes to Status::problem). Regression test one_undo_takes_back_the_newest_change::cmd_z_on_a_run_writes_the_map_so_the_watcher_has_nothing_to_adopt fails before on macOS too ('Cmd+Z took the run back in memory, but the file still holds it') and passes after. Found by the C9Linux state trace on big.",
+      "evidence": "crates/bevy_emerge_mapper/tests/one_undo_takes_back_the_newest_change.rs::cmd_z_after_a_resize_takes_back_the_resize_and_not_an_older_edit fails :138 (left 4, right 0) and :145 (left 8, right 4). CI red on ab5ebf8 (run 39926254825); green on f36ee00 (39906306802) and b99c056 (39935647016). Stress: f36ee00 44/120, ab5ebf8 67/320, single-process 0/300 (8 concurrent xvfb-run workers pinned to taskset -c 0,1). Ruled out: duplicate Undo/Redo handlers, Placement marker split, key-context race, time-based repeat. Suspect: apply for Undo::Added/Undo::Moved (editor.rs ~7726-7813) via undo()/redo(). Next: log undo_len/redo_len and placement count under stress. Evidence: local://c7-linux-notes.md (not in repo). Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-045",
+      "kind": "bug",
+      "area": "editor",
+      "title": "The snip drag box wash shows while the name field is typing",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Not judged: unconfirmed. Set when reproduced."
+      },
+      "status": "rejected",
+      "evidence": "Reproduced 2026-10-24 and found to be intended, not a defect: while the note is typed the drag box stays and its label carries the note (`note: h|  (Enter saves, Escape cancels)`), the wash is SNIP_WASH alpha 0.28 by design (an existing test pins 0.2-0.5 so the map underneath stays readable), and the overlay is despawned and respawned each frame so a capture never contains it. Probe: armed, drag, release, type 'h', then overlays_while_typing=1 with pending.note=Some(\"h\"). No wash covers the note field itself.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-048",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "An agent's kit edit gives the person almost no visible feedback",
+      "status": "shipped",
+      "evidence": "The receipt names the transition (`+crop  -tile`) and reaches BOTH doors: `EditorState::status` (Map) and `ImportState::status` (Kit). Four tests in `label_set_is_an_operation.rs`; the two kit-door ones fail before the fix with an empty receipt. An earlier `LabelGeneration` bump was measured to be unnecessary and removed.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-046",
+      "kind": "bug",
+      "area": "fill",
+      "title": "A generator's proposal is not drawn before Enter, so the person keeps or throws away a layout they cannot see",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Every learned/declared/composed generate; the only workaround is keep-then-undo. Judgment 2 of 3: must-fix."
+      },
+      "status": "shipped",
+      "evidence": "G now draws every proposed piece as a translucent ghost through `spawn_piece`, the same meshes the commit lays; viewport change on town_block went 0.00% -> 3.67%, and Enter produced exactly the previewed layout. Tests `a_proposal_is_drawn_before_it_is_kept.rs` (3).",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-047",
+      "kind": "bug",
+      "area": "labels",
+      "title": "Clicking an unlit KIND chip on a model-labelled piece stamps the kind by hand, but the clicked chip does not appear lit",
+      "status": "fixed",
+      "evidence": "The stated symptom does not reproduce: with a hook that fires a chip's real `Activate`, the click writes the token to `project.measured` AND the clicked chip is the held one. The defect that made it unanswerable and the GIF misleading is fixed — chips were told apart by fill alone (rest (42,39,34), hovered (54,50,44) = 60% of the way to held, held (63,59,51); 1.14:1, all three with the same 1 px dark border), so a held chip now carries the `ACCENT` edge the palette's shape rule already required. Guard test `clicking_a_tag_chip_writes_the_kind_and_lights_the_clicked_chip`; shape test `a_held_tag_chip_carries_an_accent_edge_and_an_unheld_one_does_not` (fails before).",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "B-048",
+      "kind": "bug",
+      "area": "editor",
+      "title": "Undoing a removal blanks the ground patches for one frame",
+      "status": "fixed",
+      "evidence": "Reproduced at 15 fps on the town map: the undo frame (f009, t=0.60 s) had 0 green field pixels where its neighbours have 143,694. Cause: a logged undo and an agent's undo ask for `Due::map_replaced`, whose `draw_every_placement` despawned EVERY standing piece before respawning the map. The person's Cmd+Z never blanked (143,694 across all 45 frames) because it takes the targeted path. Fixed: despawn only what the map no longer holds, and leave a piece alone only when it is drawn where its row says (position AND facing). Also: the put-back now spawns restored rows with their `Paint`. Test `a_full_redraw_leaves_the_standing_pieces_standing.rs` (first of two fails before).",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-054",
+      "kind": "enhancement",
+      "area": "chooser",
+      "title": "Enter on '+ new map' makes the map but does not open it; a second Enter is needed",
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/src/chooser.rs Chooser::made + drive_chooser's open above the swallowed return; chooser::tests::making_a_map_opens_it_in_the_same_press (fails without the change); measured on the real editor: pre-fix binary, one Enter leaves the chooser asking 'Enter open MAP'; this build, one Enter opens first_map (10x4x10). Guide steps 4-5 are now one step.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-057",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "A save writes every default on every placement, so a map's file is 41% larger than it needs to be",
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_core/src/map.rs (skip_serializing_if on Placed's defaulted fields); map::tests::a_default_field_is_not_written_and_nothing_is_lost and a_stated_field_is_still_written; measured live on the town map, 226,923 -> 134,320 bytes, 720 placements and 4 pins intact, second save byte-identical. The item's 'placements expanded' diagnosis was wrong: save checks by expanding and writes unexpanded.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-059",
+      "kind": "enhancement",
+      "area": "kits",
+      "title": "A two-way piece's palette row does not say which layer each placement took",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The mount label reads `on support or floor`; the per-placement answer is only in the INSPECTOR's UNDER row and in the map file."
+      },
+      "status": "shipped",
+      "evidence": "The `UNDER` readout names the layer a two-way placement took: `smithy_horseshoes — on the floor — Cmd+Delete edits it`, or `on `{host}`` when seated. The item's own evidence was wrong — it said the answer was already in that row, and the row printed only the id and the chord; the kit door's mount row is a library declaration and correctly has no placement to report. Test `headless.rs::the_under_readout_says_which_layer_a_two_way_piece_took`, with the widened-check case mutation-tested.",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-062",
+      "kind": "enhancement",
+      "area": "capture",
+      "title": "A screenshot read back over BRP can be a stale file, and two reads can return the same bytes",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "`bevy_debugger/screenshot` returns before the PNG lands; two captures taken 1.5 s apart came back with identical MD5 9702f3bd311ea207d07719077bf74572 in the E-048 iteration, which produced a 0-pixel 'no change' reading and a wrong diagnosis. Workaround: hash the path after a delay, or read the state instead."
+      },
+      "status": "shipped",
+      "evidence": "`emerge_capture_still` returns a `fingerprint` (FNV-1a 64 hex) over the bytes it writes, so two stills compare as pictures; live: unchanged screen -> same value, after a camera move -> different. The raw `bevy_debugger/screenshot {path}` trap remains (it returns in 21 ms, the PNG lands ~200 ms later) and is now warned about in docs/guide/agents.md; our tools never hit it because `grab()` polls `bevy_debugger/capture` and writes the file itself. Also corrected `docs.rs`'s claim that it reads the server's source (TOOLS is a hand-kept copy; the drift ratchet caught this change).",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-063",
+      "kind": "enhancement",
+      "area": "labels",
+      "title": "A label receipt names the axis it set but not the effects a kind change re-settled",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "`set_axis` re-settles implied effects when `kind` changes, so light -> decor drops `electricity`. The receipt says only `+decor -light`; the vocabulary decided the rest and the author is not told."
+      },
+      "status": "shipped",
+      "evidence": "The receipt names the effects a `kind` write re-settled: `set kind on `town/brazier`  -light; effects  -emit`. Compared settled-to-settled, so a stale disk row cannot report a change the editor already showed (review gap G1). Two tests in `label_set_is_an_operation.rs`, both failing before the fix.",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-064",
+      "kind": "enhancement",
+      "area": "labels",
+      "title": "An `effects` write can be overridden by the vocabulary and the receipt does not say so",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "`set_axis` settles `effects` after an effects write too, so an author removing an implied effect has it put back. The receipt reads `set effects on X  -inert` and never says `emit` stayed because the kind implies it. Found by E-063's review; same class as E-063 on the other axis."
+      },
+      "status": "shipped",
+      "evidence": "An effects write that drops an implied token says so: `set effects on `town/brazier` — kept emit (the kind implies it)`. The kept tokens are read against the request, and the effects axis's 'as it was' is the SETTLED list — review found that reading the raw row reported the vocabulary's own effect as the author's addition (`+powered -inert`) on a file not yet caught up with its kind. 3 tests, the first and third failing before; live-verified on a scratch project with an implication.",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-065",
+      "kind": "enhancement",
+      "area": "tests",
+      "title": "A sequence that starts behind its own schedule finished before applying its operation",
+      "status": "fixed",
+      "evidence": "The mechanism is not the real-time deadline the item named. drive_sequencer's operation gate waits for `next >= 1`, so a run whose first tick is already past the last frame's time asks every frame with `next == 0` and finished with `operation_result: None`, after which the operation could never apply. The finish now also requires `!operation_pending`, and the next tick applies it. Mechanism corrected and recorded in the item because the wrong diagnosis is what let it stay open as 'flakiness'. crates/bevy_emerge_mapper/tests/a_sequence_started_behind_schedule_still_applies_its_operation.rs — failed before (operation_result null) on a dadb7ef worktree, passes after; the five existing sequencer tests are unchanged and pass in a full run.",
+      "last_failure": "",
+      "first_seen": "2026-10-24",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The gate stops meaning green: three consecutive `cargo test --workspace` runs at load 30-37 each failed a different sequencer test, so no iteration's evidence could be trusted."
+      }
+    },
+    {
+      "id": "B-049",
+      "kind": "bug",
+      "area": "watch",
+      "title": "The file watcher overwrote unsaved edits: it compared the file with the in-memory map",
+      "must_fix": {
+        "blocks": true,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "watch::adopt_map compared the re-read file with `open.map`, the map that HOLDS unsaved edits, so any save from anywhere followed by an unsaved edit inside the 250 ms poll replaced the edit with the file. Silent: the map on screen and the map on disk then agree, so nothing looks wrong. This is the real cause of the intermittent a_person_removes_a_piece_and_undoes_it::an_agents_undo_of_a_removal_waits_while_the_person_has_moved_a_piece_since failure, which was reported as flakiness."
+      },
+      "status": "fixed",
+      "evidence": "Adoption now compares against what was last saved or read (OpenMap::saved()), refuses with `changed on disk while this map has unsaved edits` when the person has unsaved work, and only then takes the file. crates/bevy_emerge_mapper/tests/an_unsaved_edit_survives_the_watcher.rs (2 tests, both failing before).",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-067",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "No operation opens a map by name, so an agent that made a map cannot work in it",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "accept.py step 3: `map_create` makes `courtyard` and then the agent has no way in. `door_open` selects a door and a tab, and its parameters are door and tab only. The script's workaround is to relaunch the editor on the map, which an agent cannot do to a person's session."
+      },
+      "status": "fixed",
+      "evidence": "`map_open` reads the file through `OpenMap::open` (the Map tab's own door) and asks the editor to cross to the Map door through the same `DoorRequest` path `door_open` uses; `screen::cross` now dispatches it too, so a person crossing and an agent opening are one operation. A map that does not exist is refused rather than started — the one place it differs from `+ new map`. accept.py step `open_map`: fail -> pass. One limit recorded as E-078: from the menu the editor cannot be entered, so the script's relaunch workaround stays.",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "S-001",
+      "kind": "series",
+      "area": "mcp",
+      "title": "The agent can generate and present",
+      "goal": "An agent takes a sentence to a proposed, kept, saved and presented layout with the generators reachable as registered operations.",
+      "approved_by": "owner 2026-10-25",
+      "acceptance": [
+        "tools",
+        "save",
+        "present",
+        "verify"
+      ],
+      "status": "fixed",
+      "evidence": "propose and accept are not in the acceptance list because they depend on project content; S1's integration tests prove both.",
+      "last_failure": "",
+      "first_seen": "2026-10-25",
+      "steps": [
+        {
+          "id": "S1.1",
+          "title": "Extract a pure layout proposer (refactor; behaviour unchanged)",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.2",
+          "title": "Carry the proposal through Ctx, and a reversible row delta",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.3",
+          "title": "layout_propose (G, Shift+G, Cmd+G)",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.4",
+          "title": "layout_accept (Enter) and layout_discard (Esc)",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.5",
+          "title": "fill (F)",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.6",
+          "title": "map_save (Cmd+S on the Maps door)",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.7",
+          "title": "emerge_present: hand the result to the person (keep / undo all)",
+          "status": "fixed"
+        },
+        {
+          "id": "S1.8",
+          "title": "Close S-001: gate, accept and perf, live proof, report",
+          "status": "fixed"
+        }
+      ]
+    },
+    {
+      "id": "S-002",
+      "kind": "series",
+      "area": "assets",
+      "title": "A golem mesh becomes a placed piece",
+      "goal": "A .glb golem exported lands as a labelled palette piece and is placed on the map, all through registered operations.",
+      "approved_by": "owner 2026-10-25",
+      "acceptance": [
+        "place",
+        "propose",
+        "accept"
+      ],
+      "status": "fixed",
+      "evidence": "golem stays the tool that makes the mesh (AGENTS.md, 'Blender is a tool we own'); this series is the bridge, not a second importer.",
+      "last_failure": "",
+      "first_seen": "2026-10-25",
+      "steps": [
+        {
+          "id": "S2.1",
+          "title": "placement_add: an agent can place one piece",
+          "status": "fixed"
+        },
+        {
+          "id": "S2.2",
+          "title": "piece_import: an agent can turn a .glb inside the project into a kit piece",
+          "status": "fixed"
+        },
+        {
+          "id": "S2.3",
+          "title": "Put the bridge into the acceptance script (--glb)",
+          "status": "fixed"
+        },
+        {
+          "id": "S2.4",
+          "title": "Live proof through golem, and close S-002",
+          "status": "fixed"
+        }
+      ]
+    },
+    {
+      "id": "B-050",
+      "kind": "bug",
+      "area": "mcp",
+      "title": "A BRP call that takes longer than 5 s is reported as \"is the editor running?\"",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Measured 2026-10-25 at load average 32: `emerge/operation_apply` for `map_create` on Sanctuary's project exceeded the server's 5 s global BRP timeout and the answer read `the editor did not answer `emerge/operation_apply` ... Is it running, and is BEVY_BRP_PORT the same on both sides?` while the editor was up and answered `emerge/project_root` 6.7 s after launch. The timeout is in bevy_emerge_mcp/src/brp.rs (`timeout_global(5 s)`) and it is a considered choice — a tool call an agent waits on should not hang — but the refusal's words blame the wrong thing, and an operation that parses a project (or a fill that lays 4096 cells, or a capture's landing wait) legitimately takes longer."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mcp/src/brp.rs (MUTATING_TIMEOUT, cec92c1); tests brp::tests::a_slow_editor_is_not_blamed_on_the_connection, a_missing_editor_is_named_as_missing",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-078",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "An agent cannot enter the editor: an operation cannot move the screen, so a map made from the menu cannot be worked in without a relaunch",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "Measured 2026-10-25 with the S1 live proof: `map_create` then `map_open` both apply from the menu, and the editor stays on the menu — a 3 s capture sequence taken afterwards shows the MAPS column, not the viewport. `apply_pending_door` runs `in_state(Screen::Editor)` and `EditorState` does not exist on the menu, so the door-request mechanism cannot cross an editor boundary; the menu enters the editor through `Chooser::open_the_selection` -> `launch_args` -> `NextState`, which is the screen's, not an operation's. `tools/loop/accept.py` works around it by relaunching the editor on the map, and records the workaround."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/tests/an_agent_can_enter_the_map_it_made.rs (map_open_on_the_menu_enters_the_editor_on_that_map, a_refused_map_open_on_the_menu_stays_on_the_menu, emerge_state_says_which_screen_and_the_map_alone_does_not)",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-074",
+      "kind": "enhancement",
+      "area": "validators",
+      "title": "Mutations do not report what they broke: no overlap pass, no edge faults, no variety measurement",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The brief requires validators to run after every mutation and their failures to be in the tool result. stack::blocking, EdgeFaults and range::measure all exist and none is reported: an agent can place a piece that blocks a doorway and every answer says 'applied'."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/tests/a_change_says_what_it_broke.rs; edge faults and overlaps only — doorway clearance is E-079, variety is E-080",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "B-051",
+      "kind": "bug",
+      "area": "mapper",
+      "title": "The labels row's laid-out span falls outside the INSPECTOR panel when the model stem is long",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "`the_meshes_pane_says_how_sure_the_labels_are::a_long_model_stem_wraps_inside_the_inspector_and_keeps_the_confidence_first` fails on `:208` with \"the labels row is not inside the INSPECTOR panel\": the row drawn for a long model stem is not a descendant of the panel the INSPECTOR title sits in, so the wrap the test exists to prove is not happening. Measured 2026-10-25 on BOTH mac_air (arm64, clean rebuild) and big (Linux x86_64), and on MAIN's own tree on big in a separate CARGO_TARGET_DIR (`~/target/emerge-main-probe`, exit=101, same assertion), so it is not platform geometry and not an artifact of the E-078 branch — whose diff does not name the file. It asserts a laid-out `UiGlobalTransform` span, so it is a layout regression from the labels work (`2ca3173`, `e49b39a`), and it leaves `cargo test --workspace` red: 103 binaries green, this one failing."
+      },
+      "status": "fixed",
+      "evidence": "crates/bevy_emerge_mapper/tests/the_meshes_pane_says_how_sure_the_labels_are.rs (labels_row_and_inspector_x derives the panel from the row; two INSPECTOR titles exist, anim_tab.rs:343 hidden)",
+      "last_failure": "2026-10-25",
+      "first_seen": "2026-10-25"
+    }
+  ]
+}

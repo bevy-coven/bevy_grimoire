@@ -17,8 +17,8 @@ repository = "https://github.com/Ladvien/bevy_emerge"
 #
 # The root `CLAUDE.md` says an agent looking at or driving this project uses `bevy_debugger_mcp` and
 # nothing else, and then carved this crate out as a `bevy_devshot` caller — because it had no BRP of
-# its own. That was true while the debugger was a pinned git dependency; it is vendored now, so the
-# carve-out was a choice rather than a constraint.
+# its own. That was true while the debugger was a pinned git dependency; it moved into this tree for a
+# while and is a pinned git dependency again, on its own repo, so the carve-out was a choice rather than a constraint.
 #
 # What it buys over the sentinel file: `bevy_debugger/input` writes into the editor's own
 # `ButtonInput`, so an agent can walk tabs and press keys without touching a real keyboard — which is
@@ -91,11 +91,15 @@ serde_json.workspace = true
 # PNG. Both already in the build graph (serde_json via bevy_emerge_core, base64/image via bevy).
 base64 = "0.22"
 image.workspace = true
+# The snip's crop and its two files, shared with the MCP reader so both read one format.
+bevy_emerge_snip = { path = "../bevy_emerge_snip" }
 # Cmd+C on the detail pane — the pane's text into the system clipboard, so an author can hand a
 # piece's facts to an agent. Text only; the image-data feature would drag image deps in twice.
 arboard = { version = "3", default-features = false }
 # The debugger's companion plugin. **Optional**, so it is absent from the resolved dependency graph
 # of an ordinary build — `cargo tree -i bevy_debugger_bevy` finds no package without the feature, and
-# neither does `bevy_remote`. A path dep into the vendored copy, never a pinned rev: the pin is what
-# turned a one-line fix into a cross-repo errand, which is why the debugger lives in this tree now.
-bevy_debugger_bevy = { path = "../bevy_debugger_bevy", optional = true }
+# neither does `bevy_remote`. A git dependency on its own repo (`Ladvien/bevy_debugger_mcp`, the source
+# of truth since 2026-10-19; this tree's vendored copy is gone), pinned to a rev. The mapper uses the
+# guide, so it keeps the crate's default features. A fix the editor needs is made and pushed there, then
+# the rev here is bumped.
+bevy_debugger_bevy = { git = "https://github.com/Ladvien/bevy_debugger_mcp", rev = "f9dec25cea00e16a1de22502fd12f823d8baf88b", optional = true }

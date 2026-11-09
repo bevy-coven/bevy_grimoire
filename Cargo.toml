@@ -19,6 +19,21 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Same dev profile as Sanctuary: Bevy runs fast in debug without slowing rebuilds of these crates.
 [profile.dev]
 opt-level = 1
+# **Incremental is off, and the reason is measured, not aesthetic.** This workspace's debug profile
+# writes its incremental cache to the shared `CARGO_TARGET_DIR`, and on this machine that cache
+# reached 6–18 GB on three separate occasions in one session and filled a 461 GB disk to 100%, at
+# which point the linker fails with `write() failed, errno=28` and the failure looks like a broken
+# test rather than a full disk. `opt-level = 1` already rebuilds this code quickly; the cache was
+# buying a little more speed for a lot of disk, and the trade is wrong here.
+incremental = false
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# **The editor crate's test binaries are stripped of symbols.** `bevy_emerge_mapper` has ~90 integration
+# tests, each linking a full Bevy app into its own ~250 MB executable; `strip -x` takes one from 252 MB
+# to 137 MB, ~45% of the ~22 GB they occupy in the shared target dir. The cost is that a panic's
+# backtrace shows no function names (the panic message and line are unaffected). Only this package is
+# overridden, so every dependency keeps the build it already has.
+[profile.dev.package.bevy_emerge_mapper]
+strip = "symbols"

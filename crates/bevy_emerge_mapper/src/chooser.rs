@@ -241,23 +241,23 @@ impl Catalog {
         // parent to walk (the root of a drive, or one that cannot be read) there is just the
         // current project, which is the only one this screen can say anything about.
         let mut projects = Vec::new();
-        if let Some(parent) = root.parent() {
-            if let Ok(entries) = std::fs::read_dir(parent) {
-                for entry in entries.flatten() {
-                    let dir = entry.path();
-                    if !dir.is_dir() || !dir.join(EMERGE_DIR).is_dir() {
-                        continue;
-                    }
-                    let name = dir
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_default();
-                    projects.push(ProjectEntry {
-                        name,
-                        current: dir == root,
-                        dir,
-                    });
+        if let Some(parent) = root.parent()
+            && let Ok(entries) = std::fs::read_dir(parent)
+        {
+            for entry in entries.flatten() {
+                let dir = entry.path();
+                if !dir.is_dir() || !dir.join(EMERGE_DIR).is_dir() {
+                    continue;
                 }
+                let name = dir
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                projects.push(ProjectEntry {
+                    name,
+                    current: dir == root,
+                    dir,
+                });
             }
         }
         if projects.iter().all(|p| !p.current) {
@@ -813,12 +813,38 @@ mod tests {
     use super::*;
     use bevy_emerge_core::map::Placed;
 
+    /// **Removes a directory when the test ends, however it ends.**
+    ///
+    /// A test that makes a sibling project writes it into `$TMPDIR`, which outlives the process — so
+    /// `create_project`'s own "already exists" refusal turns a leaked directory into a failure on the
+    /// *next* run. A guard covers the panic path too, which an explicit cleanup at the end does not.
+    struct CleanUpOnDrop(PathBuf);
+
+    impl Drop for CleanUpOnDrop {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// A throwaway project root: `assets/emerge/` plus whatever kits a test asks for.
     struct Root(PathBuf);
 
     impl Root {
         fn new(name: &str) -> Root {
-            let dir = std::env::temp_dir().join(format!("chooser-{name}-{}", std::process::id()));
+            // **One parent per test, not one shared `$TMPDIR`.**
+            //
+            // `Catalog::scan` reads every *sibling* of the root as a project, so a fixture rooted
+            // straight in `$TMPDIR` made every chooser test a sibling of every other — scanned by
+            // each, and (worse) writable by each. Two runs in one process could then disagree about
+            // what is beside them, which is a test failing for a reason no diff explains.
+            //
+            // **Measured 2026-10-24**: `making_a_project_reports_the_command_that_opens_it` failed
+            // once in a full-workspace run and passed alone three times after, and `$TMPDIR` was
+            // littered with sibling test projects. The parent is the test's own now, so what it sees
+            // beside it is what it made.
+            let dir = std::env::temp_dir()
+                .join(format!("chooser-{name}-{}", std::process::id()))
+                .join("project");
             let _ = std::fs::remove_dir_all(&dir);
             let base = dir.join(EMERGE_DIR);
             std::fs::create_dir_all(&base).unwrap_or_else(|e| panic!("{}: {e}", base.display()));
@@ -1452,6 +1478,59 @@ mod tests {
     }
 
     /// **And the same for a map**, asked for in those words. A map made this way takes
+    /// **A map made at the keyboard is a map you are working in, not a row you press Enter on
+    /// again** (E-054).
+    ///
+    /// The guide taught the two-step in so many words — *"Press Enter. The map `first_map` is made
+    /// and selected in the MAPS column. It is not open yet. Press Enter again."* — and a guide that
+    /// has to teach a ceremony is describing one. It costs a person and an agent the same thing: the
+    /// first Enter answers, the screen does not change, and the natural reading is that nothing was
+    /// made.
+    ///
+    /// **Why the two presses were structural, not a decision.** `type_into_field` runs before
+    /// `drive_chooser` and sets `Chooser::swallowed` for the `Enter` it used, so `drive_chooser`
+    /// returns before its `KeyCode::Enter` arm and `open_the_selection` never runs that frame. The
+    /// press could commit the name and nothing else. So the opening has to happen where the name is
+    /// kept, which is what [`keep_field`] now does.
+    ///
+    /// **The assertion is on the arguments the screen would use**, because `args::open` is what turns
+    /// them into an editor and `launch_args` is the chooser's own answer: a map that was just made
+    /// must open *the map just made*, in that same press.
+    #[test]
+    fn making_a_map_opens_it_in_the_same_press() {
+        let root = Root::new("map-opens-once");
+        root.kit(Some("site"), 2);
+        let catalog = Catalog::scan(&root.0).unwrap_or_else(|e| panic!("{e}"));
+        let mut c = Chooser::new(root.0.clone(), catalog, Some("site"));
+
+        c.focus = Focus::Maps;
+        c.start_new();
+        c.raw = "porch".to_owned();
+        keep_field(&mut c, Field::Name);
+
+        assert!(c.creating.is_none(), "the map was made");
+        assert_eq!(c.problem, None, "and nothing was refused");
+        // **One press, one open.** `keep_field` leaves the map in hand rather than only on the
+        // cursor, so the screen opens it without a second keystroke.
+        let made = c
+            .made
+            .clone()
+            .unwrap_or_else(|| panic!("a map made at the keyboard must be left in hand to open"));
+
+        let args = c
+            .launch_args()
+            .unwrap_or_else(|e| panic!("the map just made must be openable: {e}"));
+        assert!(
+            args.iter().any(|a| a == "porch"),
+            "the arguments open the map that was just made: {args:?}"
+        );
+        assert!(
+            made.ends_with("porch.map.ron"),
+            "and the map left in hand is the one just written: {}",
+            made.display()
+        );
+    }
+
     /// `Map::default()`'s bounds, which is not a substitution — `MAP INFO` edits them afterwards
     /// through the same validate-then-atomic write, so nothing is reachable before creation that
     /// is not reachable after it.
@@ -1642,10 +1721,20 @@ mod tests {
         )
         .unwrap_or_else(|e| panic!("{}: {e}", vocab.display()));
 
-        let parent = root.0.parent().unwrap_or_else(|| panic!("temp dir has a parent"));
-        // A sibling the previous run left behind — `Root::new` cleans only its own directory.
-        let _ = std::fs::remove_dir_all(parent.join("porch_kit"));
-        let dir = create_project(parent, "Porch Kit", &vocab).unwrap_or_else(|e| panic!("{e}"));
+        // **The project is made INSIDE this test's own directory**, not beside it.
+        //
+        // `create_project` makes a *sibling* of the directory it is given, so passing the temp
+        // root's parent put the project at `<temp>/porch_kit` — **a fixed path in a directory every
+        // test in every binary shares**. Two tests running at once, or the same test in two runs,
+        // then race on it: and the line that removed "a sibling the previous run left behind"
+        // removed the directory the *other* run was writing.
+        //
+        // **The project's own name is unchanged** — `Porch Kit`, forced to `porch_kit` — and the
+        // assertion below still checks exactly that. **Only where it is made has changed**, and
+        // that is the whole of the fix: the directory is now the test's own, so nothing else can
+        // be inside it and nothing else can delete it.
+        let _ = std::fs::remove_dir_all(root.0.join("porch_kit"));
+        let dir = create_project(&root.0, "Porch Kit", &vocab).unwrap_or_else(|e| panic!("{e}"));
         assert!(
             dir.ends_with("porch_kit"),
             "forced to snake_case: {}",
@@ -1694,10 +1783,11 @@ mod tests {
         root.kit(Some("site"), 1);
         let vocab = root.0.join(EMERGE_DIR).join("vocab.ron");
         std::fs::write(&vocab, "(// kept\n)").unwrap_or_else(|e| panic!("{e}"));
+        // **The test's own parent**, which is what the fixture's new layout gives it.
         let parent = root
             .0
             .parent()
-            .unwrap_or_else(|| panic!("temp dir has a parent"))
+            .unwrap_or_else(|| panic!("the fixture gives the root a parent"))
             .to_path_buf();
         let _ = std::fs::remove_dir_all(parent.join("porch_flow"));
 
@@ -1721,6 +1811,12 @@ mod tests {
 
         assert!(c.creating.is_none(), "one Enter finishes it");
         let made = parent.join("porch_flow");
+        // **The made project goes with the test.** `create_project` refuses a directory that already
+        // exists, and this test only ever cleaned up *before* itself. The root cause of the 2026-10-24
+        // flake was the shared `$TMPDIR` parent (see `Root::new`), not this leak — but a test that
+        // leaves a directory in a place its own scan reads is a hazard either way, and the guard
+        // covers the panic path too.
+        let _cleanup = CleanUpOnDrop(made.clone());
         assert!(
             made.join(EMERGE_DIR).join(bevy_emerge_core::kits::KITS_FILE).is_file(),
             "the project landed beside this one: {}",
@@ -1788,7 +1884,6 @@ mod tests {
 
     /// **`set_authoring` re-points `kits.ron`'s `authoring`, and refuses a name that is not bound.**
     ///
-
     /// **`set_authoring` re-points `kits.ron`'s `authoring`, and refuses a name that is not bound.**
     ///
     /// The refusal names the bound kits, because "not bound" without a list is a search. The
@@ -2680,6 +2775,18 @@ pub struct Chooser {
     /// the keyboard first, exactly as `keys::Phase::Text` runs before `Act` in the editor. What was
     /// missing is the other half of that contract — having taken the key, say so.
     pub swallowed: bool,
+    /// **A map the name field made, waiting for this frame's open** (E-054).
+    ///
+    /// The `Enter` that commits a name is consumed by `type_into_field`, which sets
+    /// [`Self::swallowed`] so `drive_chooser` does not read the same press again. That is right for
+    /// Escape and wrong for this one: making a map *is* the press, and the author asked to work in
+    /// it, not to be shown a row. So the map made is left here for `drive_chooser` to open, on the
+    /// same frame, through the same `launch_args` → `args::open` path a second `Enter` used.
+    ///
+    /// `None` every frame but that one. A door that refuses leaves the map selected and the refusal
+    /// on screen, which is the one case where the two presses still happen — and now it is a case,
+    /// not the rule.
+    pub made: Option<PathBuf>,
 }
 
 /// **Something the screen has asked, and is waiting on an answer to.**
@@ -2816,6 +2923,7 @@ impl Chooser {
             creating: None,
             ask: None,
             swallowed: false,
+            made: None,
         }
     }
 
@@ -4814,11 +4922,17 @@ pub struct ChooserPlugin {
     pub preselect: Option<String>,
 }
 
-/// Where [`ChooserPlugin`] keeps its two arguments until the menu is entered.
+/// **Where [`ChooserPlugin`] keeps its arguments until the menu is entered — and where the agent
+/// bridge finds the project root while the menu is the screen that is up.**
+///
+/// The menu is the screen you are on *before* a door, so there is no `Project` resource yet, and
+/// every `emerge/…` command that needed one answered `no project is open` — which made the whole
+/// agent surface unavailable on the one screen where a project is *chosen*. `root` here is the same
+/// directory `Chooser::root` holds, so a command can still find the log and the maps directory.
 #[derive(Resource, Clone)]
-struct MenuOpening {
-    root: PathBuf,
-    preselect: Option<String>,
+pub struct MenuOpening {
+    pub root: PathBuf,
+    pub preselect: Option<String>,
 }
 
 impl Plugin for ChooserPlugin {
@@ -4867,6 +4981,9 @@ impl Plugin for ChooserPlugin {
                 paint_chooser,
                 // **After the paint**, because it measures rows the paint may have just respawned.
                 keep_the_chooser_selection_on_screen,
+                // **The list follows the directory**, so a map an agent made appears without the
+                // menu having been the one to make it.
+                follow_the_maps_directory,
                 // **After the drive**, so the border lights on the same frame the arrow moved the
                 // keyboard rather than one behind it. It reads `Chooser::focus` and writes nothing
                 // the paint depends on, so it is last for ordering's sake and not for the paint's.
@@ -5470,6 +5587,12 @@ fn fill(commands: &mut Commands, at: Entity, rows: &[Row], kind: PanelKind, pane
     }
 }
 
+// Three follower queries, one alias each, so each marker and its `ScrollPosition` sit on one line.
+// `every_list_follows_its_selection` reads this file as text and checks exactly that.
+type MapFollower<'w, 's> = Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition), (With<MapList>, Without<KitList>, Without<ProjectList>, Without<ChooserRow>)>;
+type KitFollower<'w, 's> = Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition), (With<KitList>, Without<MapList>, Without<ProjectList>, Without<ChooserRow>)>;
+type ProjectFollower<'w, 's> = Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform, &'static mut ScrollPosition), (With<ProjectList>, Without<MapList>, Without<KitList>, Without<ChooserRow>)>;
+
 /// **Keep the selected row on screen**, the way every other list in this editor does.
 ///
 /// `tests/every_list_follows_its_selection.rs` requires one of these per `scroll_list` marker, and
@@ -5482,18 +5605,9 @@ fn fill(commands: &mut Commands, at: Entity, rows: &[Row], kind: PanelKind, pane
 fn keep_the_chooser_selection_on_screen(
     chooser: Res<Chooser>,
     rows: Query<(&ChooserRow, &ComputedNode, &UiGlobalTransform)>,
-    mut maps: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (With<MapList>, Without<KitList>, Without<ProjectList>, Without<ChooserRow>),
-    >,
-    mut kits: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (With<KitList>, Without<MapList>, Without<ProjectList>, Without<ChooserRow>),
-    >,
-    mut projects: Query<
-        (&ComputedNode, &UiGlobalTransform, &mut ScrollPosition),
-        (With<ProjectList>, Without<MapList>, Without<KitList>, Without<ChooserRow>),
-    >,
+    mut maps: MapFollower<'_, '_>,
+    mut kits: KitFollower<'_, '_>,
+    mut projects: ProjectFollower<'_, '_>,
     mut follow: Local<crate::chrome::Follow<(usize, usize)>>,
 ) {
     // The cursor as one value, so `Follow` re-arms when either half moves — walking from kit 2 to
@@ -5595,7 +5709,18 @@ fn on_row_click(
             chooser.focus = Focus::Maps;
             chooser.map = row.index;
         }
-        RowPane::Settings => chooser.focus = Focus::Settings,
+        RowPane::Settings => {
+            chooser.focus = Focus::Settings;
+            // **And the field the row names.** The `•` mark is drawn on the row whose field matches
+            // `chooser.field`, so a click that moved only the focus opened whatever field the
+            // arrows had left open — **clicking `NAME` opened `ORIGIN`**, and the author typed a
+            // map's name into the origin and was told *"0 x 0 x 0town_block_ is not three
+            // numbers"*.
+            //
+            // The settings rows are built in `settings_rows` with their fields in the order they
+            // are drawn, so the row's index is the field.
+            chooser.field = Field::ALL.get(row.index).copied().unwrap_or(Field::Name);
+        }
         RowPane::Projects => {
             chooser.focus = Focus::Projects;
             chooser.project = row.index;
@@ -5677,6 +5802,35 @@ fn paint_chooser(
     }
 }
 
+/// **The list follows the directory, whoever wrote it.**
+///
+/// The menu rescanned only when **it** acted: `make_it`, a delete, a rename. A map written by anything
+/// else — an agent through `map_create`, an editor in another window, a `cp` in a terminal — left the
+/// MAPS column showing the list from before. **Measured 2026-10-24**: an MCP client made `courtyard`
+/// and the file was on disk with its note, while the menu still drew `+ new map` alone. The screen said
+/// nothing had been made.
+///
+/// **A directory's mtime, not its contents.** Re-reading every map's header is the expensive half of
+/// `Catalog::scan`; the question here is only "has anything been added or removed", and the directory's
+/// own timestamp answers that in one `stat`.
+fn follow_the_maps_directory(
+    mut chooser: ResMut<Chooser>,
+    mut last: Local<Option<std::time::SystemTime>>,
+) {
+    let dir = chooser.root.join(EMERGE_DIR).join(MAPS_DIR);
+    let now = std::fs::metadata(&dir).and_then(|m| m.modified()).ok();
+    // **The first frame records without rescanning.** `Chooser::new` has just scanned, so a rescan
+    // here would be the same work twice.
+    match (*last, now) {
+        (None, _) => *last = now,
+        (Some(before), Some(after)) if before != after => {
+            *last = Some(after);
+            rescan_keeping_place(&mut chooser, None);
+        }
+        _ => {}
+    }
+}
+
 /// **The field takes the keyboard first.** Mirrors `build.rs`'s name prompt, including the drain:
 /// while no field is open the stream is cleared, so the keystroke that *opens* one cannot become its
 /// first character (the `xseam` bug this crate already paid for once).
@@ -5707,6 +5861,22 @@ fn type_into_field(mut events: MessageReader<KeyboardInput>, mut chooser: ResMut
                 chooser.problem = None;
                 chooser.editing = false;
                 chooser.swallowed = true;
+                // **And the draft goes with the field.** This is the one place that can clear it,
+                // because `swallowed` stops the chord handler from reading this same press — and
+                // the chord handler's Escape is the only other place that clears it.
+                //
+                // **What a surviving draft costs.** `map_rows` matches on `(&self.creating,
+                // self.current_map())` and the `(Some(New::Map(d)), _)` arm comes **first**, so a
+                // surviving draft keeps winning over the map the cursor is on — and the MAP INFO
+                // panel reads *"NEW MAP IN kit / NAME (needs a name) / BOUNDS 10 x 4 x 10"* while
+                // the MAPS list beside it highlights a real map with 727 pieces. **Every fact in
+                // the panel was about an object that does not exist**, and nothing on screen said
+                // so.
+                //
+                // Measured: one `Escape` too few, and the panel stopped following the selection
+                // entirely. A second `Escape` — the one the chord handler reads — cleared the
+                // draft and the panel snapped back.
+                chooser.creating = None;
                 return;
             }
             Key::Backspace => {
@@ -5928,12 +6098,51 @@ fn make_it(chooser: &mut Chooser, new: &New) -> Result<(), String> {
             // **The project's `maps/`, and no kit is consulted.** Making a map used to require a
             // selected kit — it was written beside that kit's library — and a map now resolves
             // against every bound kit merged, so there is nothing left for the selection to decide.
-            let dir = chooser.root.join(EMERGE_DIR).join(MAPS_DIR);
-            create_map(&dir, &d.name, d.bounds, d.origin, d.note.clone())?;
+            // **`map_create`, the operation, so the dialog is a front end and not a second writer**
+            // (E-008). The chooser knew how to write a map and the registry did not, which is how a
+            // person could make one and an agent could not.
+            //
+            // **A context with the maps directory and nothing else.** The menu has no open map and
+            // no loaded library — it is the screen you are on *before* a door, and `Project::open`
+            // parses the whole library and requires `vocab.ron`. Making a map needs a directory to
+            // write in and a name, so that is what the context carries; an operation that needs
+            // more says so, and only `map_create` is dispatched from here.
+            let mut ctx = crate::ops::Ctx {
+                project: None,
+                root: Some(chooser.root.clone()),
+                open: None,
+                source: crate::ops::Source::Human,
+                session: "menu".to_owned(),
+                proposal: None,
+            };
+            let applied = crate::ops::dispatch(
+                &mut ctx,
+                "map_create",
+                &serde_json::json!({
+                    "name": d.name,
+                    "bounds": [d.bounds.0, d.bounds.1, d.bounds.2],
+                    "origin": [d.origin.0, d.origin.1, d.origin.2],
+                    "note": d.note,
+                }),
+            )
+            .map_err(|e| e.0)?;
+            let path = match applied {
+                crate::ops::Applied::Done { outcome, .. } => outcome
+                    .after
+                    .as_ref()
+                    .and_then(|a| a["path"].as_str())
+                    .map(PathBuf::from)
+                    .ok_or_else(|| "the map was made but its path was not answered".to_owned())?,
+                crate::ops::Applied::Refused(e) => return Err(e.0),
+            };
             let name = d.name.clone();
             chooser.creating = None;
             rescan_keeping_place(chooser, Some(&name));
             chooser.focus = Focus::Maps;
+            // **Leave it in hand, so the same press can open it** (E-054). The cursor is on the map
+            // and `launch_args` would already name it on a *second* Enter; this is what lets that
+            // open happen now rather than after another keystroke.
+            chooser.made = Some(path);
         }
         New::Project(name) => {
             // **A sibling beside this root** — the parent is where the other projects live, and
@@ -6022,20 +6231,34 @@ fn parse_triple(raw: &str) -> Option<(f32, f32, f32)> {
     }
 }
 
-fn drive_chooser(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut chooser: ResMut<Chooser>,
-    mut commands: Commands,
-    mut next: ResMut<NextState<crate::screen::Screen>>,
-    mut exit: MessageWriter<AppExit>,
+/// What `drive_chooser` reads and writes, bundled so the system stays within the argument budget.
+#[derive(bevy::ecs::system::SystemParam)]
+struct ChooserInput<'w, 's> {
+    keyboard: Res<'w, ButtonInput<KeyCode>>,
+    chooser: ResMut<'w, Chooser>,
+    commands: Commands<'w, 's>,
+    next: ResMut<'w, NextState<crate::screen::Screen>>,
+    exit: MessageWriter<'w, AppExit>,
     // Held arrows walk the list at the one application-wide cadence — see `keys::REPEAT_SECS`.
     // `KeysPlugin` owns `Repeat` and `screen.rs` marks it session-owned, so both outlive this
     // screen and a key held across the door does not resume repeating on the far side of it.
-    time: Res<Time>,
-    mut repeat: ResMut<crate::keys::Repeat>,
+    time: Res<'w, Time>,
+    repeat: ResMut<'w, crate::keys::Repeat>,
     // The one prompt. This screen raises two of the four questions in `confirm::Asked`.
-    mut confirm: ResMut<crate::confirm::Confirm>,
-) {
+    confirm: ResMut<'w, crate::confirm::Confirm>,
+}
+
+fn drive_chooser(input: ChooserInput<'_, '_>) {
+    let ChooserInput {
+        keyboard,
+        mut chooser,
+        mut commands,
+        mut next,
+        mut exit,
+        time,
+        mut repeat,
+        mut confirm,
+    } = input;
     // **A key the text handler already took is not read again.** One `Escape` is one press; see
     // `Chooser::swallowed` for the bug this closes.
     //
@@ -6044,6 +6267,21 @@ fn drive_chooser(
     // `Chooser` changed on every frame, which silently killed `paint_chooser`'s `is_changed()` guard
     // and rebuilt all four panels (plus a `read_to_string` of the selected map and of the kit's
     // policy) sixty times a second on an idle menu.
+    // **A map the name field just made opens in the same press** (E-054).
+    //
+    // This has to be here, above the `swallowed` return, because the press that made the map is the
+    // press `type_into_field` consumed: `keep_field` committed the name and set `swallowed`, so the
+    // `KeyCode::Enter` arm below never runs on that frame. Leaving the map in `made` is how the same
+    // press reaches `open_the_selection` — through the very path a second `Enter` used to, so a
+    // refusal still lands on screen and nothing else about opening changes.
+    if chooser.made.is_some() {
+        chooser.made = None;
+        open_the_selection(&mut chooser, &mut commands, &mut next);
+        // **And the keyboard is no longer the field's.** `keep_field` already cleared `editing`; the
+        // `swallowed` flag belonged to the press this branch just spent.
+        chooser.swallowed = false;
+        return;
+    }
     if chooser.swallowed {
         chooser.swallowed = false;
         return;

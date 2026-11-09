@@ -136,6 +136,11 @@ pub struct LabelOrigin {
     /// Which model, when one wrote any of it. Absent for a piece only ever labelled by hand.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The day the model wrote its axes, `YYYY-MM-DD`. Set by [`LabelOrigin::stamped`] and never
+    /// moved by a person's touch, which moves `at`. Absent on a record written before this field
+    /// existed; a reader falls back to `at`, which was then the model's date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_at: Option<String>,
     /// The day of the most recent write, `YYYY-MM-DD`. A date rather than a timestamp: this is read
     /// by a person deciding what to re-check, not by anything that needs to order two edits.
     ///
@@ -170,11 +175,15 @@ pub struct AxisOrigin {
 
 /// **Who wrote a value.**
 ///
-/// Two variants and not three. An `Import` for "the measuring pass put this here" was drafted and
-/// cut, because nothing in the importer writes any of these six fields — it measures size, extent
-/// and cells — so the variant would have had no writer, and a value no code path can produce is a
-/// stub wearing a schema's clothes. `None` already says *no record*, which is exactly and only what
-/// a manifest-generated descriptor means. Add the variant when something claims it.
+/// Three variants: the model, the person and the agent each claim a value, and the record keeps
+/// them apart. An `Import` for "the measuring pass put this here" was drafted and cut, because
+/// nothing in the importer writes any of these six fields — it measures size, extent and cells — so
+/// it would have had no writer. `None` already says *no record*, which is exactly and only what a
+/// manifest-generated descriptor means.
+///
+/// **Old readers.** A file without `Agent` parses everywhere. A `library.ron` that holds `Agent`
+/// (written by `label_set` from an agent) does not parse in a core older than the one that added
+/// the variant, so a consumer pinned to an older core must move with the editor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum By {
     /// A model proposed it and a person pressed apply. **Not the same as a person deciding it** —
@@ -182,6 +191,10 @@ pub enum By {
     Model,
     /// A person typed it, clicked it, or confirmed it in the editor.
     Human,
+    /// An agent wrote it through a registered operation (`label_set`). **Not a person's word**, so
+    /// it counts as unconfirmed, the same as a model's; and not a model's, so the record does not
+    /// claim a VLM said it.
+    Agent,
 }
 
 /// How sure a labeller said it was — display only, never a branch.
@@ -196,6 +209,18 @@ pub enum Confidence {
     Low,
 }
 
+/// **The word an author reads**, lower case: `high`, `medium`, `low`. The one spelling every
+/// surface uses, so a proposal line and a labels row cannot say the same confidence two ways.
+impl std::fmt::Display for Confidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
+        })
+    }
+}
+
 impl LabelOrigin {
     /// **A fresh record naming the model that is about to write**, with no axis claimed yet.
     ///
@@ -207,8 +232,16 @@ impl LabelOrigin {
             by: AxisOrigin::default(),
             model: Some(model.to_owned()),
             at: at.to_owned(),
+            model_at: Some(at.to_owned()),
             confidence,
         }
+    }
+
+    /// **The model's labelling date**, or `None` when no model wrote the record. A record written
+    /// before `model_at` existed has no separate date, and `at` was then the model's, so it stands
+    /// in. One rule, shared by the labels row and `emerge/pieces`, so they cannot show two dates.
+    pub fn model_date(&self) -> Option<&str> {
+        self.model.as_ref().map(|_| self.model_at.as_deref().unwrap_or(&self.at))
     }
 }
 
@@ -239,6 +272,15 @@ impl AxisOrigin {
             Axis::Mount => self.mount,
             Axis::Note => self.note,
         }
+    }
+
+    /// **Whether a model or an agent wrote an axis that nobody has since confirmed.** The one
+    /// predicate the labels row and `emerge_list_pieces`' `by_model` both ask, so the two cannot
+    /// disagree about which pieces still await a person.
+    pub fn any_unconfirmed(&self) -> bool {
+        [self.kind, self.effects, self.look, self.surfaces, self.mount, self.note]
+            .iter()
+            .any(|by| matches!(by, Some(By::Model | By::Agent)))
     }
 }
 
@@ -443,7 +485,7 @@ pub fn tipped_footprint(d: &Descriptor, tip: (u8, u8)) -> Option<(f32, f32)> {
 /// Separate from [`Subgrid::rotated`] because the lattice no longer carries its own divisions: a
 /// caller that turns a tile needs both halves, and having to ask for both is what keeps them in step.
 pub fn rotate_div(div: (u32, u32, u32), quarter: u8) -> (u32, u32, u32) {
-    if quarter % 2 == 0 {
+    if quarter.is_multiple_of(2) {
         div
     } else {
         (div.2, div.1, div.0)
@@ -721,6 +763,19 @@ pub fn mount_options(surfaces: &[String]) -> Vec<Mount> {
                 },
             );
         }
+        // **The two-mount entry, right after the class it lifts from.** Only the first class, and
+        // deliberately: `mount_options` is a cycle list an author taps through with `M`, and one
+        // `or the floor` entry per class would put the list's length at the vocabulary's twice.
+        // A piece that may take any other class is authored in the file, where the class is a
+        // sentence rather than a rung.
+        if let Some(class) = surfaces.first() {
+            out.insert(
+                at + surfaces.len(),
+                Mount::OnSurfaceOrFloor {
+                    class: class.clone(),
+                },
+            );
+        }
     }
     // And the same for the face placeholder. Done second so the surface expansion above has already
     // moved it, rather than both editing positions computed against the original list.
@@ -783,6 +838,7 @@ pub fn mount_label(mount: Option<&Mount>) -> String {
         None => "unset".to_owned(),
         Some(Mount::OnFloor) => "on floor".to_owned(),
         Some(Mount::OnSurface { class }) => format!("on {class}"),
+        Some(Mount::OnSurfaceOrFloor { class }) => format!("on {class} or floor"),
         Some(Mount::OnFace { class, height }) => format!("on {class} face at {height:.1} m"),
         Some(Mount::OnWall { height }) => format!("on wall at {height:.1} m"),
         Some(Mount::OnCeiling) => "on ceiling".to_owned(),
@@ -997,6 +1053,7 @@ pub struct Extent {
 /// | `InOpening { .. }` | the opening | only other `InOpening` — so a door and its wall cannot conflict |
 /// | `OnWall { height }` | that height | only `OnWall` **at the same height**, within 1 mm |
 /// | `OnSurface { class }` | its host's top | only `OnSurface` **on the same host** — two lamps contest one table, not two tables |
+/// | `OnSurfaceOrFloor { class }` | whichever it took | whichever it took: with a host it contests that host's top, without one it stands in the floor layer |
 ///
 /// **A heterogeneous pair contests nothing at all** (`same_layer`'s `_ => false`), which is why the
 /// bounded claim on [`crate::stack::blocking`] matters: the rule is per-layer and in plan, so a tall
@@ -1022,6 +1079,30 @@ pub enum Mount {
     InOpening { clear: Option<(f32, f32)> },
     /// Rests on another piece that offers this surface class.
     OnSurface { class: String },
+    /// **Either rests on a piece offering this class, or stands on the floor** — and which one is
+    /// decided per placement, by what the author dropped it on.
+    ///
+    /// The case a single `OnSurface` cannot state, and the one a dressing set needs: a smith's tools,
+    /// a horseshoe pile or a bundle of rods belongs *on a bench* in one room and *on the floor* in the
+    /// next, and a library entry describes the piece, not the room. Before this, the only way to say
+    /// so in data was a second descriptor with the same mesh and the other mount, which doubles the
+    /// library entries and splits one piece's labels across two ids.
+    ///
+    /// # The placement records which one it took
+    ///
+    /// [`crate::map::Placed::on`] **is** the record: `Some(host)` says it took the surface and names
+    /// the host; `None` says it took the floor. That is why a reload reproduces the seating without a
+    /// second field — the height is already derived from `on`, and nothing here is consulted at
+    /// resolve time. A variant with no per-placement state would put the same piece on the floor after
+    /// a reload, which is the failure a derived height exists to prevent.
+    ///
+    /// # What it does not combine with
+    ///
+    /// A floor and a named surface class only. `OnWall`, `OnCeiling`, `InOpening` and `Decal` are
+    /// *planes*, and "on the wall or on the floor" is a sentence about two different fixtures rather
+    /// than about one piece; refusing the combination keeps the variant from becoming a general
+    /// union type nothing can reason about.
+    OnSurfaceOrFloor { class: String },
     /// **Fixed to a named face of a named host**, `height` metres up it.
     ///
     /// The standing sibling of [`Self::OnSurface`], and the one that makes a fixture belong to a
@@ -1808,6 +1889,7 @@ mod tests {
                 },
                 model: Some("qwen3-vl".into()),
                 at: "2026-08-22".into(),
+                model_at: Some("2026-08-20".into()),
                 confidence: Some(Confidence::High),
             }),
             ..crate_desc()
@@ -1816,6 +1898,19 @@ mod tests {
             ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
         let back: Descriptor = ron::from_str(&text).expect("parses");
         assert_eq!(d, back);
+    }
+
+    #[test]
+    fn a_record_written_before_model_at_reads_its_model_date_from_at() {
+        let old: LabelOrigin = ron::from_str(
+            r#"(by: (kind: Some(Model)), model: Some("qwen3-vl"), at: "2026-08-22")"#,
+        )
+        .expect("parses");
+        assert_eq!(old.model_date(), Some("2026-08-22"));
+        let human: LabelOrigin = ron::from_str(r#"(at: "2026-08-22")"#).expect("parses");
+        assert_eq!(human.model_date(), None);
+        let stamped = LabelOrigin::stamped("qwen3-vl", "2026-08-20", None);
+        assert_eq!(stamped.model_date(), Some("2026-08-20"));
     }
 }
 
@@ -2319,7 +2414,7 @@ pub fn pick_cell(
     div: (u32, u32, u32),
 ) -> Option<((u32, u32, u32), Option<Face>)> {
     let n = [div.0, div.1, div.2];
-    if n.iter().any(|d| *d == 0) || size.iter().any(|s| *s <= 0.0) {
+    if n.contains(&0) || size.iter().any(|s| *s <= 0.0) {
         return None;
     }
     if ray_origin.iter().chain(dir.iter()).any(|v| !v.is_finite()) {

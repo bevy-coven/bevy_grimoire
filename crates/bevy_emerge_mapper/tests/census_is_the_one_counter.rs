@@ -121,7 +121,11 @@ fn the_census_answers_everything_this_test_forbids() {
     let library = bevy_emerge_core::library::Library::default();
     let map = bevy_emerge_core::map::Map::default();
     let catalog = bevy_emerge_core::census::of_catalog(&library, &[]);
-    let counted = bevy_emerge_core::census::of_map(&map);
+    // **The map counter expands**, so it needs the compositions and the library to expand
+    // against, and it can fail — a map whose stamps do not expand has no row count to report.
+    // The empty map has no stamps, so it cannot fail.
+    let counted = bevy_emerge_core::census::of_map(&map, &[], &library)
+        .unwrap_or_else(|e| panic!("an empty map counts: {e}"));
     // Naming each field is the point: if one is removed, this stops compiling and the row above it in
     // FORBIDDEN has to be reconsidered rather than quietly pointing at nothing.
     assert_eq!(
@@ -130,8 +134,13 @@ fn the_census_answers_everything_this_test_forbids() {
         "an empty catalog counts zero"
     );
     assert_eq!(
-        (counted.placements, counted.stamps, counted.locations),
-        (0, 0, 0),
+        (
+            counted.placements,
+            counted.stamps,
+            counted.locations,
+            counted.stamped
+        ),
+        (0, 0, 0, 0),
         "an empty map counts zero"
     );
 }

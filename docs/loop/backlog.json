@@ -1,0 +1,594 @@
+{
+  "items": [
+    {
+      "id": "E-002",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "An operation per editor verb, with the UI and the agent both dispatching it",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The registry has one operation (map_set_settings) and 128 actions are on the unmigrated allowlist. The brief asks for one workflow first, with the allowlist shrinking."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/tests/operations_have_two_front_ends.rs::the_allowlist_of_unmigrated_actions_only_shrinks",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-003",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "The kit's library and policy are re-read by a full project reload, which is slow and loses the open map",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "watch.rs::adopt re-opens the whole project for a library change, because only Project::open knows how to merge every bound kit. A per-kit re-read would be better."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/src/watch.rs::adopt",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-004",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "The operation log has a single-writer assumption, so two agents would claim the same sequence number",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "ops.rs::next_seq counts the lines in the log, and the MCP server and the editor are separate processes that could both append. An advisory file lock would fix it."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/src/ops.rs::next_seq",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-006",
+      "kind": "enhancement",
+      "area": "release",
+      "title": "No crate in this workspace is published to crates.io, so the first publication is undecided",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "cargo info for all seven crates says 'could not find ... in registry'. There is no published baseline, so no release can be made and no pre-publish gate has a version to check against."
+      },
+      "status": "open",
+      "evidence": "cargo info bevy_emerge_core@0.1.0 (and the other six)",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": ""
+      },
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-011",
+      "kind": "enhancement",
+      "area": "mcp",
+      "status": "open",
+      "title": "Frame time is unmeasurable through MCP and unreliable on a shared machine",
+      "evidence": "emerge_state has no frame clock; bevy_debugger/status tick counting gave 33.1 / 20.2 / 67.2 ms medians at load 2 agents / idle / load-avg 30.8. A per-frame CPU-time diagnostic in emerge_state would separate the editor from the machine."
+    },
+    {
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": ""
+      },
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-012",
+      "kind": "enhancement",
+      "area": "tests",
+      "status": "open",
+      "title": "Signature-reading ratchets cannot see resources inside #[derive(SystemParam)] bundles",
+      "evidence": "B-005 introduced 32 bundles; the_sweep_is_finished and every_resource_says_what_a_door_does_to_it read fn signatures, so a bare Res in a bundle used by an on_* observer would pass. on_shelf_click was kept unbundled for this reason; the ratchets should resolve bundle fields."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-015",
+      "kind": "enhancement",
+      "area": "keys",
+      "status": "deferred",
+      "title": "An action search palette over keys::Action::ALL (renzora's command palette)",
+      "evidence": "From the renzora/engine survey (crates/renzora_command_palette/src/modal.rs). User problem: an action is reachable only by knowing its chord; frequency: high (128+ actions); saving: two keystrokes instead of a chord hunt; risk: the palette must refuse what the current keys::Context refuses, through Status::problem. Cycle 2 (99c764c): not built (budget); depends on E-025 open-key migration; next cycle. Cycle 3 (52d7f84): deferred, not built. Its open key has no honest migration to pay for it under E-025, and UNMIGRATED_MAX (125) was not raised to make room."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-019",
+      "kind": "enhancement",
+      "area": "sanctuary",
+      "status": "open",
+      "title": "Sanctuary lifts its roads in code (town.rs:60 ROAD_LIFT = 0.15), so the editor cannot know the game's draw order from data",
+      "evidence": "Content hard-coded in the consumer. The editor now draws roads over fields by its own rule (smaller footprint on top), which matches for this map. Authoring the order as Placed::paint in the map would make game and editor agree by data. Consumer change: tell Sanctuary's agents via AGENTS_CHAT.md (append only)."
+    },
+    {
+      "last_failure": "",
+      "first_seen": "2026-10-21",
+      "id": "E-020",
+      "kind": "enhancement",
+      "area": "editor",
+      "status": "open",
+      "title": "Ghosts and previews do not get draw levels, and relevel is O(n^2) per map change",
+      "evidence": "From the z-fight fix (bd5116a/63e6631): ghost/preview spawns in editor.rs and redraw_stamps get no paint or lift, so a ghost over a field can draw differently from the committed piece; relevel_placements compares every pair when the map changes (727 pieces: about 0.5 M pairs)."
+    },
+    {
+      "id": "E-023",
+      "kind": "enhancement",
+      "area": "perf",
+      "status": "open",
+      "title": "Possible +1.5 ms frame time between b6ee5af and 8c97677 (not significant: paired t = 1.79, n = 9)",
+      "evidence": "target/loop/2026-10-21-b6ee5af/ab*.txt; the commit adds no per-frame work beyond view::drive reading the viewport aspect. Check with a profiler (Tracy or bevy_debugger frame timings) before claiming either way.",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "B-018",
+      "kind": "bug",
+      "area": "view",
+      "status": "open",
+      "title": "A map whose stacking does not resolve opens unframed on the 18 m close-up",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "reviewer P3 of the E-022 iteration (docs/loop/iterations/2026-10-21-view-b51da72.md): the open-framed path resolves the whole map through resolve_frame, which needs stack heights; when stacking fails it shows the stacking toast and leaves the old close-up"
+      },
+      "evidence": "Not must-fix: only maps with an unresolvable stack, and the toast already says why; emerge_frame_view {target: map} or the wheel still frames it. The whole-map box needs no stack heights (editor::map_bounds), so framing could fall back to it.",
+      "last_failure": "",
+      "first_seen": "2026-10-21"
+    },
+    {
+      "id": "E-027",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "A human R or T turn writes two undo records: an oplog line and the editor's own stack entry",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "Since 6aa6185, R and T dispatch placement_set_yaw, which appends an oplog line. The editor also keeps its Undo::Turned record so Cmd+Z still takes the turn back. One human turn is therefore two records that undo through two stacks. No defect was observed in a live run; the duplicate is inferred from reading the code and is a design question for one undo history (E-013, B-019)."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/src/editor.rs Undo::Turned; crates/bevy_emerge_mapper/src/ops.rs placement_set_yaw; commit 6aa6185 message. Partly addressed by 4364dd4 (one history). Gap: no test shows a human turn writes one entry, not two.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-021",
+      "kind": "bug",
+      "area": "editor",
+      "title": "A placement appeared in the map during a probe with the cursor and O, not reproduced",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "On the first probe run a barrel was placed (status 'placed barrel@1 at (-1965.65, -98.65)', undo_depth 1, map dirty). It was not reproduced in two replays of the same cursor and O inputs on a fresh editor, and the scratch session was discarded unsaved. Cause unknown."
+      },
+      "status": "open",
+      "evidence": "target/loop/2026-10-22-fcc4e02/live (editor.log); /tmp/emerge_live/it9/probe_pin.py. Pointer investigation 2026-10-22 (CiBuilder): placement at scale 1 and 2 lands under the pointer (crates/bevy_emerge_mapper/tests/a_piece_lands_where_the_pointer_is.rs, 930ced5); the editor's pointer mapping is correct. The probe's coordinates were far off the map, but the cause is not identified and this was not reproduced.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-031",
+      "kind": "enhancement",
+      "area": "ci",
+      "title": "The loop must not wait on CI: a PR merges on the local gate, and hosted CI runs in parallel",
+      "status": "open",
+      "evidence": "Developer decision 2026-10-22, recorded in the loop handoff (local://iteration-handoff.md), not in the repo: do not wait on CI, merge on the local gate. CI wall times reported by the main agent (18, 56 and 61 minutes, plus queue; not re-measured here). CI run 39842732867 on 360b9af was still queued at merge time. The hosted-versus-big timing probe (CiSpeedProbe) is not finished; its PR is separate.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "B-030",
+      "kind": "bug",
+      "area": "editor",
+      "title": "The oplog ties each change to its map by name, so undo of a pre-rename change needs the rename undone first, and the refusal says 'Open <old name>'",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "Judgment: 1 of 3 (no_workaround only). Rename is rare; the refusal is clear once the rename is undone."
+      },
+      "status": "open",
+      "evidence": "Reviewer gap 13, 2026-10-22 snip iteration. crates/bevy_emerge_mapper/src/ops.rs:531-580 keys the oplog by map name.",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-033",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "README demos show each change: re-shoot the five clips so every change is visible at README size",
+      "status": "open",
+      "evidence": "Cycle 2 (99c764c): the re-shoot failed tools/demo/check.py on every clip, so the README keeps cycle 1's GIFs. Bars: scene >= 40% of frame, change >= 5% per change moment, static <= 1.5 s, size cap. Measured: hero attempt A scene 75.2%, agent 34.2%, undo 33.9%, static 0.93 s, 0.45 MB, numbers pass but the house is off-crop; hero attempt B scene 87.7%, agent 3.2%, undo 3.0%; place_and_undo scene 90.4%, place 0.8%, undo 1.1%, static 2.0 s; agent_removes_then_undo scene 92.4%, agent 4.1%, undo 4.3%, static 2.1 s; frame_the_map scene 30.8%, Home 85.2%, static 1.27 s; move_the_camera scene 29.5%, static 0.67 s, 3.89 MB. Leads: the crop is not centred on the view centre (the editor reports focus for block_3_1 at (18.29, -18.29), but the house is off-centre in frame 0); the MIN_ZOOM floor keeps small targets far (the barrel is a 2 px dot); pick large pieces; the camera pan leaves the town. The tooling (tools/demo record.py, render.py, check.py, storyboards) ships in 9064805 and 99c764c. Cycle 3 (52d7f84), check.py with the corrected crop [470, 64, 950, 690]: frame_the_map FAIL, static run 1.67 s (limit 1.5), home change 77.66%, size 0.90 MB; move_the_camera FAIL, scene 17.1% (need >= 40%), size 26.77 MB (limit 3.0 MB), static 0.53 s; place_and_undo FAIL, undo change 0.36% (need >= 5%). hero and agent_removes_then_undo not recorded: the sequencer drops screenshots (B-038). Storyboards and record.py on loop/2026-10-23-video (f8942d3), merged in 446334b. Cycle 4 (0286624): place_and_undo PASS on attempt 2 and SHIPPED (README; docs/media/place-and-undo.gif, 8.7 s): scene min 91.2%, place 5.38% at 1.10 s, undo 5.17% at 2.22 s, static 1.13 s, 0.28 MB. Not shipped: frame_the_map PASS on attempt 2 but f21-f150 identical (about 8.6 s), an agent framing rather than the Home key; check.py gap, E-035. agent_removes_then_undo PASS only on attempt 3 (over the two-attempt budget), recording discarded: scene 91.7%, agent 6.16% at 0.07 s, undo 7.22% at 1.41 s, static 0.20 s, 0.49 MB. move_the_camera FAIL twice: attempt 2 scene 57.8%, static 0.70 s, 3.20 MB (limit 3.0). hero FAIL on attempt 1, not retried: scene 91.3%, agent 3.68% at 9.90 s, undo 0.23%, static 4.73 s, 0.67 MB; chunk 0 ran about 9.8 s, not 6 s (E-036). 1 of 5 clips shipped; 4 open. Cycle 5 (ca6d1ef): place_and_undo re-shot and shipped (8a3e462: scene 80.7%, place 22.54%, undo 22.38%, static 1.33 s, 0.30 MB). frame_the_map shipped in fc5063a and reverted in f75ce09 (agent framing on a 300x240 m rect; the map is 300x1120 m). move_the_camera FAIL x2 (scene min 34.6%, 19.6%); hero FAIL x2 (static 3.12 s); agent_removes_then_undo FAIL x2 (static 3.75-3.88 s). Still 1 of 5 shipped. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md Cycle 6 (0024999): agent_removes_then_undo re-shot and shipped (scene min 77.7%; agent 43.19% at 0.10 s; undo 43.36% at 1.46 s; static 1.27 s; 0.57 MB; in the README Agents section). Two of five re-shot. Still open: hero, frame_the_map, move_the_camera. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md | Cycle 7 (75711d6, 900c8cf): 4 of 5 README clips re-shot (place-and-undo, agent-removes, frame-the-map, move-the-camera). Hero (E-039) is the fifth. Still open. Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
+      "last_failure": "",
+      "first_seen": "2026-10-22"
+    },
+    {
+      "id": "E-038",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "The remaining demo clips need short holds, small pans, a larger snip rect, and the Home key for frame_the_map",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Not judged: unconfirmed. Set when reproduced."
+      },
+      "status": "open",
+      "evidence": "Cycle 5 video runs: move_the_camera FAIL x2 (scene min 34.6% and 19.6%; the pan leaves the map). hero FAIL x2 (static 3.12 s; snip drag change 0.38%). agent_removes_then_undo FAIL x2 (static 3.75-3.88 s; the removal holds the full 3 s chunk). frame_the_map reverted in f75ce09 (agent framing, not Home). Next: holds of 1.5 s or less between moments, pans of 0.2 s or less per key, a larger snip rect, and the Home key step for frame_the_map. Report: docs/loop/iterations/2026-10-23-cycle5-ca6d1ef.md Cycle 6: agent_removes_then_undo shipped in 0024999 after an attempt failed static (1.60 s). move_the_camera passed check.py (scene 91%, static <= 0.67 s) but visual review rejected both attempts: the last 1.5 s shows an empty plaza. frame_the_map: Home on town gives scene 32.2% on both attempts (bar 40%); moved to E-040. hero FAIL x2: houses about 2 m, a removal is 1.76% of the frame; snip drag outline 0.87% at README size (B-043, E-039). Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md | Cycle 7: move-the-camera ships short holds and small pans (75711d6); frame-the-map uses the Home key (900c8cf). Hero (E-039) still needs its holds and pans. Still open. Report: docs/loop/iterations/2026-10-23-cycle7-e89e86f.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-039",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "A hero storyboard on a big building: snip the abbey, the agent turns or removes it, then Cmd+Z",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Not judged: unconfirmed. Set when reproduced."
+      },
+      "status": "open",
+      "evidence": "Cycle 6: the hero clip on house-sized pieces failed twice: a removal of a 2 m house is 1.76% of the frame, and the snip outline 0.87%. A building the size of the abbey should fill enough of the frame to pass the change bar. Not started. Report: docs/loop/iterations/2026-10-23-cycle6-f34d8f4.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-041",
+      "kind": "enhancement",
+      "area": "tests",
+      "title": "The headless harness has no Activate event, so on_row_click is untested",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Not judged: unconfirmed. Set when reproduced."
+      },
+      "status": "open",
+      "evidence": "Partly closed: `on_tag_chip` is now reachable and tested through `tiles::click_tag_chip_for_test`, which fires the real `Activate`. The palette row click (`on_row_click`) still has no hook.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-043",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "label_suggest and label_apply: VLM labelling over MCP, fixture-backed",
+      "status": "open",
+      "evidence": "Cycle 8 enhancement notes; needs VLM fixture. Report: docs/loop/iterations/2026-10-23-cycle8-0cd1e1b.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-045",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "Log kit writes so they can be undone (depends on E-004)",
+      "status": "open",
+      "evidence": "Cycle 8 notes. Depends on E-004. Report: docs/loop/iterations/2026-10-23-cycle8-0cd1e1b.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-046",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "Decision: refuse a door write when the log append fails (gap 9)",
+      "status": "open",
+      "evidence": "Cycle 8 review gap 9. Behaviour unchanged in c6016bc. Needs a decision. Report: docs/loop/iterations/2026-10-23-cycle8-0cd1e1b.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-047",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "Review gaps 14 and 16 (confidence wording, duplicate confidence_word)",
+      "status": "open",
+      "evidence": "Gap 15 fixed in bfc538b: the only copy of the pieces_from wording in crates/bevy_emerge_mcp/src is docs.rs:279 (counted in the filtered list; 0 is the first match). Gap 16 open: crates/bevy_emerge_mapper/src/ops_brp.rs:462 fn confidence_word (cycle 8 cited :451; the line moved). Gap 14 open: confidence and at describe the record, not what is unchecked (local://c8-review.md, not in repo). Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-049",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "A chip click writes library.ron twice (review gap 9)",
+      "status": "open",
+      "evidence": "tiles.rs:6321-6324: set_label -> commit_measured writes the file, then persist(Library) writes the identical file again. Fix: state.status.say(Ok(said)) in that branch. Review note, not judged. Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-050",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "The Meshes right-arrow seed selects without the operation; correct the walk keys' reason (review gap 10)",
+      "status": "open",
+      "evidence": "tiles.rs:6442: FocusLibrary still sets selected_library_id = Some(land) directly, with no log line. Fix: route the seed through select_piece. The walk keys PrevCandidate and NextCandidate stay unmigrated because they also walk the candidate list, which no operation covers; the stated reason was wrong. UNMIGRATED_MAX stays 119. Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-051",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "Kit ops clone the whole Project per click, and a third Levenshtein copy exists (review gap 12)",
+      "status": "open",
+      "evidence": "editor.rs:3030-3036: each shelf click or arrow step clones Project and appends an oplog line; a chip click clones Project once and measured twice. Third Levenshtein copy at ops.rs:2278, next to brush_arm's (ops.rs ~1894) and core's private one. Fix: share brush_arm's ranking helper. Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-052",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "by_model reads as model-only but also matches agent-written axes (review gap 13)",
+      "status": "open",
+      "evidence": "Every MCP description except gap 7's already says by_model matches agent-written axes, so this is naming only. Later alias: unconfirmed. Report: docs/loop/iterations/2026-10-23-cycle9-c966e73.md",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-053",
+      "kind": "enhancement",
+      "area": "harness",
+      "title": "bevy_debugger_mcp's input tool cannot type text, so no field can be filled over BRP",
+      "status": "open",
+      "evidence": "bevy_debugger_bevy/src/commands.rs has no text/logical-key path; typing letters into the new-map NAME field and the shelf filter did nothing (2026-10-23 live tutorial run and cycle 6/9 agents). Fix belongs in the bevy_debugger_mcp repo.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-055",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "Stale code comments the docs rewrite found",
+      "status": "open",
+      "evidence": "vlm.rs header says a human applies each suggestion (labels apply on arrival, By::Model); keys.rs comments describe a Cmd+2 row and Compose lattice keys that no longer exist and a retired twelve-row ceiling; bevy_emerge_mcp main.rs module doc says eleven tools (there are twelve); tiles.rs ~6428 calls an agent's label_set a person's decision; labels.rs writes proposals to a file nothing loads.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-056",
+      "kind": "enhancement",
+      "area": "mcp",
+      "title": "emerge_capture_sequence is annotated destructiveHint true but only writes frame files",
+      "status": "open",
+      "evidence": "DocAgents 2026-10-23 from docs/mcp-tools.md.",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-058",
+      "kind": "enhancement",
+      "area": "docs",
+      "title": "Whole-window GIFs for build-a-map, label-a-kit and generate-a-layout",
+      "status": "open",
+      "evidence": "2026-10-23 round: agent-drives shipped as the README hero. build-a-map failed on caption sync and small pieces; label-a-kit waits on B-047; generate-a-layout waits on B-046. Storyboards and attempts in /tmp/gifs/ (not committed).",
+      "last_failure": "",
+      "first_seen": "2026-10-23"
+    },
+    {
+      "id": "E-060",
+      "kind": "enhancement",
+      "area": "kits",
+      "title": "`mount_options` offers the two-way mount for the first surface class only",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "The M cycle is a fixed-length list; one entry per class would double it. Authoring another class is a file edit, so a workaround exists."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_core/src/descriptor.rs::mount_options",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-061",
+      "kind": "enhancement",
+      "area": "fill",
+      "title": "A stamp proposal is outlined by cell but its member pieces are not drawn",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "B-046's fix draws proposed *placements* only: a `composes` proposal lays stamps whose rows `expand` produces against the landing map, and duplicating that expansion in the preview is its own design. The cell outline and the count in the status line still cover them."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/src/editor.rs::sync_proposal_ghosts (the stamps arm is a comment)",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-066",
+      "kind": "enhancement",
+      "area": "editor",
+      "title": "Cmd+Z does not take away a map that was just made: there is no map_remove operation",
+      "status": "open",
+      "evidence": "map_create declares Undo::None because `take_back` applies an inverse by calling the SAME operation's commit with it, and the faithful inverse of a create is a removal — which no operation carries. map removal exists only as the chooser's Delete row (chooser.rs confirm_delete_entry, std::fs::remove_file), outside the registry. An agent can therefore make a map and not unmake it.",
+      "last_failure": "",
+      "first_seen": "2026-10-24"
+    },
+    {
+      "id": "E-068",
+      "kind": "enhancement",
+      "area": "collaboration",
+      "title": "An agent's session has no panel: its steps are not on screen, and a capture is not hung on the step that made it",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The oplog already carries one `result` line per operation, and capture sequences exist, but neither is on a surface the person watches: the receipt is one row and the journal is refusals only. Mixar gives each step a row and puts the capture under it."
+      },
+      "status": "open",
+      "evidence": "mixar@39b9d27:core/steps_format.py, mixar@39b9d27:core/steps_recorder.py, mixar@39b9d27:core/capture_store.py",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-069",
+      "kind": "enhancement",
+      "area": "collaboration",
+      "title": "The agent cannot show its plan, so the person cannot see what it intends before it acts",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The brief's step 2 says the agent reads state and acts in small steps; a person watching has no list of what it means to do. Mixar renders the agent's plan as a checklist with a status per item."
+      },
+      "status": "open",
+      "evidence": "mixar@39b9d27:ui/properties/chat_slot_types.py (MixieChatTodoItem)",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-070",
+      "kind": "enhancement",
+      "area": "collaboration",
+      "title": "Every open choice becomes a question, so an agent asked for a courtyard stops to ask about a wall height",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "Open-ended requests produce 2-3 alternatives as the brief asks, but there is no way for the person to say 'decide these yourself this turn'. Mixar carries an `auto_mode` on the turn, and omitting the field IS false."
+      },
+      "status": "open",
+      "evidence": "mixar@39b9d27:core/chat_payloads.py (auto_mode), mixar@39b9d27:core/composer_send.py",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-071",
+      "kind": "enhancement",
+      "area": "collaboration",
+      "title": "Undoing an agent's turn takes one Cmd+Z per operation: a turn is not one undo step",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": false,
+        "evidence": "The brief asks for an agent's multi-step action to be grouped into one undo step. Today each dispatched operation is its own history entry, so an eight-operation turn is eight presses. Mixar keeps a turn timeline that reverts and re-applies a whole turn."
+      },
+      "status": "open",
+      "evidence": "mixar@39b9d27:core/turn_checkpoints.py, mixar@39b9d27:core/checkpoint_timeline.py, mixar@39b9d27:ui/operators/checkpoint_ops.py",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-072",
+      "kind": "enhancement",
+      "area": "compose",
+      "title": "An agent cannot author a composition, an envelope or a stamp, so only a person can build the kit's rules",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "The emergence chain is mesh -> piece -> composition -> generated layout. The first and the last are agent-reachable (piece_import, layout_propose); the middle is not: composition_create, composition_set_envelope and stamp_add exist only as editor functions (editor::composition_from_set, Project::commit_composition)."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/src/editor.rs::composition_from_set",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-073",
+      "kind": "enhancement",
+      "area": "wfc",
+      "title": "An agent cannot read or change the rules a layout is generated from",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "rules.ron holds BlockRules (weights, footprints, seed) and no registered operation reads or writes it, so the one input that decides what a generator produces is the one an agent cannot see."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_core/src/rules.rs",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-075",
+      "kind": "enhancement",
+      "area": "collaboration",
+      "title": "Reference images are not project data, so an agent cannot cite the picture it worked from",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": true,
+        "evidence": "A person can drop a reference and say 'like this'; nothing stores it as project data or lets the agent name it back. Mixar keeps a moodboard the agent reads and cites."
+      },
+      "status": "open",
+      "evidence": "mixar@39b9d27:src/scripts/mixar/modules/moodboard/core/chat_sync.py",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-076",
+      "kind": "enhancement",
+      "area": "undo",
+      "title": "An agent's undo leaves nothing to redo: the person cannot put back what an agent took back",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "Found writing S1.4's test: after `emerge/operation_undo`, `redo_for_test` answers 'nothing to redo'. `operation_undo` calls `state.forget_line(..)` when a change is taken back instead of joining the history (B-019's rule: the next Cmd+Z should reach the newest change still in effect, not one the log no longer holds), and the redo stack is therefore empty. For the person's own Cmd+Z the inverse goes on the redo stack as a `Logged` entry, so a person can redo their own undo and cannot redo an agent's."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_mapper/src/ops_brp.rs::operation_undo (the `forget_line` branch); measured in crates/bevy_emerge_mapper/tests/an_agent_can_generate_a_layout.rs, where the test was narrowed to the inverse's own contract rather than asserting a redo that does not exist",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-079",
+      "kind": "enhancement",
+      "area": "validators",
+      "title": "A piece standing in a doorway is not reported: no check reads an opening's clearance",
+      "must_fix": {
+        "blocks": false,
+        "common": true,
+        "no_workaround": true,
+        "evidence": "crates/bevy_emerge_core/src/stack.rs:589-596 says it in its own doc: `same_layer` returns false for every heterogeneous pair, so `plans_overlap` compares only within a layer — 'neither can a door and a crate standing in the doorway'. `Descriptor::clearance` (`descriptor.rs`:46) is documented as 'space that must stay free around the piece' and `descriptor.rs`:678 says it 'is the field that decides anything about space', but nothing in `stack.rs` reads it: grep for `clearance` there returns nothing, and its only non-descriptor readers are validation (`descriptor.rs`:1368) and the composition hash (`composition.rs`:1039). No fixture setter writes `Mount::InOpening { clear }`, so that field has never been exercised either."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_core/src/stack.rs (same_layer/blocking doc bounding the rule to within a layer; no `clearance` reader), crates/bevy_emerge_core/src/descriptor.rs:46 and :678 (declared and documented, read only by validate and the composition hash), crates/bevy_emerge_mapper/tests/fixtures (no Mount::InOpening writer)",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    },
+    {
+      "id": "E-080",
+      "kind": "enhancement",
+      "area": "validators",
+      "title": "A layout proposal does not report how varied it is: range::measure has no Map adapter and the solver's grid is discarded",
+      "must_fix": {
+        "blocks": false,
+        "common": false,
+        "no_workaround": false,
+        "evidence": "crates/bevy_emerge_core/src/range.rs:211 `measure` takes the solver's grid, and `grammar::learn` hands the editor back only the `Grammar`, so the grid a proposal was solved on is gone by the time anything could measure it. The brief asks for variety at :30 and :321."
+      },
+      "status": "open",
+      "evidence": "crates/bevy_emerge_core/src/range.rs:211 (measure), crates/bevy_emerge_core/src/grammar.rs (learn returns the Grammar only), .omp/commands/emerge-feature-loop.md:30,:321",
+      "last_failure": "",
+      "first_seen": "2026-10-25"
+    }
+  ]
+}

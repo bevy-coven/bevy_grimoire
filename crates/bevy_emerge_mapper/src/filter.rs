@@ -115,9 +115,9 @@ impl Filters {
         self.focus = Some(pane);
     }
 
-    /// Type one character into a box, for tests — the real path is `keys`, which reads the
-    /// message stream and cannot be driven without an `App`.
-    #[cfg(test)]
+    /// Type one character into a box, for a headless driver — the real path is `keys`, which reads
+    /// the message stream and cannot be driven without an `App`. The integration tests reach it
+    /// through the public crate, so it is not gated on `cfg(test)`.
     pub fn push_for_test(&mut self, pane: Pane, c: char) {
         self.text_mut(pane).push(c);
     }
@@ -244,6 +244,17 @@ pub fn on_click(activate: On<Activate>, boxes: Query<&FilterBox>, mut filters: R
 /// ignore releases, match the logical key.
 pub fn keys(mut events: MessageReader<KeyboardInput>, mut filters: ResMut<Filters>) {
     let Some(pane) = filters.focus else {
+        // **Drain before leaving.** The box opens in `Phase::Act` and this system runs in
+        // `Phase::Text` — so on the frame the box opens, this system has already run and the
+        // opening keystroke is **still in the stream**. It was read on the next frame, when the box
+        // was focused, and the author typed `Cmd+F` and got an `f` in the filter they had just
+        // opened.
+        //
+        // The same rule every text field in this crate follows — `tiles::cell_keys`,
+        // `editor::group_name_keys`, `editor::pin_reason_keys` all drain before leaving — and for
+        // the same reason: the keystroke that opened a field must not become its first character.
+        // The `xseam` bug, in a new place, because the filter was the one field that did not drain.
+        events.clear();
         return;
     };
     for event in events.read() {
@@ -380,8 +391,7 @@ mod blur_tests {
     /// Blurring gives back the keyboard and keeps the search — the two halves of the module note.
     #[test]
     fn blurring_keeps_the_text_and_drops_the_focus() {
-        let mut f = Filters::default();
-        f.focus = Some(Pane::Palette);
+        let mut f = Filters { focus: Some(Pane::Palette), ..Default::default() };
         *f.text_mut(Pane::Palette) = "grate".to_owned();
 
         f.blur();

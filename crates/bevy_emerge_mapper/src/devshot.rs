@@ -57,6 +57,9 @@ fn watch_drive(
     )>,
     transforms: Query<&GlobalTransform>,
     mut compose: ResMut<crate::compose::ComposeState>,
+    // **The arm is its own resource** — see `compose::Armed`. The driver arms through the same
+    // writer the keyboard does, so a captured frame is evidence about the real path.
+    mut armed: ResMut<crate::compose::Armed>,
     mut editor: ResMut<crate::editor::EditorState>,
 ) {
     let Ok(text) = fs::read_to_string(DRIVE) else {
@@ -79,7 +82,7 @@ fn watch_drive(
             // captured frame is evidence about the real path rather than about a test-only one.
             // The same call the key handler makes, toggle included — never a second copy of it.
             "arm" => {
-                crate::compose::toggle_arm(&mut compose, &project);
+                crate::compose::toggle_arm(&mut compose, &mut armed, &project);
                 info!("drive.request: arm — {}", compose.status.line());
             }
             "stamp" => {
@@ -87,7 +90,7 @@ fn watch_drive(
                     &mut project,
                     &mut open,
                     &mut editor,
-                    &mut compose,
+                    &mut armed,
                     (0.0, 0.0),
                 );
                 info!("drive.request: stamp — {}", editor.status.line());

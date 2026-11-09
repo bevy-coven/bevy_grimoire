@@ -12,7 +12,7 @@
 
 use bevy_emerge_rng::{DetRng, seeded};
 
-const SEED: u64 = 0xD06F_00D_1234_5678;
+const SEED: u64 = 0x0D06_F00D_1234_5678;
 const ROLLS: usize = 100_000;
 const SIDES: usize = 6;
 

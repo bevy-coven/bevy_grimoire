@@ -362,10 +362,10 @@ pub(crate) fn paint_stale_badge(
             continue;
         }
         for child in children {
-            if let Ok(mut text) = badges.get_mut(*child) {
-                if text.0 != want {
-                    text.0 = want.clone();
-                }
+            if let Ok(mut text) = badges.get_mut(*child)
+                && text.0 != want
+            {
+                text.0 = want.clone();
             }
         }
     }

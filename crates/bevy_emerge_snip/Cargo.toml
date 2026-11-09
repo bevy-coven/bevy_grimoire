@@ -1,0 +1,15 @@
+[package]
+name = "bevy_emerge_snip"
+version = "0.1.0"
+edition = "2024"
+description = "Cutting one rectangle out of a PNG of the bevy_emerge editor, shared by the editor and the MCP server."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Ladvien/bevy_emerge"
+keywords = ["bevy", "gamedev", "level-design"]
+categories = ["game-development"]
+rust-version = "1.88"
+
+[dependencies]
+image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
