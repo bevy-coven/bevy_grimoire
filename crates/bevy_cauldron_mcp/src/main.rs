@@ -26,6 +26,7 @@
 //! | `grimoire_snip` | one rectangle of the picture, cut out and written as a crop with its metadata |
 //! | `grimoire_decide` | ask a named check or typed questions about pictures and facts; a probability for every answer |
 //! | `grimoire_present` | put a result in front of the person and take their Keep or Undo all |
+//! | `grimoire_wish` | after the hand-back, name the one tool that would most have helped |
 //! | `grimoire_list_pieces` | the library's pieces, a page at a time, with their label provenance |
 //! | `grimoire_list_snips` | the snips the person took, newest first, with the newest picture |
 //! | `grimoire_feedback_list` | the reports the person filed about Cauldron itself, newest first |
@@ -37,7 +38,7 @@
 //! | `grimoire_open_project` | open a project folder in the running editor, from any screen including the Projects home |
 //! | `grimoire_self_test` | the power-on self test an agent runs when Cauldron's terminal starts it |
 //!
-//! **Twenty-two tools, and the set is small on purpose.** An agent's context is spent on the tools it
+//! **Twenty-three tools, and the set is small on purpose.** An agent's context is spent on the tools it
 //! is offered, and a catalogue of ninety-six verbs is a catalogue of ninety-six things to choose
 //! badly from. **The operation tools are a discovery surface**: the first names what exists, and
 //! the others preview, run and take back what it names. Later iterations add one tool per
@@ -438,6 +439,37 @@ pub struct CheckItemParam {
     /// Placement ids to frame in the viewport first, if any.
     #[serde(default)]
     pub placements: Vec<String>,
+}
+
+/// **The parameters of `grimoire_wish`** (#353). The one tool that would most have helped.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WishParams {
+    /// **The hand-back this wish follows**: a presentation's id (`present-1`) or a note the agent
+    /// resolved (`n3`). **One wish per hand-back**, so a second citing the same one is refused.
+    pub after: AfterParam,
+    /// What the task was.
+    pub task: String,
+    /// What cost steps: where the work stalled, repeated itself, or needed a second call to learn
+    /// what one call should have said.
+    pub hardship: String,
+    /// **The single tool that would most have helped**, named and described in one sentence. 200
+    /// characters at most.
+    pub tool: String,
+    /// A call to that tool, as you would like to write it. 600 characters at most.
+    pub example_call: String,
+}
+
+/// **Which hand-back a wish follows**, as the tool takes it: exactly one of the two.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AfterParam {
+    /// A presentation's id, as `grimoire_present` returned it.
+    #[serde(default)]
+    pub presentation: Option<String>,
+    /// A note's id, as the agent resolved it.
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// **The parameters of `grimoire_list_pieces`.** Every filter is optional and they combine.
@@ -860,6 +892,76 @@ impl Grimoire {
             "operation_ids": p.operation_ids,
         });
         match self.editor.call("grimoire/present", body).await {
+            Ok(v) => Ok(CallToolResult::structured(v)),
+            Err(e) => Ok(refusal(&e)),
+        }
+    }
+
+    /// **`grimoire_wish` — the one tool that would most have helped** (#353).
+    ///
+    /// **After the hand-back, not instead of it.** `grimoire_present` says what was done; this says
+    /// what it cost, and names the single tool that would have removed the cost. It is the one thing
+    /// a person reading a finished result cannot see.
+    ///
+    /// **Queued in the editor and answered at once**, like `grimoire_present`: what became of the
+    /// wish is read from `grimoire_state.wishes`, because a wish waits to be reviewed by a person
+    /// and an MCP call that blocked on one would deadlock with the editor's frame.
+    ///
+    /// **One wish per hand-back.** A second citing the same presentation or note is refused, and so
+    /// is one citing an id this editor never handed back.
+    #[tool(
+        name = "grimoire_wish",
+        description = "After a grimoire_present hand-back (or a note you resolved), name the one \
+                       tool that would most have helped with that task: after, the hand-back it \
+                       follows ({presentation: \"present-1\"} or {note: \"n3\"}); task, what the \
+                       task was; hardship, what cost steps; tool, the single tool, named and \
+                       described in one sentence (200 characters at most); example_call, a call to \
+                       it as you would like to write it (600 at most). The editor queues the wish \
+                       and the editor adds the context it already has — the hand-back's title, the \
+                       operations the task applied, its version and your client's name and version \
+                       — so do not restate those. It returns at once with the wish's id and \
+                       \"waiting\"; read grimoire_state's wishes for what became of it. One wish per \
+                       hand-back: a second one citing the same hand-back, or one citing an id this \
+                       editor never handed back, is refused with the reason. An empty field, or one \
+                       past its limit, is refused naming the field — a wish is never trimmed. It \
+                       writes nothing outside the editor's own queue.",
+        annotations(
+            title = "Wish for the tool that would have helped",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn wish(
+        &self,
+        Parameters(p): Parameters<WishParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        // **Exactly one hand-back is named.** Two is a wish citing two tasks; none is a wish citing
+        // nothing, and the editor cannot tell either what was handed back.
+        let after = match (p.after.presentation, p.after.note) {
+            (Some(id), None) => json!({"presentation": id}),
+            (None, Some(id)) => json!({"note": id}),
+            (Some(_), Some(_)) => {
+                return Ok(refusal(
+                    "a wish follows one hand-back: pass `presentation` or `note`, not both",
+                ));
+            }
+            (None, None) => {
+                return Ok(refusal(
+                    "a wish follows a hand-back: pass `presentation` (an id grimoire_present \
+                     returned) or `note` (an id you resolved)",
+                ));
+            }
+        };
+        match self.editor.call("grimoire/wish", json!({
+            "after": after,
+            "task": p.task,
+            "hardship": p.hardship,
+            "tool": p.tool,
+            "example_call": p.example_call,
+        })).await
+        {
             Ok(v) => Ok(CallToolResult::structured(v)),
             Err(e) => Ok(refusal(&e)),
         }

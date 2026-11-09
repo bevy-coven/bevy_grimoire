@@ -101,6 +101,45 @@ fn yes() -> bool {
     true
 }
 
+/// **The parameters of `grimoire/wish`** (#353).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WishParams {
+    /// **The hand-back the wish follows**: a presentation's id, or a resolved note's.
+    pub after: AfterRef,
+    /// What the task was.
+    pub task: String,
+    /// What cost steps.
+    pub hardship: String,
+    /// The single tool that would most have helped: its name and one sentence.
+    pub tool: String,
+    /// A call to that tool, as the agent would like to write it.
+    pub example_call: String,
+}
+
+/// **Which hand-back a wish follows.**
+///
+/// **Two kinds, and the difference is where the hand-back lives**: a presentation is the editor's
+/// question with a Keep / Undo answer, and a note is a person's report that an agent worked and
+/// resolved. Both end a task, so both can carry a wish.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "lowercase")]
+pub enum AfterRef {
+    /// A presentation, by its id (`present-1`).
+    Presentation(String),
+    /// A note the agent resolved, by its id (`n3`).
+    Note(String),
+}
+
+impl AfterRef {
+    /// **The id as the wish records it**, so the record says which kind of hand-back it cites.
+    fn recorded_id(&self) -> String {
+        match self {
+            AfterRef::Presentation(id) | AfterRef::Note(id) => id.clone(),
+        }
+    }
+}
+
 /// **The parameters of `grimoire/operation_preview`.**
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -418,9 +457,22 @@ fn agent_hello(
     mut terminal: ResMut<crate::terminal::Terminal>,
     time: Res<Time<Real>>,
     activity: Option<ResMut<crate::familiar::AgentActivity>>,
+    mut client: Option<ResMut<crate::present::AgentClient>>,
 ) -> Result<Value, String> {
     if let Some(mut activity) = activity {
         activity.hear("agent_hello", time.elapsed_secs_f64());
+    }
+    // **Who is talking**, kept for the session so a wish can carry it without the agent retyping
+    // it (#353). `client` is the handshake's own `{name, version}`; a server that sent none is not
+    // recorded as a client with no name.
+    if let Some(client) = client.as_mut()
+        && let Some(said) = params.get("client").and_then(|c| c.as_object())
+        && let (Some(name), Some(version)) = (
+            said.get("name").and_then(|n| n.as_str()),
+            said.get("version").and_then(|v| v.as_str()),
+        )
+    {
+        client.0 = Some(crate::present::ClientName { name: name.to_owned(), version: version.to_owned() });
     }
     crate::terminal_agent::agent_hello(&mut terminal, &params, time.elapsed_secs_f64())
 }
@@ -581,6 +633,8 @@ fn editor_state(
     door: Option<Res<crate::tiles::Door>>,
     mode: Option<Res<crate::tiles::Mode>>,
     presenting: Option<Res<crate::present::Presenting>>,
+    // **The agent's wishes this session** (#353): what it found hard, waiting to be read.
+    wishes: Option<Res<crate::present::Wishes>>,
     // **Which screen the editor is on, which nothing else here says (E-078).** The map, the door and
     // the mode all read the same on the menu as in the editor — `Door` and `Mode` are `init_resource`d
     // at build and a loaded `OpenMap` is a resource either way — so before this, an agent could not
@@ -813,6 +867,11 @@ fn editor_state(
         "clock_scrub": preview_scrub,
         "editor": editor,
         "presentation": presentation,
+        // **The agent's wishes this session** (#353): `[{id, after, state}]`, oldest first, each
+        // waiting. A wish leaves the list when it is opened or discarded, so `waiting` is every one
+        // here. The MCP server holds no wish state: this is the record, and the editor is where a
+        // hand-back and its wish are both known.
+        "wishes": wishes.as_deref().map(|w| w.state_json()).unwrap_or(Value::Null),
         "frame": frame_json(diagnostics.as_deref(), busy.as_deref()),
         // **The game's verdict on the last reload** (S3.5): null, "pending", or {ok, message, at_unix_ms}.
         "game": game.as_deref().map_or(Value::Null, |g| g.state_json(open.as_ref().map(|o| o.map_path.as_path()))),
@@ -2610,6 +2669,27 @@ impl Plugin for OpsBridgePlugin {
             })),
             editor_present,
         );
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/wish",
+                "The one tool that would most have helped with the task just handed back: the \
+                 hand-back it follows, what the task was, what cost steps, the tool and a call to \
+                 it. Queued in the editor and read from grimoire/state's wishes; one wish per \
+                 hand-back, refused at the door and never trimmed.",
+            )
+            .params(
+                "after: {\"presentation\": \"present-1\"} or {\"note\": \"n3\"}; task, hardship \
+                     and example_call (600 characters each at most); tool (200 at most).",
+            )
+            .example(json!({
+                "after": {"presentation": "present-1"},
+                "task": "a wall along the courtyard's east side",
+                "hardship": "three calls to grimoire_state to find the wall's piece id",
+                "tool": "grimoire_find_piece: searches the library by label and answers the ids.",
+                "example_call": "grimoire_find_piece({\"label\": \"wall\"})",
+            })),
+            editor_wish,
+        );
     }
 }
 
@@ -2624,6 +2704,7 @@ fn editor_present(
     project: Option<Res<crate::project::Project>>,
     mut confirm: Option<ResMut<crate::confirm::Confirm>>,
     mut presenting: Option<ResMut<crate::present::Presenting>>,
+    mut handbacks: Option<ResMut<crate::present::HandBacks>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     // Not `Gates`: this system holds the confirm modal mutably, and `Gates` reads it.
     activity: Option<ResMut<crate::familiar::AgentActivity>>,
@@ -2705,6 +2786,15 @@ fn editor_present(
         .map(|n| n + 1)
         .unwrap_or(1);
     let id = format!("present-{n}");
+    // **The hand-back is kept for the session**, not only while the question is up: a wish made
+    // after the person has answered, or after a later hand-back replaced this one, still cites it.
+    if let Some(handbacks) = handbacks.as_mut() {
+        handbacks.0.push(crate::present::HandBack {
+            id: id.clone(),
+            title: p.title.clone(),
+            operation_ids: p.operation_ids.clone(),
+        });
+    }
     presenting.0 = Some(crate::present::Presented {
         id: id.clone(),
         title: p.title.clone(),
@@ -2732,6 +2822,122 @@ fn editor_present(
         // one operation, or ids the stack no longer holds — and the answer says so rather than
         // claiming a single step it did not make.
         "grouped": grouped,
+    }))
+}
+
+/// **`grimoire/wish` — the one tool that would have helped** (#353).
+///
+/// **Refused at the door, never trimmed.** An empty field or one past its limit is a refusal naming
+/// the field, and the address is measured here too: an issue address GitHub would not take is
+/// refused while the agent is still there to shorten what it wrote.
+///
+/// **The editor writes the context**, from what it already knows: the hand-back's title (or the
+/// note's text), the operations the task applied, the editor's version, and the client's name and
+/// version. **It never writes the project's path or its files.**
+#[allow(clippy::too_many_arguments)]
+fn editor_wish(
+    In(p): In<WishParams>,
+    project: Option<Res<crate::project::Project>>,
+    open: Option<Res<crate::project::OpenMap>>,
+    handbacks: Option<Res<crate::present::HandBacks>>,
+    mut wishes: Option<ResMut<crate::present::Wishes>>,
+    client: Option<Res<crate::present::AgentClient>>,
+    mut activity: Option<ResMut<crate::familiar::AgentActivity>>,
+    time: Option<Res<Time<Real>>>,
+) -> Result<Value, String> {
+    if let (Some(activity), Some(time)) = (activity.as_mut(), time) {
+        activity.hear("wish", time.elapsed_secs_f64());
+    }
+    let Some(wishes) = wishes.as_mut() else {
+        return Err("this editor keeps no wish queue, so a wish would be lost".to_owned());
+    };
+    // **The fields first**, so an agent that sent a paragraph where a sentence belongs is told that
+    // rather than that its hand-back is unknown.
+    let mut wish = bevy_grimoire_core::wish::Wish {
+        after: p.after.recorded_id(),
+        task: p.task,
+        hardship: p.hardship,
+        tool: p.tool,
+        example_call: p.example_call,
+        ..bevy_grimoire_core::wish::Wish::default()
+    };
+    wish.validate()?;
+    // **One wish per hand-back, and the hand-back has to be this session's.** The editor holds the
+    // record; the MCP server holds none, so it cannot know either rule.
+    if wishes.has_wish_for(&wish.after) {
+        return Err(format!(
+            "`{}` already has a wish, and a hand-back carries one. Read the queued ones in \
+             grimoire_state.wishes.",
+            wish.after
+        ));
+    }
+    // **What the hand-back was**, from the editor's own record or the notes on disk.
+    let (title, operation_ids) = match &p.after {
+        AfterRef::Presentation(id) => match handbacks.as_ref().and_then(|h| {
+            h.0.iter().find(|handback| &handback.id == id).map(|h| (h.title.clone(), h.operation_ids.clone()))
+        }) {
+            Some(found) => found,
+            None => {
+                return Err(format!(
+                    "`{id}` was never handed back in this editor session. A presentation hands \
+                     back, and a wish cites the one it follows."
+                ));
+            }
+        },
+        AfterRef::Note(id) => {
+            let Some(open) = open.as_deref() else {
+                return Err(format!("`{id}` names a note, and no map is open to hold one"));
+            };
+            let path = bevy_grimoire_core::notes::path_for_map(&open.map_path);
+            let notes = bevy_grimoire_core::notes::Notes::load(&path)
+                .map_err(|e| format!("the notes beside this map do not read: {e}"))?;
+            let Some(note) = notes.get(id) else {
+                return Err(format!("there is no note `{id}` on this map, so nothing was handed back"));
+            };
+            let held = match &note.state {
+                bevy_grimoire_core::notes::State::Resolved { ops, .. }
+                | bevy_grimoire_core::notes::State::Kept { ops, .. } => Some(ops.clone()),
+                _ => None,
+            };
+            let Some(ops) = held else {
+                return Err(format!(
+                    "note `{id}` is `{}`, so no agent has handed it back yet. A wish cites the \
+                     hand-back it follows.",
+                    note.status()
+                ));
+            };
+            (note.text.clone(), ops)
+        }
+    };
+    // **The context, in the editor's words.** The operations are named from the log's own lines, so
+    // a wish says what the turn applied rather than what the agent called it.
+    let log = project.as_ref().map(|p| ops::read_entries(&ops::oplog_path(p))).unwrap_or_default();
+    let applied: Vec<String> = operation_ids
+        .iter()
+        .filter_map(|id| log.iter().find(|entry| &entry.operation_id == id))
+        .map(|entry| entry.op.clone())
+        .collect();
+    let mut context = format!("Hand-back: {title}\n");
+    if !applied.is_empty() {
+        context.push_str(&format!("Operations: {}\n", applied.join(", ")));
+    }
+    context.push_str(&format!("Editor: {}\n", env!("CARGO_PKG_VERSION")));
+    if let Some(client) = client.as_deref().and_then(|c| c.0.as_ref()) {
+        context.push_str(&format!("Client: {} {}\n", client.name, client.version));
+    }
+    wish.context = context.trim_end().to_owned();
+    // **The address is built now**, so one GitHub would not take is refused while the agent is
+    // still here, and not when a person presses a button on a wish that can never be filed.
+    let url = wish.issue_url()?;
+    let id = wishes.take(wish, url);
+    Ok(json!({
+        "id": id,
+        // **The context the editor added**, so the agent can see what was recorded about its turn
+        // without retyping any of it.
+        "context": wishes.queued.last().map(|q| q.wish.context.clone()).unwrap_or_default(),
+        "after": p.after.recorded_id(),
+        "state": "waiting",
+        "queued": wishes.queued.len(),
     }))
 }
 

@@ -151,12 +151,113 @@ pub struct PresentPlugin;
 
 impl Plugin for PresentPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Presenting>().init_resource::<PresentationReply>().add_systems(
-            Update,
-            (answer_presentation, ask_again_when_the_block_closes).chain().in_set(crate::keys::Phase::Act),
-        );
+        app.init_resource::<Presenting>()
+            .init_resource::<PresentationReply>()
+            .init_resource::<HandBacks>()
+            .init_resource::<Wishes>()
+            .init_resource::<AgentClient>()
+            .add_systems(
+                Update,
+                (answer_presentation, ask_again_when_the_block_closes).chain().in_set(crate::keys::Phase::Act),
+            );
     }
 }
+
+/// **The wishes an agent has made this session, in the order they arrived** (#353).
+///
+/// A wish is the one tool that would most have helped with the task just handed back. **The editor
+/// holds them and the MCP server holds none**: a wish is about a hand-back, and hand-backs live
+/// here, so this is the only place that can answer "has this one a wish already". Nothing in the
+/// queue is written to the project — it is the session's record, not the game's.
+#[derive(Resource, Default)]
+pub struct Wishes {
+    /// **The wishes waiting to be read**, oldest first. A wish leaves the queue when it is opened or
+    /// discarded, which is the review that follows this one.
+    pub queued: Vec<QueuedWish>,
+    /// The next wish's number. Monotonic for the life of the process, so ids are never reused.
+    next: u32,
+}
+
+/// **One wish, with the address it will be filed at.**
+pub struct QueuedWish {
+    pub wish: bevy_grimoire_core::wish::Wish,
+    /// **The issue address, built when the wish was made**, so an address GitHub would not take is
+    /// refused while the agent is still there to shorten what it wrote.
+    pub url: String,
+}
+
+/// **Every hand-back this session has put in front of the person**, oldest first (#353).
+///
+/// A presentation is a question with an answer, and the answer is the last thing the editor keeps
+/// about it — so a wish citing a hand-back that has since been answered, or superseded by the next
+/// one, needs this record to be told it existed. **A wish cites a hand-back, not the current
+/// question**, which is why the record is separate from [`Presenting`].
+#[derive(Resource, Default)]
+pub struct HandBacks(pub Vec<HandBack>);
+
+/// **One hand-back**, as a wish needs it: what it was called and what it covered.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HandBack {
+    /// `present-1`, `present-2`, …
+    pub id: String,
+    /// The title the agent gave it, which the wish carries as its context.
+    pub title: String,
+    /// The operations the turn listed, whose names the wish carries as its context.
+    pub operation_ids: Vec<String>,
+}
+
+impl Wishes {
+    /// **The wishes waiting**, as `grimoire_state` reports them: `{id, after, state}` each.
+    ///
+    /// `state` is `"waiting"` for every one of them, because a wish leaves this list the moment it is
+    /// opened or discarded: there is one queue, and a wish is in it or it is not.
+    pub fn state_json(&self) -> serde_json::Value {
+        serde_json::Value::Array(
+            self.queued
+                .iter()
+                .map(|q| {
+                    serde_json::json!({
+                        "id": q.wish.id,
+                        "after": q.wish.after,
+                        "state": "waiting",
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    /// **Whether this hand-back has a wish already** — the rule that keeps wishes worth reading.
+    pub fn has_wish_for(&self, after: &str) -> bool {
+        self.queued.iter().any(|q| q.wish.after == after)
+    }
+
+    /// **Take a wish**, numbering it and keeping it waiting behind the ones already there.
+    ///
+    /// The id counts up from `wish-1`; the order the queue is read in is the order wishes arrived, so
+    /// several arriving at once are not lost and are read as they were written.
+    pub fn take(&mut self, mut wish: bevy_grimoire_core::wish::Wish, url: String) -> String {
+        self.next += 1;
+        let id = format!("wish-{}", self.next);
+        wish.id = id.clone();
+        self.queued.push(QueuedWish { wish, url });
+        id
+    }
+}
+
+/// **Who is talking to the editor**, as the MCP client's handshake said: its name and version.
+///
+/// The editor records it so a wish can carry it without the agent retyping it, and so a wish reads
+/// as what one client found hard rather than as an anonymous complaint.
+#[derive(Resource, Default)]
+pub struct AgentClient(pub Option<ClientName>);
+
+/// One client, as it introduced itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClientName {
+    pub name: String,
+    pub version: String,
+}
+
 
 /// **Take the person's answer**, and keep the result or undo every operation it listed.
 ///

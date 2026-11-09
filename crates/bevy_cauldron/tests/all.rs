@@ -199,6 +199,7 @@ mod an_agent_can_take_its_own_change_back;
 mod an_agent_change_is_on_the_receipt;
 mod an_agent_presents_its_result;
 mod an_agent_turn_in_a_sequence_stands_on_the_screen;
+mod an_agent_wishes_for_one_tool;
 mod an_agents_edit_owes_checks_a_persons_does_not;
 mod an_agents_steps_are_on_screen;
 mod an_agents_turn_is_one_undo_step;

@@ -94,6 +94,7 @@ pub mod vocab;
 pub mod wfc;
 pub mod volume;
 pub mod water;
+pub mod wish;
 
 /// Hermite ease between two edges. Pure math, so it lives here rather than in a crate that has a
 /// renderer — `bevy_grimoire_anim`'s weight blending and the game's own `util` both take it from one place.
