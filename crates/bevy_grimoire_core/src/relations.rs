@@ -135,8 +135,9 @@ impl Relations {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Relation {
-    /// The placement id this relation is about: a placed piece on the map.
-    #[schemars(extend("x-dark-factory-ref" = "map"))]
+    /// The placement id this relation is about. **An id inside this project's map files, not a value of
+    /// another file's kind**, so it carries no `x-dark-factory-ref`: the reader it names is a placement, and
+    /// there is no one file to send a navigation to.
     pub of: String,
     pub kind: Kind,
     /// **Must hold** (#151): [`solve`] never breaks a hard relation to mend soft ones, and mends a

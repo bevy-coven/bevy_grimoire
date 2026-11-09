@@ -110,21 +110,11 @@ pub fn for_kind(kind: &str) -> Result<Value, Problem> {
         "destructible_marks" => root::<crate::destructible::Marks>(),
         "destructible_bake" => root::<crate::destructible::Bake>(),
         _ => {
-            // The kinds whose type genuinely lives in another crate. A kind of core's own that has no
-            // schema would be a kind added to the reload table and not to `KINDS` above, which is a
-            // different fault and is not counted as "another crate's".
-            let elsewhere: Vec<&str> = crate::reload::KINDS
-                .iter()
-                .map(|k| k.id)
-                .filter(|id| !KINDS.contains(id))
-                .filter(|id| !crate::reload_check::unchecked().any(|k| k.id == *id))
-                .collect();
             return Err(Problem::with(
                 format!("there is no schema for `{kind}`"),
                 Detail::default()
                     .because(format!(
-                        "a schema is generated from a type, and this crate has none for it; the kinds it generates are {KINDS:?}{}",
-                        if elsewhere.is_empty() { String::new() } else { format!(", and {} kinds' types live in another crate: {elsewhere:?}", elsewhere.len()) }
+                        "a schema is generated from a type, and this crate has none for it; the kinds it generates are {KINDS:?}"
                     ))
                     .fix("ask for a kind whose type `bevy_grimoire_core` owns")
                     .docs("docs/guide/your-game.md"),
@@ -249,40 +239,3 @@ fn write_problem(path: &Path, why: &str) -> Problem {
             .docs("docs/guide/your-game.md"),
     )
 }
-
-/// **The field path a kind's reader refuses `text` at**, or `None` when it reads — the reader's half of
-/// "fails at the same path the schema names", so a test compares two readers rather than each against an
-/// expectation of its own.
-pub fn field_of(kind: &str, text: &str) -> Option<String> {
-    fn at<T: serde::de::DeserializeOwned>(text: &str) -> Option<String> {
-        crate::yaml::from_str::<T>(text, "a project file").err().and_then(|p| p.where_.and_then(|w| w.field))
-    }
-    match kind {
-        "kits" => at::<crate::kits::Kits>(text),
-        "vocab" => at::<crate::vocab::Vocabularies>(text),
-        "library" => at::<crate::library::Library>(text),
-        "policy" => at::<crate::policy::Policy>(text),
-        "rules" => at::<crate::rules::Rules>(text),
-        "compositions" => at::<crate::composition::Compositions>(text),
-        "standards" => at::<crate::standards::Standards>(text),
-        "repetition" => at::<crate::repetition::RepetitionRules>(text),
-        "data_registry" => at::<crate::data_files::DataFiles>(text),
-        "rigs" => at::<crate::rigs::Rigs>(text),
-        "map" => at::<crate::map::Map>(text),
-        "notes" => at::<crate::notes::Notes>(text),
-        "plan" => at::<crate::plan::Plan>(text),
-        "references" => at::<crate::references::References>(text),
-        "relations" => at::<crate::relations::Relations>(text),
-        "terrain" => at::<crate::heightfield::Heightfield>(text),
-        "water_plan" => at::<crate::water::WaterPlan>(text),
-        "water_field" => at::<crate::water::WaterField>(text),
-        "volume" => at::<crate::volume::Volume>(text),
-        "family_list" => at::<crate::family::Family>(text),
-        "agent" => at::<crate::note_agent::AgentSettings>(text),
-        "play" => at::<crate::play::PlayConfig>(text),
-        "destructible_marks" => at::<crate::destructible::Marks>(text),
-        "destructible_bake" => at::<crate::destructible::Bake>(text),
-        _ => None,
-    }
-}
-

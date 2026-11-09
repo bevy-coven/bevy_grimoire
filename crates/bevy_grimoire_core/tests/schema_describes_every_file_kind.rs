@@ -371,27 +371,64 @@ fn a_wrong_value_is_refused_at_the_same_path_by_the_reader_and_by_the_schema() {
         let named: Vec<String> = validator.iter_errors(&doc).map(|e| e.instance_path().to_string()).collect();
         assert!(named.iter().any(|p| p == &pointer), "{kind}: the schema did not refuse `{path}` ({pointer}): {named:?}");
 
-        // What GD-01's reader says of the same wrong file. It is written as **text**, not through
+        // What GD-01's reader says of the same wrong document. It is written as **text**, not through
         // `yaml_surgery`: the surgery refuses a value of another kind, which is right for an editor and
         // the wrong instrument for asking what the reader makes of a file a person wrote by hand.
-        let edited = set_text(&text, &path, "not the kind this field is");
+        let edited = wrong_file(&doc);
         // The kind's **own type**, not `Value`: a `Value` accepts a string in an `f32` field, so reading
         // it as anything would prove only that YAML is YAML.
-        let reader_field = schema::field_of(kind, &edited)
+        let reader_field = reader_field(kind, &edited)
             .unwrap_or_else(|| panic!("{kind}: the reader accepted `{path}` set to a string\n{edited}"));
         assert_eq!(reader_field.as_str(), path.as_str(), "{kind}: the reader named `{reader_field}` and the schema named `{path}`");
     }
 }
 
-/// **`text` with the leaf at `path` replaced by the raw text `value`**, found by the walk — a file a
-/// person could have typed, which is what the reader is asked about.
-fn set_text(text: &str, path: &str, value: &str) -> String {
-    // The leaf's bytes, from the reader's own walk, so the bad file differs from the good one in exactly
-    // the field the schema was asked about.
-    let (_, span) = bevy_grimoire_core::yaml::walk_for_test(text)
-        .find(|(at, _)| at == path)
-        .unwrap_or_else(|| panic!("`{path}` is not in the fixture"));
-    format!("{}{value}{}", &text[..span.0], &text[span.1..])
+/// **The field a kind's own reader refuses `text` at**, or `None` when it reads — the reader's half of
+/// "fails at the same path the schema names".
+///
+/// The types are named here, in the test, rather than through a door in the crate: a public helper whose
+/// only caller is a test is part of the published API for no reason.
+fn reader_field(kind: &str, text: &str) -> Option<String> {
+    fn at<T: serde::de::DeserializeOwned>(text: &str) -> Option<String> {
+        bevy_grimoire_core::yaml::from_str::<T>(text, "a project file").err().and_then(|p| p.where_.and_then(|w| w.field))
+    }
+    match kind {
+        "kits" => at::<bevy_grimoire_core::kits::Kits>(text),
+        "vocab" => at::<bevy_grimoire_core::vocab::Vocabularies>(text),
+        "library" => at::<bevy_grimoire_core::library::Library>(text),
+        "policy" => at::<bevy_grimoire_core::policy::Policy>(text),
+        "rules" => at::<bevy_grimoire_core::rules::Rules>(text),
+        "compositions" => at::<bevy_grimoire_core::composition::Compositions>(text),
+        "standards" => at::<bevy_grimoire_core::standards::Standards>(text),
+        "repetition" => at::<bevy_grimoire_core::repetition::RepetitionRules>(text),
+        "data_registry" => at::<bevy_grimoire_core::data_files::DataFiles>(text),
+        "rigs" => at::<bevy_grimoire_core::rigs::Rigs>(text),
+        "map" => at::<bevy_grimoire_core::map::Map>(text),
+        "notes" => at::<bevy_grimoire_core::notes::Notes>(text),
+        "plan" => at::<bevy_grimoire_core::plan::Plan>(text),
+        "references" => at::<bevy_grimoire_core::references::References>(text),
+        "relations" => at::<bevy_grimoire_core::relations::Relations>(text),
+        "terrain" => at::<bevy_grimoire_core::heightfield::Heightfield>(text),
+        "water_plan" => at::<bevy_grimoire_core::water::WaterPlan>(text),
+        "water_field" => at::<bevy_grimoire_core::water::WaterField>(text),
+        "volume" => at::<bevy_grimoire_core::volume::Volume>(text),
+        "family_list" => at::<bevy_grimoire_core::family::Family>(text),
+        "agent" => at::<bevy_grimoire_core::note_agent::AgentSettings>(text),
+        "play" => at::<bevy_grimoire_core::play::PlayConfig>(text),
+        "destructible_marks" => at::<bevy_grimoire_core::destructible::Marks>(text),
+        "destructible_bake" => at::<bevy_grimoire_core::destructible::Bake>(text),
+        _ => None,
+    }
+}
+
+/// **The document with one leaf wrong, as the YAML a person could have typed.**
+///
+/// The wrong value goes into the JSON document the validator is asked about, and that document is written
+/// back as YAML — so the file the reader is asked about is the file the schema was asked about, and no
+/// byte of it is found by a search: there is no test-only door into the crate's own walk, and nothing to
+/// drift from it.
+fn wrong_file(doc: &Value) -> String {
+    serde_yaml_ng::to_string(doc).unwrap_or_else(|e| panic!("the wrong document does not write as YAML: {e}"))
 }
 
 #[test]
@@ -430,16 +467,36 @@ fn a_field_that_names_a_piece_a_composition_or_a_rig_carries_its_kind() {
     assert_eq!(named(&map, &["$defs", "Placed", "properties", "descriptor"]).as_str(), Some("library"), "a placement's descriptor names a library piece");
     assert_eq!(named(&map, &["$defs", "Stamped", "properties", "of"]).as_str(), Some("compositions"), "a stamp names a composition");
 
-    // A relation is about a placement on the map, and a note points at one.
+    // **A relation's `of` and a note's target hold a placement id**, which is an id inside this project's
+    // map files and not a value of another file's kind: neither carries a mark, because there is no one
+    // other file a reader could be sent to. The test says so, so a mark added back is caught.
     let relations = schema::for_kind("relations").unwrap();
-    assert_eq!(named(&relations, &["$defs", "Relation", "properties", "of"]).as_str(), Some("map"), "a relation is about a placement");
+    assert_eq!(named(&relations, &["$defs", "Relation", "properties", "of"]).as_str(), None, "a relation's `of` is a placement id, not another file's value");
     let notes = schema::for_kind("notes").unwrap();
-    let text = serde_json::to_string(&notes).unwrap_or_default();
-    assert!(text.contains("x-dark-factory-ref"), "a note's target names a placement: {text}");
+    assert_eq!(note_target_ref(&notes).as_str(), None, "a note's target is a placement id, not another file's value");
 
-    // A rig's manifest is keyed by rig name, so a file of it names rigs.
+    // **A rigs file's `rigs` map is its own definitions**, keyed by rig name; it names nothing outside
+    // this file, so it carries no mark. The manifest's own `note` is a string, not a reference either.
     let rigs = schema::for_kind("rigs").unwrap();
-    let text = serde_json::to_string(&rigs).unwrap_or_default();
-    assert!(text.contains("x-dark-factory-ref"), "a rigs file names rigs: {text}");
+    assert_eq!(named(&rigs, &["properties", "rigs"]).as_str(), None, "a rigs file's `rigs` map is its own definitions: {}", rigs["properties"]["rigs"]);
+    // And nothing else in the file gained a mark by accident.
+    let stray: Vec<&str> = ["rigs", "version", "note"]
+        .into_iter()
+        .filter(|key| named(&rigs, &["properties", key]).as_str().is_some())
+        .collect();
+    assert!(stray.is_empty(), "a rigs file names no other file's value, but {} carries a mark", stray.join(", "));
+}
+
+/// **The mark on a note's `Target::Placement`**, found inside the enum rather than by searching the
+/// serialized schema for the key: a key anywhere in a document says nothing about which field carries it.
+fn note_target_ref(schema: &Value) -> Value {
+    let target = &schema["$defs"]["Target"];
+    let cases = target["oneOf"].as_array().unwrap_or_else(|| panic!("a `Target` is one of its variants: {target}"));
+    for case in cases {
+        if let Some(placement) = case["properties"].get("Placement") {
+            return placement["x-dark-factory-ref"].clone();
+        }
+    }
+    panic!("`Target` has a `Placement` variant: {target}");
 }
 
