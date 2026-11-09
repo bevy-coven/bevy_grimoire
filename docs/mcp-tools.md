@@ -125,6 +125,16 @@ Every operation the running bevy_grimoire editor knows, with each one's paramete
 | `destructiveHint` | false |
 | `idempotentHint` | true |
 
+### `grimoire_schema`
+
+The JSON Schema of one kind of project file, generated from the Rust type the editor reads, so it describes exactly what the reader accepts. Its properties carry the field's doc comment as description, and a field that names another file's value carries x-dark-factory-ref (the kind it names). kind is a file kind's id: map, kits, library, vocab, compositions, rigs, rules, standards, notes, relations, terrain, volume, agent, play, destructible_marks and the rest. Returns the schema as JSON; it changes nothing. The same schema is on disk at .dark_factory/schema/<kind>.schema.json.
+
+| annotation | value |
+|---|---|
+| `readOnlyHint` | true |
+| `destructiveHint` | false |
+| `idempotentHint` | true |
+
 ### `grimoire_preview_operation`
 
 What an operation would change, and nothing changed: the map, the data file and the operation log are all left alone. Use this to check a proposal before applying it. Returns what would change and shown, where the change would be seen (the place the apply will name), or the refusal.

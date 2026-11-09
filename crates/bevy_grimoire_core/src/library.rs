@@ -16,6 +16,7 @@
 //! [`Descriptor::note`] is a field; see `crate::map`'s note on why that decision was made.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::Descriptor;
 use crate::vocab::{Masks, Vocabularies};
@@ -33,7 +34,7 @@ pub const LIBRARY_VERSION: u32 = 1;
 pub const MAX_LATTICE_CELLS: u32 = 4096;
 
 /// Everything a project can place.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Library {
     pub version: u32,

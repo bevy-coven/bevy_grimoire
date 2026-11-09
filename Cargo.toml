@@ -26,6 +26,10 @@ serde_path_to_error = "0.1"
 # path. Both are pure data crates with no engine in them.
 serde_yaml_ng = "0.10"
 saphyr-parser = "0.3"
+# **The JSON Schema every project file kind publishes** (GD-04, #366): generated from the type, never
+# written by hand, so a schema cannot describe a file the type does not read. `schemars` is what the MCP
+# server already uses for its tool arguments, and it holds no engine type.
+schemars = "1"
 rand = "0.10"
 rand_chacha = "0.10"
 # **The terminal's engine, and the only new crate the in-editor terminal costs.** A pure-Rust VTE

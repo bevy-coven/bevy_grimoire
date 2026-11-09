@@ -13,12 +13,13 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// The file format's version, written first so a later change can be migrated.
 pub const PLAN_VERSION: u32 = 1;
 
 /// Where one item of the plan stands.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     /// Not started.
@@ -32,7 +33,7 @@ pub enum Status {
 }
 
 /// One step the agent means to take.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PlanItem {
     pub text: String,
@@ -41,7 +42,7 @@ pub struct PlanItem {
 }
 
 /// The plan of one map: its items in the order the agent means to take them.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Plan {
     pub version: u32,

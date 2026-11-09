@@ -6,6 +6,7 @@
 //! queues the notes. Engine-free: `std::process` only.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -32,7 +33,7 @@ ask before removing a person's piece, and finish with note_resolve. Once the not
 in one grimoire_wish citing it: name the single tool that would most have helped, and make no wish if \
 nothing was hard.";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AgentSettings {
     pub version: u32,

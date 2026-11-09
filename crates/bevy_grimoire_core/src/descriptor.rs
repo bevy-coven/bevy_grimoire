@@ -30,9 +30,10 @@
 //! `DoorPlaque`, hardcoded in Rust and never authored.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// What an asset is. A patch — see the module docs.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Descriptor {
     /// Stable identity, opaque to everything here. The only required field.
@@ -127,7 +128,7 @@ pub struct Descriptor {
 /// of time"* — an absence wearing a value's clothes, which is precisely the mistake
 /// [`Descriptor::labels`] exists to stop. The default moved down onto the three fields that have an
 /// honest absence, and `at` now refuses at parse instead.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LabelOrigin {
     /// Per-axis, and `None` per axis means the same as `None` here: no record.
@@ -156,7 +157,7 @@ pub struct LabelOrigin {
 }
 
 /// One [`By`] per field a labeller can write, so the mixed case has somewhere to live.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct AxisOrigin {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -184,7 +185,7 @@ pub struct AxisOrigin {
 /// **Old readers.** A file without `Agent` parses everywhere. A `library.ron` that holds `Agent`
 /// (written by `label_set` from an agent) does not parse in a core older than the one that added
 /// the variant, so a consumer pinned to an older core must move with the editor.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum By {
     /// A model proposed it and a person pressed apply. **Not the same as a person deciding it** —
     /// that distinction is the whole point of this enum.
@@ -202,7 +203,7 @@ pub enum By {
 /// Lives here rather than in the mapper's `vlm` module because a descriptor now carries one: a type
 /// two crates share has to sit in the one they both depend on, and duplicating three variants so
 /// each crate could own a copy is how two enums that mean the same thing drift apart.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Confidence {
     High,
     Medium,
@@ -349,7 +350,7 @@ pub enum Axis {
 /// The shipped library is 43 mostly-rectangular props. Writing every cell would be thousands of rows
 /// of `solid: false` — so only cells that differ from open-and-unlabelled are written, and a piece
 /// with no lattice detail costs nothing at all.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Subgrid {
     /// Only the cells that are not plain open space. See the note on sparseness.
@@ -670,7 +671,7 @@ impl Subgrid {
 }
 
 /// One cell of a [`Subgrid`]. See that type for what the three facets are for.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct SubCell {
     /// Which cell, `(x, y, z)`, zero-based.
@@ -713,7 +714,7 @@ pub struct SubCell {
 /// room types to choose a room's freestanding set, and items sharing a `group` are drawn together by
 /// a soft `Near` relation. Unlike `category` and the four unread affordance tokens, something reads
 /// them.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Placement {
     /// Room-type tokens this piece suits — *a toilet suits a bathroom*. Cross-validated against the
@@ -895,7 +896,7 @@ pub fn mount_label(mount: Option<&Mount>) -> String {
 /// makes the quantisation part of the type instead of a rule some later caller forgets.
 ///
 /// It is also lossless for the shipped data — every `front` in the repo is `90.0`, which is [`Self::East`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Face {
     North,
@@ -994,7 +995,7 @@ pub fn quarter_turns_xyz(rotate: (i32, i32, i32), owner: &str) -> Result<(u8, u8
 
 /// Corrections for what the artist got wrong. Every one is measured, never dialled by eye — the kit's
 /// own doc says so of `scale`, and the importer exists to make that true of the rest.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Align {
     /// Uniform art correction: real-world size ÷ authored size.
@@ -1046,7 +1047,7 @@ pub struct Align {
 }
 
 /// How much room it takes. Metres.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Extent {
     /// (width, depth) before yaw.
@@ -1085,7 +1086,7 @@ pub struct Extent {
 /// **A heterogeneous pair contests nothing at all** (`same_layer`'s `_ => false`), which is why the
 /// bounded claim on [`crate::stack::blocking`] matters: the rule is per-layer and in plan, so a tall
 /// floor-standing piece and a wall-mounted one behind it never meet.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Mount {
     /// Stands on the floor. The common case.
@@ -1171,7 +1172,7 @@ pub enum Mount {
 /// `Decal` — the variant that exists *for* wall decals — had nowhere to put one, so a wall decal
 /// could be authored and then had no answer for where it went. Encoding it in the variant means the
 /// unanswerable state is not constructible rather than merely rejected.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum DecalHost {
     /// A floor marking — a hazard stripe, a painted lane, a stain. Lies on the map's floor.
@@ -1184,7 +1185,7 @@ pub enum DecalHost {
 }
 
 /// Which way a clearance requirement points, relative to the piece's own front.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Dir {
     Front,
@@ -1206,7 +1207,7 @@ pub enum Dir {
 ///
 /// Without this the schema cannot forbid a chair flush against a wall with its seat socket inside the
 /// wall — the same class of bug as the mug misclassification, one level up.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Clearance {
     pub dir: Dir,
@@ -1214,7 +1215,7 @@ pub struct Clearance {
 }
 
 /// What a piece makes available to others.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Offers {
     /// Surface classes this piece's top provides, from the closed vocabulary in
@@ -1243,7 +1244,7 @@ pub struct Offers {
 }
 
 /// A named point on a piece, in its own local space.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Socket {
     pub id: String,

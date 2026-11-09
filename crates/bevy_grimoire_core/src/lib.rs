@@ -76,6 +76,7 @@ pub mod rigs;
 pub mod rigs_edit;
 pub mod rules;
 pub mod run;
+pub mod schema;
 /// The deterministic RNG, re-exported at its original path.
 ///
 /// It lives in the `bevy_grimoire_rng` crate — a leaf with no dependencies of its own, so every crate

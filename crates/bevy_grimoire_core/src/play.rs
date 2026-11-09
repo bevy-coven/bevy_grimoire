@@ -5,6 +5,7 @@
 //! substitution of the map and camera into the command.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 use std::path::{Path, PathBuf};
 
 pub const PLAY_VERSION: u32 = 1;
@@ -16,7 +17,7 @@ fn default_port() -> u16 {
     DEFAULT_PORT
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PlayConfig {
     pub version: u32,

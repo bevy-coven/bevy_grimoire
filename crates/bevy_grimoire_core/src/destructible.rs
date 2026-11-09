@@ -10,12 +10,13 @@
 //! read at all is damaged, and is refused by name ([`crate::reload_check`]).
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// The `version` a fresh marks file or bake is written with.
 pub const DESTRUCTIBLE_VERSION: u32 = 1;
 
 /// **`<project>/destructible.ron`**: the pieces marked destructible.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Marks {
     pub version: u32,
@@ -23,7 +24,7 @@ pub struct Marks {
 }
 
 /// One chunk a piece breaks into: a closed convex solid as points and faces (indices into `points`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Chunk {
     pub points: Vec<[f32; 3]>,
@@ -31,7 +32,7 @@ pub struct Chunk {
 }
 
 /// **`<project>/destructible/<piece>.bake.ron`**: a piece's chunks, cached.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Bake {
     pub version: u32,

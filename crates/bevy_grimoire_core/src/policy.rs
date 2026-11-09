@@ -37,6 +37,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::Descriptor;
 use crate::library::Library;
@@ -149,7 +150,7 @@ pub struct Layered {
 }
 
 /// What a patch applies to.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Match {
     /// Exactly this descriptor.
@@ -159,7 +160,7 @@ pub enum Match {
 }
 
 /// One rule: what it applies to, why, and the fields it layers on.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Patch {
     #[serde(rename = "match")]
@@ -174,7 +175,7 @@ pub struct Patch {
 }
 
 /// A game's policy over a shared library.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Policy {
     pub version: u32,

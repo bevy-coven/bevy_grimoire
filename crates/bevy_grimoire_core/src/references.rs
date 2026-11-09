@@ -8,12 +8,13 @@
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 pub const REFERENCES_VERSION: u32 = 1;
 
 const IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Reference {
     pub id: String,
@@ -22,7 +23,7 @@ pub struct Reference {
     pub caption: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct References {
     pub version: u32,

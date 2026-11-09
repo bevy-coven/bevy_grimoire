@@ -22,21 +22,23 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// The file format's version, written first so a later change can be migrated.
 pub const NOTES_VERSION: u32 = 1;
 
 /// What a note is about.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Target {
-    /// A placed mesh, by [`crate::map::Placed::id`].
+    /// A placed mesh, by [`crate::map::Placed::id`]. **An id inside this project's map files, not a value of
+    /// another file's kind**, so it carries no `x-dark-factory-ref`.
     Placement(String),
     /// A tile, by grid cell.
     Cell(i32, i32),
 }
 
 /// Where a note stands.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum State {
     /// Written by a person and not yet sent: no agent sees it, the sign stands on the map.
     Draft,
@@ -67,7 +69,7 @@ pub enum State {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Note {
     pub id: String,
@@ -88,7 +90,7 @@ pub struct Note {
 }
 
 /// One thing that happened to a note.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Event {
     /// Seconds since the Unix epoch.
@@ -99,7 +101,7 @@ pub struct Event {
 }
 
 /// What happened.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum What {
     Written,
     /// The text was changed; `old` is the text it replaced.
@@ -144,7 +146,7 @@ impl Note {
 }
 
 /// The place a note was written about, as it was when written.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Site {
     /// Inclusive cell rectangle `(min_x, min_z, max_x, max_z)`.
@@ -345,7 +347,7 @@ impl Note {
 }
 
 /// Every note of one map.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Notes {
     pub version: u32,

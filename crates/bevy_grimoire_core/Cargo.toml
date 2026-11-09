@@ -43,3 +43,15 @@ dirs = "6"
 # Neither holds an engine type.
 serde_yaml_ng.workspace = true
 saphyr-parser.workspace = true
+# The JSON Schema each file kind publishes, generated from its type (`schema.rs`, GD-04, #366).
+schemars.workspace = true
+
+# **A JSON Schema validator, for the test and for nothing else** (#366). The schema tests check a fixture
+# against the schema an editor reads — a schema a wrong file passes is worse than none — and only a
+# validator can say so. It is a dev-dependency because nothing in the product validates a document
+# against a schema at runtime: an editor does, and this crate only generates the schema.
+[dev-dependencies]
+# **No default features**: with them, `jsonschema` is ~50 crates including `reqwest` and
+# `aws-lc-sys`, for a remote `$ref` resolver, a CLI and a language binding this test never uses. A schema
+# here is one local document whose `$defs` are in the same file, so nothing needs fetching.
+jsonschema = { version = "0.61", default-features = false }

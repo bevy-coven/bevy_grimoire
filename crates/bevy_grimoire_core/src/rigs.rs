@@ -22,6 +22,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// The highest mask group a slot may name — `AnimationMask` in Bevy 0.19 is a `u64`, so the bits are
 /// 0..63 and `1 << 64` is undefined behaviour the compiler turns into a panic.
@@ -55,7 +56,7 @@ pub const BENCH_TOOL_VERSION: u32 = 1;
 /// *"this GLB changed since these numbers were measured"* is strictly stronger than *"1.417
 /// declared vs 1.402 measured"* — it catches a re-export that changed something the value checks
 /// never look at, and it cannot false-alarm on float drift.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct Provenance {
     /// FNV-1a of the GLB's file bytes, spelled `"0x"` + 16 lowercase hex digits. A string so the
     /// on-disk spelling is stable and readable — RON re-spells a bare u64 in decimal on a write.
@@ -78,7 +79,7 @@ pub fn fingerprint_string(hash: u64) -> String {
 
 /// How a clip advances. Mirrors `anim::Playback` — the game converts one to the other and nothing
 /// else here knows what an `AnimationPlayer` is.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Copy, Debug, PartialEq)]
 pub enum Playback {
     /// Loops at its own speed. Idles, and anything with no relationship to the ground.
     Free { speed: f32 },
@@ -94,7 +95,7 @@ pub enum Playback {
 }
 
 /// One entry in a rig's slot table.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct SlotDef {
     /// The glTF animation index. **The only identifier the runtime uses.**
     pub clip: usize,
@@ -133,7 +134,7 @@ pub struct SlotDef {
 }
 
 /// One animated character.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default, PartialEq)]
 pub struct Rig {
     /// Asset-relative path to the GLB, so the manifest can be checked against the file it describes.
     pub mesh: String,
@@ -200,13 +201,17 @@ impl Rig {
 }
 
 /// The whole manifest.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default, PartialEq)]
 pub struct Rigs {
     pub version: u32,
     #[serde(default)]
     pub note: Option<String>,
-    /// Keyed by rig name. A `BTreeMap`, so writing the file back out is byte-stable — a manifest that
+    /// The rigs, keyed by rig name. A `BTreeMap`, so writing the file back out is byte-stable — a manifest that
     /// reordered itself on every save would make every diff unreadable.
+    ///
+    /// **No `x-dark-factory-ref`**, deliberately: this map is the file's own definitions, not a value that
+    /// names another file's. A mark here would tell a reader that `cipher_field` is a rig in some other
+    /// file, and there is no such file.
     pub rigs: BTreeMap<String, Rig>,
 }
 

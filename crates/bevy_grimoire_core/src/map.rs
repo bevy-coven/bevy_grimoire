@@ -60,6 +60,7 @@
 //! is what the older file already meant.
 
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 use crate::descriptor::Descriptor;
 use crate::placement::ir::Guard;
@@ -86,7 +87,7 @@ use crate::placement::ir::Guard;
 pub const MAP_VERSION: u32 = 9;
 
 /// One authored world.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Map {
     pub version: u32,
@@ -184,7 +185,7 @@ pub struct Map {
 ///
 /// A *soft* wish: a region that cannot reach the target returns its best arrangement and says so
 /// rather than refusing, which is what makes a tuned number safe.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Enclosure {
     /// **The fraction of a generated region that should close into rooms**, `0.0..=1.0`.
@@ -274,14 +275,15 @@ fn default_bounds() -> (f32, f32, f32) {
 }
 
 /// One instance of a descriptor, somewhere.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Placed {
     /// Unique within the map. Referenced by [`Location::props`], so it must be stable across edits —
     /// which is why it is an authored string and not a vec index. An index would silently re-point
     /// every location the moment a placement above it was deleted.
     pub id: String,
-    /// Which [`Descriptor`] this is an instance of.
+    /// Which [`Descriptor`] this is an instance of: a library piece.
+    #[schemars(extend("x-dark-factory-ref" = "library"))]
     pub descriptor: String,
     /// Position in map space, metres. **The floor plan only** — the height comes from the
     /// descriptor's [`crate::descriptor::Mount`], never from the author, so a lamp cannot be authored
@@ -382,7 +384,7 @@ pub struct Placed {
 }
 
 /// An invisible thing that owns a group of props and governs their use.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Location {
     pub id: String,
@@ -396,7 +398,7 @@ pub struct Location {
 }
 
 /// Something that can happen here.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Interaction {
     /// `"eat"`, `"sleep"`, `"repair"`. Opaque — matched, never interpreted.
@@ -414,7 +416,7 @@ pub struct Interaction {
 }
 
 /// A part an agent can play in an interaction.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RoleSlot {
     pub name: String,
@@ -439,7 +441,7 @@ pub struct RoleSlot {
 }
 
 /// Smart Zones' three strata, kept because they encode *when a scene may start*.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum RoleKind {
     /// *"Main roles are essential… The scene won't start unless all the main roles are fulfilled."*
@@ -456,7 +458,7 @@ pub enum RoleKind {
 /// added for exactly that reason and has never been constructed in the life of the codebase; an open
 /// variant that nothing produces is dead surface that every reader has to consider. Growing this enum
 /// should be a deliberate edit.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum Effect {
     /// Refill a named drive at this rate per second while the interaction runs.
