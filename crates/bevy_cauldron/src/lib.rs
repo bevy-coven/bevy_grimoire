@@ -74,6 +74,8 @@ pub mod app_verbs;
 pub mod menu_bar;
 pub mod empty_state;
 pub mod family_host;
+#[cfg(feature = "bevy_elements")]
+pub mod family_panel;
 pub mod log_filter;
 pub mod log_file;
 pub mod startup_probe;

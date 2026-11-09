@@ -2498,16 +2498,26 @@ impl Plugin for EditorPlugin {
         #[cfg(feature = "bevy_elements")]
         app.init_resource::<crate::environment::ClockScrub>()
             .init_resource::<crate::environment::ClockRamp>()
+            // **A clock the editor writes is read by the sky in the same frame.** `bevy_elements` states the
+            // rule for its own host (`ElementsSystems`, `plugin.rs`): "systems that write `WorldClock` … run
+            // `.before(ElementsSystems::Clock)`". Nothing did, so a scrub or a settings edit landed after
+            // that frame's sun and moon were placed and the sky visibly lagged the clock by one frame — which
+            // is the frame the family panel's time-of-day field is accepted on (UI-57, #243). The set is
+            // configured here so the ordering holds in a build that has no `ElementsPlugins` at all (the
+            // headless harness), where it costs nothing.
+            .configure_sets(Update, bevy_elements::ElementsSystems::Clock)
             .add_systems(
             Update,
             (
-                crate::environment::apply_environment.after(crate::family_host::Reloaded),
+                crate::environment::apply_environment.after(crate::family_host::Reloaded).before(bevy_elements::ElementsSystems::Clock),
                 // **After the settings, before the scrubber**: the walk moves the hour the file
                 // asked for, and a held scrubber then wins, as it always has (#271).
                 crate::environment::walk_the_clock
                     .after(crate::environment::apply_environment)
                     .before(crate::environment::scrub_clock),
-                crate::environment::scrub_clock.after(crate::environment::apply_environment),
+                crate::environment::scrub_clock
+                    .after(crate::environment::apply_environment)
+                    .before(bevy_elements::ElementsSystems::Clock),
                 crate::environment::dress_volume.after(crate::family_host::Reloaded).after(crate::terrain_view::sync_terrain_view),
             ),
         );
@@ -2526,6 +2536,10 @@ impl Plugin for EditorPlugin {
             .add_systems(Update, crate::audio_panel::read_audio);
         #[cfg(feature = "bevy_elements")]
         app.add_observer(on_environment_click);
+        // **A family crate's own settings, as a panel** (UI-57, #243): gooey's reflect inspector over a
+        // view of `family/bevy_elements.ron`, an edit dispatched as `family_set`.
+        #[cfg(feature = "bevy_elements")]
+        app.add_plugins(crate::family_panel::FamilyPanelPlugin);
         // **The light map (#103):** shown by its button, re-baked when the map changes, drawn over the floor.
         #[cfg(feature = "bevy_light_grid")]
         app.init_resource::<crate::light_overlay::LightOverlay>()
