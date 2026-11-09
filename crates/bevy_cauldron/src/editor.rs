@@ -2485,6 +2485,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
         app.add_plugins(crate::inspector_view::InspectorPlugin);
         app.add_plugins(crate::outliner::OutlinerPlugin);
+        app.add_plugins(crate::problems_view::ProblemsViewPlugin);
         app.add_plugins(crate::familiar::FamiliarPlugin);
         app.add_plugins(crate::shell_view::ShellViewPlugin);
         app.add_observer(drop_a_piece_on_the_map);
@@ -3867,6 +3868,25 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 crate::chrome::section(s, "PLAN");
                 s.spawn((
                     PlanList,
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                        ..default()
+                    },
+                ));
+            });
+
+            // **Problems (UI-54).** Each relation the open map breaks, from `<map>.relations.ron`, with a Go to that selects the
+            // pieces it names.
+            p.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            })
+            .with_children(|s| {
+                crate::chrome::section(s, "PROBLEMS");
+                s.spawn((
+                    crate::problems_view::ProblemsList,
                     Node {
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(crate::chrome::GAP_TIGHT),
@@ -8394,7 +8414,7 @@ pub fn plain_receipt(text: &str) -> String {
 /// when every relation holds, else `U unmet, M missing: <the first broken relation>`, and the file's
 /// name when it does not read. The same check `grimoire_state.relations` runs (#137).
 fn relations_readout(open: &OpenMap) -> (String, Color) {
-    use bevy_grimoire_core::relations::{check_map, path_for_map, Kind, Outcome, Relations};
+    use bevy_grimoire_core::relations::{check_map, path_for_map, Outcome, Relations};
     let path = path_for_map(&open.map_path);
     let unreadable = || {
         let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
@@ -8424,37 +8444,7 @@ fn relations_readout(open: &OpenMap) -> (String, Color) {
         .find(|(r, o)| r.hard && matches!(o, Outcome::Unmet { .. }))
         .or_else(|| pairs().find(|(_, o)| matches!(o, Outcome::Unmet { .. })))
         .or_else(|| pairs().find(|(_, o)| matches!(o, Outcome::Missing { .. })));
-    let words = match first {
-        Some((_, Outcome::Missing { id })) => format!("{id} is not on the map"),
-        Some((r, outcome)) => {
-            let of = &r.of;
-            let what = match &r.kind {
-                Kind::Faces(to) => format!("{of} faces {to}"),
-                Kind::Near { to, .. } => format!("{of} near {to}"),
-                Kind::Apart { from, .. } => format!("{of} apart from {from}"),
-                Kind::InFrontOf { of: other, .. } => format!("{of} in front of {other}"),
-                Kind::Behind { of: other, .. } => format!("{of} behind {other}"),
-                Kind::LeftOf { of: other, .. } => format!("{of} left of {other}"),
-                Kind::RightOf { of: other, .. } => format!("{of} right of {other}"),
-                Kind::ClearInFront { .. } => format!("{of} clear in front"),
-                Kind::VisibleFrom { from, .. } => format!("{of} seen from {from}"),
-                Kind::Along { path, .. } => format!("{of} along {}", path.join(" → ")),
-                Kind::ReachableFrom { from, .. } => format!("{of} reachable from {from}"),
-                Kind::AlignedWith(to) => format!("{of} aligned with {to}"),
-                Kind::Between { a, b, .. } => format!("{of} between {a} and {b}"),
-                Kind::MirrorOf { of: other, about, .. } => format!("{of} mirror of {other} about {about}"),
-                Kind::BacksOnto { of: other, .. } => format!("{of} backs onto {other}"),
-                Kind::Inside { of: other, .. } => format!("{of} inside {other}"),
-                Kind::Balances { with, about, .. } => format!("{of} balances {} about {about}", with.join(", ")),
-            };
-            let what = if r.hard { format!("{what} (hard)") } else { what };
-            match outcome {
-                Outcome::Unmet { by: Some(by), .. } => format!("{what} ({by} in the way)"),
-                _ => what,
-            }
-        }
-        None => String::new(),
-    };
+    let words = first.map(|(r, outcome)| crate::problems_view::relation_words(r, outcome)).unwrap_or_default();
     let mut counts = Vec::new();
     if unmet > 0 {
         counts.push(format!("{unmet} unmet"));

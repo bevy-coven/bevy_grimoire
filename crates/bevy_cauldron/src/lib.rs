@@ -153,6 +153,7 @@ pub mod ops_water;
 pub mod terrain_view;
 pub mod notes_view;
 pub mod checks_view;
+pub mod problems_view;
 pub mod oplog_view;
 pub mod data_view;
 pub mod reference_view;

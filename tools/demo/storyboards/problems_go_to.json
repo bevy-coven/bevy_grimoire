@@ -1,0 +1,94 @@
+{
+ "name": "problems_go_to",
+ "fps": 10,
+ "scale": 1,
+ "width": 900,
+ "setup": [
+  {
+   "key": "KeyJ",
+   "mods": [
+    "ControlLeft"
+   ]
+  },
+  {
+   "mcp": "grimoire_frame_view",
+   "args": {
+    "target": "map"
+   }
+  }
+ ],
+ "chunks": [
+  {
+   "seconds": 6
+  },
+  {
+   "seconds": 6
+  }
+ ],
+ "steps": [
+  {
+   "at": 0.0,
+   "cursor": [
+    640,
+    300
+   ]
+  },
+  {
+   "at": 0.05,
+   "key": "Escape"
+  },
+  {
+   "write": {
+    "path": "assets/grimoire/maps/bedroom.relations.ron",
+    "text": "(version: 1, relations: [(of: \"sofa\", kind: Faces(\"bed\")), (of: \"armchair\", kind: Near(to: \"coffee_table\", within: 0.2)), (of: \"lamp\", kind: Near(to: \"plant\", within: 2.0))])"
+   },
+   "at": 0.1
+  },
+  {
+   "at": 0.3,
+   "caption": "the Inspector's PROBLEMS section: a row for each broken relation"
+  },
+  {
+   "at": 0.6,
+   "scroll_to": "PROBLEMS",
+   "over": [
+    150,
+    400
+   ],
+   "region": [
+    0,
+    130,
+    330,
+    440
+   ]
+  },
+  {
+   "at": 4.5,
+   "caption": "person: Go to, on 'armchair near coffee_table'"
+  },
+  {
+   "at": 4.8,
+   "click_label": "Go to",
+   "within": [
+    0,
+    130,
+    330,
+    470
+   ]
+  },
+  {
+   "at": 7.0,
+   "caption": "the armchair and the table are selected, and the view is on them"
+  },
+  {
+   "at": 10.5,
+   "clear_cursor": true
+  }
+ ],
+ "crop": [
+  0,
+  0,
+  1080,
+  640
+ ]
+}
