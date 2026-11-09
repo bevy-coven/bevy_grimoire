@@ -733,10 +733,10 @@
       "taken_at_ms": 1794230462401,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "enhancement",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "asks the centre 'Add meshes' empty state out of the map; it belongs in the right panel only",
       "commit": "",
       "attempts": []
     },
