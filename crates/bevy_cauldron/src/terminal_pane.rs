@@ -279,12 +279,14 @@ pub struct TerminalAgentStatusChip;
 #[derive(Component)]
 pub struct TerminalAgentCard;
 
-/// What both of the agent's LEDs are called, beside the dot and before its state word (`Agent live`, `Agent busy`, `Agent failed`).
-/// It is also the LED's accessible name, so a reader of the screen hears what is live and not only that something is.
+/// What both of the agent's LEDs are called, beside the dot and before its state word (`Agent off`, `Agent busy`, `Agent live`,
+/// `Agent failed`). It is also the LED's accessible name, so a reader of the screen hears what is live and not only that
+/// something is.
 const AGENT_LED_LABEL: &str = "Agent";
 
-/// **The agent's LED in the bar** (feedback-1794230412409: *"where are the LEDs?"*), on the status chip's row and before it, while
-/// an agent tab is drawn. It is [`crate::terminal_agent::AgentPost::led`] in light: it stays when the self-test card goes.
+/// **The agent's LED in the bar** (feedback-1794230412409: *"where are the LEDs?"*), on the status chip's row and before it, for as
+/// long as the settings choose an agent: dark while no agent tab is drawn, and [`crate::terminal_agent::AgentPost::led`] in light
+/// once there is one. It stays when the self-test card goes.
 #[derive(Component)]
 pub struct TerminalAgentLed;
 
@@ -822,10 +824,16 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             flex_grow: 1.0,
             ..default()
         });
-        // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state. Its LED stands before it
-        // (feedback-1794230412409): the chip says it in words, the LED in light, and the LED stays after the card is gone.
-        if let Some(post) = terminal.tab().and_then(|tab| tab.agent()) {
-            bar.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentLed));
+        // **The agent's LED** (feedback-1794230412409, and #343's four states): one LED in the bar for as long as the settings
+        // choose an agent. Dark (`off`, a ring) while no agent tab is drawn, and the drawn agent tab's state (`busy`, `live`,
+        // `failed`) once there is one. The chip after it says the same in words, and the LED stays after the card is gone.
+        let post = terminal.tab().and_then(|tab| tab.agent());
+        if post.is_some() || terminal.agent() != crate::settings::TerminalAgent::Off {
+            let state = post.map_or(bevy_gooey::LedState::Off, |post| post.led());
+            bar.spawn((bevy_gooey::led(AGENT_LED_LABEL, state), TerminalAgentLed));
+        }
+        // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state.
+        if let Some(post) = post {
             let (label, ink) = post.chip();
             chrome::chip(
                 bar,
