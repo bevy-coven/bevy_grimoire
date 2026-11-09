@@ -2802,23 +2802,19 @@ fn editor_present(
     let Some(presenting) = presenting.as_mut() else {
         return Err("this editor has no presentation slot".to_owned());
     };
-    let n = presenting
-        .0
-        .as_ref()
-        .and_then(|prev| prev.id.rsplit('-').next())
-        .and_then(|n| n.parse::<u32>().ok())
-        .map(|n| n + 1)
-        .unwrap_or(1);
-    let id = format!("present-{n}");
     // **The hand-back is kept for the session**, not only while the question is up: a wish made
     // after the person has answered, or after a later hand-back replaced this one, still cites it.
-    if let Some(handbacks) = handbacks.as_mut() {
-        handbacks.0.push(crate::present::HandBack {
-            id: id.clone(),
-            title: p.title.clone(),
-            operation_ids: p.operation_ids.clone(),
-        });
-    }
+    //
+    // **And numbered by the session's own counter**, never by the number on the question standing on
+    // screen: `Presenting` is a door's state and is reset when the door changes, so a number read off
+    // it restarts at `present-1` on the next door — and two different hand-backs would share an id,
+    // which the one-wish rule would then read as one hand-back (review M4).
+    let id = match handbacks.as_mut() {
+        Some(handbacks) => handbacks.ask(p.title.clone(), p.operation_ids.clone()),
+        // **No record, no session to cite.** The id still names the question, so the person reads
+        // the same `present-N` they would otherwise; a wish citing it is refused, truthfully.
+        None => "present-0".to_owned(),
+    };
     presenting.0 = Some(crate::present::Presented {
         id: id.clone(),
         title: p.title.clone(),
@@ -2886,53 +2882,44 @@ fn editor_wish(
         ..bevy_grimoire_core::wish::Wish::default()
     };
     wish.validate()?;
-    // **One wish per hand-back, and the hand-back has to be this session's.** The editor holds the
-    // record; the MCP server holds none, so it cannot know either rule.
-    if wishes.has_wish_for(&wish.after) {
+    // **The hand-back has to be one this session watched.** The editor holds the record; the MCP
+    // server holds none, so it cannot know the rule.
+    //
+    // **A note is cited by its map as well as its id**: a note's id is unique on its own map and
+    // nowhere else, so `n3` on this map and `n3` on another are two different hand-backs. The
+    // presentation's id needs no such care: the session numbers those.
+    let cited = match &p.after {
+        AfterRef::Presentation(id) => handbacks.as_ref().and_then(|h| h.cited(id, None).cloned()),
+        AfterRef::Note(id) => match open.as_deref().map(|open| open.map.name.as_str()) {
+            // **With no map open there is no note to cite**, and the refusal says so rather than
+            // looking one up on a map that is not there.
+            Some(map) => handbacks.as_ref().and_then(|h| h.cited(id, Some(map)).cloned()),
+            None => None,
+        },
+    };
+    let Some(cited) = cited else {
+        return Err(match &p.after {
+            AfterRef::Presentation(id) => format!(
+                "`{id}` was never handed back in this editor session. A presentation hands \
+                 back, and a wish cites the one it follows."
+            ),
+            AfterRef::Note(id) => format!(
+                "`{id}` is not a note this editor session handed back. A note resolved in an \
+                 earlier session is not a hand-back anyone watched here, and a wish cites the \
+                 hand-back it follows."
+            ),
+        });
+    };
+    // **One wish per hand-back**, asked with the record's own key — which no door change can make
+    // ambiguous — while the answer names the id the agent wrote.
+    if wishes.has_wish_for(&cited.key) {
         return Err(format!(
             "`{}` already has a wish, and a hand-back carries one. Read the queued ones in \
              grimoire_state.wishes.",
             wish.after
         ));
     }
-    // **What the hand-back was**, from the editor's own record or the notes on disk.
-    let (title, operation_ids) = match &p.after {
-        AfterRef::Presentation(id) => match handbacks.as_ref().and_then(|h| {
-            h.0.iter().find(|handback| &handback.id == id).map(|h| (h.title.clone(), h.operation_ids.clone()))
-        }) {
-            Some(found) => found,
-            None => {
-                return Err(format!(
-                    "`{id}` was never handed back in this editor session. A presentation hands \
-                     back, and a wish cites the one it follows."
-                ));
-            }
-        },
-        AfterRef::Note(id) => {
-            let Some(open) = open.as_deref() else {
-                return Err(format!("`{id}` names a note, and no map is open to hold one"));
-            };
-            let path = bevy_grimoire_core::notes::path_for_map(&open.map_path);
-            let notes = bevy_grimoire_core::notes::Notes::load(&path)
-                .map_err(|e| format!("the notes beside this map do not read: {e}"))?;
-            let Some(note) = notes.get(id) else {
-                return Err(format!("there is no note `{id}` on this map, so nothing was handed back"));
-            };
-            let held = match &note.state {
-                bevy_grimoire_core::notes::State::Resolved { ops, .. }
-                | bevy_grimoire_core::notes::State::Kept { ops, .. } => Some(ops.clone()),
-                _ => None,
-            };
-            let Some(ops) = held else {
-                return Err(format!(
-                    "note `{id}` is `{}`, so no agent has handed it back yet. A wish cites the \
-                     hand-back it follows.",
-                    note.status()
-                ));
-            };
-            (note.text.clone(), ops)
-        }
-    };
+    let (title, operation_ids) = (cited.title.clone(), cited.operation_ids.clone());
     // **The context, in the editor's words.** The operations are named from the log's own lines, so
     // a wish says what the turn applied rather than what the agent called it.
     let log = project.as_ref().map(|p| ops::read_entries(&ops::oplog_path(p))).unwrap_or_default();
@@ -2953,7 +2940,7 @@ fn editor_wish(
     // **The address is built now**, so one GitHub would not take is refused while the agent is
     // still here, and not when a person presses a button on a wish that can never be filed.
     let url = wish.issue_url()?;
-    let id = wishes.take(wish, url);
+    let id = wishes.take(wish, cited.key.clone(), url);
     Ok(json!({
         "id": id,
         // **The context the editor added**, so the agent can see what was recorded about its turn

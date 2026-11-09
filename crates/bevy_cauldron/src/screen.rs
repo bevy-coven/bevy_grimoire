@@ -449,11 +449,6 @@ door_state![
     crate::present::Presenting,
     // **The answer to that question goes with it**: a button pressed on one door and not yet taken must not answer the next door's question.
     crate::present::PresentationReply,
-    // **A wish cites a hand-back, and a hand-back belongs to a door** (#353): carried across, a wish
-    // would name an operation of a map nobody is looking at, and the queue's one-wish rule would be
-    // enforced against a turn this door never showed.
-    crate::present::HandBacks,
-    crate::present::Wishes,
     crate::tiles::MapView,
     crate::tiles::NoteEdit,
     crate::tiles::ScaleEdit,
@@ -591,6 +586,16 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::project::Project", Ownership::Project),
     // **`Session`: it is the one thing that says which project the asset server reads**, moved by
     // `project_assets::open_project` and by nothing a door change does.
+    // **The wish queue is the editor session's, not a door's** (#353, review M4). A wish is what the
+    // editor has learned about its own tools in this sitting, and a hand-back it cites can be on any
+    // door — carried across, both stay readable, which is the rule the issue states: "the queue lives
+    // in the editor session and nothing is lost".
+    //
+    // **What a door change used to break was the ids**, and that is fixed at the source:
+    // `HandBacks::asked` numbers presentations for the whole session, and a note's key carries the
+    // map it is on, so the one-wish rule cannot read two hand-backs as one.
+    ("bevy_cauldron::present::HandBacks", Ownership::Session),
+    ("bevy_cauldron::present::Wishes", Ownership::Session),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),
@@ -750,8 +755,6 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::tiles::LatticePick", Ownership::Door),
     ("bevy_cauldron::present::Presenting", Ownership::Door),
     ("bevy_cauldron::present::PresentationReply", Ownership::Door),
-    ("bevy_cauldron::present::HandBacks", Ownership::Door),
-    ("bevy_cauldron::present::Wishes", Ownership::Door),
     ("bevy_cauldron::tiles::MapView", Ownership::Door),
     ("bevy_cauldron::tiles::NoteEdit", Ownership::Door),
     ("bevy_cauldron::tiles::ScaleEdit", Ownership::Door),

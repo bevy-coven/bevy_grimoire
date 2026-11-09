@@ -158,7 +158,13 @@ impl Plugin for PresentPlugin {
             .init_resource::<AgentClient>()
             .add_systems(
                 Update,
-                (answer_presentation, ask_again_when_the_block_closes).chain().in_set(crate::keys::Phase::Act),
+                (
+                    (answer_presentation, ask_again_when_the_block_closes).chain(),
+                    // **After the notes have been read this frame**, so a resolve made a moment ago is
+                    // already in the file `NotesView` holds and is recorded in the same frame.
+                    record_handed_back_notes.after(crate::notes_view::sync_notes_view),
+                )
+                    .in_set(crate::keys::Phase::Act),
             );
     }
 }
@@ -169,6 +175,13 @@ impl Plugin for PresentPlugin {
 /// holds them and the MCP server holds none**: a wish is about a hand-back, and hand-backs live
 /// here, so this is the only place that can answer "has this one a wish already". Nothing in the
 /// queue is written to the project — it is the session's record, not the game's.
+///
+/// **`Session`, not `Door`, and that is #353's own rule** (review M4). The queue is what the editor
+/// has learned about its own tools in this sitting, and the hand-backs it cites can be on any door:
+/// carried across, a wish made about the Kit door's work stays readable beside the Map door's. The
+/// *ids* are what a door change used to restart, which is why they are numbered from
+/// [`HandBacks::next`] — a count that no door change touches — rather than from the question on
+/// screen.
 #[derive(Resource, Default)]
 pub struct Wishes {
     /// **The wishes waiting to be read**, oldest first. A wish leaves the queue when it is opened or
@@ -181,6 +194,10 @@ pub struct Wishes {
 /// **One wish, with the address it will be filed at.**
 pub struct QueuedWish {
     pub wish: bevy_grimoire_core::wish::Wish,
+    /// **What the one-wish rule compares**: the hand-back's [`HandBack::key`], which no door change
+    /// can make ambiguous. `wish.after` stays exactly as the agent wrote it, so `present-3` reads
+    /// back the same as it was sent.
+    pub key: String,
     /// **The issue address, built when the wish was made**, so an address GitHub would not take is
     /// refused while the agent is still there to shorten what it wrote.
     pub url: String,
@@ -192,18 +209,77 @@ pub struct QueuedWish {
 /// about it — so a wish citing a hand-back that has since been answered, or superseded by the next
 /// one, needs this record to be told it existed. **A wish cites a hand-back, not the current
 /// question**, which is why the record is separate from [`Presenting`].
+///
+/// **`Session`, not `Door`** (review M4): a wish cites a hand-back that has since been answered, or
+/// one made before the author walked to the other door, and a record thrown away with the door would
+/// refuse both — with the very sentence that is supposed to mean "that never happened".
 #[derive(Resource, Default)]
-pub struct HandBacks(pub Vec<HandBack>);
+pub struct HandBacks {
+    /// **Presentations and resolved notes, oldest first.**
+    pub hands: Vec<HandBack>,
+    /// **How many presentations this session has asked**, which is what numbers them.
+    ///
+    /// **Not the question on screen's number** (review M4): `Presenting` is `Door` state, so a
+    /// number read off it restarts at `present-1` on the next door and two different hand-backs end
+    /// up sharing an id — which the one-wish rule would then silently treat as one hand-back.
+    pub asked: u32,
+}
 
 /// **One hand-back**, as a wish needs it: what it was called and what it covered.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HandBack {
-    /// `present-1`, `present-2`, …
+    /// **The id the agent sends**: `present-3`, or a note's `n3`.
     pub id: String,
+    /// **The id no door change can make ambiguous**, which the one-wish rule compares.
+    ///
+    /// A presentation's key is its id, because [`HandBacks::asked`] numbers them for the whole
+    /// session. A note's is `<map>:<note id>`, because a note id is only unique **on its own map** —
+    /// so a `n3` on one door and the `n3` of a different map are two hand-backs, as they are.
+    pub key: String,
     /// The title the agent gave it, which the wish carries as its context.
     pub title: String,
     /// The operations the turn listed, whose names the wish carries as its context.
     pub operation_ids: Vec<String>,
+}
+
+impl HandBacks {
+    /// **Record a presentation**, numbering it for the session, and say what the agent will cite.
+    pub fn ask(&mut self, title: String, operation_ids: Vec<String>) -> String {
+        self.asked += 1;
+        let id = format!("present-{}", self.asked);
+        self.hands.push(HandBack {
+            id: id.clone(),
+            // **A presentation's key is its id**, and the id is a session-wide count, so the two
+            // cannot disagree.
+            key: id.clone(),
+            title,
+            operation_ids,
+        });
+        id
+    }
+
+    /// **The hand-back a wish cites**, found by the id the agent sent.
+    ///
+    /// A presentation's id is unique for the session, so the last one naming it is the one. A note's
+    /// id is only unique on its own map, so `on` — the open map's name — picks between two maps that
+    /// both have a note `n3`; with no map open, or two maps' worth recorded and none open to choose
+    /// by, the newest is the one the agent most likely means, and it is the one whose turn just
+    /// ended.
+    pub fn cited(&self, id: &str, on: Option<&str>) -> Option<&HandBack> {
+        self.hands
+            .iter()
+            .rev()
+            .find(|h| h.id == id && h.key == id)
+            .or_else(|| {
+                let named: Vec<&HandBack> = self.hands.iter().filter(|h| h.id == id).collect();
+                named
+                    .iter()
+                    .rev()
+                    .find(|h| on.is_some_and(|map| h.key == format!("{map}:{id}")))
+                    .copied()
+                    .or_else(|| named.last().copied())
+            })
+    }
 }
 
 impl Wishes {
@@ -227,20 +303,106 @@ impl Wishes {
     }
 
     /// **Whether this hand-back has a wish already** — the rule that keeps wishes worth reading.
-    pub fn has_wish_for(&self, after: &str) -> bool {
-        self.queued.iter().any(|q| q.wish.after == after)
+    ///
+    /// Asked with [`HandBack::key`] rather than with the words the agent sent, so two hand-backs that
+    /// a door change once made share an id are still two hand-backs.
+    pub fn has_wish_for(&self, key: &str) -> bool {
+        self.queued.iter().any(|q| q.key == key)
     }
 
     /// **Take a wish**, numbering it and keeping it waiting behind the ones already there.
     ///
     /// The id counts up from `wish-1`; the order the queue is read in is the order wishes arrived, so
     /// several arriving at once are not lost and are read as they were written.
-    pub fn take(&mut self, mut wish: bevy_grimoire_core::wish::Wish, url: String) -> String {
+    pub fn take(&mut self, mut wish: bevy_grimoire_core::wish::Wish, key: String, url: String) -> String {
         self.next += 1;
         let id = format!("wish-{}", self.next);
         wish.id = id.clone();
-        self.queued.push(QueuedWish { wish, url });
+        self.queued.push(QueuedWish { wish, key, url });
         id
+    }
+}
+
+/// **A note an agent has handed back**, whichever of the two states says so.
+fn handed_back(note: &bevy_grimoire_core::notes::Note) -> bool {
+    matches!(
+        note.state,
+        bevy_grimoire_core::notes::State::Resolved { .. } | bevy_grimoire_core::notes::State::Kept { .. }
+    )
+}
+
+/// The baseline [`record_handed_back_notes`] took when it first looked at a map's notes file.
+///
+/// **`pub`, because the system that holds it in a `Local` is**: a `Local` of a private type makes
+/// the system's own signature private, which `private_interfaces` refuses.
+#[derive(Default)]
+pub struct NotesBaseline {
+    path: std::path::PathBuf,
+    /// **The notes already handed back when this map was first looked at.**
+    ///
+    /// They belong to an earlier session: a note resolved last week reads as `done` on disk, and it
+    /// is not a hand-back anyone watched here, so a wish may not cite it.
+    before: std::collections::BTreeSet<String>,
+}
+
+/// **Record every note handed back in this session**, so a wish can cite one (#353, review M3).
+///
+/// **`after` names a hand-back from this editor session**, and the notes file cannot say which of
+/// its `done` notes this session produced — a note resolved last week looks exactly like one resolved
+/// a minute ago. So the record is kept here: the state of every note the first time this map's file
+/// was read is the baseline, and any note handed back after that is this session's.
+///
+/// **One reader, so one path.** The notes come from [`crate::notes_view::NotesView`], which is the
+/// editor's own reader of the file, so an agent's `note_resolve` and a person's own are recorded by
+/// the same code — and a resolve undone and redone records once, because the id is already there.
+pub fn record_handed_back_notes(
+    open: Option<Res<crate::project::OpenMap>>,
+    view: Option<Res<crate::notes_view::NotesView>>,
+    mut handbacks: Option<ResMut<HandBacks>>,
+    mut baseline: Local<Option<NotesBaseline>>,
+) {
+    // **Every one of these is `Option`**: a build without the editor's own plugins has no notes
+    // view and no open map, and in Bevy a missing `Res<T>` panics its system rather than skipping it.
+    let (Some(open), Some(view), Some(handbacks)) = (open, view, handbacks.as_mut()) else {
+        return;
+    };
+    let path = bevy_grimoire_core::notes::path_for_map(&open.map_path);
+    // **Not looked at yet, so nothing is known.** Taking a baseline here would make the file's own
+    // `done` notes look as though they had just been handed back.
+    if view.looked_at() != Some(path.as_path()) {
+        return;
+    }
+    if baseline.as_ref().is_none_or(|taken| taken.path != path) {
+        let before = view
+            .notes()
+            .notes
+            .iter()
+            .filter(|note| handed_back(note))
+            .map(|note| note.id.clone())
+            .collect();
+        *baseline = Some(NotesBaseline { path, before });
+        return;
+    }
+    let before = &baseline.as_ref().expect("just established").before;
+    for note in view.notes().notes.iter().filter(|note| handed_back(note)) {
+        let key = format!("{}:{}", open.map.name, note.id);
+        if before.contains(&note.id) || handbacks.hands.iter().any(|h| h.key == key) {
+            continue;
+        }
+        let ops = match &note.state {
+            bevy_grimoire_core::notes::State::Resolved { ops, .. }
+            | bevy_grimoire_core::notes::State::Kept { ops, .. } => ops.clone(),
+            // [`handed_back`] is the filter above; this arm says so rather than panicking.
+            _ => continue,
+        };
+        handbacks.hands.push(HandBack {
+            id: note.id.clone(),
+            // **A note id is unique on its own map and nowhere else**, so the map is part of the key:
+            // two doors' `n3` are two hand-backs, which is what the one-wish rule needs.
+            key,
+            title: note.text.clone(),
+            operation_ids: ops,
+        });
     }
 }
 

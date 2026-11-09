@@ -46,6 +46,15 @@ impl NotesView {
     pub fn notes(&self) -> &Notes {
         &self.notes
     }
+
+    /// **The notes file this has looked at**, or nothing before the first read.
+    ///
+    /// A reader that has to tell "this map has no notes" from "this map's file has not been looked
+    /// at yet" cannot do it from [`Self::notes`] alone: both are empty. This is the difference, and
+    /// it is what `present::record_handed_back_notes` reads to take its baseline.
+    pub fn looked_at(&self) -> Option<&std::path::Path> {
+        (!self.path.as_os_str().is_empty()).then_some(self.path.as_path())
+    }
 }
 
 /// **Read the open map's notes file when it changed, and decide it once.**
