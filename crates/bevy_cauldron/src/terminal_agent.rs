@@ -351,6 +351,20 @@ impl AgentPost {
         }
     }
 
+    /// **The agent's LED** (feedback-1794230412409: *"where are the LEDs?"*): what the status chip says in words, in light. A
+    /// failed check is [`bevy_gooey::LedState::Failed`], a check still waiting is [`bevy_gooey::LedState::Busy`], and every check
+    /// passed or skipped is [`bevy_gooey::LedState::Live`]; the order is the chip's, so the two never disagree. `bevy_gooey` draws
+    /// each state with its own silhouette and its word beside the dot, so the light is never the only signal.
+    pub fn led(&self) -> bevy_gooey::LedState {
+        if self.failed() {
+            bevy_gooey::LedState::Failed
+        } else if self.pending() {
+            bevy_gooey::LedState::Busy
+        } else {
+            bevy_gooey::LedState::Live
+        }
+    }
+
     /// **A click on the status chip**: the card comes back for a while, and an omp self test that
     /// failed after its agent connected is asked again. `true` when the caller is to type
     /// [`SELF_TEST_PROMPT`] into the tab, which is at omp's prompt.
@@ -875,5 +889,41 @@ mod tests {
         assert_eq!(no_token, Ok(json!({"known": false})));
         assert!(agent_session(&mut terminal, &json!({"token": "t", "session": "a b; c"})).is_err(), "a string with a shell in it is refused");
         assert!(agent_session(&mut terminal, &json!({"token": "t", "session": "0197-abc", "extra": 1})).is_err(), "an unknown field is refused");
+    }
+
+    /// **The LED answers as the status chip does** (`feedback-1794230412409`, oracle `spec`): busy while a check waits,
+    /// failed once one failed, live when nothing waits and nothing failed, and the chip's own words say the same in every state.
+    #[test]
+    fn the_led_is_busy_while_a_check_waits_failed_on_a_failure_and_live_when_none_waits_and_the_chip_agrees() {
+        use bevy_gooey::LedState;
+        let mut post = started_post(TerminalAgent::OhMyPi);
+        assert_eq!((post.led(), post.chip().0.as_str()), (LedState::Busy, "omp: checking…"), "connected and self test still wait");
+        post.hello(None, 22, 1.0);
+        assert_eq!(post.led(), LedState::Busy, "connected, and the self test still waits");
+        post.self_test(&[("state".to_owned(), true, "a".to_owned()), ("picture".to_owned(), true, "b".to_owned())]);
+        assert_eq!((post.led(), post.chip().0.as_str()), (LedState::Live, "omp connected · 22 tools"));
+        post.self_test(&[("picture".to_owned(), false, "empty".to_owned())]);
+        assert_eq!((post.led(), post.chip().0.as_str()), (LedState::Failed, "omp: self test failed"));
+    }
+
+    /// **A failure outranks a check that still waits**, as the chip's words do: the agent that never connected has failed, not
+    /// "busy".
+    #[test]
+    fn a_failed_check_is_failed_even_while_another_still_waits() {
+        let mut post = started_post(TerminalAgent::OhMyPi);
+        post.checks[2] = CheckStatus::Failed("never reached the editor".to_owned());
+        post.checks[3] = CheckStatus::Pending;
+        assert_eq!(post.led(), bevy_gooey::LedState::Failed);
+    }
+
+    /// **A skipped self test is not a reason to stay busy**: a custom command that passes no prompt is connected and its test
+    /// is skipped, which the chip calls connected.
+    #[test]
+    fn a_skipped_self_test_leaves_the_led_live() {
+        let mut post = started_post(TerminalAgent::Custom);
+        post.hello(None, 3, 10.0);
+        post.tick(10.0 + SELF_TEST_TIMEOUT_S + 1.0);
+        assert!(matches!(post.checks[3], CheckStatus::Skipped(_)), "{:?}", post.checks[3]);
+        assert_eq!(post.led(), bevy_gooey::LedState::Live);
     }
 }

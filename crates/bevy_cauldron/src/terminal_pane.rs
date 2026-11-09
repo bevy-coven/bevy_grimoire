@@ -279,6 +279,19 @@ pub struct TerminalAgentStatusChip;
 #[derive(Component)]
 pub struct TerminalAgentCard;
 
+/// What both of the agent's LEDs are called, beside the dot and before its state word (`Agent live`, `Agent busy`, `Agent failed`).
+/// It is also the LED's accessible name, so a reader of the screen hears what is live and not only that something is.
+const AGENT_LED_LABEL: &str = "Agent";
+
+/// **The agent's LED in the bar** (feedback-1794230412409: *"where are the LEDs?"*), on the status chip's row and before it, while
+/// an agent tab is drawn. It is [`crate::terminal_agent::AgentPost::led`] in light: it stays when the self-test card goes.
+#[derive(Component)]
+pub struct TerminalAgentLed;
+
+/// **The agent's LED at the foot of the self-test card**: the verdict the four checks above it add up to.
+#[derive(Component)]
+pub struct TerminalAgentCardLed;
+
 /// The least the card is wide, logical pixels: wide enough for the first check's row (`OK Tools server: bevy_cauldron_mcp
 /// on port 15702`), so the card does not start narrower than that and grow row by row.
 const AGENT_CARD_MIN_W: f32 = 320.0;
@@ -809,8 +822,10 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             flex_grow: 1.0,
             ..default()
         });
-        // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state.
+        // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state. Its LED stands before it
+        // (feedback-1794230412409): the chip says it in words, the LED in light, and the LED stays after the card is gone.
         if let Some(post) = terminal.tab().and_then(|tab| tab.agent()) {
+            bar.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentLed));
             let (label, ink) = post.chip();
             chrome::chip(
                 bar,
@@ -1074,7 +1089,8 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
 }
 
 /// **The self-test card**: the harness, then each check's word, name and what it found, in the check's
-/// ink. Floats where the find box does, and the pointer goes through it to the shell.
+/// ink, and the agent's LED as the verdict they add up to. Floats where the find box does, and the pointer goes through it to
+/// the shell.
 fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::terminal_agent::AgentPost) {
     let row = |words: String, ink: Color| {
         (Text::new(words), TextColor(ink), chrome::font(chrome::text::LABEL), Pickable::IGNORE)
@@ -1095,6 +1111,7 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
             for (label, check) in crate::terminal_agent::CHECK_LABELS.iter().zip(&post.checks) {
                 card.spawn(row(format!("{} {label}: {}", check.mark(), check.detail()), check.ink()));
             }
+            card.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentCardLed));
         })
         .id();
     commands.entity(body).add_child(card);
