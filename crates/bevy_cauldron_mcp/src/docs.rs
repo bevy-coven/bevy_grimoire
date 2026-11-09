@@ -40,6 +40,19 @@ pub struct ToolDoc {
 /// other fails a test rather than a reader's trust.
 pub const TOOLS: &[ToolDoc] = &[
     ToolDoc {
+        name: "grimoire_guide",
+        description: "How to work in Cauldron, in the order a task goes: orient, change, what to do \
+                       when a person pauses the agent's writes, how to show your work, and how to \
+                       hand a result back. Call this before any other tool on your first task in a \
+                       project: the other tools say what one tool does, and this says which of them \
+                       in what order, and what the person on the other end expects. It returns the \
+                       shipped guide as text; it takes no parameters, needs no editor and changes \
+                       nothing.",
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+    },
+    ToolDoc {
         name: "grimoire_present",
         description: "Put a result in front of the person: a title, a one-paragraph summary, what they \
                       specified, what you inferred, up to three places worth checking, and the operation \
@@ -443,28 +456,17 @@ pub const TOOLS: &[ToolDoc] = &[
     },
 ];
 
-/// **How any agent works a note** (#94). The fenced `json` block is one operation per line; the
-/// editor's `send_starts_the_notes_agent` guide test runs every line against a headless editor, so the
-/// example cannot drift from the operations.
-pub const NOTES_GUIDE: &str = "## Working a note\n\n\
-A person leaves notes on the map (a rectangle or picked pieces, with an instruction) and presses Send. \
-Any agent connected to this server can work a sent note; the editor holds no agent logic. If the project's \
-`agent.ron` names a command, Send also starts it once per Send (`(version: 1, command: Some(\"omp\"), model: \"claude-sonnet-5-5\")`; \
-`args` may use `{model}`, `{prompt}`, `{project}`; the default arguments are `-p --model {model} {prompt}`). \
-With no `agent.ron`, or no `command` in it, Send only queues the notes, and a hand-started agent works them the same way.\n\n\
-1. **List.** `grimoire_state` has a notes section: the sent and claimed notes with `id`, `holder` and `lease_until`. Pass `note=<id>` for a note's bundle: text, area and margin, nearby pieces, the palette, the camera and earlier notes.\n\
-2. **Claim.** `note_claim` with your name as `agent` holds the note for a lease. `note_renew` keeps it while you work, `note_release` gives it back. A note another agent holds is refused.\n\
-3. **Work inside the fence.** Every `grimoire_apply_operation` you make with `agent` set is checked against your note: an operation reaching outside the note's area plus one cell is refused before anything is written. Removing a piece a person placed is refused until you have asked with `note_ask` and the person has answered with `note_answer`. Capture a before and an after still with `grimoire_capture_still`.\n\
-4. **Resolve.** `note_resolve` closes the note with a one-line `summary`, your `assumptions`, the `ops` (operation ids) you ran and `captures` `[before, after]`. The person then keeps the result or undoes the whole note in one step, which reopens it.\n\n\
-Worked example: the person's note `n1` covers cells 0,0 to 2,2 (\"tidy the wall\"), and the agent `omp` works it. Operations, one per line:\n\n\
-```json\n\
-{\"operation\": \"note_add\", \"parameters\": {\"cells\": [0, 0, 2, 2], \"text\": \"tidy the wall\"}}\n\
-{\"operation\": \"note_send\", \"parameters\": {}}\n\
-{\"operation\": \"note_claim\", \"parameters\": {\"id\": \"n1\", \"agent\": \"omp\"}}\n\
-{\"operation\": \"placement_add\", \"parameters\": {\"piece\": \"site/wall\", \"at\": [0.5, 0.5]}, \"agent\": \"omp\"}\n\
-{\"operation\": \"note_resolve\", \"parameters\": {\"id\": \"n1\", \"agent\": \"omp\", \"summary\": \"added a wall\", \"captures\": [\"before.png\", \"after.png\"], \"assumptions\": [\"the wall belongs in the corner\"]}}\n\
-```\n\n\
-The first two lines are the person's (the note box and Send); the rest are the agent's. `placement_add`'s piece and cell are the example's own: use pieces from `grimoire_list_pieces`.\n\n";
+/// **The guide an agent reads before its first call** (#346, AG-01).
+///
+/// **One source for the prose.** It is `guide.md`, beside this file, compiled in with
+/// `include_str!`: `grimoire_guide` returns this string, and [`render`] writes the same string into
+/// `docs/mcp-tools.md`, so the shipped guide and the document cannot disagree — there is one text
+/// and two readers, not two copies.
+///
+/// **Its examples stay executable.** The fenced `json` block is one operation per line; the editor's
+/// `send_starts_the_notes_agent` guide test runs every line against a headless editor, so an example
+/// cannot drift from the operations that exist.
+pub const GUIDE: &str = include_str!("guide.md");
 
 /// **The document, as markdown.**
 ///
@@ -483,7 +485,7 @@ pub fn render() -> String {
          nothing to disk itself: the editor owns the project directory, and every file the \
          editor writes is written by the editor.\n\n",
     );
-    out.push_str(NOTES_GUIDE);
+    out.push_str(GUIDE);
     out.push_str("## The tools\n\n");
     for tool in TOOLS {
         out.push_str(&format!("### `{}`\n\n", tool.name));
@@ -536,6 +538,11 @@ pub fn tool_table_and_count() -> (usize, String) {
 
 pub fn schemas() -> Value {
     serde_json::json!({
+        "grimoire_guide": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {},
+        },
         "grimoire_present": {
             "type": "object",
             "additionalProperties": false,

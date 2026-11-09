@@ -14,6 +14,7 @@
 //!
 //! | tool | what it does |
 //! |---|---|
+//! | `grimoire_guide` | how to work in Cauldron: which tools in what order, and what the person expects |
 //! | `grimoire_list_operations` | every operation, its parameters' schema, and how it is undone; `query` searches them |
 //! | `grimoire_preview_operation` | what an operation would change; nothing changes |
 //! | `grimoire_apply_operation` | run one, and record it in the operation log |
@@ -607,6 +608,39 @@ impl Grimoire {
             ));
         }
         Ok(())
+    }
+
+    /// **`grimoire_guide` — how to work in Cauldron, before the first call** (#346, AG-01).
+    ///
+    /// **A read of a compiled-in string.** The guide is `guide.md`, shipped inside the binary, so it
+    /// answers with no editor running and no project open — which matters, because an agent reads it
+    /// before it has done anything. It changes nothing, it is the same text every call, and it needs
+    /// no parameters: three reasons its hints are what they are.
+    ///
+    /// **One text, two readers.** The same string is what [`docs::render`] writes into
+    /// `docs/mcp-tools.md`, so the guide an agent is given and the guide a person reads cannot
+    /// disagree.
+    #[tool(
+        name = "grimoire_guide",
+        description = "How to work in Cauldron, in the order a task goes: orient, change, what to do \
+                       when a person pauses the agent's writes, how to show your work, and how to \
+                       hand a result back. Call this before any other tool on your first task in a \
+                       project: the other tools say what one tool does, and this says which of them \
+                       in what order, and what the person on the other end expects. It returns the \
+                       shipped guide as text; it takes no parameters, needs no editor and changes \
+                       nothing.",
+        annotations(
+            title = "Read the guide to working in Cauldron",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn guide(&self) -> Result<CallToolResult, ErrorData> {
+        Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(docs::GUIDE.to_owned()),
+        ]))
     }
 
     /// **`grimoire_list_operations` — every operation, its schema, and how it is undone.**
@@ -2172,10 +2206,11 @@ impl rmcp::ServerHandler for Grimoire {
 
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "This server drives the bevy_grimoire world editor. Call grimoire_list_operations first to \
-             learn the operations and their parameters, then grimoire_preview_operation to check a \
-             change, and grimoire_apply_operation to make it. Every applied operation is recorded in \
-             the editor's operation log.",
+            "This server drives the bevy_grimoire world editor. Call grimoire_guide first: it says \
+             which tools come in what order, what a person expects back, and what to do when they \
+             pause your writes. Then grimoire_list_operations to learn the operations and their \
+             parameters, grimoire_preview_operation to check a change, and grimoire_apply_operation \
+             to make it. Every applied operation is recorded in the editor's operation log.",
         )
     }
 }
