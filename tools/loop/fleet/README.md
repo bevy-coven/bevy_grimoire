@@ -14,6 +14,10 @@ tools/loop/fleet/status.sh            # FLEET_MACHINES="local big bmb" by defaul
 
 ## Watching
 
+The Herdr app lists `hc` terminals (herdr-core), not the herdr-CLI sessions the workers run in, so `launch.sh` also starts an `hc` terminal `w<issue>` under the manager's that attaches to the worker's pane (`ssh -t <host> herdr --session loops agent attach w<n> --takeover` for a remote host). A host whose own `hc` core has its registry writer stopped (it panicked on a full disk) cannot host them, so the viewer is always a local terminal. 
+
+From the herdr CLI:
+
 Run `herdr`, choose the machine `big` or `bmb` (or the local session), then the workspace `fleet`: one tab per issue. From a script, `herdr [--machine <label>] agent read w<n> --source recent-unwrapped --lines 120`, and `agent wait w<n>` to block until it settles.
 
 ## Merge and gate

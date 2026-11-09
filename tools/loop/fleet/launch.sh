@@ -50,4 +50,10 @@ hc pane run "$pane" "exec env POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true zsh
 sleep 3
 hc agent start "w$issue" --kind omp --pane "$pane" --timeout 120000 -- --model "$MODEL" --thinking high >/dev/null
 hc agent prompt "w$issue" "Read /tmp/fleet/brief-$issue.md and follow it exactly; it is your whole task." >/dev/null
+# Show the worker in the Herdr app too: an hc terminal under the manager's own, attached to the agent's pane.
+# The app lists hc terminals, not herdr-CLI sessions. --takeover because herdr's own pane view already holds the attach.
+if command -v hc >/dev/null; then
+  if [ "$host" = local ]; then attach=(herdr agent attach "w$issue" --takeover); else attach=(ssh -t "$host" "herdr --session loops agent attach w$issue --takeover"); fi
+  hc run --bg --no-notify --name "w$issue" -- "${attach[@]}" >/dev/null || echo "warning: no hc viewer for w$issue" >&2
+fi
 echo "launched w$issue on $host pane $pane branch $branch worktree $worktree"
