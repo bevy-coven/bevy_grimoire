@@ -115,20 +115,37 @@ impl TerminalAgent {
 /// that does not would only fail its self test.
 pub const AGENT_PROGRAM: &str = "omp";
 
-/// **Is the agent installed on this machine?** — the executable [`AGENT_PROGRAM`] on the `PATH` it is
-/// given, in any of its folders.
+/// The shell asked when the environment names none — the same one [`crate::terminal`]'s pane runs.
+const DEFAULT_SHELL: &str = "/bin/sh";
+
+/// **The shell a question about this machine is put to**: `$SHELL`, else [`DEFAULT_SHELL`].
 ///
-/// Off the environment as a parameter rather than read inside, so the answer for any `PATH` can be
-/// tested without touching the process's own. A file that is not executable is not a program: a
-/// machine with one has no agent, and its terminal keeps its shell.
+/// The same choice [`crate::terminal`]'s pane makes, so the machine is asked in the shell the `Invoke
+/// Agent` press will type into.
+fn login_shell() -> String {
+    std::env::var("SHELL").ok().filter(|shell| !shell.is_empty()).unwrap_or_else(|| DEFAULT_SHELL.to_owned())
+}
+
+/// **How long the login shell is given to answer, in seconds** (#341).
+///
+/// A login shell reads the person's rc files, so it is slower than a plain one and one of them can
+/// hang. Past this the machine is read as having no agent: a window that never opens is worse than a
+/// terminal that offers a shell.
+pub const LOGIN_ASK_PATIENCE_S: u64 = 5;
+
+/// **Is the agent installed on this machine?** — the executable [`AGENT_PROGRAM`] in any folder of the
+/// `PATH` it is given.
+///
+/// Off the environment as a parameter rather than read inside, so the answer for any folder list can be
+/// tested without touching the process's own. A file that is not executable is not a program: a machine
+/// with one has no agent, and its terminal keeps its shell.
 pub fn agent_in_path(path: Option<&str>) -> TerminalAgent {
     let Some(path) = path else { return TerminalAgent::Off };
-    let separator = if cfg!(windows) { ';' } else { ':' };
-    let found = path
-        .split(separator)
-        .filter(|dir| !dir.is_empty())
-        .map(|dir| Path::new(dir).join(AGENT_PROGRAM))
-        .any(|program| is_runnable(&program));
+    // An empty entry is "here" to a shell, so a test run from a folder holding an `omp` would answer
+    // for a machine whose `PATH` does not name one; it is left out rather than read as a folder.
+    let found = std::env::split_paths(path)
+        .filter(|folder| !folder.as_os_str().is_empty())
+        .any(|folder| is_runnable(&folder.join(AGENT_PROGRAM)));
     if found { TerminalAgent::OhMyPi } else { TerminalAgent::Off }
 }
 
@@ -160,11 +177,75 @@ fn is_runnable(program: &Path) -> bool {
 pub struct MachineAgent(pub TerminalAgent);
 
 impl MachineAgent {
-    /// Asks this machine what it has.
+    /// **Asks the machine the way the press runs the agent** (#341).
+    ///
+    /// It is `SHELL -lc 'command -v omp'`, not this process's `PATH`. A macOS app opened from Finder or
+    /// the Dock inherits launchd's environment — `/usr/bin:/bin:/usr/sbin:/sbin` — so the owner's
+    /// `~/.local/bin/omp` is not on it and the machine would answer `Off` while `Invoke Agent` works,
+    /// because that press types the command into a *login* shell (`terminal_agent.rs` says why). The
+    /// question is therefore put to the same login shell, so the pane's offer and the button's work
+    /// come from one answer.
+    ///
+    /// Bounded: a login shell whose rc files hang answers nothing, and [`LOGIN_ASK_PATIENCE_S`] later
+    /// the machine is read as having no agent rather than the window waiting.
     pub fn ask() -> MachineAgent {
-        MachineAgent(agent_in_path(std::env::var("PATH").ok().as_deref()))
+        MachineAgent(MachineAgent::ask_the_login_shell(&login_shell(), LOGIN_ASK_PATIENCE_S))
+    }
+
+    /// [`MachineAgent::ask`] with the shell and its patience named, so a test can give both.
+    ///
+    /// `None` from `command -v` — the shell exits non-zero — is a machine without the agent; so is a
+    /// shell that cannot be started or does not answer inside `patience_s`.
+    pub fn ask_the_login_shell(shell: &str, patience_s: u64) -> TerminalAgent {
+        let script = format!("command -v {AGENT_PROGRAM}");
+        let started = std::process::Command::new(shell)
+            .arg("-lc")
+            .arg(&script)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        let Ok(mut child) = started else { return TerminalAgent::Off };
+        // **Read on another thread, so a shell that answers nothing does not hold this one.** The wait
+        // below is the bound; a shell still running then is left to it and the machine reads `Off`.
+        let reading = child.stdout.take().map(|mut out| {
+            std::thread::spawn(move || {
+                use std::io::Read as _;
+                let mut text = String::new();
+                let _ = out.read_to_string(&mut text);
+                text
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(patience_s);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let found = status.success() && reading.is_some_and(|r| r.join().is_ok_and(|text| !text.trim().is_empty()));
+                    return if found { TerminalAgent::OhMyPi } else { TerminalAgent::Off };
+                }
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(LOGIN_ASK_POLL_MS));
+                }
+                _ => {
+                    let _ = child.kill();
+                    return TerminalAgent::Off;
+                }
+            }
+        }
+    }
+
+    /// **The agent a machine starts its terminal with**, from what the binary asked it.
+    ///
+    /// [`None`] is a process that never asked — every test's editor — and reads `Off`, the built-in
+    /// default. One place, because the terminal's resolution and the Settings screen must not answer
+    /// this question two ways.
+    pub fn resolved(machine: Option<&MachineAgent>) -> TerminalAgent {
+        machine.map_or(TerminalAgent::Off, |machine| machine.0)
     }
 }
+
+/// How often the login shell is looked at while it is given its patience, in milliseconds.
+const LOGIN_ASK_POLL_MS: u64 = 10;
 
 /// **What the running editor uses**: the defaults with the user's file and then the project's laid over
 /// them, key by key.
@@ -201,7 +282,7 @@ pub struct EditorSettings {
     ///
     /// **The built-in default is `Off`**, a pure value with no machine behind it. What a person meets is
     /// the resolved settings, and that asks this machine once at start-up (`MachineAgent`, #341): a
-    /// machine with `omp` on its `PATH` resolves to `OhMyPi`, so its terminal opens on the empty pane that
+    /// machine whose login shell finds `omp` resolves to `OhMyPi`, so its terminal opens on the empty pane that
     /// offers the agent; a machine without one resolves to `Off` and opens a shell. A `terminal_agent`
     /// key in either settings file wins over both.
     ///
@@ -396,7 +477,7 @@ impl EditorSettings {
     ///
     /// **A file still wins, both ways.** `machine` fills the default, it does not overrule a layer, so a
     /// person on a machine with `omp` who wants a plain shell names `Off` in their file and gets it, and
-    /// a person whose agent is somewhere their `PATH` does not reach names it too. Only the key nobody
+    /// a person whose agent is somewhere their login shell does not reach names it too. Only the key nobody
     /// stated comes from the machine.
     pub fn resolve_on_this_machine(
         user: Option<&SettingsLayer>,
@@ -555,7 +636,7 @@ pub struct SettingsSources<'w> {
 impl SettingsSources<'_> {
     /// The agent this machine's terminal starts with when no file states one.
     fn machine_agent(&self) -> TerminalAgent {
-        self.machine.as_deref().copied().map_or(TerminalAgent::Off, |machine| machine.0)
+        MachineAgent::resolved(self.machine.as_deref())
     }
 }
 

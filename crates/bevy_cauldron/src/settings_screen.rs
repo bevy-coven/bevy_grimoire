@@ -152,7 +152,7 @@ struct ProblemLine;
 pub(crate) struct Files<'w> {
     pub(crate) user: Option<Res<'w, UserSettingsFile>>,
     pub(crate) project: Option<Res<'w, Project>>,
-    /// What the binary found on this machine's `PATH` at start-up. Absent in a test, and absent is
+    /// What the binary asked this machine's login shell at start-up. Absent in a test, and absent is
     /// `Off` — the same answer the terminal's own resolution gives for an app that never asked.
     pub(crate) machine: Option<Res<'w, crate::settings::MachineAgent>>,
 }
@@ -161,7 +161,7 @@ impl Files<'_> {
     /// **The agent this machine's terminal is using when no file states one** (#341). The row a file
     /// does not set shows this, so the screen and the pane cannot say two things about one setting.
     pub(crate) fn machine_agent(&self) -> TerminalAgent {
-        self.machine.as_deref().copied().map_or(TerminalAgent::Off, |machine| machine.0)
+        crate::settings::MachineAgent::resolved(self.machine.as_deref())
     }
 
     pub(crate) fn user(&self) -> Option<PathBuf> {
