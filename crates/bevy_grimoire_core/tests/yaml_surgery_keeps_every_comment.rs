@@ -475,3 +475,89 @@ fn a_surgery_says_where_a_refusal_stands_rather_than_line_one() {
     assert!(!why.contains("line 1, column 1"), "{why}");
     assert!(problem.where_.as_ref().and_then(|w| w.field.as_deref()).is_some(), "{}", problem.line());
 }
+
+// ------------------------------------------------------------------------------------------------
+// Review of #364, second round: flow quoting, a block scalar's header, an item's first key, positions.
+// ------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_string_with_flow_syntax_is_quoted_inside_a_flow_collection() {
+    // `x, y` inside `{id: x, y, yaw: 90.0}` would be read as TWO entries, and `y` as a key. A bracket
+    // closes the collection early. Every flow indicator is that hazard, so a string holding one is
+    // quoted — and the file reads back as the value it was given, with its neighbour unchanged.
+    let flow = "version: 9\nname: yard\norigin: [0.0, 0.0, 0.0]\nbounds: [10.0, 4.0, 10.0]\nplacements: [{id: bed, descriptor: d, at: [1.0, 2.0], yaw: 90.0}]\n";
+    for nasty in ["x, y", "a[b", "a]b", "a{b", "a}b"] {
+        let after = set(flow, "placements[0].id", Value::Str(nasty.into()));
+        let read: bevy_grimoire_core::map::Map = bevy_grimoire_core::yaml::from_str(&after, "maps/yard.map.yaml")
+            .unwrap_or_else(|e| panic!("`{nasty}` made the flow list unreadable: {}\n{after}", e.line()));
+        assert_eq!(read.placements.len(), 1, "`{nasty}` made a second entry:\n{after}");
+        assert_eq!(read.placements[0].id, nasty, "`{nasty}` did not come back as itself:\n{after}");
+        assert_eq!(read.placements[0].yaw, 90.0, "the neighbour is unchanged:\n{after}");
+    }
+}
+
+#[test]
+fn a_block_scalars_header_line_keeps_its_comment_and_the_new_value_replaces_the_old() {
+    // A `|` scalar may carry a comment on its header line, and the comment is a person's. The new value
+    // replaces the block's content and the header's comment stays where it was.
+    let text = "note: |  # why it says this\n  the old text\nnext: 1\n";
+    let after = set(text, "note", Value::Str("new".into()));
+    assert_eq!(after, "note: new  # why it says this\nnext: 1\n", "{after}");
+
+    // A `>` in the header's comment must not be mistaken for the indicator: the value is not spliced
+    // into the comment, and the comment survives whole.
+    let text = "note: |  # a -> b\n  old\nnext: 1\n";
+    let after = set(text, "note", Value::Str("new".into()));
+    assert_eq!(after, "note: new  # a -> b\nnext: 1\n", "{after}");
+}
+
+#[test]
+fn removing_a_first_key_takes_only_that_key_and_only_from_its_own_item() {
+    // Two one-key items: the first item's only key cannot be promoted, and the second item's key must
+    // never be pulled into the first — so this is refused, naming the key.
+    let text = "placements:\n  - id: bed\n  - id: sofa\nsealed: true\n";
+    let problem = yaml_surgery::remove_entry(text, "placements[0]", "id").expect_err("the only key of an item has nothing to promote");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("placements[0].id"), "{}", problem.line());
+
+    // A first key whose value is a block collection keeps its `-`, and the next key is promoted.
+    let text = "placements:\n  - patch:\n      scale: 2\n    id: bed\nsealed: true\n";
+    let after = yaml_surgery::remove_entry(text, "placements[0]", "patch").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert!(after.contains("  - id: bed"), "the `-` is kept and the next key promoted:\n{after}");
+    assert!(after.contains("sealed: true"), "{after}");
+
+    // A last item whose only key is removed is refused: there is no key to promote onto its line.
+    let text = "placements:\n  - id: bed\nsealed: true\n";
+    let problem = yaml_surgery::remove_entry(text, "placements[0]", "id").expect_err("an item with one key has nothing to promote");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("placements[0].id"), "{}", problem.line());
+    assert!(!problem.line().contains("line 1, column 1"), "{}", problem.line());
+}
+
+#[test]
+fn every_surgery_refusal_has_a_real_position_or_none() {
+    // A path the file does not have, a leaf that is not a leaf, a flow mapping added to: each names its
+    // own place; none prints `line 1, column 1`.
+    let text = "version: 9\nplacements: []\n";
+    let cases: Vec<(&str, String)> = vec![
+        ("a path not in the file", yaml_surgery::set(text, "nowhere", Value::Int(1), None).unwrap_err().line()),
+        ("a list set as a value", yaml_surgery::set(text, "placements", Value::Int(1), None).unwrap_err().line()),
+        ("a flow mapping added to", yaml_surgery::add_entry("a: {x: 1}\nb: 2\n", "a", "y: 2").unwrap_err().line()),
+    ];
+    for (what, line) in cases {
+        assert!(!line.contains("line 1, column 1"), "{what} invented a position: {line}");
+    }
+}
+
+#[test]
+fn an_empty_flow_mapping_becomes_a_block_the_way_an_empty_list_does() {
+    // The commit that made `{}` readable as an empty collection made it convertible; an empty mapping is
+    // as much "nothing written yet" as `[]` is.
+    let text = "locations: {}\nnext: 1\n";
+    let after = yaml_surgery::add_entry(text, "locations", "yard:\n  note: a").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "locations:\n  yard:\n    note: a\nnext: 1\n", "{after}");
+}
+
+#[test]
+fn a_float_too_large_for_an_integer_is_refused_rather_than_saturated() {
+    let problem = yaml_surgery::set(YARD, "version", Value::Float(1e30), None).expect_err("1e30 is not a u32");
+    assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("version"), "{}", problem.line());
+}

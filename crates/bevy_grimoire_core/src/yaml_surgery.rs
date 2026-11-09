@@ -150,7 +150,18 @@ fn quote(s: &str) -> String {
         out.push('"');
         return out;
     }
-    if s.is_empty() || !Style::Plain.is_text(s) || starts_with_indicator(s) || s.trim() != s || s.contains(" #") || s.contains(": ") || s.ends_with(':') {
+    if s.is_empty()
+        || !Style::Plain.is_text(s)
+        || starts_with_indicator(s)
+        || s.trim() != s
+        || s.contains(" #")
+        || s.contains(": ")
+        || s.ends_with(':')
+        // **A flow indicator ends a flow scalar wherever it sits.** `{id: x, y}` reads `x` and then `y`
+        // as a key, and a bracket closes the collection early — so a string holding one is quoted even
+        // where the plain spelling would be fine in block style.
+        || s.chars().any(|c| matches!(c, ',' | '[' | ']' | '{' | '}'))
+    {
         return format!("'{}'", s.replace('\'', "''"));
     }
     s.to_owned()
@@ -193,7 +204,7 @@ pub fn set(text: &str, path: &str, value: Value, bounds: Option<&Bounds>) -> Res
     // into an integer leaf would be a file the reader refuses (`9.5` is not a `u32`), and `9.0` is
     // exactly the integer `9`.
     let value = match (&value, &leaf.style) {
-        (Value::Float(x), _) if !leaf.style.accepts_number(&leaf.text) => return Err(wrong_kind(text, node, leaf, &value, path)),
+        (Value::Float(_), _) if !leaf.style.accepts_number(&leaf.text) => return Err(wrong_kind(text, node, leaf, &value, path)),
         (Value::Float(x), _) if is_integer_leaf(leaf) => {
             if x.fract() != 0.0 {
                 return Err(at_node_named(text,
@@ -203,6 +214,13 @@ pub fn set(text: &str, path: &str, value: Value, bounds: Option<&Bounds>) -> Res
                     "a float leaf is the only one that takes a fraction",
                     "write a whole number",
                 ));
+            }
+            // A cast saturates, which would write a number nobody asked for: `1e30` is not an integer any
+            // file holds, and it is refused rather than turned into `i64::MAX`.
+            // A cast saturates, which would write a number nobody asked for, so the range is checked
+            // against the bound the leaf's reader has before the cast is made.
+            if *x < i64::MIN as f64 || *x > i64::MAX as f64 || *x > u32::MAX as f64 {
+                return Err(at_node_named(text, node, path, &format!("`{path}`: {x} is not a number an integer holds"), "a cast would saturate, which is a number nobody asked for", "write a number the field holds"));
             }
             Value::Int(*x as i64)
         }
@@ -225,26 +243,40 @@ pub fn set(text: &str, path: &str, value: Value, bounds: Option<&Bounds>) -> Res
     // **A block scalar's span is its content, not its indicator.** `saphyr-parser` reports a `|` scalar
     // from its first content character to the start of the line after its last, so a replacement runs
     // from the `|` itself (which says the value was a block) to the end of the content.
-    let (start, end) = if leaf.style == Style::Block {
-        (block_indicator(text, node), content_end(text, node, &walk))
-    } else {
-        (node.span.0, node.span.1)
-    };
     let mut out = String::with_capacity(text.len() + 8);
-    out.push_str(&text[..start]);
-    out.push_str(&value.text());
-    out.push_str(&text[end..]);
+    if leaf.style == Style::Block {
+        let indicator = block_indicator(text, node);
+        let end = content_end(text, node, &walk);
+        // **The header line's comment is a person's**, and it stays after the new value: `note: |  # why`
+        // becomes `note: new  # why`. The comment is what follows the indicator on its own line.
+        let header_end = text[indicator..].find('\n').map_or(text.len(), |at| indicator + at);
+        let header = &text[indicator + 1..header_end];
+        let comment = header.trim_start().strip_prefix('#').map(|rest| format!("  #{}", rest));
+        out.push_str(&text[..indicator]);
+        out.push_str(&value.text());
+        if let Some(comment) = comment {
+            out.push_str(&comment);
+        }
+        out.push_str(&text[end..]);
+    } else {
+        out.push_str(&text[..node.span.0]);
+        out.push_str(&value.text());
+        out.push_str(&text[node.span.1..]);
+    }
     verified(out, path)
 }
 
-/// **The `|` or `>` that makes a scalar a block**, which is where a replacement of one starts: the span
-/// `saphyr-parser` reports begins at the first content character, so the indicator is the last one
-/// between the value's key and that character.
+/// **The `|` or `>` that makes a scalar a block**, which is where a replacement of one starts.
+///
+/// **The first one after the key's `:`**, not the last: a header line may carry a comment — `note: |  #
+/// a -> b` — and the `>` in it is not the indicator. `saphyr-parser`'s span begins at the first content
+/// character, so everything between the key and that character is the indicator, its options and its
+/// comment, and the indicator is the first of them.
 fn block_indicator(text: &str, node: &Node) -> usize {
     let from = node.key.as_ref().map_or(node.span.0, |key| key.span.1);
-    text[from..node.span.0.min(text.len())]
-        .rfind(['|', '>'])
-        .map_or(node.span.0, |at| from + at)
+    let up_to = node.span.0.min(text.len());
+    let colon = text[from..up_to].find(':').map_or(from, |at| from + at);
+    text[colon..up_to].find(['|', '>']).map_or(node.span.0, |at| colon + at)
 }
 
 /// Whether a leaf's number is a whole number, so a `Float` that is whole may fill it.
@@ -266,27 +298,68 @@ fn flow_refusal(text: &str, node: &Node, path: &str, verb: &str) -> Problem {
     )
 }
 
-/// **An item's first key removed without losing the item**: the `-` stays, and the next key is promoted
-/// onto its line, so what is left is still an item of the list.
-fn promote_first_key(text: &str, dash: usize, line_start: usize, after_removed: usize) -> String {
-    // Whatever follows the removed entry is the item's next line, which carries its own indentation.
-    let rest = &text[after_removed..];
-    let next_end = rest.find('\n').map_or(rest.len(), |at| at + 1);
-    let next_line = &rest[..next_end];
-    let indent = next_line.len() - next_line.trim_start_matches(' ').len();
-    let body = next_line.trim_start();
+/// **An item's first key removed without losing the item**: the `-` stays, and the item's own next entry
+/// is promoted onto its line, so what is left is still an item of the list.
+///
+/// `next` is the byte the next entry **of this item** starts at, and `after_removed` the byte the removed
+/// entry's own lines end at: everything between them — a comment, a blank line — is kept, because it is
+/// somebody's.
+fn promote_first_key(text: &str, dash: usize, line_start: usize, next: usize, after_removed: usize) -> String {
+    // The promoted entry's own line, without its indentation, which the `- ` replaces.
+    let next_line_end = text[next..].find('\n').map_or(text.len(), |at| next + at + 1);
+    let promoted = text[next..next_line_end].trim();
+    // Between the removed entry and the promoted one: whatever a person wrote there — a comment, a blank
+    // line — is kept, and the whitespace that indented the promoted key is not (the `- ` is its indent).
+    let between: String = text[after_removed..next]
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| format!("{line}\n"))
+        .collect();
+
     let mut out = String::with_capacity(text.len());
     out.push_str(&text[..line_start]);
-    // **The `-` stays and the next key takes its own column**, which is what keeps the row an item of
-    // the list: `  - turn_deg: 90.0` with `turn_deg` where the item's first key was.
-    let dash_column = dash - line_start;
-    out.push_str(&" ".repeat(dash_column));
+    // **The `-` stays and the promoted entry takes its own place on that line**, which is what keeps the
+    // row an item of the list.
+    out.push_str(&" ".repeat(dash - line_start));
     out.push_str("- ");
-    out.push_str(body.trim_end());
+    out.push_str(promoted);
     out.push('\n');
-    out.push_str(&rest[next_end..]);
-    let _ = indent;
+    out.push_str(&between);
+    // The promoted key's line is re-emitted above, so it is skipped here rather than repeated; its own
+    // value, when that is a block starting on a later line, follows as it was.
+    out.push_str(&text[next_line_end..]);
     out
+}
+
+/// **The `-` that starts the line `byte` is on**, when there is one: an item's first key's line.
+fn dash_on_line(text: &str, byte: usize) -> Option<usize> {
+    let line_start = text[..byte].rfind('\n').map_or(0, |at| at + 1);
+    let prefix = &text[line_start..byte];
+    prefix.trim_start().starts_with('-').then(|| line_start + prefix.len() - prefix.trim_start().len())
+}
+
+/// **The item path a `parent[i].key` path belongs to**: `placements[0]`.
+fn item_of_path(path: &str) -> Option<String> {
+    let key = path.rfind('.')?;
+    let parent = &path[..key];
+    parent.ends_with(']').then(|| parent.to_owned())
+}
+
+/// **The next entry of the item at `item_path`**, whose own lines start at or after `from`: the next
+/// key of that item, never the next item's first key.
+fn next_entry_of(text: &str, walk: &Walk, item_path: &str, from: usize) -> Option<usize> {
+    walk.nodes
+        .iter()
+        .filter(|n| is_entry_of(&n.path, item_path))
+        .filter_map(|n| n.key.as_ref().map(|k| k.span.0))
+        .filter(|at| *at >= from)
+        // The item's own entries only: a key of the item's `parent[1]` has a longer path.
+        .filter(|at| {
+            let line_start = text[..*at].rfind('\n').map_or(0, |n| n + 1);
+            let prefix = &text[line_start..*at];
+            !prefix.trim_start().starts_with('-')
+        })
+        .min()
 }
 
 /// A refusal at a node: its own line and column, never a made-up `line 1`.
@@ -318,7 +391,7 @@ fn wrong_kind(text: &str, node: &Node, leaf: &yaml::Leaf, value: &Value, path: &
 #[allow(clippy::result_large_err)]
 fn verified(text: String, path: &str) -> Result<String, Problem> {
     let walk = yaml::walk(&text);
-    if let Some(site) = yaml::first_fault(&text, walk) {
+    if let Some(site) = yaml::first_fault(&text, &walk) {
         return Err(yaml::problem_naming(FILE, Some(path.to_owned()), site));
     }
     Ok(text)
@@ -373,7 +446,7 @@ pub fn add_item(text: &str, path: &str, item: &str) -> Result<String, Problem> {
     let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Sequence {
-        return Err(not_a(path, "a list"));
+        return Err(not_a_at(text, node, path, "a list"));
     }
     let item_lines: Vec<&str> = item.trim_end_matches('\n').lines().map(str::trim_end).collect();
     if item_lines.is_empty() || item_lines[0].trim().is_empty() {
@@ -401,6 +474,7 @@ pub fn add_item(text: &str, path: &str, item: &str) -> Result<String, Problem> {
         .min()
         .unwrap_or_else(|| key_column(text, node));
     let field_column = dash_column + yaml::INDENT_SPACES;
+    let first_indent = item_lines[0].len() - item_lines[0].trim_start().len();
     let mut block = String::new();
     for (n, line) in item_lines.iter().enumerate() {
         if n == 0 {
@@ -408,9 +482,10 @@ pub fn add_item(text: &str, path: &str, item: &str) -> Result<String, Problem> {
             block.push_str("- ");
             block.push_str(line.trim_start());
         } else {
-            // **Every later line keeps the indentation it was written with**, relative to the item's
-            // first line, so a nested mapping stays nested: `patch:` then `  scale: 2` is two levels.
-            let relative = line.len() - line.trim_start().len();
+            // **Every later line keeps its indentation relative to the item's first line**, so a nested
+            // mapping stays nested: `patch:` then `  scale: 2` is two levels under the item, however
+            // deeply the text the caller wrote was itself indented.
+            let relative = (line.len() - line.trim_start().len()).saturating_sub(first_indent);
             block.push_str(&" ".repeat(field_column + relative));
             block.push_str(line.trim_start());
         }
@@ -425,22 +500,18 @@ pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
     let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Mapping {
-        return Err(not_a(path, "a mapping"));
+        return Err(not_a_at(text, node, path, "a mapping"));
     }
-    if text[node.span.0..node.span.1].trim_start().starts_with('{') {
-        return Err(yaml::problem_at(
-            FILE,
-            Some(path.to_owned()),
-            1,
-            &format!("`{path}` is a flow mapping"),
-            "an entry added to it would rewrite the line the mapping is on, and this edit moves no byte it was not asked for",
-            "write the mapping in block style first",
-        ));
+    // An **empty** `{}` has no entry to rewrite around, so it becomes a block exactly as `[]` does.
+    let flow = is_flow(text, node);
+    if flow && !text[node.span.0..node.span.1].trim_end().ends_with("{}") {
+        return Err(flow_refusal(text, node, path, "added to"));
     }
     let entry_lines: Vec<&str> = entry.trim_end_matches('\n').lines().map(str::trim_end).collect();
     if entry_lines.is_empty() || entry_lines[0].trim().is_empty() {
-        return Err(yaml::problem_at(FILE, Some(path.to_owned()), 1, "an entry to add is empty", "there is nothing to write", "give the entry's first line"));
+        return Err(at_node_named(text, node, path, "an entry to add is empty", "there is nothing to write", "give the entry's first line"));
     }
+    let flow = text[node.span.0..node.span.1].trim_start().starts_with('{');
     let children: Vec<&Node> = walk.nodes.iter().filter(|n| is_entry_of(&n.path, path)).collect();
     // A mapping with no entry has no sibling to copy. Its own column plus one step is where a nested
     // mapping's keys go, which is the only style there is for one.
@@ -458,7 +529,7 @@ pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
         block.push_str(body);
         block.push('\n');
     }
-    verified(insert_after_last_of(text, node, &walk, &block, false), path)
+    verified(insert_after_last_of(text, node, &walk, &block, flow), path)
 }
 
 /// **Remove item `index` of the sequence at `path`**, taking only its own lines.
@@ -467,7 +538,7 @@ pub fn remove_item(text: &str, path: &str, index: usize) -> Result<String, Probl
     let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Sequence {
-        return Err(not_a(path, "a list"));
+        return Err(not_a_at(text, node, path, "a list"));
     }
     // **A flow list is one line, and this cannot edit one.** Removing an item from `at: [1.0, 2.0]` would
     // take the line the key is on, so it is refused exactly as adding to a non-empty flow list is.
@@ -494,7 +565,7 @@ pub fn remove_entry(text: &str, path: &str, key: &str) -> Result<String, Problem
     let walk = walk_or_refuse(text)?;
     let node = find(&walk, path)?;
     if node.kind != NodeKind::Mapping {
-        return Err(not_a(path, "a mapping"));
+        return Err(not_a_at(text, node, path, "a mapping"));
     }
     if is_flow(text, node) {
         return Err(flow_refusal(text, node, path, "removed from"));
@@ -504,16 +575,27 @@ pub fn remove_entry(text: &str, path: &str, key: &str) -> Result<String, Problem
         at_node_named(text, node, &entry_path, &format!("`{entry_path}` is not in this file"), "the mapping has no such key", "check the key's spelling")
     })?;
 
-    // **An entry on the line its item's `-` starts is the item's first key.** Removing its whole line
-    // would take the `-` with it and leave the rest of the row as a key of the list's parent, so the
-    // next key is promoted onto that line instead: `  - id: bed` and `    turn_deg: 90.0` become
-    // `  - turn_deg: 90.0`.
-    if entry.dash.is_some() {
-        let key_at = entry.key.as_ref().map_or(entry.span.0, |k| k.span.0);
+    // **An entry on the line its item's `-` starts is the item's first key**, which is decided from the
+    // KEY's own line and not from where its value begins: a first key whose value is a block mapping
+    // (`- patch:`) or a block scalar (`- note: |`) starts its value on a later line.
+    let key_at = entry.key.as_ref().map_or(entry.span.0, |k| k.span.0);
+    if let Some(dash) = dash_on_line(text, key_at) {
         let line_start = text[..key_at].rfind('\n').map_or(0, |at| at + 1);
-        let dash = entry.dash.unwrap_or(key_at);
-        let after_key = end_of_last_line(text, entry.span.1);
-        return verified(promote_first_key(text, dash, line_start, after_key), path);
+        // The item this key belongs to, and the next entry **of that item** — never the next item's key.
+        let item_path = item_of_path(&entry_path).unwrap_or_else(|| entry_path.clone());
+        let after_key = end_of_last_line(text, content_end(text, entry, &walk));
+        let Some(next) = next_entry_of(text, &walk, &item_path, after_key) else {
+            // An item with one key has nothing to promote, and its `-` cannot stay on a line by itself.
+            return Err(at_node_named(
+                text,
+                entry,
+                &entry_path,
+                &format!("`{entry_path}` is the only key of `{item_path}`"),
+                "removing it would leave the item with no key on its `-` line",
+                "remove the whole item instead, or give the item another key first",
+            ));
+        };
+        return verified(promote_first_key(text, dash, line_start, next, after_key), path);
     }
     let from_key = entry.key.as_ref().map_or(entry.span.0, |k| k.span.0);
     let start = text[..from_key].rfind('\n').map_or(from_key, |at| at + 1);
@@ -545,9 +627,11 @@ fn insert_after_last_of(text: &str, node: &Node, walk: &Walk, block: &str, flow:
         let line_start = text[..node.span.0].rfind('\n').map_or(0, |at| at + 1);
         let line_end = text[line_start..].find('\n').map_or(text.len(), |at| line_start + at + 1);
         let head = text[line_start..node.span.0].trim_end_matches(' ');
-        // The `[]`'s own end. Its span can stop a byte short of the `]`, so the bracket is found rather
-        // than assumed, and everything after it on the line — a comment — stays with the key.
-        let bracket = text[node.span.0..line_end].rfind(']').map_or(node.span.1, |at| node.span.0 + at + 1);
+        // The collection's own end. Its span can stop a byte short of the bracket, so the bracket is
+        // found rather than assumed, and everything after it on the line — a comment — stays with the
+        // key.
+        let close = if text[node.span.0..line_end].trim_start().starts_with('{') { '}' } else { ']' };
+        let bracket = text[node.span.0..line_end].rfind(close).map_or(node.span.1, |at| node.span.0 + at + 1);
         let after = text[bracket.min(line_end)..line_end].trim_end_matches('\n');
         out.push_str(&text[..line_start]);
         out.push_str(head);
@@ -645,7 +729,7 @@ fn walk_or_refuse(text: &str) -> Result<Walk, Problem> {
     // One question, one answer: `first_fault` is what the reader asks too, so an edit and a read cannot
     // disagree about which fault a file has. A file that does not read is refused before any path is
     // looked for, because a wrong path in a broken file must not be the answer.
-    if let Some(site) = yaml::first_fault(text, walk.clone()) {
+    if let Some(site) = yaml::first_fault(text, &walk) {
         return Err(yaml::refusal_of(FILE, site));
     }
     Ok(walk)
@@ -656,10 +740,10 @@ fn walk_or_refuse(text: &str) -> Result<Walk, Problem> {
 fn find<'a>(walk: &'a Walk, path: &str) -> Result<&'a Node, Problem> {
     walk.nodes.iter().find(|n| n.path == path).ok_or_else(|| {
         let near = nearest(walk, path);
-        yaml::problem_at(
+        // A path the file does not have has no line: no position is claimed rather than `line 1`.
+        yaml::problem_nowhere(
             FILE,
             Some(path.to_owned()),
-            1,
             &format!("`{path}` is not in this file"),
             &format!("the nearest paths are: {}", near.iter().map(|p| format!("`{p}`")).collect::<Vec<_>>().join(", ")),
             "check the path against the file's own keys",
@@ -667,12 +751,12 @@ fn find<'a>(walk: &'a Walk, path: &str) -> Result<&'a Node, Problem> {
     })
 }
 
-/// `path` is not a list or a mapping, as the call needed.
-fn not_a(path: &str, wanted: &str) -> Problem {
-    yaml::problem_at(
-        FILE,
-        Some(path.to_owned()),
-        1,
+/// **`path` is not what the call needed**, refused at the node that stands there.
+fn not_a_at(text: &str, node: &Node, path: &str, wanted: &str) -> Problem {
+    at_node_named(
+        text,
+        node,
+        path,
         &format!("`{path}` is not {wanted}"),
         "the call needs a list or a mapping at this path",
         "check the path against the file's own keys",

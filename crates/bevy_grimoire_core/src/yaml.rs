@@ -111,7 +111,7 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T, Problem> {
 #[allow(clippy::result_large_err)]
 pub fn from_str<T: DeserializeOwned>(text: &str, path: &str) -> Result<T, Problem> {
     let walk = walk(text);
-    if let Some(site) = earlier_fault(indentation_tab(text, &walk.blocks), walk.site) {
+    if let Some(site) = first_fault(text, &walk) {
         return Err(refusal(path, site));
     }
     let deserializer = serde_yaml_ng::Deserializer::from_str(text);
@@ -214,16 +214,9 @@ pub(crate) struct Site {
 /// **The first fault in a file**, whichever reader met it first: the tab that indents a line, or the
 /// walk's own first refusal. One function, so the reader and an editor ask the same question and cannot
 /// answer it two ways.
-pub(crate) fn first_fault(text: &str, walk: Walk) -> Option<Site> {
+pub(crate) fn first_fault(text: &str, walk: &Walk) -> Option<Site> {
     let tab = indentation_tab(text, &walk.blocks);
-    earlier_fault(tab, walk.site)
-}
-
-/// **A refusal a caller outside this module builds**, when an edit would produce a file the reader
-/// refuses ([`crate::yaml_surgery`]): the field's path, what happened, why, and the fix.
-#[allow(clippy::result_large_err)]
-pub(crate) fn problem_at(path: &str, field: Option<String>, line: usize, what: &str, why: &str, fix: &str) -> Problem {
-    refusal(path, Site { what: what.to_owned(), field, line, column: 1, why: why.to_owned(), fix: fix.to_owned(), tab_report: false })
+    earlier_fault(tab, walk.site.clone())
 }
 
 /// **A refusal at a byte of the text**, with its own line and column: what a surgery says when it
@@ -252,6 +245,16 @@ fn column_of(text: &str, byte: usize) -> usize {
     let byte = byte.min(text.len());
     let start = text[..byte].rfind('\n').map_or(0, |at| at + 1);
     text[start..byte].chars().count() + 1
+}
+
+/// **A refusal about a place the file has no line for** — a path the file does not contain — says where
+/// the file is and nothing about where in it, rather than inventing `line 1, column 1`.
+#[allow(clippy::result_large_err)]
+pub(crate) fn problem_nowhere(path: &str, field: Option<String>, what: &str, why: &str, fix: &str) -> Problem {
+    Problem::with(
+        format!("{path} — {what}"),
+        Detail::default().at(Location::file(path.to_owned()).field(field)).because(why.to_owned()).fix(fix.to_owned()).docs(DOCS),
+    )
 }
 
 /// **A refusal that adopts a fault the reader found**, naming the field an edit asked about: the edit's
