@@ -2802,6 +2802,9 @@ fn editor_present(
     let Some(presenting) = presenting.as_mut() else {
         return Err("this editor has no presentation slot".to_owned());
     };
+    let Some(record) = project.as_deref() else {
+        return Err("no project is open, so this editor cannot record a hand-back".to_owned());
+    };
     // **The hand-back is kept for the session**, not only while the question is up: a wish made
     // after the person has answered, or after a later hand-back replaced this one, still cites it.
     //
@@ -2809,12 +2812,14 @@ fn editor_present(
     // screen: `Presenting` is a door's state and is reset when the door changes, so a number read off
     // it restarts at `present-1` on the next door — and two different hand-backs would share an id,
     // which the one-wish rule would then read as one hand-back (review M4).
-    let id = match handbacks.as_mut() {
-        Some(handbacks) => handbacks.ask(p.title.clone(), p.operation_ids.clone()),
-        // **No record, no session to cite.** The id still names the question, so the person reads
-        // the same `present-N` they would otherwise; a wish citing it is refused, truthfully.
-        None => "present-0".to_owned(),
+    // **A hand-back with no record is a hand-back no wish can cite**, and it is refused here rather
+    // than numbered `present-0`: an id nothing recorded is an id the agent would spend its one wish
+    // on and be told never happened, which is a worse answer than "this editor keeps no record".
+    let Some(handbacks) = handbacks.as_mut() else {
+        return Err("this editor keeps no hand-back record, so a wish could not cite this result"
+            .to_owned());
     };
+    let id = handbacks.ask(&record.root, p.title.clone(), p.operation_ids.clone());
     presenting.0 = Some(crate::present::Presented {
         id: id.clone(),
         title: p.title.clone(),
@@ -2888,16 +2893,38 @@ fn editor_wish(
     // **A note is cited by its map as well as its id**: a note's id is unique on its own map and
     // nowhere else, so `n3` on this map and `n3` on another are two different hand-backs. The
     // presentation's id needs no such care: the session numbers those.
-    let cited = match &p.after {
-        AfterRef::Presentation(id) => handbacks.as_ref().and_then(|h| h.cited(id, None).cloned()),
-        AfterRef::Note(id) => match open.as_deref().map(|open| open.map.name.as_str()) {
-            // **With no map open there is no note to cite**, and the refusal says so rather than
-            // looking one up on a map that is not there.
-            Some(map) => handbacks.as_ref().and_then(|h| h.cited(id, Some(map)).cloned()),
-            None => None,
-        },
+    let Some(project) = project.as_deref() else {
+        return Err("no project is open, so there is no hand-back record to cite".to_owned());
+    };
+    let root = project.root.as_path();
+    let (kind, cited) = match &p.after {
+        AfterRef::Presentation(id) => (
+            crate::present::HandBackKind::Presentation,
+            handbacks.as_ref().and_then(|h| h.cited(crate::present::HandBackKind::Presentation, id, root, None).cloned()),
+        ),
+        // **A note is on a map, and the map is the file its key carries** — not its name, which two
+        // projects both have. With no map open there is no note to look for.
+        AfterRef::Note(id) => {
+            let map = open.as_deref().map(|open| open.map_path.as_path());
+            (
+                crate::present::HandBackKind::Note,
+                handbacks
+                    .as_ref()
+                    .and_then(|h| h.cited(crate::present::HandBackKind::Note, id, root, map).cloned()),
+            )
+        }
     };
     let Some(cited) = cited else {
+        // **An id this project handed back before, in another project, says so**: the refusal names
+        // the project as what is wrong, because the id is real and the reason is not "never".
+        if let AfterRef::Presentation(id) | AfterRef::Note(id) = &p.after
+            && handbacks.as_ref().is_some_and(|h| h.elsewhere(kind, id, root).is_some())
+        {
+            return Err(format!(
+                "`{id}` was handed back in another project. A wish cites a hand-back of the project \
+                 it is about, whose operations and map it names."
+            ));
+        }
         return Err(match &p.after {
             AfterRef::Presentation(id) => format!(
                 "`{id}` was never handed back in this editor session. A presentation hands \
@@ -2905,8 +2932,8 @@ fn editor_wish(
             ),
             AfterRef::Note(id) => format!(
                 "`{id}` is not a note this editor session handed back. A note resolved in an \
-                 earlier session is not a hand-back anyone watched here, and a wish cites the \
-                 hand-back it follows."
+                 earlier session, or on another map, is not a hand-back anyone watched here, and \
+                 a wish cites the hand-back it follows."
             ),
         });
     };
@@ -2922,7 +2949,7 @@ fn editor_wish(
     let (title, operation_ids) = (cited.title.clone(), cited.operation_ids.clone());
     // **The context, in the editor's words.** The operations are named from the log's own lines, so
     // a wish says what the turn applied rather than what the agent called it.
-    let log = project.as_ref().map(|p| ops::read_entries(&ops::oplog_path(p))).unwrap_or_default();
+    let log = ops::read_entries(&ops::oplog_path(project));
     let applied: Vec<String> = operation_ids
         .iter()
         .filter_map(|id| log.iter().find(|entry| &entry.operation_id == id))

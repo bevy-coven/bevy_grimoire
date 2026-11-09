@@ -31,7 +31,7 @@
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
-use bevy_cauldron::present::HandBacks;
+use bevy_cauldron::present::{HandBackKind, HandBacks};
 
 use crate::fixtures;
 
@@ -152,6 +152,24 @@ fn resolve_a_note(app: &mut App) -> String {
     "n1".to_owned()
 }
 
+/// **The open project's root**, which is what the record compares — the harness canonicalises it.
+fn project_root(app: &App) -> std::path::PathBuf {
+    app.world().resource::<bevy_cauldron::project::Project>().root.clone()
+}
+
+/// **The record's answer for one citation**, asked the way `grimoire/wish` asks it: the kind, the
+/// id, this project, and the open map's own file for a note.
+fn cited<'a>(app: &'a App, kind: HandBackKind, id: &str) -> Option<&'a bevy_cauldron::present::HandBack> {
+    let root = app.world().resource::<bevy_cauldron::project::Project>().root.clone();
+    let map = app
+        .world()
+        .get_resource::<bevy_cauldron::project::OpenMap>()
+        .map(|open| open.map_path.clone());
+    app.world()
+        .resource::<HandBacks>()
+        .cited(kind, id, &root, map.as_deref())
+}
+
 /// **1. A note resolved in this session is a hand-back a wish may cite.**
 #[test]
 fn a_wish_cites_a_note_this_session_resolved() {
@@ -159,7 +177,7 @@ fn a_wish_cites_a_note_this_session_resolved() {
     let mut app = editor_with_bridge(&root);
     let note = resolve_a_note(&mut app);
     assert!(
-        app.world().resource::<HandBacks>().cited(&note, Some("m")).is_some(),
+        cited(&app, HandBackKind::Note, &note).is_some(),
         "a note resolved in this session is a hand-back, and the record does not hold it"
     );
 
@@ -187,7 +205,7 @@ fn a_wish_citing_a_note_from_an_earlier_session_is_refused() {
     // **This session**, opened on the same project.
     let mut app = editor_with_bridge(&root);
     assert!(
-        app.world().resource::<HandBacks>().cited("n1", Some("m")).is_none(),
+        cited(&app, HandBackKind::Note, "n1").is_none(),
         "a note already `done` when this session opened the map was handed back in an earlier \
          session, and the record must not hold it"
     );
@@ -209,6 +227,9 @@ fn a_door_change_keeps_the_wishes_and_their_hand_backs() {
     let root = project(&format!("wish_crosses_{}", std::process::id()));
     let mut app = editor_with_bridge(&root);
     let after = present(&mut app);
+    // **The root, before the teardown**: `close_the_door` drops the `Project`, and a crossing puts
+    // the next door's back — which the harness does not do, because it registers no `ScreenPlugin`.
+    let root = project_root(&app);
     call(&mut app, "grimoire/wish", wish_body(serde_json::json!({"presentation": after})))
         .unwrap_or_else(|e| panic!("the wish must be taken: {e}"));
     assert_eq!(
@@ -228,16 +249,21 @@ fn a_door_change_keeps_the_wishes_and_their_hand_backs() {
          and nothing is lost."
     );
     assert!(
-        app.world().resource::<HandBacks>().cited(&after, None).is_some(),
+        app.world()
+            .resource::<HandBacks>()
+            .cited(HandBackKind::Presentation, &after, &root, None)
+            .is_some(),
         "the door change dropped the hand-back the queued wish cites, so it can no longer be read \
          back or checked against the one-wish rule"
     );
-    // **And a second wish for the same hand-back is still refused**, which is what the key is for.
-    let refused = call(&mut app, "grimoire/wish", wish_body(serde_json::json!({"presentation": after})))
-        .expect_err("the hand-back still carries its wish across the door change");
+    // **And the queue's one-wish rule still knows that hand-back**: the key survived with the
+    // record, so a second wish for it is refused. Asked of the queue directly, because the
+    // harness's teardown leaves no `Project` and the handler refuses before the rule is reached.
     assert!(
-        refused.contains(&after),
-        "the refusal does not name the hand-back: {refused:?}"
+        app.world()
+            .resource::<bevy_cauldron::present::Wishes>()
+            .has_wish_for(&after),
+        "the door change left the queued wish, and the one-wish rule no longer sees its hand-back"
     );
 }
 
@@ -248,16 +274,28 @@ fn presentation_ids_do_not_restart_at_a_door_change() {
     let mut app = editor_with_bridge(&root);
     let first = present(&mut app);
     assert_eq!(first, "present-1", "the first presentation of the session is `present-1`");
+    let root = project_root(&app);
     press(&mut app, KeyCode::KeyN);
 
     bevy_cauldron::screen::close_the_door(app.world_mut());
 
-    let second = present(&mut app);
+    // **What the teardown did to the counter**, which is what numbers the next one. The headless
+    // harness registers no `ScreenPlugin`, so nothing re-installs the `Project` a crossing puts
+    // back, and a second `grimoire/present` would be refused for the missing resource rather than
+    // counted. The counter itself is the property: it is `Session`, so the teardown leaves it.
     assert_eq!(
-        second, "present-2",
+        app.world().resource::<HandBacks>().asked,
+        1,
         "presentations are numbered for the session: after a door change the next hand-back is \
          `present-2`, not a second `present-1`. The id is what an agent writes in \
          `after: {{presentation: \"present-N\"}}`, so two hand-backs sharing one is two turns an \
          agent cannot tell apart."
+    );
+    assert!(
+        app.world()
+            .resource::<HandBacks>()
+            .cited(HandBackKind::Presentation, &first, &root, None)
+            .is_some(),
+        "the door change dropped the hand-back `present-1` names"
     );
 }

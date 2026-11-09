@@ -15,7 +15,6 @@
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
 mod a_saved_arrangement_is_the_one_the_editor_shows;
-mod a_scripts_and_trees_shown_where_they_are_written;
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;
@@ -150,6 +149,7 @@ mod a_sequence_turn_is_on_the_receipt;
 mod a_slow_load_shows_a_spinner_then_progress_then_the_editor;
 mod a_snip_lists_the_stamped_rows_it_covers;
 mod a_script_edited_on_disk_takes_effect;
+mod a_scripts_and_trees_shown_where_they_are_written;
 mod a_stale_entry_is_dropped_on_its_second_refusal;
 mod a_stale_snip_is_swept_on_open;
 mod a_stamp_turns_by_the_unit_its_schema_names;
@@ -159,8 +159,9 @@ mod a_torn_oplog_line_does_not_swallow_the_next_entry;
 mod a_trigger_binds_to_a_notes_area;
 mod a_two_way_mount_is_seated_by_every_door;
 mod a_two_way_mount_seats_on_either;
-mod a_wish_cites_the_sessions_hand_back;
 mod a_weight_names_the_pieces_it_tunes;
+mod a_wish_cites_a_hand_back_of_its_own_map_and_project;
+mod a_wish_cites_the_sessions_hand_back;
 mod a_widget_is_clicked_by_its_label;
 mod the_colour_table_only_shrinks;
 mod the_commands_lenses_match_the_tree;
