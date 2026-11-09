@@ -17,6 +17,70 @@ pub fn editor_skin() -> GooeySkin {
     crate::ui_skin::from_ron(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.ron does not read: {e}"))
 }
 
+/// **The editor's skin for a theme** (UI-73, #251): its own measured colours for [`Theme::ToolDark`],
+/// and `bevy_gooey`'s preset for the two the editor does not ship.
+///
+/// Tool dark is the editor's own `editor_skin.ron` because the editor's darks are *measured*
+/// (`chrome.rs`'s elevation ladder and the ink contracts its census holds), and gooey's `tool()` is a
+/// different set of them. Parchment and High contrast are the library's presets whole: they are the
+/// accessibility answer, and a host that re-derived one would be a second, unchecked palette.
+///
+/// **The sizes stay the editor's.** [`GooeySkin::with_colours_of`](bevy_gooey::GooeySkin::with_colours_of)
+/// takes a preset's colours and keeps this skin's metrics, so changing the theme never moves a layout:
+/// a person who set 200% text and then asks for high contrast has both. The one exception is high
+/// contrast's **opaque** surfaces — its look is what makes a faint ground into a solid one — which
+/// `with_colours_of` carries with the rest of the colours.
+pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
+    use crate::settings::Theme;
+    match theme {
+        Theme::ToolDark => editor_skin(),
+        Theme::Parchment => editor_skin().with_colours_of(&GooeySkin::parchment()),
+        Theme::HighContrast => editor_skin().with_colours_of(&GooeySkin::high_contrast()),
+    }
+}
+
+/// **The theme and the text size reach the running skin** (UI-73, #251): the settings resolve into
+/// [`crate::settings::EditorSettings`], and this is how a choice in the settings screen — or a file a
+/// person edited — becomes the skin a widget draws from.
+///
+/// **The colours and the scale are written separately, and that is not tidiness.** `skin_for` builds
+/// the theme's colours at the editor's own sizes, so a person's 200% text would be reset by a theme
+/// change if the two were assigned together. Comparing before writing means a settled editor costs one
+/// comparison, which is the same rule every follower here follows.
+///
+/// It runs after the settings are read and before gooey styles, so a theme chosen this frame is the
+/// skin this frame's widgets are painted from.
+pub fn follow_the_theme(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    family: Option<Res<crate::family_host::FamilySettings>>,
+    mut skin: ResMut<GooeySkin>,
+    // The theme this system last applied, so a run that has only ever seen the default leaves the skin
+    // exactly as `EditorUiPlugin` put it, and a *return* to the default is still an application.
+    mut applied: Local<Option<crate::settings::Theme>>,
+) {
+    let Some(settings) = settings else { return };
+    // `family/bevy_gooey.ron` is the running skin (`ui_skin::apply_ui_skin`), so a project that ships
+    // one has said what its chrome looks like, and a person's theme setting must not overwrite it. The
+    // text size is the person's and still applies — `with_colours_of` never touches it.
+    if family.as_deref().is_some_and(|family| family.text.contains_key(crate::ui_skin::CRATE)) {
+        return;
+    }
+    // **A run that has only ever seen the default theme writes no colours.** `EditorUiPlugin` has
+    // already put the editor's own skin in as the running one, and the one state that must not move is
+    // the untouched default: removing a project's skin file clears the running skin to gooey's own
+    // default (`ui_skin::apply_ui_skin`), which `tests/family_gooey_skin.rs` pins. The scale is still
+    // the person's, so it is written below either way.
+    let first_default = settings.theme == crate::settings::Theme::default() && applied.is_none();
+    *applied = Some(settings.theme);
+    let mut want = if first_default { skin.clone() } else { skin_for(settings.theme) };
+    // The theme's colours *and* the person's scale, in one value: `skin_for` builds at the editor's
+    // own sizes, so the scale is written on top of them, never instead of them.
+    want.text_scale = settings.text_scale;
+    if *skin != want {
+        *skin = want;
+    }
+}
+
 /// **How the editor spells a chord: in words, `Cmd+Z`, never the symbol `⌘Z`** (`feedback-1794097488318`, and
 /// `feedback-1793927744511` before it; `bevy-coven/bevy_gooey#45`).
 ///
@@ -115,6 +179,15 @@ impl Plugin for EditorUiPlugin {
         app.add_systems(
             Update,
             follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
+        );
+        // **The theme and the text size reach the skin** (UI-73, #251), after the settings are read and
+        // after the project's skin file, so a project's `family/bevy_gooey.ron` still wins.
+        app.add_systems(
+            Update,
+            follow_the_theme
+                .after(crate::settings::sync_settings)
+                .after(crate::ui_skin::apply_ui_skin)
+                .before(bevy_gooey::GooeySystems::Style),
         );
         // Before gooey's colour motion, which leads every colour to the last one written: a button this paints
         // is that colour's target, and colours it writes after the motion would be a frame ahead of it.
