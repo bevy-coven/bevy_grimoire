@@ -764,11 +764,20 @@
       "app_version": "0.5.0",
       "record_version": 2,
       "kind": "bug",
-      "status": "triaged",
+      "status": "fixed",
       "host": "mac_air",
-      "reason": "the bar's chips are bare names, and a cd chip is offered on an agent tab where it types into the agent's prompt",
-      "commit": "",
-      "attempts": []
+      "reason": "every terminal-bar chip has a tooltip; the move chip reads Go to <folder> and is a shell's only (an agent tab typed it into the prompt)",
+      "commit": "0f671f50",
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "from the capture's frame (0.5.0 on mac_air): the bar's chips are bare names (omp connected, omp, cd lavender_hills, Agent, +, x) and no hover sentence exists; confirmed by the failing whole-application test on big"
+        }
+      ]
     }
   ]
 }
