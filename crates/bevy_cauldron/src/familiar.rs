@@ -110,7 +110,15 @@ impl Plugin for FamiliarPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AgentPause>().init_resource::<AgentActivity>().init_resource::<HandBackHere>().add_systems(
             Update,
-            (tick_the_menu_row, tick_the_familiar_row, follow_the_agent, follow_the_pause, follow_the_hand_back_switch, follow_the_hand_back)
+            (
+                tick_the_menu_row,
+                tick_the_familiar_row,
+                follow_the_agent,
+                follow_the_plan,
+                follow_the_pause,
+                follow_the_hand_back_switch,
+                follow_the_hand_back,
+            )
                 .run_if(in_state(Screen::Editor)),
         );
     }
@@ -134,6 +142,14 @@ pub enum FamiliarLine {
     /// What the agent handed back, and what the person answered.
     HandBack,
 }
+
+/// **The block's PLAN row** (UI-60b, #340): the open map's plan as the agent declared it with `plan_set`, each step with its
+/// status. It is not a [`FamiliarLine`]: the order of those is pinned, and this row reads a file rather than the editor's state.
+#[derive(Component)]
+pub struct FamiliarPlanLine;
+
+/// How often the PLAN row looks at the plan file again, in seconds: a `plan_set`, its undo and a hand edit all show.
+const PLAN_READ_SECS: f32 = 0.5;
 
 /// The block's pause switch.
 #[derive(Component)]
@@ -205,6 +221,12 @@ pub fn toggle_the_familiar(
                     });
                 });
             }
+            block.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|row| {
+                crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, "PLAN");
+                row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
+                    crate::chrome::row_value(col, "", crate::chrome::TEXT, FamiliarPlanLine);
+                });
+            });
             block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
             block.spawn((
                 toggle("Answer hand-backs here", here.0),
@@ -219,6 +241,33 @@ pub fn toggle_the_familiar(
         })
         .id();
     commands.entity(pane).insert_children(0, &[block]);
+}
+
+/// **The PLAN row follows the plan file**, read at most every [`PLAN_READ_SECS`]: the count, then each step with its status, or `no plan`.
+/// The same words the inspector's PLAN section prints ([`crate::ops_plan::plan_text`]).
+fn follow_the_plan(
+    time: Res<Time<Real>>,
+    open: Option<Res<OpenMap>>,
+    mut lines: Query<&mut Text, With<FamiliarPlanLine>>,
+    mut read_at: Local<Option<f32>>,
+) {
+    if lines.is_empty() {
+        *read_at = None;
+        return;
+    }
+    let now = time.elapsed_secs();
+    if read_at.is_some_and(|at| now - at < PLAN_READ_SECS) {
+        return;
+    }
+    let Some(open) = open else { return };
+    *read_at = Some(now);
+    let plan = bevy_grimoire_core::plan::Plan::load(&bevy_grimoire_core::plan::path_for_map(&open.map_path)).unwrap_or_default();
+    let said = crate::ops_plan::plan_text(&plan).join("\n");
+    for mut text in &mut lines {
+        if text.0 != said {
+            text.0.clone_from(&said);
+        }
+    }
 }
 
 /// **The Undo button presses Undo's chord** when the newest change is the agent's, and otherwise says why not.

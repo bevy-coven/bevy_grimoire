@@ -6753,28 +6753,24 @@ fn refresh_plan_list(
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
+            let lines = crate::ops_plan::plan_text(&now);
             if now.items.is_empty() {
-                p.spawn((Text::new("no plan"), TextColor(DIM), crate::chrome::font(crate::chrome::text::LABEL)));
+                p.spawn((Text::new(lines.join("\n")), TextColor(DIM), crate::chrome::font(crate::chrome::text::LABEL)));
                 return;
             }
-            let (_, _, done, _) = now.counts();
+            let mut lines = lines.into_iter();
             p.spawn((
-                Text::new(format!("plan: {done} of {} done", now.items.len())),
+                Text::new(lines.next().unwrap_or_default()),
                 TextColor(DIM),
                 crate::chrome::font(crate::chrome::text::LABEL),
             ));
-            for (at, item) in now.items.iter().enumerate() {
-                let (status, colour) = match item.status {
-                    Status::Pending => ("pending", TEXT),
-                    Status::Doing => ("doing", ACCENT),
-                    Status::Done => ("done", DIM),
-                    Status::Skipped => ("skipped", DIM),
+            for (item, line) in now.items.iter().zip(lines) {
+                let colour = match item.status {
+                    Status::Pending => TEXT,
+                    Status::Doing => ACCENT,
+                    Status::Done | Status::Skipped => DIM,
                 };
-                p.spawn((
-                    Text::new(format!("{} [{status}] {}", at + 1, item.text)),
-                    TextColor(colour),
-                    crate::chrome::font(crate::chrome::text::BODY),
-                ));
+                p.spawn((Text::new(line), TextColor(colour), crate::chrome::font(crate::chrome::text::BODY)));
             }
         });
     }
