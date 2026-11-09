@@ -140,6 +140,10 @@ fn main() -> AppExit {
     if let Some(file) = bevy_cauldron::settings::user_file() {
         app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     }
+    // **What this machine has** (#341): the terminal starts with the agent chosen on a machine that has
+    // `omp` on its `PATH`, and with a plain shell on one that does not. A file either layer states still
+    // wins. Only the binary asks, so a test's editor resolves from the built-in default alone.
+    app.insert_resource(bevy_cauldron::settings::MachineAgent::ask());
     // **What an agent tab needs** (`terminal_agent.rs`): the remote protocol's port, the MCP server beside
     // this binary, and a folder for the configs a launch writes. Only the binary names them, as with the
     // settings file, so no test hands an agent the real data directory.

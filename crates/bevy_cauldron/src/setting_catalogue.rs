@@ -210,7 +210,10 @@ fn cursor_at(index: usize) -> TerminalCursor {
     }
 }
 
-fn agent_index(agent: TerminalAgent) -> usize {
+/// Where an agent sits in [`TERMINAL_AGENTS`], for a screen that shows or writes the choice. Public
+/// because the Settings screen shows the terminal's effective agent (`settings_screen::refresh`) and
+/// that is the one place the option order is defined.
+pub fn agent_index(agent: TerminalAgent) -> usize {
     match agent {
         TerminalAgent::Off => 0,
         TerminalAgent::OhMyPi => 1,

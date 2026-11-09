@@ -480,6 +480,7 @@ mod the_caret_follows_wide_characters;
 mod the_editor_moves_on_springs;
 mod the_editor_skin_has_depth;
 mod the_terminal_agent_is_a_setting;
+mod a_machine_with_the_agent_installed_starts_with_it_chosen;
 mod an_agent_tab_runs_its_self_test;
 mod capture_feedback_1794024642593;
 mod capture_feedback_1794062374181;
