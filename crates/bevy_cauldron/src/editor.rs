@@ -2542,6 +2542,9 @@ impl Plugin for EditorPlugin {
                 ),
             );
         app.add_plugins(crate::ui::EditorUiPlugin);
+        // **The editor follows the Familiar** (AF-02, #358): a request the agent's two BRP
+        // handlers raise, the ease, and the ring round the changed pieces.
+        app.add_plugins(crate::follow::FollowPlugin);
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
@@ -6769,7 +6772,7 @@ fn on_notes_click(
         }
         match resolve_frame(&FrameTarget::Placements(ids.clone()), &project, &open, None) {
             Ok(frame) => {
-                apply_frame(&mut rig, &frame, aspect, &open);
+                apply_frame(&mut rig, &frame, aspect, &open, crate::view::FRAME_MARGIN);
                 state.status.note(format!("framed the {} piece(s) operation {} changed", ids.len(), button.op));
             }
             Err(why) => state.status.problem(why),
@@ -6810,7 +6813,7 @@ fn on_notes_click(
         };
         match resolve_frame(&target, &project, &open, None) {
             Ok(frame) => {
-                apply_frame(&mut rig, &frame, aspect, &open);
+                apply_frame(&mut rig, &frame, aspect, &open, crate::view::FRAME_MARGIN);
                 state.status.note(format!("framed note {} ({})", note.id, note.status()));
             }
             Err(why) => state.status.problem(why),
@@ -7826,11 +7829,15 @@ pub fn aspect_of(camera: &Camera) -> Option<f32> {
 /// **Frame the Map camera on a resolved box.** The one place a frame is written to the rig, so every caller
 /// frames the same way. Camera state only: the map does not change, so this is
 /// not an operation and nothing is logged or undone.
+///
+/// `margin` is passed through to [`crate::view::frame_box`]: [`crate::view::FRAME_MARGIN`] for a frame
+/// a person asked for, [`crate::follow::FOLLOW_MARGIN_FRAC`] for a change the editor is showing them.
 pub fn apply_frame(
     rig: &mut crate::view::Rig,
     framing: &Framing,
     aspect: f32,
     open: &OpenMap,
+    margin: f32,
 ) -> (Vec3, f32) {
     let (focus, height) = crate::view::frame_box(
         rig,
@@ -7838,6 +7845,7 @@ pub fn apply_frame(
         framing.size,
         aspect,
         crate::view::max_zoom(Some(open), aspect),
+        margin,
     );
     rig.focus = focus;
     rig.height = height;
@@ -7854,9 +7862,23 @@ pub struct MapFraming {
     last_size: Option<Vec2>,
 }
 
+impl MapFraming {
+    /// **The map has already been framed for this door**, so the one-shot entry frame never runs.
+    ///
+    /// **Called by the follow** (`crate::follow`): a change that arrives just after a crossing is framed
+    /// by the follow, and the entry frame — which is one shot per door and runs on the same frames —
+    /// would then put the camera back on the whole map and leave the person looking at a room instead of
+    /// the piece the agent just placed.
+    pub fn settle(&mut self) {
+        if !self.done {
+            self.done = true;
+        }
+    }
+}
+
 /// **Frame the whole map once, when the Map opens.** A map that cannot be framed is a refusal and goes
 /// in a problem, not a silent retry on every frame.
-fn frame_map_on_open(
+pub(crate) fn frame_map_on_open(
     mut framing: ResMut<MapFraming>,
     mut state: ResMut<EditorState>,
     mut rig: ResMut<crate::view::Rig>,
@@ -7887,7 +7909,7 @@ fn frame_map_on_open(
     framing.done = true;
     match resolve_frame(&FrameTarget::Map, &project, &open, None) {
         Ok(frame) => {
-            apply_frame(&mut rig, &frame, aspect, &open);
+            apply_frame(&mut rig, &frame, aspect, &open, crate::view::FRAME_MARGIN);
             // **The frame does not need the stack, and the author still does.** A map's own box is
             // its floor plan and its height span, so a bad stack no longer refuses the frame (B-018)
             // — but the reason it is bad is the one thing the author has to be told, and it used to
@@ -7942,7 +7964,7 @@ fn frame_on_home(
         );
         return;
     };
-    apply_frame(&mut rig, &frame, aspect, &open);
+    apply_frame(&mut rig, &frame, aspect, &open, crate::view::FRAME_MARGIN);
     state.status.note(format!(
         "framed {} ({:.0} x {:.0} m)",
         frame.what, frame.size.x, frame.size.z,

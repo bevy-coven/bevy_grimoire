@@ -1,0 +1,141 @@
+{
+  "name": "agent_follow",
+  "fps": 15,
+  "scale": 1,
+  "width": 960,
+  "crop": [
+    0,
+    0,
+    1088,
+    640
+  ],
+  "setup": [
+    {
+      "key": "KeyJ",
+      "mods": [
+        "ControlLeft"
+      ]
+    },
+    {
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "map_set_settings",
+        "parameters": {
+          "bounds": [
+            24.0,
+            3.0,
+            20.0
+          ]
+        }
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "seconds": 8.0
+    },
+    {
+      "seconds": 5.0
+    }
+  ],
+  "steps": [
+    {
+      "at": 0.0,
+      "cursor": [
+        420,
+        320
+      ],
+      "caption": "agent: grimoire_apply_operation places a pouffe in the far corner"
+    },
+    {
+      "at": 0.4,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -9.0,
+            -7.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 1.3,
+      "caption": "the camera eases onto it and the placed piece is ringed"
+    },
+    {
+      "at": 1.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            9.0,
+            -7.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 2.8,
+      "caption": "a second pouffe, in the opposite corner: the view follows again"
+    },
+    {
+      "at": 3.4,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            -9.0,
+            7.0
+          ]
+        }
+      }
+    },
+    {
+      "at": 4.3,
+      "caption": "a third, in the third corner: each change brings its own place into view"
+    },
+    {
+      "at": 4.9,
+      "mcp": "grimoire_undo_operation",
+      "args": {
+        "operation_id": null
+      }
+    },
+    {
+      "at": 5.8,
+      "caption": "agent: grimoire_undo_operation takes the third one back"
+    },
+    {
+      "at": 6.4,
+      "mcp": "grimoire_undo_operation",
+      "args": {
+        "operation_id": null
+      }
+    },
+    {
+      "at": 7.3,
+      "caption": "an undo frames where the change was, and the receipt says the Familiar placed pouffe@3"
+    },
+    {
+      "at": 7.9,
+      "mcp": "grimoire_apply_operation",
+      "args": {
+        "operation": "placement_add",
+        "parameters": {
+          "piece": "pouffe",
+          "at": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    }
+  ]
+}

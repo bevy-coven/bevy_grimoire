@@ -2772,14 +2772,45 @@ pub mod placement_add {
         }
         fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
             match Params::parse(params) {
+                // **A delta's change is seen in two places, and the smaller one is usually the answer.**
+                //
+                // The rows it ADDS are a put-back — an undo of a removal, or the rows a place
+                // replaced — and they stand where they stand. The rows it REMOVES are the piece the
+                // placement minted, which is still on the map when `shows` is read (it runs before
+                // the commit), and that is exactly where the undone change was. **Reading only the
+                // additions answered `MapWhole` for an undo of a place on empty floor**, so the
+                // follow framed the whole map and the clip showed the camera flying out to the room
+                // instead of back to the corner (AF-02, #358 — measured on the recording).
                 Ok(p) if p.delta.is_some() => {
-                    let rows: Vec<bevy_grimoire_core::map::Placed> = p
-                        .delta
-                        .iter()
-                        .flat_map(|d| d.add_placements.iter())
-                        .map(|a| a.row.clone())
-                        .collect();
-                    if rows.is_empty() { Shown::MapWhole } else { shown_rows(ctx, &rows) }
+                    let mut boxes = Vec::new();
+                    let mut ids: Vec<String> = Vec::new();
+                    for delta in p.delta.iter() {
+                        let added: Vec<bevy_grimoire_core::map::Placed> = delta
+                            .add_placements
+                            .iter()
+                            .map(|a| a.row.clone())
+                            .collect();
+                        if let Shown::Map { rect, placements } = shown_rows(ctx, &added) {
+                            boxes.push(rect);
+                            ids.extend(placements);
+                        }
+                        if let Shown::Map { rect, placements } =
+                            shown_placements(ctx, &delta.remove_placements)
+                        {
+                            boxes.push(rect);
+                            ids.extend(placements);
+                        }
+                    }
+                    match crate::ops::enclose(boxes) {
+                        Some(rect) => {
+                            ids.dedup();
+                            Shown::Map { rect, placements: ids }
+                        }
+                        // **Nothing on the map either way** is the map: an id this delta cannot
+                        // measure would be refused, so the place the change is seen is the map
+                        // rather than nothing at all.
+                        None => Shown::MapWhole,
+                    }
                 }
                 // **The id is minted at commit**, so the parameters name the box and no ids.
                 Ok(p) => {
