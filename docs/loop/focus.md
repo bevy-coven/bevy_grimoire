@@ -37,6 +37,8 @@ The lease is still **exclusive**, so HomeStill cannot search or convert while cl
 
 **Workers running** (`build-loop.md`, "Parallel workers"; owner, 2026-10-31: "we only want one item being worked on per loop, per repo; the multiple agents was just because we were trying to burn tokens"): **one**, `bevy_emerge_loop` (big since 2026-11-01; also owns #96's shared host and releases). `bevy_emerge_w2` to `bevy_emerge_w7` finished the pass in flight and were retired on 2026-10-30 16:20 and after; `bevy_emerge_w8` went away with sib mid-pass, so its last pass survives, if at all, only as a `refs/wiggum/pass-*` checkpoint in this repo. A `worker:<name>` label naming any of them is a stale claim, and the issue is free for `bevy_emerge_loop` to take. It takes the first unclaimed ready issue in this file's order. The setup is in `docs/loop/RUNNING-A-LOOP.md`, "What the loops are, today".
 
+**Fleet runs (owner, 2026-11-09).** "We have more tokens than we do time", and "only one agent working on a machine at a time": a manager session runs one DeepSeek worker per machine (mac_air, bmb, big) with `tools/loop/fleet/`. Each takes a cluster of three or four related issues in order; each issue is reviewed and pushed through the gate on a rolling basis. This supersedes "Workers running … one" for fleet runs; a Wiggum loop on this repo still runs one worker.
+
 **Ready now** (owner, 2026-10-30 04:20; this list outranks any earlier log line, so read it before you read the log):
 
 - **#105** (Rhai triggers) and **#106** (dialogue): slices 1–2 and 1–5 are on main. Their next slices are ready, and neither is claimed.

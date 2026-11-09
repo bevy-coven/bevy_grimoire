@@ -9,7 +9,7 @@ import json, re, sys
 d = json.load(sys.stdin)
 for a in d["result"]["agents"]:
     n = a.get("name") or a.get("agent") or ""
-    if re.fullmatch(r"w[0-9]+", n):
+    if re.fullmatch(r"w[a-z0-9]+", n):
         print("  %-8s %-10s %s" % (n, a.get("agent_status", "?"), a.get("pane_id", "")))'
   else
     echo "$host: unreachable ($(printf '%s' "$out" | head -1))"
@@ -17,6 +17,6 @@ for a in d["result"]["agents"]:
 done
 for host in ${FLEET_MACHINES:-local big bmb}; do
   echo "== results $host"
-  if [ "$host" = local ]; then cat /tmp/fleet/result-*.md 2>/dev/null; else ssh "$host" 'cat /tmp/fleet/result-*.md 2>/dev/null' 2>/dev/null; fi | grep -h '^FLEET-RESULT'
+  if [ "$host" = local ]; then cat /tmp/fleet/result-*.md 2>/dev/null; else ssh "$host" 'cat /tmp/fleet/result-*.md 2>/dev/null' 2>/dev/null; fi | grep -hE '^(FLEET-ISSUE|FLEET-RESULT)'
 done
 true
