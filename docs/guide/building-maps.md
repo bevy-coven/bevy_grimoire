@@ -53,6 +53,30 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **If it goes wrong:** A piece that does not match the search is not in the tree, so it cannot be selected from there until the search is cleared. The outliner lists placements only; compositions, people, triggers and notes are not in it yet.
 
+## Edit a note's text on several lines
+
+**Goal:** Correct a note you left, with room for more than one line.
+
+1. Open the Map door's INSPECTOR and find **NOTES**. Every note is a row, with its buttons under it.
+2. Press **Edit** on the note. A text area opens under the list holding the note's text.
+3. Type. Enter adds a line. Press Ctrl+Enter (Cmd+Enter on a Mac) to save, or move to another field.
+
+**What you see:** The note's row reads the new text, and the change is one `note_edit` in the log: Cmd+Z takes it back. Text left as it was saves nothing, and text cleared away removes the note. Writing a note on the map still saves on plain Enter.
+
+**If it goes wrong:** Moving to another field saves too, so press Edit again to change it once more. A refused edit (the note is gone from the map) says why on the status line and writes nothing.
+
+## Tune a game's data in the DATA table
+
+**Goal:** Change one number of a game's own tuning file, and see what you changed.
+
+1. List the file in `assets/grimoire/data.ron`, as the game's guide describes. Without that file the DATA section says `no data files registered (data.ron)` and shows no table.
+2. In the INSPECTOR, find **DATA**. Each leaf of each registered file is a row of the table: file, path and value. Click a column's title to sort by it.
+3. Open a row with Enter or a double click. A text field opens over the value. Type the new value and press Enter.
+
+**What you see:** The table shows the new value, the file holds it, and the log has one `data_set` line, which Cmd+Z takes back. A value the file's bounds refuse is not written; the status line says why.
+
+**If it goes wrong:** The DATA field above the table still takes `<file> <path> <value>` and writes through the same `data_set`.
+
 ## Pick a tool from the toolbar
 
 **Goal:** Arm Place, Move, Erase, Clone or Run without a key.
