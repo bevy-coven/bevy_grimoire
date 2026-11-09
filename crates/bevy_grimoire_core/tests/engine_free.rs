@@ -78,6 +78,14 @@ use std::path::{Path, PathBuf};
 /// MCP server must agree on: core is the one crate both depend on. It reads environment variables and the
 /// platform's folder API, holds no engine type, and pulls only `dirs-sys` and `option-ext`. Added with the
 /// approved plan for #306 (a new row, nothing loosened).
+///
+/// **`serde_yaml_ng` and `saphyr-parser`** (#363, GD-01) are the YAML reader every project file goes
+/// through (`yaml.rs`), and the event parser whose reported positions make a refusal name a line and a
+/// field path. Both are pure data crates: `serde_yaml_ng` is `serde` plus a `libyaml` port,
+/// `saphyr-parser` is `arraydeque` and `thiserror`, and neither holds an engine type, opens a window or
+/// touches a GPU. The alternative was a hand-written YAML parser, which is a far larger and far less
+/// tested piece of code than either, for a format whose corner cases (block scalars, quoting rules, flow
+/// collections) are the whole job. Added as assumed owner exceptions (two new rows, nothing loosened).
 const ALLOWED_DEPS: &[&str] = &[
     "serde",
     "serde_json",
@@ -88,6 +96,8 @@ const ALLOWED_DEPS: &[&str] = &[
     "bevy_grimoire_solver",
     "serde_path_to_error",
     "dirs",
+    "serde_yaml_ng",
+    "saphyr-parser",
 ];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so

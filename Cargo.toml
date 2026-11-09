@@ -18,6 +18,14 @@ ron = "0.12.2"
 # The path to the field a refused file is wrong at (`placements[3].yaw`), which ron names only for a
 # missing field (#200). Read only on a refusal, to say where, never to decide.
 serde_path_to_error = "0.1"
+# **The YAML reader and writer, and the event parser that says where a node stands.** `serde_yaml_ng`
+# reads a project file (GD-01, #363, `bevy_grimoire_core/src/yaml.rs`) and follows YAML 1.2, so only
+# `true` and `false` are booleans. Its reader resolves an anchor silently and reports a duplicate key
+# with no position, so the text is also walked by `saphyr-parser`, which reports every node's path and
+# position: that walk is where a refusal is refused, and `yaml_surgery` reads its spans to edit one leaf
+# without touching a comment. Both are pure data crates with no engine in them.
+serde_yaml_ng = "0.10"
+saphyr-parser = "0.3"
 rand = "0.10"
 rand_chacha = "0.10"
 # **The terminal's engine, and the only new crate the in-editor terminal costs.** A pure-Rust VTE
