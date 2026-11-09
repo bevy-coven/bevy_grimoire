@@ -280,6 +280,11 @@ pub struct TerminalAgentStatusChip;
 #[derive(Component)]
 pub struct TerminalAgentCard;
 
+/// **A row of the self-test card**, and which of the four checks it draws, so a theme edit can repaint
+/// its ink without rebuilding the card: `None` is the card's own heading.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct TerminalAgentCardRow(pub Option<usize>);
+
 /// What both of the agent's LEDs are called, beside the dot and before its state word (`Agent off`, `Agent busy`, `Agent live`,
 /// `Agent failed`). It is also the LED's accessible name, so a reader of the screen hears what is live and not only that
 /// something is.
@@ -469,6 +474,11 @@ impl Plugin for TerminalPanePlugin {
                 )
                     .run_if(the_pane_is_up),
             )
+            // **The agent tab's ink is the running skin's** (UI-02, #210, slice 6a). It runs after every
+            // spawn this frame, in `PostUpdate` — the one place a `TextColor` written here is what the
+            // frame draws — so a card built a moment ago and a card built before a theme edit both land
+            // on the skin's colours, and a rebuild never shows the editor's own darks for a frame.
+            .add_systems(PostUpdate, dress_the_agent_tab.run_if(the_pane_is_up))
             // The two chords that are the pane's own. Read from `ButtonInput` here rather than
             // through `keys::BINDINGS`: the census is the table of what a *tab* does, and a chord
             // that belongs to the window is the case `command_palette::chords` already set the
@@ -852,6 +862,9 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
         let folder = project_folder(terminal);
         // **The drawn agent tab's status**, first among the chips, so it reads as the tab's state.
         if let Some(post) = post {
+            // **The shipped palette at spawn; [`dress_the_agent_tab`] repaints it from the running
+            // skin** (UI-02, #210, slice 6a) before the frame draws, so a project's skin reaches the
+            // bar and a rebuild never flashes the editor's own darks.
             let (label, ink) = post.chip();
             chrome::chip(
                 bar,
@@ -1125,9 +1138,14 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
 /// **The self-test card**: the harness, then each check's word, name and what it found, in the check's
 /// ink, and the agent's LED as the verdict they add up to. Floats where the find box does, and the pointer goes through it to
 /// the shell.
+///
+/// **The ink is the running skin's** (UI-02, #210, slice 6a): every row carries
+/// [`TerminalAgentCardRow`], so [`dress_the_agent_tab`] repaints the card when a project's skin changes
+/// without the card being rebuilt.
 fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::terminal_agent::AgentPost) {
-    let row = |words: String, ink: Color| {
-        (Text::new(words), TextColor(ink), chrome::font(chrome::text::LABEL), Pickable::IGNORE)
+    let ink = crate::terminal_agent::AgentInk::of(None);
+    let row = |words: String, ink: Color, which: TerminalAgentCardRow| {
+        (Text::new(words), TextColor(ink), chrome::font(chrome::text::LABEL), which, Pickable::IGNORE)
     };
     let card = commands
         .spawn((
@@ -1141,9 +1159,13 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
             Name::new("terminal agent card"),
         ))
         .with_children(|card| {
-            card.spawn(row(format!("Agent self test · {}", post.harness.name()), chrome::TEXT));
-            for (label, check) in crate::terminal_agent::CHECK_LABELS.iter().zip(&post.checks) {
-                card.spawn(row(format!("{} {label}: {}", check.mark(), check.detail()), check.ink()));
+            card.spawn(row(format!("Agent self test · {}", post.harness.name()), ink.read, TerminalAgentCardRow(None)));
+            for (index, (label, check)) in crate::terminal_agent::CHECK_LABELS.iter().zip(&post.checks).enumerate() {
+                card.spawn(row(
+                    format!("{} {label}: {}", check.mark(), check.detail()),
+                    check.ink(&ink),
+                    TerminalAgentCardRow(Some(index)),
+                ));
             }
             card.spawn((bevy_gooey::led(AGENT_LED_LABEL, post.led()), TerminalAgentCardLed));
         })
@@ -1372,6 +1394,56 @@ fn forget_a_find_box_that_went(
 /// Give the keyboard back when the door closes.
 fn give_the_keyboard_back(mut focus: ResMut<TerminalFocus>) {
     focus.release();
+}
+
+/// **The agent tab's ink follows the running skin** (UI-02, #210, slice 6a).
+///
+/// The card and the bar's chip are rebuilt when their *content* moves — a check passed, a tab
+/// changed — which is exactly why their ink cannot be read once at spawn: a project's
+/// `family/bevy_gooey.ron` edited while the card stands reached the panels, the list rows and the
+/// status band, and left this tab in the editor's darks. This is the split
+/// [`crate::chrome::dim_the_ground`] makes for a panel's ground: the spawn paints what it always
+/// painted, and this system reads the skin, so a card built before an edit follows it.
+///
+/// It compares before writing, so a settled editor costs one comparison per row.
+fn dress_the_agent_tab(
+    terminal: Res<Terminal>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+    chips: Query<Entity, With<TerminalAgentStatusChip>>,
+    mut rows: Query<(&TerminalAgentCardRow, &mut TextColor)>,
+    mut chips_text: Query<(&mut Text, &mut TextColor), Without<TerminalAgentCardRow>>,
+    children: Query<&Children>,
+) {
+    let ink = crate::terminal_agent::AgentInk::of(skin.as_deref());
+    let post = terminal.tab().and_then(|tab| tab.agent());
+
+    // The chip: its words and its ink are one answer, so both come from the post.
+    for chip in &chips {
+        let Ok(kids) = children.get(chip) else { continue };
+        for part in kids.iter() {
+            let Ok((mut text, mut colour)) = chips_text.get_mut(part) else { continue };
+            let said = post.map_or_else(String::new, |post| post.chip_words().to_owned());
+            let want = post.map_or(ink.muted, |post| post.chip_ink(&ink));
+            if text.0 != said {
+                text.0 = said;
+            }
+            if colour.0 != want {
+                colour.0 = want;
+            }
+        }
+    }
+
+    // The card's rows: the heading, then one per check, each in the ink of its own state.
+    for (which, mut colour) in &mut rows {
+        let want = match (which.0, post) {
+            (None, _) => ink.read,
+            (Some(index), Some(post)) => post.checks.get(index).map_or(ink.muted, |check| check.ink(&ink)),
+            (Some(_), None) => ink.muted,
+        };
+        if colour.0 != want {
+            colour.0 = want;
+        }
+    }
 }
 
 /// Redraw the bar after the session list changed.
