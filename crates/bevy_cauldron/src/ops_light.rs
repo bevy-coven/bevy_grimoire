@@ -12,7 +12,7 @@ use bevy::math::IVec2;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -127,6 +127,9 @@ impl LightMap {
 impl Operation for LightMap {
     fn name(&self) -> &'static str {
         "light_map"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]

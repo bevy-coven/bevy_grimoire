@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_named};
 use crate::project::Project;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -155,6 +155,12 @@ impl TreeEdit {
 impl Operation for TreeEdit {
     fn name(&self) -> &'static str {
         "tree_edit"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("name").and_then(serde_json::Value::as_str) {
+            Some(name) => shown_named(ctx, &format!("assets/grimoire/trees/{name}.tree.ron")),
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["trees"]

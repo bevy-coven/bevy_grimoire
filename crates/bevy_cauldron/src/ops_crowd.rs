@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::crowd_preview::{Area, Preview, Spec};
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 /// Steps a run may take when the caller names no limit: 5 minutes of walking at the default 0.1 s step.
 const DEFAULT_MAX_STEPS: usize = 3000;
@@ -69,6 +69,9 @@ fn report_json(r: &crate::crowd_preview::Report) -> serde_json::Value {
 impl Operation for CrowdPreview {
     fn name(&self) -> &'static str {
         "crowd_preview"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]

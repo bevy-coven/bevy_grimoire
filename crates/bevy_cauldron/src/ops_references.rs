@@ -12,7 +12,7 @@ use bevy_grimoire_core::references::{self, Reference, References};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 /// **A reference put back where it stood**, for the undo of a removal.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -151,6 +151,10 @@ pub struct ReferenceSet;
 impl Operation for ReferenceSet {
     fn name(&self) -> &'static str {
         "reference_set"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        // **A reference image is drawn over the map**, so that is where a person sees it.
+        Shown::MapWhole
     }
     fn writes(&self) -> &'static [&'static str] {
         &["references"]

@@ -10,7 +10,7 @@ use bevy_grimoire_core::family;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_placement};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -94,6 +94,12 @@ impl FamilySet {
 impl Operation for FamilySet {
     fn name(&self) -> &'static str {
         "family_set"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("crate").and_then(serde_json::Value::as_str) {
+            Some(section) => Shown::Settings { section: section.to_owned() },
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["family"]
@@ -225,6 +231,12 @@ fn check_conversation(_script: &std::path::Path, _p: &PieceParams) -> Result<(),
 impl Operation for PlacementSetFamily {
     fn name(&self) -> &'static str {
         "placement_set_family"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => shown_placement(ctx, id),
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]

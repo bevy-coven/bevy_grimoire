@@ -20,7 +20,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 use crate::ops_people::People;
 
 /// Who a trigger is for. Everyone, when all three are empty.
@@ -384,6 +384,17 @@ fn check(_ctx: &Ctx, _t: &Trigger, _people: &People, _saved: &Scripts) -> Result
 impl Operation for TriggerSet {
     fn name(&self) -> &'static str {
         "trigger_set"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **A trigger is a file beside the map**, which the scripts panel lists.
+        Shown::File {
+            path: params
+                .get("map")
+                .and_then(serde_json::Value::as_str)
+                .map(|m| format!("assets/grimoire/scripts/{m}.ron"))
+                .unwrap_or_else(|| "assets/grimoire/scripts".to_owned()),
+            lines: None,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["scripts"]

@@ -19,7 +19,7 @@ use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 /// The games this process started, by project root: one per project.
 static RUNNING: Mutex<Option<HashMap<PathBuf, Child>>> = Mutex::new(None);
@@ -117,6 +117,9 @@ impl Operation for Play {
     fn name(&self) -> &'static str {
         "play"
     }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
+    }
     fn writes(&self) -> &'static [&'static str] {
         &[]
     }
@@ -180,6 +183,9 @@ pub struct PlayStop;
 impl Operation for PlayStop {
     fn name(&self) -> &'static str {
         "play_stop"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]

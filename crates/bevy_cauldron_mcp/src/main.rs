@@ -683,7 +683,8 @@ impl Grimoire {
         name = "grimoire_preview_operation",
         description = "What an operation would change, and nothing changed: the map, the data file \
                        and the operation log are all left alone. Use this to check a proposal \
-                       before applying it. Returns what would change, or the refusal.",
+                       before applying it. Returns what would change and shown, where the change \
+                       would be seen (the place the apply will name), or the refusal.",
         annotations(
             title = "Preview an editor operation",
             read_only_hint = true,
@@ -730,8 +731,10 @@ impl Grimoire {
                        removing a weight list is how an undo restores one, so read that field \
                        rather than assuming a weight did something. \
                        The operation replaces the values it names rather than adding to them, \
-                       so it is marked destructive. Take a change back with \
-                       grimoire_undo_operation and the returned id.",
+                       so it is marked destructive. The answer's shown field says where the \
+                       change is seen — a box on the map, a library piece, a composition, a rig, \
+                       a note, a project file, or nowhere — which is what the person's view \
+                       follows. Take a change back with grimoire_undo_operation and the returned id.",
         annotations(
             title = "Apply an editor operation",
             read_only_hint = false,
@@ -1709,7 +1712,8 @@ impl Grimoire {
                        takes back — and the answer says how many changes it took with took_back. \
                        turn refuses when nothing has been presented, or when the presentation named \
                        no operations. \
-                       Returns the undo's own operation id and what it set.",
+                       Returns the undo's own operation id, what it set, and shown: where the \
+                       inverse's change is seen, which for a put-back is where the piece stands again.",
         annotations(
             title = "Undo an editor operation",
             read_only_hint = false,

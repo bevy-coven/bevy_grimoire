@@ -14,7 +14,7 @@ use serde_json::json;
 
 use bevy_grimoire_core::composition::Stamped;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, point_box};
 use crate::project::Project;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -185,6 +185,28 @@ impl StampAdd {
 impl Operation for StampAdd {
     fn name(&self) -> &'static str {
         "stamp_add"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match Params::parse(params) {
+            Ok(p) => {
+                if let Some(at) = p.at {
+                    let id = p.id.clone().or_else(|| p.remove.clone());
+                    return Shown::Map {
+                        rect: point_box((at[0], at[1])),
+                        placements: id.into_iter().collect(),
+                    };
+                }
+                // **A put-back names the stamp it restores**, which is where it stood.
+                if let Some(restore) = p.restore {
+                    return Shown::Map {
+                        rect: point_box(restore.stamp.at),
+                        placements: vec![restore.stamp.id],
+                    };
+                }
+                Shown::MapWhole
+            }
+            Err(_) => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]

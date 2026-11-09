@@ -10,7 +10,7 @@ use bevy_grimoire_core::plan::{self, Plan, PlanItem, Status};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_file};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -147,6 +147,13 @@ impl PlanSet {
 impl Operation for PlanSet {
     fn name(&self) -> &'static str {
         "plan_set"
+    }
+    fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        // **The plan is a file beside the map**, which the checklist panel renders.
+        match ctx.open.as_ref() {
+            Some(open) => shown_file(ctx, &bevy_grimoire_core::plan::path_for_map(&open.map_path), None),
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["plan"]

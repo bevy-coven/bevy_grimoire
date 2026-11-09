@@ -14,7 +14,7 @@ use serde_json::json;
 
 use crate::editor::EditorState;
 use crate::fixture::Fixture;
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 use crate::project::{OpenMap, Project};
 use crate::view::Rig;
 
@@ -92,6 +92,9 @@ impl LightPoolBudget {
 impl Operation for LightPoolBudget {
     fn name(&self) -> &'static str {
         "light_pool"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]

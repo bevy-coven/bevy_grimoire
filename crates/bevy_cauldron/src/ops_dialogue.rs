@@ -11,7 +11,7 @@ use bevy_speech_bubbles::{DialogueScript, Node};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -96,6 +96,9 @@ impl DialoguePreview {
 impl Operation for DialoguePreview {
     fn name(&self) -> &'static str {
         "dialogue_preview"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]

@@ -213,6 +213,220 @@ pub enum Undo {
     Snapshot,
 }
 
+/// **Where the change an operation makes can be seen** (AF-01, #357).
+///
+/// **The editor follows the Familiar**: after every change an agent makes, the person's view goes to
+/// it. That needs one answer per operation to *where the change is*, and it comes from the operation
+/// itself — [`Outcome`] says what changed and not where to look, and most changes are not on the map
+/// at all (a library piece, a composition, a rig, a data file, a note).
+///
+/// # One vocabulary, three readers
+///
+/// The answer is what `grimoire/operation_apply`, `operation_preview` and `operation_undo` return as
+/// `shown`, and what the follow (#358, #359) frames or opens. **It is serialized with a `kind` tag**,
+/// so an agent reads the same words a person's editor acts on.
+///
+/// # It is a place, not an effect
+///
+/// Every variant names something a person can *look at*, and `Map`'s rectangle is in **map metres** —
+/// the coordinates a [`crate::editor::FrameTarget::Rect`] takes. Ids are the things to outline, so a
+/// follow can draw the change rather than only point at it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Shown {
+    /// **A place on the map**: map metres, and the ids to outline.
+    ///
+    /// `placements` is empty when the id is not known before the change — a placement's id is minted
+    /// at commit, so the answer names the box it will land in and no ids.
+    Map {
+        /// `[x0, z0, x1, z1]`, map metres, with `x0 <= x1` and `z0 <= z1`.
+        rect: [f32; 4],
+        /// The placement ids inside it that the change touched.
+        placements: Vec<String>,
+    },
+    /// **The whole map**: a change whose extent the parameters do not name (a flood fill, a terrain
+    /// field, the map's own settings).
+    MapWhole,
+    /// **One library piece**, by the id the Meshes shelf names it.
+    Piece { id: String },
+    /// **One tile** — a library piece's own lattice, on the Tiles tab.
+    Tile { id: String },
+    /// **One composition**, on the Compose tab.
+    Composition { id: String },
+    /// **One rig**, on the Anim tab.
+    Rig { id: String },
+    /// **A project file**, and the lines changed when the operation knows them (GD-14, #376).
+    File {
+        /// Relative to the project root, the way a refusal names one: `assets/grimoire/vocab.ron`.
+        path: String,
+        /// `[first, last]`, 1-based, when the changed span is known.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lines: Option<[u32; 2]>,
+    },
+    /// **One note**, in the Notes panel and on the map where it was drawn.
+    Note { id: String },
+    /// **One section of the settings**, by the name the screen lists it under: a family crate's id, or
+    /// `packs` for the kit's own policy.
+    Settings { section: String },
+    /// **Nothing a person can look at.** Pinned by name in
+    /// `tests/an_operation_says_where_its_change_is_seen.rs`, so a new one is a visible decision.
+    Nowhere,
+}
+
+/// **How wide the box round a point is**, in metres, when the thing there has no measurement of its
+/// own — an unmeasured piece, a person's marker, a spring. **A rect of zero width is not a place**:
+/// the framing code refuses one, so an answer that could not be framed is not an answer.
+pub const POINT_BOX_M: f32 = 1.0;
+
+/// **The map-space box a piece covers**, standing at `at`, turned by `yaw`, tipped by `tip`.
+///
+/// The floor shadow of [`bevy_grimoire_core::descriptor::tipped_footprint`], turned the way the piece
+/// is drawn so a turned wall's box is wide instead of tall. `None` for a piece with no measurement.
+pub fn footprint_rect(
+    d: &bevy_grimoire_core::descriptor::Descriptor,
+    at: (f32, f32),
+    yaw: f32,
+    tip: (u8, u8),
+) -> Option<[f32; 4]> {
+    let (w, depth) = bevy_grimoire_core::descriptor::tipped_footprint(d, tip)?;
+    let turn = bevy_grimoire::draw_yaw(d, yaw).to_radians();
+    let (sin, cos) = turn.sin_cos();
+    let mut lo = (f32::INFINITY, f32::INFINITY);
+    let mut hi = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for (sx, sz) in [(-0.5, -0.5), (-0.5, 0.5), (0.5, -0.5), (0.5, 0.5)] {
+        let (x, z) = (sx * w, sz * depth);
+        // Bevy's yaw about +Y turns +X toward −Z. A box's axis-aligned bounds are the same either
+        // way round, so this is the ordinary rotation and the sign convention cannot bite.
+        let (rx, rz) = (x * cos - z * sin, x * sin + z * cos);
+        lo = (lo.0.min(at.0 + rx), lo.1.min(at.1 + rz));
+        hi = (hi.0.max(at.0 + rx), hi.1.max(at.1 + rz));
+    }
+    lo.0.is_finite().then_some([lo.0, lo.1, hi.0, hi.1])
+}
+
+/// **The box round a point on the map**, [`POINT_BOX_M`] wide.
+pub fn point_box(at: (f32, f32)) -> [f32; 4] {
+    let half = POINT_BOX_M * 0.5;
+    [at.0 - half, at.1 - half, at.0 + half, at.1 + half]
+}
+
+/// **The one box round a set of boxes**: their union. `None` for an empty set.
+pub fn enclose(boxes: impl IntoIterator<Item = [f32; 4]>) -> Option<[f32; 4]> {
+    let mut out: Option<[f32; 4]> = None;
+    for b in boxes {
+        out = Some(match out {
+            None => b,
+            Some(o) => [o[0].min(b[0]), o[1].min(b[1]), o[2].max(b[2]), o[3].max(b[3])],
+        });
+    }
+    out
+}
+
+/// **The box a placement row covers**, read from its own `at`, `yaw` and `tip` and the library's
+/// measurement of its descriptor. [`POINT_BOX_M`] when the piece has no measurement.
+pub fn row_box(
+    library: &bevy_grimoire_core::library::Library,
+    row: &bevy_grimoire_core::map::Placed,
+) -> [f32; 4] {
+    library
+        .get(&row.descriptor)
+        .and_then(|d| footprint_rect(d, row.at, row.yaw, row.tip))
+        .unwrap_or_else(|| point_box(row.at))
+}
+
+/// **The box a run's path covers**: its `from`, its `to`, and every corner between them, each grown to
+/// [`POINT_BOX_M`] so the posts a run lays are inside it. `None` for a value that does not name a path.
+pub fn run_span_of(run: &serde_json::Value) -> Option<[f32; 4]> {
+    let path = run.get("run").unwrap_or(run);
+    let point = |v: Option<&serde_json::Value>| -> Option<(f32, f32)> {
+        let v = v?;
+        Some((v.get(0)?.as_f64()? as f32, v.get(1)?.as_f64()? as f32))
+    };
+    let mut points = vec![point(path.get("from"))?, point(path.get("to"))?];
+    for corner in path.get("corners").and_then(|c| c.as_array()).into_iter().flatten() {
+        points.extend(point(corner.get("at")));
+    }
+    enclose(points.into_iter().map(point_box))
+}
+
+/// **A project file, as a `Shown` names one**: relative to the project's root, the way a refusal does.
+pub(crate) fn shown_file(ctx: &Ctx, path: &std::path::Path, lines: Option<[u32; 2]>) -> Shown {
+    let relative = ctx
+        .root_or_project()
+        .and_then(|root| path.strip_prefix(root).ok().map(|p| p.to_string_lossy().replace('\\', "/")))
+        .unwrap_or_else(|| path.to_string_lossy().replace('\\', "/"));
+    Shown::File { path: relative, lines }
+}
+
+/// **A project file named the way the project's own files are**: a path relative to the root.
+pub(crate) fn shown_named(ctx: &Ctx, relative: &str) -> Shown {
+    match ctx.root_or_project() {
+        Some(root) => shown_file(ctx, &root.join(relative), None),
+        None => Shown::File { path: relative.to_owned(), lines: None },
+    }
+}
+
+/// **The box a placement named by this id covers now**, and the id, or [`Shown::MapWhole`] when there
+/// is no such placement on the open map — a removal has already taken it off, so the id is not there
+/// to measure.
+///
+/// **The one reader for every placement-addressed operation**, so a turn, a lift and a tip name their
+/// box the same way and a new one cannot get it wrong.
+pub(crate) fn shown_placement(ctx: &Ctx, id: &str) -> Shown {
+    let Some(open) = ctx.open.as_ref() else {
+        return Shown::MapWhole;
+    };
+    let Some(row) = open.map.placements.iter().find(|p| p.id == id) else {
+        return Shown::MapWhole;
+    };
+    let rect = match ctx.project.as_ref() {
+        Some(project) => row_box(&project.library, row),
+        None => point_box(row.at),
+    };
+    Shown::Map { rect, placements: vec![id.to_owned()] }
+}
+
+/// **The box a set of placement ids covers now**, and the ids that are still on the map.
+pub(crate) fn shown_placements(ctx: &Ctx, ids: &[String]) -> Shown {
+    let Some(open) = ctx.open.as_ref() else {
+        return Shown::MapWhole;
+    };
+    let mut boxes = Vec::new();
+    let mut present = Vec::new();
+    for id in ids {
+        let Some(row) = open.map.placements.iter().find(|p| &p.id == id) else {
+            continue;
+        };
+        boxes.push(match ctx.project.as_ref() {
+            Some(project) => row_box(&project.library, row),
+            None => point_box(row.at),
+        });
+        present.push(id.clone());
+    }
+    // **Nothing on the map is still the map**: an id the map does not hold would be refused, and the
+    // place a change to it would be seen is the map rather than nothing at all.
+    match enclose(boxes) {
+        Some(rect) => Shown::Map { rect, placements: present },
+        None => Shown::MapWhole,
+    }
+}
+
+/// **The box a set of map rows covers**, for an operation whose answer is the rows it touched.
+pub(crate) fn shown_rows(ctx: &Ctx, rows: &[bevy_grimoire_core::map::Placed]) -> Shown {
+    let Some(project) = ctx.project.as_ref() else {
+        return Shown::MapWhole;
+    };
+    if rows.is_empty() {
+        return Shown::MapWhole;
+    }
+    let boxes: Vec<[f32; 4]> = rows.iter().map(|r| row_box(&project.library, r)).collect();
+    let ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+    match enclose(boxes) {
+        Some(rect) => Shown::Map { rect, placements: ids },
+        None => Shown::MapWhole,
+    }
+}
+
 /// **A refusal — the editor could not do what was asked.**
 ///
 /// **One type, for both front ends.** A key handler and an agent get the *same* refusal, from
@@ -462,6 +676,12 @@ pub enum Applied {
         /// variants differ by four times their size costs every match on it the size of the
         /// larger arm, and the refusal arm is on the hot path of every refused call.
         entry: Box<Entry>,
+        /// **Where a person can see the change** ([`Operation::shows`], AF-01, #357).
+        ///
+        /// **Computed before the commit**, from the parameters — which is what makes a removal name
+        /// where the piece stood, a place name the box its minted id will land in, and a preview name
+        /// the same place its apply did.
+        shown: Shown,
     },
     /// **It could not.** The refusal says why.
     Refused(Refusal),
@@ -625,6 +845,21 @@ pub trait Operation: 'static {
     fn rng_seed(&self, _params: &serde_json::Value) -> Option<u64> {
         None
     }
+
+    /// **Where the change these parameters make can be seen** (AF-01, #357).
+    ///
+    /// **No default, so a new operation cannot skip it** — the same rule [`Self::writes`] follows
+    /// (#198). `Shown::Nowhere` is what an operation says when its change has nothing a person can
+    /// look at, and that answer is pinned by name in
+    /// `tests/an_operation_says_where_its_change_is_seen.rs`, so saying it is a decision a reader can
+    /// see rather than an omission nobody notices.
+    ///
+    /// **Pure, and computed from the parameters before the commit** — like [`Self::plan`], for the
+    /// same reason. A preview and its apply therefore name the same place, a person watching the
+    /// Familiar sees what is about to change before it changes, and a removal names where the piece
+    /// stood rather than nowhere. An undo needs nothing of its own: it shows what its inverse's
+    /// parameters show, because an inverse *is* its operation's parameters.
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown;
 }
 
 /// **Make a map** — the operation a developer's *"make me a courtyard"* becomes (E-008).
@@ -730,6 +965,9 @@ pub mod map_create {
     impl Operation for MapCreate {
         fn name(&self) -> &'static str {
             "map_create"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::MapWhole
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -1120,6 +1358,12 @@ pub mod layout_propose {
         fn name(&self) -> &'static str {
             "layout_propose"
         }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params).ok().and_then(|p| p.area) {
+                Some([x0, z0, x1, z1]) => Shown::Map { rect: [x0, z0, x1, z1], placements: Vec::new() },
+                None => Shown::MapWhole,
+            }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &[]
         }
@@ -1282,6 +1526,13 @@ pub mod layout_accept {
     impl Operation for LayoutAccept {
         fn name(&self) -> &'static str {
             "layout_accept"
+        }
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            // **The layout standing on screen**, which is what keeping it writes into the map.
+            match ctx.proposal.as_ref() {
+                Some(p) if !p.placements.is_empty() => shown_rows(ctx, &p.placements),
+                _ => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -1522,6 +1773,9 @@ pub mod layout_discard {
         fn name(&self) -> &'static str {
             "layout_discard"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
         fn writes(&self) -> &'static [&'static str] {
             &[]
         }
@@ -1654,6 +1908,23 @@ pub mod fill {
     impl Operation for Fill {
         fn name(&self) -> &'static str {
             "fill"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params) {
+                // **The undo names the rows it takes away**, so their boxes are answered exactly.
+                Ok(p) if p.delta.is_some() => {
+                    let rows: Vec<bevy_grimoire_core::map::Placed> = p
+                        .delta
+                        .iter()
+                        .flat_map(|d| d.remove_placements.iter())
+                        .filter_map(|id| ctx.open.as_ref()?.map.placements.iter().find(|q| &q.id == id).cloned())
+                        .collect();
+                    if rows.is_empty() { Shown::MapWhole } else { shown_rows(ctx, &rows) }
+                }
+                // **A flood fill's extent is not in its parameters** — it is whatever open floor the flood
+                // reaches — so the honest answer is the map.
+                _ => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -1886,6 +2157,9 @@ pub mod snip_arm {
         fn name(&self) -> &'static str {
             "snip_arm"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
         fn writes(&self) -> &'static [&'static str] {
             // A capture mode is not the grimoire; the *file* a completed snip writes is `snip_commit`'s,
             // and that is the operation a project needs, not this one.
@@ -1952,6 +2226,9 @@ pub mod tool_arm {
     impl Operation for ToolArm {
         fn name(&self) -> &'static str {
             "tool_arm"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
         }
         fn writes(&self) -> &'static [&'static str] {
             // A tool is what the next click does, not something the grimoire keeps.
@@ -2037,6 +2314,9 @@ pub mod view_toggle_journal {
         fn name(&self) -> &'static str {
             "view_toggle_journal"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
         fn writes(&self) -> &'static [&'static str] {
             // A panel being up is not project data: no map, no file, no undo step.
             &[]
@@ -2092,6 +2372,9 @@ pub mod view_cycle_grid {
     impl Operation for ViewCycleGrid {
         fn name(&self) -> &'static str {
             "view_cycle_grid"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
         }
         fn writes(&self) -> &'static [&'static str] {
             // **Nothing the project keeps.** No map, no file: a rung is about this session's hand.
@@ -2158,6 +2441,11 @@ pub mod map_save {
     impl Operation for MapSave {
         fn name(&self) -> &'static str {
             "map_save"
+        }
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            // **It writes the map that is already on screen**, so there is no new place to look at.
+            let _ = ctx;
+            Shown::Nowhere
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -2270,6 +2558,9 @@ pub mod map_open {
     impl Operation for MapOpen {
         fn name(&self) -> &'static str {
             "map_open"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::MapWhole
         }
         fn writes(&self) -> &'static [&'static str] {
             &[]
@@ -2473,6 +2764,30 @@ pub mod placement_add {
     impl Operation for PlacementAdd {
         fn name(&self) -> &'static str {
             "placement_add"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params) {
+                Ok(p) if p.delta.is_some() => {
+                    let rows: Vec<bevy_grimoire_core::map::Placed> = p
+                        .delta
+                        .iter()
+                        .flat_map(|d| d.add_placements.iter())
+                        .map(|a| a.row.clone())
+                        .collect();
+                    if rows.is_empty() { Shown::MapWhole } else { shown_rows(ctx, &rows) }
+                }
+                // **The id is minted at commit**, so the parameters name the box and no ids.
+                Ok(p) => {
+                    let rect = ctx
+                        .project
+                        .as_ref()
+                        .and_then(|pr| pr.library.get(&p.piece))
+                        .and_then(|d| footprint_rect(d, p.at, p.yaw, p.tip))
+                        .unwrap_or_else(|| point_box(p.at));
+                    Shown::Map { rect, placements: Vec::new() }
+                }
+                Err(_) => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -2745,6 +3060,26 @@ pub mod piece_import {
     impl Operation for PieceImport {
         fn name(&self) -> &'static str {
             "piece_import"
+        }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params) {
+                Ok(p) => {
+                    let id = p
+                        .remove
+                        .clone()
+                        .or_else(|| p.restore.as_ref().map(|d| d.id.clone()))
+                        .or(p.id.clone())
+                        .or_else(|| p.glb.as_deref().map(|g| {
+                            let stem = g.rsplit('/').next().unwrap_or(g);
+                            stem.strip_suffix(".glb").unwrap_or(stem).to_owned()
+                        }));
+                    match id {
+                        Some(id) => Shown::Piece { id },
+                        None => Shown::MapWhole,
+                    }
+                }
+                Err(_) => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["library"]
@@ -3041,6 +3376,15 @@ pub mod piece_remove {
     impl Operation for PieceRemove {
         fn name(&self) -> &'static str {
             "piece_remove"
+        }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match parse(params) {
+                Ok(p) => match p.restore.as_ref().map(|d| d.id.clone()).or_else(|| p.id.clone()) {
+                    Some(id) => Shown::Piece { id },
+                    None => Shown::MapWhole,
+                },
+                Err(_) => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["library"]
@@ -3347,6 +3691,12 @@ pub mod piece_turn {
     impl Operation for PieceTurn {
         fn name(&self) -> &'static str {
             "piece_turn"
+        }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match request(params) {
+                Ok(Request::Turn { id, .. }) | Ok(Request::Restore { id, .. }) => Shown::Piece { id },
+                Err(_) => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["library"]
@@ -3811,6 +4161,13 @@ pub mod piece_set_cells {
         fn name(&self) -> &'static str {
             "piece_set_cells"
         }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            // **A piece's lattice is the Tiles tab's own panel**, keyed by the piece.
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => Shown::Tile { id: id.to_owned() },
+                None => Shown::MapWhole,
+            }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["library"]
         }
@@ -3996,6 +4353,10 @@ pub mod vocab_add_token {
         fn name(&self) -> &'static str {
             "vocab_add_token"
         }
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            // **The vocabulary is one project file**, at the root of the grimoire directory.
+            shown_named(ctx, "assets/grimoire/vocab.ron")
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["vocab"]
         }
@@ -4170,6 +4531,12 @@ pub mod rig_adopt_measured {
     impl Operation for RigAdoptMeasured {
         fn name(&self) -> &'static str {
             "rig_adopt_measured"
+        }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("rig").and_then(serde_json::Value::as_str) {
+                Some(id) => Shown::Rig { id: id.to_owned() },
+                None => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["rigs"]
@@ -4749,6 +5116,18 @@ pub fn preview(
     op.plan(ctx, params)
 }
 
+/// **Where a preview says its change is seen** (AF-01, #357), with the same purity [`preview`] has.
+///
+/// **It is [`Operation::shows`] and nothing else**, so a preview and its apply cannot name different
+/// places: a preview that computed its own answer would be a second opinion about the same question.
+///
+/// **Infallible, because [`preview`] already refused what it would refuse.** `shows` is pure and
+/// answers for parameters a commit would reject — that is what lets a person see *where* a change
+/// that will be refused would have landed.
+pub fn preview_shows(ctx: &Ctx, op: &dyn Operation, params: &serde_json::Value) -> Shown {
+    op.shows(ctx, params)
+}
+
 /// **[`dispatch`], with the line it undoes named** — the one path for a change and for its undo,
 /// so an undo is validated, written and logged exactly as the change was.
 fn dispatch_as(
@@ -4777,6 +5156,10 @@ fn dispatch_as(
     // written, so a refused operation changes nothing — not the map, not the file, not the log
     // (beyond the record that it was refused, which is itself worth having).
     op.plan(ctx, params)?;
+    // **And where the change is seen, from the parameters, before the commit** (AF-01, #357). Read
+    // here and not after, because a removal's piece is gone by then and a place's id is minted by it:
+    // the answer has to describe the change the parameters ask for.
+    let shown = op.shows(ctx, params);
     let outcome = op.commit(ctx, params)?;
     let mut entry = Entry {
         version: OPLOG_VERSION,
@@ -4808,6 +5191,7 @@ fn dispatch_as(
         outcome,
         operation_id: entry.operation_id.clone(),
         entry: Box::new(entry),
+        shown,
     })
 }
 
@@ -5486,6 +5870,9 @@ pub mod map_set_settings {
         fn name(&self) -> &'static str {
             "map_set_settings"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::MapWhole
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
         }
@@ -5825,6 +6212,12 @@ pub mod placement_set_pin {
         fn name(&self) -> &'static str {
             "placement_set_pin"
         }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => shown_placement(ctx, id),
+                None => Shown::MapWhole,
+            }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
         }
@@ -5986,6 +6379,12 @@ pub mod placement_set_yaw {
     impl Operation for PlacementSetYaw {
         fn name(&self) -> &'static str {
             "placement_set_yaw"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => shown_placement(ctx, id),
+                None => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -6196,6 +6595,12 @@ pub mod placement_set_tip {
     impl Operation for PlacementSetTip {
         fn name(&self) -> &'static str {
             "placement_set_tip"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => shown_placement(ctx, id),
+                None => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -6414,6 +6819,15 @@ pub mod placement_set_pose {
     impl Operation for PlacementSetPose {
         fn name(&self) -> &'static str {
             "placement_set_pose"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params) {
+                Ok(p) => {
+                    let ids: Vec<String> = p.targets().into_iter().map(str::to_owned).collect();
+                    shown_placements(ctx, &ids)
+                }
+                Err(_) => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -6694,6 +7108,12 @@ pub mod placement_set_lift {
     impl Operation for PlacementSetLift {
         fn name(&self) -> &'static str {
             "placement_set_lift"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => shown_placement(ctx, id),
+                None => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -7218,6 +7638,12 @@ pub mod label_set {
         fn name(&self) -> &'static str {
             "label_set"
         }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => Shown::Piece { id: id.to_owned() },
+                None => Shown::MapWhole,
+            }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["library"]
         }
@@ -7521,6 +7947,12 @@ pub mod piece_set_mount {
         fn name(&self) -> &'static str {
             "piece_set_mount"
         }
+        fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match params.get("id").and_then(serde_json::Value::as_str) {
+                Some(id) => Shown::Piece { id: id.to_owned() },
+                None => Shown::MapWhole,
+            }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["library"]
         }
@@ -7760,6 +8192,10 @@ pub mod pack_set_excluded {
         fn name(&self) -> &'static str {
             "pack_set_excluded"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            // **A pack is a row of the kit's own policy**, shown in the Meshes door's pack list.
+            Shown::Settings { section: "packs".to_owned() }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["policy"]
         }
@@ -7929,6 +8365,9 @@ pub mod brush_arm {
         fn name(&self) -> &'static str {
             "brush_arm"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
         fn writes(&self) -> &'static [&'static str] {
             &[]
         }
@@ -8058,6 +8497,9 @@ pub mod composition_arm {
     impl Operation for CompositionArm {
         fn name(&self) -> &'static str {
             "composition_arm"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
         }
         fn writes(&self) -> &'static [&'static str] {
             &[]
@@ -8291,6 +8733,9 @@ pub mod door_open {
         fn name(&self) -> &'static str {
             "door_open"
         }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
         fn writes(&self) -> &'static [&'static str] {
             &[]
         }
@@ -8411,6 +8856,9 @@ pub mod piece_select {
     impl Operation for PieceSelect {
         fn name(&self) -> &'static str {
             "piece_select"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
         }
         fn writes(&self) -> &'static [&'static str] {
             &[]
@@ -8706,6 +9154,28 @@ pub mod placement_remove {
         fn name(&self) -> &'static str {
             "placement_remove"
         }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params) {
+                // **A put-back names the rows it puts back**, so their boxes are answered exactly — and it is
+                // what an undo of a removal sends.
+                Ok(p) if p.put_back.is_some() => {
+                    let rows: Vec<bevy_grimoire_core::map::Placed> = p
+                        .put_back
+                        .iter()
+                        .flat_map(|pb| pb.rows.iter())
+                        .filter_map(|r| serde_json::from_value(r.placed.clone()).ok())
+                        .collect();
+                    if rows.is_empty() { Shown::MapWhole } else { shown_rows(ctx, &rows) }
+                }
+                // **A removal names where the piece stands now**, because that is the last moment the map still
+                // holds it — and it is where a person must look to see what went.
+                Ok(p) => match p.id {
+                    Some(id) => shown_placement(ctx, &id),
+                    None => Shown::MapWhole,
+                },
+                Err(_) => Shown::MapWhole,
+            }
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
         }
@@ -8976,6 +9446,24 @@ pub mod stamp_remove {
     impl Operation for StampRemove {
         fn name(&self) -> &'static str {
             "stamp_remove"
+        }
+        fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+            match Params::parse(params) {
+                Ok(p) => {
+                    let stamp = p
+                        .id
+                        .as_deref()
+                        .and_then(|id| ctx.open.as_ref()?.map.stamps.iter().find(|s| s.id == id).cloned())
+                        .or_else(|| {
+                            serde_json::from_value::<bevy_grimoire_core::composition::Stamped>(p.put_back?.stamp).ok()
+                        });
+                    match stamp {
+                        Some(s) => Shown::Map { rect: point_box(s.at), placements: vec![s.id] },
+                        None => Shown::MapWhole,
+                    }
+                }
+                Err(_) => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map"]
@@ -9585,6 +10073,9 @@ pub mod rules_set {
         fn name(&self) -> &'static str {
             "rules_set"
         }
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            shown_named(ctx, "assets/grimoire/rules.ron")
+        }
         fn writes(&self) -> &'static [&'static str] {
             &["rules"]
         }
@@ -9717,7 +10208,7 @@ pub mod map_rename {
     use serde_json::json;
 
     use super::map_set_settings::settings_of;
-    use super::{Ctx, Operation, Outcome, Refusal, Undo};
+    use super::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
     use bevy_grimoire_core::naming::{map_file_name, to_snake_case};
 
     /// **What the operation takes.** One field, the new name.
@@ -9820,6 +10311,9 @@ pub mod map_rename {
     impl Operation for MapRename {
         fn name(&self) -> &'static str {
             "map_rename"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::MapWhole
         }
         fn writes(&self) -> &'static [&'static str] {
             &["map", "rules"]

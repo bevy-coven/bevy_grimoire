@@ -14,7 +14,7 @@ use bevy_grimoire_core::repetition;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Indexed, Operation, Outcome, Refusal, RowDelta, Undo};
+use crate::ops::{Ctx, Indexed, Operation, Outcome, Refusal, RowDelta, Shown, Undo, shown_rows};
 use crate::project::{OpenMap, Project};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -109,6 +109,27 @@ pub struct RepetitionVary;
 impl Operation for RepetitionVary {
     fn name(&self) -> &'static str {
         "repetition_vary"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The rows this call turns, computed the way its commit computes them**: `vary` is pure and reads
+        // only the map and the project's rules, so a preview and its apply answer with the same code.
+        let Ok(p) = Params::parse(params) else {
+            return Shown::MapWhole;
+        };
+        let (Some(project), Some(open)) = (ctx.project.as_ref(), ctx.open.as_ref()) else {
+            return Shown::MapWhole;
+        };
+        let delta = match p.delta {
+            Some(delta) => delta,
+            None => match plan(project, open) {
+                Ok(planned) => planned.delta,
+                Err(_) => return Shown::MapWhole,
+            },
+        };
+        // **A turn moves nothing**, so the box where the piece stood is the box it stands in.
+        let rows: Vec<bevy_grimoire_core::map::Placed> =
+            delta.add_placements.iter().map(|a| a.row.clone()).collect();
+        if rows.is_empty() { Shown::MapWhole } else { shown_rows(ctx, &rows) }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]

@@ -12,7 +12,7 @@ use bevy_grimoire_core::notes::{self, Note, Notes};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_placements};
 
 /// **A note put back where it stood**, for the undo of a removal.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -191,6 +191,26 @@ impl Operation for NoteAdd {
     fn name(&self) -> &'static str {
         "note_add"
     }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The id is minted at commit**; the parameters name the cells the note is drawn over.
+        let cells = params.get("cells").and_then(|v| serde_json::from_value::<[i32; 4]>(v.clone()).ok());
+        let pieces: Option<Vec<String>> = params
+            .get("pieces")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+        match (cells, pieces) {
+            (Some(c), _) => {
+                let tile = bevy_grimoire_core::grid::TILE;
+                let (x0, z0) = (c[0].min(c[2]) as f32 * tile, c[1].min(c[3]) as f32 * tile);
+                let (x1, z1) = ((c[0].max(c[2]) + 1) as f32 * tile, (c[1].max(c[3]) + 1) as f32 * tile);
+                Shown::Map { rect: [x0, z0, x1, z1], placements: Vec::new() }
+            }
+            (None, Some(ids)) => shown_placements(ctx, &ids),
+            (None, None) => match params.get("take_back").and_then(serde_json::Value::as_str) {
+                Some(id) => Shown::Note { id: id.to_owned() },
+                None => Shown::MapWhole,
+            },
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["notes"]
     }
@@ -280,6 +300,12 @@ impl Operation for NoteEdit {
     fn name(&self) -> &'static str {
         "note_edit"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match EditParams::parse(params) {
+            Ok(p) => Shown::Note { id: p.restore.map(|n| n.id).unwrap_or(p.id) },
+            Err(_) => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["notes"]
     }
@@ -354,6 +380,15 @@ impl NoteRemove {
 impl Operation for NoteRemove {
     fn name(&self) -> &'static str {
         "note_remove"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match RemoveParams::parse(params) {
+            Ok(p) => match p.put_back.map(|pb| pb.note.id).or(p.id) {
+                Some(id) => Shown::Note { id },
+                None => Shown::MapWhole,
+            },
+            Err(_) => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["notes"]
@@ -447,6 +482,13 @@ impl NoteSend {
 impl Operation for NoteSend {
     fn name(&self) -> &'static str {
         "note_send"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Note { id: id.to_owned() },
+            // **Every draft is sent at once**, which is the Notes panel's own list.
+            None => Shown::Settings { section: "notes".to_owned() },
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["notes"]
@@ -599,6 +641,14 @@ macro_rules! lease_operation {
             }
             fn schema(&self) -> serde_json::Value {
                 LeaseParams::schema($what)
+            }
+            fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+                // **The note it is about**: a claim, a renewal and a release all say "this note is
+                // mine now" or "no longer", and the Notes panel shows its state.
+                match params.get("id").and_then(serde_json::Value::as_str) {
+                    Some(id) => Shown::Note { id: id.to_owned() },
+                    None => Shown::MapWhole,
+                }
             }
             fn state(&self, ctx: &Ctx) -> Option<serde_json::Value> {
                 state_of_open(ctx)
@@ -778,6 +828,14 @@ macro_rules! talk_operation {
             fn schema(&self) -> serde_json::Value {
                 $talk.schema()
             }
+            fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+                // **The note the turn is about**: an ask, an answer, a resolution and a keep all
+                // change one note's state, which the Notes panel and the map's marker both show.
+                match params.get("id").and_then(serde_json::Value::as_str) {
+                    Some(id) => Shown::Note { id: id.to_owned() },
+                    None => Shown::MapWhole,
+                }
+            }
             fn state(&self, ctx: &Ctx) -> Option<serde_json::Value> {
                 state_of_open(ctx)
             }
@@ -953,6 +1011,12 @@ impl NoteUndoWork {
 impl Operation for NoteUndoWork {
     fn name(&self) -> &'static str {
         "note_undo_work"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Note { id: id.to_owned() },
+            None => Shown::Settings { section: "notes".to_owned() },
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map", "notes"]

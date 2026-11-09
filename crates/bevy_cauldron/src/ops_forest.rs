@@ -15,7 +15,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, enclose, point_box};
 
 /// One planted tree. Same seed, same stroke, same trees: `id` is the tree's number in its forest.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -344,6 +344,24 @@ impl ForestScatter {
 impl Operation for ForestScatter {
     fn name(&self) -> &'static str {
         "forest_scatter"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **A planted tree is one point; a stroke is a polyline.** Both are on the map, in map metres.
+        match serde_json::from_value::<Params>(params.clone()) {
+            Ok(p) => {
+                let boxes: Vec<[f32; 4]> = p
+                    .place
+                    .iter()
+                    .map(|pl| point_box(pl.at))
+                    .chain(p.plant.iter().flat_map(|pl| pl.points.iter().map(|at| point_box(*at))))
+                    .collect();
+                match enclose(boxes) {
+                    Some(rect) => Shown::Map { rect, placements: Vec::new() },
+                    None => Shown::MapWhole,
+                }
+            }
+            Err(_) => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["forest"]
