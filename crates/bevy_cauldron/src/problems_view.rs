@@ -235,7 +235,7 @@ fn on_problem_go_to(
     };
     match resolve_frame(&FrameTarget::Placements(ids), &project, &open, None) {
         Ok(frame) => {
-            apply_frame(&mut rig, &frame, aspect, &open);
+            apply_frame(&mut rig, &frame, aspect, &open, crate::view::FRAME_MARGIN);
             state.status.note(format!("went to {joined}"));
         }
         Err(why) => state.status.problem(why),

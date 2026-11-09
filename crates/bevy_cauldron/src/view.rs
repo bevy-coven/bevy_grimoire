@@ -342,7 +342,11 @@ pub fn depth_range(camera: &Transform, open: Option<&crate::project::OpenMap>) -
 
 /// **The room a framed box is given**, as a multiplier on its extent: a tenth each way, so a box framed
 /// to the edge does not sit against the viewport's border.
-const FRAME_MARGIN: f32 = 1.1;
+///
+/// **`pub` because the follow (`crate::follow`) is the other caller that has to name one**: it frames a
+/// change with `FOLLOW_MARGIN_FRAC` instead, and the two margins belong to the caller rather than to
+/// two versions of the framer. One arithmetic, one place to read what a margin means.
+pub const FRAME_MARGIN: f32 = 1.1;
 
 /// **Where to look, and how far out, to see a box whole**: `(focus, viewport height)`.
 ///
@@ -356,12 +360,28 @@ const FRAME_MARGIN: f32 = 1.1;
 /// and testable; the caller reads it from the Map camera's logical viewport, because a wrong aspect is
 /// the fault this must not have.
 ///
+/// `margin` is how much room the box is given past its own extent, as the multiplier
+/// [`FRAME_MARGIN`] is: `1.1` for a frame a person asked for, [`crate::follow::FOLLOW_MARGIN_FRAC`]
+/// for a change the editor is showing them. **A parameter rather than a second framer**, so the two
+/// callers cannot disagree about where a box goes on screen — only about how much air it gets.
+///
 /// **Camera state only.** The result is a focus and a height for the rig. Nothing the map holds
 /// changes, so framing is not an operation and is not undoable.
-pub fn frame_box(rig: &Rig, centre: Vec3, size: Vec3, aspect: f32, ceiling: f32) -> (Vec3, f32) {
+pub fn frame_box(
+    rig: &Rig,
+    centre: Vec3,
+    size: Vec3,
+    aspect: f32,
+    ceiling: f32,
+    margin: f32,
+) -> (Vec3, f32) {
     debug_assert!(
         aspect > 0.0,
         "a viewport has a positive aspect, got {aspect}"
+    );
+    debug_assert!(
+        margin >= 1.0,
+        "a margin is room PAST the box, so it is at least 1.0; got {margin}"
     );
     let settled = Rig {
         focus: Vec3::ZERO,
@@ -383,7 +403,7 @@ pub fn frame_box(rig: &Rig, centre: Vec3, size: Vec3, aspect: f32, ceiling: f32)
             }
         }
     }
-    let needed = (2.0 * down).max(2.0 * across / aspect) * FRAME_MARGIN;
+    let needed = (2.0 * down).max(2.0 * across / aspect) * margin;
     (centre, needed.clamp(MIN_ZOOM, ceiling))
 }
 
@@ -1003,7 +1023,7 @@ mod tests {
             ..Rig::default()
         };
         let centre = Vec3::new(120.0, 3.0, -75.0);
-        let (focus, _) = super::frame_box(&rig, centre, Vec3::new(60.0, 4.0, 30.0), 1.5, MAX_ZOOM);
+        let (focus, _) = super::frame_box(&rig, centre, Vec3::new(60.0, 4.0, 30.0), 1.5, MAX_ZOOM, super::FRAME_MARGIN);
         assert_eq!(focus, centre);
     }
 
@@ -1031,7 +1051,7 @@ mod tests {
             }
         }
         for aspect in [0.5, 1.0, 1.6, 2.5] {
-            let (_, h) = super::frame_box(&rig, centre, size, aspect, 1000.0);
+            let (_, h) = super::frame_box(&rig, centre, size, aspect, 1000.0, super::FRAME_MARGIN);
             assert!(
                 hx * 2.0 * 1.1 <= h * aspect + 1e-3,
                 "aspect {aspect}: width {hx} does not fit in {h}"
@@ -1049,8 +1069,8 @@ mod tests {
     fn a_wide_viewport_needs_less_height_for_the_same_box() {
         let rig = Rig::default();
         let size = Vec3::new(200.0, 4.0, 4.0);
-        let (_, square) = super::frame_box(&rig, Vec3::ZERO, size, 1.0, 1000.0);
-        let (_, wide) = super::frame_box(&rig, Vec3::ZERO, size, 3.0, 1000.0);
+        let (_, square) = super::frame_box(&rig, Vec3::ZERO, size, 1.0, 1000.0, super::FRAME_MARGIN);
+        let (_, wide) = super::frame_box(&rig, Vec3::ZERO, size, 3.0, 1000.0, super::FRAME_MARGIN);
         assert!(
             wide < square,
             "a 3:1 view should need less height than a square one: {wide} vs {square}"
@@ -1062,9 +1082,9 @@ mod tests {
     #[test]
     fn the_framed_height_stays_between_the_floor_and_the_ceiling() {
         let rig = Rig::default();
-        let (_, speck) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(0.01), 1.0, 375.0);
+        let (_, speck) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(0.01), 1.0, 375.0, super::FRAME_MARGIN);
         assert_eq!(speck, MIN_ZOOM);
-        let (_, vast) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(5000.0), 1.0, 375.0);
+        let (_, vast) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(5000.0), 1.0, 375.0, super::FRAME_MARGIN);
         assert_eq!(vast, 375.0);
     }
 
@@ -1084,8 +1104,8 @@ mod tests {
             ..Rig::default()
         };
         assert_eq!(
-            super::frame_box(&turning, centre, size, 1.4, 1000.0),
-            super::frame_box(&settled, centre, size, 1.4, 1000.0),
+            super::frame_box(&turning, centre, size, 1.4, 1000.0, super::FRAME_MARGIN),
+            super::frame_box(&settled, centre, size, 1.4, 1000.0, super::FRAME_MARGIN),
         );
     }
 

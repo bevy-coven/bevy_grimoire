@@ -558,14 +558,23 @@ fn frame_json(
     })
 }
 
-/// **What stands between an agent and a write** (the system takes sixteen parameters, and a seventeenth is not one): the
-/// question a person has open, and the person's pause switch (UI-60, #246).
+/// **Everything an agent's call reaches besides the map**: the question standing in the way of a
+/// write, the person's pause switch (UI-60, #246), the AGENT block's hearsay, and the camera that
+/// follows the change (AF-02, #358).
+///
+/// **One bundle because the system takes sixteen parameters, and a seventeenth is not one.** The
+/// follow lives here rather than in the signature because `operation_apply` is at the limit; the
+/// alternative was a second bundle and two ways to name the same call's side effects.
 #[derive(bevy::ecs::system::SystemParam)]
 struct Gates<'w> {
     confirm: Option<Res<'w, crate::confirm::Confirm>>,
     pause: Option<Res<'w, crate::familiar::AgentPause>>,
     activity: Option<ResMut<'w, crate::familiar::AgentActivity>>,
     time: Option<Res<'w, Time<Real>>>,
+    /// **The camera the editor follows an agent's map change with**, asked for here so the request is
+    /// raised where the agent comes in — never inside `dispatch`, where a person's key would raise one
+    /// too and the camera would move under their hands.
+    following: Option<ResMut<'w, crate::follow::Following>>,
 }
 
 impl Gates<'_> {
@@ -573,6 +582,19 @@ impl Gates<'_> {
     fn hear(&mut self, method: &'static str) {
         if let (Some(activity), Some(time)) = (self.activity.as_mut(), self.time.as_deref()) {
             activity.hear(method, time.elapsed_secs_f64());
+        }
+    }
+
+    /// **Ask the camera to go to the change**, or nothing when it is not on the map.
+    ///
+    /// A change to a library piece, a composition, a rig, a note or a file is a place on another
+    /// screen; those are AF-04's (#359), and this answers `None` for them rather than guessing.
+    fn follow(&mut self, shown: &crate::ops::Shown) {
+        let Some(request) = crate::follow::request_of(shown) else {
+            return;
+        };
+        if let Some(following) = self.following.as_mut() {
+            following.request(request);
         }
     }
 }
@@ -1854,13 +1876,33 @@ fn operation_apply(
     // reached the file, the live library and the chips, and said nothing in the row the author was
     // looking at. Measured on the running editor: the labels row read `agent set kind` and the words
     // `+crop -tile` appeared nowhere on screen.
+    //
+    // **A change on the map is named in the history's words** (AF-02, #358): the row the person can
+    // walk back to reads `placed bed@1 · the Familiar`, so the receipt says `the Familiar placed
+    // bed@1` rather than making them work out which actor the word `agent` means. The door's own
+    // `agent: <operation>:` prefix stays, because that is the row a person reads after any agent call
+    // and the kit door's receipt carries the same shape.
     let says = match &applied {
         Ok(ops::Applied::Done { outcome, .. }) => Ok(outcome.summary.clone()),
         Ok(ops::Applied::Refused(e)) | Err(e) => Err(e.problem()),
     };
     if let Some(state) = state.as_mut() {
         match &says {
-            Ok(summary) => state.receipt_agent_change(&p.operation, summary),
+            Ok(summary) => {
+                let on_the_map = matches!(
+                    &applied,
+                    Ok(ops::Applied::Done { shown, .. })
+                        if crate::follow::request_of(shown).is_some()
+                );
+                if on_the_map {
+                    state.receipt_agent_change(
+                        &p.operation,
+                        &crate::follow::as_the_familiar(summary),
+                    );
+                } else {
+                    state.receipt_agent_change(&p.operation, summary);
+                }
+            }
             Err(why) => state.problem_agent_problem(&p.operation, why.clone()),
         }
     }
@@ -1879,9 +1921,10 @@ fn operation_apply(
             entry,
             shown,
         }) => {
-            // **A door the editor will ask about is not yet open (cycle 8, gap 4).** The outcome is a
-            // stable word, `waiting`, and `waiting_on` names what it waits for, so nobody reads "applied"
-            // as "the door is open" and a caller can branch on the word.
+            // **The editor follows the change** (AF-02, #358): the request is raised here, at the door
+            // an agent comes through, and never inside `dispatch` — a person's key goes through the
+            // same dispatch and must not move the camera under their hands.
+            gates.follow(&shown);
             let waiting = outcome
                 .after
                 .as_ref()
@@ -2139,11 +2182,19 @@ fn operation_undo(
         }
     }
 
-    // **The person's receipt says what the agent undid (B-020)**, named `undo`.
+    // **The person's receipt says what the agent undid (B-020)**, named `undo` — and, for a change
+    // on the map, in the history's words (AF-02, #358), as the apply's receipt is.
     if let Some(state) = state.as_mut() {
         match &undone {
-            Ok((_, ops::Applied::Done { outcome, .. })) => {
-                state.receipt_agent_change("undo", &outcome.summary);
+            Ok((_, ops::Applied::Done { outcome, shown, .. })) => {
+                if crate::follow::request_of(shown).is_some() {
+                    state.receipt_agent_change(
+                        "undo",
+                        &crate::follow::as_the_familiar(&outcome.summary),
+                    );
+                } else {
+                    state.receipt_agent_change("undo", &outcome.summary);
+                }
             }
             Ok((_, ops::Applied::Refused(e))) | Err(e) => {
                 state.problem_agent_problem("undo", e.problem());
@@ -2159,23 +2210,29 @@ fn operation_undo(
                 entry,
                 shown,
             },
-        )) => json!({
-            "operation": entry.op,
-            "outcome": "applied",
-            // **Where the inverse's change is seen** (AF-01, #357), which for a put-back is where the
-            // piece stands again.
-            "shown": shown,
-            // **The change taken back or put back**, by the id of the line that made it, and the
-            // line whose inverse did it.
-            "change": plan.change,
-            "undoes": entry.undoes,
-            "summary": outcome.summary,
-            "saved": outcome.saved,
-            "set": entry.params,
-            // **The undo's own id**, which is what a redo names.
-            "operation_id": operation_id,
-            "log_entry": entry,
-        }),
+        )) => {
+            // **The editor follows an undo too** (AF-02, #358): an undo of a removal is where the piece
+            // stands again, and an undo of a placement is where it was — both are places the person
+            // must be shown, from the same answer the apply's follow reads.
+            gates.follow(&shown);
+            json!({
+                "operation": entry.op,
+                "outcome": "applied",
+                // **Where the inverse's change is seen** (AF-01, #357), which for a put-back is where the
+                // piece stands again.
+                "shown": shown,
+                // **The change taken back or put back**, by the id of the line that made it, and the
+                // line whose inverse did it.
+                "change": plan.change,
+                "undoes": entry.undoes,
+                "summary": outcome.summary,
+                "saved": outcome.saved,
+                "set": entry.params,
+                // **The undo's own id**, which is what a redo names.
+                "operation_id": operation_id,
+                "log_entry": entry,
+            })
+        }
         Ok((_, ops::Applied::Refused(e))) | Err(e) => refused_answer("undo", &e),
     })
 }
@@ -2400,7 +2457,7 @@ fn frame_view(
             "the Map camera has no viewport yet, so there is nothing to frame against",
         ));
     };
-    let (focus, height) = crate::editor::apply_frame(&mut rig, &framing, aspect, &open);
+    let (focus, height) = crate::editor::apply_frame(&mut rig, &framing, aspect, &open, crate::view::FRAME_MARGIN);
     if let Some(mut state) = state {
         state.status.note(format!(
             "an agent framed {} ({:.0} x {:.0} m)",
@@ -2731,6 +2788,10 @@ fn editor_present(
     // **The AGENT block, when it is open and the person has asked for it, is where the hand-back is answered.**
     block: Query<(), With<crate::familiar::Familiar>>,
     here: Option<Res<crate::familiar::HandBackHere>>,
+    // **The hand-back's first place to check is a follow** (AF-02, #358): one camera, one ease, one
+    // crossing. A presentation that framed through a mechanism of its own would fight the follow for
+    // the camera the moment an agent placed something and then handed back.
+    mut following: Option<ResMut<crate::follow::Following>>,
 ) -> Result<Value, String> {
     if let (Some(mut activity), Some(time)) = (activity, time) {
         activity.hear("present", time.elapsed_secs_f64());
@@ -2793,6 +2854,17 @@ fn editor_present(
             crate::present::undo_label(p.operation_ids.len()),
             "Keep",
         );
+    }
+    // **The first place to check is framed before the question goes up**, as a follow (AF-02, #358):
+    // one camera, one ease, one crossing, so a hand-back and a follow cannot fight over it. The ids
+    // are the ones the person will read under the camera, so the ring lasts as it does for a change.
+    if let (Some(first), Some(following)) = (p.check.first(), following.as_mut())
+        && !first.placements.is_empty()
+    {
+        following.request(crate::follow::FollowRequest {
+            target: crate::editor::FrameTarget::Placements(first.placements.clone()),
+            ids: first.placements.clone(),
+        });
     }
     let Some(presenting) = presenting.as_mut() else {
         return Err("this editor has no presentation slot".to_owned());
