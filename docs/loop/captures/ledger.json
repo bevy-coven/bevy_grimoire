@@ -763,10 +763,10 @@
       "taken_at_ms": 1794230949329,
       "app_version": "0.5.0",
       "record_version": 2,
-      "kind": "",
-      "status": "unread",
+      "kind": "bug",
+      "status": "triaged",
       "host": "mac_air",
-      "reason": "",
+      "reason": "the bar's chips are bare names, and a cd chip is offered on an agent tab where it types into the agent's prompt",
       "commit": "",
       "attempts": []
     }
