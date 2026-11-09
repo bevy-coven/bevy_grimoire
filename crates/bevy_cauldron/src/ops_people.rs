@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, point_box};
 
 /// One person on the map.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -340,6 +340,12 @@ impl Operation for PersonSet {
     fn name(&self) -> &'static str {
         "person_set"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("at").and_then(|v| serde_json::from_value::<(f32, f32)>(v.clone()).ok()) {
+            Some(at) => Shown::Map { rect: point_box(at), placements: Vec::new() },
+            None => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["people"]
     }
@@ -649,6 +655,9 @@ impl PeopleRun {
 impl Operation for PeopleRun {
     fn name(&self) -> &'static str {
         "people_run"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]

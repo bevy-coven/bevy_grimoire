@@ -8,7 +8,7 @@ use bevy_grimoire_core::water::{Placed, WaterPlan};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, point_box};
 
 /// An undo's put-back: the file as it was (`None`: there was none).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -127,6 +127,25 @@ impl WaterPlace {
 impl Operation for WaterPlace {
     fn name(&self) -> &'static str {
         "water_place"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match Params::parse(params) {
+            Ok(p) => match p.place {
+                Some(bevy_grimoire_core::water::Placed::Spring(s)) => {
+                    Shown::Map { rect: point_box((s.x, s.z)), placements: Vec::new() }
+                }
+                Some(bevy_grimoire_core::water::Placed::Sink(s)) => {
+                    Shown::Map { rect: point_box((s.x, s.z)), placements: Vec::new() }
+                }
+                Some(bevy_grimoire_core::water::Placed::Lake(l)) => Shown::Map {
+                    rect: [l.x - l.radius_m, l.z - l.radius_m, l.x + l.radius_m, l.z + l.radius_m],
+                    placements: Vec::new(),
+                },
+                // **Clearing takes every source of the map**, which is the map.
+                None => Shown::MapWhole,
+            },
+            Err(_) => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["water_plan"]
@@ -254,6 +273,9 @@ impl WaterRun {
 impl Operation for WaterRun {
     fn name(&self) -> &'static str {
         "water_run"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::MapWhole
     }
     fn writes(&self) -> &'static [&'static str] {
         &["water_field"]

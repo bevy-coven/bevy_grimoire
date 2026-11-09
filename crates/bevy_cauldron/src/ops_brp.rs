@@ -1399,6 +1399,9 @@ fn operation_preview(
         Ok(plan) => Ok(json!({
             "operation": p.operation,
             "outcome": "previewed",
+            // **Where the change would be seen** (AF-01, #357), read from the same function the
+            // apply reads, so a preview and its apply cannot name different places.
+            "shown": ops::preview_shows(&ctx, op.as_ref(), &p.parameters),
             "would_change": plan,
         })),
         Err(e) => Ok(refused_answer(&p.operation, &e)),
@@ -1592,6 +1595,7 @@ fn operation_apply(
             Ok(plan) => Ok(json!({
                 "operation": p.operation,
                 "outcome": "previewed",
+                "shown": ops::preview_shows(&ctx, op.as_ref(), &p.parameters),
                 "would_change": plan,
             })),
             Err(e) => Ok(refused_answer(&p.operation, &e)),
@@ -1814,6 +1818,7 @@ fn operation_apply(
             outcome,
             operation_id,
             entry,
+            shown,
         }) => {
             // **A door the editor will ask about is not yet open (cycle 8, gap 4).** The outcome is a
             // stable word, `waiting`, and `waiting_on` names what it waits for, so nobody reads "applied"
@@ -1827,6 +1832,9 @@ fn operation_apply(
                 "operation": p.operation,
                 "outcome": if waiting.is_some() { "waiting" } else { "applied" },
                 "waiting_on": waiting,
+                // **Where a person can see it** (AF-01, #357): the follow (#358) frames this, and an
+                // agent reads the same words the editor acts on.
+                "shown": shown,
                 "summary": outcome.summary,
                 "affected": outcome.affected,
                 "saved": outcome.saved,
@@ -1985,6 +1993,7 @@ fn operation_undo(
             session: crate::ops::session_id(),
             proposal: None,
         };
+        let mut shown: Option<ops::Shown> = None;
         let resolved = ops::undo_target(&ctx, p.operation_id.as_deref()).and_then(|plan| {
             let op = ops::find(&plan.line.op).ok_or_else(|| {
                 ops::Refusal::new(format!(
@@ -1992,7 +2001,12 @@ fn operation_undo(
                     plan.line.op
                 ))
             })?;
-            op.plan(&ctx, &plan.inverse).map(|_| plan)
+            op.plan(&ctx, &plan.inverse).map(|_| {
+                // **An undo shows what its inverse's parameters show**: an inverse *is* its
+                // operation's parameters, so there is no second answer to compute (AF-01, #357).
+                shown = Some(op.shows(&ctx, &plan.inverse));
+                plan
+            })
         });
         let resolved = match rows_refusal(state.as_deref(), &ctx, p.operation_id.as_deref()) {
             Some(refusal) => Err(refusal),
@@ -2004,6 +2018,7 @@ fn operation_undo(
                 "outcome": "previewed",
                 "change": plan.change,
                 "undoes": plan.line.operation_id,
+                "shown": shown,
                 "would_set": plan.inverse,
             }),
             Err(e) => refused_answer("undo", &e),
@@ -2083,10 +2098,14 @@ fn operation_undo(
                 outcome,
                 operation_id,
                 entry,
+                shown,
             },
         )) => json!({
             "operation": entry.op,
             "outcome": "applied",
+            // **Where the inverse's change is seen** (AF-01, #357), which for a put-back is where the
+            // piece stands again.
+            "shown": shown,
             // **The change taken back or put back**, by the id of the line that made it, and the
             // line whose inverse did it.
             "change": plan.change,

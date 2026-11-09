@@ -14,7 +14,7 @@ use bevy_grimoire_core::run::{Corner, Gap, Run, RunPlaced};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, run_span_of, shown_placements};
 
 /// **A run put back where it stood**, for the undo of a removal.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -222,6 +222,18 @@ impl Operation for RunAdd {
     fn name(&self) -> &'static str {
         "run_add"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The span a run's path covers**, from its own `from`, `to` and corners; and a put-back names the
+        // run it puts back the same way.
+        let run = params
+            .get("run")
+            .or_else(|| params.get("put_back").and_then(|pb| pb.get("run")))
+            .and_then(|v| v.get("run").or(Some(v)));
+        match run.and_then(run_span_of) {
+            Some(rect) => Shown::Map { rect, placements: Vec::new() },
+            None => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]
     }
@@ -355,6 +367,13 @@ impl Operation for RunSet {
     fn name(&self) -> &'static str {
         "run_set"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The span the run covers**: its `restore` when this is the undo, else its own path.
+        match params.get("restore").and_then(run_span_of).or_else(|| run_span_of(params)) {
+            Some(rect) => Shown::Map { rect, placements: Vec::new() },
+            None => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]
     }
@@ -425,6 +444,24 @@ impl RunRemove {
 impl Operation for RunRemove {
     fn name(&self) -> &'static str {
         "run_remove"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The posts the run laid**, named `<run>/<n>`, are what a person sees: they stand on the map.
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => {
+                let prefix = format!("{id}/");
+                let posts: Vec<String> = ctx.open.as_ref().map_or_else(Vec::new, |open| {
+                    open.map
+                        .placements
+                        .iter()
+                        .map(|p| p.id.clone())
+                        .filter(|p| p.starts_with(&prefix))
+                        .collect()
+                });
+                if posts.is_empty() { Shown::MapWhole } else { shown_placements(ctx, &posts) }
+            }
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]
@@ -557,6 +594,25 @@ impl PlacementsToRun {
 impl Operation for PlacementsToRun {
     fn name(&self) -> &'static str {
         "placements_to_run"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The rows it converts**: named by id in the request, or named in `restore` by the undo.
+        let ids: Option<Vec<String>> = params
+            .get("rows")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .or_else(|| {
+                params
+                    .get("restore")
+                    .and_then(|r| r.get("rows"))
+                    .and_then(|rows| {
+                        serde_json::from_value::<Vec<bevy_grimoire_core::map::Placed>>(rows.clone()).ok()
+                    })
+                    .map(|rows| rows.into_iter().map(|r| r.id).collect())
+            });
+        match ids {
+            Some(ids) => shown_placements(ctx, &ids),
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]

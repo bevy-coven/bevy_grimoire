@@ -10,7 +10,7 @@ use bevy_grimoire_core::relations::{self, Relations};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Indexed, Operation, Outcome, Refusal, RowDelta, Undo};
+use crate::ops::{Ctx, Indexed, Operation, Outcome, Refusal, RowDelta, Shown, Undo, enclose, point_box, row_box, shown_file};
 use crate::project::OpenMap;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -146,6 +146,48 @@ pub struct RelationsSolve;
 impl Operation for RelationsSolve {
     fn name(&self) -> &'static str {
         "relations_solve"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **The rows this call changes, computed the way its commit computes them** — pure, on a copy of the
+        // map, so a preview and its apply answer the same question with the same code.
+        //
+        // **A move must show where the piece left as well as where it landed**, or a person watching the
+        // Familiar sees a table hop with nothing to connect the two frames. The delta's rows are the new
+        // positions; the rows they replace are the old ones; their union is one box round both.
+        let Ok(p) = Params::parse(params) else {
+            return Shown::MapWhole;
+        };
+        let Some(open) = ctx.open.as_ref() else {
+            return Shown::MapWhole;
+        };
+        let delta = match p.delta {
+            Some(delta) => delta,
+            None => match mend(open) {
+                Ok(m) => m.delta,
+                Err(_) => return Shown::MapWhole,
+            },
+        };
+        let mut boxes: Vec<[f32; 4]> = Vec::new();
+        let mut ids: Vec<String> = Vec::new();
+        for added in &delta.add_placements {
+            boxes.push(match ctx.project.as_ref() {
+                Some(project) => row_box(&project.library, &added.row),
+                None => point_box(added.row.at),
+            });
+            ids.push(added.row.id.clone());
+        }
+        for id in &delta.remove_placements {
+            if let Some(before) = open.map.placements.iter().find(|q| &q.id == id) {
+                boxes.push(match ctx.project.as_ref() {
+                    Some(project) => row_box(&project.library, before),
+                    None => point_box(before.at),
+                });
+            }
+        }
+        match enclose(boxes) {
+            Some(rect) => Shown::Map { rect, placements: ids },
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["map"]
@@ -435,6 +477,13 @@ pub mod relations_add {
     impl Operation for RelationsAdd {
         fn name(&self) -> &'static str {
             "relations_add"
+        }
+        fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            // **The relations are a file beside the map**, which nothing in the editor draws yet.
+            match ctx.open.as_ref() {
+                Some(open) => shown_file(ctx, &bevy_grimoire_core::relations::path_for_map(&open.map_path), None),
+                None => Shown::MapWhole,
+            }
         }
         fn writes(&self) -> &'static [&'static str] {
             // The relations file is a data file beside the map, not the map itself.

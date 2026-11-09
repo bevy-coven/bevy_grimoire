@@ -9,7 +9,7 @@ use bevy_grimoire_core::heightfield::{Heightfield, Stroke};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, enclose};
 
 /// A flat field to start a map's terrain from, when it has none.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -155,6 +155,29 @@ impl Operation for TerrainStroke {
     fn name(&self) -> &'static str {
         "terrain_stroke"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match Params::parse(params) {
+            Ok(p) => {
+                // **A stroke is a polyline**, so its box is the box round its points — grown by the brush
+                // radius, so a raise centred on the last point is inside the answer.
+                let Some(stroke) = &p.stroke else {
+                    // **The whole field**, which is what a create or an undo writes.
+                    return Shown::MapWhole;
+                };
+                let radius = stroke.radius_m.max(0.0);
+                let boxes: Vec<[f32; 4]> = stroke
+                    .points
+                    .iter()
+                    .map(|(x, z)| [x - radius, z - radius, x + radius, z + radius])
+                    .collect();
+                match enclose(boxes) {
+                    Some(rect) => Shown::Map { rect, placements: Vec::new() },
+                    None => Shown::MapWhole,
+                }
+            }
+            Err(_) => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["terrain"]
     }
@@ -294,6 +317,9 @@ impl TerrainImport {
 impl Operation for TerrainImport {
     fn name(&self) -> &'static str {
         "terrain_import"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::MapWhole
     }
     fn writes(&self) -> &'static [&'static str] {
         &["terrain"]
@@ -441,6 +467,9 @@ impl TerrainPreset {
 impl Operation for TerrainPreset {
     fn name(&self) -> &'static str {
         "terrain_preset"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::MapWhole
     }
     fn writes(&self) -> &'static [&'static str] {
         &["terrain"]

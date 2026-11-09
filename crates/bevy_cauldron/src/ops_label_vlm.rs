@@ -20,7 +20,7 @@ use bevy_grimoire_core::descriptor::Descriptor;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 use crate::project::Project;
 use crate::vlm::{Provenance, Suggestion, VlmConfig};
 
@@ -90,6 +90,9 @@ pub struct LabelSuggest;
 impl Operation for LabelSuggest {
     fn name(&self) -> &'static str {
         "label_suggest"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &[]
@@ -254,6 +257,12 @@ pub struct LabelApply;
 impl Operation for LabelApply {
     fn name(&self) -> &'static str {
         "label_apply"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Piece { id: id.to_owned() },
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["library"]

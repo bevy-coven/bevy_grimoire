@@ -8,7 +8,7 @@ use bevy_grimoire_core::volume::{Edit, Volume};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 /// An undo's put-back: the file as it was (`None`: there was none).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,6 +128,9 @@ impl VolumeEdit {
 impl Operation for VolumeEdit {
     fn name(&self) -> &'static str {
         "volume_edit"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::MapWhole
     }
     fn writes(&self) -> &'static [&'static str] {
         &["volume"]

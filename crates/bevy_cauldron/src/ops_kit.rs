@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::catalog::{GRIMOIRE_DIR, new_kit_files};
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 fn root(ctx: &Ctx) -> Result<PathBuf, Refusal> {
     ctx.root_or_project()
@@ -144,6 +144,10 @@ impl Operation for KitCreate {
     fn name(&self) -> &'static str {
         "kit_create"
     }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        // **A kit is a row of the project chooser's kit list**, and its binding is `kits.ron`'s.
+        Shown::Settings { section: "kits".to_owned() }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["kits", "library", "policy"]
     }
@@ -237,6 +241,10 @@ pub struct KitSetAuthoring;
 impl Operation for KitSetAuthoring {
     fn name(&self) -> &'static str {
         "kit_set_authoring"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        // **A kit is a row of the project chooser's kit list**, and its binding is `kits.ron`'s.
+        Shown::Settings { section: "kits".to_owned() }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["kits"]

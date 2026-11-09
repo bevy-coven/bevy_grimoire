@@ -9,7 +9,7 @@ use bevy_grimoire_core::data_files::{self, DataFiles};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_file};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -112,6 +112,20 @@ impl DataSet {
 impl Operation for DataSet {
     fn name(&self) -> &'static str {
         "data_set"
+    }
+    fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        // **A data file's own path**, when the registry knows it; the id it was asked for when it does not.
+        match ctx.project.as_ref().and_then(|p| {
+            bevy_grimoire_core::data_files::DataFiles::load(&p.grimoire_dir)
+                .ok()
+                .flatten()
+                .and_then(|reg| reg.get(params.get("file")?.as_str()?).cloned().map(|f| reg.resolve(&f)))
+        }) {
+            Some(path) => shown_file(ctx, &path, None),
+            None => Shown::Settings {
+                section: params.get("file").and_then(serde_json::Value::as_str).unwrap_or("data").to_owned(),
+            },
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["game_data"]

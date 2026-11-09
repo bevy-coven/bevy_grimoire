@@ -16,7 +16,7 @@ use serde_json::json;
 
 use bevy_grimoire_core::composition::Composition;
 
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -208,6 +208,12 @@ impl Operation for CompositionDefine {
     fn name(&self) -> &'static str {
         "composition_define"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Composition { id: id.to_owned() },
+            None => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["compositions"]
     }
@@ -311,6 +317,12 @@ impl Operation for CompositionSetEnvelope {
     fn name(&self) -> &'static str {
         "composition_set_envelope"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("id").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Composition { id: id.to_owned() },
+            None => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["compositions"]
     }
@@ -406,6 +418,12 @@ impl CompositionRename {
 impl Operation for CompositionRename {
     fn name(&self) -> &'static str {
         "composition_rename"
+    }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("name").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Composition { id: id.to_owned() },
+            None => Shown::MapWhole,
+        }
     }
     fn writes(&self) -> &'static [&'static str] {
         &["compositions", "map"]

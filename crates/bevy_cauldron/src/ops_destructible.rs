@@ -17,7 +17,7 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 
 use crate::map_files::read_named;
-use crate::ops::{Ctx, Operation, Outcome, Refusal, Undo};
+use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 /// Chunks a fresh bake aims for, and the smallest share of the piece one may be.
 const TARGET_CHUNKS: usize = 6;
@@ -152,6 +152,12 @@ impl Operation for DestructibleSet {
     fn name(&self) -> &'static str {
         "destructible_set"
     }
+    fn shows(&self, _ctx: &Ctx, params: &serde_json::Value) -> Shown {
+        match params.get("piece").and_then(serde_json::Value::as_str) {
+            Some(id) => Shown::Piece { id: id.to_owned() },
+            None => Shown::MapWhole,
+        }
+    }
     fn writes(&self) -> &'static [&'static str] {
         &["destructible_marks", "destructible_bake"]
     }
@@ -249,6 +255,9 @@ impl DestructibleHit {
 impl Operation for DestructibleHit {
     fn name(&self) -> &'static str {
         "destructible_hit"
+    }
+    fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+        Shown::Nowhere
     }
     fn writes(&self) -> &'static [&'static str] {
         &["destructible_bake"]
