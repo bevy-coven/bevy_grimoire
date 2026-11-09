@@ -41,23 +41,23 @@ if [ "$host" = local ]; then cp "$brief" "/tmp/fleet/brief-$cluster.md"; else sc
 
 if [ "$host" = local ]; then H=(herdr); else H=(herdr --machine "$host"); fi
 js() { python3 -c "import json,sys; d=json.load(sys.stdin); $1"; }
-hc() { local out; out=$("${H[@]}" "$@") || { echo "herdr $* failed" >&2; exit 1; }; printf '%s' "$out"; }
+hd() { local out; out=$("${H[@]}" "$@") || { echo "herdr $* failed" >&2; exit 1; }; printf '%s' "$out"; }
 
-ws=$(hc workspace list | js 'w=[x for x in d["result"]["workspaces"] if x.get("label")=="fleet"]; print(w[0]["workspace_id"] if w else "")')
+ws=$(hd workspace list | js 'w=[x for x in d["result"]["workspaces"] if x.get("label")=="fleet"]; print(w[0]["workspace_id"] if w else "")')
 if [ -z "$ws" ]; then
-  out=$(hc workspace create --cwd "$worktree" --label fleet --no-focus)
+  out=$(hd workspace create --cwd "$worktree" --label fleet --no-focus)
   pane=$(printf '%s' "$out" | js 'print(d["result"]["root_pane"]["pane_id"])')
   tab=$(printf '%s' "$out" | js 'print(d["result"]["tab"]["tab_id"])')
-  hc tab rename "$tab" "w$cluster" >/dev/null
+  hd tab rename "$tab" "w$cluster" >/dev/null
 else
-  out=$(hc tab create --workspace "$ws" --cwd "$worktree" --label "w$cluster" --no-focus)
+  out=$(hd tab create --workspace "$ws" --cwd "$worktree" --label "w$cluster" --no-focus)
   pane=$(printf '%s' "$out" | js 'print(d["result"]["root_pane"]["pane_id"])')
 fi
 # Powerlevel10k asks its configuration wizard on a host without a p10k config, which hides the prompt.
-hc pane run "$pane" "exec env POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true zsh -l" >/dev/null
+hd pane run "$pane" "exec env POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true zsh -l" >/dev/null
 sleep 3
-hc agent start "w$cluster" --kind omp --pane "$pane" --timeout 120000 -- --model "$MODEL" --thinking high >/dev/null
-hc agent prompt "w$cluster" "Read /tmp/fleet/brief-$cluster.md and follow it exactly; it is your whole task." >/dev/null
+hd agent start "w$cluster" --kind omp --pane "$pane" --timeout 120000 -- --model "$MODEL" --thinking high >/dev/null
+hd agent prompt "w$cluster" "Read /tmp/fleet/brief-$cluster.md and follow it exactly; it is your whole task." >/dev/null
 # Show the worker in the Herdr app too: an hc terminal under the manager's own, attached to the agent's pane.
 # The app lists hc terminals, not herdr-CLI sessions. --takeover because herdr's own pane view already holds the attach.
 if command -v hc >/dev/null; then
