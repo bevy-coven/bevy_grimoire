@@ -156,8 +156,10 @@ sealed: true
 fn an_alias_with_nothing_to_point_at_is_refused_at_its_line() {
     let text = GOOD.replace("sealed: true", "sealed: *nowhere");
     let problem = refused(&text);
+    assert_eq!(field(&problem), Some("sealed"), "the refusal names the field the alias stands at: {}", problem.line());
     let why = why(&problem);
     assert!(why.contains("line 6"), "the refusal names the line the alias is on: {why}");
+    assert!(why.contains("alias"), "the refusal says what it refused, which is an alias and not `text that is not YAML`: {why}");
     assert!(problem.fix.is_some(), "{}", problem.line());
 }
 
@@ -213,6 +215,17 @@ fn a_tab_at_the_start_of_a_line_is_refused_though_a_reader_might_take_it() {
 }
 
 #[test]
+fn a_tab_inside_a_later_block_scalar_does_not_replace_the_refusal_before_it() {
+    // The duplicate key is the file's first fault, and it is what a person has to fix: a tab that is
+    // content of a block scalar further down must not become the answer.
+    let text = "version: 9\nversion: 9\nname: |\n  a\n  \tb\nplacements: []\nsealed: true\n";
+    let problem = refused(text);
+    let why = why(&problem);
+    assert!(why.contains("`version` is given twice"), "{why}");
+    assert!(why.contains("line 2"), "the second `version` is on line 2: {why}");
+}
+
+#[test]
 fn a_tab_inside_a_string_is_content_and_reads() {
     let text = GOOD.replace("name: yard", "name: \"a\\tb\"");
     let yard = read(&text).unwrap_or_else(|e| panic!("{}", e.line()));
@@ -255,6 +268,17 @@ fn a_value_of_the_wrong_type_is_refused_at_its_whole_path() {
     let problem = refused(&text);
     assert_eq!(field(&problem), Some("placements[0].turn_deg"), "{}", problem.line());
     assert!(why(&problem).contains("expected"), "{}", problem.line());
+}
+
+#[test]
+fn a_refusal_that_has_a_position_gives_it_and_one_that_has_none_claims_none() {
+    // Every refusal this reader can reach from a file has a position, and says it. One that has none —
+    // `serde_yaml_ng` answers none for a stream it could not shape into a document — says none rather
+    // than `line 1, column 1`; that half is `yaml::tests::a_refusal_with_no_position_invents_none`.
+    let problem = refused("just a string\n");
+    let why = why(&problem);
+    assert!(why.starts_with("line "), "a refusal that has a position gives it: {why}");
+    assert!(why.contains("expected struct Yard"), "{why}");
 }
 
 #[test]

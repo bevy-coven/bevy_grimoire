@@ -1,11 +1,16 @@
 //! **Every type a project holds round-trips through the one YAML writer** (GD-01, #363).
 //!
-//! The values are today's fixtures, read through the RON reader that is still the one on disk: the
-//! shipped project's own files where there is one, and the type's own writer where the project ships
-//! no sample (`standards.ron`, `repetition.ron`, a terrain). Each is written by
-//! `bevy_grimoire_core::yaml::to_string` and read back by `yaml::from_str`, and the value must come
-//! back equal — a round trip that loses a field, an empty list or a float's last digit is a file the
-//! editor writes and cannot read.
+//! **The values are today's fixtures, read through RON.** Where the shipped project has a file, that is
+//! it; where it has none, the file a release wrote and `tests/old_data.rs` freezes is: those hold real
+//! content — a `standards.ron` with a rule in it, a `relations.ron` with a relation, a destructive bake
+//! with a chunk — where `Default::default()` holds empty lists and would prove only that an `[]`
+//! round-trips. Each is written by `bevy_grimoire_core::yaml::to_string` and read back by
+//! `yaml::from_str`, and the value must come back equal: a round trip that loses a field, an empty list
+//! or a float's last digit is a file the editor writes and cannot read.
+//!
+//! **Not here: the kinds whose type lives above this crate** (`Forest`, `People`, `Scripts`, a
+//! `Checks`, a `TreeParams`, the editor's `EditorSettings`), because this crate cannot name the type to
+//! read the fixture as. Their round trip is GD-03's (#365), in the crate that owns them.
 //!
 //! The written form is checked too, because the style is what a person reads and what the surgery
 //! (#364) keeps: two spaces per level, block style, the type's field order, a trailing newline, and no
@@ -14,8 +19,9 @@
 use std::path::{Path, PathBuf};
 
 use bevy_grimoire_core::composition::Compositions;
-use bevy_grimoire_core::destructible::{Bake, Chunk, DESTRUCTIBLE_VERSION, Marks};
-use bevy_grimoire_core::family::{FAMILY_VERSION, Family};
+use bevy_grimoire_core::data_files::DataFiles;
+use bevy_grimoire_core::destructible::{Bake, Marks};
+use bevy_grimoire_core::family::Family;
 use bevy_grimoire_core::heightfield::Heightfield;
 use bevy_grimoire_core::kits::Kits;
 use bevy_grimoire_core::library::Library;
@@ -23,7 +29,7 @@ use bevy_grimoire_core::map::{MAP_VERSION, Map};
 use bevy_grimoire_core::note_agent::AgentSettings;
 use bevy_grimoire_core::notes::Notes;
 use bevy_grimoire_core::plan::Plan;
-use bevy_grimoire_core::play::{DEFAULT_PORT, PLAY_VERSION, PlayConfig};
+use bevy_grimoire_core::play::{PlayConfig};
 use bevy_grimoire_core::policy::Policy;
 use bevy_grimoire_core::references::References;
 use bevy_grimoire_core::relations::Relations;
@@ -33,7 +39,7 @@ use bevy_grimoire_core::rigs::Rigs;
 use bevy_grimoire_core::standards::Standards;
 use bevy_grimoire_core::vocab::Vocabularies;
 use bevy_grimoire_core::volume::Volume;
-use bevy_grimoire_core::water::{WATER_FIELD_VERSION, WaterField, WaterPlan};
+use bevy_grimoire_core::water::{WaterField, WaterPlan};
 use bevy_grimoire_core::yaml;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -49,6 +55,15 @@ fn shipped<T: DeserializeOwned>(rel: &str) -> T {
     ron::from_str(&text).unwrap_or_else(|e| panic!("{} does not read as RON: {e}", path.display()))
 }
 
+/// **A file a release wrote and `tests/old_data.rs` freezes**, read as the value it holds: the fixture a
+/// kind the shipped project has no sample of is proved against, so the value has content and not only
+/// empty lists.
+fn frozen<T: DeserializeOwned>(rel: &str) -> T {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data").join(rel);
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    ron::from_str(&text).unwrap_or_else(|e| panic!("{} does not read as RON: {e}", path.display()))
+}
+
 /// The values a project holds, each with the file its kind is written at.
 fn project() -> Vec<(&'static str, String)> {
     vec![
@@ -60,39 +75,25 @@ fn project() -> Vec<(&'static str, String)> {
         ("rigs.yaml", round_trip::<Rigs>("rigs.yaml", shipped("rigs.ron"))),
         ("rules.yaml", round_trip::<Rules>("rules.yaml", ron::from_str(&format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION)).expect("the rules file this build writes"))),
         ("maps/bedroom.map.yaml", round_trip::<Map>("maps/bedroom.map.yaml", shipped("maps/bedroom.map.ron"))),
-        // Kinds the shipped project has no sample of: the type's own default is the value.
-        ("standards.yaml", round_trip::<Standards>("standards.yaml", Standards::default())),
-        ("repetition.yaml", round_trip::<RepetitionRules>("repetition.yaml", RepetitionRules::default())),
-        ("maps/yard.notes.yaml", round_trip::<Notes>("maps/yard.notes.yaml", Notes::default())),
-        ("maps/yard.plan.yaml", round_trip::<Plan>("maps/yard.plan.yaml", Plan::default())),
-        ("maps/yard.references.yaml", round_trip::<References>("maps/yard.references.yaml", References::default())),
-        ("maps/yard.relations.yaml", round_trip::<Relations>("maps/yard.relations.yaml", Relations::default())),
-        ("site/terrain/yard.yaml", round_trip::<Heightfield>("site/terrain/yard.yaml", Heightfield::flat((0.0, 0.0), 1.0, 2, 2, 0.0))),
-        ("site/water/yard.yaml", round_trip::<WaterPlan>("site/water/yard.yaml", WaterPlan::default())),
-        (
-            "site/water/yard.field.yaml",
-            round_trip::<WaterField>(
-                "site/water/yard.field.yaml",
-                WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: vec![0.0; 4], settled: true, steps: 1 },
-            ),
-        ),
-        ("site/volume/yard.yaml", round_trip::<Volume>("site/volume/yard.yaml", Volume::default())),
-        ("family.yaml", round_trip::<Family>("family.yaml", Family { version: FAMILY_VERSION, crates: Vec::new() })),
-        ("agent.yaml", round_trip::<AgentSettings>("agent.yaml", AgentSettings::default())),
-        (
-            "play.yaml",
-            round_trip::<PlayConfig>(
-                "play.yaml",
-                PlayConfig { version: PLAY_VERSION, command: vec!["game".to_owned()], cwd: None, port: DEFAULT_PORT },
-            ),
-        ),
-        ("destructible.yaml", round_trip::<Marks>("destructible.yaml", Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] })),
+        // Kinds the shipped project has no sample of: a file a release wrote, frozen in tests/old_data.
+        ("standards.yaml", round_trip::<Standards>("standards.yaml", frozen("core-0.3.0/standards.ron"))),
+        ("repetition.yaml", round_trip::<RepetitionRules>("repetition.yaml", frozen("core-0.3.0/repetition.ron"))),
+        ("maps/yard.notes.yaml", round_trip::<Notes>("maps/yard.notes.yaml", frozen("core-0.3.0/notes.ron"))),
+        ("maps/yard.plan.yaml", round_trip::<Plan>("maps/yard.plan.yaml", frozen("core-0.3.0/plan.ron"))),
+        ("maps/yard.references.yaml", round_trip::<References>("maps/yard.references.yaml", frozen("core-0.3.0/references.ron"))),
+        ("maps/yard.relations.yaml", round_trip::<Relations>("maps/yard.relations.yaml", frozen("core-0.3.0/relations.ron"))),
+        ("site/terrain/yard.yaml", round_trip::<Heightfield>("site/terrain/yard.yaml", frozen("core-0.3.0/terrain.ron"))),
+        ("site/water/yard.yaml", round_trip::<WaterPlan>("site/water/yard.yaml", frozen("core-0.3.0/water_plan.ron"))),
+        ("site/water/yard.field.yaml", round_trip::<WaterField>("site/water/yard.field.yaml", frozen("core-0.3.0/water_field.ron"))),
+        ("site/volume/yard.yaml", round_trip::<Volume>("site/volume/yard.yaml", frozen("core-0.3.0/volume.ron"))),
+        ("site/data.yaml", round_trip::<DataFiles>("site/data.yaml", frozen("core-0.3.0/data_registry.ron"))),
+        ("family.yaml", round_trip::<Family>("family.yaml", frozen("core-0.3.0/family_list.ron"))),
+        ("agent.yaml", round_trip::<AgentSettings>("agent.yaml", frozen("core-0.3.0/agent.ron"))),
+        ("play.yaml", round_trip::<PlayConfig>("play.yaml", frozen("core-0.3.0/play.ron"))),
+        ("destructible.yaml", round_trip::<Marks>("destructible.yaml", frozen("editor-3f4084c/destructible.ron"))),
         (
             "destructible/site__cart.bake.yaml",
-            round_trip::<Bake>(
-                "destructible/site__cart.bake.yaml",
-                Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] },
-            ),
+            round_trip::<Bake>("destructible/site__cart.bake.yaml", frozen("editor-3f4084c/site__cart.bake.ron")),
         ),
         (
             "maps/yard.map.yaml",
@@ -125,9 +126,15 @@ fn every_type_a_project_holds_round_trips_through_the_one_writer() {
 #[test]
 fn written_files_come_out_in_one_style() {
     for (file, text) in project() {
-        // Block style, not flow: a project file is read by a person, one field a line.
+        // Block style, not flow: a project file is read by a person, one field a line. The one
+        // exception is an EMPTY collection, which a block cannot write and which is `[]` or `{}`.
         for (n, line) in text.lines().enumerate() {
-            assert!(!line.contains('{') && !line.contains('}'), "{file}:{} is flow style: {line}", n + 1);
+            let flow = line.split_once(": ").map_or(line, |(_, value)| value).trim();
+            assert!(
+                flow.is_empty() || matches!(flow, "[]" | "{}") || (!line.contains('{') && !line.contains('}')),
+                "{file}:{} is flow style: {line}",
+                n + 1
+            );
             assert!(!line.contains('\t'), "{file}:{} holds a tab: {line}", n + 1);
             let indent = line.len() - line.trim_start().len();
             assert_eq!(indent % 2, 0, "{file}:{} is indented {indent} spaces, not two per level: {line}", n + 1);

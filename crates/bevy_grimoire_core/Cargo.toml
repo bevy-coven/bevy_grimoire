@@ -39,7 +39,7 @@ rand_chacha.workspace = true
 # name where `recent.ron`, `settings.ron`, `trusted.ron` and `cauldron.log` live. No engine in it.
 dirs = "6"
 # The one YAML reader and writer every project file goes through (`yaml.rs`, GD-01, #363), and the event
-# parser that says where each node stands — which is what a refusal's line and field path come from, and
-# what `yaml_surgery` reads to edit one leaf while every comment stays. Neither holds an engine type.
+# parser that says where each node stands — which is what a refusal's line and field path come from.
+# Neither holds an engine type.
 serde_yaml_ng.workspace = true
 saphyr-parser.workspace = true

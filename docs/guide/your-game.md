@@ -35,6 +35,28 @@ Your game keeps its bevy_grimoire data in one folder, `assets/grimoire/`, inside
 
 A kit folder must be bound in `kits.ron` before the game can load it. See the data file reference for every file's format.
 
+### The rules a project file is read by
+
+The project's files are moving from RON to YAML, one kind at a time, and every one that has moved is read by
+`bevy_grimoire_core::yaml` — the only place a project file is parsed or written as YAML, so every file the editor
+and an agent see is held to the same rules.
+
+A YAML file may **not** say any of these, and is refused rather than guessed at: a field nothing reads, a key given
+twice, an anchor (`&name`), an alias (`*name`) or a `<<` merge key, a second document, or a tab used for
+indentation. A file a person reads and an agent edits has to say everything where it stands, and each of those
+makes some part of it arrive from somewhere else or mean two things. A tab inside a string, a quoted scalar or a
+block scalar's content is content and reads normally.
+
+It follows YAML 1.2, so only `true` and `false` are booleans: `no`, `on` and `yes` are the words they look like.
+Give one to a `bool` field and the file is refused, with a sentence saying a boolean was expected.
+
+A refusal is one `Problem` (see `bevy_grimoire_core::problem`): the file, the line and column, the field's path
+(`placements[3].turn_deg`), what was expected, and the fix. The editor shows it as a toast and a journal row; an
+agent receives the same parts as JSON, so neither can drop something the other has.
+
+What the reader writes is what it reads: block style, two spaces per level, the type's field order, a trailing
+newline, and a string quoted only where YAML needs it.
+
 ## Load a project in your game
 
 **Goal:** the game loads one map and spawns its pieces when it starts.

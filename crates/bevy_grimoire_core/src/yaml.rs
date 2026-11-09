@@ -35,7 +35,8 @@
 //!
 //! # The written style, which is what a diff shows
 //!
-//! - **Block style**, never flow: one field a line.
+//! - **Block style**, never flow: one field a line, and an item of a list a line of its own. The one
+//!   exception is an **empty** collection, which is `[]` or `{}` because a block has nothing to write.
 //! - **Two spaces per nesting level** of mappings ([`INDENT_SPACES`]).
 //! - **The type's field order**, because the file then reads the way the type is declared, so an edit
 //!   of one field is a diff of one field.
@@ -57,7 +58,7 @@
 //! walk is where the refusals above come from, each at the line and field path it would have had — and
 //! `serde_yaml_ng` then reads the value, its refusal reported in the same shape.
 //!
-//! `saphyr-parser` is also what tells a leaf its own bytes, which is what `yaml_surgery` edits.
+
 //!
 //! Engine-free: nothing here knows what a window, a map view or an agent is.
 
@@ -73,7 +74,14 @@ use crate::problem::{Detail, Location, Problem};
 /// `yaml_surgery` copies when it adds an item beside siblings that are indented.
 pub const INDENT_SPACES: usize = 2;
 
-/// The page that explains a YAML refusal to a person.
+/// **How many columns one tab is worth** when a refusal says where a tab-indented line would have sat.
+/// YAML gives a tab no width at all (it is forbidden as indentation), so this is a reading convenience
+/// for a person's editor, which is what the field path in a refusal is derived from. Eight is the tab
+/// stop every editor's default starts at, and it is deliberately not [`INDENT_SPACES`]: a mapping's
+/// step is the writer's style, while this is only how far a tab was thought to reach.
+const TAB_WIDTH: usize = 8;
+
+/// The page that explains a YAML refusal to a person: "The rules a project file is read by" in it.
 const DOCS: &str = "docs/guide/your-game.md";
 
 /// The sentence every refusal opens with, after the file's name.
@@ -104,13 +112,8 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T, Problem> {
 /// one it is about to be written to.
 #[allow(clippy::result_large_err)]
 pub fn from_str<T: DeserializeOwned>(text: &str, path: &str) -> Result<T, Problem> {
-    // The tab first: `saphyr-parser` complains about a tab-indented line two ways — sometimes at the
-    // tab, sometimes at the line after it — and the tab is the truth in both cases.
     let (blocks, site) = walk(text);
-    if let Some(site) = indentation_tab(text, &blocks) {
-        return Err(refusal(path, site));
-    }
-    if let Some(site) = site {
+    if let Some(site) = earlier_fault(indentation_tab(text, &blocks), site) {
         return Err(refusal(path, site));
     }
     let deserializer = serde_yaml_ng::Deserializer::from_str(text);
@@ -119,12 +122,12 @@ pub fn from_str<T: DeserializeOwned>(text: &str, path: &str) -> Result<T, Proble
         Err(error) => {
             let field = path_of(&error.path().to_string());
             let inner = error.inner();
-            let (line, column) = inner.location().map_or((1, 1), |l| (l.line(), l.column()));
+            let why = positioned(inner.location(), &inner.to_string());
             Err(Problem::with(
                 format!("{path} {WHAT}"),
                 Detail::default()
                     .at(Location::file(path.to_owned()).field(field.clone()))
-                    .because(format!("line {line}, column {column}: {}", sentence(&inner.to_string())))
+                    .because(why)
                     .fix(fix_for(&field))
                     .docs(DOCS),
             ))
@@ -153,6 +156,18 @@ where
 fn path_of(path: &str) -> Option<String> {
     let path = path.trim_start_matches('.');
     (!path.is_empty()).then(|| path.to_owned())
+}
+
+/// **A serde message, with its line and column when it has one and with none when it has not.**
+///
+/// `serde_yaml_ng` answers no location for a few refusals — a stream it could not shape into one
+/// document, among them — and writing `line 1, column 1` for those would send a reader to a place the
+/// fault is not, which is worse than saying nothing about where.
+fn positioned(location: Option<serde_yaml_ng::Location>, message: &str) -> String {
+    match location {
+        Some(at) => format!("line {}, column {}: {}", at.line(), at.column(), sentence(message)),
+        None => sentence(message),
+    }
 }
 
 /// A serde message without the path it repeats (the field is in [`Location`]) and without the
@@ -220,7 +235,10 @@ type Blocks = Vec<(usize, usize)>;
 ///
 /// It answers both rather than stopping at the refusal, because a tab in a block scalar's content is
 /// content and the walk is what says which lines those are: a file refused for a tab must not be
-/// refused for one that is a character in a note.
+/// refused for one that is a character in a note — and because the walk stops at the first fault (a
+/// scan error ends `saphyr-parser`'s event stream), a tab found *after* that fault is not yet known to be
+/// indentation: it may be the content of a block scalar further down. So [`from_str`] weighs the two:
+/// see [`earlier_fault`].
 fn walk(text: &str) -> (Blocks, Option<Site>) {
     let mut blocks: Blocks = Vec::new();
     let mut stack: Vec<Frame> = Vec::new();
@@ -233,14 +251,30 @@ fn walk(text: &str) -> (Blocks, Option<Site>) {
             Err(error) => {
                 let marker = error.marker();
                 let info = error.info().to_owned();
-                let tab = info.to_ascii_lowercase().contains("tab");
-                let site = Site {
-                    what: if tab { "a tab is used for indentation".to_owned() } else { "the text is not YAML".to_owned() },
-                    field: path_of(&child_path(&stack)),
-                    line: marker.line(),
-                    column: marker.col() + 1,
-                    why: info,
-                    fix: if tab { indent_fix() } else { "write the line as YAML 1.2".to_owned() },
+                let lower = info.to_ascii_lowercase();
+                // **An alias is an alias however the parser met it.** A `*name` with nothing to point
+                // at is a scan error (`found unknown anchor`) and never reaches `Event::Alias`, so the
+                // file would otherwise be refused as "not YAML" — which says nothing about what to fix.
+                let site = if lower.contains("anchor") {
+                    alias_site(&stack, marker.line(), marker.col() + 1)
+                } else if lower.contains("tab") {
+                    Site {
+                        what: "a tab is used for indentation".to_owned(),
+                        field: path_of(&child_path(&stack)),
+                        line: marker.line(),
+                        column: marker.col() + 1,
+                        why: info,
+                        fix: indent_fix(),
+                    }
+                } else {
+                    Site {
+                        what: "the text is not YAML".to_owned(),
+                        field: path_of(&child_path(&stack)),
+                        line: marker.line(),
+                        column: marker.col() + 1,
+                        why: info,
+                        fix: "write the line as YAML 1.2".to_owned(),
+                    }
                 };
                 return (blocks, Some(site));
             }
@@ -264,16 +298,10 @@ fn walk(text: &str) -> (Blocks, Option<Site>) {
                 }
             }
             Event::DocumentEnd => {}
-            Event::Alias(_) => {
-                return (blocks, Some(Site {
-                    what: "an alias (`*name`) is not read".to_owned(),
-                    field: path_of(&child_path(&stack)),
-                    line,
-                    column,
-                    why: "an alias points at an anchor elsewhere, so this value does not stand where it is read".to_owned(),
-                    fix: "write the value out where it is used, and drop the anchor and its alias".to_owned(),
-                }));
-            }
+            // Unreachable for `saphyr-parser` 0.3.3, which fails a `*name` before it emits this event
+            // (see the scan-error arm above, which is what actually refuses one), and kept because the
+            // event exists: a parser version that reports an alias instead must not read one through.
+            Event::Alias(_) => return (blocks, Some(alias_site(&stack, line, column))),
             Event::Scalar(value, style, anchor, _tag) => {
                 if anchor != 0 {
                     return (blocks, Some(anchor_refusal(&stack, line, column)));
@@ -330,6 +358,18 @@ fn walk(text: &str) -> (Blocks, Option<Site>) {
         }
     }
     (blocks, None)
+}
+
+/// The refusal an alias earns, wherever it stands.
+fn alias_site(stack: &[Frame], line: usize, column: usize) -> Site {
+    Site {
+        what: "an alias (`*name`) is not read".to_owned(),
+        field: path_of(&child_path(stack)),
+        line,
+        column,
+        why: "an alias points at an anchor elsewhere, so this value does not stand where it is read".to_owned(),
+        fix: "write the value out where it is used, and drop the anchor and its alias".to_owned(),
+    }
 }
 
 /// The refusal an anchor earns, wherever it stands.
@@ -392,6 +432,27 @@ fn finish_value(stack: &mut [Frame]) {
     }
 }
 
+/// **Whichever of the two faults a file has comes first**, or the only one it has.
+///
+/// The tab and the walk are two readers of one text, and they see different amounts of it: the tab check
+/// reads every line, while the walk stops at the first fault. So a tab on line 9 with a duplicate key on
+/// line 2 must lose — the duplicate key is what the file's author meets first, and the tab may even be
+/// content of a block scalar the walk never reached.
+///
+/// `saphyr-parser` reports a tab it trips over at the tab's line or at the line after it (both measured
+/// against 0.3.3), so a tab one line past the walk's fault is the same fault and is taken as the tab.
+fn earlier_fault(tab: Option<Site>, walked: Option<Site>) -> Option<Site> {
+    match (tab, walked) {
+        (Some(tab), Some(walked)) if tab.line <= walked.line + TAB_REPORT_SLACK_LINES => Some(tab),
+        (_, Some(walked)) => Some(walked),
+        (tab, None) => tab,
+    }
+}
+
+/// **How far past the walk's fault a tab may be and still be the same fault**, because
+/// `saphyr-parser` reports a tab at the line it meets and sometimes at the line after it.
+const TAB_REPORT_SLACK_LINES: usize = 1;
+
 /// **The first tab that indents a line**, outside every block scalar's content.
 ///
 /// `serde_yaml_ng` accepts a leading tab, and `saphyr-parser` accepts one on the first line, so this is
@@ -404,7 +465,7 @@ fn indentation_tab(text: &str, blocks: &Blocks) -> Option<Site> {
         }
         let leading = line.len() - line.trim_start_matches([' ', '\t']).len();
         if let Some(at) = line[..leading].find('\t') {
-            let indent = line[..leading].chars().map(|c| if c == '\t' { INDENT_SPACES } else { 1 }).sum();
+            let indent = line[..leading].chars().map(|c| if c == '\t' { TAB_WIDTH } else { 1 }).sum();
             return Some(Site {
                 what: "a tab is used for indentation".to_owned(),
                 field: owning_path(text, number, indent),
@@ -436,7 +497,7 @@ fn owning_path(text: &str, line: usize, indent: usize) -> Option<String> {
         for c in above.chars() {
             match c {
                 ' ' => width += 1,
-                '\t' => width += INDENT_SPACES,
+                '\t' => width += TAB_WIDTH,
                 _ => break,
             }
         }
@@ -465,6 +526,11 @@ mod tests {
         assert_eq!(path_of("."), None);
         assert_eq!(path_of(".placements[0].turn_deg"), Some("placements[0].turn_deg".to_owned()));
         assert_eq!(path_of("placements[0].turn_deg"), Some("placements[0].turn_deg".to_owned()));
+    }
+
+    #[test]
+    fn a_refusal_with_no_position_invents_none() {
+        assert_eq!(positioned(None, "invalid type: unit value, expected struct Yard"), "invalid type: unit value, expected struct Yard");
     }
 
     #[test]
