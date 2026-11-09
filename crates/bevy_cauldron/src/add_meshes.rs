@@ -1,7 +1,7 @@
 //! **An empty library leads to adding meshes** (#301).
 //!
-//! A project with no pieces has an empty palette, and the way out has to be on the screen: the map's empty state, the PLACE
-//! list and the kit's Meshes view each say so and offer **Add meshes…** ([`AddMeshesButton`]). One function does the work for
+//! A project with no pieces has an empty palette, and the way out has to be on the screen: the PLACE list and the kit's Meshes
+//! view each say so and offer **Add meshes…** ([`AddMeshesButton`]); the map is left clear. One function does the work for
 //! every way in — the button's file chooser ([`crate::picker`]), a `.glb` dropped on the window, and a test:
 //!
 //! 1. each file is copied into `assets/<authoring kit>/` ([`bevy_grimoire_core::atomic_file::write_new`]; a name that is
@@ -28,7 +28,7 @@ use crate::screen::Screen;
 /// The button's label, wherever it stands.
 pub const ACTION: &str = "Add meshes…";
 
-/// What the map's empty state and the PLACE list say when the library has no pieces.
+/// What the PLACE list says when the library has no pieces.
 pub const NO_PIECES: &str = "This project has no pieces yet";
 
 /// What the kit's Meshes view says when the project has no meshes and nothing to import.

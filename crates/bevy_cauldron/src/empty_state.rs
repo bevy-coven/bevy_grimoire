@@ -24,11 +24,9 @@
 
 use bevy::prelude::*;
 
-use crate::add_meshes::{ACTION as ADD_MESHES, AddMeshesButton, NO_PIECES};
 use crate::chrome::{Frame, FrameSystems};
 use crate::confirm::Confirm;
 use crate::project::{OpenMap, Project};
-use crate::ui::submit_button;
 use crate::screen::Screen;
 
 /// What the prompt says. One sentence, no full stop, as the writing style has every label.
@@ -39,14 +37,12 @@ pub const ACTION: &str = "Open library";
 
 /// The overlay: the sentence and the action, centred over the viewport.
 ///
-/// A project whose library has no pieces says so and offers **Add meshes…** ([`crate::add_meshes`]); a library with pieces and a
-/// map with none says [`SENTENCE`]. The prompt is the kind that is wanted, and swaps when the library gains its first piece.
+/// It stands over a map with no placements whose library has pieces to place. A library with none gets no overlay: the PLACE
+/// list offers **Add meshes…** there, and the map is left clear ([`wanted_prompt`]).
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EmptyMapPrompt {
     /// The library has pieces; the map has no placements.
     NoPlacements,
-    /// The library has no pieces at all.
-    NoPieces,
 }
 
 /// The prompt's button.
@@ -70,13 +66,17 @@ impl Plugin for EmptyStatePlugin {
     }
 }
 
-/// **What the prompt is, from what is true now**: `None` unless the map is empty, no question is open and no agent has been
-/// invoked. An agent that is working the map is the answer to "what do I do next", and a sentence that sends a person to the
-/// library while one is placing things (or has built a forest, which are not placements) is in the way
-/// (`feedback-1794146746836`: *"This should go away if I invoke an agent"*).
+/// **What the prompt is, from what is true now**: `None` unless the map is empty, the library has pieces to place, no question
+/// is open and no agent has been invoked. An agent that is working the map is the answer to "what do I do next", and a sentence
+/// that sends a person to the library while one is placing things (or has built a forest, which are not placements) is in the
+/// way (`feedback-1794146746836`: *"This should go away if I invoke an agent"*).
+///
+/// **A library with no pieces gets no prompt over the map** (`feedback-1794147258746`, `feedback-1794230462401`: *"We do not
+/// want the 'Add Meshes' here, it should be in the panel on the right. It shouldn't block the map area"*). There is nothing
+/// to place, and the PLACE list in the right dock already says so and offers **Add meshes…**
+/// ([`crate::add_meshes::AddMeshesButton`]), which is where the person who has no meshes yet looks.
 fn wanted_prompt(map_is_empty: bool, question_open: bool, agent_invoked: bool, library_is_empty: bool) -> Option<EmptyMapPrompt> {
-    (map_is_empty && !question_open && !agent_invoked)
-        .then_some(if library_is_empty { EmptyMapPrompt::NoPieces } else { EmptyMapPrompt::NoPlacements })
+    (map_is_empty && !question_open && !agent_invoked && !library_is_empty).then_some(EmptyMapPrompt::NoPlacements)
 }
 
 /// **The prompt exists exactly while the open map has no placements, no question is open and no agent is invoked.**
@@ -132,16 +132,8 @@ fn spawn_prompt(commands: &mut Commands, viewport: Entity, kind: EmptyMapPrompt)
             ChildOf(viewport),
         ))
         .with_children(|p| {
-            match kind {
-                EmptyMapPrompt::NoPlacements => {
-                    p.spawn(bevy_gooey::label(SENTENCE));
-                    p.spawn((bevy_gooey::button(ACTION), OpenLibraryButton));
-                }
-                EmptyMapPrompt::NoPieces => {
-                    p.spawn(bevy_gooey::label(NO_PIECES));
-                    p.spawn((submit_button(ADD_MESHES), AddMeshesButton));
-                }
-            }
+            p.spawn(bevy_gooey::label(SENTENCE));
+            p.spawn((bevy_gooey::button(ACTION), OpenLibraryButton));
         });
 }
 
@@ -183,8 +175,9 @@ mod tests {
 
     /// **An invoked agent takes the prompt away, and nothing else about the prompt moves** (`feedback-1794146746836`).
     ///
-    /// The four facts the prompt is decided from, every combination: it stands only on an empty map with no question open and
-    /// no agent invoked, and the kind it takes is the library's (pieces to place, or none to add).
+    /// The four facts the prompt is decided from, every combination: it stands only on an empty map whose library has pieces to
+    /// place, with no question open and no agent invoked. A library with none gets no prompt over the map
+    /// (`feedback-1794230462401`): the PLACE list offers **Add meshes…** there.
     #[test]
     fn the_prompt_stands_only_on_an_empty_map_with_no_question_and_no_agent() {
         for map_is_empty in [false, true] {
@@ -192,11 +185,10 @@ mod tests {
                 for agent_invoked in [false, true] {
                     for library_is_empty in [false, true] {
                         let wanted = wanted_prompt(map_is_empty, question_open, agent_invoked, library_is_empty);
-                        let stands = map_is_empty && !question_open && !agent_invoked;
-                        let kind = if library_is_empty { EmptyMapPrompt::NoPieces } else { EmptyMapPrompt::NoPlacements };
+                        let stands = map_is_empty && !question_open && !agent_invoked && !library_is_empty;
                         assert_eq!(
                             wanted,
-                            stands.then_some(kind),
+                            stands.then_some(EmptyMapPrompt::NoPlacements),
                             "map empty {map_is_empty}, question {question_open}, agent {agent_invoked}, library empty {library_is_empty}"
                         );
                     }

@@ -1,8 +1,9 @@
 //! **An empty library leads to adding meshes** (#301).
 //!
-//! An Empty project's map says it has no pieces and offers Add meshes…; so does the PLACE list. Meshes put in through the
-//! one function — a `.glb` dropped on the window, the file chooser's answer — are copied into the authoring kit, imported with
-//! `piece_import`, and the first is armed: the palette then has the piece as its one row, and it is the brush.
+//! An Empty project's PLACE list says it has no pieces and offers Add meshes…; the map is left clear (`feedback-1794230462401`).
+//! Meshes put in through the one function — a `.glb` dropped on the window, the file chooser's answer — are copied into the
+//! authoring kit, imported with `piece_import`, and the first is armed: the palette then has the piece as its one row, and it
+//! is the brush.
 
 use std::path::{Path, PathBuf};
 
@@ -67,18 +68,18 @@ fn brush_id(app: &App) -> Option<String> {
 }
 
 #[test]
-fn an_empty_project_says_it_has_no_pieces_and_offers_to_add_meshes_on_the_map_and_in_place() {
+fn an_empty_project_says_it_has_no_pieces_and_offers_to_add_meshes_in_place_and_leaves_the_map_clear() {
     let dir = scratch("says");
     let (mut app, _) = on_an_empty_project("blank", &dir);
-    assert_eq!(prompt(&mut app), Some(EmptyMapPrompt::NoPieces), "the map's empty state is the no-pieces one");
+    assert_eq!(prompt(&mut app), None, "the map draws no empty-state prompt when the library has no pieces to place");
     let said = texts(&mut app);
-    assert!(said.iter().filter(|t| t.as_str() == NO_PIECES).count() == 2, "the map and the PLACE list each say {NO_PIECES:?}: {said:?}");
-    // The menu bar's File → Add meshes… (#299) says it too, so the count is of the two *buttons* the empty states draw, each saying it.
+    assert!(said.iter().filter(|t| t.as_str() == NO_PIECES).count() == 1, "the PLACE list alone says {NO_PIECES:?}: {said:?}");
+    // The menu bar's File → Add meshes… (#299) says it too, so the count is of the *buttons* the empty states draw: the PLACE list's one.
     let buttons: Vec<Entity> = app.world_mut().query_filtered::<Entity, With<AddMeshesButton>>().iter(app.world()).collect();
-    assert_eq!(buttons.len(), 2, "the map and the PLACE list each offer a button");
+    assert_eq!(buttons.len(), 1, "the PLACE list offers the one button");
     for button in buttons {
         let says = app.world().get::<Children>(button).is_some_and(|kids| kids.iter().any(|k| app.world().get::<Text>(k).is_some_and(|t| t.0 == ACTION)));
-        assert!(says, "each button says {ACTION:?}");
+        assert!(says, "the button says {ACTION:?}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

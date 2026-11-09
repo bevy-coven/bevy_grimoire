@@ -4042,7 +4042,7 @@ fn rebuild_palette(
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
-            // **A library with no pieces says so, and where to get some** (#301): the same sentence and button as the map's own empty state.
+            // **A library with no pieces says so, and where to get some** (#301): the one **Add meshes…** on the map's door, here in the right dock, so the map stays clear (`feedback-1794230462401`).
             if project.library.descriptors.is_empty() {
                 p.spawn(bevy_gooey::label(crate::add_meshes::NO_PIECES));
                 p.spawn((bevy_gooey::button(crate::add_meshes::ACTION), crate::add_meshes::AddMeshesButton));
