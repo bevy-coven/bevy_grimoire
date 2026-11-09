@@ -80,6 +80,7 @@ pub mod startup_probe;
 #[cfg(feature = "bevy_elements")]
 pub mod environment;
 pub mod fill;
+pub mod follow;
 pub mod filter;
 pub mod exit_watchdog;
 #[cfg(feature = "debugger")]

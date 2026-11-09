@@ -342,7 +342,11 @@ pub fn depth_range(camera: &Transform, open: Option<&crate::project::OpenMap>) -
 
 /// **The room a framed box is given**, as a multiplier on its extent: a tenth each way, so a box framed
 /// to the edge does not sit against the viewport's border.
-const FRAME_MARGIN: f32 = 1.1;
+///
+/// **`pub` because the follow (`crate::follow`) is the other caller that has to name one**: it frames a
+/// change with `FOLLOW_MARGIN_FRAC` instead, and the two margins belong to the caller rather than to
+/// two versions of the framer. One arithmetic, one place to read what a margin means.
+pub const FRAME_MARGIN: f32 = 1.1;
 
 /// **Where to look, and how far out, to see a box whole**: `(focus, viewport height)`.
 ///
@@ -358,10 +362,35 @@ const FRAME_MARGIN: f32 = 1.1;
 ///
 /// **Camera state only.** The result is a focus and a height for the rig. Nothing the map holds
 /// changes, so framing is not an operation and is not undoable.
+///
+/// **This is the frame a person asked for**, so it gives the box [`FRAME_MARGIN`]. A caller that
+/// wants its own margin — the follow showing an agent's change — calls
+/// [`frame_box_with_margin`], which is the one arithmetic both go through.
 pub fn frame_box(rig: &Rig, centre: Vec3, size: Vec3, aspect: f32, ceiling: f32) -> (Vec3, f32) {
+    frame_box_with_margin(rig, centre, size, aspect, ceiling, FRAME_MARGIN)
+}
+
+/// [`frame_box`], with the room the box is given stated by the caller.
+///
+/// `margin` is a multiplier on the box's extent, as [`FRAME_MARGIN`] is: `1.1` for a frame a person
+/// asked for, [`crate::follow::FOLLOW_MARGIN_FRAC`] for a change the editor is showing them. **A
+/// parameter rather than a second framer**, so the two callers cannot disagree about where a box
+/// goes on screen — only about how much air it gets.
+pub fn frame_box_with_margin(
+    rig: &Rig,
+    centre: Vec3,
+    size: Vec3,
+    aspect: f32,
+    ceiling: f32,
+    margin: f32,
+) -> (Vec3, f32) {
     debug_assert!(
         aspect > 0.0,
         "a viewport has a positive aspect, got {aspect}"
+    );
+    debug_assert!(
+        margin >= 1.0,
+        "a margin is room PAST the box, so it is at least 1.0; got {margin}"
     );
     let settled = Rig {
         focus: Vec3::ZERO,
@@ -383,7 +412,7 @@ pub fn frame_box(rig: &Rig, centre: Vec3, size: Vec3, aspect: f32, ceiling: f32)
             }
         }
     }
-    let needed = (2.0 * down).max(2.0 * across / aspect) * FRAME_MARGIN;
+    let needed = (2.0 * down).max(2.0 * across / aspect) * margin;
     (centre, needed.clamp(MIN_ZOOM, ceiling))
 }
 

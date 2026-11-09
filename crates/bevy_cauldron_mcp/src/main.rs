@@ -907,20 +907,10 @@ impl Grimoire {
         &self,
         Parameters(p): Parameters<PresentParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        // **The first place to check is framed before the question goes up.** Reusing
-        // `grimoire/frame_view` rather than adding a second framing mechanism: the beat is "look here",
-        // and the editor already has one way to look somewhere.
-        if let Some(first) = p.check.first()
-            && !first.placements.is_empty()
-        {
-            let _ = self
-                .editor
-                .call(
-                    "grimoire/frame_view",
-                    json!({"target": {"placements": first.placements}}),
-                )
-                .await;
-        }
+        // **The first place to check is framed before the question goes up**, and the editor does it
+        // (AF-02, #358): `grimoire/present` raises a *follow* with the check's placements, so the
+        // hand-back and an agent's change share one camera, one ease and one crossing. A second
+        // `grimoire/frame_view` call here would be a jump that fought the follow already in flight.
         let body = json!({
             "title": p.title,
             "summary": p.summary,

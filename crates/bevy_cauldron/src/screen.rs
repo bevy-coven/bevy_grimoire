@@ -724,6 +724,11 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::present::AgentClient", Ownership::Session),
     // **`Session`**: whether hand-backs are answered in the AGENT block is the person's choice for the sitting, like the pause.
     ("bevy_cauldron::familiar::HandBackHere", Ownership::Session),
+    // **`Session`, and it has to be**: a follow raised while the Kit door is open asks for the Map,
+    // and the crossing that answers it resets the door's own state — so a request kept in a `Door`
+    // resource would be erased by the very crossing it asked for. `Camera state only`, like `Rig`,
+    // but it outlives the door for that one reason.
+    ("bevy_cauldron::follow::Following", Ownership::Session),
     // **`Session`**: what the person has hidden of the shell (the left panel, Zen mode) is their call for the sitting, not a door's;
     // the next door's frame is folded the same way the frame of this one was.
     ("bevy_cauldron::shell_view::ShellView", Ownership::Session),
