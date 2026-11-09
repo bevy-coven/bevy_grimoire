@@ -717,7 +717,16 @@
       "host": "mac_air",
       "reason": "asks for the LED that #343 assumed: a glowing live indicator on the agent card/bar; a request, not how the screen is",
       "commit": "",
-      "attempts": []
+      "attempts": [
+        {
+          "host": "mac_air",
+          "backend": "metal",
+          "window": "2560x1406",
+          "ui_scale": 2.4,
+          "outcome": "reproduced",
+          "saw": "Read from the capture's own frame (installed 0.5.0, recorded on mac_air), not re-run: the card has four green OK rows and the bar only text chips; no LED anywhere. On big the whole-application test fails at 5ceeefa8: no LED is drawn in the bar or on the card."
+        }
+      ]
     }
   ]
 }
