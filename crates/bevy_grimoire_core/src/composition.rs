@@ -181,7 +181,8 @@ fn paint_is_zero(v: &i8) -> bool {
 #[allow(clippy::large_enum_variant)]
 pub enum Body {
     Descriptor {
-        /// A [`crate::descriptor::Descriptor`] id.
+        /// A [`crate::descriptor::Descriptor`] id: a library piece.
+        #[schemars(extend("x-dark-factory-ref" = "library"))]
         id: String,
         /// Quarter turns about X and Z, applied in the piece's own frame *before* any yaw — which is
         /// what lets a stamp's yaw simply add to the member's.
@@ -197,7 +198,11 @@ pub enum Body {
         patch: Option<Descriptor>,
     },
     /// Another composition, in full. Its internals are immutable from here — see the module note.
-    Composition { id: String },
+    Composition {
+        /// The [`Composition::id`] of the composition this member is: a composition.
+        #[schemars(extend("x-dark-factory-ref" = "compositions"))]
+        id: String,
+    },
     /// **A declared hole: a position that says what may go here without saying what does.**
     ///
     /// The author walks the tile's grid and drops a slot exactly as they drop a piece, so it carries

@@ -206,8 +206,10 @@ pub struct Rigs {
     pub version: u32,
     #[serde(default)]
     pub note: Option<String>,
-    /// Keyed by rig name. A `BTreeMap`, so writing the file back out is byte-stable — a manifest that
-    /// reordered itself on every save would make every diff unreadable.
+    /// The rigs, keyed by rig name. A `BTreeMap`, so writing the file back out is byte-stable — a manifest
+    /// that reordered itself on every save would make every diff unreadable. The key is a rig's own name,
+    /// and a file that names one is a file of this kind.
+    #[schemars(extend("x-dark-factory-ref" = "rigs"))]
     pub rigs: BTreeMap<String, Rig>,
 }
 

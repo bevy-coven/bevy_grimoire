@@ -152,7 +152,7 @@ pub const KINDS: &[FileKind] = &[
     kind("checks", Grimoire, "checks.ron", "Checks", Live, Global,
         "by hand",
         "`Checks::for_project` reads it fresh on every run, so an edit takes effect at once."),
-    kind("schema", Grimoire, "schema/<name>", "a generated JSON Schema", Live, Global,
+    kind("schema", Root, "<file>/schema/<name>.schema.json", "a generated JSON Schema", Live, Global,
         "the editor, when it opens a project or writes a kind's file",
         "**Derived, never authored.** The editor writes one per file kind from the type (`schema.rs`, GD-04) into the project's `.dark_factory/schema/` folder, and `game.schema.json` there comes from the running game's `registry.schema` each time it starts. A hand edit is overwritten on the next write, and the `$comment` inside each file says so. Nothing holds them: an outside editor's YAML extension reads them from disk."),
     kind("data_registry", Grimoire, "<kit>/data.ron", "DataFiles", Live, Global,

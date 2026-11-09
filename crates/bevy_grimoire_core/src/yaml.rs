@@ -211,6 +211,14 @@ pub(crate) struct Site {
     tab_report: bool,
 }
 
+/// **The walk, for a test that has to write a file the surgery would refuse** — a field of another kind,
+/// which is what a person's typo looks like and what a schema and a reader are compared on. Compiled in
+/// tests only, so no product path can use it to skip a check.
+#[doc(hidden)]
+pub fn walk_for_test(text: &str) -> impl Iterator<Item = (String, (usize, usize))> + '_ {
+    walk(text).nodes.into_iter().map(|n| (n.path, n.span))
+}
+
 /// **The first fault in a file**, whichever reader met it first: the tab that indents a line, or the
 /// walk's own first refusal. One function, so the reader and an editor ask the same question and cannot
 /// answer it two ways.

@@ -110,13 +110,21 @@ pub fn for_kind(kind: &str) -> Result<Value, Problem> {
         "destructible_marks" => root::<crate::destructible::Marks>(),
         "destructible_bake" => root::<crate::destructible::Bake>(),
         _ => {
-            let known: Vec<crate::reload::FileKind> = crate::reload::KINDS.iter().copied().filter(|k| !KINDS.contains(&k.id)).collect();
+            // The kinds whose type genuinely lives in another crate. A kind of core's own that has no
+            // schema would be a kind added to the reload table and not to `KINDS` above, which is a
+            // different fault and is not counted as "another crate's".
+            let elsewhere: Vec<&str> = crate::reload::KINDS
+                .iter()
+                .map(|k| k.id)
+                .filter(|id| !KINDS.contains(id))
+                .filter(|id| !crate::reload_check::unchecked().any(|k| k.id == *id))
+                .collect();
             return Err(Problem::with(
                 format!("there is no schema for `{kind}`"),
                 Detail::default()
                     .because(format!(
                         "a schema is generated from a type, and this crate has none for it; the kinds it generates are {KINDS:?}{}",
-                        if known.is_empty() { String::new() } else { format!(", and {} kinds' types live in another crate", known.len()) }
+                        if elsewhere.is_empty() { String::new() } else { format!(", and {} kinds' types live in another crate: {elsewhere:?}", elsewhere.len()) }
                     ))
                     .fix("ask for a kind whose type `bevy_grimoire_core` owns")
                     .docs("docs/guide/your-game.md"),
@@ -128,16 +136,27 @@ pub fn for_kind(kind: &str) -> Result<Value, Problem> {
 }
 
 /// **Every kind's schema**, as `(kind, schema)`.
-#[allow(clippy::result_large_err)]
+///
+/// [`for_kind`] can only refuse a kind `KINDS` does not list, and this iterates `KINDS`, so every one
+/// answers: a kind added to the list without its `for_kind` arm is a test failure, not a missing entry
+/// here.
 pub fn all() -> Vec<(&'static str, Value)> {
-    KINDS.iter().filter_map(|kind| for_kind(kind).map(|schema| (*kind, schema)).ok()).collect()
+    KINDS
+        .iter()
+        .map(|kind| (*kind, for_kind(kind).unwrap_or_else(|e| panic!("`{kind}` is in schema::KINDS and for_kind has no arm for it: {}", e.line()))))
+        .collect()
 }
 
 /// **The generated root schema of a type**, through `schemars`: what an editor reads, as the type
 /// declares it.
+///
+/// A schema is `schemars`'s own `Schema`, which is a tree of `serde_json` values and strings, so
+/// `to_value` cannot fail on it: the only `Err` it has is a map key that is not a string, and a schema's
+/// keys are all `&'static str`. The `expect` states that, so a future schema shape that broke it would
+/// panic here, in a test, rather than quietly returning `null` as a schema an editor then ignores.
 fn root<T: schemars::JsonSchema>() -> Value {
     let generated = schemars::SchemaGenerator::default().into_root_schema_for::<T>();
-    serde_json::to_value(generated).unwrap_or(Value::Null)
+    serde_json::to_value(generated).expect("a schemars schema is JSON values and string keys")
 }
 
 /// **Mark a schema as this crate's and this kind's**, and say it is generated.
@@ -190,20 +209,27 @@ pub fn write_game(root: &Path, schema: &str) -> Result<PathBuf, Problem> {
     Ok(path)
 }
 
-/// **The line a YAML file of `kind` starts with**, so an outside editor finds its schema. The path is
-/// relative to the project root, which is where the schema files live.
-pub fn header(kind: &str) -> String {
-    format!("# {SCHEMA_HINT}{SCHEMA_DIR}/{kind}{SCHEMA_EXT}")
+/// **The line a YAML file of `kind` starts with**, so an outside editor finds its schema.
+///
+/// **The path is relative to the file that carries it**, not to the project root: a YAML language server
+/// resolves `$schema` from the YAML file's own folder, so `assets/grimoire/kits.yaml` says
+/// `../../../.dark_factory/schema/kits.schema.json` and a file at the root says
+/// `.dark_factory/schema/family_list.schema.json`. `file` is the file's path **relative to the project
+/// root**, `/`-separated, which is the only thing the answer depends on besides the kind.
+pub fn header(kind: &str, file: &str) -> String {
+    let depth = file.split('/').count().saturating_sub(1);
+    let up = if depth == 0 { String::new() } else { "../".repeat(depth) };
+    format!("# {SCHEMA_HINT}{up}{SCHEMA_DIR}/{kind}{SCHEMA_EXT}")
 }
 
 /// **`text` with `kind`'s schema hint as its first line**, unless it already starts with one. A file the
 /// editor writes begins with it; a file with a person's comments keeps them below it, and a file with no
 /// hint gains one without any other line moving.
-pub fn with_header(kind: &str, text: &str) -> String {
-    if text.starts_with(SCHEMA_HINT) || text.starts_with(&format!("# {SCHEMA_HINT}")) {
+pub fn with_header(kind: &str, file: &str, text: &str) -> String {
+    if text.starts_with(&format!("# {SCHEMA_HINT}")) {
         return text.to_owned();
     }
-    format!("{}\n{text}", header(kind))
+    format!("{}\n{text}", header(kind, file))
 }
 
 #[allow(clippy::result_large_err)]
@@ -224,74 +250,39 @@ fn write_problem(path: &Path, why: &str) -> Problem {
     )
 }
 
-/// **Whether a kind's type is one this crate owns**, so a caller knows if [`for_kind`] can answer.
-pub fn owns(kind: &str) -> bool {
-    KINDS.contains(&kind)
-}
-
-/// **A kind's fixture as the JSON an editor's extension shows**, which is the value the type holds: read
-/// by this crate's own reader, then as JSON. A file whose YAML uses a tag for an enum (`!Near`) is a
-/// JSON object to an editor, and this is the one place that says so.
-#[allow(clippy::result_large_err)]
-pub fn value_of(kind: &str, text: &str) -> Result<Value, Problem> {
-    match kind {
-        "kits" => json_of::<crate::kits::Kits>(text),
-        "vocab" => json_of::<crate::vocab::Vocabularies>(text),
-        "library" => json_of::<crate::library::Library>(text),
-        "policy" => json_of::<crate::policy::Policy>(text),
-        "rules" => json_of::<crate::rules::Rules>(text),
-        "compositions" => json_of::<crate::composition::Compositions>(text),
-        "standards" => json_of::<crate::standards::Standards>(text),
-        "repetition" => json_of::<crate::repetition::RepetitionRules>(text),
-        "data_registry" => json_of::<crate::data_files::DataFiles>(text),
-        "rigs" => json_of::<crate::rigs::Rigs>(text),
-        "map" => json_of::<crate::map::Map>(text),
-        "notes" => json_of::<crate::notes::Notes>(text),
-        "plan" => json_of::<crate::plan::Plan>(text),
-        "references" => json_of::<crate::references::References>(text),
-        "relations" => json_of::<crate::relations::Relations>(text),
-        "terrain" => json_of::<crate::heightfield::Heightfield>(text),
-        "water_plan" => json_of::<crate::water::WaterPlan>(text),
-        "water_field" => json_of::<crate::water::WaterField>(text),
-        "volume" => json_of::<crate::volume::Volume>(text),
-        "family_list" => json_of::<crate::family::Family>(text),
-        "agent" => json_of::<crate::note_agent::AgentSettings>(text),
-        "play" => json_of::<crate::play::PlayConfig>(text),
-        "destructible_marks" => json_of::<crate::destructible::Marks>(text),
-        "destructible_bake" => json_of::<crate::destructible::Bake>(text),
-        _ => for_kind(kind).map(|_| Value::Null),
+/// **The field path a kind's reader refuses `text` at**, or `None` when it reads — the reader's half of
+/// "fails at the same path the schema names", so a test compares two readers rather than each against an
+/// expectation of its own.
+pub fn field_of(kind: &str, text: &str) -> Option<String> {
+    fn at<T: serde::de::DeserializeOwned>(text: &str) -> Option<String> {
+        crate::yaml::from_str::<T>(text, "a project file").err().and_then(|p| p.where_.and_then(|w| w.field))
     }
-}
-
-/// A file read by this crate's reader, then as JSON.
-#[allow(clippy::result_large_err)]
-fn json_of<T>(text: &str) -> Result<Value, Problem>
-where
-    T: serde::Serialize + serde::de::DeserializeOwned,
-{
-    let value: T = crate::yaml::from_str(text, "a fixture")?;
-    serde_json::to_value(value).map_err(|e| {
-        Problem::with("a fixture did not convert to JSON", Detail::default().because(e.to_string()))
-    })
-}
-
-/// **Write one kind's schema into the project at `root`**, which is what an editor does for a kind it
-/// just wrote a file of.
-#[allow(clippy::result_large_err)]
-pub fn write_kind(root: &Path, kind: &str) -> Result<PathBuf, Problem> {
-    let schema = for_kind(kind)?;
-    let dir = root.join(SCHEMA_DIR);
-    std::fs::create_dir_all(&dir).map_err(|e| write_problem(&dir, &e.to_string()))?;
-    let path = dir.join(format!("{kind}{SCHEMA_EXT}"));
-    write_json(&path, &schema)?;
-    Ok(path)
-}
-
-/// The JSON text of a schema, for a tool that hands it to an agent.
-#[allow(clippy::result_large_err)]
-pub fn to_json(schema: &Value) -> Result<String, Problem> {
-    serde_json::to_string_pretty(schema).map_err(|e| {
-        Problem::with("a schema did not write as JSON", Detail::default().because(e.to_string()))
-    })
+    match kind {
+        "kits" => at::<crate::kits::Kits>(text),
+        "vocab" => at::<crate::vocab::Vocabularies>(text),
+        "library" => at::<crate::library::Library>(text),
+        "policy" => at::<crate::policy::Policy>(text),
+        "rules" => at::<crate::rules::Rules>(text),
+        "compositions" => at::<crate::composition::Compositions>(text),
+        "standards" => at::<crate::standards::Standards>(text),
+        "repetition" => at::<crate::repetition::RepetitionRules>(text),
+        "data_registry" => at::<crate::data_files::DataFiles>(text),
+        "rigs" => at::<crate::rigs::Rigs>(text),
+        "map" => at::<crate::map::Map>(text),
+        "notes" => at::<crate::notes::Notes>(text),
+        "plan" => at::<crate::plan::Plan>(text),
+        "references" => at::<crate::references::References>(text),
+        "relations" => at::<crate::relations::Relations>(text),
+        "terrain" => at::<crate::heightfield::Heightfield>(text),
+        "water_plan" => at::<crate::water::WaterPlan>(text),
+        "water_field" => at::<crate::water::WaterField>(text),
+        "volume" => at::<crate::volume::Volume>(text),
+        "family_list" => at::<crate::family::Family>(text),
+        "agent" => at::<crate::note_agent::AgentSettings>(text),
+        "play" => at::<crate::play::PlayConfig>(text),
+        "destructible_marks" => at::<crate::destructible::Marks>(text),
+        "destructible_bake" => at::<crate::destructible::Bake>(text),
+        _ => None,
+    }
 }
 

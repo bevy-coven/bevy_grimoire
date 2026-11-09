@@ -30,8 +30,8 @@ pub const NOTES_VERSION: u32 = 1;
 /// What a note is about.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Target {
-    /// A placed mesh, by [`crate::map::Placed::id`].
-    Placement(String),
+    /// A placed mesh, by [`crate::map::Placed::id`]: a placement on the map.
+    Placement(#[schemars(extend("x-dark-factory-ref" = "map"))] String),
     /// A tile, by grid cell.
     Cell(i32, i32),
 }

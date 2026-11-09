@@ -76,16 +76,12 @@ where
     bevy_grimoire_core::yaml::to_string(&value).unwrap_or_else(|e| panic!("{e}"))
 }
 
-/// **The fixture as the JSON an outside editor sees**, which is the value the crate's own reader makes of
-/// it: a kind whose YAML uses a tag for an enum (`!Near`) is a JSON object to an editor, and this
-/// crate's reader is the one that says so.
-fn as_json(kind: &str, text: &str) -> Value {
-    let value: Value = serde_yaml_ng::from_str(text).unwrap_or_else(|_| {
-        // The crate's reader, for the fixture a tag keeps the plain reader from taking: the document an
-        // editor's extension shows is the JSON of the value the type holds.
-        schema::value_of(kind, text).unwrap_or_else(|e| panic!("{kind}: the fixture is not YAML: {}", e.line()))
-    });
-    value
+/// **The fixture as the JSON an outside editor sees**, read by the same plain YAML-to-JSON reader an
+/// editor's extension uses — **never through the Rust type**, which would hand back the value the schema
+/// is checked against and make the check agree with itself. A kind whose fixture carries a tag is in
+/// [`TAGGED`] and never reaches this.
+fn as_json(_kind: &str, text: &str) -> Value {
+    serde_yaml_ng::from_str::<Value>(text).unwrap_or_else(|e| panic!("the fixture is not plain YAML-to-JSON: {e}"))
 }
 
 #[test]
@@ -100,7 +96,7 @@ fn every_kind_has_a_schema_generated_from_its_type() {
 
 #[test]
 fn every_kinds_fixture_validates_and_a_wrong_field_does_not() {
-    for (kind, text) in kinds() {
+    for (kind, text) in kinds().into_iter().filter(|(kind, _)| !TAGGED.iter().any(|(id, _)| id == kind)) {
         let generated = schema::for_kind(kind).unwrap_or_else(|e| panic!("{kind}: {}", e.line()));
         let validator = jsonschema::validator_for(&generated).unwrap_or_else(|e| panic!("{kind}: its schema is not a JSON Schema: {e}"));
         let fixture = as_json(kind, &text);
@@ -268,11 +264,26 @@ fn the_schemas_are_written_where_an_outside_editor_looks_and_carry_their_hint() 
     }
 
     // **Every YAML file the editor writes starts with the hint**, so an outside editor finds the schema.
-    let header = schema::header("map");
-    assert_eq!(header, "# yaml-language-server: $schema=.dark_factory/schema/map.schema.json");
-    let hinted = schema::with_header("map", "version: 9\n");
-    assert!(hinted.starts_with(&header), "{hinted}");
-    assert_eq!(schema::with_header("map", &hinted), hinted, "a file that has the hint gains no second one");
+    // **The hint is relative to the file that carries it**, because a YAML language server resolves it
+    // from that file's own folder: a map under `assets/grimoire/maps/` is three levels down, and a file
+    // at the root is not.
+    // The path is the file's, relative to the project root, which is where the `.dark_factory/` folder
+    // sits: a map under `assets/grimoire/maps/` is three folders down.
+    assert_eq!(
+        schema::header("map", "assets/grimoire/maps/town.map.yaml"),
+        "# yaml-language-server: $schema=../../../.dark_factory/schema/map.schema.json"
+    );
+    assert_eq!(
+        schema::header("family_list", "family.yaml"),
+        "# yaml-language-server: $schema=.dark_factory/schema/family_list.schema.json"
+    );
+    let hinted = schema::with_header("map", "assets/grimoire/maps/town.map.yaml", "version: 9\n");
+    assert!(hinted.starts_with(&schema::header("map", "assets/grimoire/maps/town.map.yaml")), "{hinted}");
+    assert_eq!(
+        schema::with_header("map", "assets/grimoire/maps/town.map.yaml", &hinted),
+        hinted,
+        "a file that has the hint gains no second one"
+    );
 
     // A game's own reflected schema is written where an editor looks, and text that is not JSON is
     // refused rather than written.
@@ -284,3 +295,151 @@ fn the_schemas_are_written_where_an_outside_editor_looks_and_carry_their_hint() 
 
     std::fs::remove_dir_all(&root).expect("the test removes its own scratch folder");
 }
+
+/// **The kinds whose YAML carries an enum tag**, checked in: `!Near`, `!Sphere`, `!Placement`.
+///
+/// A JSON Schema describes JSON, where a tagged enum is an object — `{"Near": {"to": …, "within": …}}` —
+/// while `serde_yaml_ng` writes an enum as a YAML tag, so the two forms are one value and not one
+/// document. Making them one means an internally tagged enum (`#[serde(tag = "kind")]`), which these
+/// types cannot take: `relations::Kind` has both struct variants and tuple variants (`Faces(String)`),
+/// and an internally tagged enum supports neither a tuple variant nor a newtype of anything but a
+/// struct. Rewriting seven file formats to reach one form is GD-03's (#365) call and not this one's, so
+/// **these kinds are not validated here and the gap is counted**, so it cannot grow unseen.
+const TAGGED: &[(&str, &str)] = &[
+    ("library", "a `Descriptor`'s `mount`, a `Mount`"),
+    ("policy", "a `Patch`'s `match`, a `Match`"),
+    ("compositions", "a `Composition`'s `envelope`, an `Envelope`"),
+    ("rigs", "a slot's `playback`, a `Playback`"),
+    ("notes", "a note's `targets`, a `Target`"),
+    ("relations", "a relation's `kind`, a `Kind`"),
+    ("volume", "an edit's `shape`, a `Shape`"),
+];
+
+/// **A literal, not `TAGGED.len()`**: a number that is its own measure can never fail.
+const TAGGED_MAX: usize = 7;
+
+#[test]
+fn the_tagged_list_only_shrinks() {
+    assert_eq!(TAGGED.len(), TAGGED_MAX, "the checked-in tagged list has {} kinds and the ratchet says {TAGGED_MAX}: lower both when a kind's enum becomes one JSON can spell", TAGGED.len());
+    // The list is what it says: a listed kind's fixture is one the plain YAML reader cannot take, and an
+    // unlisted kind's is one it can.
+    for (kind, text) in kinds() {
+        let tagged = serde_yaml_ng::from_str::<Value>(&text).is_err();
+        let listed = TAGGED.iter().any(|(id, _)| *id == kind);
+        assert_eq!(tagged, listed, "`{kind}` is {}tagged and {} on the list: the two must agree, or the gap this test records is not the gap it counts", if tagged { "" } else { "not " }, if listed { "" } else { "not " });
+    }
+}
+
+#[test]
+fn the_schema_files_are_found_by_the_reload_table_at_the_path_they_are_written_to() {
+    // **The folder `write_all` writes to and the folder the reload table watches are the same one.** A
+    // kind nobody can classify is a file the editor never notices, and nothing else in this file would
+    // say so: the schema writes and the table are two statements of one path.
+    let root = std::env::temp_dir().join(format!("schema-reload-{}", std::process::id()));
+    let written = schema::write_all(&root).expect("the schemas write");
+    for path in written {
+        let relative = path.to_string_lossy().rsplit_once("/schema/").map(|(_, rest)| format!("schema/{rest}"));
+        let relative = relative.unwrap_or_else(|| panic!("{} is under a `schema/` folder", path.display()));
+        // The path relative to the **game root**, which is what a `Base::Root` kind is matched against.
+        let from_root = format!(".dark_factory/{relative}");
+        let kind = bevy_grimoire_core::reload::kind_of(bevy_grimoire_core::reload::Base::Root, &from_root)
+            .unwrap_or_else(|| panic!("`{from_root}` is not a kind the reload table knows"));
+        assert_eq!(kind.id, "schema", "`{from_root}` is a schema file");
+    }
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("schema-reload-{}", std::process::id())));
+}
+
+#[test]
+fn a_wrong_value_is_refused_at_the_same_path_by_the_reader_and_by_the_schema() {
+    // **GD-01's reader and the JSON Schema must name one path.** They are two readers of one file, and a
+    // field one calls `placements[0].turn_deg` while the other calls `/placements/0/yaw` is a person
+    // sent to two places. So the edited document goes through `yaml::from_str` too, and the two paths
+    // are compared, not each against an expectation of its own. A tagged fixture is in [`TAGGED`] and
+    // never reaches here: `serde_yaml_ng` reads a tag only into the type, so there is no plain YAML to
+    // compare on both sides.
+    for (kind, text) in kinds().into_iter().filter(|(kind, _)| !TAGGED.iter().any(|(id, _)| id == kind)) {
+        let generated = schema::for_kind(kind).unwrap_or_else(|e| panic!("{kind}: {}", e.line()));
+        let validator = jsonschema::validator_for(&generated).unwrap_or_else(|e| panic!("{kind}: {e}"));
+        let mut doc = as_json(kind, &text);
+        let (leaf, path) = first_leaf_refusing_a_string(&generated, &mut doc)
+            .unwrap_or_else(|| panic!("{kind}: no leaf the schema says is not a string"));
+        *leaf = Value::from("not the kind this field is");
+
+        // What the schema says, as the file's own spelling.
+        let from_pointer = path.replace('.', "/").replace(['[', ']'], "/").replace("//", "/");
+        let pointer = format!("/{}", from_pointer.trim_end_matches('/'));
+        let named: Vec<String> = validator.iter_errors(&doc).map(|e| e.instance_path().to_string()).collect();
+        assert!(named.iter().any(|p| p == &pointer), "{kind}: the schema did not refuse `{path}` ({pointer}): {named:?}");
+
+        // What GD-01's reader says of the same wrong file. It is written as **text**, not through
+        // `yaml_surgery`: the surgery refuses a value of another kind, which is right for an editor and
+        // the wrong instrument for asking what the reader makes of a file a person wrote by hand.
+        let edited = set_text(&text, &path, "not the kind this field is");
+        // The kind's **own type**, not `Value`: a `Value` accepts a string in an `f32` field, so reading
+        // it as anything would prove only that YAML is YAML.
+        let reader_field = schema::field_of(kind, &edited)
+            .unwrap_or_else(|| panic!("{kind}: the reader accepted `{path}` set to a string\n{edited}"));
+        assert_eq!(reader_field.as_str(), path.as_str(), "{kind}: the reader named `{reader_field}` and the schema named `{path}`");
+    }
+}
+
+/// **`text` with the leaf at `path` replaced by the raw text `value`**, found by the walk — a file a
+/// person could have typed, which is what the reader is asked about.
+fn set_text(text: &str, path: &str, value: &str) -> String {
+    // The leaf's bytes, from the reader's own walk, so the bad file differs from the good one in exactly
+    // the field the schema was asked about.
+    let (_, span) = bevy_grimoire_core::yaml::walk_for_test(text)
+        .find(|(at, _)| at == path)
+        .unwrap_or_else(|| panic!("`{path}` is not in the fixture"));
+    format!("{}{value}{}", &text[..span.0], &text[span.1..])
+}
+
+#[test]
+fn a_field_that_names_a_piece_a_composition_or_a_rig_carries_its_kind() {
+    // **Every field that names another file's value says which kind**, so navigation can follow it. Each
+    // is marked once, on the type, with `#[schemars(extend("x-dark-factory-ref" = "<kind>"))]`, and this
+    // checks the marking reached the schema an editor reads.
+    let named = |schema: &Value, at: &[&str]| -> Value {
+        let mut node = schema;
+        for step in at {
+            node = &node[*step];
+        }
+        node["x-dark-factory-ref"].clone()
+    };
+    /// **The variant named `variant` of an `oneOf`**, which `schemars` writes as
+    /// `{properties: {<Variant>: {properties: {<field>: …}}}}`.
+    fn variant<'s>(schema: &'s Value, variant: &str, field: &str) -> &'s Value {
+        let cases = schema["oneOf"].as_array().unwrap_or_else(|| panic!("an enum has `oneOf`: {schema}"));
+        for case in cases {
+            if let Some(found) = case["properties"].get(variant) {
+                return &found["properties"][field];
+            }
+        }
+        panic!("no variant `{variant}` in {schema}");
+    }
+
+    // A composition's member names a library piece, and its other variant names a composition.
+    // `schemars` writes an enum variant as `properties: {<Variant>: {...}}`.
+    let compositions = schema::for_kind("compositions").unwrap();
+    let body = &compositions["$defs"]["Body"];
+    assert_eq!(variant(body, "Descriptor", "id")["x-dark-factory-ref"].as_str(), Some("library"), "a composition's member names a library piece: {body}");
+    assert_eq!(variant(body, "Composition", "id")["x-dark-factory-ref"].as_str(), Some("compositions"), "a member can be another composition: {body}");
+
+    // A map's placement names a library piece; a stamp names a composition.
+    let map = schema::for_kind("map").unwrap();
+    assert_eq!(named(&map, &["$defs", "Placed", "properties", "descriptor"]).as_str(), Some("library"), "a placement's descriptor names a library piece");
+    assert_eq!(named(&map, &["$defs", "Stamped", "properties", "of"]).as_str(), Some("compositions"), "a stamp names a composition");
+
+    // A relation is about a placement on the map, and a note points at one.
+    let relations = schema::for_kind("relations").unwrap();
+    assert_eq!(named(&relations, &["$defs", "Relation", "properties", "of"]).as_str(), Some("map"), "a relation is about a placement");
+    let notes = schema::for_kind("notes").unwrap();
+    let text = serde_json::to_string(&notes).unwrap_or_default();
+    assert!(text.contains("x-dark-factory-ref"), "a note's target names a placement: {text}");
+
+    // A rig's manifest is keyed by rig name, so a file of it names rigs.
+    let rigs = schema::for_kind("rigs").unwrap();
+    let text = serde_json::to_string(&rigs).unwrap_or_default();
+    assert!(text.contains("x-dark-factory-ref"), "a rigs file names rigs: {text}");
+}
+
