@@ -557,6 +557,38 @@ fn an_empty_flow_mapping_becomes_a_block_the_way_an_empty_list_does() {
 }
 
 #[test]
+fn a_block_scalars_chomping_and_indentation_indicators_keep_the_header_comment() {
+    // `serde_yaml_ng` writes a multi-line string as `|-`, so a chomping indicator with a comment is the
+    // common case and the comment is a person's: it stays after the new value, whatever indicators the
+    // header carries.
+    for header in ["|", "|-", "|+", "|2", "|-2", ">+", ">2-"] {
+        let text = format!("note: {header}  # why it says this\n  the old text\nnext: 1\n");
+        let after = set(&text, "note", Value::Str("new".into()));
+        assert_eq!(after, "note: new  # why it says this\nnext: 1\n", "`{header}` lost the comment: {after:?}");
+    }
+}
+
+#[test]
+fn a_whole_float_fills_the_leaf_whatever_range_the_integer_holds() {
+    // An integer leaf's own range is the reader's business: a `u64` or an `i64` field — a seed, a bake key
+    // — takes a whole float well past `u32::MAX`, so the check is a cast's own range and nothing tighter.
+    let text = "key: 7\n";
+    let after = yaml_surgery::set(text, "key", Value::Float(9_000_000_000.0), None).unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(after, "key: 9000000000\n");
+}
+
+#[test]
+fn a_promoted_key_leaves_a_blank_line_where_a_person_had_one() {
+    let text = "placements:\n  - id: bed\n\n    yaw: 90.0\nsealed: true\n";
+    let after = yaml_surgery::remove_entry(text, "placements[0]", "id").unwrap_or_else(|e| panic!("{}", e.line()));
+    assert_eq!(
+        after,
+        "placements:\n  - yaw: 90.0\n\nsealed: true\n",
+        "the blank line a person left between the two keys is still there"
+    );
+}
+
+#[test]
 fn a_float_too_large_for_an_integer_is_refused_rather_than_saturated() {
     let problem = yaml_surgery::set(YARD, "version", Value::Float(1e30), None).expect_err("1e30 is not a u32");
     assert_eq!(problem.where_.as_ref().and_then(|w| w.field.as_deref()), Some("version"), "{}", problem.line());

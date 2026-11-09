@@ -217,10 +217,11 @@ pub fn set(text: &str, path: &str, value: Value, bounds: Option<&Bounds>) -> Res
             }
             // A cast saturates, which would write a number nobody asked for: `1e30` is not an integer any
             // file holds, and it is refused rather than turned into `i64::MAX`.
-            // A cast saturates, which would write a number nobody asked for, so the range is checked
-            // against the bound the leaf's reader has before the cast is made.
-            if *x < i64::MIN as f64 || *x > i64::MAX as f64 || *x > u32::MAX as f64 {
-                return Err(at_node_named(text, node, path, &format!("`{path}`: {x} is not a number an integer holds"), "a cast would saturate, which is a number nobody asked for", "write a number the field holds"));
+            // A cast saturates, which would write a number nobody asked for, so the cast's own range is
+            // checked first — the leaf's own range (a `u32` version, a `u64` seed) is its reader's
+            // business, and refuses what it cannot hold with its own words.
+            if !(*x > i64::MIN as f64 && *x < i64::MAX as f64) {
+                return Err(at_node_named(text, node, path, &format!("`{path}`: {x} is not a number an integer holds"), "a whole number too large for any integer cannot be written", "write a number the field holds"));
             }
             Value::Int(*x as i64)
         }
@@ -250,8 +251,12 @@ pub fn set(text: &str, path: &str, value: Value, bounds: Option<&Bounds>) -> Res
         // **The header line's comment is a person's**, and it stays after the new value: `note: |  # why`
         // becomes `note: new  # why`. The comment is what follows the indicator on its own line.
         let header_end = text[indicator..].find('\n').map_or(text.len(), |at| indicator + at);
+        // **The header may carry chomping and indentation indicators** — `|-`, `|+`, `|2`, `|2-` — and
+        // `serde_yaml_ng` writes a multi-line string as `|-`, so they are the common case: they are
+        // skipped before the comment is looked for, or the comment is silently dropped.
         let header = &text[indicator + 1..header_end];
-        let comment = header.trim_start().strip_prefix('#').map(|rest| format!("  #{}", rest));
+        let rest = header.trim_start_matches(|c: char| c == '+' || c == '-' || c.is_ascii_digit()).trim_start();
+        let comment = rest.strip_prefix('#').map(|rest| format!("  #{}", rest));
         out.push_str(&text[..indicator]);
         out.push_str(&value.text());
         if let Some(comment) = comment {
@@ -310,10 +315,14 @@ fn promote_first_key(text: &str, dash: usize, line_start: usize, next: usize, af
     let promoted = text[next..next_line_end].trim();
     // Between the removed entry and the promoted one: whatever a person wrote there — a comment, a blank
     // line — is kept, and the whitespace that indented the promoted key is not (the `- ` is its indent).
+    // **A blank line keeps its newline and loses its indentation**: the indentation belonged to the entry
+    // that was removed, and a line of nothing but spaces is not a thing a person wrote.
+    // **Each whole line a person wrote between the two keys is kept**; the last segment, when it has no
+    // newline, is the promoted key's own indentation, which the `- ` replaces.
     let between: String = text[after_removed..next]
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| format!("{line}\n"))
+        .split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
+        .map(|line| if line.trim().is_empty() { "\n".to_owned() } else { line.to_owned() })
         .collect();
 
     let mut out = String::with_capacity(text.len());
@@ -583,6 +592,8 @@ pub fn remove_entry(text: &str, path: &str, key: &str) -> Result<String, Problem
         let line_start = text[..key_at].rfind('\n').map_or(0, |at| at + 1);
         // The item this key belongs to, and the next entry **of that item** — never the next item's key.
         let item_path = item_of_path(&entry_path).unwrap_or_else(|| entry_path.clone());
+        // The removed entry's own line ends at the newline after its content: everything after it up to the
+        // promoted key — a blank line, a comment — is a person's, and `promote_first_key` keeps it.
         let after_key = end_of_last_line(text, content_end(text, entry, &walk));
         let Some(next) = next_entry_of(text, &walk, &item_path, after_key) else {
             // An item with one key has nothing to promote, and its `-` cannot stay on a line by itself.
