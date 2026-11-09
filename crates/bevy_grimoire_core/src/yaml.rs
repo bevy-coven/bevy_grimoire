@@ -58,8 +58,6 @@
 //! walk is where the refusals above come from, each at the line and field path it would have had — and
 //! `serde_yaml_ng` then reads the value, its refusal reported in the same shape.
 //!
-
-//!
 //! Engine-free: nothing here knows what a window, a map view or an agent is.
 
 use std::path::Path;
@@ -71,7 +69,7 @@ use saphyr_parser::{Event, ScalarStyle};
 use crate::problem::{Detail, Location, Problem};
 
 /// **How many spaces one nesting level of a mapping is indented by**: the writer's, and the step
-/// `yaml_surgery` copies when it adds an item beside siblings that are indented.
+/// [`crate::yaml_surgery`] gives a new item's fields under its `-`.
 pub const INDENT_SPACES: usize = 2;
 
 /// **How many columns one tab is worth** when a refusal says where a tab-indented line would have sat.
@@ -112,8 +110,8 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T, Problem> {
 /// one it is about to be written to.
 #[allow(clippy::result_large_err)]
 pub fn from_str<T: DeserializeOwned>(text: &str, path: &str) -> Result<T, Problem> {
-    let (blocks, site) = walk(text);
-    if let Some(site) = earlier_fault(indentation_tab(text, &blocks), site) {
+    let walk = walk(text);
+    if let Some(site) = earlier_fault(indentation_tab(text, &walk.blocks), walk.site) {
         return Err(refusal(path, site));
     }
     let deserializer = serde_yaml_ng::Deserializer::from_str(text);
@@ -200,13 +198,46 @@ fn fix_for(field: &Option<String>) -> String {
 }
 
 /// **One thing the scan found the file may not say**, with where it stands.
-struct Site {
+pub(crate) struct Site {
     what: String,
     field: Option<String>,
     line: usize,
     column: usize,
     why: String,
     fix: String,
+}
+
+/// **A refusal a caller outside this module builds**, when an edit would produce a file the reader
+/// refuses ([`crate::yaml_surgery`]): the field's path, what happened, why, and the fix.
+#[allow(clippy::result_large_err)]
+pub(crate) fn problem_at(path: &str, field: Option<String>, line: usize, what: &str, why: &str, fix: &str) -> Problem {
+    refusal(path, Site { what: what.to_owned(), field, line, column: 1, why: why.to_owned(), fix: fix.to_owned() })
+}
+
+/// **The tab that indents a line**, as a refusal, if the file has one: an edit asks before it moves a
+/// byte, so it never edits a file its reader would refuse.
+pub(crate) fn indentation_tab_site(text: &str, blocks: &[(usize, usize)]) -> Option<Site> {
+    indentation_tab(text, &blocks.to_vec())
+}
+
+/// A [`Site`] as the one [`Problem`] it is.
+pub(crate) fn refusal_of(path: &str, site: Site) -> Problem {
+    refusal(path, site)
+}
+
+/// **The block scalar content lines the walk found**, for a caller asking whether a tab indents.
+pub(crate) fn block_lines(walk: &Walk) -> &[(usize, usize)] {
+    &walk.blocks
+}
+
+/// `path[3]`, the way a refusal and an edit both spell a sequence item.
+pub(crate) fn join_path_index(parent: &str, index: usize) -> String {
+    join_index(parent, index)
+}
+
+/// `path.key`, the way a refusal and an edit both spell a mapping entry.
+pub(crate) fn join_path_key(parent: &str, key: &str) -> String {
+    join_key(parent, key)
 }
 
 /// A [`Site`] as the one [`Problem`] a refusal is: the file, the field, the line and column, why, and
@@ -230,6 +261,100 @@ fn refusal(path: &str, site: Site) -> Problem {
 /// last), so a tab inside that content is not mistaken for indentation.
 type Blocks = Vec<(usize, usize)>;
 
+/// **What a node is.**
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NodeKind {
+    Scalar,
+    Sequence,
+    Mapping,
+}
+
+/// **A node's key**, for a node that is a mapping's value: the key's text and its bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Key {
+    pub(crate) name: String,
+    pub(crate) span: (usize, usize),
+}
+
+/// **One node of a file**, with the path it stands at and the bytes it occupies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Node {
+    /// `placements[3].turn_deg`; empty at the file's root.
+    pub(crate) path: String,
+    /// What stands at the path.
+    pub(crate) kind: NodeKind,
+    /// The node's own bytes: its first character through its last.
+    pub(crate) span: (usize, usize),
+    /// The key it is a value under, when it is one.
+    pub(crate) key: Option<Key>,
+    /// For an item of a block sequence: the byte of its `-`.
+    pub(crate) dash: Option<usize>,
+    /// For a scalar: its style and its text.
+    pub(crate) scalar: Option<Leaf>,
+}
+
+/// **One scalar of a file as it stands**: its text without quotes, and the style that says what kind of
+/// value it is. `yaml_surgery` decides whether a value may replace it from exactly this pair.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Leaf {
+    pub(crate) text: String,
+    pub(crate) style: Style,
+}
+
+/// **How a scalar was written**, which decides what kind of value it holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Style {
+    /// `90.0`: plain, so the reader decides whether it is a number, a bool or a word.
+    Plain,
+    /// `'a'` or `"a"`: always a string.
+    Quoted,
+    /// `|` or `>`: always a string, and it may span lines.
+    Block,
+}
+
+impl Style {
+    /// **Whether a scalar written this way holds a string**, whatever its text spells: a quoted scalar
+    /// and a block scalar always do, and a plain one does only when its text is not a number, a bool or
+    /// a null.
+    pub(crate) fn is_text(self, text: &str) -> bool {
+        match self {
+            Style::Quoted | Style::Block => true,
+            Style::Plain => !is_number(text) && !matches!(text, "true" | "false" | "null" | "Null" | "NULL" | "~" | ""),
+        }
+    }
+}
+
+/// **Whether `text` reads as a number** to this reader: a YAML 1.2 integer or float, and its infinities
+/// and NaN.
+pub(crate) fn is_number(text: &str) -> bool {
+    let unsigned = text.strip_prefix(['-', '+']).unwrap_or(text);
+    if unsigned.is_empty() {
+        return false;
+    }
+    if unsigned.chars().all(|c| c.is_ascii_digit()) {
+        return true;
+    }
+    if unsigned.parse::<f64>().is_ok() && (unsigned.contains('.') || unsigned.contains(['e', 'E'])) {
+        return true;
+    }
+    if matches!(unsigned, ".inf" | ".Inf" | ".INF" | ".nan" | ".NaN" | ".NAN") {
+        return true;
+    }
+    ["0x", "0o", "0b"].iter().any(|prefix| {
+        unsigned.strip_prefix(prefix).is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric()))
+    })
+}
+
+/// Everything the walk learned about a file.
+pub(crate) struct Walk {
+    /// Every node, parents before children.
+    pub(crate) nodes: Vec<Node>,
+    /// The block scalars' content lines.
+    blocks: Blocks,
+    /// The first construct the file may not say, when it says one.
+    pub(crate) site: Option<Site>,
+}
+
 /// **Walk `text`'s events once**: the line ranges of its block scalars, and the first construct the file
 /// may not say.
 ///
@@ -239,11 +364,16 @@ type Blocks = Vec<(usize, usize)>;
 /// scan error ends `saphyr-parser`'s event stream), a tab found *after* that fault is not yet known to be
 /// indentation: it may be the content of a block scalar further down. So [`from_str`] weighs the two:
 /// see [`earlier_fault`].
-fn walk(text: &str) -> (Blocks, Option<Site>) {
-    let mut blocks: Blocks = Vec::new();
+pub(crate) fn walk(text: &str) -> Walk {
+    let mut walk = Walk { nodes: Vec::new(), blocks: Vec::new(), site: None };
     let mut stack: Vec<Frame> = Vec::new();
+    let mut open: Vec<usize> = Vec::new();
     let mut documents = 0usize;
     let parser = saphyr_parser::Parser::new_from_str(text);
+    // `saphyr-parser` counts in characters and this module edits bytes, so the offsets are the byte of
+    // each character, once.
+    let offsets: Vec<usize> = text.char_indices().map(|(at, _)| at).collect();
+    let byte = |index: usize| offsets.get(index).copied().unwrap_or(text.len());
 
     for event in parser {
         let (event, span) = match event {
@@ -276,9 +406,12 @@ fn walk(text: &str) -> (Blocks, Option<Site>) {
                         fix: "write the line as YAML 1.2".to_owned(),
                     }
                 };
-                return (blocks, Some(site));
+                walk.site = Some(site);
+                return walk;
             }
         };
+        let start = byte(span.start.index());
+        let end = byte(span.end.index());
         let line = span.start.line();
         let column = span.start.col() + 1;
 
@@ -287,77 +420,110 @@ fn walk(text: &str) -> (Blocks, Option<Site>) {
             Event::DocumentStart(_) => {
                 documents += 1;
                 if documents > 1 {
-                    return (blocks, Some(Site {
+                    walk.site = Some(Site {
                         what: "a second document starts here".to_owned(),
                         field: None,
                         line,
                         column,
                         why: "a project file is one document, so a second one is a file that was not made".to_owned(),
                         fix: "keep one document here and put the other in a file of its own".to_owned(),
-                    }));
+                    });
+                    return walk;
                 }
             }
             Event::DocumentEnd => {}
             // Unreachable for `saphyr-parser` 0.3.3, which fails a `*name` before it emits this event
             // (see the scan-error arm above, which is what actually refuses one), and kept because the
             // event exists: a parser version that reports an alias instead must not read one through.
-            Event::Alias(_) => return (blocks, Some(alias_site(&stack, line, column))),
+            Event::Alias(_) => {
+                walk.site = Some(alias_site(&stack, line, column));
+                return walk;
+            }
             Event::Scalar(value, style, anchor, _tag) => {
                 if anchor != 0 {
-                    return (blocks, Some(anchor_refusal(&stack, line, column)));
+                    walk.site = Some(anchor_refusal(&stack, line, column));
+                    return walk;
                 }
                 if matches!(stack.last(), Some(Frame::Map { key: None, .. })) {
-                    let key = value.to_string();
-                    if style == ScalarStyle::Plain && key == "<<" {
-                        return (blocks, Some(Site {
+                    let name = value.to_string();
+                    if style == ScalarStyle::Plain && name == "<<" {
+                        walk.site = Some(Site {
                             what: "a merge key (`<<`) is not read".to_owned(),
                             field: path_of(stack.last().map_or("", Frame::path)),
                             line,
                             column,
                             why: "a merge copies another mapping's keys in, so this mapping does not say what it holds".to_owned(),
                             fix: "write the keys out here, and drop the merge".to_owned(),
-                        }));
+                        });
+                        return walk;
                     }
                     if let Some(Frame::Map { path, key: slot, seen }) = stack.last_mut() {
-                        if let Some(first) = seen.get(&key) {
-                            return (blocks, Some(Site {
-                                what: format!("`{key}` is given twice"),
-                                field: path_of(&join_key(path, &key)),
+                        if let Some(first) = seen.get(&name) {
+                            walk.site = Some(Site {
+                                what: format!("`{name}` is given twice"),
+                                field: path_of(&join_key(path, &name)),
                                 line,
                                 column,
                                 why: format!("it is first given on line {first}, so a reader would take one of the two by accident of order"),
-                                fix: format!("keep one `{key}`"),
-                            }));
+                                fix: format!("keep one `{name}`"),
+                            });
+                            return walk;
                         }
-                        seen.insert(key.clone(), line);
-                        *slot = Some(key);
+                        seen.insert(name.clone(), line);
+                        *slot = Some(Key { name, span: (start, end) });
                     }
                     continue;
                 }
-                if matches!(style, ScalarStyle::Literal | ScalarStyle::Folded) {
-                    blocks.push((span.start.line(), span.end.line()));
+                let style = match style {
+                    ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => Style::Quoted,
+                    ScalarStyle::Literal | ScalarStyle::Folded => Style::Block,
+                    ScalarStyle::Plain => Style::Plain,
+                };
+                if style == Style::Block {
+                    walk.blocks.push((span.start.line(), span.end.line()));
                 }
+                let path = child_path(&stack);
+                let key = take_key(&mut stack);
+                let dash = dash_before(text, start);
+                walk.nodes.push(Node { path, kind: NodeKind::Scalar, span: (start, end), key, dash, scalar: Some(Leaf { text: value.to_string(), style }) });
                 finish_value(&mut stack);
             }
             Event::SequenceStart(anchor, _) => {
                 if anchor != 0 {
-                    return (blocks, Some(anchor_refusal(&stack, line, column)));
+                    walk.site = Some(anchor_refusal(&stack, line, column));
+                    return walk;
                 }
-                stack.push(Frame::Seq { path: child_path(&stack), next: 0 });
+                let path = child_path(&stack);
+                let key = take_key(&mut stack);
+                let dash = dash_before(text, start);
+                open.push(walk.nodes.len());
+                walk.nodes.push(Node { path: path.clone(), kind: NodeKind::Sequence, span: (start, end), key, dash, scalar: None });
+                stack.push(Frame::Seq { path, next: 0 });
             }
             Event::MappingStart(anchor, _) => {
                 if anchor != 0 {
-                    return (blocks, Some(anchor_refusal(&stack, line, column)));
+                    walk.site = Some(anchor_refusal(&stack, line, column));
+                    return walk;
                 }
-                stack.push(Frame::Map { path: child_path(&stack), key: None, seen: Default::default() });
+                let path = child_path(&stack);
+                let key = take_key(&mut stack);
+                let dash = dash_before(text, start);
+                open.push(walk.nodes.len());
+                walk.nodes.push(Node { path: path.clone(), kind: NodeKind::Mapping, span: (start, end), key, dash, scalar: None });
+                stack.push(Frame::Map { path, key: None, seen: Default::default() });
             }
             Event::SequenceEnd | Event::MappingEnd => {
+                // A collection's own bytes run to the end of its last child, which is where its end
+                // event stands.
+                if let Some(index) = open.pop() {
+                    walk.nodes[index].span.1 = end;
+                }
                 stack.pop();
                 finish_value(&mut stack);
             }
         }
     }
-    (blocks, None)
+    walk
 }
 
 /// The refusal an alias earns, wherever it stands.
@@ -391,7 +557,7 @@ fn indent_fix() -> String {
 /// One frame of the walk: the node being read, and where the next child of it goes.
 enum Frame {
     Seq { path: String, next: usize },
-    Map { path: String, key: Option<String>, seen: std::collections::BTreeMap<String, usize> },
+    Map { path: String, key: Option<Key>, seen: std::collections::BTreeMap<String, usize> },
 }
 
 impl Frame {
@@ -407,7 +573,7 @@ fn child_path(stack: &[Frame]) -> String {
     match stack.last() {
         None => String::new(),
         Some(Frame::Seq { path, next }) => join_index(path, *next),
-        Some(Frame::Map { path, key, .. }) => join_key(path, key.as_deref().unwrap_or("")),
+        Some(Frame::Map { path, key, .. }) => join_key(path, key.as_ref().map_or("", |k| k.name.as_str())),
     }
 }
 
@@ -421,6 +587,25 @@ fn join_key(parent: &str, key: &str) -> String {
 
 fn join_index(parent: &str, index: usize) -> String {
     format!("{parent}[{index}]")
+}
+
+/// **The key a node is a value under**, taken off its parent so the next sibling does not inherit it.
+fn take_key(stack: &mut [Frame]) -> Option<Key> {
+    match stack.last_mut() {
+        Some(Frame::Map { key, .. }) => key.take(),
+        _ => None,
+    }
+}
+
+/// **The `-` an item of a block sequence starts with**, when the item starts with one. A flow item has
+/// none, and neither has a value written after its key on the same line.
+fn dash_before(text: &str, start: usize) -> Option<usize> {
+    let line_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
+    let prefix = &text[line_start..start];
+    if !prefix.trim_start().starts_with('-') || prefix.contains('[') || prefix.contains('{') {
+        return None;
+    }
+    Some(line_start + prefix.len() - prefix.trim_start().len())
 }
 
 /// The value at a path is finished, so its parent's next item or key is what comes after it.
