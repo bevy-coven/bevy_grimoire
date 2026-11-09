@@ -1,0 +1,78 @@
+{
+  "version": 2,
+  "stem": "feedback-1794230949329",
+  "taken_at_ms": 1794230949329,
+  "audience": "developers",
+  "app_version": "0.5.0",
+  "screen": "editor",
+  "project": "/Users/ladvien/Documents/Cauldron Projects/lavender_hills",
+  "map": "deadite_caverns",
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "element",
+        "entity": 193273526806,
+        "rect_px": [
+          0.0,
+          887.0,
+          2560.0,
+          944.0
+        ],
+        "path": [
+          {
+            "name": null,
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal",
+            "role": null,
+            "control": null,
+            "text": null
+          },
+          {
+            "name": "terminal bar",
+            "role": null,
+            "control": null,
+            "text": null
+          }
+        ]
+      },
+      "at": [
+        2309.789,
+        914.8672
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "What are the different chips on here for?  It's unclear.  And \"cd lavender_hills\" doesn't make a lot of sense.",
+  "picture": {
+    "file": "feedback-1794230949329.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794230949329_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794230949329.log"
+}

@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "stem": "feedback-1794230462401",
+  "taken_at_ms": 1794230462401,
+  "audience": "developers",
+  "app_version": "0.5.0",
+  "screen": "editor",
+  "project": "/Users/ladvien/Documents/Cauldron Projects/lavender_hills",
+  "map": "deadite_caverns",
+  "tool": "Place",
+  "window": {
+    "physical": [
+      2560,
+      1406
+    ],
+    "logical": [
+      1280.0,
+      703.0
+    ],
+    "scale_factor": 2.0,
+    "ui_scale": 2.4
+  },
+  "picks": [
+    {
+      "subject": {
+        "kind": "scene",
+        "world": [
+          -85.48706,
+          0.0,
+          -153.81299
+        ],
+        "map": [
+          -85.48706,
+          -153.81299
+        ],
+        "cell": [
+          -86,
+          -154
+        ],
+        "placement": null,
+        "camera": {
+          "translation": [
+            -88.96893,
+            32.0,
+            -88.96893
+          ],
+          "forward": [
+            -0.5773503,
+            -0.5773503,
+            -0.57735026
+          ]
+        }
+      },
+      "at": [
+        1449.2812,
+        591.2656
+      ]
+    }
+  ],
+  "relations": [],
+  "note": "We do not want the \"Add Meshes\"  here, it should be in the panel on the right.  It shouldn't block the map area.",
+  "picture": {
+    "file": "feedback-1794230462401.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "picks_picture": {
+    "file": "feedback-1794230462401_picks.png",
+    "size": [
+      2560,
+      1406
+    ]
+  },
+  "log": "feedback-1794230462401.log"
+}

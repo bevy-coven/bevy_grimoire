@@ -727,6 +727,30 @@
           "saw": "Read from the capture's own frame (installed 0.5.0, recorded on mac_air), not re-run: the card has four green OK rows and the bar only text chips; no LED anywhere. On big the whole-application test fails at 5ceeefa8: no LED is drawn in the bar or on the card."
         }
       ]
+    },
+    {
+      "stem": "feedback-1794230462401",
+      "taken_at_ms": 1794230462401,
+      "app_version": "0.5.0",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
+    },
+    {
+      "stem": "feedback-1794230949329",
+      "taken_at_ms": 1794230949329,
+      "app_version": "0.5.0",
+      "record_version": 2,
+      "kind": "",
+      "status": "unread",
+      "host": "mac_air",
+      "reason": "",
+      "commit": "",
+      "attempts": []
     }
   ]
 }
