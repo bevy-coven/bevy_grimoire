@@ -5,11 +5,11 @@ for host in ${FLEET_MACHINES:-local big bmb}; do
   echo "== $host"
   if out=$("${H[@]}" agent list 2>&1); then
     printf '%s' "$out" | python3 -c '
-import json, sys
+import json, re, sys
 d = json.load(sys.stdin)
 for a in d["result"]["agents"]:
     n = a.get("name") or a.get("agent") or ""
-    if n.startswith("w"):
+    if re.fullmatch(r"w[0-9]+", n):
         print("  %-8s %-10s %s" % (n, a.get("agent_status", "?"), a.get("pane_id", "")))'
   else
     echo "$host: unreachable ($(printf '%s' "$out" | head -1))"
