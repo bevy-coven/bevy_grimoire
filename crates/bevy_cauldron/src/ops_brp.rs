@@ -1929,6 +1929,9 @@ fn operation_apply(
             // an agent comes through, and never inside `dispatch` — a person's key goes through the
             // same dispatch and must not move the camera under their hands.
             gates.follow(&shown);
+            // **A door the editor will ask about is not yet open (cycle 8, gap 4).** The outcome is a
+            // stable word, `waiting`, and `waiting_on` names what it waits for, so nobody reads "applied"
+            // as "the door is open" and a caller can branch on the word.
             let waiting = outcome
                 .after
                 .as_ref()

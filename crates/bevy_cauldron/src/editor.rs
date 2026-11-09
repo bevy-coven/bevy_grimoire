@@ -7830,7 +7830,7 @@ pub fn aspect_of(camera: &Camera) -> Option<f32> {
 /// frames the same way. Camera state only: the map does not change, so this is
 /// not an operation and nothing is logged or undone.
 ///
-/// `margin` is passed through to [`crate::view::frame_box`]: [`crate::view::FRAME_MARGIN`] for a frame
+/// `margin` is passed through to [`crate::view::frame_box_with_margin`]: [`crate::view::FRAME_MARGIN`] for a frame
 /// a person asked for, [`crate::follow::FOLLOW_MARGIN_FRAC`] for a change the editor is showing them.
 pub fn apply_frame(
     rig: &mut crate::view::Rig,
@@ -7839,7 +7839,7 @@ pub fn apply_frame(
     open: &OpenMap,
     margin: f32,
 ) -> (Vec3, f32) {
-    let (focus, height) = crate::view::frame_box(
+    let (focus, height) = crate::view::frame_box_with_margin(
         rig,
         framing.centre,
         framing.size,
@@ -7870,9 +7870,7 @@ impl MapFraming {
     /// would then put the camera back on the whole map and leave the person looking at a room instead of
     /// the piece the agent just placed.
     pub fn settle(&mut self) {
-        if !self.done {
-            self.done = true;
-        }
+        self.done = true;
     }
 }
 

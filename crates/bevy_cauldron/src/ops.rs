@@ -2803,6 +2803,10 @@ pub mod placement_add {
                     }
                     match crate::ops::enclose(boxes) {
                         Some(rect) => {
+                            // **Sorted then deduped**: the ids arrive in the order the two sides of
+                            // the delta named them, so a piece on both sides is not necessarily
+                            // adjacent and `dedup` alone would leave it twice (review of #358, nit b).
+                            ids.sort();
                             ids.dedup();
                             Shown::Map { rect, placements: ids }
                         }

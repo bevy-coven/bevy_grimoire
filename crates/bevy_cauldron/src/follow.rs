@@ -116,6 +116,9 @@ pub struct Following {
     outline: Vec<String>,
     /// The `Time<Real>` second the ring comes down at.
     outline_until: f64,
+    /// **Whether the Map has been asked for on this request's behalf.** A `Door::Map` that does not
+    /// follow drops the request instead of asking again every frame.
+    asked_for_the_map: bool,
 }
 
 impl Following {
@@ -141,6 +144,28 @@ impl Following {
     }
 }
 
+/// **A new map ends the follow of the old one.**
+///
+/// **The ease and the ring are about a place on one map**: a focus in map metres, heights measured
+/// against its bounds, and placement ids, which are only unique on the map that minted them. Carried
+/// onto another map they name a spot that means nothing, so the camera would ease to a metre figure
+/// from the previous map and the ring would try to find ids that are not there. **The queue is kept**
+/// — those requests are still what the person asked to see, and `take_the_follow_request` re-resolves
+/// each against the map open when its turn comes.
+fn clear_the_follow_when_the_map_changes(
+    open: Option<Res<OpenMap>>,
+    mut following: ResMut<Following>,
+    mut seen: Local<Option<std::path::PathBuf>>,
+) {
+    let path = open.as_deref().map(|open| open.map_path.clone());
+    if *seen == path {
+        return;
+    }
+    *seen = path;
+    following.ease = None;
+    following.outline.clear();
+}
+
 /// **The plugin that owns the follow**: the resource, the system that carries one request a frame,
 /// and the ring drawn round the changed pieces.
 pub struct FollowPlugin;
@@ -156,6 +181,9 @@ impl Plugin for FollowPlugin {
                 // **And before the whole-map frame on entry**, which is one shot per door: a change
                 // that arrives just after a crossing would otherwise be framed by the follow and
                 // then overwritten by the whole map a frame later.
+                // **Before the request is taken**, so a follow never carries the last map's ease or
+                // ring onto the new map.
+                clear_the_follow_when_the_map_changes.before(take_the_follow_request),
                 take_the_follow_request
                     .before(crate::view::drive)
                     .before(crate::editor::frame_map_on_open),
@@ -232,19 +260,37 @@ fn take_the_follow_request(
     }
     // **The camera is the Map door's.** A crossing is the editor's own request mechanism, so a
     // follow from another door asks for it and waits.
-    if door.as_deref().is_some_and(|door| *door != Door::Map) {
-        if let Some(state) = state.as_mut()
-            && state.door_request.is_none()
-            && !state.leaving
-            && !confirm.as_deref().is_some_and(|c| c.is_open())
-        {
+    //
+    // **Once per request, and never for ever** (review of #358, nit g). The request below is asked
+    // for on the frame the queue first has something to carry, and marked asked; a frame that then
+    // finds the door still not the Map — the crossing was refused, or a question on screen held it —
+    // **drops the request** rather than asking again every frame. Asking again would be a crossing
+    // asked for by a camera move nobody is waiting on any more, and it would never end.
+    let on_the_map = door.as_deref().is_none_or(|door| *door == Door::Map);
+    if !on_the_map {
+        if following.asked_for_the_map {
+            following.queue.pop_front();
+            following.asked_for_the_map = false;
+            return;
+        }
+        let asking = state.as_deref().is_none_or(|state| {
+            state.door_request.is_some() || state.leaving || confirm.as_deref().is_some_and(|c| c.is_open())
+        });
+        if asking {
+            // **Held, not asked for**: a question is on screen, or the editor is already leaving, and
+            // this frame is not one that can start a crossing. The request waits for a frame that can.
+            return;
+        }
+        if let Some(state) = state.as_mut() {
             state.door_request = Some(crate::editor::DoorRequest {
                 door: Door::Map,
                 tab: Some(crate::tiles::Mode::Map),
             });
+            following.asked_for_the_map = true;
         }
         return;
     }
+    following.asked_for_the_map = false;
     let (Some(project), Some(open)) = (project.as_deref(), open.as_deref()) else {
         // A follow with no map has nothing to look at. It is dropped rather than held: the editor is
         // between projects, and the next request is not this one's business.
@@ -375,18 +421,14 @@ fn draw_the_follow_outline(
             continue;
         };
         // **The piece's own drawn box, measured the way the frame measured it**, so the ring and the
-        // frame cannot disagree about where the change is. A piece with no measurement still gets
-        // the smallest ring: the place is known even when the size is not.
-        let (centre, size) = crate::editor::placement_bounds(project, open, index)
+        // frame cannot disagree about where the change is. **A piece with no measurement is skipped**,
+        // as an unknown id is: a ring drawn at the row's origin and a half metre square would point at
+        // a place the editor does not know the piece is, which is worse than no ring.
+        let Some((centre, size)) = crate::editor::placement_bounds(project, open, index)
             .map(|(centre, size)| (centre, Vec2::new(size.x, size.z)))
-            .unwrap_or_else(|| {
-                let origin = open.map.origin;
-                let at = open.map.placements[index].at;
-                (
-                    Vec3::new(origin.0 + at.0, origin.1, origin.2 + at.1),
-                    Vec2::ZERO,
-                )
-            });
+        else {
+            continue;
+        };
         gizmos.rect(
             Isometry3d::new(
                 centre + Vec3::Y * OUTLINE_LIFT_M,

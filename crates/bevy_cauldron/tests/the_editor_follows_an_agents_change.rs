@@ -446,6 +446,17 @@ fn reduced_motion_lands_the_frame_at_once() {
     if let Err(why) = seen(&mut app, &corners) {
         panic!("reduced motion still eased the follow, so the next frame was not there yet: {why}");
     }
+    // **And it framed the change, not the whole room** (review of #358, nit e): a whole-map frame
+    // holds every piece by definition, so `seen` alone would pass for a camera that jumped to the map
+    // rather than to the change. The placement test asserts this; the reduced-motion one is the same
+    // rule and needs the same check.
+    let fill = fill(&mut app, &corners);
+    assert!(
+        fill >= FRAMED_MIN_FILL,
+        "reduced motion landed on the whole map rather than on the change: it fills {:.0}% of the \
+         viewport",
+        fill * 100.0
+    );
 }
 
 /// **The ease is a real one, and it lands.** With motion on, the first frame of the follow is between

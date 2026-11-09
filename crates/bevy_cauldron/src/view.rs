@@ -360,14 +360,23 @@ pub const FRAME_MARGIN: f32 = 1.1;
 /// and testable; the caller reads it from the Map camera's logical viewport, because a wrong aspect is
 /// the fault this must not have.
 ///
-/// `margin` is how much room the box is given past its own extent, as the multiplier
-/// [`FRAME_MARGIN`] is: `1.1` for a frame a person asked for, [`crate::follow::FOLLOW_MARGIN_FRAC`]
-/// for a change the editor is showing them. **A parameter rather than a second framer**, so the two
-/// callers cannot disagree about where a box goes on screen — only about how much air it gets.
-///
 /// **Camera state only.** The result is a focus and a height for the rig. Nothing the map holds
 /// changes, so framing is not an operation and is not undoable.
-pub fn frame_box(
+///
+/// **This is the frame a person asked for**, so it gives the box [`FRAME_MARGIN`]. A caller that
+/// wants its own margin — the follow showing an agent's change — calls
+/// [`frame_box_with_margin`], which is the one arithmetic both go through.
+pub fn frame_box(rig: &Rig, centre: Vec3, size: Vec3, aspect: f32, ceiling: f32) -> (Vec3, f32) {
+    frame_box_with_margin(rig, centre, size, aspect, ceiling, FRAME_MARGIN)
+}
+
+/// [`frame_box`], with the room the box is given stated by the caller.
+///
+/// `margin` is a multiplier on the box's extent, as [`FRAME_MARGIN`] is: `1.1` for a frame a person
+/// asked for, [`crate::follow::FOLLOW_MARGIN_FRAC`] for a change the editor is showing them. **A
+/// parameter rather than a second framer**, so the two callers cannot disagree about where a box
+/// goes on screen — only about how much air it gets.
+pub fn frame_box_with_margin(
     rig: &Rig,
     centre: Vec3,
     size: Vec3,
@@ -1023,7 +1032,7 @@ mod tests {
             ..Rig::default()
         };
         let centre = Vec3::new(120.0, 3.0, -75.0);
-        let (focus, _) = super::frame_box(&rig, centre, Vec3::new(60.0, 4.0, 30.0), 1.5, MAX_ZOOM, super::FRAME_MARGIN);
+        let (focus, _) = super::frame_box(&rig, centre, Vec3::new(60.0, 4.0, 30.0), 1.5, MAX_ZOOM);
         assert_eq!(focus, centre);
     }
 
@@ -1051,7 +1060,7 @@ mod tests {
             }
         }
         for aspect in [0.5, 1.0, 1.6, 2.5] {
-            let (_, h) = super::frame_box(&rig, centre, size, aspect, 1000.0, super::FRAME_MARGIN);
+            let (_, h) = super::frame_box(&rig, centre, size, aspect, 1000.0);
             assert!(
                 hx * 2.0 * 1.1 <= h * aspect + 1e-3,
                 "aspect {aspect}: width {hx} does not fit in {h}"
@@ -1069,8 +1078,8 @@ mod tests {
     fn a_wide_viewport_needs_less_height_for_the_same_box() {
         let rig = Rig::default();
         let size = Vec3::new(200.0, 4.0, 4.0);
-        let (_, square) = super::frame_box(&rig, Vec3::ZERO, size, 1.0, 1000.0, super::FRAME_MARGIN);
-        let (_, wide) = super::frame_box(&rig, Vec3::ZERO, size, 3.0, 1000.0, super::FRAME_MARGIN);
+        let (_, square) = super::frame_box(&rig, Vec3::ZERO, size, 1.0, 1000.0);
+        let (_, wide) = super::frame_box(&rig, Vec3::ZERO, size, 3.0, 1000.0);
         assert!(
             wide < square,
             "a 3:1 view should need less height than a square one: {wide} vs {square}"
@@ -1082,9 +1091,9 @@ mod tests {
     #[test]
     fn the_framed_height_stays_between_the_floor_and_the_ceiling() {
         let rig = Rig::default();
-        let (_, speck) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(0.01), 1.0, 375.0, super::FRAME_MARGIN);
+        let (_, speck) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(0.01), 1.0, 375.0);
         assert_eq!(speck, MIN_ZOOM);
-        let (_, vast) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(5000.0), 1.0, 375.0, super::FRAME_MARGIN);
+        let (_, vast) = super::frame_box(&rig, Vec3::ZERO, Vec3::splat(5000.0), 1.0, 375.0);
         assert_eq!(vast, 375.0);
     }
 
@@ -1104,8 +1113,8 @@ mod tests {
             ..Rig::default()
         };
         assert_eq!(
-            super::frame_box(&turning, centre, size, 1.4, 1000.0, super::FRAME_MARGIN),
-            super::frame_box(&settled, centre, size, 1.4, 1000.0, super::FRAME_MARGIN),
+            super::frame_box(&turning, centre, size, 1.4, 1000.0),
+            super::frame_box(&settled, centre, size, 1.4, 1000.0),
         );
     }
 
