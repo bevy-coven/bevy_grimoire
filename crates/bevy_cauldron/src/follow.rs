@@ -144,6 +144,50 @@ impl Following {
     }
 }
 
+/// **A person's own input takes the camera back, and the follow yields.**
+///
+/// **#358's acceptance says a person is never yanked** — the follow exists so someone reading a panel
+/// can see what the agent just did, and it stops being a kindness the moment they are doing something
+/// themselves. So a key press or a mouse button **drops the queue, stops the ease where the camera
+/// already is, and takes the ring down**, rather than moving the view out from under the gesture in
+/// progress.
+///
+/// **Measured, not supposed.** `a_person_removes_a_piece_and_undoes_it`'s
+/// `an_agents_undo_of_a_removal_waits_while_the_person_has_moved_a_piece_since` reads where a piece
+/// is on screen with `Camera::world_to_viewport`, then presses `B` and clicks those pixels. With the
+/// follow still queued the `B` frame also carried the camera from the whole-map frame to the
+/// removal's box, so the pixels the person aimed at were a frame stale and the piece did not move.
+/// A person's press is theirs; the camera is theirs from that moment.
+///
+/// **What this does not touch**: an agent's operation raises no input event, so an agent's change is
+/// still followed, and a person who does nothing is still shown it.
+fn a_persons_input_takes_the_camera_back(
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    mouse: Option<Res<ButtonInput<MouseButton>>>,
+    mut following: ResMut<Following>,
+) {
+    // **`pressed`, not `just_pressed`**: the press state is what survives the frame it was made on,
+    // and a person holding a key is working just as much as one who tapped it. It is also the only
+    // honest answer in a headless run — `ButtonInput`'s `just_pressed` is cleared in `PreUpdate`, so
+    // a test that writes the resource before its frame would be measured a frame late.
+    let working = keys.as_deref().is_some_and(|keys| {
+        keys.get_pressed().next().is_some() || keys.get_just_released().next().is_some()
+    });
+    let clicking = mouse.as_deref().is_some_and(|mouse| {
+        mouse.get_pressed().next().is_some() || mouse.get_just_released().next().is_some()
+    });
+    if !working && !clicking {
+        return;
+    }
+    // **The camera stays where it is**: `rig` already holds the ease's latest step, so clearing the
+    // ease leaves the view exactly where the person's eyes left it — no snap to the ease's end,
+    // which would be the yank this exists to prevent.
+    following.ease = None;
+    following.outline.clear();
+    following.queue.clear();
+    following.asked_for_the_map = false;
+}
+
 /// **A new map ends the follow of the old one.**
 ///
 /// **The ease and the ring are about a place on one map**: a focus in map metres, heights measured
@@ -184,6 +228,10 @@ impl Plugin for FollowPlugin {
                 // **Before the request is taken**, so a follow never carries the last map's ease or
                 // ring onto the new map.
                 clear_the_follow_when_the_map_changes.before(take_the_follow_request),
+                // **And before it too**, so the frame a person presses a key on is a frame the
+                // camera does not move on: the press and the follow would otherwise land together
+                // and the click after it would aim at where things used to be.
+                a_persons_input_takes_the_camera_back.before(take_the_follow_request),
                 take_the_follow_request
                     .before(crate::view::drive)
                     .before(crate::editor::frame_map_on_open),

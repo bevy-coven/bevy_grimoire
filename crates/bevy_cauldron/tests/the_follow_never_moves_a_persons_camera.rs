@@ -18,9 +18,14 @@
 //!
 //! 1. **An inspector edit — a `Source::Human` dispatch — leaves the rig where it was and queues no
 //!    follow.**
-//! 2. **A new map clears the ease and the ring**, which name places and row ids of the map they were
+//! 2. **A person's own key press takes the camera back**: a follow already queued is dropped and the
+//!    camera stays exactly where their eyes left it. This is the rule the gate found broken by #358
+//!    (`a_person_removes_a_piece_and_undoes_it::an_agents_undo_of_a_removal_waits_while_the_person_has_moved_a_piece_since`):
+//!    a follow queued by an agent's change was carried out on the frame the person pressed `B`, so the
+//!    pixels they then clicked were a frame stale.
+//! 3. **A new map clears the ease and the ring**, which name places and row ids of the map they were
 //!    made on, and keeps the queue.
-//! 3. **A follow that cannot be carried out does not ask for the Map every frame**: the request is
+//! 4. **A follow that cannot be carried out does not ask for the Map every frame**: the request is
 //!    asked for once, and dropped when the answer did not cross.
 
 use std::time::Duration;
@@ -188,6 +193,63 @@ fn a_persons_dispatch_change_leaves_the_camera_and_the_queue_alone() {
         0,
         "a person's own change queued a follow. It may not move the camera this frame and still \
          move it on the next."
+    );
+}
+
+/// **1b. A person's key press takes the camera back, and the queued follow is dropped.**
+///
+/// **This is #358's acceptance, "a person is never yanked", in the form the gate found broken.** An
+/// agent's change raises a follow; the person then reaches for the keyboard, and the frame their press
+/// lands on used to be a frame the camera moved on — so the click after it aimed where things used to
+/// be. Measured on the removal test: the rig went from height 17.06 (the whole-map frame) to 1.02 on
+/// the `B` frame, and its two clicks then missed.
+///
+/// The assertion is the camera's identity, not a tolerance: a follow that eases a fraction of the way
+/// and then stops is still a camera that moved under the person's hands.
+#[test]
+fn a_persons_key_press_drops_the_queued_follow_and_keeps_the_camera() {
+    let root = room("follow_person_takes_it_back");
+    let mut app = editor(&root);
+    // **Travel on**, so a follow has an ease to be in flight and a person's press has something to
+    // interrupt (the harness builds with motion off, which lands every follow in its own frame).
+    app.insert_resource(bevy_gooey::MotionSettings::default());
+    app.update();
+    let id = place(&mut app, "bed", (20.0, 20.0));
+    point_away(&mut app);
+    let before = rig(&app);
+
+    // **An agent's change**, through the same path the BRP handlers use.
+    app.world_mut().resource_mut::<Following>().request(FollowRequest {
+        target: bevy_cauldron::editor::FrameTarget::Placements(vec![id]),
+        ids: Vec::new(),
+    });
+    assert_eq!(
+        app.world().resource::<Following>().pending(),
+        1,
+        "the follow is queued, which is what the person's press has to drop"
+    );
+
+    // **The person presses a key.** `ButtonInput<KeyCode>` is what the editor's own keys read, so
+    // this is the same event a keyboard makes.
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::KeyB);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .release(KeyCode::KeyB);
+
+    assert_eq!(
+        rig(&app),
+        before,
+        "the person pressed a key and the camera moved on that frame: the follow is a kindness to \
+         someone reading a panel, and it stops being one the moment they are working"
+    );
+    assert_eq!(
+        app.world().resource::<Following>().pending(),
+        0,
+        "the person's press must drop the queued follow, or the camera is moved on the next frame \
+         instead — which is the same yank, one frame later"
     );
 }
 
