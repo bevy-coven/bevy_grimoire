@@ -9,7 +9,8 @@ MGR=/tmp/fleet-mgr
 ROSTER=$MGR/roster.txt SEEN=$MGR/seen.txt
 STALL_POLLS=6 POLL_S=30
 touch "$SEEN"
-declare -A last still
+REVS=$MGR/revs  # one file per worker holding "<revision> <unchanged polls>"; macOS bash 3.2 has no associative arrays
+mkdir -p "$REVS"
 while :; do
   while read -r host cluster; do
     [ -n "$cluster" ] || continue
@@ -30,10 +31,11 @@ while :; do
     done <<<"$lines"
     printf '%s\n' "$lines" | grep -q '^FLEET-RESULT' && continue
     rev=$("${H[@]}" agent get "w$cluster" </dev/null 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["result"]["agent"]["revision"])' 2>/dev/null)
-    key="$host/$cluster"
-    if [ -n "$rev" ] && [ "$rev" = "${last[$key]}" ]; then still[$key]=$(( ${still[$key]:-0} + 1 )); else still[$key]=0; fi
-    last[$key]=$rev
-    if [ "${still[$key]}" -ge "$STALL_POLLS" ]; then
+    key="$REVS/$host-$cluster"
+    prev="" count=0; [ -f "$key" ] && read -r prev count <"$key"
+    if [ -n "$rev" ] && [ "$rev" = "$prev" ]; then count=$(( ${count:-0} + 1 )); else count=0; fi
+    printf '%s %s\n' "$rev" "$count" >"$key"
+    if [ "$count" -ge "$STALL_POLLS" ]; then
       echo "STALL $host $cluster"
       exit 0
     fi
