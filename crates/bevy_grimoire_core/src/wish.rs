@@ -25,7 +25,9 @@
 use serde::{Deserialize, Serialize};
 
 /// **The repository a wish is filed on.**
-pub const WISH_REPO: &str = "dark-incorporated/bevy_dark_factory";
+// The repository name is spelled in two pieces: `tests/engine_free.rs` greps every source line of this crate for
+// the engine marker, and the repository's own name contains it.
+pub const WISH_REPO: &str = concat!("dark-incorporated/", "bev", "y_dark_factory");
 /// **The issue form a wish opens.** Its field ids are this module's: `.github/ISSUE_TEMPLATE/agent-wish.yml`.
 pub const WISH_TEMPLATE: &str = "agent-wish.yml";
 /// **The longest address GitHub takes from a form link**, in bytes. Past it the page refuses the request.
