@@ -1522,12 +1522,58 @@ struct CrowdReadout;
 #[derive(Component, Clone, Copy)]
 struct DataList;
 
-/// A row of [`DataList`]. Enter-equivalent: activating it opens the data field with `<file> <path> `
-/// already typed, so the person types only the value.
-#[derive(Component, Clone)]
-struct DataLeafRow {
+/// **The DATA panel's table** (UI-56, #242): it exists only while a `data.ron` lists leaves, which keeps its header cells (gooey
+/// draws them as buttons) out of screens that count every button in the world.
+#[derive(Component, Clone, Copy)]
+struct DataTable;
+
+/// **Where the DATA panel's cell editor opens**: a sibling after [`DataList`], so the list's rebuild cannot take the field away.
+#[derive(Component, Clone, Copy)]
+struct DataCellEditor;
+
+/// The text field open over one leaf's value: which leaf, and its value when the field opened.
+#[derive(Component, Clone, Debug)]
+struct DataCellEdit {
     file: String,
     path: String,
+    was: String,
+}
+
+/// Column widths of the DATA table, in body text sizes (gooey's `Column::width`): a registry id such as `tuning/mob`, a leaf
+/// path such as `mob.speed`, and the value, which takes the room that is left.
+const DATA_COLUMN_FILE_W: f32 = 5.0;
+const DATA_COLUMN_PATH_W: f32 = 8.0;
+const DATA_COLUMN_VALUE_W: f32 = 9.0;
+/// How many rows tall the DATA table stands before it scrolls: the inspector is a narrow column with a dozen sections, and a half row cut
+/// off at the foot says there is more.
+const DATA_TABLE_ROWS: f32 = 6.5;
+
+/// **The DATA table's rows**: one per leaf of every registered file, as [`crate::ops_data::listing`] lists them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataRows(pub Vec<crate::ops_data::LeafRow>);
+
+impl bevy_gooey::RowSource for DataRows {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn cell(&self, row: usize, column: usize) -> std::borrow::Cow<'_, str> {
+        let leaf = &self.0[row];
+        std::borrow::Cow::Borrowed(match column {
+            0 => &leaf.file,
+            1 => &leaf.path,
+            _ => &leaf.value,
+        })
+    }
+
+    /// A leaf is identified by its file and path, so a row keeps its place when the table is sorted or the file is rewritten.
+    fn key(&self, row: usize) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let leaf = &self.0[row];
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (&leaf.file, &leaf.path).hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 /// **The Plan panel's list** (E-069): the agent's plan for the open map, one numbered row per step
@@ -2886,7 +2932,6 @@ impl Plugin for EditorPlugin {
             .add_observer(on_data_field_click)
             .add_observer(on_terrain_field_click)
             .add_observer(on_crowd_field_click)
-            .add_observer(on_data_leaf_click)
             .add_observer(on_script_row_click)
             .add_observer(on_notes_click);
     }
@@ -3820,6 +3865,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         ..default()
                     },
                 ));
+                s.spawn((DataCellEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
             });
 
             // **Scripts (#105).** Every trigger of the open map; a row opens the terrain line to edit it.
@@ -6459,23 +6505,6 @@ fn on_data_field_click(
     );
 }
 
-fn on_data_leaf_click(
-    activate: On<Activate>,
-    rows: Query<&DataLeafRow>,
-    edit: Option<ResMut<DataEdit>>,
-    state: Option<ResMut<EditorState>>,
-) {
-    // `Option`, because this is a GLOBAL observer: see [`on_size_field_click`].
-    let (Some(mut edit), Some(mut state)) = (edit, state) else {
-        return;
-    };
-    let Ok(row) = rows.get(activate.entity) else {
-        return;
-    };
-    edit.active = Some(format!("{} {} ", row.file, row.path));
-    state.status.note("Enter writes the value, Esc leaves it alone".to_owned());
-}
-
 /// A row of [`ScriptsList`]: one trigger of the open map, carrying the terrain line that rewrites it.
 #[derive(Component, Clone)]
 struct ScriptRow {
@@ -6560,13 +6589,17 @@ fn refresh_scripts_list(
     *shown = Some(rows);
 }
 
-/// Keep [`DataList`] equal to the registered files' leaves. The files are read twice a second, not
-/// every frame, and the rows are respawned only when what they say changed.
+/// **Keep the DATA panel equal to the registered files' leaves** (UI-56): a gooey table of file, path and value, or the line that
+/// says no file is registered. The files are read twice a second, not every frame; a changed list is handed to the table that is
+/// there (it keeps its scroll and its sort), and the table is spawned only while there are rows.
+#[allow(clippy::too_many_arguments)]
 fn refresh_data_list(
     mut commands: Commands,
     time: Res<Time>,
     project: Option<Res<Project>>,
-    lists: Query<Entity, With<DataList>>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
+    lists: Query<(Entity, Has<Children>), With<DataList>>,
+    mut tables: Query<&mut bevy_gooey::Table, With<DataTable>>,
     mut shown: Local<Option<Vec<crate::ops_data::LeafRow>>>,
     mut since: Local<f32>,
 ) {
@@ -6576,36 +6609,90 @@ fn refresh_data_list(
     }
     *since = 0.0;
     let rows = project.map(|p| crate::ops_data::listing(&p.grimoire_dir)).unwrap_or_default();
-    if shown.as_ref() == Some(&rows) {
+    // A list with no children is one a door change just respawned: it is filled again even when the files did not change.
+    if shown.as_ref() == Some(&rows) && lists.iter().all(|(_, filled)| filled) {
         return;
     }
-    for list in &lists {
-        commands.entity(list).despawn_related::<Children>();
-        commands.entity(list).with_children(|p| {
-            if rows.is_empty() {
+    let ink = crate::compose::PanelInk::of(skin.as_deref());
+    for (list, _) in &lists {
+        if rows.is_empty() {
+            commands.entity(list).despawn_related::<Children>();
+            commands.entity(list).with_children(|p| {
                 p.spawn((
                     Text::new("no data files registered (data.ron)"),
-                    TextColor(DIM),
+                    TextColor(ink.quiet),
                     crate::chrome::font(crate::chrome::text::LABEL),
                 ));
-            }
-            for r in &rows {
-                crate::chrome::list_row(
-                    p,
-                    false,
-                    DataLeafRow { file: r.file.clone(), path: r.path.clone() },
-                )
-                .with_children(|row| {
-                    row.spawn((
-                        Text::new(format!("{} {} = {}", r.file, r.path, r.value)),
-                        TextColor(TEXT),
-                        crate::chrome::font(crate::chrome::text::BODY),
-                    ));
-                });
-            }
-        });
+            });
+        } else if let Ok(mut table) = tables.single_mut() {
+            table.set_source(DataRows(rows.clone()));
+        } else {
+            commands.entity(list).despawn_related::<Children>();
+            commands.entity(list).with_children(|p| {
+                p.spawn((
+                    bevy_gooey::table(
+                        [
+                            bevy_gooey::Column::new("File").width(DATA_COLUMN_FILE_W),
+                            bevy_gooey::Column::new("Path").width(DATA_COLUMN_PATH_W),
+                            bevy_gooey::Column::new("Value").width(DATA_COLUMN_VALUE_W),
+                        ],
+                        DataRows(rows.clone()),
+                    ),
+                    DataTable,
+                    bevy_gooey::TableRows(DATA_TABLE_ROWS),
+                    bevy_gooey::observe(open_the_cell),
+                ));
+            });
+        }
     }
     *shown = Some(rows);
+}
+
+/// **A row opened (Enter, or a double click) puts a text field over its value** (UI-56): the field holds the leaf's value as the file
+/// has it, and its final change writes it through `data_set` ([`write_the_cell`]).
+fn open_the_cell(
+    activated: On<bevy_gooey::RowActivated>,
+    tables: Query<&bevy_gooey::Table, With<DataTable>>,
+    editors: Query<Entity, With<DataCellEditor>>,
+    mut commands: Commands,
+) {
+    use bevy_gooey::RowSource;
+    let Ok(table) = tables.get(activated.entity) else { return };
+    let Some(rows) = table.source::<DataRows>() else { return };
+    let Some(leaf) = (0..rows.len()).find(|row| rows.key(*row) == activated.key).map(|row| rows.0[row].clone()) else { return };
+    for editor in &editors {
+        commands.entity(editor).despawn_related::<Children>();
+        commands.entity(editor).with_children(|slot| {
+            slot.spawn((
+                bevy_gooey::text_input(format!("{} {}", leaf.file, leaf.path), leaf.value.clone()),
+                DataCellEdit { file: leaf.file.clone(), path: leaf.path.clone(), was: leaf.value.clone() },
+                bevy::input_focus::AutoFocus,
+                bevy_gooey::observe(write_the_cell),
+            ));
+        });
+    }
+}
+
+/// **The cell's field ends its edit**: the final change (Enter, or the field losing the keys) writes the value through `data_set`,
+/// the same operation, parse and refusals the DATA field's Enter uses ([`write_data_leaf`]). Text left as it was writes nothing. The
+/// field goes either way.
+fn write_the_cell(
+    change: On<bevy_gooey::ValueChange<String>>,
+    edits: Query<&DataCellEdit>,
+    project: Option<Res<Project>>,
+    state: Option<ResMut<EditorState>>,
+    mut commands: Commands,
+) {
+    if !change.is_final {
+        return;
+    }
+    let Ok(edit) = edits.get(change.source) else { return };
+    commands.entity(change.source).despawn();
+    let Some(mut state) = state else { return };
+    if change.value.trim() == edit.was {
+        return;
+    }
+    write_data_leaf(project.as_deref(), &mut state, &edit.file, &edit.path, change.value.trim());
 }
 
 /// **The Notes panel's actions** (#90): a row flies the camera to its note, the filter button
@@ -7077,15 +7164,25 @@ fn set_data_leaf(project: Option<&Project>, state: &mut EditorState, raw: &str) 
         state.status.problem(format!("`{}` is not `<file> <path> <value>`, so nothing was written", raw.trim()));
         return;
     };
+    write_data_leaf(project, state, krate, field, value);
+}
+
+/// **The text a person typed for a leaf, as the JSON scalar `data_set` takes**: `2.5`, `true` and `"name"` as they read, and any
+/// other text as a string.
+fn data_value(text: &str) -> serde_json::Value {
+    serde_json::from_str::<serde_json::Value>(text).unwrap_or_else(|_| serde_json::Value::String(text.to_owned()))
+}
+
+/// **Write one leaf through the registry** as `data_set`, and put it on the undo stack. A refusal goes to the status line and writes
+/// nothing. The one path the DATA field's Enter and the table's cell edit share.
+fn write_data_leaf(project: Option<&Project>, state: &mut EditorState, file: &str, path: &str, value_text: &str) {
     let mut ctx = crate::ops::Ctx {
         project: project.cloned(),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
         ..crate::ops::Ctx::default()
     };
-    let value = serde_json::from_str::<serde_json::Value>(value)
-        .unwrap_or_else(|_| serde_json::Value::String(value.to_owned()));
-    let params = serde_json::json!({"file": krate, "path": field, "value": value});
+    let params = serde_json::json!({"file": file, "path": path, "value": data_value(value_text)});
     match crate::ops::dispatch(&mut ctx, "data_set", &params) {
         Ok(crate::ops::Applied::Done { outcome, operation_id, .. }) => {
             state.status.note(outcome.summary.clone());
