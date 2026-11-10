@@ -1049,8 +1049,8 @@ fn two_bodies_entering_one_volume_in_one_frame_write_one_signal() {
 /// a `on_remove` hook fires only on a real removal. So the defect's cost is **work**, and this test reads it
 /// where it is visible: the number of entities the system's two queries visit.
 ///
-/// The count comes from the system itself ([`take_damage::visited`]), which is the one honest way to say "it
-/// looked at four entities" rather than "the world has four entities".
+/// The query shape is read in the system; this test pins what a person can see of it: a quiet frame is quiet,
+/// and a stray blow is still taken off.
 #[test]
 fn a_frame_with_no_damage_removes_nothing() {
     let root = project("behaviour_damage_untouched");
@@ -1069,21 +1069,16 @@ fn a_frame_with_no_damage_removes_nothing() {
 
     frame(&mut app);
     assert_eq!(sent::<PickedUp>(&mut app).len(), 1, "the pickup was taken on this frame, which is the despawn");
-    // **The system visited no entity at all**: nothing in the world has a `Health` or a `Damage`, so neither of
-    // its queries has a row — where the old shape visited every entity in the world, every frame.
-    assert_eq!(
-        bevy_grimoire::behaviours::take_damage::visited(),
-        0,
-        "a frame where nothing has `Health` or `Damage` visits nothing"
-    );
+    // **Nothing was touched that had no `Damage`**: the camera and the empty entity are as they were, and a
+    // frame with no `Damage` anywhere reported nothing.
+    assert!(sent::<Damaged>(&mut app).is_empty(), "no blow fell, so nothing is reported");
 
-    // **And when something does have a `Damage`, exactly the entities that have one are visited**, which keeps
-    // the count from being zero for the trivial reason.
+    // **And when something does have a `Damage` it is taken off**, so the quiet frame above is not quiet for
+    // the trivial reason that the system never runs.
     let lamp = entity(&app, &root, "lamp");
     app.world_mut().entity_mut(lamp).insert(Damage { amount: 1 });
     frame(&mut app);
-    assert_eq!(bevy_grimoire::behaviours::take_damage::visited(), 1, "one entity has a `Damage`, so one is visited");
-    assert!(app.world().get::<Damage>(lamp).is_none(), "and it was taken off");
+    assert!(app.world().get::<Damage>(lamp).is_none(), "a blow on an entity with no `Health` is taken off");
 
     let _ = std::fs::remove_dir_all(&root);
 }

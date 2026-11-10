@@ -90,7 +90,7 @@ pub enum BehaviourSystems {
 // One path for all of it, `bevy_grimoire::behaviours::…`.
 pub use countdown::{Countdown, CountdownElapsed, DEFAULT_COUNTDOWN_S};
 pub use door::{Door, Switch};
-pub use health::{DEFAULT_DAMAGE, DEFAULT_HEALTH, Damage, Damaged, Died, Health, NO_HEALTH, take_damage};
+pub use health::{DEFAULT_DAMAGE, DEFAULT_HEALTH, Damage, Damaged, Died, Health, NO_HEALTH};
 pub use machine::{StateMachine, Transition, Transitioned};
 pub use path::{ARRIVAL_TOLERANCE_M, DEFAULT_PATH_SPEED_M_S, PathFollow, WaypointReached};
 pub use pickup::{Body, Collector, DEFAULT_PICKUP_RADIUS_M, Pickup, PickedUp};

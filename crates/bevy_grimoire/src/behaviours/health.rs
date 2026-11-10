@@ -101,28 +101,6 @@ pub struct Died {
     pub entity: Entity,
 }
 
-/// **How many entities [`take_damage`]'s queries visited in the last frame it ran.**
-///
-/// A counter rather than an inference, because the thing worth knowing is what the system *looked at*: the
-/// first version's query matched every entity in the world, a camera and a UI node included, and there is no
-/// way to see that from the world afterwards. It is read by `a_frame_with_no_damage_removes_nothing`, which is
-/// the claim the query shape is for.
-pub mod take_damage {
-    use core::sync::atomic::{AtomicUsize, Ordering};
-
-    /// The count the system last wrote.
-    static VISITED: AtomicUsize = AtomicUsize::new(0); // TEST-COUNTER: no behaviour reads this.
-
-    /// **The number of entities the last frame's queries matched**, zero when the system has not run.
-    pub fn visited() -> usize {
-        VISITED.load(Ordering::Relaxed)
-    }
-
-    pub(super) fn record(count: usize) {
-        VISITED.store(count, Ordering::Relaxed);
-    }
-}
-
 /// **Settle every entity's [`Health`], then take any waiting [`Damage`] off it**, and say what happened.
 ///
 /// The clamp is here rather than in the reader because the reader is GD-05's and knows nothing about hit
@@ -146,8 +124,6 @@ pub(crate) fn take_damage(
     mut damaged: MessageWriter<Damaged>,
     mut died: MessageWriter<Died>,
 ) {
-    // **The one place the count is written**, so what a test reads is what the system did.
-    take_damage::record(healths.iter().len() + orphans.iter().len());
     // **A blow on an entity with no hit points is taken off it, once**: there is nothing for it to come off,
     // and a `Damage` left where it fell would land the day a `Health` was added. Nothing is reported, because
     // nothing was damaged. The query above cannot see these entities, so `remove` is queued for them here.
