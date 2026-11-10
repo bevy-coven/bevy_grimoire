@@ -268,6 +268,8 @@ pub struct EditorState {
     /// **A command of the project's waiting for the person to allow it** (Send, Play), and where their
     /// trust store is. See [`crate::trusted`].
     pub trust: crate::trusted::TrustState,
+    /// **The project's agent guide's question**, where it stands (#348, AG-03).
+    pub guide: crate::agent_guide::GuideTrust,
 }
 
 impl EditorState {
@@ -1396,6 +1398,7 @@ impl Default for EditorState {
             leaving: false,
             door_request: None,
             trust: crate::trusted::TrustState::default(),
+            guide: crate::agent_guide::GuideTrust::default(),
         }
     }
 }

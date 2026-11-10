@@ -44,6 +44,7 @@ use crate::launcher::{self, HomeContent, Launcher, ProjectPictures, SidebarRoot,
 use crate::project_assets::{self, ProjectRoot};
 use crate::screen::Screen;
 use crate::ui::submit_button;
+use bevy_grimoire_core::trust::{self, TrustStore};
 
 /// The one message every action of the page goes through.
 #[derive(Message, Clone, Debug, PartialEq)]
@@ -74,6 +75,25 @@ pub enum PageAction {
     RemovePolicy { kit: String, entry: PolicyEntry },
     /// Back to the home's grid.
     Back,
+    /// **The agent guide section** (AG-05, #350). Each is the person's own act on the page, like a trust
+    /// grant: **no operation dispatches one**, so no agent can write the guide it is following.
+    ///
+    /// The area's text changed; held as an unsaved edit until Save.
+    GuideEdited(String),
+    /// Write the text area's content to the file and grant it.
+    SaveGuide,
+    /// Throw the unsaved edit away and show the file's text.
+    RevertGuide,
+    /// A person allows this exact content.
+    AllowGuide,
+    /// A person trusts the whole project, so every later edit is allowed.
+    TrustProject,
+    /// Write the template through [`crate::guide_template::write`].
+    CreateGuide,
+    /// Take the file's text over the unsaved edit.
+    ReloadGuide,
+    /// Write the unsaved edit over the file's text.
+    KeepMyGuide,
 }
 
 /// **What the page is showing.** Rebuilt from disk every time the screen is entered, and whenever the project's files change.
@@ -91,6 +111,10 @@ pub struct ProjectPage {
     seen: Vec<(PathBuf, SystemTime)>,
     /// Seconds until the files are looked at again.
     since: f32,
+    /// **The Agent guide section's held text** (AG-05, #350): the file as it last read, the person's
+    /// unsaved edit, and whether somebody else changed the file under it. On the page rather than as a
+    /// resource of its own, so a redraw and an action cannot read two different values.
+    pub guide: GuidePage,
 }
 
 impl ProjectPage {
@@ -193,6 +217,63 @@ pub struct MapCard(pub String);
 #[derive(Component)]
 pub struct KitRow(pub String);
 
+// ── the Agent guide section (AG-05, #350) ─────────────────────────────────────────────────────────
+
+/// The Agent guide section of the project page.
+#[derive(Component)]
+pub struct AgentGuide;
+/// The section's status line: `allowed`, `waiting for you` or `missing`.
+#[derive(Component)]
+pub struct AgentGuideStatus;
+/// The section's `text_area`, which holds the file's text and the person's unsaved edits. **Drawn only when
+/// the whole guide fits**, so its presence is the field the page can write from.
+#[derive(Component)]
+pub struct AgentGuideText;
+
+/// **The read-only prefix the section shows when the guide does not fit.** Deliberately not
+/// [`AgentGuideText`]: nothing typed into a view of part of the file can be written over the whole of it.
+#[derive(Component)]
+pub struct AgentGuideShown;
+#[derive(Component)]
+pub struct AgentGuideSave;
+#[derive(Component)]
+pub struct AgentGuideRevert;
+#[derive(Component)]
+pub struct AgentGuideAllow;
+#[derive(Component)]
+pub struct AgentGuideTrust;
+#[derive(Component)]
+pub struct AgentGuideCreate;
+#[derive(Component)]
+pub struct AgentGuideReload;
+#[derive(Component)]
+pub struct AgentGuideKeepMine;
+
+/// **What the Agent guide section is holding, and what it last read.**
+///
+/// **One resource, so the file, the edit and the answer cannot disagree.** `on_disk` is the text the
+/// section last read or wrote; an area whose text is not `on_disk` has unsaved edits, and a file whose
+/// text is neither `on_disk` nor the area's is a change from somewhere else.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GuidePage {
+    /// The text the section last read from, or wrote to, the file.
+    pub on_disk: String,
+    /// The area's text while it has unsaved edits; `None` when it matches the disk.
+    pub editing: Option<String>,
+    /// **Somebody else changed the file while there were unsaved edits.** The file is not overwritten until
+    /// the person chooses Reload or Keep mine.
+    pub conflict: bool,
+    /// **What the file says and which state it is in**, read from disk each time the page looks.
+    pub view: GuideView,
+}
+
+impl GuidePage {
+    /// Whether the area holds text the file does not.
+    pub fn dirty(&self) -> bool {
+        self.editing.is_some()
+    }
+}
+
 pub struct ProjectPagePlugin;
 
 impl Plugin for ProjectPagePlugin {
@@ -201,12 +282,19 @@ impl Plugin for ProjectPagePlugin {
             .add_systems(OnEnter(Screen::Project), (build_page, fill_page).chain())
             .add_systems(
                 Update,
-                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), launcher::hide_the_divider, act, answer_the_question, follow_the_files, redraw, show_the_form).chain().run_if(in_state(Screen::Project)),
+                (back_on_escape.before(bevy_gooey::GooeySystems::Navigate), launcher::hide_the_divider, act, the_guide_section, read_the_guide, answer_the_question, follow_the_files, redraw, show_the_form).chain().run_if(in_state(Screen::Project)),
             );
     }
 }
 
-fn build_page(mut commands: Commands, root: Res<ProjectRoot>, mut images: ResMut<Assets<Image>>, mut splash: ResMut<SplashArt>) {
+fn build_page(
+    mut commands: Commands,
+    root: Res<ProjectRoot>,
+    mut images: ResMut<Assets<Image>>,
+    mut splash: ResMut<SplashArt>,
+    state: Option<Res<crate::editor::EditorState>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+) {
     launcher::ensure_splash(&mut images, &mut splash);
     let Some(root) = root.current() else {
         error!("the project page was entered with no project to show");
@@ -217,7 +305,14 @@ fn build_page(mut commands: Commands, root: Res<ProjectRoot>, mut images: ResMut
         Err(e) => (Catalog { kits: Vec::new(), maps: Vec::new(), authoring: None, bashes: Vec::new() }, Some(e)),
     };
     let seen = fingerprint(&root);
-    commands.insert_resource(ProjectPage { root, catalog, asking: None, asking_policy: None, dirty: false, seen, since: 0.0 });
+    // **The guide is read as the page is built**, not a frame later: the section's first draw is what a
+    // person sees, and a first draw that said "allowed" about a project with no guide would be a line that
+    // is wrong until something else moved.
+    let mut page = ProjectPage { root, catalog, asking: None, asking_policy: None, dirty: false, seen, since: 0.0, guide: GuidePage::default() };
+    let view = agent_guide_view(&page, store_root.as_deref(), state.and_then(|s| s.trust.file.clone()).as_deref());
+    page.guide.on_disk = view.text.clone();
+    page.guide.view = view;
+    commands.insert_resource(page);
     if let Some(problem) = problem {
         commands.spawn(toast_alert(problem).sticky());
     }
@@ -286,7 +381,188 @@ fn draw_body(commands: &mut Commands, body: Entity, page: &ProjectPage, map_menu
                 });
             })),
         ));
+        // **The agent guide** (AG-05, #350): the file an agent is given for this project, read here, edited
+        // here, and allowed here — because a person who answered "not now" to the modal needs a second
+        // place to say yes, and because reading the file is how anybody decides.
+        draw_agent_guide(body, &page.guide);
     });
+}
+
+/// **What the Agent guide section draws**, read from the file and the store on the frame the page redraws.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GuideView {
+    pub state: crate::agent_guide::GuideState,
+    /// **A problem that stopped the decision**, shown instead of a guess: a store that will not read, or a
+    /// project root that will not resolve. `None` when the store gave an answer.
+    pub trouble: Option<String>,
+    pub text: String,
+    /// The AG-02 problem a guide that cannot be served has, shown instead of the editor.
+    pub problem: Option<String>,
+}
+
+/// **Read the guide as the section needs it**: the file's text, the state the store gives it, or the
+/// problem that stops it being served. A missing file is `Missing`, not a problem.
+///
+/// **The state is the store's answer, not the section's guess.** The same decision `grimoire/agent_guide`
+/// makes is what colours the status line, so a person pressing Allow here and an agent asking are looking
+/// at one rule.
+pub fn agent_guide_view(page: &ProjectPage, store_root: Option<&crate::trusted::StoreRoot>, trust_file: Option<&Path>) -> GuideView {
+    use crate::agent_guide::GuideState;
+    let path = crate::agent_guide::project_file(&page.root);
+    let text = match bevy_grimoire_core::agent_guide::read_layer(bevy_grimoire_core::agent_guide::Source::Project, &path) {
+        Ok(Some(text)) => text,
+        Ok(None) => return GuideView { state: GuideState::Missing, text: String::new(), problem: None, trouble: None },
+        Err(problem) => {
+            return GuideView { state: GuideState::Waiting, text: String::new(), problem: Some(problem.line()), trouble: None };
+        }
+    };
+    // **`None` is the person's own store** (`crate::trusted::resolve`), as it is for the guide the agent is
+    // served — the page and the answer must agree about what is allowed.
+    //
+    // **A store that will not read is said, not swallowed.** It is not "everything is allowed" (the grant
+    // would be a fiction) and it is not silently "waiting for you" either: a person whose store is damaged
+    // is the only one who can fix it, and the section is where it is written down.
+    let state = match crate::trusted::load_at(store_root, trust_file).and_then(|store| store.guide_decision(&page.root, &text)) {
+        Ok(trust::Decision::Trusted(_)) => GuideState::Allowed,
+        Ok(trust::Decision::Untrusted) => GuideState::Waiting,
+        Err(e) => {
+            return GuideView { state: GuideState::Waiting, text, problem: None, trouble: Some(e) };
+        }
+    };
+    GuideView { state, text, problem: None, trouble: None }
+}
+
+/// **How many rows the section's `text_area` holds.** gooey's area is fixed-height and clipped.
+pub const GUIDE_ROWS: usize = 12;
+
+/// **How many characters wide that area is**, from gooey's own `TEXT_AREA_CHARS` at the pinned revision
+/// (`widgets.rs:185`, `26.0`). It is copied rather than imported because it is private there, and the copy
+/// is what [`FULLY_SHOWN_CHARS`] is measured from — the number a person sees in a guide has to match the
+/// widget they are typing in.
+pub const GUIDE_COLUMNS: usize = 26;
+
+/// **Draw the Agent guide section**: its status line, then the editor, then the state's own buttons.
+///
+/// **The section is drawn from [`GuidePage`]**, not from the file again: an unsaved edit lives there, and a
+/// redraw that re-read the disk under it would be a redraw that threw the person's typing away.
+fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands<ChildOf>, held: &GuidePage) {
+    let view = &held.view;
+    // **The whole file or none of it**, and "the whole file" is counted in the rows the box has, not in
+    // characters: the area wraps at [`GUIDE_COLUMNS`] and clips past [`GUIDE_ROWS`], so a short character
+    // count can still hide a payload below the fold. Past either bound the section says how much it is
+    // showing and offers no Save, no Allow, no Revert and no Trust: writing over a file from a view of part
+    // of it is how a guide gets truncated.
+    let total = view.text.chars().count();
+    let rows = bevy_grimoire_core::agent_guide::visual_rows(&view.text, GUIDE_COLUMNS);
+    let truncated = !fully_shown(&view.text);
+    // **A file nobody can serve says its problem where the state would be**, because "waiting for you" over
+    // a file that is too large or not text would be an offer to allow something unusable.
+    let status = if let Some(problem) = &view.problem {
+        problem.clone()
+    } else if let Some(trouble) = &view.trouble {
+        format!("{} · {trouble}", view.state.word())
+    } else if truncated {
+        // **Said in the box's own terms**: rows against rows, and the character count as the supporting
+        // fact. "The first 312 characters" was true of a file whose *thirteenth line* was the invisible one.
+        format!(
+            "{} · {} · showing the first {GUIDE_ROWS} of {rows} lines ({FULLY_SHOWN_CHARS} characters of \
+             {total}); edit the file in your editor, at {}. Nothing here can be saved or allowed until the \
+             whole guide fits the box.",
+            view.state.word(),
+            crate::agent_guide::PROJECT_PATH_SHOWN,
+            crate::agent_guide::PROJECT_PATH_SHOWN
+        )
+    } else if held.conflict {
+        format!("changed on disk · {} was changed somewhere else, and your unsaved edits were kept", crate::agent_guide::PROJECT_PATH_SHOWN)
+    } else {
+        format!("{} · {}", view.state.word(), crate::agent_guide::PROJECT_PATH_SHOWN)
+    };
+    // **What is shown when it does not all fit**: the whole lines that do, never a character cut through
+    // the middle of a line — a prefix ending mid-word reads as a damaged file rather than a partial one.
+    let text: String = if truncated {
+        view.text
+            .lines()
+            .scan(0usize, |rows, line| {
+                let here = bevy_grimoire_core::agent_guide::visual_rows(line, GUIDE_COLUMNS);
+                let fits = *rows + here <= GUIDE_ROWS;
+                if fits {
+                    *rows += here;
+                }
+                Some((line, fits))
+            })
+            .take_while(|(_, fits)| *fits)
+            .map(|(line, _)| format!("{line}\n"))
+            .collect()
+    } else {
+        held.editing.clone().unwrap_or_else(|| view.text.clone())
+    };
+    let state = view.state;
+    let problem = view.problem.clone();
+    let conflict = held.conflict;
+    let editing = held.editing.is_some();
+    parent.spawn((
+        section(
+            "Agent guide",
+            true,
+            Children::spawn(SpawnWith(move |parent: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>| {
+                parent.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(crate::chrome::GAP_TIGHT), padding: UiRect::vertical(Val::Px(crate::chrome::GAP_ROW)), ..default() }).with_children(|rows| {
+                    rows.spawn((label(status.clone()), AgentGuideStatus));
+                    // **A file nobody can read is its problem, not an editor**: saving over it would throw
+                    // away whatever it is, and the person is owed the reason instead.
+                    if let Some(problem) = &problem {
+                        rows.spawn(bevy_gooey::toast_alert(problem.clone()));
+                        return;
+                    }
+                    if state == crate::agent_guide::GuideState::Missing {
+                        rows.spawn((
+                            button("Create guide"),
+                            AgentGuideCreate,
+                            observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::CreateGuide); }),
+                        ));
+                        return;
+                    }
+                    // **A partial view is a label, not a field.** Drawn as a `text_area` it would take a
+                    // typist's keystrokes into the *prefix*, and `Keep mine` would then write that prefix
+                    // over the whole file — so the partial case shows the same prefix as read-only prose and
+                    // offers nothing else. The status line says what is shown and where to edit the rest.
+                    if truncated {
+                        rows.spawn((label(text.clone()), AgentGuideShown));
+                        return;
+                    }
+                    rows.spawn((
+                        bevy_gooey::text_area("The guide", text.clone(), GUIDE_ROWS),
+                        AgentGuideText,
+                        observe(|change: On<ValueChange<String>>, mut out: MessageWriter<PageAction>| {
+                            out.write(PageAction::GuideEdited(change.value.clone()));
+                        }),
+                    ));
+                    rows.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
+                        if conflict {
+                            // **The person says which text wins.** Neither is thrown away until they do.
+                            row.spawn((submit_button("Reload"), AgentGuideReload, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::ReloadGuide); })));
+                            row.spawn((button("Keep mine"), AgentGuideKeepMine, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::KeepMyGuide); })));
+                        } else if state == crate::agent_guide::GuideState::Waiting {
+                            // **A guide nobody has allowed is read before it is allowed**, and both answers
+                            // AG-03's modal offers are here, because this is where a person comes back to.
+                            //
+                            // **No Allow while there is an unsaved edit**: the edit is text on nobody's disk,
+                            // and granting it would both allow unread content and drop the edit. Save is the
+                            // act that writes it, and the grant follows the save.
+                            if !editing {
+                                row.spawn((submit_button("Allow this guide"), AgentGuideAllow, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::AllowGuide); })));
+                            }
+                            row.spawn((button("Trust this project"), AgentGuideTrust, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::TrustProject); })));
+                            row.spawn((button("Save"), AgentGuideSave, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::SaveGuide); })));
+                            row.spawn((button("Revert"), AgentGuideRevert, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RevertGuide); })));
+                        } else {
+                            row.spawn((submit_button("Save"), AgentGuideSave, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::SaveGuide); })));
+                            row.spawn((button("Revert"), AgentGuideRevert, observe(|_: On<Activate>, mut out: MessageWriter<PageAction>| { out.write(PageAction::RevertGuide); })));
+                        }
+                    });
+                });
+            })),
+        ),
+    ));
 }
 
 /// A map: its picture, name, size in metres and how many pieces stand in it. One that will not open says why and can be deleted.
@@ -458,6 +734,16 @@ fn act(
     let mut confirm = confirm;
     for action in actions.read().cloned() {
         match action {
+            // **The Agent guide's actions are the section's own system's** ([`the_guide_section`]), which
+            // reads the same messages with its own cursor. Nothing here touches the guide.
+            PageAction::GuideEdited(_)
+            | PageAction::SaveGuide
+            | PageAction::RevertGuide
+            | PageAction::AllowGuide
+            | PageAction::TrustProject
+            | PageAction::CreateGuide
+            | PageAction::ReloadGuide
+            | PageAction::KeepMyGuide => {}
             PageAction::Back => {
                 // The grid is the project's parent: the page's sidebar entry for it is Projects.
                 launcher.tab = launcher::HomeTab::Projects;
@@ -612,6 +898,307 @@ fn answer_the_question(mut commands: Commands, mut page: ResMut<ProjectPage>, co
             commands.spawn(toast_alert(e).sticky());
         }
     }
+}
+
+/// **Read the guide from disk** into the page's held state, before it draws.
+///
+/// **Read every [`GUIDE_READ_SECS`]**, not only when the page redraws: a person editing the guide in their
+/// own text editor is the case this section exists for, and a section that showed a stale copy until the
+/// maps' directory moved would be one that quietly disagreed with the file.
+///
+/// **An unsaved edit survives the read**: the text drawn is `editing` while there is one, and the disk's
+/// text is what the edit is compared against. **A file that moved under an unsaved edit is a conflict**,
+/// reported by the status line, and the file is only written by [`the_guide_section`], which refuses while
+/// a conflict stands.
+const GUIDE_READ_SECS: f32 = 0.5;
+
+fn read_the_guide(
+    mut page: ResMut<ProjectPage>,
+    state: Option<Res<crate::editor::EditorState>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+    real: Res<Time<Real>>,
+    mut since: Local<f32>,
+) {
+    *since += real.delta_secs();
+    // **Every time the page is about to redraw, and otherwise each [`GUIDE_READ_SECS`].** A redraw the
+    // section itself asked for must see the file it asked about, so the read cannot wait for a clock the
+    // next frame may not have reached.
+    if !page.dirty && *since < GUIDE_READ_SECS {
+        return;
+    }
+    *since = 0.0;
+    let trust_file = state.and_then(|s| s.trust.file.clone());
+    let view = agent_guide_view(&page, store_root.as_deref(), trust_file.as_deref());
+    let disk = view.text.clone();
+    let mut moved = false;
+    // **A standing conflict is not re-read away.** It is what the person is deciding between, and the only
+    // two things that settle it are **Reload** and **Keep mine** — a read loop that re-read the disk and
+    // cleared the flag would erase the state one frame after it was raised, and the buttons that resolve it
+    // with it.
+    if page.guide.conflict {
+        // Nothing to update: show the state as it was found, and let the person choose.
+    } else if page.guide.dirty() {
+        // **The person is typing.** A file that changed under them is a conflict, never a silent overwrite.
+        if disk != page.guide.on_disk {
+            page.guide.on_disk = disk;
+            page.guide.conflict = true;
+            moved = true;
+        }
+    } else if disk != page.guide.on_disk {
+        page.guide.on_disk = disk;
+        moved = true;
+    }
+    if page.guide.view != view {
+        page.guide.view = view;
+        moved = true;
+    }
+    if moved {
+        page.dirty = true;
+    }
+}
+
+/// **The Agent guide section's own actions** (AG-05, #350), carried out.
+///
+/// **Save is not an operation.** It is the person's own act on the page, like a trust grant: the guide is
+/// what tells an agent what to do, so an agent that could write it could instruct itself.
+///
+/// **A file that changed on disk while there were unsaved edits is never overwritten.** The section says
+/// so, and **Reload** (take the disk's text) or **Keep mine** (write the person's) is how the two are
+/// settled — the rule `a_file_that_does_not_read_is_never_overwritten` states for every other file the
+/// editor writes, applied to the one file a person types into directly.
+fn the_guide_section(
+    mut commands: Commands,
+    mut actions: MessageReader<PageAction>,
+    mut page: ResMut<ProjectPage>,
+    state: Option<ResMut<crate::editor::EditorState>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+) {
+    for action in actions.read().cloned() {
+        let guide = crate::agent_guide::project_file(&page.root);
+        // **The person's own store when none is named** (`crate::trusted::store_path`), the same resolution
+        // the guide the agent is served uses, so an Allow here is an Allow there.
+        let store = state.as_deref().and_then(|s| s.trust.file.clone());
+        let root_res = store_root.as_deref();
+        match action {
+            PageAction::GuideEdited(text) => {
+                // **An edit equal to the file is not an edit.** A redraw re-draws the area with the file's
+                // text, and that arrival must not count as unsaved work.
+                let was = page.guide.editing.is_some();
+                page.guide.editing = (text != page.guide.on_disk).then_some(text);
+                // **Redraw when the area's state flips**, not on every keystroke: the buttons change with
+                // it (Allow goes while there is an edit), and a redraw per character would rebuild the field
+                // under the person typing in it.
+                if was != page.guide.editing.is_some() {
+                    page.dirty = true;
+                }
+            }
+            PageAction::RevertGuide => {
+                page.guide.editing = None;
+                page.dirty = true;
+            }
+            PageAction::ReloadGuide => match read_guide(&guide) {
+                Ok(disk) => {
+                    page.guide.on_disk = disk;
+                    page.guide.editing = None;
+                    page.guide.conflict = false;
+                    page.dirty = true;
+                }
+                Err(e) => toast_failed(&mut commands, e),
+            },
+            PageAction::KeepMyGuide => {
+                let Some(text) = page.guide.editing.clone() else { continue };
+                match write_and_grant(&guide, &page.root, &text, root_res, store.as_deref()) {
+                    Ok(()) => {
+                        page.guide.on_disk = text;
+                        page.guide.editing = None;
+                        page.guide.conflict = false;
+                        page.dirty = true;
+                        toast_done(&mut commands, "Kept your guide");
+                    }
+                    Err(e) => toast_failed(&mut commands, e),
+                }
+            }
+            PageAction::SaveGuide => {
+                let Some(text) = page.guide.editing.clone() else { continue };
+                // **A conflict is not written over**, whatever the edit says: the person chooses Reload or
+                // Keep mine first, and that choice is the whole of this state.
+                if page.guide.conflict {
+                    toast_failed(&mut commands, format!("{} changed on disk while you were editing, so nothing was written. Choose Reload or Keep mine.", guide.display()));
+                    continue;
+                }
+                // **The file moved under the edit**: say so and write nothing. The two buttons on the card
+                // are the choice; a save here would throw one of the two texts away.
+                let disk = match read_guide(&guide) {
+                    Ok(disk) => disk,
+                    Err(e) => {
+                        toast_failed(&mut commands, e);
+                        continue;
+                    }
+                };
+                if disk != page.guide.on_disk {
+                    page.guide.on_disk = disk;
+                    page.guide.conflict = true;
+                    page.dirty = true;
+                    toast_failed(
+                        &mut commands,
+                        format!("{} was changed on disk while you were editing, so nothing was written. Reload it or keep yours.", guide.display()),
+                    );
+                    continue;
+                }
+                match write_and_grant(&guide, &page.root, &text, root_res, store.as_deref()) {
+                    Ok(()) => {
+                        page.guide.on_disk = text;
+                        page.guide.editing = None;
+                        page.guide.conflict = false;
+                        page.dirty = true;
+                        toast_done(&mut commands, "Saved this project's guide");
+                    }
+                    Err(e) => toast_failed(&mut commands, e),
+                }
+            }
+            // **Allow this guide, and only the text the person was shown.**
+            //
+            // Two ways this could grant text nobody read, and both are refused:
+            // - **An unsaved edit** is text that is on nobody's disk, and granting it would also drop the
+            //   edit: Save is the act that writes it, and the grant follows the save.
+            // - **A file that moved between the draw and the click** — the time-of-check/time-of-use hole —
+            //   would give whoever wrote it a grant for text the person never saw. So `on_disk` is granted
+            //   only while the file still holds it; otherwise the conflict is raised and nothing is granted.
+            PageAction::AllowGuide => {
+                if let Some(_editing) = &page.guide.editing {
+                    toast_failed(&mut commands, "Save the edit first: Allow grants the file, and this text is not written yet.");
+                    continue;
+                }
+                let disk = match read_guide(&guide) {
+                    Ok(disk) => disk,
+                    Err(e) => {
+                        toast_failed(&mut commands, e);
+                        continue;
+                    }
+                };
+                if disk != page.guide.on_disk {
+                    page.guide.on_disk = disk;
+                    page.guide.conflict = true;
+                    page.dirty = true;
+                    toast_failed(
+                        &mut commands,
+                        format!("{} was changed on disk since the page read it, so nothing was allowed. Reload it, read it, and allow it then.", guide.display()),
+                    );
+                    continue;
+                }
+                match grant_in_store(root_res, store.as_deref(), &page.root, &page.guide.on_disk) {
+                    Ok(()) => {
+                        page.dirty = true;
+                        toast_done(&mut commands, "Allowed this guide");
+                    }
+                    Err(e) => toast_failed(&mut commands, e),
+                }
+            }
+            PageAction::TrustProject => match trust_project_in_store(root_res, store.as_deref(), &page.root) {
+                Ok(()) => {
+                    page.dirty = true;
+                    toast_done(&mut commands, "Trusted this project, so its guides are served");
+                }
+                Err(e) => toast_failed(&mut commands, e),
+            },
+            PageAction::CreateGuide => match crate::guide_template::write(&page.root, root_res, store.as_deref()) {
+                Ok(file) => {
+                    page.guide.on_disk = crate::guide_template::TEMPLATE.to_owned();
+                    page.guide.editing = None;
+                    page.guide.conflict = false;
+                    page.dirty = true;
+                    toast_done(&mut commands, format!("Wrote {}", file.display()));
+                }
+                Err(e) => toast_failed(&mut commands, e),
+            },
+            _ => {}
+        }
+    }
+}
+
+/// **The guide on disk, read the one bounded way**, or the refusal that says why it cannot be.
+///
+/// **`std::fs::read_to_string` is not used anywhere in this section.** A guide path arrives with a cloned
+/// project, so a FIFO or a `/dev/zero` symlink would block or grow without end inside a UI system — the same
+/// hole AG-02's reader closed, in the paths this page writes through (`SaveGuide`, `ReloadGuide`,
+/// `AllowGuide`). The core reader refuses a non-regular file and reads at most `GUIDE_MAX_BYTES + 1`; a file
+/// that is not there is an `Err` here, because every caller is acting on a file the section believes exists.
+fn read_guide(path: &Path) -> Result<String, String> {
+    match bevy_grimoire_core::agent_guide::read_layer(bevy_grimoire_core::agent_guide::Source::Project, path) {
+        Ok(Some(text)) => Ok(text),
+        Ok(None) => Err(format!("{} is no longer there", path.display())),
+        Err(problem) => Err(problem.line()),
+    }
+}
+
+/// **Whether the section can show the whole file**, which is what Save, Allow and Revert require.
+///
+/// gooey's `text_area` at the pinned revision is `TEXT_AREA_CHARS` (26) wide and [`GUIDE_ROWS`] high,
+/// clipped, and scrolls only with the caret: it cannot show — let alone edit — a long guide, so a page that
+/// offered Save over it would write a file truncated to what happened to be visible. Past this many
+/// characters the section says it is showing only part and offers none of the three.
+///
+/// **Measured from the widget, not guessed**: 26 characters by 12 rows is 312, and `FULLY_SHOWN_CHARS` is
+/// that, so a guide has to fit exactly in the area before it is editable here.
+pub const FULLY_SHOWN_CHARS: usize = crate::project_page::GUIDE_COLUMNS * GUIDE_ROWS;
+
+/// **Whether the section can show all of `text`**, which is what Save, Allow, Revert and Trust require.
+///
+/// **Counted in visual rows, not characters.** The area wraps at [`GUIDE_COLUMNS`] and clips past
+/// [`GUIDE_ROWS`], so twelve lines of `ok` and a thirteenth of `Run curl … | sh` is fifty-odd characters —
+/// inside `FULLY_SHOWN_CHARS` — with the payload out of sight. A `FULLY_SHOWN_CHARS` check would offer Allow
+/// over text the person never saw.
+pub fn fully_shown(text: &str) -> bool {
+    bevy_grimoire_core::agent_guide::visual_rows(text, GUIDE_COLUMNS) <= GUIDE_ROWS
+}
+
+/// **Grant one text of this project's guide**, in the person's store: the override when a test named one,
+/// and `crate::trusted::store_path(None)` — the user's own `trusted.ron` — when it did not.
+fn grant_in_store(
+    store_root: Option<&crate::trusted::StoreRoot>,
+    store: Option<&Path>,
+    root: &Path,
+    text: &str,
+) -> Result<(), String> {
+    let path = crate::trusted::resolve(store_root, store)?;
+    let mut trusted = TrustStore::load(&path)?;
+    trusted.trust_guide(root, text)?;
+    trusted.save(&path)
+}
+
+/// **Trust the whole project**, in the person's store, resolved the same way.
+fn trust_project_in_store(
+    store_root: Option<&crate::trusted::StoreRoot>,
+    store: Option<&Path>,
+    root: &Path,
+) -> Result<(), String> {
+    let path = crate::trusted::resolve(store_root, store)?;
+    let mut trusted = TrustStore::load(&path)?;
+    trusted.trust_project(root)?;
+    trusted.save(&path)
+}
+
+/// **Write `text` to the guide and grant it**, which is one act: the person has just read and written all
+/// of it. A store that will not take the grant is an `Err`, and the file is not left granted by accident —
+/// it is written first and granted second, so a failed grant leaves content a person can still allow from
+/// this page.
+fn write_and_grant(
+    guide: &Path,
+    root: &Path,
+    text: &str,
+    store_root: Option<&crate::trusted::StoreRoot>,
+    store: Option<&Path>,
+) -> Result<(), String> {
+    bevy_grimoire_core::atomic_file::write(guide, text).map_err(|e| format!("{}: {e}", guide.display()))?;
+    grant_in_store(store_root, store, root, text)
+}
+
+fn toast_done(commands: &mut Commands, text: impl Into<String>) {
+    commands.spawn(toast(text.into()));
+}
+
+fn toast_failed(commands: &mut Commands, text: impl Into<String>) {
+    commands.spawn(toast_alert(text.into()).sticky());
 }
 
 /// Looks at the project's files once a second: a map or a kit made, renamed or deleted elsewhere draws.

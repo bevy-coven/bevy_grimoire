@@ -104,6 +104,11 @@ const ALLOWED_DEPS: &[&str] = &[
     "serde_yaml_ng",
     "saphyr-parser",
     "schemars",
+    // **The digest a guide grant holds** (#348, AG-03): whether a project's `AGENTS.md` is the text a person
+    // allowed. Pure Rust, engine-free, and on this list in the commit that needed it, which is what this
+    // test's own message asks for — `sha2` is the published construction rather than sixty lines of
+    // arithmetic whose silent wrongness would read as a trust bug.
+    "sha2",
 ];
 
 /// Crate names that would mean the boundary has been crossed, checked as substrings so

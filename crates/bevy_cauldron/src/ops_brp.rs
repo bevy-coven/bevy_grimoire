@@ -96,6 +96,52 @@ pub struct UndoParams {
     pub dry_run: bool,
 }
 
+/// **`grimoire/agent_guide` — the person's and the project's layers of an agent's guide** (#347, AG-02;
+/// #348, AG-03).
+///
+/// **The editor composes the two layers because it holds both things they hang off**: the open project,
+/// whose `.dark_factory/AGENTS.md` travels with it, and the person's own directory. The MCP server puts
+/// its shipped layer first and reads no file itself — so a server started with `--project` serves the
+/// same guide the editor has, and there is one reader of both paths.
+///
+/// **Both files are read here, on each call**, so an edit is picked up the next time an agent asks.
+/// A missing file is an absent layer; a file that cannot be read, is not UTF-8 or is over
+/// `GUIDE_MAX_BYTES` is left out and named in `problems` — never truncated.
+///
+/// **The project's layer needs the person's trust** (AG-03). Untrusted, it is one line in `withheld`
+/// and the text never reaches the agent; the question is raised in the editor's modal, and answering
+/// **Allow this guide** serves it. **"Not now" holds for that content for the session**, so an agent that
+/// asks at the start of every task does not re-ask a question the person already answered.
+///
+/// **A problem also reaches the person's status line**, because a person who wrote a guide that is not
+/// being served is the only one who can fix it.
+fn agent_guide(
+    _: In<serde_json::Value>,
+    project: Option<Res<crate::project::Project>>,
+    user: Option<Res<crate::agent_guide::UserGuideFile>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
+    state: Option<ResMut<crate::editor::EditorState>>,
+) -> Result<Value, String> {
+    // **The Projects home is not an open project.** The menu's folder is a card being looked at, not a
+    // project whose guide an agent is following, so the project layer is absent there and only the
+    // person's is served.
+    let Some(mut state) = state else {
+        let composed = crate::agent_guide::compose(project.as_deref(), user.as_deref(), store_root.as_deref(), None);
+        return Ok(crate::agent_guide::json(&composed));
+    };
+    let composed = crate::agent_guide::serve(&mut state, project.as_deref(), user.as_deref(), store_root.as_deref());
+    for problem in &composed.guide.problems {
+        // **The same sentence each time, folded into one row by [`crate::chrome::Status`]**: an agent asks
+        // at the start of every task, and a guide that stays broken would otherwise push the same line on
+        // each ask.
+        state.status.raise("agent guide: ", problem.clone());
+    }
+    if let Some(trouble) = &composed.trouble {
+        state.status.problem(format!("agent guide: {trouble}"));
+    }
+    Ok(crate::agent_guide::json(&composed))
+}
+
 /// **`true`, the default for the fields that mean "yes".**
 fn yes() -> bool {
     true
@@ -2531,6 +2577,20 @@ impl Plugin for OpsBridgePlugin {
             )
             .example(json!({})),
             project_root,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/agent_guide",
+                "The person's and the open project's layers of an agent's guide, in that order, and \
+                 what was refused: layers [{source, path, text}], problems [{what, where, why, fix}]. \
+                 The MCP server puts its shipped layer first and reads no file itself. Both files are \
+                 read on each call, so an edit is picked up at once. A missing file is an absent \
+                 layer; one that cannot be read, is not UTF-8 or is over GUIDE_MAX_BYTES is left out \
+                 and named. A read.",
+            )
+            .example(json!({})),
+            agent_guide,
         );
 
         app.add_debug_command(

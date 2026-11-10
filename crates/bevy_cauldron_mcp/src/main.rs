@@ -622,14 +622,26 @@ impl Grimoire {
         Ok(())
     }
 
-    /// **`grimoire_guide` — how to work in Cauldron, before the first call** (#346, AG-01).
+    /// **`grimoire_guide` — how to work in Cauldron, in the person's and the project's own words**
+    /// (#346, AG-01; #347, AG-02).
     ///
-    /// **A read of a compiled-in string.** The guide is `guide.md`, shipped inside the binary, so it
+    /// **Three layers, in order.** The shipped guide is `guide.md`, compiled into the binary, so this
     /// answers with no editor running and no project open — which matters, because an agent reads it
-    /// before it has done anything. It changes nothing, it is the same text every call, and it needs
-    /// no parameters: three reasons its hints are what they are.
+    /// before it has done anything. Then the person's `<config_dir>/Grimoire/AGENTS.md` and the open
+    /// project's `.dark_factory/AGENTS.md`, both **read by the editor** and never by this server: the
+    /// editor holds the open project and the person's directories, so it is the one place that knows
+    /// where they are. **A later layer adds to the earlier ones; nothing is merged or overridden key by
+    /// key.**
     ///
-    /// **One text, two readers.** The same string is what [`docs::render`] writes into
+    /// **A missing file is an absent layer, and a file that cannot be served is a problem.** Each layer
+    /// arrives under a heading naming its source and path, and a file that cannot be read, is not UTF-8
+    /// or is too large is left out with the refusal said in one line — never truncated into a guide an
+    /// agent would half-follow.
+    ///
+    /// **With no editor, the shipped layer is the whole guide.** A server an agent starts before the
+    /// editor does still answers with something true, and says the two other layers were not read.
+    ///
+    /// **One text, two readers.** The shipped string is what [`docs::render`] writes into
     /// `docs/mcp-tools.md`, so the guide an agent is given and the guide a person reads cannot
     /// disagree.
     #[tool(
@@ -639,8 +651,11 @@ impl Grimoire {
                        hand a result back. Call this before any other tool on your first task in a \
                        project: the other tools say what one tool does, and this says which of them \
                        in what order, and what the person on the other end expects. It returns the \
-                       shipped guide as text; it takes no parameters, needs no editor and changes \
-                       nothing.",
+                       shipped guide, then the person's own guide and the open project's, each under \
+                       a heading that names its source and path. A project's guide is served only once \
+                       the person has allowed that exact content (or trusted the project), so an \
+                       unread one arrives as one line saying they have not allowed it, never as its \
+                       text. It takes no parameters and changes nothing.",
         annotations(
             title = "Read the guide to working in Cauldron",
             read_only_hint = true,
@@ -650,8 +665,78 @@ impl Grimoire {
         )
     )]
     async fn guide(&self) -> Result<CallToolResult, ErrorData> {
+        let mut text = docs::GUIDE.to_owned();
+        match self.editor.call("grimoire/agent_guide", json!({})).await {
+            Ok(answer) => {
+                let layers = answer
+                    .get("layers")
+                    .and_then(|l| l.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                for layer in &layers {
+                    // **The layer exactly as the editor rendered it** — heading, source and path — so the
+                    // one renderer is `bevy_grimoire_core::agent_guide::Layer::rendered` and this server
+                    // cannot spell a heading differently or print a path the agent does not need.
+                    let Some(rendered) = layer.get("rendered").and_then(|r| r.as_str()) else { continue };
+                    text.push('\n');
+                    text.push_str(rendered.trim_end());
+                    text.push('\n');
+                }
+                // **A withheld layer is one line where the layer would have been**, and the text it
+                // withheld is never sent: the editor never puts it in the answer, and this reads only what
+                // the editor sent.
+                if let Some(withheld) = answer.get("withheld").and_then(|w| w.as_str()) {
+                    text.push('\n');
+                    text.push_str(&format!("**{withheld}**\n"));
+                }
+                if !layers.is_empty() || answer.get("withheld").and_then(|w| w.as_str()).is_some() {
+                    text.push('\n');
+                }
+                if let Some(trouble) = answer.get("trouble").and_then(|t| t.as_str()) {
+                    text.push_str(&format!("\n**No answer can be recorded about it: {trouble}**\n"));
+                }
+                for problem in answer.get("problems").and_then(|p| p.as_array()).cloned().unwrap_or_default() {
+                    // **Every part the problem has**, because the reason is what an agent acts on: a path
+                    // with no `why` is a refusal a reader has to guess the cause of.
+                    let said = problem.get("what").and_then(|w| w.as_str()).unwrap_or("a guide was left out");
+                    let at = problem
+                        .get("where")
+                        .and_then(|w| w.get("file"))
+                        .and_then(|f| f.as_str())
+                        .unwrap_or("no file was named");
+                    let why = problem.get("why").and_then(|w| w.as_str());
+                    let fix = problem.get("fix").and_then(|w| w.as_str());
+                    let mut line = format!("\n**A guide was not served: {said} — {at}");
+                    if let Some(why) = why {
+                        line.push_str(&format!(": {why}"));
+                    }
+                    line.push('.');
+                    if let Some(fix) = fix {
+                        line.push_str(&format!(" {fix}."));
+                    }
+                    line.push_str("**\n");
+                    text.push_str(&line);
+                }
+            }
+            // **No editor, or an older one that has no such method.** The shipped layer is the whole
+            // guide and says so, because an agent that is told nothing about the two files cannot know
+            // whether they are empty or unread.
+            Err(e) => {
+                // **The project's guide is named as withheld, not as a file to go and read.** Its whole
+                // point is that an agent cannot serve itself a project's rules: the editor reads it only
+                // once a person has allowed that content, so an agent told to `cat` it would be a route
+                // around the check this server exists to hold.
+                text.push_str(&format!(
+                    "\n**Neither the person's guide nor this project's guide was read: {e}** The \
+                     person's is `AGENTS.md` in the editor's config folder, and reading it is safe. \
+                     This project's guide (`.dark_factory/AGENTS.md`) is served only by the editor, \
+                     and only once the person has allowed that exact content there — it is not a file \
+                     for you to read around this tool.\n"
+                ));
+            }
+        }
         Ok(CallToolResult::success(vec![
-            rmcp::model::ContentBlock::text(docs::GUIDE.to_owned()),
+            rmcp::model::ContentBlock::text(text),
         ]))
     }
 

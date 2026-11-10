@@ -93,6 +93,14 @@ pub enum Asked {
     /// directory; an edit to any of them asks again), **trust the whole project**, or **not now**. The
     /// answer is a person's alone: nothing an agent can call reaches [`Confirm::settle_choice`].
     TrustCommand,
+    /// **The open project's `.dark_factory/AGENTS.md` is being given to an agent, and no person has
+    /// allowed that text** (AG-03, #348).
+    ///
+    /// The same three answers as [`Asked::TrustCommand`], because it is the same question about a
+    /// different subject: **allow this guide** (that exact content), **trust this project** (every guide
+    /// in it, from now on), or **not now**. The question shows the file's text, since the text is what is
+    /// being allowed.
+    TrustGuide,
 }
 
 impl Asked {
@@ -106,7 +114,7 @@ impl Asked {
     /// is a different matter and is every question's: [`take`] consumes it, so no verb behind a
     /// question reads the `N` that settled it (#286).
     pub fn owns_keyboard(self) -> bool {
-        matches!(self, Asked::TrustCommand)
+        matches!(self, Asked::TrustCommand | Asked::TrustGuide)
     }
 
     /// **Does saying yes throw work away?** The only thing the affirmative button's severity
@@ -129,7 +137,7 @@ impl Asked {
             //
             // **And crossing saves the map on the way out too** — the same rule, the same reason:
             // nothing is thrown away, so the affirmative is not destructive and must not look it.
-            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor | Asked::TrustCommand => false,
+            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor | Asked::TrustCommand | Asked::TrustGuide => false,
         }
     }
 }
@@ -158,7 +166,10 @@ struct Question {
     serial: u64,
     title: String,
     body: String,
-    yes: String,
+    /// **`None` for a note**, which has no affirming answer at all: `Y` does nothing, no affirmative
+    /// button is drawn, and the only answer is [`Question::no`]. A question whose yes would grant something
+    /// the person has not read is a note, because every modal's affirmative is `Y` and `Y` is a reflex.
+    yes: Option<String>,
     /// The middle button of a three-way question.
     alt: Option<Alt>,
     no: String,
@@ -193,7 +204,23 @@ impl Confirm {
         yes: impl Into<String>,
         no: impl Into<String>,
     ) {
-        self.raise(of, title.into(), body.into(), yes.into(), None, no.into());
+        self.raise(of, title.into(), body.into(), Some(yes.into()), None, no.into());
+    }
+
+    /// **Raise a note: something to read, with one answer.**
+    ///
+    /// The dialog has no affirmative button and `Y` answers nothing, so a note can never grant, delete or
+    /// start anything by reflex. For a question where every available grant is one the person cannot be
+    /// shown the evidence for — a guide too long to display, say — the honest shape is a note that sends
+    /// them somewhere they can read it, not a question with a yes.
+    pub fn note(
+        &mut self,
+        of: Asked,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        dismiss: impl Into<String>,
+    ) {
+        self.raise(of, title.into(), body.into(), None, None, dismiss.into());
     }
 
     /// **Raise a question with a middle answer**, `alt_key` or its button: yes, alt or no.
@@ -209,10 +236,10 @@ impl Confirm {
         no: impl Into<String>,
     ) {
         let alt = Alt { label: alt.into(), key: alt_key };
-        self.raise(of, title.into(), body.into(), yes.into(), Some(alt), no.into());
+        self.raise(of, title.into(), body.into(), Some(yes.into()), Some(alt), no.into());
     }
 
-    fn raise(&mut self, of: Asked, title: String, body: String, yes: String, alt: Option<Alt>, no: String) {
+    fn raise(&mut self, of: Asked, title: String, body: String, yes: Option<String>, alt: Option<Alt>, no: String) {
         if self.question.is_some() {
             return;
         }
@@ -236,7 +263,8 @@ impl Confirm {
         self.question.is_some()
     }
 
-    /// **Take this question's answer, once.** `Some(true)` agreed, `Some(false)` refused.
+    /// **Take this question's answer, once.** `Some(true)` agreed, `Some(false)` refused. A [`Confirm::note`]
+    /// has nothing to agree to, so it answers `Some(false)` or nothing.
     pub fn answer(&mut self, of: Asked) -> Option<bool> {
         match self.answer {
             Some((asked, choice)) if asked == of => {
@@ -265,10 +293,17 @@ impl Confirm {
     }
 
     /// The same, for any of the three. An `Alt` answer to a question with no middle button is dropped:
-    /// it cannot happen from the keys or the buttons, which only offer what the question has.
+    /// it cannot happen from the keys or the buttons, which only offer what the question has. **A `Yes` to
+    /// a note is dropped too**: a note has no affirmative, and dropping it here is what makes `Y` do
+    /// nothing rather than something nobody described.
     fn settle_choice(&mut self, choice: Choice) {
-        if choice == Choice::Alt && self.question.as_ref().is_some_and(|q| q.alt.is_none()) {
-            return;
+        if let Some(q) = self.question.as_ref() {
+            if choice == Choice::Alt && q.alt.is_none() {
+                return;
+            }
+            if choice == Choice::Yes && q.yes.is_none() {
+                return;
+            }
         }
         if let Some(q) = self.question.take() {
             self.owner_answered |= q.of.owns_keyboard();
@@ -333,8 +368,14 @@ fn answer_by_key(mut keyboard: ResMut<ButtonInput<KeyCode>>, mut confirm: ResMut
         return;
     }
     let alt_key = confirm.question.as_ref().and_then(|q| q.alt.as_ref()).map(|alt| alt.key);
+    // **`Y` on a note is taken and does nothing.** Left unread, it would be read by whatever verb follows —
+    // a note owns the keyboard like any other question — and a key that answered nothing would still turn
+    // a mesh or open a field behind the card.
+    let note = confirm.question.as_ref().is_none_or(|q| q.yes.is_none());
     if take(&mut keyboard, KeyCode::KeyY) {
-        confirm.settle(true);
+        if !note {
+            confirm.settle(true);
+        }
     } else if alt_key.is_some_and(|key| take(&mut keyboard, key)) {
         confirm.settle_choice(Choice::Alt);
     } else if take(&mut keyboard, KeyCode::KeyN) | take(&mut keyboard, KeyCode::Escape) {
@@ -430,24 +471,28 @@ fn sync_dialog(
                         card.spawn(label(q.body.clone()));
                     }
                     card.spawn(menu()).with_children(|answers| {
-                        let mut yes = answers.spawn((button(q.yes.clone()), ConfirmButton(Choice::Yes)));
-                        if destructive {
-                            // **A destructive answer says so** (UI-R03, #333): the danger colour, and the safe answer is focused.
-                            yes.insert(bevy_gooey::ButtonVariant::Danger);
-                        } else {
-                            yes.insert(AutoFocus);
+                        if let Some(yes) = &q.yes {
+                            let mut button = answers.spawn((button(yes.clone()), ConfirmButton(Choice::Yes)));
+                            if destructive {
+                                // **A destructive answer says so** (UI-R03, #333): the danger colour, and the safe answer is focused.
+                                button.insert(bevy_gooey::ButtonVariant::Danger);
+                            } else {
+                                button.insert(AutoFocus);
+                            }
                         }
                         if let Some(alt) = &q.alt {
                             answers.spawn((button(alt.label.clone()), ConfirmButton(Choice::Alt)));
                         }
+                        // **A note's one answer is the focused one**, since there is nothing else to press.
                         let mut no = answers.spawn((button(q.no.clone()), ConfirmButton(Choice::No)));
-                        if destructive {
+                        if destructive || q.yes.is_none() {
                             no.insert(AutoFocus);
                         }
                     });
-                    card.spawn(label(match &q.alt {
-                        Some(alt) => format!("Y {}  ·  {} {}  ·  N {}", q.yes, key_letter(alt.key), alt.label, q.no),
-                        None => "Y proceeds  ·  N stops".to_owned(),
+                    card.spawn(label(match (&q.yes, &q.alt) {
+                        (Some(yes), Some(alt)) => format!("Y {yes}  ·  {} {}  ·  N {}", key_letter(alt.key), alt.label, q.no),
+                        (Some(_), None) => "Y proceeds  ·  N stops".to_owned(),
+                        (None, _) => "N stops".to_owned(),
                     }));
                 });
         });

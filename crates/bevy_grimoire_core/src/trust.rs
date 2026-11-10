@@ -34,12 +34,19 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// The version of the store's file.
-pub const TRUST_VERSION: u32 = 1;
+/// The version of the store's file. **2** added guide grants ([`GuideGrant`]); a version 1 store is still
+/// read, with no guides allowed, because the projects a person trusted yesterday are still trusted.
+pub const TRUST_VERSION: u32 = 2;
 
-/// **The project files whose content names a program to start.** Nothing may edit these as data: see
-/// `data_files::DataFiles::parse`.
-pub const COMMAND_FILES: [&str; 2] = ["agent.ron", "play.ron"];
+/// The version this build still reads, so a store written before guide grants existed is not a refusal.
+pub const TRUST_VERSION_READS_FROM: u32 = 1;
+
+/// **The project files whose content names a program to start, or tells an agent what to do.** Nothing
+/// may edit these as data: see `data_files::DataFiles::parse`.
+///
+/// `AGENTS.md` is here because `data_set` edits a registered file's values: a guide registered as a data
+/// file would let an agent edit the very rules it is being asked to follow.
+pub const COMMAND_FILES: [&str; 3] = ["agent.ron", "play.ron", "AGENTS.md"];
 
 /// The store's file name, inside the editor's own folder of the user's data directory.
 pub const STORE_FILE: &str = "trusted.ron";
@@ -116,6 +123,19 @@ struct Grant {
     command: CommandSpec,
 }
 
+/// **A person allowed one project's guide, as it read at that moment.**
+///
+/// The digest is of the file's **bytes**, so one changed byte is a different guide and asks again: a guide
+/// an agent rewrote through its shell has not been allowed. A `Scope::Project` grant covers the guide
+/// too, which is what trusting a project means.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuideGrant {
+    pub project: PathBuf,
+    /// The SHA-256 of the text, lowercase hex — see [`sha256_hex`].
+    pub sha256: String,
+}
+
 /// **Everything this person has allowed.**
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -123,12 +143,16 @@ pub struct TrustStore {
     version: u32,
     projects: Vec<PathBuf>,
     commands: Vec<Grant>,
+    /// **The guides allowed, one per project.** Empty for a store written before this field existed, which
+    /// is why it has a default: the projects that store trusted are still trusted.
+    #[serde(default)]
+    guides: Vec<GuideGrant>,
 }
 
 impl Default for TrustStore {
     /// A person who has trusted nothing.
     fn default() -> Self {
-        TrustStore { version: TRUST_VERSION, projects: Vec::new(), commands: Vec::new() }
+        TrustStore { version: TRUST_VERSION, projects: Vec::new(), commands: Vec::new(), guides: Vec::new() }
     }
 }
 
@@ -146,15 +170,19 @@ impl TrustStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(TrustStore::default()),
             Err(e) => return Err(format!("trust: {}: {e}", file.display())),
         };
-        let store: TrustStore =
+        let mut store: TrustStore =
             ron::from_str(&text).map_err(|e| format!("trust: {} does not read ({e}). Fix or delete it: nothing is trusted until it does.", file.display()))?;
-        if store.version != TRUST_VERSION {
+        if store.version < TRUST_VERSION_READS_FROM || store.version > TRUST_VERSION {
             return Err(format!(
-                "trust: {} is version {}, and this build reads version {TRUST_VERSION}. Nothing is trusted until it does.",
+                "trust: {} is version {}, and this build reads versions {TRUST_VERSION_READS_FROM} to {TRUST_VERSION}. Nothing is trusted until it does.",
                 file.display(),
                 store.version
             ));
         }
+        // **A store from before guide grants reads as one with none**, and is written at this build's
+        // version the next time a person allows anything — which is a migration, not a silent upgrade: the
+        // projects it trusted are kept.
+        store.version = TRUST_VERSION;
         Ok(store)
     }
 
@@ -197,6 +225,32 @@ impl TrustStore {
         Ok(())
     }
 
+    /// **Has a person allowed this project's guide, as this text?** An `Err` when the project folder
+    /// cannot be resolved. The text's digest is what a [`GuideGrant`] holds, so any edit is a new question.
+    pub fn guide_decision(&self, root: &Path, text: &str) -> Result<Decision, String> {
+        let root = resolve(root)?;
+        if self.projects.contains(&root) {
+            return Ok(Decision::Trusted(Scope::Project));
+        }
+        let digest = sha256_hex(text.as_bytes());
+        if self.guides.iter().any(|g| g.project == root && g.sha256 == digest) {
+            return Ok(Decision::Trusted(Scope::Command));
+        }
+        Ok(Decision::Untrusted)
+    }
+
+    /// **A person allows this project's guide, exactly as it reads now.**
+    pub fn trust_guide(&mut self, root: &Path, text: &str) -> Result<(), String> {
+        let project = resolve(root)?;
+        // **One grant per (project, text)**: an older grant is kept, so a person who edits back to a wording
+        // they already allowed is not asked again for a guide they have read; a new text is a new entry.
+        let grant = GuideGrant { project: project.clone(), sha256: sha256_hex(text.as_bytes()) };
+        if !self.guides.contains(&grant) {
+            self.guides.push(grant);
+        }
+        Ok(())
+    }
+
     /// **What to say when a command is not allowed**: what it is, where it came from and who can allow it.
     pub fn untrusted_sentence(root: &Path, command: &CommandSpec) -> String {
         format!(
@@ -206,4 +260,24 @@ impl TrustStore {
             command.display()
         )
     }
+}
+
+/// **The SHA-256 of `bytes`, as lowercase hex**, which is what a [`GuideGrant`] holds: whether a project's
+/// guide is the exact text a person read. The published construction, with published vectors checked in
+/// `tests/a_projects_guide_needs_the_persons_trust.rs` — the question is identity, not secrecy, and a
+/// digest that was subtly wrong would withhold a guide whose grant was made and read as a trust bug.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// **What an agent is told when the project's guide is withheld.**
+///
+/// One line, because it stands where a layer would have been: the agent is not shown the text, and it is
+/// told why and who can change that. A person reading it in the editor reads the same words.
+pub fn withheld_sentence(root: &Path) -> String {
+    format!(
+        "{} has a guide at `.dark_factory/AGENTS.md` that no person has allowed, so it was not served. Ask them to allow it in the editor; an agent cannot.",
+        root.display()
+    )
 }

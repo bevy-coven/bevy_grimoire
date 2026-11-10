@@ -23,6 +23,29 @@ use std::path::{Path, PathBuf};
 use crate::confirm::{Asked, Choice, Confirm};
 use crate::editor::EditorState;
 
+/// **Where the person's stores live**, when the program has said. The binary names the user's data
+/// directory; a test names a scratch folder, so no test reads or writes the real `trusted.ron`.
+///
+/// **The override is the store's *file*, not its folder** ([`TrustState::file`]), and this is the folder a
+/// `None` override resolves to — the one fact that used to be a hard-wired call to
+/// `bevy_grimoire_core::user_dirs::data_dir()` inside [`store_path`], where a test could not reach it.
+#[derive(Resource, Clone, Debug, PartialEq, Eq)]
+pub struct StoreRoot(pub PathBuf);
+
+/// **The person's store, resolved once**: the named file, else the [`StoreRoot`], else the user's data
+/// directory (`None` is that directory, never "no store" — a real editor names no file).
+pub fn resolve(root: Option<&StoreRoot>, over: Option<&Path>) -> Result<PathBuf, String> {
+    if let Some(file) = over {
+        return Ok(file.to_path_buf());
+    }
+    match root {
+        Some(root) => Ok(root.0.join(STORE_FILE)),
+        None => bevy_grimoire_core::user_dirs::data_dir()
+            .map(|d| d.join(STORE_FILE))
+            .ok_or_else(|| "this machine has no user data directory, so there is nowhere to keep what you trust".to_owned()),
+    }
+}
+
 /// **A command waiting for a person's answer.**
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrustRequest {
@@ -45,12 +68,12 @@ pub struct TrustState {
 
 /// `<data_dir>/Grimoire/trusted.ron`.
 pub fn store_path(over: Option<&Path>) -> Result<PathBuf, String> {
-    match over {
-        Some(p) => Ok(p.to_path_buf()),
-        None => bevy_grimoire_core::user_dirs::data_dir()
-            .map(|d| d.join(STORE_FILE))
-            .ok_or_else(|| "this machine has no user data directory, so there is nowhere to keep what you trust".to_owned()),
-    }
+    resolve(None, over)
+}
+
+/// Reads the person's store through a [`StoreRoot`], so a test's scratch folder is where it looks.
+pub fn load_at(root: Option<&StoreRoot>, over: Option<&Path>) -> Result<TrustStore, String> {
+    TrustStore::load(&resolve(root, over)?)
 }
 
 /// Reads the person's store; a damaged one is an `Err` that names it.

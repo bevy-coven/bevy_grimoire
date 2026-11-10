@@ -32,6 +32,11 @@ saphyr-parser = "0.3"
 schemars = "1"
 rand = "0.10"
 rand_chacha = "0.10"
+# **The digest a guide's grant is for** (#348, AG-03). A project's `AGENTS.md` is served only when a person
+# allowed that exact content, and "exact" is a SHA-256 of the bytes: one changed byte is a different guide
+# and asks again. A published construction with published vectors, and the vectors are checked. Already a
+# dependency of the editor; here so the engine-free core can hold the same type without a second digest.
+sha2 = "0.10"
 # **The terminal's engine, and the only new crate the in-editor terminal costs.** A pure-Rust VTE
 # parser plus the grid that holds what the parser wrote — the part of a terminal that is hard, taken
 # whole rather than re-derived. Its `tty` module also owns the PTY (fork, `setsid`, `TIOCSCTTY`,
