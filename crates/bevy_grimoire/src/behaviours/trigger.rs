@@ -23,6 +23,7 @@ pub const DEFAULT_TRIGGER_RADIUS_M: f32 = 1.0;
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
 #[require(Transform)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Trigger {
     /// How far from the volume's own position it still holds a body, in world metres.
     pub radius_m: f32,
@@ -64,6 +65,7 @@ pub(crate) fn crossings(
     volumes: Query<(Entity, &Trigger, &GlobalTransform)>,
     bodies: Query<(Entity, &super::Body, &GlobalTransform)>,
     mut out: MessageWriter<Triggered>,
+    mut signals: MessageWriter<super::Signal>,
 ) {
     // **Forget pairs whose volume or body is gone**, so a despawned body is not remembered forever and a
     // body respawned into the same index does not look like a body that was already inside.
@@ -75,8 +77,16 @@ pub(crate) fn crossings(
         for (body, _, where_) in &bodies {
             let holds = super::within(trigger.radius_m, at.translation(), where_.translation());
             let before = inside.0.insert((volume, body), holds).unwrap_or(false);
-            if holds != before {
-                out.write(Triggered { trigger: volume, body, entered: holds, signal: trigger.signal.clone() });
+            if holds == before {
+                continue;
+            }
+            out.write(Triggered { trigger: volume, body, entered: holds, signal: trigger.signal.clone() });
+            // **The volume writes the signal as well as reporting the crossing**, so a `Switch` or a
+            // `StateMachine` that names it answers without a game's code in between: one vocabulary across
+            // every part of a room. A volume with no `signal` writes none, rather than an empty name that
+            // would match every other nameless part.
+            if !trigger.signal.is_empty() {
+                signals.write(super::Signal { name: trigger.signal.clone() });
             }
         }
     }

@@ -17,6 +17,7 @@ pub const DEFAULT_PICKUP_RADIUS_M: f32 = 1.0;
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
 #[require(Transform)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Body {}
 
 /// **Marks an entity that takes a [`Pickup`] it reaches.**
@@ -31,6 +32,7 @@ pub struct Body {}
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
 #[require(Transform)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Collector {}
 
 /// **Something a [`Collector`] that reaches it takes, once.**
@@ -46,6 +48,7 @@ pub struct Collector {}
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
 #[require(Transform)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Pickup {
     /// What it is, in the game's own vocabulary.
     pub item: String,

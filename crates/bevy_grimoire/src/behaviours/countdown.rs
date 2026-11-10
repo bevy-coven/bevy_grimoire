@@ -20,6 +20,7 @@ pub const DEFAULT_COUNTDOWN_S: f32 = 1.0;
 #[derive(Component, Reflect, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Countdown {
     /// How long it runs for, in seconds.
     pub duration_s: f32,
@@ -51,6 +52,7 @@ pub(crate) fn ticks(
     time: Option<Res<Time>>,
     mut countdowns: Query<(Entity, &mut Countdown)>,
     mut out: MessageWriter<CountdownElapsed>,
+    mut signals: MessageWriter<super::Signal>,
 ) {
     // **No clock, no counting**: a game without `Time` counts nothing rather than finishing instantly.
     let Some(time) = time else { return };
@@ -68,5 +70,11 @@ pub(crate) fn ticks(
         countdown.elapsed_s = countdown.duration_s.max(0.0);
         countdown.finished = true;
         out.write(CountdownElapsed { entity, signal: countdown.signal.clone() });
+        // **A countdown that rings writes the signal it names**, so a bell can move a machine or a latch
+        // without a game's code listening to `CountdownElapsed` first. It rings once, so it writes once; a
+        // countdown with no `signal` writes none rather than an empty name.
+        if !countdown.signal.is_empty() {
+            signals.write(super::Signal { name: countdown.signal.clone() });
+        }
     }
 }

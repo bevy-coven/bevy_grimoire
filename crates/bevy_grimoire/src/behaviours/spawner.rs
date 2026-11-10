@@ -21,6 +21,7 @@ pub const DEFAULT_SPAWN_INTERVAL_S: f32 = 5.0;
 #[derive(Component, Reflect, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Spawner {
     /// The id of the descriptor to ask for, which is a piece the game's library holds.
     pub of: String,

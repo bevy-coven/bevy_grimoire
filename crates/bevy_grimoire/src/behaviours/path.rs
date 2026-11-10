@@ -11,8 +11,15 @@ pub const ARRIVAL_TOLERANCE_M: f32 = 1e-3;
 
 /// **Walks its waypoints at `speed_m_s`, saying which one it reached, and stops at the last.**
 ///
-/// **The waypoints are world positions in metres**, not offsets from where the follower stands: a save that
-/// moves a follower does not move its route, and a route written by an agent is a list of places.
+/// **The waypoints are in the follower's own frame, which is the world's for an entity with no parent.** A
+/// follower writes its local `Transform` — the only transform a system may write, since `GlobalTransform` is
+/// the engine's — so under a parent the whole route is the parent's frame: a follower under a cart at x=10
+/// walking to `[2.0, 0.0, 0.0]` walks two metres from the cart, not two metres from the world's origin.
+///
+/// **A follower's own `GlobalTransform` is a frame behind its `Transform`**, because propagation runs before
+/// these systems. Nothing here reads it, so nothing here is wrong because of it; a game that compares a
+/// follower against another entity's `GlobalTransform` on the same frame is comparing this frame's parent with
+/// last frame's follower.
 ///
 /// **It does not turn the entity**, so a game is free to face it however it likes — a piece's own yaw is the
 /// editor's, and a behaviour that wrote it would fight the map. A follower with no waypoints, or one that
@@ -25,10 +32,11 @@ pub const ARRIVAL_TOLERANCE_M: f32 = 1e-3;
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
 #[require(Transform)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct PathFollow {
-    /// How fast it walks, in world metres a second.
+    /// How fast it walks, in metres a second of its own frame.
     pub speed_m_s: f32,
-    /// The route, in world metres, in the order it is walked.
+    /// The route, in the follower's own frame, in the order it is walked.
     pub waypoints_m: Vec<[f32; 3]>,
     /// The index of the next waypoint to reach. A file may set it, so a save mid-route resumes.
     pub next: usize,

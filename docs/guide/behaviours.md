@@ -22,22 +22,35 @@ name, a key a type does not have is refused at its line, and a refusal changes n
 
 |Behaviour|What it does|Writes|
 |---|---|---|
-|`Trigger`|A sphere of `radius_m` that says when a `Body` enters and when it leaves|`Triggered`|
+|`Trigger`|A sphere of `radius_m` that says when a `Body` enters and when it leaves|`Triggered`, `Signal`|
 |`Switch`|A named latch a `Signal` turns on and off|—|
 |`Door`|Opens with the `Switch` whose `latch` is its `link`|—|
 |`Spawner`|Asks for `of` every `interval_s`, at `at_m`|`SpawnRequested`|
 |`Pickup`|Something a `Collector` that reaches it takes once, then it is gone|`PickedUp`|
 |`Health`|`current` of `max`, clamped to that range whenever it is written|—|
 |`Damage`|Takes `amount` off `Health` on the next frame, then goes|`Damaged`, `Died`|
-|`Countdown`|Counts `duration_s`, then says `signal` once|`CountdownElapsed`|
+|`Countdown`|Counts `duration_s`, then says `signal` once|`CountdownElapsed`, `Signal`|
 |`PathFollow`|Walks `waypoints_m` at `speed_m_s`, stopping at the last|`WaypointReached`|
 |`StateMachine`|`initial` and `state`, stepped along `transitions` by signals|`Transitioned`|
 |`Body`|Marks an entity a `Trigger` notices|—|
 |`Collector`|Marks an entity that takes a `Pickup`|—|
 
-`Signal { name }` is the one message every named thing listens for, so a game's input writes one and every part
-of a room that names it answers: a switch whose `latch` is that name flips, and a machine with a transition
-`on` that name from its current state steps.
+`Signal { name }` is the one message every named thing listens for, and **the behaviours write it as well as
+read it**: a `Trigger` a body enters and a `Countdown` that rings each write a `Signal` named by their own
+`signal` field. So a volume and a bell press a `Switch` or step a `StateMachine` that names them, with no
+game's code in between:
+
+```yaml
+entities:
+  latch:    { Switch: { latch: gate_crossed, on: false } }   # answers the volume below
+  gate:     { Door: { link: gate_crossed, open: false } }
+  tripwire: { Trigger: { radius_m: 1.5, signal: gate_crossed } }
+```
+
+A producer (a volume, a countdown) runs before a consumer (a switch and its door, a state machine) in the same
+frame, so crossing the tripwire opens the gate on that frame. A game's own input writes the same message, so a
+button and a tripwire press a switch the same way. A `Trigger` or `Countdown` with no `signal` writes nothing
+rather than an empty name that would match every other nameless part.
 
 ## What a behaviour may and may not do
 
@@ -47,9 +60,15 @@ of a room that names it answers: a switch whose `latch` is that name flips, and 
 - **Its fields name their unit** (`radius_m`, `duration_s`, `speed_m_s`), so a bounds check and a schema both
   address a number by a name that says what it is.
 - **Its state is in the file**: `Switch.on`, `StateMachine.state`, `Countdown.elapsed_s`, `PathFollow.next`. A
-  save can set where a behaviour is, so it is resumed rather than reset.
+  save can set where a behaviour is, so it is resumed rather than reset. `Door.open` is the exception a save
+  should know about: from the first frame its switch exists, the switch owns the door, so a file's `open` is
+  only the value before then.
 - **It acts in `PostUpdate`, after transform propagation**, so a body moved this frame is where it is this
-  frame rather than where it was last one.
+  frame rather than where it was last one. The two exceptions: a `PathFollow` writes its own local `Transform`
+  (so it walks in its parent's frame, which is the world's only when it has no parent), and a follower's
+  `GlobalTransform` is one frame behind its own `Transform`.
+- **It needs `TransformPlugin`**, which `DefaultPlugins` provides; `BehaviourPlugin` adds no plugin itself,
+  so behaviours-first-then-`DefaultPlugins` builds.
 - **It needs a clock only if it counts**: a behaviour with a timer takes an optional `Time`, so a game without
   one ticks nothing rather than panicking.
 
@@ -63,4 +82,5 @@ The same collision is why **the behaviours do not register themselves**. Bevy 0.
 derived type process-wide, so a shipped `Health` would make a game's own `Health` ambiguous in that game's
 files and the reader would refuse both. `BehaviourPlugin` is the opt-in: a game that does not add it has none
 of these types in its registry, and a game that does add it and also has its own `Health` writes
-`bevy_grimoire::behaviours::health::Health` for this one.
+`bevy_grimoire::behaviours::Health` for this one — the type has exactly that one reflected path, because the
+module's own submodules are private.

@@ -14,6 +14,7 @@ use bevy::prelude::*;
 #[derive(Component, Reflect, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Switch {
     /// The signal name that presses this switch.
     pub latch: String,
@@ -21,12 +22,16 @@ pub struct Switch {
     pub on: bool,
 }
 
-
 /// **A door that opens and closes with the switch of its name.**
 ///
 /// `link` is a [`Switch`]'s `latch`, so a door is opened by the switch a person presses without the two
-/// naming each other's entities: a save can move either one and the link still holds. `open` is the door's
-/// state, and a file may set it — a door saved open comes up open.
+/// naming each other's entities: a save can move either one and the link still holds.
+///
+/// **`open` is the door's state, and a switch that exists owns it.** A file may set `open`, and a door whose
+/// `link` names no switch keeps what the file said — but from the first frame its switch exists, the door is
+/// its switch's state and the file's `open` is only the value before the first frame. The alternative is a
+/// door whose field and whose lock disagree, which is the shape of bug where a person opens a door and it
+/// closes itself on the next save.
 ///
 /// **Two doors with one link share it**: two leaves of one doorway answer the same latch, which is why the
 /// link is a name and not an entity reference.
@@ -37,6 +42,7 @@ pub struct Switch {
 #[derive(Component, Reflect, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Door {
     /// The `latch` of the [`Switch`] this door follows.
     pub link: String,
@@ -47,8 +53,11 @@ pub struct Door {
 /// **Turn every switch a signal names, then set every door to its switch's state.**
 ///
 /// One pass, in this order, so a door set beside the switch it follows opens in the frame that switch is
-/// pressed rather than a frame later. A door whose `link` names no switch is closed: a door linked to
-/// nothing is not open, and leaving it as it was would make a broken link look like a working one.
+/// pressed rather than a frame later.
+///
+/// **A door whose `link` names no switch keeps what the file said.** It is not closed, because a save that
+/// says `open: true` means it — a door saved open is open, and a link nobody has written yet is not a reason
+/// to contradict the file. The moment a switch with that name exists the door is its state and stays there.
 pub(crate) fn switched(
     mut signals: MessageReader<super::Signal>,
     mut switches: Query<&mut Switch>,
@@ -69,9 +78,13 @@ pub(crate) fn switched(
     // than a lookup inside one: a door must follow this frame's state, not last frame's.
     let latches: Vec<(String, bool)> = switches.iter().map(|switch| (switch.latch.clone(), switch.on)).collect();
     for mut door in &mut doors {
-        let open = latches.iter().find(|(latch, _)| *latch == door.link).is_some_and(|(_, on)| *on);
-        if door.open != open {
-            door.open = open;
+        // **A link that names no switch leaves the door as the file set it**; one that does name a switch owns
+        // `open` from then on.
+        let Some((_, on)) = latches.iter().find(|(latch, _)| !latch.is_empty() && *latch == door.link) else {
+            continue;
+        };
+        if door.open != *on {
+            door.open = *on;
         }
     }
 }

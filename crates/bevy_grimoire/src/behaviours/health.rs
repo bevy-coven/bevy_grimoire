@@ -6,6 +6,18 @@ use bevy::prelude::*;
 /// zero, and the dead do not go negative and die again.
 pub const NO_HEALTH: i32 = 0;
 
+/// **What a file that writes `Health` with no fields gets**: one point of one.
+///
+/// One rather than zero because an entity is alive when its `Health` arrives; zero would make the first thing
+/// a game spawns already dead, which no file means.
+pub const DEFAULT_HEALTH: Health = Health { current: 1, max: 1 };
+
+/// **What a file that writes `Damage: {}` gets**: one point off.
+///
+/// One rather than zero because the file asked for a blow; a zero-point blow would take nothing and report
+/// nothing, which is a `Damage` that does not do what its name says.
+pub const DEFAULT_DAMAGE: i32 = 1;
+
 /// **Hit points an entity has left, out of its maximum.**
 ///
 /// `current` is what a blow comes off and `max` is what a game shows a bar against. **`current` is clamped
@@ -18,6 +30,7 @@ pub const NO_HEALTH: i32 = 0;
 #[derive(Component, Reflect, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Health {
     /// Hit points left. Never below [`NO_HEALTH`] nor above `max`.
     pub current: i32,
@@ -26,10 +39,8 @@ pub struct Health {
 }
 
 impl Default for Health {
-    // **One of one, not zero of zero**: an entity a file gives `Health` to with no fields is alive, and a
-    // default of zero would make the first thing a game spawns dead.
     fn default() -> Self {
-        Self { current: 1, max: 1 }
+        DEFAULT_HEALTH
     }
 }
 
@@ -45,6 +56,10 @@ impl Health {
 /// **A blow waiting to land**: `amount` comes off [`Health`] on the next frame, and the component goes with
 /// it.
 ///
+/// **On an entity with no `Health` it is taken off and nothing is reported**: there are no hit points for it
+/// to come off, and a component that stayed would land the day a `Health` was added — a blow struck in the
+/// past arriving on a later frame is worse than one that did nothing.
+///
 /// A file writes it to give an entity a wound at load; a game writes it to hit one. **It is one-shot on
 /// purpose**: a damage component that stayed would be a wound taken every frame, which is the shape that
 /// makes an entity die of a single arrow while nobody is looking.
@@ -55,16 +70,15 @@ impl Health {
 #[derive(Component, Reflect, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Damage {
     /// How many hit points it takes off, which may be more than are left.
     pub amount: i32,
 }
 
 impl Default for Damage {
-    // **One point, not zero**: a file that writes `Damage: {}` means a blow, and a zero-point blow would take
-    // nothing and report nothing.
     fn default() -> Self {
-        Self { amount: 1 }
+        Self { amount: DEFAULT_DAMAGE }
     }
 }
 
@@ -95,11 +109,18 @@ pub struct Died {
 /// order between them to get wrong.
 pub(crate) fn take_damage(
     mut commands: Commands,
-    mut healths: Query<(Entity, &mut Health, Option<&Damage>)>,
+    mut healths: Query<(Entity, Option<&mut Health>, Option<&Damage>)>,
     mut damaged: MessageWriter<Damaged>,
     mut died: MessageWriter<Died>,
 ) {
-    for (entity, mut health, damage) in &mut healths {
+    for (entity, health, damage) in &mut healths {
+        // **A blow on an entity with no hit points is still taken off it**: there is nothing for it to come
+        // off, and a `Damage` left where it fell would land the day a `Health` was added. Nothing is
+        // reported, because nothing was damaged.
+        let Some(mut health) = health else {
+            commands.entity(entity).remove::<Damage>();
+            continue;
+        };
         // Written only when it differs, so a settled entity is not marked changed every frame.
         let settled = health.clamped();
         if health.current != settled.current || health.max != settled.max {

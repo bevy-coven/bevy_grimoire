@@ -11,18 +11,22 @@
 //! takes `Option<Res<Time>>`, so a game without one ticks nothing rather than panicking (the rule
 //! `entities.rs` states for its own reload).
 //!
+//! **The systems run in `PostUpdate`, after `TransformSystems::Propagate`**, so a body moved this frame is
+//! where it is this frame rather than where it was last one.
+//!
 //! **The frame a file is read is the frame its behaviours first act.** `GameEntitiesPlugin` queues its reads
-//! from `Startup`, Bevy flushes that queue before `Update` runs, and the behaviour systems are in `Update` —
-//! so a one-second countdown written in a file has already rung when its first frame ends. Every count below
-//! is that first frame plus the ones after it.
+//! from `Startup`, Bevy flushes that queue after `Startup` and before `PostUpdate`, so a one-second countdown
+//! written in a file has already rung when its first frame ends. Every count below is that first frame plus
+//! the ones after it.
 
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
+use bevy::app::PluginGroupBuilder;
 use bevy_grimoire::behaviours::{
-    BehaviourPlugin, Body, Collector, Countdown, CountdownElapsed, Damage, Damaged, Died, Door, Health, PathFollow,
-    PickedUp, Pickup, Signal, SpawnRequested, Spawner, StateMachine, Switch, Transitioned, Trigger, Triggered,
-    WaypointReached, behaviours_named,
+    BehaviourPlugin, BehaviourSystems, Body, Collector, Countdown, CountdownElapsed, Damage, Damaged, Died, Door,
+    Health, PathFollow, PickedUp, Pickup, Signal, SpawnRequested, Spawner, StateMachine, Switch, Transitioned,
+    Trigger, Triggered, WaypointReached, behaviours_named,
 };
 use bevy_grimoire::entities::{self, GameEntities, GameEntitiesPlugin};
 
@@ -45,10 +49,18 @@ fn write(root: &Path, text: &str) {
 ///
 /// The order matters: the reader resolves a file's type paths through the registry, so the behaviours must be
 /// registered first or a file naming one is refused as a type nobody registered.
+///
+/// **`TransformPlugin` is here and not in `BehaviourPlugin`.** The behaviours read `GlobalTransform`, which
+/// only propagation writes, so a game needs `TransformPlugin` — `DefaultPlugins` provides it. It is added
+/// *before* `BehaviourPlugin` here on purpose: `BehaviourPlugin` must not add it itself, because a plugin
+/// group added afterwards (`App::new().add_plugins((BehaviourPlugin, DefaultPlugins))`) panics in
+/// `PluginGroupBuilder::finish` on a plugin already in the app.
 fn game(root: &Path) -> App {
     let mut app = App::new();
     app.init_resource::<Time>();
-    app.add_plugins(BehaviourPlugin).add_plugins(GameEntitiesPlugin { root: root.to_path_buf() });
+    app.add_plugins(bevy::transform::TransformPlugin)
+        .add_plugins(BehaviourPlugin)
+        .add_plugins(GameEntitiesPlugin { root: root.to_path_buf() });
     app
 }
 
@@ -481,7 +493,8 @@ fn entity_or_none(app: &App, root: &Path, name: &str) -> Entity {
 /// registry answers — a component renamed without updating the list fails here.
 #[test]
 fn every_behaviour_is_a_registered_component_a_file_can_name() {
-    let app = game(&project("behaviour_registry"));
+    let root = project("behaviour_registry");
+    let app = game(&root);
     let registry = app.world().resource::<AppTypeRegistry>().clone();
     let registry = registry.read();
 
@@ -507,6 +520,7 @@ fn every_behaviour_is_a_registered_component_a_file_can_name() {
     // **`Transition` is a value, not a component**, and the list does not claim it is one: it is registered
     // because a `StateMachine` carries a `Vec` of them and a file writes that list.
     assert!(registry.get_with_short_type_path("Transition").is_some(), "a machine's transitions are registered");
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// **A type a file does not name is still refused**, which is what makes the registration above mean
@@ -537,7 +551,7 @@ fn a_behaviours_fields_carry_their_doc_comments_into_the_type_information() {
     registry.register::<Trigger>();
     registry.register::<Spawner>();
     let trigger = registry
-        .get_with_type_path("bevy_grimoire::behaviours::trigger::Trigger")
+        .get_with_type_path("bevy_grimoire::behaviours::Trigger")
         .expect("registered above");
     let bevy::reflect::TypeInfo::Struct(info) = trigger.type_info() else { panic!("a trigger is a struct") };
     for (field, expected) in [("radius_m", "world metres"), ("signal", "name")] {
@@ -547,7 +561,7 @@ fn a_behaviours_fields_carry_their_doc_comments_into_the_type_information() {
     }
     // **A unit in a field's name is what makes a doc say what the number is for**, so the fields a behaviour
     // bounds carry one.
-    let spawner = registry.get_with_type_path("bevy_grimoire::behaviours::spawner::Spawner").expect("registered");
+    let spawner = registry.get_with_type_path("bevy_grimoire::behaviours::Spawner").expect("registered");
     let bevy::reflect::TypeInfo::Struct(info) = spawner.type_info() else { panic!("a spawner is a struct") };
     let names: Vec<&str> = info.iter().map(|f| f.name()).collect();
     for unit in ["interval_s", "at_m"] {
@@ -596,4 +610,339 @@ fn a_behaviour_is_not_in_the_registry_until_a_game_asks_for_it() {
     asked.add_plugins(BehaviourPlugin);
     let registry = asked.world().resource::<AppTypeRegistry>().read();
     assert!(registry.get_with_short_type_path("Health").is_some(), "and one that asked has it");
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Review of #369: M1 (the plugin's own TransformPlugin guard covered only one order), M2 (a signal a
+// behaviour names reached nothing), and the notes. Each test below failed before the fix below it.
+// ---------------------------------------------------------------------------------------------------
+
+/// **M1: `BehaviourPlugin` first, the transform plugins after it.** `DefaultPlugins` is a plugin *group*, and
+/// `PluginGroupBuilder::finish` panics on a plugin already in the app — so a plugin that added
+/// `TransformPlugin` itself worked only when it came second. `BehaviourPlugin` adds no plugin at all now:
+/// it needs `TransformPlugin` and says so.
+///
+/// The group here holds `TransformPlugin` and a marker rather than all of `DefaultPlugins`, because the rest
+/// needs a renderer and an asset server this headless test does not build. The panic is in the group's own
+/// `finish`, which is the same code path either way: it refuses a plugin the app already has.
+#[test]
+fn behaviour_plugin_first_and_a_transform_plugin_group_after_it_builds() {
+    let mut app = App::new();
+    app.add_plugins((BehaviourPlugin, TransformPlugins));
+    // The group's `finish` has run by now; before the fix this panicked with "plugin was already added".
+    assert!(app.is_plugin_added::<TransformPlugin>(), "the group's own plugin is in the app");
+    assert!(app.is_plugin_added::<BehaviourPluginMarker>(), "and the plugin after it in the group");
+}
+
+/// A plugin group holding `TransformPlugin`, which is what `DefaultPlugins` does. A group rather than a bare
+/// tuple is the point: `(a, b)` adds each plugin on its own and never runs `PluginGroupBuilder::finish`, so
+/// only a group can panic on a plugin the app already has.
+struct TransformPlugins;
+
+impl PluginGroup for TransformPlugins {
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::start::<Self>()
+            .add(TransformPlugin)
+            .add(BehaviourPluginMarker)
+    }
+}
+
+/// A plugin added after `TransformPlugin` in the group, so an app built from the group is observably whole: if
+/// `finish` had panicked, this would not be in the app.
+struct BehaviourPluginMarker;
+
+impl Plugin for BehaviourPluginMarker {
+    fn build(&self, _app: &mut App) {}
+}
+
+/// **M2: crossing a `Trigger` whose `signal` names a `Switch` presses that switch.** The docs promise one
+/// vocabulary — a volume's `signal` is "the same name a `Switch` latch or a `Countdown` uses" — so the volume
+/// must write the [`Signal`] itself rather than only copying the name into its own event.
+///
+/// **Order in one frame**: a crossing writes `Signal`, and the switch that names it reads one in the same
+/// frame, because the producers ([`BehaviourSystems::Produces`]) run before the consumers
+/// ([`BehaviourSystems::Consumes`]).
+#[test]
+fn crossing_a_trigger_writes_the_signal_its_switch_names() {
+    let root = project("behaviour_trigger_signal");
+    write(
+        &root,
+        &format!(
+            "entities:\n  latch:\n    Switch: {{ latch: gate_crossed, on: false }}\n  gate:\n    Door: {{ link: gate_crossed, open: false }}\n  tripwire:\n    Trigger: {{ radius_m: 1.5, signal: gate_crossed }}\n  walker:\n    Body: {{}}\n    Transform: {}\n",
+            at(10.0, 0.0, 0.0)
+        ),
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    let walker = entity(&app, &root, "walker");
+    let latch = entity(&app, &root, "latch");
+    let gate = entity(&app, &root, "gate");
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(false), "the walker has not crossed");
+
+    // **In**: the crossing writes the signal and the switch reads it in the same frame.
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::ZERO;
+    frame(&mut app);
+    assert_eq!(sent::<Triggered>(&mut app).len(), 1, "the volume reports the crossing");
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "and the crossing pressed the switch");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(true), "so the door opened");
+    // **Standing inside writes nothing more**, so the door does not flap: a crossing is an edge, not a state.
+    frame(&mut app);
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "still on while the body stays");
+
+    // **Out**: the way out presses it again, so a tripwire is a toggle and a game reads `entered` to tell.
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::new(10.0, 0.0, 0.0);
+    frame(&mut app);
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(false), "leaving pressed it back off");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **M2: a countdown that rings with a `signal` naming a `StateMachine`'s transition steps that machine — in
+/// the same frame.**
+///
+/// The behaviours are in two sets: [`BehaviourSystems::Produces`] (the volume and the countdown, which write a
+/// signal) runs before [`BehaviourSystems::Consumes`] (the switch and the machine, which read one), so a
+/// producer's signal is read in the frame that wrote it. Nothing here relies on the next frame.
+#[test]
+fn a_countdown_that_rings_writes_the_signal_its_machine_names() {
+    let root = project("behaviour_countdown_signal");
+    write(
+        &root,
+        "entities:\n  bell:\n    Countdown: { duration_s: 1.0, signal: dinner }\n  guard:\n    StateMachine:\n      initial: waiting\n      state: waiting\n      transitions:\n        - { from: waiting, on: dinner, to: eating }\n",
+    );
+    let mut app = game(&root);
+    // The read frame is the countdown's one second of one: it rings, writes its signal, and the machine —
+    // later in the same frame — has already stepped by the time the frame ends.
+    frame(&mut app);
+    let guard = entity(&app, &root, "guard");
+    let rung = sent::<CountdownElapsed>(&mut app);
+    assert_eq!(rung.len(), 1, "the bell rang: {rung:?}");
+    assert_eq!(rung[0].signal, "dinner");
+    assert_eq!(
+        app.world().get::<StateMachine>(guard).map(|m| m.state.as_str()),
+        Some("eating"),
+        "and the bell's own signal stepped the machine, on the same frame"
+    );
+    let stepped = sent::<Transitioned>(&mut app);
+    assert_eq!(stepped.len(), 1, "one step: {stepped:?}");
+    assert_eq!(stepped[0].on, "dinner", "taken on the bell's signal");
+
+    // **Same frame, and not by luck**: the countdown is in `BehaviourSystems::Produces` and the machine in
+    // `BehaviourSystems::Consumes`, configured after it. The two assertions above are the proof — a machine
+    // polled before the bell would still be `waiting` when this frame ended.
+    assert_ne!(BehaviourSystems::Produces, BehaviourSystems::Consumes, "the two halves are distinct sets");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A `Trigger` or `Countdown` with no `signal` writes none**, so a file that forgot one does not fire an
+/// empty name that matches every other nameless part.
+#[test]
+fn a_volume_or_a_countdown_with_no_signal_name_writes_no_signal() {
+    let root = project("behaviour_no_signal_name");
+    write(
+        &root,
+        "entities:\n  tripwire:\n    Trigger: { radius_m: 5.0 }\n  bell:\n    Countdown: { duration_s: 1.0 }\n  walker:\n    Body: {}\n",
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    // The walker is at the origin, inside the volume, and the bell has rung.
+    assert_eq!(sent::<Triggered>(&mut app).len(), 1, "the volume reports the crossing");
+    assert_eq!(sent::<CountdownElapsed>(&mut app).len(), 1, "and the bell rang");
+    for _ in 0..3 {
+        frame(&mut app);
+    }
+    assert!(sent::<Signal>(&mut app).is_empty(), "neither wrote a signal, because neither names one");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **The two bevy paths under `behaviours` are one.** `behaviours::Health` is the path the docs, the guide and
+/// this crate's own list use, and it is the only one: the submodules are private, and each type says so with
+/// `#[type_path]`.
+#[test]
+fn every_behaviour_is_reachable_at_one_path() {
+    let expected = [
+        "bevy_grimoire::behaviours::Trigger",
+        "bevy_grimoire::behaviours::Switch",
+        "bevy_grimoire::behaviours::Door",
+        "bevy_grimoire::behaviours::Spawner",
+        "bevy_grimoire::behaviours::Pickup",
+        "bevy_grimoire::behaviours::Body",
+        "bevy_grimoire::behaviours::Collector",
+        "bevy_grimoire::behaviours::Health",
+        "bevy_grimoire::behaviours::Damage",
+        "bevy_grimoire::behaviours::Countdown",
+        "bevy_grimoire::behaviours::PathFollow",
+        "bevy_grimoire::behaviours::StateMachine",
+        "bevy_grimoire::behaviours::Transition",
+    ];
+    // The registry's own answer, which is what a file writes and what a hover shows.
+    let mut app = App::new();
+    app.add_plugins(BehaviourPlugin);
+    let registry = app.world().resource::<AppTypeRegistry>().read();
+    for full in expected {
+        assert!(registry.get_with_type_path(full).is_some(), "`{full}` is a path the registry answers");
+    }
+    // **And no other path**: the private submodule a type is written in is not a path it answers to, so
+    // `behaviours::health::Health` is not a second spelling a save could use.
+    for reg in registry.iter() {
+        let path = reg.type_info().type_path();
+        let ours = path.starts_with("bevy_grimoire::behaviours::");
+        assert!(
+            !ours || !path["bevy_grimoire::behaviours::".len()..].contains("::"),
+            "`{path}` names a private module, so the type has two paths where it should have one"
+        );
+    }
+    drop(registry);
+    let named = behaviours_named();
+    for behaviour in &named {
+        assert!(
+            behaviour.full.starts_with("bevy_grimoire::behaviours::"),
+            "`{}` answers to one path under `behaviours`, not `{}`",
+            behaviour.short,
+            behaviour.full
+        );
+        assert!(
+            !behaviour.full["bevy_grimoire::behaviours::".len()..].contains("::"),
+            "`{}`'s path has no private module in it: {}",
+            behaviour.short,
+            behaviour.full
+        );
+    }
+}
+
+/// **A `Door` a file saves open comes up open**, which its doc says: the first frame must not close it just
+/// because it has no switch to follow yet.
+#[test]
+fn a_door_saved_open_stays_open_with_no_switch_to_follow() {
+    let root = project("behaviour_door_saved_open");
+    write(&root, "entities:\n  gate:\n    Door: { link: nowhere, open: true }\n");
+    let mut app = game(&root);
+    frame(&mut app);
+    let gate = entity(&app, &root, "gate");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(true), "the door the file saved open is open");
+
+    // And a door that names a switch still follows it, so a link that exists wins on the next frame.
+    write(&root, "entities:\n  latch:\n    Switch: { latch: north, on: false }\n  gate:\n    Door: { link: north, open: true }\n");
+    frame(&mut app);
+    frame(&mut app);
+    let gate = entity(&app, &root, "gate");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(false), "a link that exists is followed");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A `PathFollow` on a child walks in its parent's frame, not the world's**, which is what writing the
+/// local `Transform` means: a follower under a parent at x=10 standing on local (0,0,0) is at world x=10, and
+/// a waypoint of world x=12 is two metres of walking, not twelve.
+#[test]
+fn a_path_follow_under_a_parent_walks_from_where_the_parent_puts_it() {
+    let root = project("behaviour_path_child");
+    write(
+        &root,
+        &format!(
+            "entities:\n  cart:\n    Transform: {}\n    children:\n      wheel:\n        PathFollow: {{ speed_m_s: 2.0, waypoints_m: [[2.0, 0.0, 0.0]] }}\n        Transform: {}\n",
+            at(10.0, 0.0, 0.0),
+            at(0.0, 0.0, 0.0)
+        ),
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    let cart = entity(&app, &root, "cart");
+    let wheel = app
+        .world()
+        .resource::<GameEntities>()
+        .spawned
+        .values()
+        .flat_map(|by_name| by_name.values())
+        .copied()
+        .find(|e| *e != cart && app.world().get::<PathFollow>(*e).is_some())
+        .expect("the child was spawned");
+    // One second at two metres a second, along its parent's x, from its parent's origin.
+    let local = app.world().get::<Transform>(wheel).expect("a follower moves through a transform").translation;
+    assert!((local.x - 2.0).abs() < 1e-4, "two metres of its own frame: {local:?}");
+    // **The follower's `GlobalTransform` is one frame behind its `Transform`**, which is what writing the
+    // local transform means here: propagation has already run this frame. The next frame's propagation is
+    // what carries the move to world space.
+    frame(&mut app);
+    let world = app.world().get::<GlobalTransform>(wheel).expect("propagated").translation();
+    assert!((world.x - 12.0).abs() < 1e-4, "which is two metres from where its parent stands: {world:?}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A `Damage` on an entity with no `Health` is reported and removed**, so a stray blow is not a component
+/// that sits on the entity for ever and lands the day a `Health` is added.
+#[test]
+fn a_damage_with_no_health_is_taken_off_and_says_so() {
+    let root = project("behaviour_damage_no_health");
+    write(&root, "entities:\n  crate:\n    Damage: { amount: 3 }\n");
+    let mut app = game(&root);
+    frame(&mut app);
+    let crate_ = entity(&app, &root, "crate");
+    assert!(app.world().get::<Damage>(crate_).is_none(), "a blow nothing can take is still taken off the entity");
+    assert!(sent::<Damaged>(&mut app).is_empty(), "and nothing was damaged, so nothing is reported");
+    assert!(sent::<Died>(&mut app).is_empty(), "and nothing died");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **`the_spawner_never_makes_anything_itself`** is counted, not asserted: before and after a request, the
+/// number of entities in the world is the same, so a `Spawner` that quietly spawned would fail here.
+#[test]
+fn a_spawner_adds_no_entity_to_the_world() {
+    let root = project("behaviour_spawner_counts");
+    write(&root, "entities:\n  rat_hole:\n    Spawner: { of: rat, interval_s: 1.0 }\n");
+    let mut app = game(&root);
+    frame(&mut app);
+    let before = app.world().entities().len();
+    assert_eq!(sent::<SpawnRequested>(&mut app).len(), 1, "it asked on its first second");
+    let after = app.world().entities().len();
+    assert_eq!(after, before, "a spawner asks and makes nothing: {before} entities before, {after} after");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **`Health`'s and `Damage`'s defaults are named**, so a file that writes the component with no fields gets
+/// a value someone chose rather than a bare literal in the middle of a type.
+#[test]
+fn the_defaults_a_file_gets_are_the_named_ones() {
+    use bevy_grimoire::behaviours::{DEFAULT_DAMAGE, DEFAULT_HEALTH};
+    assert_eq!(Health::default(), Health { current: DEFAULT_HEALTH.current, max: DEFAULT_HEALTH.max });
+    assert_eq!(Damage::default(), Damage { amount: DEFAULT_DAMAGE });
+    // **An entity a file gives `Health` with no fields is one point of one**, which is alive: a default of
+    // zero would make the first thing a game spawns already dead.
+    assert_eq!(Health::default().current, 1);
+    assert_eq!(Health::default().max, 1);
+    assert_eq!(Damage::default().amount, 1);
+}
+
+/// **The list is the registration**, which is why `behaviours_named` is public: `BehaviourPlugin` walks it, so
+/// a behaviour on the list is registered and a row cannot name a type the registry does not get. A row removed
+/// from the list is a behaviour a file can no longer name, which is what a build without it means.
+#[test]
+fn the_plugins_registration_is_the_list() {
+    let named = behaviours_named();
+    let mut app = App::new();
+    app.add_plugins(BehaviourPlugin);
+    let registry = app.world().resource::<AppTypeRegistry>().read();
+    // **Every row is registered**, and each row's own `register` is what did it.
+    for behaviour in &named {
+        assert!(
+            registry.get_with_type_path(behaviour.full).is_some(),
+            "`{}` is on the list, so the plugin registered it",
+            behaviour.short
+        );
+    }
+    // **And the list is not short by accident**: the issue's first set is all of it, so a row dropped without
+    // a decision fails here rather than quietly making a behaviour unwritable.
+    let shorts: Vec<&str> = named.iter().map(|b| b.short).collect();
+    for required in [
+        "Trigger", "Switch", "Door", "Spawner", "Pickup", "Health", "Damage", "Countdown", "PathFollow",
+        "StateMachine",
+    ] {
+        assert!(shorts.contains(&required), "`{required}` is one of the shipped behaviours: {shorts:?}");
+    }
+    assert_eq!(shorts.len(), named.len(), "no two rows share a short path");
 }

@@ -10,6 +10,7 @@ use bevy::prelude::*;
 #[derive(Reflect, Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[reflect(Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct Transition {
     /// The state this step may be taken from.
     pub from: String,
@@ -38,6 +39,7 @@ pub struct Transition {
 #[derive(Component, Reflect, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Component, Deserialize, Serialize, Default, no_auto_register)]
 #[serde(default, deny_unknown_fields)]
+#[type_path = "bevy_grimoire::behaviours"]
 pub struct StateMachine {
     /// The state it starts in, kept so a game can reset to it.
     pub initial: String,
