@@ -108,18 +108,19 @@ fn project(tag: &str, stamps: Option<&[Stamped]>) -> PathBuf {
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("vocab.ron"),
-        ron::to_string(&Vocabularies::default()).unwrap_or_else(|e| panic!("{e}")),
+        grimoire.join(bevy_grimoire_core::project_data::VOCAB_FILE),
+        Vocabularies::default().to_yaml().unwrap_or_else(|e| panic!("{e}")),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("kit/library.yaml"),
+        grimoire.join("kit").join(bevy_grimoire_core::policy::LIBRARY_FILE),
         library().to_yaml().unwrap_or_else(|e| panic!("{e}")),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("kit/project.yaml"),
-        "(\n    version: 2,\n    note: None,\n    patches: [],\n)",
+        grimoire.join("kit").join(bevy_grimoire_core::policy::POLICY_FILE),
+        bevy_grimoire_core::yaml::to_string(&bevy_grimoire_core::policy::Policy::default())
+            .unwrap_or_else(|p| panic!("{}", p.line())),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -130,8 +131,7 @@ fn project(tag: &str, stamps: Option<&[Stamped]>) -> PathBuf {
     };
     std::fs::write(
         grimoire.join(Compositions::FILE),
-        ron::ser::to_string_pretty(&compositions, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}")),
+        bevy_grimoire_core::yaml::to_string(&compositions).unwrap_or_else(|p| panic!("{}", p.line())),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -155,8 +155,7 @@ fn project(tag: &str, stamps: Option<&[Stamped]>) -> PathBuf {
     };
     std::fs::write(
         grimoire.join("maps/yard.map.yaml"),
-        ron::ser::to_string_pretty(&map, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}")),
+        bevy_grimoire_core::yaml::to_string(&map).unwrap_or_else(|p| panic!("{}", p.line())),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -397,10 +396,7 @@ fn a_map_with_stamps_compositions_and_rules_round_trips() {
     // A rules file, so the round trip covers all three kinds of file at once.
     std::fs::write(
         grimoire.join("rules.yaml"),
-        format!(
-            "(\n    version: {},\n    blocks: [],\n)",
-            bevy_grimoire_core::rules::RULES_VERSION
-        ),
+        format!("version: {}\nblocks: []\n", bevy_grimoire_core::rules::RULES_VERSION),
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -408,8 +404,7 @@ fn a_map_with_stamps_compositions_and_rules_round_trips() {
     let map = data.maps.get("yard").expect("the map loaded");
 
     // **The file the consumer wrote back is the file it read.**
-    let re_saved = ron::ser::to_string_pretty(map, ron::ser::PrettyConfig::default())
-        .unwrap_or_else(|e| panic!("{e}"));
+    let re_saved = bevy_grimoire_core::yaml::to_string(map).unwrap_or_else(|p| panic!("{}", p.line()));
     let original =
         std::fs::read_to_string(grimoire.join("maps/yard.map.yaml")).unwrap_or_else(|e| panic!("{e}"));
 

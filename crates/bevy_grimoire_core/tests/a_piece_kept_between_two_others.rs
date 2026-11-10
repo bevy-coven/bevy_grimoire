@@ -113,7 +113,14 @@ fn solve_moves_the_table_between_the_chairs_and_its_rider_with_it() {
 
 #[test]
 fn the_file_reads_and_writes_between_and_refuses_a_negative_distance() {
-    let text = r#"(version: 1, relations: [(of: "table", kind: Between(a: "chair_1", b: "chair_2", within: 0.5))])"#;
+    let text = r"version: 1
+relations:
+- of: table
+  kind: !Between
+    a: chair_1
+    b: chair_2
+    within: 0.5
+";
     let parsed = Relations::parse(text).unwrap();
     assert_eq!(parsed, table_between_chairs());
     assert_eq!(Relations::parse(&parsed.to_yaml().unwrap()).unwrap(), parsed);

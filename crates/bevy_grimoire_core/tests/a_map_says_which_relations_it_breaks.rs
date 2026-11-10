@@ -151,7 +151,9 @@ fn relations_round_trip_as_ron() {
     let back = Relations::parse(&text).expect("parses");
     assert_eq!(back, relations());
     assert!(
-        Relations::parse("(version: 99, relations: [])").is_err(),
+        Relations::parse(r"version: 99
+relations: []
+").is_err(),
         "a future version is refused"
     );
 }
@@ -261,7 +263,13 @@ fn in_front_of_is_a_cone_and_a_missing_target_is_missing() {
 #[test]
 fn a_negative_or_unknown_distance_is_refused_when_read() {
     let ok =
-        "(version: 1, relations: [(of: \"door\", kind: ClearInFront(depth: 2.0, width: 1.2))])";
+        r"version: 1
+relations:
+- of: door
+  kind: !ClearInFront
+    depth: 2.0
+    width: 1.2
+";
     assert!(Relations::parse(ok).is_ok());
     let negative = ok.replace("width: 1.2", "width: -1.2");
     assert!(

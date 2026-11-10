@@ -562,37 +562,32 @@ mod exclude_tests {
 
 /// **Rewrite a policy file's `exclude` list, and nothing else.**
 ///
-/// A serialize-and-write would be shorter and would destroy the file: `assets/grimoire/site/project.yaml`
-/// is hand-authored, and its patches carry paragraphs explaining why each one exists. That is the
-/// whole argument `ron_surgery` was written for — *"a writer that reformats them is not a faster
-/// version of this, it is a different, lossy tool"* — so this splices the one field.
+/// A serialize-and-write would be shorter and would destroy the file: a kit's `project.yaml` is hand-authored,
+/// and its patches carry paragraphs explaining why each one exists. So this is
+/// [`crate::yaml_surgery::set_entry`] — the one YAML surgery — which replaces the field's own bytes and keeps
+/// every comment, every other field and the file's layout where they were. A file that has no `exclude` gains
+/// one, in its siblings' indentation.
 ///
-/// Inserts the field after `version:` when the file has none, which every kit written before
-/// exclusions existed is the case for.
-///
-/// The result is **re-parsed before it is returned**, so a splice that produced something the game
-/// could not read is an error here rather than a broken kit on disk.
+/// The result is **re-parsed before it is returned**, so an edit that produced something the game could not
+/// read is an error here rather than a broken kit on disk.
 pub fn rewrite_exclude(text: &str, exclude: &[String]) -> Result<String, String> {
-    let rendered = if exclude.is_empty() {
-        "    exclude: [],".to_owned()
-    } else {
-        let items: Vec<String> = exclude.iter().map(|e| format!("        \"{e}\",")).collect();
-        format!("    exclude: [\n{}\n    ],", items.join("\n"))
-    };
-
-    let out = match find_exclude(text) {
-        Some(span) => format!("{}{rendered}{}", &text[..span.start], &text[span.end..]),
-        None => {
-            // After `version:`, which every policy file has and which `Policy::parse` requires.
-            let at = line_span(text, "version:")
-                .ok_or_else(|| "policy: no `version:` line to write `exclude` after".to_owned())?;
-            format!("{}\n{rendered}{}", &text[..at.end], &text[at.end..])
-        }
-    };
-    // The splice is only correct if the file still reads. Checked here so a bad edit cannot land.
+    let items: Vec<String> = exclude.iter().map(|e| yaml_string(e)).collect();
+    let entry = format!("exclude: [{}]", items.join(", "));
+    let out = crate::yaml_surgery::set_entry(text, "", &entry).map_err(|p| p.line())?;
     Policy::parse(&out).map_err(|e| format!("policy: rewriting `exclude` broke the file: {e}"))?;
     Ok(out)
 }
+
+/// **A string as a YAML scalar**, quoted when it needs to be.
+///
+/// A piece's id is a path (`site/floor`), which is plain; one holding a `:` or a leading indicator is not, and
+/// the reader would refuse the file. `serde_yaml_ng` is the authority, through the one YAML writer.
+fn yaml_string(value: &str) -> String {
+    crate::yaml::to_string(&value.to_owned())
+        .map(|text| text.trim_end().to_owned())
+        .unwrap_or_else(|_| format!("'{value}'"))
+}
+
 
 /// **Drop the patch at `ordinal` within `patches`, preserving every comment in the file.**
 ///
@@ -617,85 +612,22 @@ pub fn remove_patch(path: &Path, ordinal: usize) -> Result<(), String> {
         ));
     }
 
-    // **Locate the `patches: [` list and splice out the record at `ordinal`.**
-    //
-    // `LineDoc` scans the list's records and keeps every comment and blank line inside it, which is
-    // the whole point of the module — a record's trailing `// why` and the prose above it survive.
-    // The list is a `[` list, not a `( … )` block, so `LineDoc` scans the whole file for the
-    // `patches: [` header directly.
-    let mut doc = crate::ron_surgery::LineDoc::parse(&text, &["patches"])
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    doc.remove("patches", ordinal)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    let out = doc.render();
-
-    // The splice is only correct if the file still reads. Checked here so a bad edit cannot land.
+    // **The list entry itself is removed by the one surgery**, which takes only that entry's own lines and
+    // keeps every comment and blank line inside and around the list — a record's trailing `# why` and the
+    // prose above it survive.
+    let out = crate::yaml_surgery::remove_item(&text, "patches", ordinal).map_err(|p| p.line())?;
+    // The edit is only correct if the file still reads. Checked here so a bad edit cannot land.
     Policy::parse(&out).map_err(|e| format!("policy: removing the patch broke the file: {e}"))?;
-    crate::ron_surgery::save_atomic(path, &out)
-}
-
-/// The byte span of an `exclude: [ … ]` field, quote-aware so a `]` inside a path cannot end it
-/// early, and comment-aware so a line mentioning the field in prose is not mistaken for it.
-fn find_exclude(text: &str) -> Option<std::ops::Range<usize>> {
-    let mut at = 0usize;
-    for line in text.split_inclusive('\n') {
-        let start = at;
-        at += line.len();
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("//") || !trimmed.starts_with("exclude:") {
-            continue;
-        }
-        let field_start = start + (line.len() - trimmed.len());
-        // Walk to the closing bracket from here, ignoring anything inside quotes.
-        let rest = &text[field_start..];
-        let mut depth = 0i32;
-        let mut in_string = false;
-        for (i, c) in rest.char_indices() {
-            match c {
-                '"' => in_string = !in_string,
-                '[' if !in_string => depth += 1,
-                ']' if !in_string => {
-                    depth -= 1;
-                    if depth == 0 {
-                        // Take the trailing comma with it, so the splice does not leave two.
-                        let end = rest[i + 1..]
-                            .find(',')
-                            .filter(|c| rest[i + 1..i + 1 + c].trim().is_empty())
-                            .map_or(field_start + i + 1, |c| field_start + i + 2 + c);
-                        return Some(field_start..end);
-                    }
-                }
-                _ => {}
-            }
-        }
-        return None;
-    }
-    None
-}
-
-/// The span of the first line whose trimmed text starts with `prefix` and is not a comment.
-fn line_span(text: &str, prefix: &str) -> Option<std::ops::Range<usize>> {
-    let mut at = 0usize;
-    for line in text.split_inclusive('\n') {
-        let start = at;
-        at += line.len();
-        let trimmed = line.trim_start();
-        if !trimmed.starts_with("//") && trimmed.starts_with(prefix) {
-            return Some(start..at - usize::from(line.ends_with('\n')));
-        }
-    }
-    None
+    crate::yaml::save(path, &out)
 }
 
 #[cfg(test)]
 mod exclude_write_tests {
     use super::*;
 
-    const PROSE: &str = r#"(
-    version: 2,
-    // A comment that must survive, because this file is read by people.
-    note: Some("SCP-9191 containment site."),
-)
+    const PROSE: &str = r#"version: 2
+# A comment that must survive, because this file is read by people.
+note: SCP-9191 containment site.
 "#;
 
     /// **The prose survives.** That is the entire reason this is a splice and not a serialize.
@@ -703,7 +635,7 @@ mod exclude_write_tests {
     fn writing_an_exclusion_keeps_every_comment() {
         let out = rewrite_exclude(PROSE, &["characters".into()]).unwrap_or_else(|e| panic!("{e}"));
         assert!(
-            out.contains("// A comment that must survive"),
+            out.contains("# A comment that must survive"),
             "a serialize-and-write would have eaten this:\n{out}"
         );
         assert!(out.contains("SCP-9191 containment site."), "and the note:\n{out}");
@@ -728,20 +660,18 @@ mod exclude_write_tests {
         // And emptying it again leaves a valid file with nothing excluded.
         let none = rewrite_exclude(&twice, &[]).unwrap_or_else(|e| panic!("{e}"));
         assert!(Policy::parse(&none).unwrap_or_else(|e| panic!("{e}")).exclude.is_empty());
-        assert!(none.contains("// A comment that must survive"), "still:\n{none}");
+        assert!(none.contains("# A comment that must survive"), "still:\n{none}");
     }
 
     /// A line of prose that merely mentions the field is not the field.
     #[test]
     fn a_comment_naming_the_field_is_not_the_field() {
-        let text = r#"(
-    version: 2,
-    // exclude: this line is prose about excluding, not an exclusion.
-    note: Some("a policy with nothing but prose in it"),
-)
+        let text = r#"version: 2
+# exclude: this line is prose about excluding, not an exclusion.
+note: a policy with nothing but prose in it
 "#;
         let out = rewrite_exclude(text, &["characters".into()]).unwrap_or_else(|e| panic!("{e}"));
-        assert!(out.contains("// exclude: this line is prose"), "the comment stands:\n{out}");
+        assert!(out.contains("# exclude: this line is prose"), "the comment stands:\n{out}");
         assert_eq!(
             Policy::parse(&out).unwrap_or_else(|e| panic!("{e}")).exclude,
             vec!["characters".to_owned()]
@@ -766,22 +696,27 @@ fn temp_policy(name: &str, text: &str) -> std::path::PathBuf {
 /// it is what makes a `matches`-keyed removal wrong.
 #[test]
 fn removing_a_patch_takes_the_ordinal_and_keeps_everything_else() {
-    let text = r#"(
-    version: 2,
-    // A comment that must survive, because this file is read by people.
-    note: Some("SCP-9191 containment site."),
-    exclude: ["characters"],
-    patches: [
-        ( match: Id("crate_b"), because: "the first reason", patch: ( align: ( stretch_y: Some(1.2) ) ) ),
-        ( match: Id("crate_b"), because: "the second reason", patch: ( align: ( stretch_y: Some(1.4) ) ) ),
-    ],
-)
+    let text = r#"version: 2
+# A comment that must survive, because this file is read by people.
+note: SCP-9191 containment site.
+exclude: [characters]
+patches:
+- match: !Id crate_b
+  because: the first reason
+  patch:
+    align:
+      stretch_y: 1.2
+- match: !Id crate_b
+  because: the second reason
+  patch:
+    align:
+      stretch_y: 1.4
 "#;
     let path = temp_policy("shared-key", text);
     remove_patch(&path, 0).unwrap_or_else(|e| panic!("{e}"));
 
     let out = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{e}"));
-    assert!(out.contains("// A comment that must survive"), "the comment stands:\n{out}");
+    assert!(out.contains("# A comment that must survive"), "the comment stands:\n{out}");
     let policy = Policy::parse(&out).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(policy.exclude, vec!["characters".to_owned()], "the exclusion is untouched");
     assert_eq!(policy.patches.len(), 1, "exactly one patch left:\n{out}");
@@ -794,13 +729,14 @@ fn removing_a_patch_takes_the_ordinal_and_keeps_everything_else() {
 /// An `ordinal` past the end refuses and leaves the file byte-identical.
 #[test]
 fn removing_a_patch_past_the_end_refuses_without_writing() {
-    let text = r#"(
-    version: 2,
-    note: Some("a policy with one patch"),
-    patches: [
-        ( match: Id("crate_a"), because: "the only reason", patch: ( align: ( stretch_y: Some(1.2) ) ) ),
-    ],
-)
+    let text = r#"version: 2
+note: a policy with one patch
+patches:
+- match: !Id crate_a
+  because: the only reason
+  patch:
+    align:
+      stretch_y: 1.2
 "#;
     let path = temp_policy("past-end", text);
     let before = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{e}"));

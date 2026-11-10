@@ -86,7 +86,7 @@ fn read(file: &str, text: &str) -> Result<Checks, (Option<String>, String)> {
     };
     // The decision crate's reader says where in the text, not which field; the shared one says both for
     // a file that does not parse. A file that parses and still refuses broke a rule: no field.
-    match reload_check::read::<Checks>("checks", file, text) {
+    match reload_check::read_ron::<Checks>("checks", file, text) {
         Err(r) => Err((r.field, r.reason)),
         Ok(_) => Err((None, reason)),
     }

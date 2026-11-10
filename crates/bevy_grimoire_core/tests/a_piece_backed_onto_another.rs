@@ -122,7 +122,7 @@ fn solve_turns_the_shelf_out_from_the_wall_and_sets_it_close_where_it_stood_alon
 
 #[test]
 fn a_negative_distance_is_refused() {
-    let text = format!("(version: {RELATIONS_VERSION}, relations: [(of: \"shelf\", kind: BacksOnto(of: \"wall\", within: -1.0))])");
+    let text = format!("version: {RELATIONS_VERSION}\nrelations:\n- of: shelf\n  kind: !BacksOnto\n    of: wall\n    within: -1.0\n");
     let err = Relations::parse(&text).expect_err("a negative within must not read");
     assert!(err.contains("-1"), "{err}");
     let ok = text.replace("-1.0", "0.25");

@@ -45,25 +45,45 @@ pub fn file_name(project: &Project, path: &Path) -> String {
 
 /// **`text`, the contents of the file at `path`, as a `T`**, and a refusal that names the file and the
 /// field when it does not read.
-pub fn read_text<T: DeserializeOwned>(kind: &'static str, project: &Project, path: &Path, text: &str) -> Result<T, Refusal> {
-    read_named(kind, &file_name(project, path), text)
+pub fn read_text<T: DeserializeOwned>(
+    kind: &'static str,
+    project: &Project,
+    path: &Path,
+    text: &str,
+    parse: fn(&str) -> Result<T, String>,
+) -> Result<T, Refusal> {
+    read_named(kind, &file_name(project, path), text, parse)
 }
 
 /// **`text` as a `T`, naming the file `file`**: for a file that is not under the project's directory
 /// (the game root's own, `destructible.yaml`), where `file` is the path the author edits it by.
-pub fn read_named<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> Result<T, Refusal> {
-    reload_check::read(kind, file, text).map_err(|r| {
+pub fn read_named<T: DeserializeOwned>(
+    kind: &'static str,
+    file: &str,
+    text: &str,
+    parse: fn(&str) -> Result<T, String>,
+) -> Result<T, Refusal> {
+    reload_check::read(kind, file, text, parse).map_err(|r| {
         Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))
     })
 }
 
 /// **The file at `path` as a `T`**, `T::default()` when there is no file, and a refusal that names the
 /// file (as the project's directory sees it) and the field when there is one that does not read.
-pub fn read_or_empty<T: DeserializeOwned + Default>(kind: &'static str, project: &Project, path: &Path) -> Result<T, Refusal> {
+pub fn read_or_empty<T: DeserializeOwned + Default + serde::de::DeserializeOwned>(
+    kind: &'static str,
+    project: &Project,
+    path: &Path,
+) -> Result<T, Refusal> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
         Err(e) => return Err(Refusal::new(format!("{} cannot be read: {e}. Nothing was changed.", path.display()))),
     };
-    read_text(kind, project, path, &text)
+    // **A `forest`, `people` or `scripts` file is its own crate's type** (`bevy_flora`, `bevy_society`), read by
+    // that crate's reader — so this door reads RON, and it is the list of kinds still outside the cutover.
+    // `read_text` is the YAML door for a kind this crate declares.
+    reload_check::read_ron(kind, &file_name(project, path), &text).map_err(|r| {
+        Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))
+    })
 }

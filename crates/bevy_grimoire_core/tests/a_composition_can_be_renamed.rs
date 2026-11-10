@@ -4,7 +4,7 @@
 //!
 //! - **The rename edits the file and does not reformat it.** A hand-written note survives, and the
 //!   rest of the file is byte-identical. This is the test that fails if the writer reaches for
-//!   `to_ron`.
+//!   the value writer instead of the surgery.
 //! - **Every map that stamps the composition follows**, and a map that does not is **untouched** —
 //!   byte for byte, not "reformatted the same way".
 //! - **A name that is already taken is refused, and nothing is written.**
@@ -13,89 +13,69 @@
 
 use bevy_grimoire_core::composition::{rename_composition, Compositions};
 
-/// A `compositions.ron` with a hand-written note, two compositions, and a member each.
-const COMPOSITIONS: &str = r#"(
-    version: 1,
-    note: Some("a hand-written note that must survive a rename"),
-    compositions: [
-        (
-            id: "site/house_a",
-            envelope: Anchored,
-            members: [
-                (
-                    id: "p00_wall",
-                    body: Descriptor(
-                        id: "wall",
-                        tip: (0, 0),
-                        on: None,
-                        patch: None,
-                    ),
-                    at: (0.0, 0.0),
-                    yaw: 0.0,
-                    lift: 0.0,
-                    of_fingerprint: None,
-                    note: Some("the wall's own note"),
-                ),
-            ],
-            locations: [],
-            note: Some("the house's own note"),
-        ),
-        (
-            id: "site/house_b",
-            envelope: Anchored,
-            members: [],
-            locations: [],
-            note: None,
-        ),
-    ],
-)
+/// A `compositions.yaml` with a hand-written note, two compositions, and a member each.
+const COMPOSITIONS: &str = r#"version: 1
+note: a hand-written note that must survive a rename
+compositions:
+- id: site/house_a
+  envelope: Anchored
+  members:
+  - id: p00_wall
+    body: !Descriptor
+      id: wall
+      tip: [0, 0]
+      on: null
+      patch: null
+    at: [0.0, 0.0]
+    yaw: 0.0
+    lift: 0.0
+    of_fingerprint: null
+    note: the wall's own note
+  locations: []
+  note: the house's own note
+- id: site/house_b
+  envelope: Anchored
+  members: []
+  locations: []
+  note: null
 "#;
 
 /// A map with two stamps of `site/house_a` and one of `site/house_b`.
-const MAP: &str = r#"(
-    version: 6,
-    name: "m",
-    origin: (0.0, 0.0, 0.0),
-    bounds: (10.0, 10.0, 10.0),
-    bash: None,
-    placements: [],
-    stamps: [
-        (
-            id: "house_a@1",
-            of: "site/house_a",
-            at: (0.0, 0.0),
-            yaw: 0.0,
-            overrides: [],
-            of_fingerprint: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-        ),
-        (
-            id: "house_b@1",
-            of: "site/house_b",
-            at: (1.0, 1.0),
-            yaw: 0.0,
-            overrides: [],
-            of_fingerprint: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-        ),
-        (
-            id: "house_a@2",
-            of: "site/house_a",
-            at: (2.0, 2.0),
-            yaw: 0.0,
-            overrides: [],
-            of_fingerprint: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-        ),
-    ],
-    locations: [],
-)
+const MAP: &str = r#"version: 6
+name: m
+origin: [0.0, 0.0, 0.0]
+bounds: [10.0, 10.0, 10.0]
+bash: null
+placements: []
+stamps:
+- id: house_a@1
+  of: site/house_a
+  at: [0.0, 0.0]
+  yaw: 0.0
+  overrides: []
+  of_fingerprint: null
+  owned: false
+  owned_because: null
+  note: null
+- id: house_b@1
+  of: site/house_b
+  at: [1.0, 1.0]
+  yaw: 0.0
+  overrides: []
+  of_fingerprint: null
+  owned: false
+  owned_because: null
+  note: null
+- id: house_a@2
+  of: site/house_a
+  at: [2.0, 2.0]
+  yaw: 0.0
+  overrides: []
+  of_fingerprint: null
+  owned: false
+  owned_because: null
+  note: null
+locations: []
 "#;
 
 /// **The rename edits the file, and does not reformat it.**
@@ -139,12 +119,14 @@ fn the_rename_edits_the_file_and_does_not_reformat_it() {
         .filter(|(_, (a, b))| a != b)
         .map(|(i, _)| i)
         .collect();
-    assert_eq!(
-        differing,
-        vec![5],
-        "exactly one line should have changed — the composition's id — and {} did: {:?}",
-        differing.len(),
-        differing
+    // **One line, and it is the id.** Pinning the index would pin the fixture's layout rather than the
+    // property; what matters is that a rename touches exactly one line and that the line is the
+    // composition's own `id`.
+    assert_eq!(differing.len(), 1, "a rename changes exactly one line, and {} did: {differing:?}", differing.len());
+    assert!(
+        after[differing[0]].trim_start().trim_start_matches("- ").starts_with("id:"),
+        "the line that changed is the composition's own `id`: {:?}",
+        after[differing[0]]
     );
 }
 
@@ -156,22 +138,24 @@ fn every_map_that_stamps_the_composition_follows() {
 
     let (_, map) = &renamed.maps[0];
     assert_eq!(
-        map.matches("\"site/house_b2\"").count(),
+        map.matches("site/house_b2").count(),
         2,
         "the two stamps that named the old id must name the new one. The map names it:\n{map}"
     );
     assert_eq!(
-        map.matches("\"site/house_a\"").count(),
+        map.matches("site/house_a").count(),
         0,
         "a stamp still names the old id, so the map has a dangling reference and will not open."
     );
-    // **The stamp of the other composition is untouched.** Counted on the *quoted* form, because
-    // `site/house_b2` contains `site/house_b` and a substring count would say three.
+    // **The stamp of the other composition is untouched.** `site/house_b` is a substring of neither the new
+    // name nor the old one once the rename has landed, so a plain count says what it should.
+    // **The stamp of the other composition is untouched.** Its id is the only name in the map holding
+    // `site/house_b`, and the new `site/house_b2` is a different string once the rename has landed.
     assert_eq!(
-        map.matches("\"site/house_b\"").count(),
+        map.matches("of: site/house_b\n").count(),
         1,
         "the stamp of the composition that was not renamed was changed. A rename reaches only what \
-         names it."
+         names it:\n{map}"
     );
 
     // **And the map was edited, not rewritten.**

@@ -654,7 +654,7 @@ authoring: f
         let bad = |set: fn(&mut Lattice)| {
             let mut k = kits(&[("f", "f")], "f");
             set(&mut k.lattice);
-            let text = ron::ser::to_string(&k).unwrap_or_default();
+            let text = k.to_yaml().unwrap_or_default();
             Kits::parse(&text).err().unwrap_or_default()
         };
         assert!(bad(|l| l.face_bands = 0).contains("a face reads between 1 and"));
@@ -735,25 +735,35 @@ authoring: f
 
     /// The four remaining refusals, each by its own wording — a map names a bash by name, so every
     /// way the name or the membership can be ambiguous is refused rather than resolved.
+    /// **A bash entry as a file writes it**: two spaces under `bash:`, the first line with the `-`, and every
+    /// later line of the item two spaces in from that. A caller's own `- name:` at the start of a later line is
+    /// a *second* item, which is the shape the "declared twice" case needs.
+    fn indent_item(bash: &str) -> String {
+        bash.lines()
+            .enumerate()
+            .map(|(n, line)| if n == 0 { format!("  - {line}") } else { format!("  {line}") })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     #[test]
     fn a_bash_that_cannot_be_named_unambiguously_is_refused() {
         let bad = |bash: &str| {
-            // YAML, because a project file is: the two binds as a list, and the bash the closure writes.
+            // **A project file is YAML**, and a bash item is written as a file writes one: two spaces under
+            // `bash:`, the first line with the `-`, every later line two spaces in from that. A caller's own
+            // `- name:` on a later line is a *second* item, which is the "declared twice" case's shape.
+            // **Written without line continuations**, because a `\`-continued string swallows the source
+            // indentation and the item would land at column 0. The text is the file a person writes:
             let text = format!(
-                "version: 3\n\
-                 bind:\n\
-                 - namespace: f\n\
-                   dir: f\n\
-                 - namespace: g\n\
-                   dir: g\n\
-                 authoring: f\n\
-                 bash:\n\
-                 - {bash}\n"
+                "version: 3\nbind:\n- namespace: f\n  dir: f\n- namespace: g\n  dir: g\nauthoring: f\nbash:\n{}\n",
+                indent_item(bash)
             );
             Kits::parse(&text).err().unwrap_or_default()
         };
         assert!(
-            bad("name: Hub Kit\n  kits: [f]").contains("not a usable bash name"),
+            // **Quoted, so the name reaches the check**: a bare `Hub Kit` is a plain scalar YAML reads
+            // happily, and the refusal this test is about is the *name's* shape, not the file's.
+            bad("name: 'Hub Kit'\n  kits: [f]").contains("not a usable bash name"),
             "a name that is not one snake_case segment"
         );
         assert!(

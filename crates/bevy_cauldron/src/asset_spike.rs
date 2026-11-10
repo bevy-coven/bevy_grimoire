@@ -53,7 +53,7 @@ impl AssetLoader for StandardsLoader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["ron"]
+        &["yaml"]
     }
 }
 

@@ -19,22 +19,24 @@ fn refusal(id: &str, file: &str, text: &str) -> bevy_grimoire_core::reload_check
 #[test]
 fn a_damaged_chunk_is_named_by_its_index_and_list() {
     let file = "destructible/site__cart.bake.yaml";
-    let one = "(points: [(0.0, 0.0, 0.0)], faces: [[0, 0, 0]])";
-    let r = refusal("destructible_bake", file, &format!("(version: 1, key: 5, chunks: [{one}, (points: 7, faces: [])])"));
+    let one = "  points: [[0.0, 0.0, 0.0]]\n  faces: [[0, 0, 0]]";
+    let r = refusal("destructible_bake", file, &format!("version: 1\nkey: 5\nchunks:\n-\n{one}\n- points: 7\n  faces: []\n"));
     assert_eq!((r.kind, r.file.as_str(), r.field.as_deref()), ("destructible_bake", file, Some("chunks[1].points")), "{}", r.reason);
     // A point with two numbers is the third one missing, in the chunk that has it.
-    let r = refusal("destructible_bake", file, &format!("(version: 1, key: 5, chunks: [{one}, (points: [(0.0, 0.0)], faces: [])])"));
+    let r = refusal("destructible_bake", file, &format!("version: 1\nkey: 5\nchunks:\n-\n{one}\n- points: [[0.0, 0.0]]\n  faces: []\n"));
     assert_eq!(r.field.as_deref(), Some("chunks[1].points[0]"), "{}", r.reason);
     // A field the type does not have is named, so a rename in a hand edit is not silently dropped.
-    let r = refusal("destructible_marks", "destructible.yaml", "(version: 1, pieces: [], piece: [\"site/cart\"])");
+    let r = refusal("destructible_marks", "destructible.yaml", "version: 1\npieces: []\npiece: [site/cart]\n");
     assert_eq!(r.field.as_deref(), Some("piece"), "{}", r.reason);
 }
 
 #[test]
 fn a_bake_made_from_another_mesh_or_version_reads_and_the_key_is_the_whole_u64() {
-    let stale = format!("(version: {}, key: {}, chunks: [])", DESTRUCTIBLE_VERSION + 1, u64::MAX);
+    let stale = format!("version: {}\nkey: {}\nchunks: []\n", DESTRUCTIBLE_VERSION + 1, u64::MAX);
     let kind = kind_by_id("destructible_bake").unwrap();
     assert_eq!(check(kind, "destructible/a.bake.yaml", &stale), Check::Valid, "staleness is the editor's to judge, not a refusal");
     assert_eq!(Bake::parse(&stale).unwrap().key, u64::MAX);
-    assert_eq!(Marks::parse("(version: 1, pieces: [])").unwrap().pieces.len(), 0);
+    assert_eq!(Marks::parse(r"version: 1
+pieces: []
+").unwrap().pieces.len(), 0);
 }

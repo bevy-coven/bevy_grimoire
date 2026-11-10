@@ -74,8 +74,8 @@ fn trial(way: Way, n: u32, dir: &Path) -> [Seen; 4] {
     }
     app.world_mut().resource_mut::<Heard>().events.clear();
     // A watch stats when it is made, so these two start from the file as it is before the write.
-    let mut default_watch = FileWatch::new(dir, &["ron"]);
-    let mut quick_watch = FileWatch::new(dir, &["ron"]).with_timing(0.1, 0.1);
+    let mut default_watch = FileWatch::new(dir, &["yaml"]);
+    let mut quick_watch = FileWatch::new(dir, &["yaml"]).with_timing(0.1, 0.1);
     // The editor's own watcher (`mapper::watch::tick_watch`): the file's size and modification time
     // every 250 ms of the wall clock, a change at once and no settle time. The rule, on the one file.
     let stamp = || std::fs::metadata(&file).ok().map(|m| (m.len(), m.modified().ok()));
@@ -146,7 +146,7 @@ fn set_trial(n: u32, gap_ms: u64, dir: &Path) -> (Vec<Option<f64>>, u32) {
         std::thread::sleep(STEP);
     }
     app.world_mut().resource_mut::<Heard>().events.clear();
-    let mut watch = FileWatch::new(dir, &["ron"]);
+    let mut watch = FileWatch::new(dir, &["yaml"]);
     let mut next_write = 0;
     let (mut arrived, mut reloads) = (vec![None; FILES.len()], 0u32);
     let t0 = Instant::now();

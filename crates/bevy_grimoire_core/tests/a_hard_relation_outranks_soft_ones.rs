@@ -71,7 +71,13 @@ fn soft_relations_are_never_mended_by_breaking_a_hard_one() {
 
 #[test]
 fn a_file_without_hard_reads_as_soft_and_writes_without_it() {
-    let old = r#"(version: 1, relations: [(of: "crate", kind: Near(to: "home", within: 1.0))])"#;
+    let old = r"version: 1
+relations:
+- of: crate
+  kind: !Near
+    to: home
+    within: 1.0
+";
     let r = Relations::parse(old).unwrap();
     assert!(!r.relations[0].hard);
     let text = r.to_yaml().unwrap();

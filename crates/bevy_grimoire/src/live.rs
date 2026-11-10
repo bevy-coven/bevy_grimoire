@@ -208,7 +208,7 @@ impl GrimoireLiveApp for App {
 impl Plugin for GrimoireLivePlugin {
     fn build(&self, app: &mut App) {
         // Stat BEFORE loading: a write between the two is then a change the first poll sees.
-        let watch = FileWatch::new(&self.dir, &["ron"]);
+        let watch = FileWatch::new(&self.dir, &["yaml"]);
         let names: Vec<&str> = self.maps.iter().map(String::as_str).collect();
         let last = match ProjectData::load(&self.dir, &names) {
             Ok(data) => data.maps,

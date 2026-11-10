@@ -72,7 +72,7 @@ fn no_notes_writes_no_file_and_a_missing_file_is_empty() {
 fn a_change_to_the_notes_file_is_a_reload_for_a_file_watch() {
     let dir = scratch("watch");
     let path = dir.join("town.notes.yaml");
-    let mut watch = FileWatch::new(&dir, &["ron"]);
+    let mut watch = FileWatch::new(&dir, &["yaml"]);
     let mut notes = Notes::default();
     notes.add(vec![Target::Cell(0, 0)], "look").unwrap();
     notes.save(&path).unwrap();

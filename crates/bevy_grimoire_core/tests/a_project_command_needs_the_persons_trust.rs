@@ -128,9 +128,9 @@ fn a_damaged_store_is_refused_and_never_read_as_empty_or_as_everything() {
     let home = Dir::new("bad");
     let file = home.0.join("trusted.yaml");
     for (text, why) in [
-        ("(version: 1, projects: [", "cut off"),
-        ("(version: 99, projects: [], commands: [])", "a version this build does not read"),
-        ("(version: 1, projects: [], commands: [], also: true)", "a field it does not know"),
+        ("version: 1\nprojects: [", "cut off"),
+        ("version: 99\nprojects: []\ncommands: []\n", "a version this build does not read"),
+        ("version: 1\nprojects: []\ncommands: []\nalso: true\n", "a field it does not know"),
         ("", "empty"),
     ] {
         std::fs::write(&file, text).unwrap();

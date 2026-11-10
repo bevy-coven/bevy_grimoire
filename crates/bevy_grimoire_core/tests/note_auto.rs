@@ -33,11 +33,11 @@ fn auto_does_not_open_the_fence() {
 #[test]
 fn the_flag_survives_a_save_and_an_old_file_without_it_reads_false() {
     let (n, id) = claimed(true);
-    let text = ron::to_string(&n).unwrap();
-    let back: Notes = ron::from_str(&text).unwrap();
+    let text = bevy_grimoire_core::yaml::to_string(&n).unwrap();
+    let back = Notes::parse(&text).unwrap();
     assert!(back.get(&id).unwrap().auto);
     let (plain, id) = claimed(false);
-    let text = ron::to_string(&plain).unwrap();
+    let text = bevy_grimoire_core::yaml::to_string(&plain).unwrap();
     assert!(!text.contains("auto"), "a false flag is not written: {text}");
-    assert!(!ron::from_str::<Notes>(&text).unwrap().get(&id).unwrap().auto);
+    assert!(!Notes::parse(&text).unwrap().get(&id).unwrap().auto);
 }

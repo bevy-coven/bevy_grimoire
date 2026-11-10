@@ -131,7 +131,7 @@ fn solve_sets_the_lamp_on_the_mirror_point_and_leaves_the_others() {
 #[test]
 fn a_negative_distance_is_refused() {
     let text = format!(
-        "(version: {RELATIONS_VERSION}, relations: [(of: \"lamp_2\", kind: MirrorOf(of: \"lamp_1\", about: \"door\", within: -1.0))])"
+        "version: {RELATIONS_VERSION}\nrelations:\n- of: lamp_2\n  kind: !MirrorOf\n    of: lamp_1\n    about: door\n    within: -1.0\n"
     );
     let err = Relations::parse(&text).expect_err("a negative within must not read");
     assert!(err.contains("-1"), "{err}");

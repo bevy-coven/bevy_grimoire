@@ -91,7 +91,11 @@ fn solve_turns_the_pew_in_place_and_its_rider_with_it() {
 
 #[test]
 fn the_file_reads_and_writes_aligned_with() {
-    let text = r#"(version: 1, relations: [(of: "pew_2", kind: AlignedWith("pew_1"))])"#;
+    let text = r"version: 1
+relations:
+- of: pew_2
+  kind: !AlignedWith pew_1
+";
     let parsed = Relations::parse(text).unwrap();
     assert_eq!(parsed, second_with_first());
     assert_eq!(Relations::parse(&parsed.to_yaml().unwrap()).unwrap(), parsed);

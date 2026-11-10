@@ -7,7 +7,7 @@
 use bevy_grimoire_core::data_files::DataFiles;
 
 fn registry(path: &str) -> String {
-    format!("(version: 1, files: [(id: \"x\", path: \"{path}\")])")
+    format!("version: 1\nfiles:\n- id: x\n  path: {path}\n")
 }
 
 #[test]

@@ -320,7 +320,7 @@ fn a_rename_replaced_file_is_loaded_once() {
     let dir = Scratch::new("once");
     let target = dir.0.join("maps").join("town.map.yaml");
     save_atomic(&target, &map_text(5, 0.0)).unwrap_or_else(|e| panic!("{e}"));
-    let mut watch = FileWatch::new(&dir.0, &["ron"]);
+    let mut watch = FileWatch::new(&dir.0, &["yaml"]);
 
     // A file system's clock can be as coarse as a few milliseconds, so a replace made at once after
     // the last stat would share its mtime and be invisible to a watch that compares mtimes.

@@ -34,7 +34,7 @@ fn a_bad_or_newer_file_is_refused_by_path() {
     let e = Verdict::read(&d).unwrap_err();
     assert!(e.contains("game.yaml"), "{e}");
     let newer = format!(
-        "(version: {}, at_unix_ms: 1, ok: true, message: \"\")",
+        "version: {}\nat_unix_ms: 1\nok: true\nmessage: \"\"\n",
         VERDICT_VERSION + 1
     );
     std::fs::write(&path, newer).unwrap();

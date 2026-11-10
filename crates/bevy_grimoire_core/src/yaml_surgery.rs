@@ -539,18 +539,29 @@ pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
     let children: Vec<&Node> = walk.nodes.iter().filter(|n| is_entry_of(&n.path, path)).collect();
     // A mapping with no entry has no sibling to copy. Its own column plus one step is where a nested
     // mapping's keys go, which is the only style there is for one.
-    let column = children
-        .iter()
-        .filter_map(|n| n.key.as_ref().map(|k| column_of(text, k.span.0)))
-        .min()
-        .unwrap_or_else(|| key_column(text, node) + yaml::INDENT_SPACES);
+    // **The document's own mapping has no key to stand beside**, so an entry added to it goes at column 0 —
+    // `key_column` answers where the file's first `key:` is, which *is* 0 for every file the writer emits, and
+    // adding a step to that would nest the entry under the last key instead of writing it at the root.
+    let column = if node.path.is_empty() {
+        0
+    } else {
+        children
+            .iter()
+            .filter_map(|n| n.key.as_ref().map(|k| column_of(text, k.span.0)))
+            .min()
+            .unwrap_or_else(|| key_column(text, node) + yaml::INDENT_SPACES)
+    };
+    // **A block value is indented one step under its key**, which is what YAML requires of a mapping or a
+    // sequence written under one: `provenance:` then its fields at `column + INDENT_SPACES`. A single-line
+    // entry (`exclude: []`) is just the key's own line at `column`.
     let mut block = String::new();
-    for (n, line) in entry_lines.iter().enumerate() {
-        // The first line names the key, so its own indentation is the indent the caller wrote it with;
-        // every later line keeps the indentation it was written with, relative to that.
-        let body = if n == 0 { line.trim_start() } else { *line };
-        block.push_str(&" ".repeat(column));
-        block.push_str(body);
+    let first = entry_lines[0].trim_start();
+    block.push_str(&" ".repeat(column));
+    block.push_str(first);
+    block.push('\n');
+    for line in entry_lines.iter().skip(1) {
+        block.push_str(&" ".repeat(column + yaml::INDENT_SPACES));
+        block.push_str(line.trim_start());
         block.push('\n');
     }
     verified(insert_after_last_of(text, node, &walk, &block, flow), path)
@@ -584,7 +595,20 @@ pub fn set_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
     if value.is_empty() {
         return Err(at_node_named(text, node, path, &format!("`{key}:` has no value on its line"), "an entry whose value is a block cannot be set through this call", "remove the entry and add it again"));
     }
-    set(text, &at, scalar_of(value), None)
+    // **What stands there decides how it is written.** A scalar takes `set`; a collection takes the collection's
+    // own replacement, which is `set` for a flow list (`exclude: [a]` on one line) and otherwise a refusal —
+    // because a block list's items are lines a person wrote and one call cannot rewrite them without
+    // guessing which is which.
+    let existing = walk.nodes.iter().find(|n| n.path == at);
+    match existing.map(|n| n.kind) {
+        Some(NodeKind::Sequence) => {
+            // A list's items are replaced by rewriting the entry's own line, which `set` does for a flow list
+            // and which `replace_lines` does for a block one.
+            replace_entry_lines(text, &at, entry)
+        }
+        Some(NodeKind::Mapping) => replace_entry_lines(text, &at, entry),
+        _ => set(text, &at, scalar_of(value), None),
+    }
 }
 
 /// **A scalar as the value a written line spells**: a number, a bool, a quoted string or a plain word.
@@ -610,6 +634,39 @@ fn scalar_of(value: &str) -> Value {
         return Value::Float(f);
     }
     Value::Str(plain.to_owned())
+}
+
+/// **Replace the entry at `path` with `entry`, taking exactly its own lines.**
+///
+/// The shape-changing sibling of [`set`], which writes one scalar's bytes: this is for a value that *is* a
+/// collection (`exclude: [a, b]`, or a block list a person wrote), where a replacement changes how many lines
+/// the entry occupies. What is kept is everything the entry did not own: the key's own line comment stands
+/// above the new value, and so does every comment and blank line around it.
+#[allow(clippy::result_large_err)]
+fn replace_entry_lines(text: &str, path: &str, entry: &str) -> Result<String, Problem> {
+    let walk = walk_or_refuse(text)?;
+    let node = find(&walk, path)?;
+    let key_at = node.key.as_ref().map_or(node.span.0, |k| k.span.0);
+    let line_start = text[..key_at].rfind('\n').map_or(0, |at| at + 1);
+    let column = column_of(text, key_at);
+    let end = end_of_last_line(text, content_end(text, node, &walk));
+    // The new value, at the entry's own column: the key's line is replaced by the caller's first line, and a
+    // block value's lines follow one step in, which is what YAML needs of a mapping under a key.
+    let lines: Vec<&str> = entry.trim_end_matches('\n').lines().collect();
+    let mut block = String::new();
+    block.push_str(&" ".repeat(column));
+    block.push_str(lines[0].trim_start());
+    block.push('\n');
+    for line in lines.iter().skip(1) {
+        block.push_str(&" ".repeat(column + yaml::INDENT_SPACES));
+        block.push_str(line.trim_start());
+        block.push('\n');
+    }
+    let mut out = String::with_capacity(text.len() + block.len());
+    out.push_str(&text[..line_start]);
+    out.push_str(&block);
+    out.push_str(&text[end..]);
+    verified(out, path)
 }
 
 /// **Remove item `index` of the sequence at `path`**, taking only its own lines.
@@ -820,6 +877,8 @@ fn walk_or_refuse(text: &str) -> Result<Walk, Problem> {
 /// The node at `path`, or a refusal naming it and its nearest neighbours.
 #[allow(clippy::result_large_err)]
 fn find<'a>(walk: &'a Walk, path: &str) -> Result<&'a Node, Problem> {
+    // **The root's own path is the empty string**, which is how the walk spells it, and a caller wanting the
+    // document's mapping says `""` rather than a name the file does not have.
     walk.nodes.iter().find(|n| n.path == path).ok_or_else(|| {
         let near = nearest(walk, path);
         // A path the file does not have has no line: no position is claimed rather than `line 1`.

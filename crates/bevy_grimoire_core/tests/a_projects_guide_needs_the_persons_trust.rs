@@ -130,7 +130,7 @@ fn a_store_written_before_guides_grants_existed_still_reads() {
     let resolved = std::fs::canonicalize(&project.0).expect("the project resolves");
     std::fs::write(
         &file,
-        format!("(version: 1, projects: [\"{}\"], commands: [])", resolved.display()),
+        format!("version: 1\nprojects: [\"{}\"]\ncommands: []\n", resolved.display()),
     )
     .expect("the old store is written");
     let store = TrustStore::load(&file).expect("a store from before the field reads");
@@ -151,7 +151,7 @@ fn the_projects_guide_cannot_be_registered_as_a_data_file() {
         "the guide is a file no registry may name: {COMMAND_FILES:?}"
     );
     for bad in [".dark_factory/AGENTS.md", "../.dark_factory/AGENTS.md", "/an/absolute/AGENTS.md"] {
-        let text = format!("(version: 1, files: [(id: \"g\", path: \"{bad}\")])");
+        let text = format!("version: 1\nfiles:\n- id: g\n  path: {bad}\n");
         let said = bevy_grimoire_core::data_files::DataFiles::parse(&text)
             .expect_err(&format!("`{bad}` was accepted as a data file"));
         assert!(said.contains("names a program") || said.contains("cannot be a data file"), "{bad}: {said}");

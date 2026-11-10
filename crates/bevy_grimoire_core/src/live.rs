@@ -454,7 +454,7 @@ mod tests {
     fn a_dotfile_change_never_fires() {
         let dir = Scratch::new("dotfile");
         dir.write("maps/town.map.yaml", 1);
-        let mut watch = FileWatch::new(&dir.0, &["ron"]);
+        let mut watch = FileWatch::new(&dir.0, &["yaml"]);
         dir.write(".live/game.yaml", 2);
         dir.write("maps/.town.map.yaml", 2);
         for step in 0..8 {
@@ -473,8 +473,8 @@ mod tests {
     fn a_file_of_another_extension_is_ignored() {
         let dir = Scratch::new("extension");
         dir.write("town.map.yaml", 1);
-        let mut watch = FileWatch::new(&dir.0, &["ron"]);
-        dir.write("pieces.yaml", 2);
+        let mut watch = FileWatch::new(&dir.0, &["yaml"]);
+        dir.write("pieces.ron", 2);
         dir.write("town.map.yaml.tmp", 2);
         for step in 0..8 {
             assert!(!watch.poll(step as f64 * POLL_SECS));
@@ -487,7 +487,7 @@ mod tests {
     fn two_polls_within_the_poll_interval_stat_once() {
         let dir = Scratch::new("interval");
         dir.write("town.map.yaml", 1);
-        let mut watch = FileWatch::new(&dir.0, &["ron"]);
+        let mut watch = FileWatch::new(&dir.0, &["yaml"]);
         assert!(!watch.poll(0.0));
         dir.write("town.map.yaml", 2);
         // Too soon after the last poll: no stat, so the change is not yet seen.

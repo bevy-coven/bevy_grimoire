@@ -120,11 +120,11 @@ fn read_as(krate: &str, text: &str) -> Result<(), (Refusal, &'static str)> {
     #[cfg(feature = "bevy_elements")]
     if krate == crate::environment::CRATE {
         let file = settings_file(krate);
-        return reload_check::read::<crate::environment::ElementsSettings>("family", &file, text).map(drop).map_err(|r| (r, "the previous environment stays"));
+        return reload_check::read_ron::<crate::environment::ElementsSettings>("family", &file, text).map(drop).map_err(|r| (r, "the previous environment stays"));
     }
     if krate == crate::ui_skin::CRATE {
         let file = settings_file(krate);
-        return reload_check::read::<bevy_gooey::GooeySkin>("family", &file, text).map(drop).map_err(|r| (r, "the previous skin stays"));
+        return reload_check::read_ron::<bevy_gooey::GooeySkin>("family", &file, text).map(drop).map_err(|r| (r, "the previous skin stays"));
     }
     let _ = (krate, text);
     Ok(())

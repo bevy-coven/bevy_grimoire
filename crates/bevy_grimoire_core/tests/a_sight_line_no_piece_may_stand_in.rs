@@ -83,7 +83,7 @@ fn a_missing_viewer_is_missing_not_met() {
 
 #[test]
 fn a_negative_clearance_is_refused() {
-    let ok = "(version: 1, relations: [(of: \"sign\", kind: VisibleFrom(from: \"gate\", clearance: 1.0))])";
+    let ok = "version: 1\nrelations:\n- of: sign\n  kind: !VisibleFrom\n    from: gate\n    clearance: 1.0\n";
     assert_eq!(Relations::parse(ok), Ok(sign_seen_from_gate()));
     let err = Relations::parse(&ok.replace("1.0", "-1.0")).unwrap_err();
     assert!(err.contains("-1"), "the refusal says what is wrong: {err}");

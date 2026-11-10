@@ -83,7 +83,7 @@ fn the_types_themselves_refuse_another_version_and_name_the_field() {
     fn refused<T: serde::de::DeserializeOwned>(kind: &'static str, rest: &str) {
         for version in [2u32, 0, 7] {
             let text = format!("(version: {version}, {rest})");
-            let r = match reload_check::read::<T>(kind, "x.yaml", &text) {
+            let r = match reload_check::read_ron::<T>(kind, "x.yaml", &text) {
                 Err(r) => r,
                 Ok(_) => panic!("`{kind}` at version {version} was taken as this build's"),
             };

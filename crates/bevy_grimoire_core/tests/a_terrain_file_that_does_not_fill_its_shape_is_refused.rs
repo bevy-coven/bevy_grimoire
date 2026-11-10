@@ -6,12 +6,13 @@
 use bevy_grimoire_core::heightfield::{Heightfield, TERRAIN_VERSION};
 
 fn field(origin: (f32, f32), cell_m: f32, width: usize, depth: usize, heights: Vec<f32>) -> String {
-    ron::to_string(&Heightfield { version: TERRAIN_VERSION, origin, cell_m, width, depth, heights }).unwrap()
+    bevy_grimoire_core::yaml::to_string(&Heightfield { version: TERRAIN_VERSION, origin, cell_m, width, depth, heights })
+        .unwrap_or_else(|p| panic!("{}", p.line()))
 }
 
 #[test]
 fn heights_that_do_not_fill_the_shape_are_refused_with_the_shape() {
-    let e = Heightfield::parse("(origin: (0.0, 0.0), cell_m: 1.0, width: 4, depth: 4, heights: [0.0, 0.0, 0.0])")
+    let e = Heightfield::parse("origin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 4\ndepth: 4\nheights: [0.0, 0.0, 0.0]\n")
         .expect_err("3 heights cannot fill 4x4");
     assert!(e.contains("3 heights for 4x4"), "{e}");
     let e = Heightfield::parse(&field((0.0, 0.0), 1.0, 2, 2, vec![0.0; 5])).expect_err("5 heights overfill 2x2");
@@ -46,12 +47,12 @@ fn a_size_or_height_that_is_not_a_finite_number_is_refused() {
 fn a_well_formed_field_reads_back_as_written() {
     let mut flat = Heightfield::flat((-3.0, 2.0), 0.5, 3, 2, 1.25);
     flat.heights[4] = -0.5;
-    let text = ron::ser::to_string_pretty(&flat, ron::ser::PrettyConfig::default()).unwrap();
+    let text = bevy_grimoire_core::yaml::to_string(&flat).unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(Heightfield::parse(&text), Ok(flat));
 }
 
 #[test]
 fn text_that_is_not_a_heightfield_is_refused() {
-    let e = Heightfield::parse("(origin: (0.0, 0.0))").expect_err("missing fields");
+    let e = Heightfield::parse("origin: [0.0, 0.0]\n").expect_err("missing fields");
     assert!(e.starts_with("terrain:"), "{e}");
 }

@@ -44,7 +44,9 @@ impl RigDoc {
         if slot >= self.slots {
             return Err(format!("no slot {slot} in this rig"));
         }
-        let path = format!("rigs.{}.slots[{slot}].{field}", self.rig);
+        // **`playback` is a tagged enum**, so its fields sit one level deeper: `!Gait` then the numbers.
+        // The path the surgery edits is the leaf's own, which is what `yaml::leaves` answers.
+        let path = format!("rigs.{}.slots[{slot}].playback.{field}", self.rig);
         let number: Value = match field {
             "duration" | "phase_offset" | "cycle_distance" => Value::Float(
                 value.parse::<f64>().map_err(|e| format!("`{value}` is not a number: {e}"))?,
@@ -62,7 +64,15 @@ impl RigDoc {
     /// reader takes back — which is what the stamp's round-trip test pins.
     pub fn set_rig_field(&mut self, field: &str, value: &str) -> Result<(), String> {
         let parent = format!("rigs.{}", self.rig);
-        let entry = format!("{field}: {value}");
+        // **A value may be a block** (the provenance stamp is a mapping of five fields), so the entry's first
+        // line carries the key and every later line is the value's own, which `set_entry` writes under it.
+        // **A block value starts on the next line**, which is what YAML requires of a mapping under a key: the
+        // entry's first line is `field:` and the value's own lines follow, indented by `set_entry`.
+        let entry = if value.contains('\n') {
+            format!("{field}:\n{value}")
+        } else {
+            format!("{field}: {value}")
+        };
         self.full = yaml_surgery::set_entry(&self.full, &parent, &entry).map_err(|p| p.line())?;
         Ok(())
     }
@@ -78,10 +88,10 @@ impl RigDoc {
 /// `serde_yaml_ng`'s own output for the value, so the spelling that lands on disk is the spelling the reader
 /// takes back — the stamp's round-trip test is what pins that, and a hand-built string would be a second
 /// spelling to keep in step with the type.
-pub fn provenance_yaml(p: &Provenance, indent: usize) -> String {
-    let text = crate::yaml::to_string(p).unwrap_or_else(|e| e.line());
-    let pad = " ".repeat(indent);
-    text.lines().map(|line| format!("{pad}{line}")).collect::<Vec<_>>().join("\n")
+pub fn provenance_yaml(p: &Provenance) -> String {
+    // **Unindented on purpose**: [`crate::yaml_surgery::set_entry`] indents what it inserts to the mapping's
+    // own column, so a caller that padded here would have its padding added to.
+    crate::yaml::to_string(p).unwrap_or_else(|e| e.line()).trim_end().to_owned()
 }
 
 #[cfg(test)]
@@ -134,10 +144,10 @@ rigs:
         let out = doc.render();
         assert!(out.contains("duration: 1.402"), "{out}");
         // Alpha's block and every comment are untouched.
-        assert!(out.contains("mesh: a/a.glb"));
-        assert!(out.contains("// The first rig."));
-        assert!(out.contains("// Header prose that must survive."));
-        assert!(out.contains("// trailing"), "the record's trailing comment survives");
+        assert!(out.contains("mesh: \"a/a.glb\"") || out.contains("mesh: a/a.glb"));
+        assert!(out.contains("# The first rig."));
+        assert!(out.contains("# Header prose that must survive."));
+        assert!(out.contains("# trailing"), "the record's trailing comment survives");
         assert!(out.contains("walk — the reference"), "the note survives");
     }
 
@@ -164,7 +174,7 @@ rigs:
             date: "2026-08-06".to_owned(),
         };
         let mut doc = RigDoc::open(DOC, "beta").unwrap_or_else(|e| panic!("{e}"));
-        doc.set_rig_field("provenance", &provenance_yaml(&stamp, 0)).unwrap_or_else(|e| panic!("{e}"));
+        doc.set_rig_field("provenance", &provenance_yaml(&stamp)).unwrap_or_else(|e| panic!("{e}"));
         let once = doc.render();
         assert!(
             once.lines().count() > DOC.lines().count(),
@@ -180,7 +190,7 @@ rigs:
         let mut doc = RigDoc::open(&once, "beta").unwrap_or_else(|e| panic!("{e}"));
         let mut newer = stamp.clone();
         newer.date = "2026-08-07".to_owned();
-        doc.set_rig_field("provenance", &provenance_yaml(&newer, 0)).unwrap_or_else(|e| panic!("{e}"));
+        doc.set_rig_field("provenance", &provenance_yaml(&newer)).unwrap_or_else(|e| panic!("{e}"));
         doc.edit_slot_field(0, "duration", "1.4").unwrap_or_else(|e| panic!("{e}"));
         let twice = doc.render();
         assert_eq!(

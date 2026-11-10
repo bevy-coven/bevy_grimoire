@@ -665,10 +665,10 @@ pub fn append_token(path: &Path, axis: &str, name: &str, note: &str) -> Result<(
                      token whose meaning has not been decided yet"
             .to_owned());
     }
-    if note.contains('"') || note.contains('\\') || note.chars().any(|c| c.is_control()) {
+    if note.chars().any(|c| c.is_control()) {
         return Err(
-            "vocab: the note must not contain a quote, a backslash or a control character — those \
-             are RON escapes and would break the parse or silently alter the note"
+            "vocab: the note must not contain a control character — it is written as a YAML scalar, and a \
+             newline or a tab in one is text the writer would have to escape"
                 .to_owned(),
         );
     }
@@ -698,22 +698,25 @@ pub fn append_token(path: &Path, axis: &str, name: &str, note: &str) -> Result<(
         ));
     }
 
-    // **Locate THAT axis's `tokens: [` block** — not the first one in the file. `find_block_value`
-    // finds the axis's `( ... )` by name, and `LineDoc` then scans the `tokens: [` list inside it,
-    // so `look` splices into `look` even though `kind`'s list appears first.
-    let span = crate::ron_surgery::find_block_value(&text, axis)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut doc = crate::ron_surgery::LineDoc::parse(&text[span.start..span.end], &["tokens"])
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    let record = format!("            ( name: \"{name}\",  note: \"{note}\" ),");
-    doc.append("tokens", record)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    let out = format!("{}{}{}", &text[..span.start], doc.render(), &text[span.end..]);
+    // **THAT axis's own `tokens` list**, addressed by path: `look.tokens` is a different list from
+    // `kind.tokens` however many axes the file holds, so a scanner that took the first one would splice a
+    // look token into the kind axis. The surgery adds the item and keeps every comment where it stands.
+    let item = format!("name: {}\nnote: {}", yaml_string(name), yaml_string(note));
+    let out = crate::yaml_surgery::add_item(&text, &format!("{axis}.tokens"), &item)
+        .map_err(|p| p.line())?;
 
-    // **Validate-then-write**, the order `bind_kit` uses: a splice that produced something the
-    // project could not read is an error here rather than a broken vocabulary on disk.
+    // **Validate-then-write**, the order `bind_kit` uses: a splice that produced something the project could
+    // not read is an error here rather than a broken vocabulary on disk.
     Vocabularies::parse(&out).map_err(|e| format!("{}: {e}", path.display()))?;
-    crate::ron_surgery::save_atomic(path, &out)
+    crate::yaml::save(path, &out)
+}
+
+/// **A string as a YAML scalar**, quoted when it needs to be: through the one writer, so the spelling that
+/// lands in the file is the spelling the reader takes back.
+fn yaml_string(value: &str) -> String {
+    crate::yaml::to_string(&value.to_owned())
+        .map(|text| text.trim_end().to_owned())
+        .unwrap_or_else(|_| format!("'{value}'"))
 }
 
 /// The closest token by edit distance, when it is close enough to be worth suggesting.
@@ -934,8 +937,7 @@ mod tests {
     #[test]
     fn a_vocabulary_file_round_trips() {
         let v = vocabs();
-        let text =
-            ron::ser::to_string_pretty(&v, ron::ser::PrettyConfig::default()).expect("serializes");
+        let text = v.to_yaml().expect("serializes");
         assert_eq!(Vocabularies::parse(&text).expect("parses"), v);
     }
 
@@ -1127,34 +1129,28 @@ slot:
         path
     }
 
-    /// A vocabulary with a `//` comment above a token in EVERY axis, so a scanner that naively
-    /// finds the first `tokens: [` passes on `kind` and splices into the wrong list for `look`.
-    const COMMENTED: &str = r#"(
-    kind: (
-        // the kind comment
-        tokens: [
-            ( name: "seating",  note: "a thing to sit on" ),
-        ],
-    ),
-    effects: (
-        // the effects comment
-        tokens: [
-            ( name: "emit",  note: "casts light" ),
-        ],
-    ),
-    look: (
-        // the look comment
-        tokens: [
-            ( name: "brown",  note: "" ),
-        ],
-    ),
-    surfaces: (
-        // the surfaces comment
-        tokens: [
-            ( name: "support",  note: "any support top" ),
-        ],
-    ),
-)
+    /// A vocabulary with a `#` comment above a token in EVERY axis, so a scanner that naively finds the
+    /// first `tokens:` passes on `kind` and splices into the wrong list for `look`.
+    const COMMENTED: &str = r#"kind:
+  # the kind comment
+  tokens:
+  - name: seating
+    note: a thing to sit on
+effects:
+  # the effects comment
+  tokens:
+  - name: emit
+    note: casts light
+look:
+  # the look comment
+  tokens:
+  - name: brown
+    note: ''
+surfaces:
+  # the surfaces comment
+  tokens:
+  - name: support
+    note: any support top
 "#;
 
     /// **Comments survive a token append, on every axis.** Parameterising over all four is the
@@ -1173,7 +1169,7 @@ slot:
             let out = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{e}"));
 
             // The comment above the token in THIS axis survives.
-            let comment = format!("// the {axis} comment");
+            let comment = format!("# the {axis} comment");
             assert!(out.contains(&comment), "{axis}: comment lost:\n{out}");
 
             // The new record is the LAST in this axis, and no other axis gained a record.
@@ -1216,10 +1212,10 @@ slot:
             ("kind", "seating", "a duplicate"),
             // Empty note.
             ("kind", "table", ""),
-            // A quote is a RON escape.
-            ("kind", "table", "a \"quoted\" note"),
-            // A backslash is a RON escape.
-            ("kind", "table", "a \\ note"),
+            // **A quote and a backslash are ordinary characters in a YAML scalar**, and the writer quotes
+            // what needs it, so those two are no longer refused — a note that says `a "quoted" note` is a
+            // note a person can write, and the file reads it back as itself.
+            //
             // A newline is a control character.
             ("kind", "table", "two\nlines"),
             // An axis no UI draws.

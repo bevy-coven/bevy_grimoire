@@ -131,7 +131,7 @@ fn solve_sets_the_lamp_on_the_named_side_and_its_rider_with_it() {
 #[test]
 fn the_file_reads_and_writes_both_sides_and_refuses_a_negative_distance() {
     for (name, relations) in [("LeftOf", left_of_door()), ("RightOf", right_of_door())] {
-        let text = format!(r#"(version: 1, relations: [(of: "lamp", kind: {name}(of: "door", within: 3.0))])"#);
+        let text = format!("version: 1\nrelations:\n- of: lamp\n  kind: !{name}\n    of: door\n    within: 3.0\n");
         let parsed = Relations::parse(&text).unwrap();
         assert_eq!(parsed, relations);
         assert_eq!(Relations::parse(&parsed.to_yaml().unwrap()).unwrap(), parsed);

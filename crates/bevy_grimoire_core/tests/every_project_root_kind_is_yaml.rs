@@ -42,7 +42,7 @@ fn cases() -> Vec<(&'static str, String)> {
     };
     vec![
         ("kits.yaml", as_yaml::<Kits>(&shipped("kits.yaml"))),
-        ("vocab.yaml", as_yaml::<Vocabularies>(&shipped("vocab.ron"))),
+        ("vocab.yaml", as_yaml::<Vocabularies>(&shipped("vocab.yaml"))),
         ("compositions.yaml", as_yaml::<Compositions>(&shipped("compositions.yaml"))),
         ("rigs.yaml", as_yaml::<Rigs>(&shipped("rigs.yaml"))),
         ("site/library.yaml", as_yaml::<Library>(&shipped("site/library.yaml"))),
@@ -58,10 +58,12 @@ fn cases() -> Vec<(&'static str, String)> {
     ]
 }
 
-/// The shipped RON, read through its type's RON reader **only for the sake of a value to write**: the
-/// migration (`tests/a_project_migrates_from_ron_to_yaml.rs`) is what proves that conversion is lossless.
-fn as_yaml<T: DeserializeOwned + Serialize>(ron_text: &str) -> String {
-    let value: T = ron::from_str(ron_text).unwrap_or_else(|e| panic!("the shipped file does not read: {e}"));
+/// **The shipped file, read and written again through the one reader and writer**, so what the test checks
+/// is this build's own output for the value the project holds — not the bytes on disk, which a person may
+/// have edited.
+fn as_yaml<T: DeserializeOwned + Serialize>(yaml_text: &str) -> String {
+    let value: T =
+        yaml::from_str(yaml_text, "a shipped file").unwrap_or_else(|p| panic!("the shipped file does not read: {}", p.line()));
     yaml::to_string(&value).unwrap_or_else(|p| panic!("{}", p.line()))
 }
 
@@ -194,16 +196,22 @@ fn a_project_holding_any_root_kind_as_ron_is_refused_naming_that_file() {
             bevy_grimoire_core::reload::Base::Root => root.clone(),
             bevy_grimoire_core::reload::Base::Grimoire => root.join("assets/grimoire"),
         };
-        let ron = base.join(path.trim_end_matches(".yaml").to_owned() + ".yaml");
+        let ron = base.join(path.trim_end_matches(".yaml").to_owned() + ".ron");
         std::fs::create_dir_all(ron.parent().unwrap_or(&root)).unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(&ron, "(version: 1)").unwrap_or_else(|e| panic!("{e}"));
 
         let problem = bevy_grimoire_core::migrate::leftover(&root, bevy_grimoire_core::migrate::COMMAND)
             .unwrap_or_else(|p| panic!("{}", p.line()))
             .unwrap_or_else(|| panic!("`{path}` as RON is a file nothing reads, so an open must refuse it"));
-        // **The refusal names the file it met**, which is the `.ron` spelling, and the command that fixes it.
-        let ron = path.trim_end_matches(".yaml").to_owned() + ".yaml";
-        assert!(problem.line().contains(&ron), "the refusal names the file it met: {}", problem.line());
+        // **The refusal names the file it met**, which is the `.ron` spelling, as the project sees it.
+        let ron = path.trim_end_matches(".yaml").to_owned() + ".ron";
+        let named = match kind.base {
+            bevy_grimoire_core::reload::Base::Root => ron.clone(),
+            bevy_grimoire_core::reload::Base::Grimoire => {
+                format!("{}/{ron}", bevy_grimoire_core::migrate::GRIMOIRE_DIR)
+            }
+        };
+        assert!(problem.line().contains(&named), "the refusal names the file it met (`{named}`): {}", problem.line());
         assert!(
             problem.line().contains(bevy_grimoire_core::migrate::COMMAND),
             "the refusal names the command that fixes it: {}",

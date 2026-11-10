@@ -638,7 +638,7 @@ pub(crate) fn adopt_text(
     trial_rig.provenance = Some(stamp.clone());
     doc.set_rig_field(
         "provenance",
-        &bevy_grimoire_core::rigs_edit::provenance_yaml(&stamp, 0),
+        &bevy_grimoire_core::rigs_edit::provenance_yaml(&stamp),
     )?;
 
     let new_text = doc.render();

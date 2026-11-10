@@ -445,7 +445,7 @@ impl SettingsLayer {
     /// **Reads a file's text as a layer**, refusing with the file and the field when it does not read,
     /// is another version, or holds a value no editor can use.
     pub fn read(file: &str, text: &str) -> Result<SettingsLayer, Refusal> {
-        let layer: SettingsLayer = reload_check::read(KIND, file, text)?;
+        let layer: SettingsLayer = reload_check::read_ron(KIND, file, text)?;
         let refuse = |field: &str, reason: String| Refusal { kind: KIND, file: file.to_owned(), field: Some(field.to_owned()), reason };
         if layer.version != SETTINGS_VERSION {
             return Err(refuse(

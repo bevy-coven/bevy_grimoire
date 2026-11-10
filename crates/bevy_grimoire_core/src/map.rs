@@ -1040,11 +1040,11 @@ enclosure:
     /// loud, and this pins it — the shipped maps were migrated in the same commit.
     #[test]
     fn a_map_still_carrying_the_moved_lattice_is_refused_by_name() {
-        let stale = r#"(version: 4, name: "m", origin: (0.0, 0.0, 0.0), face_bands: 2, placements: [], locations: [])"#;
+        let stale = "version: 4\nname: m\norigin: [0.0, 0.0, 0.0]\nface_bands: 2\nplacements: []\nlocations: []\n";
         let e = Map::parse(stale).err().unwrap_or_default();
         assert!(e.contains("face_bands"), "the refusal names the field: {e}");
 
-        let stale = r#"(version: 4, name: "m", origin: (0.0, 0.0, 0.0), snap_divisor: 4, placements: [], locations: [])"#;
+        let stale = "version: 4\nname: m\norigin: [0.0, 0.0, 0.0]\nsnap_divisor: 4\nplacements: []\nlocations: []\n";
         let e = Map::parse(stale).err().unwrap_or_default();
         assert!(e.contains("snap_divisor"), "the refusal names the field: {e}");
 
@@ -1293,7 +1293,7 @@ enclosure:
     fn the_map_round_trips_through_ron() {
         let m = table_map();
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
         assert_eq!(Map::parse(&text).expect("parses"), m);
     }
 
@@ -1321,7 +1321,7 @@ enclosure:
             });
         }
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
 
         // The lines that used to be written for every placement, none of which says anything when
         // it holds its default. **`note` is counted on the placement rows only**: the map's own
@@ -1372,7 +1372,7 @@ enclosure:
             ..Placed::default()
         });
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
         for stated in [
             "owned: true",
             "the gate the level starts at",
@@ -1400,7 +1400,7 @@ enclosure:
         m.placements[0].note = Some("the slab the specimen goes on".into());
 
         let text =
-            ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).expect("serializes");
+            m.to_yaml().expect("serializes");
         for prose in [
             "a galley, for the schema tests",
             "the slab the specimen goes on",
@@ -1439,8 +1439,7 @@ enclosure:
         ] {
             let mut m = table_map();
             m.note = Some(prose.to_owned());
-            let text = ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default())
-                .expect("serializes");
+            let text = m.to_yaml().expect("serializes");
             assert_eq!(
                 Map::parse(&text).expect("parses").note.as_deref(),
                 Some(prose),

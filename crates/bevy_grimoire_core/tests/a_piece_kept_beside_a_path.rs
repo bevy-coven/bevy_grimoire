@@ -102,9 +102,25 @@ fn solve_brings_the_lamp_and_its_rider_beside_the_road_on_its_own_side() {
 
 #[test]
 fn a_path_of_one_waypoint_or_a_negative_within_is_refused() {
-    let ok = "(version: 1, relations: [(of: \"lamp\", kind: Along(path: [\"gate\", \"well\", \"hall\"], within: 1.0))])";
+    let ok = r"version: 1
+relations:
+- of: lamp
+  kind: !Along
+    path:
+    - gate
+    - well
+    - hall
+    within: 1.0
+";
     assert_eq!(Relations::parse(ok), Ok(lamp_along_road()));
-    let one = "(version: 1, relations: [(of: \"lamp\", kind: Along(path: [\"gate\"], within: 1.0))])";
+    let one = r"version: 1
+relations:
+- of: lamp
+  kind: !Along
+    path:
+    - gate
+    within: 1.0
+";
     let err = Relations::parse(one).unwrap_err();
     assert!(err.contains("two"), "the refusal says a path needs two waypoints: {err}");
     let err = Relations::parse(&ok.replace("1.0", "-1.0")).unwrap_err();

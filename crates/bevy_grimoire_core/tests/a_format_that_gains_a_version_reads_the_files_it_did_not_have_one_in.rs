@@ -23,24 +23,27 @@ use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 fn prove<T: Serialize + DeserializeOwned + Debug + PartialEq>(id: &'static str, sample: T, version: fn(&T) -> u32) {
-    let written = ron::to_string(&sample).unwrap();
-    assert!(written.starts_with("(version:1,"), "`{id}`: what the type writes starts with its version:\n{written}");
+    let written = bevy_grimoire_core::yaml::to_string(&sample).unwrap();
+    assert!(written.starts_with("version: 1\n"), "`{id}`: what the type writes starts with its version:\n{written}");
     assert_eq!(version(&sample), 1, "`{id}`: the type's own value is at version 1");
 
     // A file an earlier release wrote has no `version`: it is the first one, and the value is the same.
-    let before_versions = written.replacen("version:1,", "", 1);
-    let read: T = ron::from_str(&before_versions).unwrap_or_else(|e| panic!("`{id}`: a file with no version is refused: {e}\n{before_versions}"));
+    let before_versions = written.replacen("version: 1\n", "", 1);
+    let read: T = bevy_grimoire_core::yaml::from_str(&before_versions, "a file with no version")
+        .unwrap_or_else(|p| panic!("`{id}`: a file with no version is refused: {}\n{before_versions}", p.line()));
     assert_eq!(version(&read), 1, "`{id}`: a file with no version reads as the first");
     assert_eq!(read, sample, "`{id}`: and as the same value");
 
     // A plain reader, the one an operation uses, refuses a newer file and a version zero, naming the one this build reads.
     for other in [2u32, 0, 7] {
-        let text = written.replacen("version:1,", &format!("version:{other},"), 1);
-        let said = ron::from_str::<T>(&text).expect_err(&format!("`{id}`: version {other} was read")).to_string();
+        let text = written.replacen("version: 1\n", &format!("version: {other}\n"), 1);
+        let said = bevy_grimoire_core::yaml::from_str::<T>(&text, "a file of another version")
+            .expect_err(&format!("`{id}`: version {other} was read"))
+            .line();
         assert!(said.contains(&format!("version {other} is not the 1 this build reads")), "`{id}` at version {other}: {said}");
 
         // The reader the editor's views use says which field.
-        let refusal = reload_check::read::<T>(id, "a/file.yaml", &text).expect_err("refused");
+        let refusal = reload_check::read::<T>(id, "a/file.yaml", &text, |t| bevy_grimoire_core::yaml::from_str(t, "a/file.yaml").map_err(|p| p.line())).expect_err("refused");
         assert_eq!(refusal.field.as_deref(), Some("version"), "`{id}` at version {other}: {refusal:?}");
         assert_eq!(refusal.kind, id);
     }
@@ -65,12 +68,14 @@ fn every_format_that_gained_a_version_reads_the_files_from_before_it_and_refuses
 #[test]
 fn parse_names_the_file_kind_and_the_version_this_build_reads() {
     for (what, said) in [
-        ("vocab", Vocabularies::parse("(version: 2, kind: [], effects: [], look: [], surfaces: [])").map(drop)),
-        ("repetition", RepetitionRules::parse("(version: 2)").map(drop)),
-        ("terrain", Heightfield::parse("(version: 2, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])").map(drop)),
-        ("water plan", WaterPlan::parse("(version: 2)").map(drop)),
-        ("water field", WaterField::parse("(version: 2, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 1)").map(drop)),
-        ("volume", Volume::parse("(version: 2)").map(drop)),
+        // **YAML, because a project file is**: a version the build does not read, in the spelling the file
+        // has now, so the refusal is about the version and not about the format.
+        ("vocab", Vocabularies::parse("version: 2\nkind:\n  tokens: []\neffects:\n  tokens: []\nlook:\n  tokens: []\nsurfaces:\n  tokens: []\n").map(drop)),
+        ("repetition", RepetitionRules::parse("version: 2\n").map(drop)),
+        ("terrain", Heightfield::parse("version: 2\norigin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 2\ndepth: 2\nheights: [0.0, 0.0, 0.0, 0.0]\n").map(drop)),
+        ("water plan", WaterPlan::parse("version: 2\n").map(drop)),
+        ("water field", WaterField::parse("version: 2\norigin: [0.0, 0.0]\ncell_m: 1.0\nwidth: 2\ndepth: 2\ndepth_m: [0.0, 0.0, 0.0, 0.0]\nsettled: true\nsteps: 1\n").map(drop)),
+        ("volume", Volume::parse("version: 2\n").map(drop)),
     ] {
         let said = said.expect_err(what);
         assert!(said.starts_with(&format!("{what}: ")) && said.contains("version 2 is not the 1 this build reads"), "{what}: {said}");

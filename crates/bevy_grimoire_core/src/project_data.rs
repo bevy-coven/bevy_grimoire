@@ -299,7 +299,7 @@ mod tests {
             kits.to_yaml().unwrap_or_else(|e| panic!("{e}")),
         )
         .unwrap_or_else(|e| panic!("{e}"));
-        let vocab = ron::to_string(&Vocabularies::default()).unwrap_or_else(|e| panic!("{e}"));
+        let vocab = Vocabularies::default().to_yaml().unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(dir.join(VOCAB_FILE), vocab).unwrap_or_else(|e| panic!("{e}"));
 
         let loaded = load(&dir, &[]).unwrap_or_else(|e| panic!("an empty project loads: {e}"));

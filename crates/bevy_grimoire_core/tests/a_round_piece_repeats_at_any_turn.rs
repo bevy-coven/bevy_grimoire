@@ -39,7 +39,7 @@ fn at(id: &str, descriptor: &str, x: f32, yaw: f32) -> Placed {
 
 fn round(tokens: &[&str]) -> RepetitionRules {
     RepetitionRules::parse(&format!(
-        "(round: [{}])",
+        "round: [{}]",
         tokens.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>().join(", ")
     ))
     .unwrap_or_else(|e| panic!("{e}"))
@@ -99,10 +99,12 @@ fn round_kinds_leave_other_pieces_turnable() {
 #[test]
 fn round_is_read_from_the_file_and_empty_when_left_out() {
     assert!(RepetitionRules::default().round.is_empty(), "no project's report changes by default");
-    let partial = RepetitionRules::parse("(radius_m: 3.0)").unwrap_or_else(|e| panic!("{e}"));
+    let partial = RepetitionRules::parse("radius_m: 3.0\n").unwrap_or_else(|e| panic!("{e}"));
     assert!(partial.round.is_empty());
     let rules = round(&["container", "pot"]);
     assert_eq!(rules.round, vec!["container".to_owned(), "pot".to_owned()]);
-    let text = ron::to_string(&rules).unwrap_or_else(|e| panic!("{e}"));
+    // `RepetitionRules` has no writer of its own — a project authors this file by hand — so the test writes
+    // it through the one YAML writer, which is what a person's editor would get.
+    let text = bevy_grimoire_core::yaml::to_string(&rules).unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(RepetitionRules::parse(&text).unwrap_or_else(|e| panic!("{e}")), rules);
 }

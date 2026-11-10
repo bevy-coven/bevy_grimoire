@@ -126,10 +126,24 @@ impl DataFiles {
 
 /// Every scalar leaf's dotted path and its token text, in source order.
 pub fn leaves(text: &str) -> Result<Vec<(String, String)>, String> {
-    // **A file that does not read has no leaves at all**, rather than a list of the ones a scan could see:
-    // the caller's next question is always "and does the whole file read", and answering a short list here
-    // would let an edit land in a file the reader refuses.
-    crate::yaml::from_str::<serde_json::Value>(text, "a data file").map_err(|p| p.line())?;
+    // **A tuning file is one mapping.** A bare scalar, a list or a cut-off document reads as *some* JSON
+    // value, so the check is a mapping's shape and not "does it parse": `this is not a tuning file` is a
+    // string, and a file that stopped mid-value is a mapping with a null where a number was meant. Both are
+    // refused here rather than answered as a leaf list an edit could land in.
+    let value: serde_json::Value = crate::yaml::from_str(text, "a data file").map_err(|p| p.line())?;
+    if !value.is_object() {
+        return Err(format!(
+            "a data file holds one mapping of names to values, and this is {}",
+            match value {
+                serde_json::Value::Null => "`null`",
+                serde_json::Value::Bool(_) => "a bool",
+                serde_json::Value::Number(_) => "a number",
+                serde_json::Value::String(_) => "a string",
+                serde_json::Value::Array(_) => "a list",
+                serde_json::Value::Object(_) => unreachable!(),
+            }
+        ));
+    }
     Ok(crate::yaml::leaves(text))
 }
 
@@ -138,7 +152,13 @@ const KIND: &str = "game_data";
 
 /// **The field a scan stopped at**: its errors end "... at `mob.speed`" when they got that far.
 fn stopped_at(why: &str) -> Option<String> {
-    let (_, path) = why.strip_suffix('`')?.rsplit_once(" at `")?;
+    // **The YAML reader names the path it stopped at in parentheses**, `a data file (mob.name[1])`, because
+    // the field is its own part of the `Problem` and the sentence does not repeat it. That path is what a
+    // refusal carries, so it is read from there — and a refusal with no path (`()`) says nothing about where,
+    // rather than claiming the root.
+    let (_, rest) = why.rsplit_once(" (")?;
+    let (path, _) = rest.split_once(')')?;
+    let path = path.trim();
     (!path.is_empty()).then(|| path.to_owned())
 }
 

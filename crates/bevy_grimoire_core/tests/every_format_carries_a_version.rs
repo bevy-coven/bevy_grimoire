@@ -81,7 +81,7 @@ fn versioned() -> Vec<(&'static str, &'static str, String)> {
         s("kits", "kits.yaml", fixture("kits.yaml")),
         s("library", "site/library.yaml", fixture("site/library.yaml")),
         s("policy", "site/project.yaml", fixture("site/project.yaml")),
-        s("rules", "rules.yaml", format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION)),
+        s("rules", "rules.yaml", format!("version: {}\nblocks: []\n", bevy_grimoire_core::rules::RULES_VERSION)),
         s("compositions", "compositions.yaml", fixture("compositions.yaml")),
         s("standards", "standards.yaml", Standards::default().to_yaml().unwrap()),
         s("rigs", "rigs.yaml", fixture("rigs.yaml")),
@@ -90,28 +90,28 @@ fn versioned() -> Vec<(&'static str, &'static str, String)> {
         s("plan", "maps/yard.plan.yaml", Plan::default().to_yaml().unwrap()),
         s("references", "maps/yard.references.yaml", References::default().to_yaml().unwrap()),
         s("relations", "maps/yard.relations.yaml", Relations::default().to_yaml().unwrap()),
-        s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION)),
-        s("family_list", "family.yaml", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION)),
+        s("data_registry", "site/data.yaml", format!("version: {}\nfiles: []\n", bevy_grimoire_core::data_files::REGISTRY_VERSION)),
+        s("family_list", "family.yaml", format!("version: {}\ncrates: []\n", bevy_grimoire_core::family::FAMILY_VERSION)),
         s("agent", "agent.yaml", format!("version: {}\n", bevy_grimoire_core::note_agent::AGENT_VERSION)),
         s("play", "play.yaml", format!("version: {}\ncommand: [\"game\"]\n", bevy_grimoire_core::play::PLAY_VERSION)),
-        s("destructible_marks", "destructible.yaml", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap()),
+        s("destructible_marks", "destructible.yaml", bevy_grimoire_core::yaml::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap_or_else(|p| panic!("{}", p.line()))),
         s(
             "destructible_bake",
             "destructible/site__cart.bake.yaml",
-            ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(),
+            bevy_grimoire_core::yaml::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap_or_else(|p| panic!("{}", p.line())),
         ),
         // The six kinds core parses that carried no version until #202 slice 2: each is written by the
         // type itself, so the sample is what this build writes, and `version:` is the root's first field.
-        s("vocab", "vocab.ron", ron::to_string(&Vocabularies::default()).unwrap()),
-        s("repetition", "repetition.yaml", ron::to_string(&RepetitionRules::default()).unwrap()),
-        s("terrain", "site/terrain/yard.yaml", ron::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 2, 2, 0.0)).unwrap()),
-        s("water_plan", "site/water/yard.yaml", ron::to_string(&WaterPlan::default()).unwrap()),
+        s("vocab", "vocab.yaml", bevy_grimoire_core::yaml::to_string(&Vocabularies::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
+        s("repetition", "repetition.yaml", bevy_grimoire_core::yaml::to_string(&RepetitionRules::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
+        s("terrain", "site/terrain/yard.yaml", bevy_grimoire_core::yaml::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 2, 2, 0.0)).unwrap_or_else(|p| panic!("{}", p.line()))),
+        s("water_plan", "site/water/yard.yaml", bevy_grimoire_core::yaml::to_string(&WaterPlan::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
         s(
             "water_field",
             "site/water/yard.field.yaml",
-            ron::to_string(&WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: vec![0.0; 4], settled: true, steps: 1 }).unwrap(),
+            bevy_grimoire_core::yaml::to_string(&WaterField { version: WATER_FIELD_VERSION, origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: vec![0.0; 4], settled: true, steps: 1 }).unwrap_or_else(|p| panic!("{}", p.line())),
         ),
-        s("volume", "site/volume/yard.yaml", ron::to_string(&Volume::default()).unwrap()),
+        s("volume", "site/volume/yard.yaml", bevy_grimoire_core::yaml::to_string(&Volume::default()).unwrap_or_else(|p| panic!("{}", p.line()))),
     ]
 }
 
@@ -123,8 +123,22 @@ fn version_span(text: &str) -> Option<(usize, usize)> {
     let mut from = 0;
     while let Some(found) = text[from..].find("version:") {
         let at = from + found;
-        let opens_the_root = text[..at].trim_end().ends_with('(')
-            || (text[..at].trim().is_empty() && !text[..at].contains(' '));
+        // **The first `version:` that belongs to the root value**, in either spelling:
+        //
+        // - a RON struct's: the token before it, trimmed, ends with the root's `(`;
+        // - a YAML document's: it opens at column 0, and every line above it is a comment or blank — which
+        //   every shipped file is, since the header comment block sits above `version:`.
+        //
+        // A nested value's own `version:` is indented, and a comment naming the word is skipped here.
+        let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+        let column = at - line_start;
+        let ron_root = text[..at].trim_end().ends_with('(');
+        let yaml_root = column == 0
+            && !text[line_start..at].trim_start().starts_with('#')
+            && text[..line_start]
+                .lines()
+                .all(|l| l.trim().is_empty() || l.trim_start().starts_with('#'));
+        let opens_the_root = ron_root || yaml_root;
         if opens_the_root {
             let digits = at + "version:".len();
             let start = digits + text[digits..].len() - text[digits..].trim_start().len();

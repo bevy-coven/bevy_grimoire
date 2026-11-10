@@ -38,15 +38,37 @@ use bevy_grimoire_core::vocab::Vocabularies;
 /// exercised, and so a token typo here fails the same way a real project's would.
 fn vocab() -> Vocabularies {
     Vocabularies::parse(
-        r#"(
-    kind: (tokens: [( name: "prop", note: "a thing" ), ( name: "bench", note: "a workbench" )]),
-    effects: (tokens: [( name: "inert", note: "does nothing" )]),
-    look: (tokens: [( name: "plain", note: "unremarkable" )]),
-    surfaces: (tokens: [( name: "support", note: "any support top" )]),
-    capabilities: (tokens: []),
-    edge: (tokens: []),
-    slot: (tokens: []),
-)"#,
+        r"version: 1
+kind:
+  tokens:
+  - name: prop
+    note: a thing
+    implies: []
+  - name: bench
+    note: a workbench
+    implies: []
+effects:
+  tokens:
+  - name: inert
+    note: does nothing
+    implies: []
+look:
+  tokens:
+  - name: plain
+    note: unremarkable
+    implies: []
+surfaces:
+  tokens:
+  - name: support
+    note: any support top
+    implies: []
+capabilities:
+  tokens: []
+edge:
+  tokens: []
+slot:
+  tokens: []
+",
     )
     .unwrap_or_else(|e| panic!("the test vocabulary does not parse: {e}"))
 }
@@ -138,25 +160,23 @@ fn at(id: &str, descriptor: &str, at: (f32, f32), on: Option<&str>) -> Placed {
     }
 }
 
-/// **The variant parses from RON and survives a round-trip.** Without this the feature cannot be
-/// authored at all — the file is how a library is written.
+/// **The variant is authored in a library file and survives a round-trip.** Without this the feature cannot
+/// be authored at all — the file is how a library is written.
 #[test]
 fn the_two_way_mount_is_authorable_in_a_library_file() {
     let d = tools();
-    let text = ron::ser::to_string_pretty(
-        &Descriptor {
-            mount: d.mount.clone(),
-            ..Descriptor::default()
-        },
-        ron::ser::PrettyConfig::default(),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    let text = bevy_grimoire_core::yaml::to_string(&Descriptor {
+        mount: d.mount.clone(),
+        ..Descriptor::default()
+    })
+    .unwrap_or_else(|p| panic!("{}", p.line()));
     assert!(
         text.contains("OnSurfaceOrFloor"),
         "the mount did not serialize by name: {text}"
     );
 
-    let back: Descriptor = ron::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+    let back: Descriptor = bevy_grimoire_core::yaml::from_str(&text, "a descriptor")
+        .unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(back.mount, d.mount, "the round-trip changed the mount");
 }
 
@@ -226,9 +246,8 @@ fn both_seatings_survive_a_save_and_a_load() {
     ]);
     let before = resolve_y(&m, &l).unwrap_or_else(|e| panic!("{e}"));
 
-    let text = ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default())
-        .unwrap_or_else(|e| panic!("{e}"));
-    let back: Map = ron::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+    let text = bevy_grimoire_core::yaml::to_string(&m).unwrap_or_else(|p| panic!("{}", p.line()));
+    let back = Map::parse(&text).unwrap_or_else(|e| panic!("{e}"));
     back.validate().unwrap_or_else(|e| panic!("{e}"));
     let after = resolve_y(&back, &l).unwrap_or_else(|e| panic!("{e}"));
 

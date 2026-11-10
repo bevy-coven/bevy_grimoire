@@ -48,20 +48,29 @@ fn grimoire() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire")
 }
 
-/// A shipped file, read as the value it holds through the RON reader it is written in today.
+/// A shipped file, read as the value it holds — through the one YAML reader, which is the format the
+/// shipped project is in.
 fn shipped<T: DeserializeOwned>(rel: &str) -> T {
     let path = grimoire().join(rel);
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    ron::from_str(&text).unwrap_or_else(|e| panic!("{} does not read as RON: {e}", path.display()))
+    yaml::from_str(&text, rel).unwrap_or_else(|p| panic!("{} does not read: {}", path.display(), p.line()))
 }
 
 /// **A file a release wrote and `tests/old_data.rs` freezes**, read as the value it holds: the fixture a
 /// kind the shipped project has no sample of is proved against, so the value has content and not only
 /// empty lists.
-fn frozen<T: DeserializeOwned>(rel: &str) -> T {
+fn frozen<T: DeserializeOwned>(rel: &str, project_name: &str) -> T {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data").join(rel);
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    ron::from_str(&text).unwrap_or_else(|e| panic!("{} does not read as RON: {e}", path.display()))
+    // **A frozen file is never edited**: it is read as it was written and converted by the migration, which
+    // is the one conversion proved lossless.
+    let (_, converted) = bevy_grimoire_core::migrate::written_as_yaml(
+        project_name,
+        &text,
+        bevy_grimoire_core::migrate::COMMAND,
+    )
+    .unwrap_or_else(|p| panic!("{}: {}", path.display(), p.line()));
+    yaml::from_str(&converted, rel).unwrap_or_else(|p| panic!("{} does not read: {}", path.display(), p.line()))
 }
 
 /// The values a project holds, each with the file its kind is written at.
@@ -70,31 +79,31 @@ fn project() -> Vec<(&'static str, String)> {
         ("kits.yaml", round_trip::<Kits>("kits.yaml", shipped("kits.yaml"))),
         ("site/library.yaml", round_trip::<Library>("site/library.yaml", shipped("site/library.yaml"))),
         ("site/project.yaml", round_trip::<Policy>("site/project.yaml", shipped("site/project.yaml"))),
-        ("vocab.yaml", round_trip::<Vocabularies>("vocab.yaml", shipped("vocab.ron"))),
+        ("vocab.yaml", round_trip::<Vocabularies>("vocab.yaml", shipped("vocab.yaml"))),
         ("compositions.yaml", round_trip::<Compositions>("compositions.yaml", shipped("compositions.yaml"))),
         ("rigs.yaml", round_trip::<Rigs>("rigs.yaml", shipped("rigs.yaml"))),
-        ("rules.yaml", round_trip::<Rules>("rules.yaml", frozen("core-0.3.0/rules.yaml"))),
+        ("rules.yaml", round_trip::<Rules>("rules.yaml", frozen("core-0.3.0/rules.ron", "rules.ron"))),
         ("maps/bedroom.map.yaml", round_trip::<Map>("maps/bedroom.map.yaml", shipped("maps/bedroom.map.yaml"))),
-        ("maps/yard.map.yaml", round_trip::<Map>("maps/yard.map.yaml", frozen("core-0.3.0/map.yaml"))),
+        ("maps/yard.map.yaml", round_trip::<Map>("maps/yard.map.yaml", frozen("core-0.3.0/map.ron", "maps/yard.map.ron"))),
         // Kinds the shipped project has no sample of: a file a release wrote, frozen in tests/old_data.
-        ("standards.yaml", round_trip::<Standards>("standards.yaml", frozen("core-0.3.0/standards.yaml"))),
-        ("repetition.yaml", round_trip::<RepetitionRules>("repetition.yaml", frozen("core-0.3.0/repetition.yaml"))),
-        ("maps/yard.notes.yaml", round_trip::<Notes>("maps/yard.notes.yaml", frozen("core-0.3.0/notes.yaml"))),
-        ("maps/yard.plan.yaml", round_trip::<Plan>("maps/yard.plan.yaml", frozen("core-0.3.0/plan.yaml"))),
-        ("maps/yard.references.yaml", round_trip::<References>("maps/yard.references.yaml", frozen("core-0.3.0/references.yaml"))),
-        ("maps/yard.relations.yaml", round_trip::<Relations>("maps/yard.relations.yaml", frozen("core-0.3.0/relations.yaml"))),
-        ("site/terrain/yard.yaml", round_trip::<Heightfield>("site/terrain/yard.yaml", frozen("core-0.3.0/terrain.yaml"))),
-        ("site/water/yard.yaml", round_trip::<WaterPlan>("site/water/yard.yaml", frozen("core-0.3.0/water_plan.yaml"))),
-        ("site/water/yard.field.yaml", round_trip::<WaterField>("site/water/yard.field.yaml", frozen("core-0.3.0/water_field.yaml"))),
-        ("site/volume/yard.yaml", round_trip::<Volume>("site/volume/yard.yaml", frozen("core-0.3.0/volume.yaml"))),
-        ("site/data.yaml", round_trip::<DataFiles>("site/data.yaml", frozen("core-0.3.0/data_registry.yaml"))),
-        ("family.yaml", round_trip::<Family>("family.yaml", frozen("core-0.3.0/family_list.yaml"))),
-        ("agent.yaml", round_trip::<AgentSettings>("agent.yaml", frozen("core-0.3.0/agent.yaml"))),
-        ("play.yaml", round_trip::<PlayConfig>("play.yaml", frozen("core-0.3.0/play.yaml"))),
-        ("destructible.yaml", round_trip::<Marks>("destructible.yaml", frozen("editor-3f4084c/destructible.yaml"))),
+        ("standards.yaml", round_trip::<Standards>("standards.yaml", frozen("core-0.3.0/standards.ron", "standards.ron"))),
+        ("repetition.yaml", round_trip::<RepetitionRules>("repetition.yaml", frozen("core-0.3.0/repetition.ron", "repetition.ron"))),
+        ("maps/yard.notes.yaml", round_trip::<Notes>("maps/yard.notes.yaml", frozen("core-0.3.0/notes.ron", "maps/yard.notes.ron"))),
+        ("maps/yard.plan.yaml", round_trip::<Plan>("maps/yard.plan.yaml", frozen("core-0.3.0/plan.ron", "maps/yard.plan.ron"))),
+        ("maps/yard.references.yaml", round_trip::<References>("maps/yard.references.yaml", frozen("core-0.3.0/references.ron", "maps/yard.references.ron"))),
+        ("maps/yard.relations.yaml", round_trip::<Relations>("maps/yard.relations.yaml", frozen("core-0.3.0/relations.ron", "maps/yard.relations.ron"))),
+        ("site/terrain/yard.yaml", round_trip::<Heightfield>("site/terrain/yard.yaml", frozen("core-0.3.0/terrain.ron", "site/terrain/yard.ron"))),
+        ("site/water/yard.yaml", round_trip::<WaterPlan>("site/water/yard.yaml", frozen("core-0.3.0/water_plan.ron", "site/water/yard.ron"))),
+        ("site/water/yard.field.yaml", round_trip::<WaterField>("site/water/yard.field.yaml", frozen("core-0.3.0/water_field.ron", "site/water/yard.field.ron"))),
+        ("site/volume/yard.yaml", round_trip::<Volume>("site/volume/yard.yaml", frozen("core-0.3.0/volume.ron", "site/volume/yard.ron"))),
+        ("site/data.yaml", round_trip::<DataFiles>("site/data.yaml", frozen("core-0.3.0/data_registry.ron", "site/data.ron"))),
+        ("family.yaml", round_trip::<Family>("family.yaml", frozen("core-0.3.0/family_list.ron", "family.ron"))),
+        ("agent.yaml", round_trip::<AgentSettings>("agent.yaml", frozen("core-0.3.0/agent.ron", "agent.ron"))),
+        ("play.yaml", round_trip::<PlayConfig>("play.yaml", frozen("core-0.3.0/play.ron", "play.ron"))),
+        ("destructible.yaml", round_trip::<Marks>("destructible.yaml", frozen("editor-3f4084c/destructible.ron", "destructible.ron"))),
         (
             "destructible/site__cart.bake.yaml",
-            round_trip::<Bake>("destructible/site__cart.bake.yaml", frozen("editor-3f4084c/site__cart.bake.yaml")),
+            round_trip::<Bake>("destructible/site__cart.bake.yaml", frozen("editor-3f4084c/site__cart.bake.ron", "destructible/site__cart.bake.ron")),
         ),
     ]
 }
