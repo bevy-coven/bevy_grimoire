@@ -165,28 +165,6 @@ pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -
     })
 }
 
-/// **Whether the arguments ask for the migrate command rather than a window** (GD-03, #365).
-///
-/// `cauldron migrate <root>` is a subcommand, not a door: it converts a project's files from RON to YAML
-/// and exits, so it is answered before any window, plugin or asset root is built.
-pub fn asks_to_migrate(args: &[String]) -> bool {
-    args.first().is_some_and(|a| a == MIGRATE)
-}
-
-/// **The root `cauldron migrate <root>` converts**, and the refusal when it names none.
-pub fn migrate_root(args: &[String]) -> Result<PathBuf, String> {
-    match args.get(1) {
-        Some(root) if !root.starts_with('-') => Ok(root_from(&[root.as_str()])),
-        _ => Err(format!(
-            "`{MIGRATE}` needs the project's root: `bevy_cauldron {MIGRATE} <root>`. It is the folder \
-             holding `assets/grimoire`."
-        )),
-    }
-}
-
-/// The subcommand that moves a project from RON to YAML ([`asks_to_migrate`], `migrate::COMMAND`).
-pub const MIGRATE: &str = "migrate";
-
 /// The project root out of the positionals: the first one, or the working directory.
 fn root_from(positional: &[&str]) -> PathBuf {
     let root = PathBuf::from(positional.first().copied().unwrap_or("."));
@@ -200,14 +178,12 @@ pub const USAGE: &str = "\
 Cauldron: the editor that writes a grimoire, the book your game loads.
 
 usage: bevy_cauldron [ROOT] [MAP] [--door kit|map|rigs] [--kit NAME] [--live]
-       bevy_cauldron migrate ROOT
 
   ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
   MAP           the map to open on the Map door; naming one, or a --door, skips the launcher
   --door DOOR   open a door directly: kit (reusable content), map (the level) or rigs (the rig bench)
   --kit NAME    the kit to author in, when the project binds more than one
   --live        write every committed change to disk at once, for a game that watches the project
-  migrate ROOT  move ROOT's project files from RON to YAML, losslessly, and exit
   -h, --help    print this and exit";
 
 /// Whether the arguments ask for [`USAGE`] rather than a window.

@@ -1,20 +1,32 @@
 //! **Moving a project's files from RON to YAML, losslessly** (GD-03, #365).
 //!
-//! A project used to be RON (`kits.ron`, `maps/town.map.ron`, `editor.ron`, …). This is the one
-//! command that turns a project into YAML: `cauldron migrate <root>`, and the editor offers it when it
-//! opens a RON project. Nothing else writes the old spelling again.
+//! A project used to be RON (`kits.ron`, `maps/town.map.ron`, `editor.ron`, …). [`migrate`] turns one
+//! into YAML, and [`leftover`] is the refusal an open raises when a project has not been converted —
+//! written and tested here, and not yet called by any open (see below).
+//!
+//! **This is a library, and nothing reaches it yet.** It is deliberately not wired into the binary: the
+//! editor still opens the `.ron` paths and the readers still parse RON, so a project converted under a
+//! person's feet would open empty and the next save would write fresh RON beside the YAML. The cutover
+//! that makes it reachable is the rest of #365, and it needs the fixtures and the readers moved first.
 //!
 //! # Two rules, and neither is a suggestion
 //!
 //! - **Lossless.** Each file is read with the type's own RON reader, written with the one YAML writer
-//!   ([`crate::yaml::to_string`]), and **read back with that same type's YAML reader and compared with
-//!   the value it came from** ([`crate::yaml::from_str`]). A single value that differs stops the whole
-//!   migration, names the file, and **writes nothing at all** — not that file, not the ones before it.
-//!   A half-migrated project is the one outcome a person cannot repair by hand.
+//!   ([`crate::yaml::to_string`]), **its comments placed in that text**, and then **the commented text is
+//!   read back with that same type's YAML reader** ([`crate::yaml::from_str`]). A read that fails, or a
+//!   value that writes differently than it read, stops the whole migration, names the file, and **writes
+//!   nothing at all** — not that file, not the ones before it. A half-migrated project is the one outcome
+//!   a person cannot repair by hand.
 //! - **Loud.** A RON comment is carried over as a YAML comment above the same key wherever its place
 //!   can be found. One that cannot be placed is listed in the [`Report`], never dropped quietly. A file
-//!   whose kind this crate has no type for (a mapper's forest, a game's own data file) stops the
-//!   migration and is named: guessing at a value it cannot read is how a file loses a field.
+//!   whose kind this crate has no type for — `checks.ron` (`bevy_oracle`), `editor.ron`, `family/*.ron`
+//!   and a kit's `forest/people/scripts/trees` files (`bevy_cauldron`) — **stops the whole migration**
+//!   and is named: guessing at a value it cannot read is how a file loses a field.
+//!
+//! **A file no kind's pattern names is not walked at all.** `game_data` states no pattern (it is "the
+//! files a game registers in `data.ron`"), so a game's own tuning files are neither converted nor
+//! refused: they stay RON, untouched, and this module has no opinion about them. Giving them a pattern
+//! belongs to the crate that declares their type, in the slice that moves them.
 //!
 //! # The old files are moved, not deleted
 //!
@@ -32,7 +44,6 @@
 //! been through YAML. The value, read by the type, is the only thing that can be compared, and that is
 //! what [`convert`] does.
 
-use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -56,8 +67,13 @@ pub const RON_EXT: &str = "ron";
 /// **Where the old files go**, under the project root: `<root>/.dark_factory/migrated-ron/`.
 pub const ARCHIVE_DIR: &str = ".dark_factory/migrated-ron";
 
-/// **The command a person runs**, which every refusal that meets a leftover RON file names.
-pub const COMMAND: &str = "cauldron migrate <root>";
+/// **The command that fixes a project still holding RON files**, as every refusal names it. It is the
+/// binary's own name, because the binary is what a person runs.
+///
+/// **No such subcommand exists yet** (this slice ships the library only), so the refusal is a statement
+/// about what the next slice adds rather than a line that works today; it is named here so the sentence
+/// and the binary cannot drift apart when the subcommand lands.
+pub const COMMAND: &str = "bevy_cauldron migrate <root>";
 
 /// The page of the guide that explains the move: "Moving a project to YAML" in it.
 const DOCS: &str = "docs/guide/your-game.md";
@@ -66,21 +82,35 @@ const DOCS: &str = "docs/guide/your-game.md";
 /// relative to. The same folder `project_data::migrate_legacy_data_dir` settled on.
 pub const GRIMOIRE_DIR: &str = "assets/grimoire";
 
-/// **The folders never walked**: the archive this module writes, and the ones no project file lives
-/// under. A walk that descended into `target/` would migrate a build.
-const SKIP_DIRS: [&str; 4] = [".git", "target", ".live", ARCHIVE_DIR];
+/// **The folders never walked**, by name: the ones no project file lives under. A walk that descended
+/// into `target/` would migrate a build. [`ARCHIVE_DIR`] is not here — it is a path, and a walk compares
+/// one folder name — it is skipped by [`is_archived`] instead.
+const SKIP_DIRS: [&str; 3] = [".git", "target", ".live"];
 
-/// **One file the migration converted.**
+/// **Whether a project-relative path is already inside the archive** this module writes, so a second run
+/// never converts its own output back.
+fn is_archived(rel: &str) -> bool {
+    rel.starts_with(&format!("{ARCHIVE_DIR}/"))
+}
+
+/// **One file converted**: the text to write, and what became of its comments.
+///
+/// The text is the *checked* text — read back as its type and compared with the RON value by [`convert`] —
+/// so the caller writes bytes that were verified rather than bytes assembled after the check.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Converted {
-    /// The file as the project named it before: `assets/grimoire/kits.ron`, with `/`.
+    /// The file as the project named it before, with `/`: filled in by [`migrate`], empty in [`convert`].
     pub rom: String,
-    /// The file as it is named now: `assets/grimoire/kits.yaml`.
+    /// The file as it is named now: filled in by [`migrate`], empty in [`convert`].
     pub yaml: String,
-    /// The [`FileKind::id`] it is, so a person can see which type vouched for it.
+    /// The [`FileKind::id`] it is: filled in by [`migrate`]'s caller path, empty in [`convert`].
     pub kind: &'static str,
     /// How many RON comments were carried into the YAML file.
     pub comments_carried: usize,
+    /// The RON comments that had no place in it, listed so none is dropped quietly.
+    pub unplaced: Vec<Unplaced>,
+    /// **The YAML text, comments and all**, as it will be written and as it was read back.
+    pub text: String,
 }
 
 /// **A RON comment the migration could not put above its key**, listed so it is never dropped quietly.
@@ -148,7 +178,7 @@ pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Pr
     Ok(out
         .into_iter()
         .filter_map(|rel| {
-            if !rel.ends_with(&format!(".{RON_EXT}")) {
+            if !rel.ends_with(&format!(".{RON_EXT}")) || is_archived(&rel) {
                 return None;
             }
             let kind = kind_of_rel(&rel)?;
@@ -170,6 +200,11 @@ fn kind_of_rel(rel: &str) -> Option<&'static FileKind> {
 }
 
 /// **Every file under `dir`, as a path relative to `root` with `/`**, depth-first, skipping [`SKIP_DIRS`].
+///
+/// **The walk never leaves the project.** A symlinked folder — or a symlinked file — is skipped outright:
+/// following one would convert a RON file *outside* the project, write its YAML out there and move its
+/// original out of that folder into the archive, which is a migration of somebody else's directory. A
+/// project that really wants a file from elsewhere copies it in.
 #[allow(clippy::result_large_err)]
 fn walk(root: &Path, dir: &Path, out: &mut Vec<String>, seen: &mut Vec<PathBuf>) -> Result<(), Problem> {
     // A symlinked directory that points at one of its own parents would walk forever.
@@ -183,7 +218,13 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>, seen: &mut Vec<PathBuf>)
         let entry = entry.map_err(|e| io_problem(dir, e))?;
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
-        if path.is_dir() {
+        // **`symlink_metadata` reads the link, not what it points at**, so a link is recognised before it
+        // is followed — and it is never followed.
+        let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
             if SKIP_DIRS.contains(&name.as_str()) {
                 continue;
             }
@@ -207,15 +248,23 @@ fn io_problem(path: &Path, e: std::io::Error) -> Problem {
     )
 }
 
-/// **The YAML text `text` becomes, or a refusal that says the value would change.**
+/// **The YAML text `text` becomes, its comments placed, or a refusal that says the value would change.**
 ///
-/// The one conversion: read with the type's RON reader, write with the one YAML writer, read back with
-/// the type's YAML reader, and answer the text only when the value came back equal. `file` is only what
-/// a refusal names.
+/// The one conversion, and the one place a comment is allowed to touch a file:
+///
+/// 1. read `text` with the type's RON reader;
+/// 2. write it with the one YAML writer;
+/// 3. **place the RON comments in that text** ([`carry_comments`]);
+/// 4. **read the commented text back with the type's YAML reader and compare it with the RON value** — so
+///    the text that goes to disk, comments and all, is the text that was verified, and a comment that
+///    landed inside a value is caught here rather than by a person months later.
+///
+/// A difference at either step refuses, and the caller writes nothing. `file` is only what a refusal
+/// names.
 #[allow(clippy::result_large_err)]
-fn convert<T>(text: &str, file: &str) -> Result<String, Problem>
+fn convert<T>(text: &str, file: &str) -> Result<Converted, Problem>
 where
-    T: Serialize + DeserializeOwned + PartialEq + Debug,
+    T: Serialize + DeserializeOwned,
 {
     let value: T = ron::from_str(text).map_err(|e| {
         Problem::with(
@@ -227,55 +276,67 @@ where
                 .docs(DOCS),
         )
     })?;
-    let written = yaml::to_string(&value).map_err(|p| {
-        Problem::with(
-            format!("{file} did not write as YAML, so nothing was migrated"),
-            p.detail(),
-        )
+    let plain = yaml::to_string(&value).map_err(|p| {
+        Problem::with(format!("{file} did not write as YAML, so nothing was migrated"), p.detail())
     })?;
+    // **The comments are placed before the check, not after it**, so the bytes that land on disk are the
+    // bytes that were compared.
+    let (written, comments_carried, unplaced) = carry_comments(text, &plain, file);
+    // **Reading the written text is the check a comment cannot pass.** A comment put inside a `|-` block
+    // scalar's body becomes part of the string, so this read either refuses the file or answers a value
+    // the next step compares.
     let back: T = yaml::from_str(&written, file).map_err(|p| {
         Problem::with(
             format!("{file} wrote as YAML and did not read back, so nothing was migrated"),
             p.detail(),
         )
     })?;
-    if back != value {
+    // **The faithfulness check is a second write, compared with the first.** `PartialEq` is the wrong
+    // question for a float: a `NaN` writes out as `.nan` and reads back as the same not-a-number while
+    // comparing unequal to itself, so a `!=` would refuse a file that loses nothing. The one writer's own
+    // output is deterministic and in the type's field order, so two equal texts mean the same value —
+    // and a field lost, a number re-spelled or a tag changed shows up as two different texts.
+    let again = yaml::to_string(&back).map_err(|p| {
+        Problem::with(format!("{file} did not write again as YAML, so nothing was migrated"), p.detail())
+    })?;
+    if again != plain {
         return Err(Problem::with(
             format!("{file} would change value if it were written as YAML, so nothing was migrated"),
             Detail::default()
                 .at(Location::file(file.to_owned()))
-                .because(difference(&value, &back))
+                .because(first_difference(&plain, &again))
                 .fix("a file this build cannot round-trip is left as it is; report it, do not hand-edit it".to_owned())
                 .docs(DOCS),
         ));
     }
-    Ok(written)
+    Ok(Converted { rom: String::new(), yaml: String::new(), kind: "", comments_carried, unplaced, text: written })
 }
 
-/// **Where two values of one type first disagree**, as a sentence: the debug forms, shortened to the
-/// first place they part, so a refusal names the field and not the whole document.
-fn difference<T: Debug>(before: &T, after: &T) -> String {
-    let a = format!("{before:?}");
-    let b = format!("{after:?}");
-    let at = a.bytes().zip(b.bytes()).position(|(x, y)| x != y).unwrap_or(a.len().min(b.len()));
-    let window = |s: &str| {
-        let start = s[..at].char_indices().next_back().map_or(0, |(i, _)| i);
-        let end = (at + DIFFERENCE_WINDOW).min(s.len());
-        s[start..end].to_owned()
-    };
-    format!("the RON holds `{}` and the YAML reads `{}`", window(&a), window(&b))
+/// **Where two written texts first disagree**, as a sentence naming the line.
+///
+/// Both texts are the one writer's output for the same type, so they agree line for line until the field
+/// that differs — which means the first line that differs names that field, and nothing here ever slices
+/// a string at a byte offset (a window inside a multi-byte character panics).
+fn first_difference(before: &str, after: &str) -> String {
+    for (n, (a, b)) in before.lines().zip(after.lines()).enumerate() {
+        if a != b {
+            return format!("line {}: the RON holds `{}` and the YAML reads `{}`", n + 1, a.trim(), b.trim());
+        }
+    }
+    format!(
+        "the two texts have {} and {} lines, so a value is missing",
+        before.lines().count(),
+        after.lines().count()
+    )
 }
-
-/// **How many bytes of a value a [`difference`] sentence shows** on either side of where they part.
-const DIFFERENCE_WINDOW: usize = 80;
 
 /// **The YAML text a project file of `kind` becomes**, or a refusal naming the file.
 ///
-/// One arm per kind this crate owns a type for. A kind whose type lives above this crate ([`UNOWNED`])
-/// is refused here rather than guessed at: a mapper's forest and a game's own data file are read by the
-/// crate that declares them, and only that crate can say whether the YAML holds the same value.
+/// One arm per kind this crate owns a type for. A kind whose type lives above this crate is refused here
+/// rather than guessed at: a mapper's forest, an editor settings file and a game's own data file are read
+/// by the crate that declares them, and only that crate can say whether the YAML holds the same value.
 #[allow(clippy::result_large_err)]
-fn write_kind(kind: &FileKind, text: &str, file: &str) -> Result<String, Problem> {
+fn write_kind(kind: &FileKind, text: &str, file: &str) -> Result<Converted, Problem> {
     match kind.id {
         "kits" => convert::<Kits>(text, file),
         "vocab" => convert::<Vocabularies>(text, file),
@@ -348,16 +409,25 @@ pub fn migrate(root: &Path) -> Result<Report, Problem> {
             .map(|stem| format!("{stem}.{YAML_EXT}"))
             .unwrap_or_else(|| target.display().to_string());
         let text = std::fs::read_to_string(path).map_err(|e| io_problem(path, e))?;
-        let written = write_kind(kind, &text, rel)?;
-        let (yaml_text, carried, not_placed) = carry_comments(&text, &written, rel);
-        unplaced.extend(not_placed);
-        converted.push(Converted {
-            rom: rel.clone(),
-            yaml: target_rel,
-            kind: kind.id,
-            comments_carried: carried,
-        });
-        pending.push((path.clone(), yaml_text, target));
+        let mut done = write_kind(kind, &text, rel)?;
+        // **Nothing is replaced.** A `kits.yaml` already beside its RON is a file a person made, and the
+        // migration refuses rather than writing over it.
+        if target.exists() {
+            return Err(Problem::with(
+                format!("{} already exists, so nothing was migrated", target_rel),
+                Detail::default()
+                    .at(Location::file(target_rel.clone()))
+                    .because(format!("`{rel}` converts to a name a file is already at"))
+                    .fix("move or delete the existing file, then run the migration again".to_owned())
+                    .docs(DOCS),
+            ));
+        }
+        unplaced.append(&mut done.unplaced);
+        done.rom = rel.clone();
+        done.yaml = target_rel;
+        done.kind = kind.id;
+        pending.push((path.clone(), done.text.clone(), target));
+        converted.push(done);
     }
 
     // **Nothing is written until every file has converted.** Past this line a conversion that failed is
@@ -366,7 +436,7 @@ pub fn migrate(root: &Path) -> Result<Report, Problem> {
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_problem(parent, e))?;
         }
-        crate::atomic_file::write(target, yaml_text).map_err(|e| io_problem(target, e))?;
+        crate::atomic_file::write_new(target, yaml_text).map_err(|e| io_problem(target, e))?;
     }
     let archive = root.join(ARCHIVE_DIR);
     for (path, _, _) in &pending {
@@ -377,58 +447,74 @@ pub fn migrate(root: &Path) -> Result<Report, Problem> {
         }
         // A second migration of a project that already has an archive keeps the newer copy beside the
         // older one rather than replacing what a person may still want to diff.
-        let into = unique_path(&into);
+        let into = unique_path(&into)?;
         std::fs::rename(path, &into).map_err(|e| io_problem(path, e))?;
     }
     Ok(Report { converted, unplaced, archived_at: ARCHIVE_DIR.to_owned() })
 }
 
 /// `path`, or `path.1`, `path.2`, … — the first name beside it that is not taken.
-fn unique_path(path: &Path) -> PathBuf {
+///
+/// Answers a `Result` rather than panicking on an exhausted search: a folder with every one of
+/// [`ARCHIVE_COPIES`] names taken is a refusal a person can act on, not a crash.
+#[allow(clippy::result_large_err)]
+fn unique_path(path: &Path) -> Result<PathBuf, Problem> {
     if !path.exists() {
-        return path.to_path_buf();
+        return Ok(path.to_path_buf());
     }
-    for n in 1.. {
-        let name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(name) => format!("{name}.{n}"),
-            None => continue,
+    for n in 1..=ARCHIVE_COPIES {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            return Err(Problem::new(format!("{} has no file name to archive under", path.display())));
         };
-        let candidate = path.with_file_name(name);
+        let candidate = path.with_file_name(format!("{name}.{n}"));
         if !candidate.exists() {
-            return candidate;
+            return Ok(candidate);
         }
     }
-    unreachable!("the loop above answers the first free name")
+    Err(Problem::with(
+        format!("{} already has {ARCHIVE_COPIES} archived copies", path.display()),
+        Detail::default()
+            .at(Location::file(path.display().to_string()))
+            .because("every name the archive could take beside it is used")
+            .fix("move the older copies out of the archive, then run the migration again".to_owned())
+            .docs(DOCS),
+    ))
 }
 
-/// **`written`, with each RON comment `text` holds moved above the same field**; and the comments that
-/// had no place, with why.
+/// **How many copies of one file the archive keeps beside each other.** A migration run more than this
+/// many times over the same project is a mistake to fix rather than a name to invent.
+const ARCHIVE_COPIES: usize = 99;
+
+/// **`written`, with each RON comment `text` holds placed above the line it was written about**; and the
+/// comments that had no place, with why.
 ///
-/// A comment belongs to the field it sits above in the RON (`// the lattice` above `patches:`), so it is
-/// placed above the YAML line that opens that field, indented the same way. The field is found by
-/// **walking both texts side by side in field order**, not by searching for the key's text: `note:` may
-/// appear inside a string, and `patches:` may be absent from the YAML the writer emits. So a comment is
-/// carried only when the field it names is one the writer actually wrote, and every other comment is
-/// answered as unplaced rather than moved somewhere it might be wrong.
+/// **A comment can only go where a YAML parser will not read it as content**, so the lines a comment may
+/// sit above are first narrowed to the ones that open a field or an item: a line inside a `|-` block
+/// scalar is the *body of a string*, and inserting `# …` there changes the string's value. That is what
+/// [`content_lines`] answers, and it is why the caller reads the commented text back as the type before
+/// anything is written.
+///
+/// Both texts are walked **in field order**, with a cursor that only moves forward: a type names its
+/// fields once at each level, so a comment above a RON field means the next YAML line that opens a field
+/// of that name — never one further down that happens to repeat the word.
 fn carry_comments(text: &str, written: &str, file: &str) -> (String, usize, Vec<Unplaced>) {
     let lines: Vec<String> = written.lines().map(str::to_owned).collect();
-    // **Insert from the bottom up**, so an insertion cannot move the line a later one names.
+    let openable = content_lines(&lines);
     let mut placements: Vec<(usize, Vec<String>)> = Vec::new();
     // **Headers go above everything**, gathered separately: an insertion at index 0 is displaced by any
-    // other insertion at 0, which is how a file's own header ended up second behind a field's.
+    // other insertion at 0.
     let mut headers: Vec<String> = Vec::new();
     let mut unplaced = Vec::new();
+    // **The cursor**, so the walk is in field order and never looks back.
+    let mut cursor = 0usize;
     for comment in ron_comments(text) {
         let Some(key) = comment.key else {
-            // **A header describes the whole file**, so it goes above the file's first line — the one
-            // place in YAML that means the same thing.
             if comment.header {
                 headers.extend(comment.lines.iter().map(|l| format!("# {}", l.trim_end())));
-            } else if let Some(name) = comment.item_name.as_deref().and_then(|n| item_line(&lines, n)) {
-                // **A list item that names itself is found by its name**, so a comment written above a
-                // token goes above that token's row and not above the list.
+            } else if let Some(name) = comment.item_name.as_deref().and_then(|n| item_line(&lines, &openable, n)) {
                 let indent: String = lines[name].chars().take_while(|c| *c == ' ').collect();
                 placements.push((name, comment.lines.iter().map(|l| format!("{indent}# {}", l.trim_end())).collect()));
+                cursor = name;
             } else if comment.above_an_element {
                 unplaced.push(Unplaced {
                     file: file.to_owned(),
@@ -447,10 +533,11 @@ fn carry_comments(text: &str, written: &str, file: &str) -> (String, usize, Vec<
             }
             continue;
         };
-        match opening_line(&lines, &key) {
+        match opening_line(&lines, &openable, &key, cursor) {
             Some(at) => {
                 let indent: String = lines[at].chars().take_while(|c| *c == ' ').collect();
                 placements.push((at, comment.lines.iter().map(|l| format!("{indent}# {}", l.trim_end())).collect()));
+                cursor = at;
             }
             None => unplaced.push(Unplaced {
                 file: file.to_owned(),
@@ -477,25 +564,67 @@ fn carry_comments(text: &str, written: &str, file: &str) -> (String, usize, Vec<
     (out, carried, unplaced)
 }
 
-/// **The YAML line that is the list item named `name`**: `  - name: marking`. `None` when the writer
-/// emitted no item by that name, which a list of scalars does.
-fn item_line(lines: &[String], name: &str) -> Option<usize> {
-    let opening = format!("- name: {name}");
-    lines.iter().position(|line| line.trim_start().starts_with(&opening))
+/// **The indices of the lines a comment may be inserted above**: every line that is not the body of a
+/// block scalar.
+///
+/// The YAML writer puts a multi-line string in a `|-` (or `|`, `>`) block, whose body is the string's own
+/// text — so a body line that reads `status: done` is content, and a `# …` inserted above it would become
+/// part of the string. A block opens on a line whose value ends in a block indicator, and its body is the
+/// run of following lines indented deeper than it; the first line that is not deeper ends the block.
+fn content_lines(lines: &[String]) -> Vec<usize> {
+    let mut openable = Vec::with_capacity(lines.len());
+    let mut block: Option<usize> = None;
+    for (at, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+        if let Some(owner) = block {
+            // **A blank line inside a block is still content**, and a deeper one is too.
+            if trimmed.is_empty() || indent > owner {
+                continue;
+            }
+            block = None;
+        }
+        if opens_a_block(trimmed) {
+            block = Some(indent);
+        }
+        openable.push(at);
+    }
+    openable
 }
 
-/// **The YAML line that opens the field `key`**, or `None` when the writer emitted no such field.
+/// **Whether this line's value starts a block scalar**: `note: |-`, `note: >-`, `note:` `|`.
+fn opens_a_block(trimmed: &str) -> bool {
+    let Some((_, value)) = trimmed.split_once(':') else { return false };
+    let value = value.trim();
+    matches!(value, "|" | "|-" | "|+" | ">" | ">-" | ">+")
+        || value.split_whitespace().next().is_some_and(|v| matches!(v, "|" | "|-" | "|+" | ">" | ">-" | ">+"))
+}
+
+/// **The index of the list item named `name`**: the first line in `openable` that opens an item with
+/// exactly that name. **`- name: wall` is not `- name: wall_module`** — a prefix match confuses the two,
+/// and the file still reads, so nothing else would catch it.
+fn item_line(lines: &[String], openable: &[usize], name: &str) -> Option<usize> {
+    let opening = format!("- name: {name}");
+    openable.iter().copied().find(|at| {
+        let trimmed = lines[*at].trim_start();
+        trimmed == opening || trimmed.starts_with(&format!("{opening} "))
+    })
+}
+
+/// **The index of the first line in `openable` at or after `from` that opens the field `key`**, or `None`
+/// when the writer emitted no such field after that point.
 ///
 /// A field is opened by a line whose text before its first `:` is the key — `- name: x` (a sequence
-/// item's field) and `  name: x` (a mapping's) alike — so a `name:` occurring inside a scalar is never
-/// mistaken for the field. The first such line wins: a type names its field once at each level, and a
-/// comment above a RON field means the nearest one.
-fn opening_line(lines: &[String], key: &str) -> Option<usize> {
+/// item's field) and `  name: x` (a mapping's) alike. Only a line [`content_lines`] kept is considered, so
+/// a `status:` inside a block scalar's body is never mistaken for a field.
+fn opening_line(lines: &[String], openable: &[usize], key: &str, from: usize) -> Option<usize> {
     let opening = format!("{key}:");
-    lines.iter().position(|line| {
-        let trimmed = line.trim_start();
-        let trimmed = trimmed.strip_prefix("- ").unwrap_or(trimmed);
-        trimmed.starts_with(&opening)
+    openable.iter().copied().find(|at| {
+        if *at < from {
+            return false;
+        }
+        let trimmed = lines[*at].trim_start();
+        trimmed.strip_prefix("- ").unwrap_or(trimmed).starts_with(&opening)
     })
 }
 

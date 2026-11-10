@@ -1,12 +1,14 @@
-//! **`cauldron migrate` converts a project's files from RON to YAML** (GD-03, #365).
+//! **A project's files convert from RON to YAML** (GD-03, #365).
 //!
-//! Proved through the seam a person uses: the argv parser the command line and the launcher both
-//! speak ([`bevy_cauldron::args`]) reports the subcommand and the root it names, and the migration it
-//! runs converts a fixture project's every RON file to YAML that reads.
+//! This is the editor's own proof of the library: `bevy_grimoire_core::migrate` converts a fixture
+//! project's every RON file to YAML that reads back as the type the editor reads the file as. The
+//! migration is a **library** in this slice — it is not reachable from the binary yet, because the editor
+//! still opens the `.ron` paths and a project converted under a person's feet would open empty and be
+//! re-written as RON on the next save.
 //!
 //! **What this file does not claim, and why.** The issue also asks that a project holding a RON file be
-//! refused at open, and that the editor then open the migrated result. Neither can be done without
-//! editing a protected test, measured: `tests/fixtures/mod.rs` writes every fixture project as RON (27
+//! refused at open, that the editor offer the migration, and that it then open the migrated result.
+//! None of the three can be done without editing a protected test, measured: `tests/fixtures/mod.rs` writes every fixture project as RON (27
 //! `".ron"` paths), 427 protected test files open one of those fixtures and 222 name a `.ron` literal,
 //! and `bevy_grimoire_core/tests/old_data.rs` freezes 26 RON files by `include_str!`. So a refusal at
 //! open breaks those tests, and the readers (`Kits::parse`, `Map::parse`, …) still parse RON, so a
@@ -16,7 +18,6 @@
 use std::path::PathBuf;
 
 use crate::fixtures::Fixture;
-use bevy_cauldron::args;
 use bevy_grimoire_core::migrate;
 
 /// **A fixture project of this test's own**, named for the test and this process.
@@ -25,24 +26,6 @@ fn a_fixture_project(tag: &str) -> PathBuf {
         .descriptor("site/wall", "alpha")
         .place("site/wall", (2.0, 2.0))
         .build("m")
-}
-
-#[test]
-fn the_migrate_subcommand_is_read_off_the_arguments_and_names_its_root() {
-    let argv = |words: &[&str]| words.iter().map(|w| w.to_string()).collect::<Vec<_>>();
-    assert!(args::asks_to_migrate(&argv(&["migrate", "/a/project"])));
-    assert!(args::asks_to_migrate(&argv(&["migrate"])));
-    assert!(!args::asks_to_migrate(&argv(&["/a/project", "m"])), "a project opens, it does not migrate");
-    assert!(!args::asks_to_migrate(&argv(&[])), "no argument: the launcher");
-
-    let root = a_fixture_project("argv");
-    // `args::migrate_root` canonicalises, as every other root the editor takes does.
-    let named = args::migrate_root(&argv(&["migrate", &root.to_string_lossy()]))
-        .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(named, root.canonicalize().unwrap_or(root.clone()), "the root it names");
-    let refusal = args::migrate_root(&argv(&["migrate"])).expect_err("no root is refused");
-    assert!(refusal.contains("migrate"), "the refusal names the subcommand: {refusal}");
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]

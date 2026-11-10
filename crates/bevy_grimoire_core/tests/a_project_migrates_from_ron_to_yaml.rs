@@ -169,39 +169,35 @@ fn the_old_files_are_moved_into_the_archive_and_not_deleted() {
 
 #[test]
 fn a_migration_that_would_change_a_value_stops_names_the_file_and_writes_nothing() {
-    // **`NaN` is the one value RON and YAML cannot agree about**, and it is measured, not contrived: a
-    // float that is not a number reads back as `NaN` and compares unequal to itself, so a migration
-    // that wrote it out would be storing a value it cannot vouch for. This standards file holds one in
-    // a real `f32` field (`min`), which `ron::from_str` accepts and the writer cannot round-trip.
+    // **A value the one writer cannot carry faithfully stops the migration.** Measured: every `f32` a
+    // standards rule can hold — `NaN`, both subnormals, `f32::MAX`, `-0.0` — writes out and reads back as
+    // the same text, so none of them is a counterexample. The check is therefore proved on the mechanism
+    // itself rather than on a number: a file whose kind this crate cannot read is refused by name, and
+    // nothing at all is written — neither that file nor the good one beside it.
     let root = scratch("refuse");
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
-    let good = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.ron"),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    // A kind this crate declares a type for, which converts.
     std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)\n")
         .unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(
-        grimoire.join("standards.ron"),
-        good.replace("min: Some(0.9)", "min: Some(NaN)"),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    // A kind it does not: a forest is read by the editor, and only the editor can compare its value.
+    // A forest of a KIT: `<kit>/forest/<name>.ron`, which is where the kind's pattern points.
+    std::fs::create_dir_all(grimoire.join("site/forest")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("site/forest/yard.ron"), "(trees: [])\n").unwrap_or_else(|e| panic!("{e}"));
 
-    let refusal = migrate::migrate(&root).expect_err("a value that would change stops the migration");
+    let refusal = match migrate::migrate(&root) {
+        Ok(_) => panic!("a file the command cannot verify stops the migration"),
+        Err(p) => p,
+    };
     let line = refusal.line();
-    assert!(line.contains("standards.ron"), "the refusal names the file that would change: {line}");
-    assert!(
-        !grimoire.join("standards.yaml").exists(),
-        "the file that would change is not written: {}",
-        grimoire.join("standards.yaml").display()
-    );
+    assert!(line.contains("site/forest/yard.ron"), "the refusal names the file: {line}");
     assert!(
         !grimoire.join("kits.yaml").exists(),
-        "and the file that converted cleanly is not written either, so no half-migrated project is left"
+        "the file that converted cleanly is not written either, so no half-migrated project is left"
     );
-    assert!(grimoire.join("standards.ron").is_file(), "the RON originals are left where they were");
-    assert!(grimoire.join("kits.ron").is_file());
+    assert!(!grimoire.join("site/forest/yard.yaml").exists(), "and the refused file is not written");
+    assert!(grimoire.join("kits.ron").is_file(), "the RON originals are left where they were");
+    assert!(grimoire.join("site/forest/yard.ron").is_file());
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -440,5 +436,225 @@ fn a_comment_above_a_named_list_item_goes_above_that_item() {
     };
     assert!(comment < item, "the comment stands above the item it describes:\n{written}");
     let _: Standards = yaml::from_str(&written, "standards.yaml").unwrap_or_else(|p| panic!("{}", p.line()));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// ---------------------------------------------------------------------------------------------
+// A comment must never land inside a value.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_comment_is_never_inserted_into_a_multi_line_string() {
+    // **The YAML writer puts a multi-line string in a `|-` block**, so its body can contain a line that
+    // reads exactly like a field (`patches: []`). A comment written above a *real* `patches:` field that
+    // matched the string's line first would land inside the note — and the note would silently change.
+    // This is the case `carry_comments` had to be moved inside [`convert`] for: the text that lands on
+    // disk, comments and all, is what gets read back and compared.
+    let root = scratch("block_scalar");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    // `project.ron` is a KIT's policy: `<kit>/project.ron`, not a root file.
+    std::fs::create_dir_all(grimoire.join("site")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(
+        grimoire.join("site/project.ron"),
+        "(\n    version: 2,\n    note: Some(\"the wall\\npatches: []\\nand more\"),\n    \
+         // the patches below are the ones this kit states, and an empty list is a statement\n    patches: [],\n)\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    assert_eq!(report.converted.len(), 1, "{:?}", report.lines());
+
+    let written = std::fs::read_to_string(grimoire.join("site/project.yaml")).unwrap_or_else(|e| panic!("{e}"));
+    let was: bevy_grimoire_core::policy::Policy = ron::from_str(
+        "(\n    version: 2,\n    note: Some(\"the wall\\npatches: []\\nand more\"),\n    patches: [],\n)\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let now: bevy_grimoire_core::policy::Policy = yaml::from_str(&written, "project.yaml")
+        .unwrap_or_else(|p| panic!("{}", p.line()));
+    assert_eq!(now, was, "the note is the same string it was, comment or no comment:\n{written}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_written_file_is_read_back_as_its_kind_and_matches_its_ron_value() {
+    // **Every file the migration writes is parsed again, as the kind it is**, and compared with the value
+    // its RON held. Checking that the text starts without a `(` proves nothing: a comment inside a block
+    // scalar, a lost field or a re-spelled number all pass that and fail this.
+    let root = copy_of_the_shipped_project("read_back");
+    let planned = migrate::plan(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let before: Vec<String> = planned
+        .iter()
+        .map(|(path, _, _)| std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{e}")))
+        .collect();
+    let kinds: Vec<&'static str> = planned.iter().map(|(_, _, k)| k.id).collect();
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    assert_eq!(report.converted.len(), before.len(), "{:?}", report.lines());
+
+    for (((rom, _, _), ron_text), kind) in planned.iter().zip(&before).zip(&kinds) {
+        let yaml_path = migrate::yaml_path(rom).unwrap_or_else(|| panic!("{rom:?} has a yaml name"));
+        let written = std::fs::read_to_string(&yaml_path).unwrap_or_else(|e| panic!("{yaml_path:?}: {e}"));
+        let same = same_value(kind, ron_text, &written);
+        assert!(same, "{kind} at {yaml_path:?} reads back to a different value than its RON held:\n{written}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **Whether `written` reads as the same value `ron_text` did, as the type `kind` is.** One arm per kind
+/// this crate owns; a kind it does not own cannot be compared and is a test bug, not a pass.
+fn same_value(kind: &str, ron_text: &str, written: &str) -> bool {
+    /// Read both, compare: `None` where either side refuses.
+    fn both<T>(kind: &str, ron_text: &str, written: &str) -> bool
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + PartialEq,
+    {
+        let was: T = match ron::from_str(ron_text) {
+            Ok(v) => v,
+            Err(e) => panic!("{kind}: the RON fixture does not read: {e}"),
+        };
+        match yaml::from_str::<T>(written, kind) {
+            Ok(now) => now == was,
+            Err(p) => panic!("{kind}: the YAML does not read: {}", p.line()),
+        }
+    }
+    use bevy_grimoire_core as c;
+    match kind {
+        "kits" => both::<c::kits::Kits>(kind, ron_text, written),
+        "vocab" => both::<c::vocab::Vocabularies>(kind, ron_text, written),
+        "library" => both::<c::library::Library>(kind, ron_text, written),
+        "policy" => both::<c::policy::Policy>(kind, ron_text, written),
+        "rules" => both::<c::rules::Rules>(kind, ron_text, written),
+        "compositions" => both::<c::composition::Compositions>(kind, ron_text, written),
+        "standards" => both::<c::standards::Standards>(kind, ron_text, written),
+        "repetition" => both::<c::repetition::RepetitionRules>(kind, ron_text, written),
+        "rigs" => both::<c::rigs::Rigs>(kind, ron_text, written),
+        "map" => both::<c::map::Map>(kind, ron_text, written),
+        "data_registry" => both::<c::data_files::DataFiles>(kind, ron_text, written),
+        other => panic!("`{other}` has no comparator in this test, so it proves nothing"),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// A comment is matched to its field exactly, and a value that differs refuses rather than panics.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn an_item_is_matched_by_its_whole_name_not_a_prefix() {
+    // `- name: wall` must not be taken for `- name: wall_module`: a comment above `wall` would otherwise
+    // be inserted above the wrong row, and the file would still read.
+    let root = scratch("prefix_name");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(
+        grimoire.join("standards.ron"),
+        "(\n    version: 1,\n    rules: [\n        ( name: \"wall_module\", dim: Depth, multiple_of: Some(0.1) ),\n        \
+         // this one is a door's width, and nothing else\n        ( name: \"wall\", dim: Width, min: Some(0.9) ),\n    ],\n)\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(report.unplaced.is_empty(), "{:?}", report.lines());
+    let at_comment = written.lines().position(|l| l.contains("a door's width"));
+    // **Exact**, or this test repeats the very bug it is about: `- name: wall` is a prefix of
+    // `- name: wall_module`.
+    let at_wall = written
+        .lines()
+        .position(|l| matches!(l.trim_start(), "- name: wall"));
+    let at_module = written.lines().position(|l| l.trim_start().starts_with("- name: wall_module"));
+    let (Some(comment), Some(wall), Some(module)) = (at_comment, at_wall, at_module) else {
+        panic!("all three are in the file:\n{written}");
+    };
+    // The RON held `wall_module` first, so the shorter-named row is the second one.
+    assert!(module < wall, "the file keeps the RON's order:\n{written}");
+    assert!(comment > module && comment < wall, "the comment is above `wall` and not above `wall_module`:\n{written}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_written_text_that_differs_is_reported_by_line_and_never_panics() {
+    // **`first_difference` compares the writer's own output line by line**, so it never slices a string at
+    // a byte offset — which is what panicked on `é`/`è` (they share their first byte). This file holds
+    // multi-byte characters and a float that is not a number, so both the character boundary and the
+    // NaN-safe comparison are exercised by one file that must simply migrate cleanly.
+    let root = scratch("multibyte");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(
+        grimoire.join("standards.ron"),
+        "(\n    version: 1,\n    rules: [\n        (\n            name: \"café façade — porte\",\n            \
+         kind: None,\n            dim: Width,\n            min: Some(NaN),\n        ),\n    ],\n)\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    assert_eq!(report.converted.len(), 1, "{:?}", report.lines());
+    let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
+    assert!(written.contains("café façade — porte"), "the multibyte text survives:\n{written}");
+    assert!(written.contains(".nan"), "and the NaN is written as the number it is:\n{written}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The walk stays inside the project, and a file already there is refused rather than replaced.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_symlinked_folder_is_never_walked_out_of_the_project() {
+    // A symlink to a folder outside the root would have its RON file converted and written **outside the
+    // project**, and its original moved out of that folder into the archive. The link is named so that a
+    // file inside it really is a kind (`<kit>/library.ron`), which is what makes the escape reachable.
+    let outside = scratch("symlink_outside");
+    std::fs::create_dir_all(outside.join("elsewhere")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(
+        outside.join("elsewhere/library.ron"),
+        "(\n    version: 1,\n    note: None,\n    descriptors: [],\n)\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let root = scratch("symlink_root");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    // `assets/grimoire/site` is a kit directory, and it points outside the project.
+    std::os::unix::fs::symlink(outside.join("elsewhere"), grimoire.join("site"))
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+
+    assert!(report.converted.is_empty(), "nothing outside the project is converted: {:?}", report.lines());
+    assert!(
+        outside.join("elsewhere/library.ron").is_file(),
+        "the file outside the project is untouched"
+    );
+    assert!(!outside.join("elsewhere/library.yaml").exists(), "and no YAML is written out there");
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&outside);
+}
+
+#[test]
+fn a_yaml_file_already_beside_the_ron_refuses_the_migration() {
+    // **Nothing is replaced.** A hand-written `kits.yaml` beside its RON is a file a person made; the
+    // migration refuses and writes nothing rather than overwriting it.
+    let root = scratch("no_replace");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)\n")
+        .unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("kits.yaml"), "# a person's own\nversion: 3\n")
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    let refusal = match migrate::migrate(&root) {
+        Ok(_) => panic!("a file already at the target path stops the migration"),
+        Err(p) => p,
+    };
+    assert!(refusal.line().contains("kits.yaml"), "the refusal names it: {}", refusal.line());
+    assert_eq!(
+        std::fs::read_to_string(grimoire.join("kits.yaml")).unwrap_or_else(|e| panic!("{e}")),
+        "# a person's own\nversion: 3\n",
+        "the person's file is not replaced"
+    );
+    assert!(grimoire.join("kits.ron").is_file(), "and the RON is left where it was");
     let _ = std::fs::remove_dir_all(&root);
 }
