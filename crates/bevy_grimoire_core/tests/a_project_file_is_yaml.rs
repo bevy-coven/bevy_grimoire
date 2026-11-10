@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-use bevy_grimoire_core::migrate;
+use bevy_grimoire_migrate as migrate;
 use bevy_grimoire_core::play::PlayConfig;
 
 /// A throwaway project folder of this test's own: its name and the process, so two tests in one binary
@@ -76,7 +76,7 @@ fn a_project_holding_ron_files_is_refused_naming_the_command() {
 
     assert!(problem.line().contains("agent.ron"), "the refusal names the file it met: {}", problem.line());
     assert!(
-        problem.line().contains(bevy_grimoire_core::migrate::COMMAND),
+        problem.line().contains(bevy_grimoire_migrate::COMMAND),
         "the refusal names the command that fixes it: {}",
         problem.line()
     );

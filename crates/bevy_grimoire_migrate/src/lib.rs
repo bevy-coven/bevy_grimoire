@@ -26,4 +26,4 @@
 
 pub mod migrate;
 
-pub use migrate::{ARCHIVE_DIR, COMMAND, Converted, GRIMOIRE_DIR, Report, RON_EXT, Unplaced, YAML_EXT, leftover, migrate as convert_project, migrate_moved, plan, written_as_yaml, yaml_path};
+pub use migrate::{ARCHIVE_DIR, COMMAND, Converted, GRIMOIRE_DIR, READS_YAML, RON_EXT, Report, Unplaced, YAML_EXT, leftover, migrate as convert_project, migrate_moved, plan, read_ron, reads_as_ron, reads_yaml, written_as_yaml, yaml_path};

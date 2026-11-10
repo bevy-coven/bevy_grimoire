@@ -886,6 +886,26 @@ pub fn reads_yaml(kind: &str) -> bool {
     READS_YAML.contains(&kind)
 }
 
+/// **Read `text` as a `T` from the RON an earlier release wrote**, which is what a frozen fixture is.
+///
+/// The migration's own reader, exposed so a test that holds a release's file can say what value it held
+/// before comparing it with the YAML the migration wrote. It is the only reader of the old spelling left
+/// in the workspace, and it lives here for the reason this crate exists: nothing in a running program
+/// reads RON any more, and a fixture is not a running program.
+pub fn read_ron<T: DeserializeOwned>(text: &str) -> Result<T, String> {
+    ron::from_str(text).map_err(|e: ron::error::SpannedError| e.to_string())
+}
+
+/// **Whether `text` also reads as a RON document**, which after the cutover nothing should.
+///
+/// The cutover's whole claim is one spelling per file, and a reader that took both would be the second
+/// path it exists to remove. So a test can write what this build writes and ask this whether the old
+/// reader would have taken it too: a YAML document that also reads as RON means a kind kept its old
+/// reader beside its new one.
+pub fn reads_as_ron(text: &str) -> bool {
+    ron::from_str::<ron::Value>(text).is_ok()
+}
+
 /// **One project file's text, as YAML, from the RON it was written in** — the conversion [`migrate`] runs,
 /// for one file a caller already holds in memory.
 ///

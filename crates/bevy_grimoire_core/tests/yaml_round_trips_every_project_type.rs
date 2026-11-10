@@ -64,10 +64,10 @@ fn frozen<T: DeserializeOwned>(rel: &str, project_name: &str) -> T {
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     // **A frozen file is never edited**: it is read as it was written and converted by the migration, which
     // is the one conversion proved lossless.
-    let (_, converted) = bevy_grimoire_core::migrate::written_as_yaml(
+    let (_, converted) = bevy_grimoire_migrate::written_as_yaml(
         project_name,
         &text,
-        bevy_grimoire_core::migrate::COMMAND,
+        bevy_grimoire_migrate::COMMAND,
     )
     .unwrap_or_else(|p| panic!("{}: {}", path.display(), p.line()));
     yaml::from_str(&converted, rel).unwrap_or_else(|p| panic!("{} does not read: {}", path.display(), p.line()))

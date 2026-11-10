@@ -13,7 +13,9 @@ fn map_with(placed: &[(&str, f32, f32)]) -> Map {
 }
 
 fn blank() -> Placed {
-    ron::from_str(r#"(id: "x", descriptor: "d", at: (0.0, 0.0), yaw: 0.0)"#).expect("a placement")
+    // **A placement is a row of a map, not a file of its own** (GD-03, #365): the map's YAML reader is where
+    // its shape is checked (`tests/yaml_round_trips_every_project_type.rs`), so a fixture here is the struct.
+    Placed { id: "x".into(), descriptor: "d".into(), at: (0.0, 0.0), yaw: 0.0, ..Placed::default() }
 }
 
 const CAM: (f32, f32, f32, f32, f32) = (1.0, 9.0, 2.0, 0.5, -0.8);

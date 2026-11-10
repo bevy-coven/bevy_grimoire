@@ -34,7 +34,7 @@ fn main() {
     // in the script would be a second place a kind has to move, and the two disagreeing rewrites YAML under
     // a reader that still wants RON.
     if std::env::args().skip(1).any(|a| a == "--moved-kinds") {
-        for kind in bevy_grimoire_core::migrate::READS_YAML {
+        for kind in bevy_grimoire_migrate::READS_YAML {
             println!("{kind}");
         }
         return;
@@ -54,7 +54,7 @@ fn main() {
     };
     let done: Vec<Done> = asks
         .into_iter()
-        .map(|ask| match bevy_grimoire_core::migrate::written_as_yaml(ask.kind.as_str(), &ask.text, bevy_grimoire_core::migrate::COMMAND) {
+        .map(|ask| match bevy_grimoire_migrate::written_as_yaml(ask.kind.as_str(), &ask.text, bevy_grimoire_migrate::COMMAND) {
             Ok((_, yaml)) => Done { id: ask.id, yaml: Some(yaml), why: None },
             Err(problem) => Done { id: ask.id, yaml: None, why: Some(problem.line()) },
         })

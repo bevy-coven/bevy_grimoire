@@ -52,6 +52,12 @@ schemars.workspace = true
 # validator can say so. It is a dev-dependency because nothing in the product validates a document
 # against a schema at runtime: an editor does, and this crate only generates the schema.
 [dev-dependencies]
+# **The RON reader, which is no longer a dependency of this crate** (GD-03, #365). The migration has to read
+# a release's files as it wrote them, and its tests compare the YAML it writes against the value those files
+# held; so the reader sits in `bevy_grimoire_migrate` and a TEST depends on it. `the_dependency_list_stays_closed`
+# only reads `[dependencies]`, so this is invisible to the ratchet, and that is the point: nothing in the
+# product half of this crate can reach RON.
+bevy_grimoire_migrate = { path = "../bevy_grimoire_migrate", version = "0.1.0" }
 # **No default features**: with them, `jsonschema` is ~50 crates including `reqwest` and
 # `aws-lc-sys`, for a remote `$ref` resolver, a CLI and a language binding this test never uses. A schema
 # here is one local document whose `$defs` are in the same file, so nothing needs fetching.

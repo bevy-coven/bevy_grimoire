@@ -119,14 +119,14 @@ fn main() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/site");
     let library: Library = match std::fs::read_to_string(root.join("library.yaml"))
         .map_err(|e| e.to_string())
-        .and_then(|t| ron::from_str(&t).map_err(|e| e.to_string()))
+        .and_then(|t| Library::parse(&t))
     {
         Ok(l) => l,
         Err(e) => return eprintln!("cannot read the site library: {e}"),
     };
     let comps: Compositions = match std::fs::read_to_string(root.join("compositions.yaml"))
         .map_err(|e| e.to_string())
-        .and_then(|t| ron::from_str(&t).map_err(|e| e.to_string()))
+        .and_then(|t| Compositions::parse(&t))
     {
         Ok(c) => c,
         Err(e) => return eprintln!("cannot read the site compositions: {e}"),

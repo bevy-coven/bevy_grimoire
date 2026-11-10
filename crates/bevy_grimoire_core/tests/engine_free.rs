@@ -94,7 +94,6 @@ use std::path::{Path, PathBuf};
 const ALLOWED_DEPS: &[&str] = &[
     "serde",
     "serde_json",
-    "ron",
     "rand",
     "rand_chacha",
     "bevy_grimoire_rng",

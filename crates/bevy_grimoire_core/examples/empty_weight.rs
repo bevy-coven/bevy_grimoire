@@ -37,11 +37,11 @@ const NON_CONVERGENCE_GATE: f32 = 0.20;
 fn main() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/site");
     let read = |name: &str| std::fs::read_to_string(root.join(name)).map_err(|e| e.to_string());
-    let library: Library = match read("library.yaml").and_then(|t| ron::from_str(&t).map_err(|e| e.to_string())) {
+    let library: Library = match read("library.yaml").and_then(|t| Library::parse(&t)) {
         Ok(l) => l,
         Err(e) => return eprintln!("cannot read the site library: {e}"),
     };
-    let comps: Compositions = match read("compositions.yaml").and_then(|t| ron::from_str(&t).map_err(|e| e.to_string())) {
+    let comps: Compositions = match read("compositions.yaml").and_then(|t| Compositions::parse(&t)) {
         Ok(c) => c,
         Err(e) => return eprintln!("cannot read the site compositions: {e}"),
     };

@@ -1258,13 +1258,13 @@ dependencies = [
 name = "bevy_grimoire_core"
 version = "0.10.1"
 dependencies = [
+ "bevy_grimoire_migrate",
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",
  "dirs",
  "jsonschema",
  "rand",
  "rand_chacha",
- "ron",
  "saphyr-parser",
  "schemars",
  "serde",

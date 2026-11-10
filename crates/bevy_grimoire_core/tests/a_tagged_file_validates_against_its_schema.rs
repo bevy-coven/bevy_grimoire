@@ -50,10 +50,10 @@ fn frozen(rel: &str) -> String {
 fn frozen_as_yaml(rel: &str, project_name: &str) -> String {
     // **The migration matches a file by the name a project gives it** (`maps/yard.notes.ron`), not by the path
     // it is frozen at (`core-0.3.0/notes.ron`), so the caller says both.
-    let (_, text) = bevy_grimoire_core::migrate::written_as_yaml(
+    let (_, text) = bevy_grimoire_migrate::written_as_yaml(
         project_name,
         &frozen(rel),
-        bevy_grimoire_core::migrate::COMMAND,
+        bevy_grimoire_migrate::COMMAND,
     )
     .unwrap_or_else(|p| panic!("{}", p.line()));
     text

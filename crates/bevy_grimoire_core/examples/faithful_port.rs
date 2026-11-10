@@ -177,9 +177,10 @@ fn main() {
     );
 }
 
+/// **Read a project file the one way this build reads one** (GD-03, #365): through the YAML reader every
+/// kind goes through, which refuses a file of another version and names the field it is wrong at.
 fn read<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Result<T, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    ron::from_str(&text).map_err(|e| e.to_string())
+    bevy_grimoire_core::yaml::read(path).map_err(|p| p.line())
 }
 
 /// One WFC arrangement over the same region, through the path the editor uses today.

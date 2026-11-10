@@ -17,7 +17,7 @@
 
 use std::path::{Path, PathBuf};
 
-use bevy_grimoire_core::migrate;
+use bevy_grimoire_migrate as migrate;
 
 /// A throwaway project folder of this test's own: its name and the process id, so a test binary that runs
 /// two of these never shares a path.

@@ -31,10 +31,10 @@ fn frozen(rel: &str) -> String {
 /// (`tests/a_project_migrates_from_ron_to_yaml.rs`). A frozen file is never edited; it is read as it was
 /// written and converted here.
 fn frozen_yaml(rel: &str, project_name: &str) -> String {
-    let (_, text) = bevy_grimoire_core::migrate::written_as_yaml(
+    let (_, text) = bevy_grimoire_migrate::written_as_yaml(
         project_name,
         &frozen(rel),
-        bevy_grimoire_core::migrate::COMMAND,
+        bevy_grimoire_migrate::COMMAND,
     )
     .unwrap_or_else(|p| panic!("{}", p.line()));
     text

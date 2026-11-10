@@ -20,7 +20,7 @@
 //! A frozen file is never edited. A type that has to change shape bumps its version, migrates the old
 //! version and keeps the old file reading; the new version's file is added beside the old one.
 
-use bevy_grimoire_core::migrate;
+use bevy_grimoire_migrate as migrate;
 use bevy_grimoire_core::reload::{self, KINDS};
 use bevy_grimoire_core::reload_check::{self, Check};
 

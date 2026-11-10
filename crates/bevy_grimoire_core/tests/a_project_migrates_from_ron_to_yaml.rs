@@ -12,7 +12,8 @@
 
 use std::path::{Path, PathBuf};
 
-use bevy_grimoire_core::migrate::{self, ARCHIVE_DIR, COMMAND};
+use bevy_grimoire_migrate::{ARCHIVE_DIR, COMMAND};
+use bevy_grimoire_migrate as migrate;
 use bevy_grimoire_core::{standards::Standards, yaml};
 
 /// **A scratch project of this test's own**, named for the test and this process.
@@ -87,7 +88,7 @@ fn the_shipped_project_is_yaml_so_the_migration_has_nothing_to_do_on_it() {
         planned.iter().map(|(_, rel, kind)| format!("{rel} ({})", kind.id)).collect::<Vec<_>>()
     );
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     assert!(report.converted.is_empty(), "nothing to convert: {:?}", report.lines());
 
     // **And every file it does hold reads as the type that owns it**, which is the value the old test
@@ -125,9 +126,9 @@ fn a_kind_holding_an_enum_and_an_option_reads_back_to_the_same_value() {
     // **A frozen file keeps its own name**: it is what a release wrote, so it is `standards.ron` on disk
     // until the migration converts it.
     std::fs::write(grimoire.join("standards.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
-    let was: Standards = ron::from_str(&text).unwrap_or_else(|e| panic!("the fixture is RON: {e}"));
+    let was: Standards = migrate::read_ron(&text).unwrap_or_else(|e| panic!("the fixture is RON: {e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(report.converted.len(), 1, "{:?}", report.lines());
 
     let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
@@ -147,7 +148,7 @@ fn the_old_files_are_moved_into_the_archive_and_not_deleted() {
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(grimoire.join("standards.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 
     let archived = root.join(ARCHIVE_DIR).join(migrate::GRIMOIRE_DIR).join("standards.ron");
     assert!(archived.is_file(), "the RON original is in the archive: {}", archived.display());
@@ -179,7 +180,7 @@ fn a_migration_that_would_change_a_value_stops_names_the_file_and_writes_nothing
     std::fs::create_dir_all(grimoire.join("site/forest")).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(grimoire.join("site/forest/yard.ron"), "(trees: [])\n").unwrap_or_else(|e| panic!("{e}"));
 
-    let refusal = match migrate::migrate(&root) {
+    let refusal = match migrate::convert_project(&root) {
         Ok(_) => panic!("a file the command cannot verify stops the migration"),
         Err(p) => p,
     };
@@ -206,7 +207,7 @@ fn a_comment_is_carried_above_the_field_it_was_written_about() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
     assert!(
@@ -232,7 +233,7 @@ fn a_header_comment_goes_at_the_top_of_the_file() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
     assert!(report.unplaced.is_empty(), "a header has a place, so nothing is unplaced: {:?}", report.lines());
@@ -258,7 +259,7 @@ fn a_comment_after_the_last_field_is_listed_and_never_dropped() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 
     assert_eq!(report.unplaced.len(), 1, "{:?}", report.lines());
     assert!(report.unplaced[0].comment.contains("measured against the shipped kits"));
@@ -391,7 +392,7 @@ fn every_file_a_release_wrote_converts_losslessly() {
             std::fs::create_dir_all(parent).unwrap_or_else(|e| panic!("{parent:?}: {e}"));
         }
         std::fs::write(&at, text).unwrap_or_else(|e| panic!("{at:?}: {e}"));
-        match migrate::migrate(&root) {
+        match migrate::convert_project(&root) {
             Ok(_) => {}
             Err(p) => broken.push(format!("{kind} ({file}): {}", p.line())),
         }
@@ -418,7 +419,7 @@ fn a_comment_above_a_named_list_item_goes_above_that_item() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
     assert!(report.unplaced.is_empty(), "the token names itself, so its comment has a place: {:?}", report.lines());
@@ -457,11 +458,11 @@ fn a_comment_is_never_inserted_into_a_multi_line_string() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(report.converted.len(), 1, "{:?}", report.lines());
 
     let written = std::fs::read_to_string(grimoire.join("site/project.yaml")).unwrap_or_else(|e| panic!("{e}"));
-    let was: bevy_grimoire_core::policy::Policy = ron::from_str(
+    let was: bevy_grimoire_core::policy::Policy = migrate::read_ron(
         "(\n    version: 2,\n    note: Some(\"the wall\\npatches: []\\nand more\"),\n    patches: [],\n)\n",
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -484,7 +485,7 @@ fn a_written_file_is_read_back_as_its_kind_and_matches_its_ron_value() {
         .collect();
     let kinds: Vec<&'static str> = planned.iter().map(|(_, _, k)| k.id).collect();
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(report.converted.len(), before.len(), "{:?}", report.lines());
 
     for (((rom, _, _), ron_text), kind) in planned.iter().zip(&before).zip(&kinds) {
@@ -504,7 +505,7 @@ fn same_value(kind: &str, ron_text: &str, written: &str) -> bool {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + PartialEq,
     {
-        let was: T = match ron::from_str(ron_text) {
+        let was: T = match bevy_grimoire_migrate::read_ron(ron_text) {
             Ok(v) => v,
             Err(e) => panic!("{kind}: the RON fixture does not read: {e}"),
         };
@@ -548,7 +549,7 @@ fn an_item_is_matched_by_its_whole_name_not_a_prefix() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
 
     assert!(report.unplaced.is_empty(), "{:?}", report.lines());
@@ -584,7 +585,7 @@ fn a_written_text_that_differs_is_reported_by_line_and_never_panics() {
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     assert_eq!(report.converted.len(), 1, "{:?}", report.lines());
     let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
     assert!(written.contains("café façade — porte"), "the multibyte text survives:\n{written}");
@@ -616,7 +617,7 @@ fn a_symlinked_folder_is_never_walked_out_of_the_project() {
     std::os::unix::fs::symlink(outside.join("elsewhere"), grimoire.join("site"))
         .unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 
     assert!(report.converted.is_empty(), "nothing outside the project is converted: {:?}", report.lines());
     assert!(
@@ -641,7 +642,7 @@ fn a_yaml_file_already_beside_the_ron_refuses_the_migration() {
     std::fs::write(grimoire.join("kits.yaml"), "# a person's own\nversion: 3\n")
         .unwrap_or_else(|e| panic!("{e}"));
 
-    let refusal = match migrate::migrate(&root) {
+    let refusal = match migrate::convert_project(&root) {
         Ok(_) => panic!("a file already at the target path stops the migration"),
         Err(p) => p,
     };
@@ -671,7 +672,7 @@ fn every_comment_in_the_shipped_rigs_file_finds_its_field() {
         .unwrap_or_else(|e| panic!("the shipped rigs.ron: {e}"));
     std::fs::write(grimoire.join("rigs.yaml"), &text).unwrap_or_else(|e| panic!("{e}"));
 
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 
     assert_eq!(
         report.unplaced.len(),

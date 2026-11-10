@@ -3,7 +3,7 @@
 //! The cutover's second batch: the files that sit at `assets/grimoire/` on their own — `kits.yaml`,
 //! `vocab.yaml`, `compositions.yaml`, `rules.yaml`, `standards.yaml`, `repetition.yaml`, `rigs.yaml` and
 //! `family.yaml` — plus the two at the game's root, `data.yaml` in a kit and the destructive pair. Each was
-//! read by `ron::from_str` and written by `ron::ser::to_string_pretty`; each reads YAML and writes through
+//! read by RON and written by `ron::ser::to_string_pretty`; each reads YAML and writes through
 //! [`bevy_grimoire_core::yaml`] now, and each kind's path in `reload::KINDS` ends `.yaml`.
 //!
 //! **This is the half the reload table cannot prove.** A table row is a string, and a string is right in a
@@ -171,7 +171,7 @@ fn every_project_root_kind_reads_the_yaml_its_writer_writes_and_refuses_the_ron_
         // **One spelling.** The type's RON reader no longer exists, so the same text must not read as RON:
         // a reader that took both would be the second path the cutover exists to remove.
         assert!(
-            ron::from_str::<ron::Value>(&text).is_err(),
+            !bevy_grimoire_migrate::reads_as_ron(&text),
             "`{}`'s YAML reads as RON too, so the cutover left a second spelling:\n{text}",
             kind.id
         );
@@ -200,7 +200,7 @@ fn a_project_holding_any_root_kind_as_ron_is_refused_naming_that_file() {
         std::fs::create_dir_all(ron.parent().unwrap_or(&root)).unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(&ron, "(version: 1)").unwrap_or_else(|e| panic!("{e}"));
 
-        let problem = bevy_grimoire_core::migrate::leftover(&root, bevy_grimoire_core::migrate::COMMAND)
+        let problem = bevy_grimoire_migrate::leftover(&root, bevy_grimoire_migrate::COMMAND)
             .unwrap_or_else(|p| panic!("{}", p.line()))
             .unwrap_or_else(|| panic!("`{path}` as RON is a file nothing reads, so an open must refuse it"));
         // **The refusal names the file it met**, which is the `.ron` spelling, as the project sees it.
@@ -208,12 +208,12 @@ fn a_project_holding_any_root_kind_as_ron_is_refused_naming_that_file() {
         let named = match kind.base {
             bevy_grimoire_core::reload::Base::Root => ron.clone(),
             bevy_grimoire_core::reload::Base::Grimoire => {
-                format!("{}/{ron}", bevy_grimoire_core::migrate::GRIMOIRE_DIR)
+                format!("{}/{ron}", bevy_grimoire_migrate::GRIMOIRE_DIR)
             }
         };
         assert!(problem.line().contains(&named), "the refusal names the file it met (`{named}`): {}", problem.line());
         assert!(
-            problem.line().contains(bevy_grimoire_core::migrate::COMMAND),
+            problem.line().contains(bevy_grimoire_migrate::COMMAND),
             "the refusal names the command that fixes it: {}",
             problem.line()
         );

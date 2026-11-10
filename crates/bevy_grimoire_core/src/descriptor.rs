@@ -2011,7 +2011,7 @@ mod face_tests {
 
     /// A face survives the file it is written in.
     #[test]
-    fn a_front_round_trips_through_ron() {
+    fn a_front_round_trips_through_yaml() {
         let before = Descriptor {
             id: "chair".into(),
             align: Align {
@@ -2021,7 +2021,10 @@ mod face_tests {
             ..Descriptor::default()
         };
         let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
-        assert!(text.contains("front: Some(East)"), "{text}");
+        // **YAML spells a unit enum variant as a plain scalar** (GD-03, #365), where RON wrote `Some(East)`:
+        // an `Option` of one is the value itself or nothing at all, and the tag a variant with fields gets
+        // (`!Near`) is not wanted for a bare name.
+        assert!(text.contains("front: East"), "{text}");
         let after: Descriptor = crate::yaml::from_str(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(before, after);
     }
@@ -2391,7 +2394,7 @@ mod rotate_tests {
 
     /// A rotation survives the file, and reads as degrees rather than as a count nobody can picture.
     #[test]
-    fn a_rotation_round_trips_through_ron() {
+    fn a_rotation_round_trips_through_yaml() {
         let before = Descriptor {
             id: "door".into(),
             align: Align {
@@ -2401,7 +2404,10 @@ mod rotate_tests {
             ..Descriptor::default()
         };
         let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
-        assert!(text.contains("rotate: Some((90, 0, 180))"), "{text}");
+        // **A tuple is a YAML sequence** (GD-03, #365), and an `Option` of one is the sequence or `null`:
+        // there is no `Some(...)` wrapper to write, which is the whole difference the cutover makes to a
+        // file a person reads.
+        assert!(text.contains("rotate:\n      - 90\n      - 0\n      - 180"), "{text}");
         assert_eq!(
             crate::yaml::from_str::<Descriptor>(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line())),
             before
