@@ -544,6 +544,7 @@ mod the_agent_led_is_dark_with_no_agent_tab;
 mod the_agent_block_lists_the_plan;
 mod the_agent_guide_has_three_layers;
 mod the_agent_guide_on_the_project_page;
+mod the_guide_is_a_file_kind;
 mod a_broken_relation_is_a_problem_with_go_to;
 mod a_note_body_is_edited_on_several_lines;
 mod the_data_panel_is_a_table_and_a_cell_edit_is_one_data_set;
