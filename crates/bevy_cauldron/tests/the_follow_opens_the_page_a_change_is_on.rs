@@ -93,7 +93,7 @@ fn project(tag: &str) -> std::path::PathBuf {
         .expect("valkyrie.glb");
     // A registered data file with two leaves, so the DATA table has rows to select.
     let kit = root.join("assets/grimoire/furniture");
-    std::fs::write(kit.join("mob.yaml"), "// tuning\n(mob: (speed: 1.50, name: \"orc\"))\n").expect("mob.yaml");
+    std::fs::write(kit.join("mob.yaml"), "# tuning\nmob:\n  speed: 1.50\n  name: orc\n").expect("mob.yaml");
     std::fs::write(
         kit.join("data.yaml"),
         "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}",

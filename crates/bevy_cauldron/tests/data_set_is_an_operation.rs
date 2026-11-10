@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::fixtures;
 
-const TEXT: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+const TEXT: &str = "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\nfast: false\n";
 
 fn project(tag: &str, registry: bool) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
@@ -47,7 +47,7 @@ fn a_leaf_is_set_read_back_and_one_undo_leaves_the_file_byte_identical() {
     assert!(matches!(set(&mut ctx, "mob.speed", json!(2.5)).unwrap(), Applied::Done { .. }));
     assert_eq!(
         std::fs::read_to_string(&file).unwrap(),
-        "// tuning\n(mob: (speed: 2.5, name: \"orc\", hp: 7), fast: false)\n"
+        "# tuning\nmob:\n  speed: 2.5\n  name: orc\n  hp: 7\nfast: false\n"
     );
     ops::undo(&mut ctx, None).unwrap();
     assert_eq!(std::fs::read_to_string(&file).unwrap(), TEXT, "`1.50` comes back as `1.50`");

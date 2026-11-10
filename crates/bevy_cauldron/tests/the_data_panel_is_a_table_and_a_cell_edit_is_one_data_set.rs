@@ -15,7 +15,7 @@ use bevy_gooey::{RowActivated, RowSource, Table, TextInputOf, TextInputValue};
 
 use crate::fixtures;
 
-const TEXT: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+const TEXT: &str = "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\nfast: false\n";
 
 fn editor(tag: &str, registry: bool) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
@@ -92,7 +92,7 @@ fn a_cell_edited_in_place_is_one_data_set_in_the_log_and_the_file() {
     testing::press(&mut app, KeyCode::Enter);
     settle(&mut app);
 
-    assert_eq!(std::fs::read_to_string(&file).unwrap(), "// tuning\n(mob: (speed: 2.5, name: \"orc\", hp: 7), fast: false)\n");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "# tuning\nmob:\n  speed: 2.5\n  name: orc\n  hp: 7\nfast: false\n");
     let project = app.world().resource::<Project>().clone();
     let sets: Vec<_> = ops::read_entries(&ops::oplog_path(&project)).into_iter().filter(|e| e.op == "data_set").collect();
     assert_eq!(sets.len(), 1, "one data_set line: {sets:?}");

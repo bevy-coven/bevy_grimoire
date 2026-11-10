@@ -304,6 +304,13 @@ pub fn edit_map(path: &Path, edit: impl FnOnce(&mut Map)) {
     write_yaml(path, &map);
 }
 
+/// **Put one stamp in a fixture map**, written as the YAML flow mapping a person would write. The map's
+/// own writer leaves an empty `stamps` out, so there is no line to fill: the stamp is added the typed way.
+pub fn add_stamp(map_path: &Path, stamp: &str) {
+    let stamp: bevy_grimoire_core::composition::Stamped = parse_fragment(stamp, "the stamp");
+    edit_map(map_path, |map| map.stamps.push(stamp));
+}
+
 impl Fixture {
     /// An empty project: a vocabulary, an empty library, a policy, and the font.
     pub fn new(name: &str) -> Fixture {

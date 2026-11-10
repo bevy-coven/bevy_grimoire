@@ -57,7 +57,7 @@ fn project(tag: &str) -> std::path::PathBuf {
     // **Two leaves, so the cursor has a wrong answer to be caught on**: a reveal that selected the
     // table's first row rather than the file's would pass a `cursor.is_some()` check.
     let kit = root.join("assets/grimoire/furniture");
-    std::fs::write(kit.join("mob.yaml"), "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7))\n").expect("mob.yaml");
+    std::fs::write(kit.join("mob.yaml"), "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\n").expect("mob.yaml");
     std::fs::write(
         kit.join("data.yaml"),
         "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}",

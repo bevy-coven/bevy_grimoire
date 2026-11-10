@@ -23,12 +23,12 @@ use crate::fixtures;
 /// valid settings file and the edit between any two is exactly the clock.
 fn settings_at(hour: &str) -> String {
     let base = include_str!("fixtures/bevy_elements.yaml");
-    let line = "        hour: 6.0,";
+    let line = "  hour: 6.0\n";
     assert!(
         base.contains(line),
         "the fixture's clock line changed; this helper edits exactly one line and must not guess"
     );
-    base.replace(line, &format!("        hour: {hour},"))
+    base.replace(line, &format!("  hour: {hour}\n"))
 }
 
 const FILE: &str = "family/bevy_elements.yaml";

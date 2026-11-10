@@ -82,7 +82,7 @@ fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_la
     let before = problems(app.world()).len();
     run_until(&mut app, |w| problems(w).len() > before);
     let probs = problems(app.world());
-    assert!(probs.iter().any(|p| p.contains("bevy_gooey") && p.contains("not valid RON")), "{probs:?}");
+    assert!(probs.iter().any(|p| p.contains("bevy_gooey") && p.contains("not valid YAML")), "{probs:?}");
     assert_eq!(game(app.world()).map(|s| s.accent), Some(blue));
 
     // A skin the crate's own rules refuse is applied, and each broken rule is a problem.

@@ -16000,18 +16000,7 @@ mod block_rules {
     /// the only thing the layout has to satisfy is the border and the pins.
     fn rule(example: &str, regions: &str, border: &str) -> String {
         format!(
-            "version: 1\n\
-             blocks:\n\
-             - example: {example}\n\
-               regions: [{regions}]\n\
-               cell: 2.0\n\
-               size: [4, 4]\n\
-               border: {border}\n\
-               no_empty: true\n\
-               weights: []\n\
-               footprints: []\n\
-               attempts: 8\n\
-               seed: 7\n"
+            "version: 1\nblocks:\n- example: {example}\n  regions: [{regions}]\n  cell: 2.0\n  size: [4, 4]\n  border: {border}\n  no_empty: true\n  weights: []\n  footprints: []\n  attempts: 8\n  seed: 7\n"
         )
     }
 

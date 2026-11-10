@@ -82,10 +82,7 @@ fn write_file(path: &Path, text: &str) {
 
 /// **Put one stamp in the map file**, so the map the editor opens carries a composition.
 fn add_a_stamp(map: &Path) {
-    let text = std::fs::read_to_string(map).unwrap_or_else(|e| panic!("{map:?}: {e}"));
-    let stamped = "{id: \"arch_here\", of: \"arch\", at: [3.0, 3.0], yaw: 0.0, overrides: [], of_fingerprint: null, note: null}";
-    assert!(text.contains("stamps: []"), "the fixture's map has room for a stamp: {text}");
-    write_file(map, &text.replacen("stamps: []", &format!("stamps: [{stamped}]"), 1));
+    fixtures::add_stamp(map, "{id: \"arch_here\", of: \"arch\", at: [3.0, 3.0], yaw: 0.0, overrides: [], of_fingerprint: null, note: null}");
 }
 
 fn show_the_outliner(app: &mut App, on: bool) {

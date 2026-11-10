@@ -73,7 +73,7 @@ fn an_edited_settings_file_reaches_the_editor_and_a_bad_one_is_a_problem() {
         steps += 1;
     }
     let probs = app.world().resource::<EditorState>().status.problems().iter().map(|p| p.text.clone()).collect::<Vec<_>>();
-    assert!(probs.iter().any(|p| p.contains("bevy_elements") && p.contains("not valid RON")), "{probs:?}");
+    assert!(probs.iter().any(|p| p.contains("bevy_elements") && p.contains("not valid YAML")), "{probs:?}");
     assert_eq!(
         app.world().resource::<FamilySettings>().text["bevy_elements"],
         SETTINGS_LATER,

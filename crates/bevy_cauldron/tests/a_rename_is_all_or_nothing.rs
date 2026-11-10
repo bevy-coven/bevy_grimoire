@@ -57,7 +57,7 @@ fn a_rename_onto_a_taken_name_is_refused_and_the_other_map_is_untouched() {
             .expect("the map is there");
         std::fs::write(
             &other,
-            text.replace("name: \"m\"", "name: \"other\""),
+            text.replace("name: m\n", "name: other\n"),
         )
         .expect("the map is writable");
     }
@@ -128,7 +128,7 @@ fn a_rename_leaves_one_file_and_the_new_name() {
     // **And the file's own `name:` agrees with its filename.** A map's name IS its file.
     let text = String::from_utf8(after[0].1.clone()).expect("the map is text");
     assert!(
-        text.contains("name: \"renamed\""),
+        text.contains("name: renamed"),
         "the file's own name does not agree with its filename:\n{text}"
     );
 }
@@ -211,7 +211,7 @@ fn a_rename_changes_the_name_and_nothing_else() {
     // project's own loader refuses a file that disagrees with itself.
     let text = String::from_utf8(after[0].1.clone()).expect("the map is text");
     assert!(
-        text.contains("name: \"m\""),
+        text.contains("name: m\n"),
         "the file's own name does not agree with its filename:\n{text}"
     );
 }
