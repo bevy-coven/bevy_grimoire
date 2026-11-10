@@ -192,15 +192,28 @@ fn a_layout_proposal_is_followed_as_a_preview() {
          `Undo::None`: the layout stands on screen as a proposal and nothing more"
     );
     // **And the receipt says it is a proposal**, in the operation's own words rather than a second
-    // sentence written for the follow.
+    // sentence written for the follow. The assertion is the `the Familiar is about to` prefix a
+    // preview's receipt carries — `Gates::follow_a_preview` writes it and a change's receipt does not
+    // — because every `layout_propose` answer already contains "proposed" in its own summary, so that
+    // word would pass whether the follow were a preview or not.
     let note = app
         .world()
         .resource::<bevy_cauldron::editor::EditorState>()
         .status
         .note_text()
-        .to_lowercase();
+        .to_string();
     assert!(
-        note.contains("propos"),
-        "the receipt does not say it is a proposal: {note:?}"
+        note.contains(&format!("{} is about to", bevy_cauldron::follow::FAMILIAR)),
+        "the receipt does not say this is only about to happen: {note:?}"
+    );
+
+    // **And the ring is the proposal's footprint**, which is the preview path's own drawing: an
+    // applied change rings the placement ids it names and leaves `outline_box` empty. Comparing the
+    // box rather than reading the manner twice is what makes this a second, independent witness —
+    // the manner could be `Preview` while the ring still resolved placements.
+    assert_eq!(
+        app.world().resource::<Following>().outlined_box(),
+        Some(AREA),
+        "the ring is not the proposed area's footprint, so the preview was drawn as an applied change"
     );
 }

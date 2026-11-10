@@ -246,7 +246,8 @@ const UNMIGRATED: &[Action] = &[
     Action::FrameView,
     // Owner exception (2026-11-10): the allowlist follows the new row `Action::LookAtAgentChange`
     // (AF-04, #360), which names no operation — it moves the camera, so it is camera state like
-    // `FrameView`. The ratchet `UNMIGRATED_MAX` is unchanged and still holds.
+    // `FrameView`. The list grew by one, so the ratchet below moved with it: `UNMIGRATED_MAX` is now
+    // 87, re-pinned in the same commit rather than left to fail.
     Action::LookAtAgentChange,
     Action::Cancel,
     Action::PageEnter,
