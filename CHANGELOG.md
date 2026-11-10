@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-10
+
+- **gd-09-build-relaunch** `a262da7` A change that needs Rust is a watched rebuild: BUILD in the PLAY area runs the project's build command as a background job with cargo's own count, each compiler error is a problem with its file and line, and a build that succeeds relaunches the game on the same map at the same camera while one that fails leaves the running game up *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-09
 
 - **aw-02-wish-rows** `5f63d61` The AGENT block lists each waiting wish with the agent's name and the tool line, unfolds to its task, hardship and example call, and answers it with Open on GitHub or Discard; Open asks GitHub's search first and lists matching open wishes, and a hidden block counts its waiting rows in the status band *No clip: visible, not yet recorded: fleet worker*
