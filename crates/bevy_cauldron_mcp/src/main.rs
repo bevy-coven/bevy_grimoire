@@ -72,6 +72,16 @@ use bevy_cauldron_mcp::{brp, docs, sequence};
 
 use brp::Brp;
 
+/// **What a layer's source is called in the heading an agent reads.** The editor serves the word, so a
+/// layer added later needs no change here; an unknown word is printed as it came rather than blanked.
+fn heading_of(source: &str) -> String {
+    match source {
+        "user" => "Your guide".to_owned(),
+        "project" => "This project's guide".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
 /// **The parameters of `grimoire_list_operations`** (#141).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -611,14 +621,26 @@ impl Grimoire {
         Ok(())
     }
 
-    /// **`grimoire_guide` — how to work in Cauldron, before the first call** (#346, AG-01).
+    /// **`grimoire_guide` — how to work in Cauldron, in the person's and the project's own words**
+    /// (#346, AG-01; #347, AG-02).
     ///
-    /// **A read of a compiled-in string.** The guide is `guide.md`, shipped inside the binary, so it
+    /// **Three layers, in order.** The shipped guide is `guide.md`, compiled into the binary, so this
     /// answers with no editor running and no project open — which matters, because an agent reads it
-    /// before it has done anything. It changes nothing, it is the same text every call, and it needs
-    /// no parameters: three reasons its hints are what they are.
+    /// before it has done anything. Then the person's `<config_dir>/Grimoire/AGENTS.md` and the open
+    /// project's `.dark_factory/AGENTS.md`, both **read by the editor** and never by this server: the
+    /// editor holds the open project and the person's directories, so it is the one place that knows
+    /// where they are. **A later layer adds to the earlier ones; nothing is merged or overridden key by
+    /// key.**
     ///
-    /// **One text, two readers.** The same string is what [`docs::render`] writes into
+    /// **A missing file is an absent layer, and a file that cannot be served is a problem.** Each layer
+    /// arrives under a heading naming its source and path, and a file that cannot be read, is not UTF-8
+    /// or is too large is left out with the refusal said in one line — never truncated into a guide an
+    /// agent would half-follow.
+    ///
+    /// **With no editor, the shipped layer is the whole guide.** A server an agent starts before the
+    /// editor does still answers with something true, and says the two other layers were not read.
+    ///
+    /// **One text, two readers.** The shipped string is what [`docs::render`] writes into
     /// `docs/mcp-tools.md`, so the guide an agent is given and the guide a person reads cannot
     /// disagree.
     #[tool(
@@ -628,7 +650,8 @@ impl Grimoire {
                        hand a result back. Call this before any other tool on your first task in a \
                        project: the other tools say what one tool does, and this says which of them \
                        in what order, and what the person on the other end expects. It returns the \
-                       shipped guide as text; it takes no parameters, needs no editor and changes \
+                       shipped guide, then the person's own guide and the open project's, each under \
+                       a heading that names its source and path; it takes no parameters and changes \
                        nothing.",
         annotations(
             title = "Read the guide to working in Cauldron",
@@ -639,8 +662,52 @@ impl Grimoire {
         )
     )]
     async fn guide(&self) -> Result<CallToolResult, ErrorData> {
+        let mut text = docs::GUIDE.to_owned();
+        match self.editor.call("grimoire/agent_guide", json!({})).await {
+            Ok(answer) => {
+                let layers = answer
+                    .get("layers")
+                    .and_then(|l| l.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                for layer in &layers {
+                    let (source, path, body) = (
+                        layer.get("source").and_then(|s| s.as_str()).unwrap_or_default(),
+                        layer.get("path").and_then(|p| p.as_str()).unwrap_or_default(),
+                        layer.get("text").and_then(|t| t.as_str()).unwrap_or_default(),
+                    );
+                    text.push('\n');
+                    text.push_str(&format!("## {} ({path})\n\n{}\n", heading_of(source), body.trim_end()));
+                }
+                if !layers.is_empty() {
+                    text.push('\n');
+                }
+                for problem in answer.get("problems").and_then(|p| p.as_array()).cloned().unwrap_or_default() {
+                    let said = problem
+                        .get("what")
+                        .and_then(|w| w.as_str())
+                        .unwrap_or("a guide was left out");
+                    let at = problem
+                        .get("where")
+                        .and_then(|w| w.get("file"))
+                        .and_then(|f| f.as_str())
+                        .unwrap_or("no file was named");
+                    text.push_str(&format!("\n**A guide was not served: {said} — {at}.**\n"));
+                }
+            }
+            // **No editor, or an older one that has no such method.** The shipped layer is the whole
+            // guide and says so, because an agent that is told nothing about the two files cannot know
+            // whether they are empty or unread.
+            Err(e) => {
+                text.push_str(&format!(
+                    "\n**The person's guide and this project's guide were not read: {e}** They are \
+                     `AGENTS.md` in the editor's config folder and `.dark_factory/AGENTS.md` in the \
+                     project. Read them yourself if you need them.\n"
+                ));
+            }
+        }
         Ok(CallToolResult::success(vec![
-            rmcp::model::ContentBlock::text(docs::GUIDE.to_owned()),
+            rmcp::model::ContentBlock::text(text),
         ]))
     }
 

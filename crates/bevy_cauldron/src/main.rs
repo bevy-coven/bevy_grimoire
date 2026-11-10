@@ -140,6 +140,11 @@ fn main() -> AppExit {
     if let Some(file) = bevy_cauldron::settings::user_file() {
         app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     }
+    // **The person's own agent guide** (`agent_guide.rs`, AG-02): only the binary names the file, for the
+    // same reason, so no test reads or writes the real one.
+    if let Some(file) = bevy_cauldron::agent_guide::user_file() {
+        app.insert_resource(bevy_cauldron::agent_guide::UserGuideFile(file));
+    }
     // **What an agent tab needs** (`terminal_agent.rs`): the remote protocol's port, the MCP server beside
     // this binary, and a folder for the configs a launch writes. Only the binary names them, as with the
     // settings file, so no test hands an agent the real data directory.

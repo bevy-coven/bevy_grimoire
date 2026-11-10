@@ -87,7 +87,7 @@ The first two lines are the person's (the note box and Send); the rest are the a
 
 ### `grimoire_guide`
 
-How to work in Cauldron, in the order a task goes: orient, change, what to do when a person pauses the agent's writes, how to show your work, and how to hand a result back. Call this before any other tool on your first task in a project: the other tools say what one tool does, and this says which of them in what order, and what the person on the other end expects. It returns the shipped guide as text; it takes no parameters, needs no editor and changes nothing.
+How to work in Cauldron, in the order a task goes: orient, change, what to do when a person pauses the agent's writes, how to show your work, and how to hand a result back. Call this before any other tool on your first task in a project: the other tools say what one tool does, and this says which of them in what order, and what the person on the other end expects. It returns the shipped guide, then the person's own guide and the open project's, each under a heading that names its source and path; it takes no parameters and changes nothing.
 
 | annotation | value |
 |---|---|
