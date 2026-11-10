@@ -75,8 +75,14 @@ const OTHER_GROUP: &str = "other";
 /// The names are the six things a person would say: floor, wall, ceiling, surface (on another piece), opening (a
 /// doorway) and decal.
 pub fn layer_of(library: &bevy_grimoire_core::library::Library, placed: &bevy_grimoire_core::map::Placed) -> &'static str {
+    layer_in(descriptor_of(library, placed).as_deref(), placed)
+}
+
+/// **[`layer_of`] for a caller that has already looked the descriptor up**: a rebuild asks about every piece of the map, and
+/// a lookup per question is three lookups per piece (UI-93, #259).
+fn layer_in(descriptor: Option<&bevy_grimoire_core::descriptor::Descriptor>, placed: &bevy_grimoire_core::map::Placed) -> &'static str {
     use bevy_grimoire_core::descriptor::Mount;
-    match descriptor_of(library, placed).as_deref().and_then(|d| d.mount.as_ref()) {
+    match descriptor.and_then(|d| d.mount.as_ref()) {
         // **The two-way mount is settled by the placement's own record**: `on` is `Some` when it took a surface.
         Some(Mount::OnSurfaceOrFloor { .. }) => {
             if placed.on.is_some() {
@@ -375,23 +381,31 @@ pub fn nodes_for(
     // above are never in the same group.
     let mut piece_groups: std::collections::BTreeMap<&'static str, std::collections::BTreeMap<String, Vec<(u64, String)>>> =
         std::collections::BTreeMap::new();
-    let mut rows = HashMap::new();
+    let mut rows = HashMap::with_capacity(map.placements.len());
+    // **Every layer the map has, kept or not**, because the tree's shape is decided from the whole map and not from what a
+    // search left (see `nested` below).
+    let mut layers_seen: BTreeSet<&'static str> = BTreeSet::new();
     for placed in &map.placements {
-        let layer = layer_of(library, placed);
-        let kind = descriptor_of(library, placed).and_then(|d| d.kind.first().cloned()).unwrap_or_else(|| OTHER_GROUP.to_owned());
+        // **One lookup per piece**: the layer and the kind both come from the same descriptor.
+        let descriptor = descriptor_of(library, placed);
+        let layer = layer_in(descriptor.as_deref(), placed);
+        layers_seen.insert(layer);
+        let kind: &str = descriptor.as_deref().and_then(|d| d.kind.first()).map_or(OTHER_GROUP, String::as_str);
         // **A search may name the layer**, so `wall` finds what hangs on a wall, which is the same rule the kinds and
-        // the map's other sections follow.
-        if !kept(&format!("{} {} {layer}", placed.id, placed.descriptor), &kind) {
+        // the map's other sections follow. **Nothing is built for a piece when nothing is typed**: the haystack is a
+        // string per piece, and ten thousand of them are most of what an unfiltered rebuild would cost.
+        if searching && !kept(&format!("{} {} {layer}", placed.id, placed.descriptor), kind) {
             continue;
         }
         let key = placement_key(&placed.id);
         rows.insert(key, placed.id.clone());
-        piece_groups
-            .entry(layer)
-            .or_default()
-            .entry(kind)
-            .or_default()
-            .push((key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
+        let kinds = piece_groups.entry(layer).or_default();
+        // The kind's name is copied once per kind, not once per piece.
+        let group = match kinds.get_mut(kind) {
+            Some(group) => group,
+            None => kinds.entry(kind.to_owned()).or_default(),
+        };
+        group.push((key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
     }
     // **The map's other contents, four groups of their own** (UI-51, #237), after the pieces' groups.
     let notes: Vec<(u64, String)> = contents
@@ -438,7 +452,7 @@ pub fn nodes_for(
         piece_groups.into_iter().filter(|(_, kinds)| !kinds.is_empty()).collect();
     // **Decided from the whole map, not from what a search left**, so typing does not re-shape the tree under the
     // reader's hand: a search narrows the rows and leaves the levels where they were.
-    let nested = map.placements.iter().map(|placed| layer_of(library, placed)).collect::<std::collections::BTreeSet<_>>().len() > 1;
+    let nested = layers_seen.len() > 1;
     for (layer, kinds) in layers {
         let mut kind_keys: Vec<u64> = Vec::new();
         let mut kind_nodes: Vec<TreeNode> = Vec::new();
@@ -504,18 +518,15 @@ fn fingerprint(
         hash = fold(hash, placed.id.as_bytes());
         hash = fold(hash, b"\x1e");
         hash = fold(hash, placed.descriptor.as_bytes());
-        // **The mount too, and the `on` that settles a two-way one** (UI-51, #237): the layer a row is drawn under
-        // is a fact about the descriptor, so a mount edited in the library or a piece moved onto a table is a
-        // rebuild. `\x1c` is a byte the other fields never carry, so the two cannot be read into one another.
+        // **The layer and the kind the row is drawn under** (UI-51, #237): both are facts about the descriptor, so a mount
+        // or a kind edited in the library, or a piece moved onto a table, is a rebuild. They are the static names the
+        // tree groups by, so nothing is allocated; `\x1c` and `\x1b` are bytes the other fields never carry, so the
+        // fields cannot be read into one another.
+        let descriptor = descriptor_of(library, placed);
         hash = fold(hash, b"\x1c");
-        hash = fold(
-            hash,
-            bevy_grimoire_core::descriptor::mount_label(
-                descriptor_of(library, placed).as_deref().and_then(|d| d.mount.as_ref()),
-            )
-            .as_bytes(),
-        );
-        hash = fold(hash, if placed.on.is_some() { b"1" } else { b"0" });
+        hash = fold(hash, layer_in(descriptor.as_deref(), placed).as_bytes());
+        hash = fold(hash, b"\x1b");
+        hash = fold(hash, descriptor.as_deref().and_then(|d| d.kind.first()).map_or(OTHER_GROUP, String::as_str).as_bytes());
     }
     // **The map's own stamps**, which are rows of the tree too.
     for stamped in &map.stamps {

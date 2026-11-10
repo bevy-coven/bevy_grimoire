@@ -553,4 +553,5 @@ mod an_operation_says_where_its_change_is_seen;
 mod the_agent_tabs_ink_comes_from_the_skin;
 mod the_theme_is_a_skin_and_the_text_fits;
 mod the_uis_budget_is_two_milliseconds_a_frame;
+mod the_ui_frame_covers_a_change_and_the_input_path;
 mod the_view_menu_toggles_the_overlays;
