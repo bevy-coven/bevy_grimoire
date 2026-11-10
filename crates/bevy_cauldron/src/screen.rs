@@ -412,6 +412,11 @@ macro_rules! door_state {
 }
 
 door_state![
+    // **A build is this door's project's work** (GD-09, #371): its record names a map and a camera of
+    // the project the build was started for, and a build carried across a door would relaunch a game
+    // in a project nobody is looking at. The building child is ended by `build_view::BuildPlugin`'s
+    // `OnExit(Editor)`, so no compiler outlives the project it was started for.
+    crate::build_view::BuildState,
     crate::build::TileHistory,
     crate::build::Build,
     crate::editor::EditorState,
@@ -609,6 +614,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::present::Wishes", Ownership::Session),
     ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
     // **`Session`**: whether this run opens no addresses (it records them instead) is the run's own fact, true for as long as the app runs.
+    // **`Session`**: whether this run opens a browser is the run's own fact, true for as long as the
+    // app runs. The harness inserts it so a stepped editor records an address instead of launching
+    // one (#354), and a test may insert its own.
     ("bevy_cauldron::app_verbs::LinksOff", Ownership::Session),
     // **`Session`, for the queue's own reason**: which rows the person has unfolded, and what GitHub
     // said about the wishes in them, are facts about this sitting's wishes — the queue outlives a door
@@ -618,6 +626,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`**: whether this run asks GitHub nothing is the run's own fact, true for as long as
     // the app runs (a test inserts it once and every row reads it).
     ("bevy_cauldron::wish_view::WishSearchOff", Ownership::Session),
+    // **`Door`, like the job it reports** (UI-22): a build is this door's project's work, and its
+    // record names a map and a camera of a project nobody is looking at after a crossing.
+    ("bevy_cauldron::build_view::BuildState", Ownership::Door),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),

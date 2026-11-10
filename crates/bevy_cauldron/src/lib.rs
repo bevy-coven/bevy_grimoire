@@ -52,6 +52,7 @@ pub mod args;
 pub mod asset_spike;
 pub mod badges;
 pub mod build;
+pub mod build_view;
 pub mod catalog;
 pub mod checks;
 pub mod chrome;

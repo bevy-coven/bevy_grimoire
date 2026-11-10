@@ -119,7 +119,7 @@ impl Plugin for WishViewPlugin {
             .add_systems(OnEnter(Screen::Editor), spawn_the_chip.after(crate::chrome::FrameSystems))
             .add_systems(
                 Update,
-                (ask_the_unfolded, land_the_searches, follow_the_rows, follow_the_chip)
+                (ask_the_unfolded, land_the_searches, follow_the_rows, follow_the_search_lines, follow_the_chip)
                     .run_if(in_state(Screen::Editor)),
             );
     }
@@ -243,22 +243,38 @@ pub struct WishRows;
 /// row is unfolded, and the two buttons leave when the person answers, so the set of nodes a row is
 /// made of changes with the wish.
 #[derive(Component, Clone, PartialEq, Eq)]
-struct RowsShown(Vec<(String, bool, WishState, String, Option<String>)>);
+struct RowsShown(Vec<RowShown>);
+
+/// **One row's own state**, as the list is rebuilt by it. A `Vec` of these is what `RowsShown` compares,
+/// so a frame that changes nothing rebuilds nothing.
+///
+/// **The client is part of it** (#354's review): a row spawned before `grimoire/agent_hello` said who
+/// was talking reads `an agent`, and the row has to be rebuilt when the name arrives — otherwise the
+/// block names nobody for the whole sitting.
+#[derive(Clone, PartialEq, Eq)]
+struct RowShown {
+    id: String,
+    unfolded: bool,
+    state: WishState,
+    note: Option<String>,
+    client: Option<(String, String)>,
+}
 
 impl RowsShown {
-    fn of(wishes: &Wishes, open: &WishOpenRows) -> RowsShown {
+    fn of(wishes: &Wishes, open: &WishOpenRows, client: Option<&crate::present::ClientName>) -> RowsShown {
         RowsShown(
             wishes
                 .queued
                 .iter()
-                .map(|q| {
-                    (
-                        q.wish.id.clone(),
-                        open.is_open(&q.wish.id),
-                        q.state,
-                        q.search.sentence(),
-                        q.note.clone(),
-                    )
+                .map(|q| RowShown {
+                    id: q.wish.id.clone(),
+                    unfolded: open.is_open(&q.wish.id),
+                    state: q.state,
+                    // **The search's answer is not here**: it is one line of text, written in place by
+                    // `follow_the_search_lines`. Putting it in this list would rebuild every row on the
+                    // frame a search came back, and a row is a whole subtree.
+                    note: q.note.clone(),
+                    client: client.map(|c| (c.name.clone(), c.version.clone())),
                 })
                 .collect(),
         )
@@ -286,6 +302,20 @@ pub fn fields_of(queued: &QueuedWish) -> [(&'static str, String); 5] {
     ]
 }
 
+/// **The search's one line follows its answer**, in place: a row that was asking says what it found
+/// (or why GitHub could not be asked) without being rebuilt, which matters because a row is a subtree
+/// of fields and buttons and a search answers on a frame nobody chose.
+fn follow_the_search_lines(wishes: Option<Res<Wishes>>, mut lines: Query<(&mut Text, &WishOf), With<WishSearchLine>>) {
+    let Some(wishes) = wishes else { return };
+    for (mut text, of) in &mut lines {
+        let Some(queued) = wishes.queued.iter().find(|q| q.wish.id == of.0) else { continue };
+        let said = queued.search.sentence();
+        if text.0 != said {
+            text.0 = said;
+        }
+    }
+}
+
 /// **The block's list follows the wishes**: a row per wish, saying everything it is.
 fn follow_the_rows(
     mut commands: Commands,
@@ -296,8 +326,8 @@ fn follow_the_rows(
     rows: Query<Entity, With<WishRow>>,
 ) {
     let (Some(wishes), Some(open)) = (wishes, open) else { return };
-    let now = RowsShown::of(&wishes, &open);
     let client = client.as_deref().and_then(|c| c.0.as_ref());
+    let now = RowsShown::of(&wishes, &open, client);
     for (list, built) in &lists {
         if built.is_some_and(|built| *built == now) {
             continue;
