@@ -192,6 +192,8 @@ enum Slot {
     Statistics,
     /// View ▸ Show outliner (UI-51, #237).
     Outliner,
+    /// View ▸ Show library (UI-52, #238): the same library as a grid of portraits.
+    Library,
     /// View ▸ Show agent (UI-60, #246).
     Familiar,
     /// View ▸ Pause agent writes (UI-60, #246).
@@ -293,6 +295,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::LeftPanel);
         slots.push(Slot::Zen);
         slots.push(Slot::Outliner);
+        slots.push(Slot::Library);
         #[cfg(feature = "bevy_light_grid")]
         slots.push(Slot::LightMap);
         slots.push(Slot::Familiar);
@@ -410,6 +413,16 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::outliner::OutlinerItem,
                 bevy_gooey::check_item("Show outliner", false),
                 bevy_gooey::observe(crate::outliner::toggle_the_outliner),
+            ));
+        }
+        // **View ▸ Show library** (UI-52, #238): the library as a grid of portraits, with its own search and
+        // a tag row. Asked for here for the outliner's reason: a text box and a grid of cards are entities
+        // that the screens counting every button in the world would find.
+        Slot::Library => {
+            menu.spawn((
+                crate::library_browser::LibraryItem,
+                bevy_gooey::check_item("Show library", false),
+                bevy_gooey::observe(crate::library_browser::toggle_the_library),
             ));
         }
         // **View ▸ Light map** (UI-80, #254). Gated with the slot: a build without the overlay has no

@@ -2,6 +2,11 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-10
+
+- **ui-52-library-browser** `42972da5` The library browser: the project's pieces as a grid of portraits in the Inspector, with its own search and a row of tag filters, where choosing a card arms its piece and dragging one onto the map places it *For you: You can now browse your pieces as pictures rather than a list: search them, filter by what they are, and drag one onto the map.* *No clip: visible, not yet recorded: fleet worker*
+- **ui-51-outliner-everything** `5a275e04` The outliner draws the map's compositions, people, triggers and notes as groups of their own beside the pieces, and a piece row's menu pins it (asking for the reason) or hides it for this session; pieces are still grouped by kind, and grouping by layer is not built because a placement has no layer field *For you: The Inspector's outliner now shows everything on your map, not just pieces, and right-clicking a piece's row lets you pin it or take it out of the way.* *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-09
 
 - **ui-infra-review** `815d628` The staging plan stamps each panel on its own chunk's clock, and the UI budget reports a rebuild apart from a settled frame *For you: Clips of every panel no longer die on the first one, and the editor's speed check says exactly what it measures.* *No clip: a corrected clock in a tool, two faster list builds and an honest budget test, with no picture of their own; proved by tools/demo/test_stage.py (test_every_chunk_stamps_its_stage_on_its_own_start, test_a_capture_that_writes_fewer_frames_than_planned_is_refused) and bevy_cauldron/tests/the_uis_budget_is_two_milliseconds_a_frame.rs (a_settled_frame_on_the_reference_fixture_stays_under_the_ui_budget, a_rebuild_frame_is_measured_and_is_not_claimed_as_settled, the_clock_counts_every_way_out_and_marks_a_rebuild)*

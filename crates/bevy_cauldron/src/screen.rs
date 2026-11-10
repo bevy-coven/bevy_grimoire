@@ -389,6 +389,11 @@ pub fn cross(world: &mut World, to: crate::tiles::Door) -> Result<(), String> {
 /// [`OWNERSHIP`] row, so either build compares the list and the table it actually has.
 macro_rules! door_state {
     ($($(#[$attr:meta])* $t:ty),* $(,)?) => {
+        /// **The same reset, for a test** that opens a door and asks whether a resource went back.
+        pub fn reset_door_state_for_test(world: &mut World) {
+            reset_door_state(world);
+        }
+
         pub(crate) fn reset_door_state(world: &mut World) {
             $(
                 $(#[$attr])*
@@ -420,6 +425,9 @@ door_state![
     // selection carried across a door would name a note the next map does not have.
     crate::editor::SelectedNote,
     crate::editor::NotesFilter,
+    // **The outliner's eye** (UI-51, #237): it holds ids of *this map's* placements, so another map's rows
+    // must not inherit them.
+    crate::outliner::Eyes,
     crate::editor::RunDrag,
     crate::editor::RunGhostDrag,
     crate::editor::FineAnchor,
@@ -674,6 +682,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::editor::NoteBox", Ownership::Door),
     ("bevy_cauldron::editor::SelectedNote", Ownership::Door),
     ("bevy_cauldron::editor::NotesFilter", Ownership::Door),
+    // **The eye of the outliner** (UI-51, #237): the pieces a person hid are rows of the map that was open.
+    ("bevy_cauldron::outliner::Eyes", Ownership::Door),
     ("bevy_cauldron::editor::RunDrag", Ownership::Door),
     ("bevy_cauldron::editor::RunGhostDrag", Ownership::Door),
     ("bevy_cauldron::editor::FineAnchor", Ownership::Door),

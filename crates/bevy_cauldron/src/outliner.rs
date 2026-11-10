@@ -16,15 +16,32 @@
 //! - **The tree follows the viewport.** A piece selected there is the selected row here, when the
 //!   search leaves it in view.
 //!
-//! Nothing here writes the map: a selection is session state, so there is no operation to dispatch and
-//! nothing to undo. Visibility and lock toggles, and compositions, people, triggers and notes as
-//! further groups, are the rest of the issue and are not built.
+//! - **The map's other contents are four groups of their own** below the pieces': its stamps
+//!   (`compositions`), its people (`people/<map>.ron`), its triggers (`scripts/<map>.ron`) and its notes
+//!   (`.notes.ron`). A row in one of them names the thing and nothing else: it is not a placement, so
+//!   clicking it selects nothing and its menu offers no Pin and no Hide.
+//!
+//! # A row's menu
+//!
+//! gooey's tree row is a chevron and a label, so a row's two toggles are gooey's own `context_menu`
+//! ([`crate::outliner::OutlinerRowMenu`]) named on **the piece rows only**, the way [`crate::palette_menu`]
+//! names one on the palette's rows: never a control built here, and never on a row that has nothing to
+//! toggle. The rows are a pool rebound as the tree scrolls, so the menu is removed again from a row that is
+//! rebound to a group or to something that is not a piece.
+//!
+//! - **Pin** is the piece's `placement_set_pin`, the write the `O` key makes (`Action::OwnToggle`), through
+//!   [`crate::editor::toggle_pin`] — the same function the key's prompt goes through, so a pin always asks
+//!   for its reason the way `EditorState::pinning` says it must. One operation, one log line, one Cmd+Z.
+//! - **Hide** takes the piece out of the viewport **for this session** ([`Eyes`]). A hide is view state:
+//!   the map format has no "hidden" field and this does not add one, because a map file that says a wall
+//!   is invisible is a map every consumer has to agree with.
 //!
 //! # Keys
 //!
-//! A tree row's key is a `u64`. A piece's is a hash of its id with the top bit clear and a group's a
-//! hash of its name with the top bit set ([`placement_key`], [`group_key`]), so the two never meet and a
-//! key survives a rebuild: the tree keeps its own selection and open groups across a map edit.
+//! A tree row's key is a `u64`. A piece's is a hash of its id with the two high bits clear, a group's a
+//! hash of its name with the top bit set and any other thing's a hash of its section and id with the second
+//! set ([`placement_key`], [`group_key`], [`thing_key`]), so the three families never meet and a key
+//! survives a rebuild: the tree keeps its own selection and open groups across a map edit.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -50,8 +67,16 @@ const OTHER_GROUP: &str = "other";
 pub struct Outliner {
     /// What the search box holds.
     pub query: String,
-    /// The piece behind each row's key.
+    /// The piece behind each row's key: a placement only, so a row for a person is not one.
     rows: HashMap<u64, String>,
+    /// The rows drawn under each group, in the order they are drawn, so a row can be asked what it is under.
+    children: HashMap<u64, Vec<u64>>,
+    /// The notes' generation the tree was last built from. `NotesView` marks itself changed every frame (it
+    /// keeps its own clock), so `is_changed` says nothing about whether the notes moved.
+    built_notes: u64,
+    /// The stat of the two side files the tree was last built from, so a write to `people/` or `scripts/` is
+    /// noticed even though no resource in the editor changed.
+    built_files: Vec<FileStat>,
     /// A fingerprint of what the tree was last built from (the query and every piece's id and
     /// descriptor), so a map edit that changes no piece's identity (a turn, a nudge) is not a rebuild.
     built_from: u64,
@@ -75,6 +100,17 @@ impl Outliner {
     pub fn looks(&self) -> u32 {
         self.looks
     }
+
+    /// **The rows drawn under the group `key`**, in the order they are drawn.
+    pub fn rows_under(&self, key: u64) -> &[u64] {
+            self.children.get(&key).map_or(&[], Vec::as_slice)
+        }
+
+        /// **What the row `key` names**: the piece it stands for, or `None` for a group and for a row for a
+        /// composition, a person, a trigger or a note.
+        pub fn piece_of(&self, key: u64) -> Option<&str> {
+            self.rows.get(&key).map(String::as_str)
+        }
 }
 
 /// The tree widget.
@@ -92,9 +128,13 @@ fn fnv(text: &str) -> u64 {
     text.bytes().fold(BASIS, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(PRIME))
 }
 
-/// The key of the row for the piece `id`.
+/// The second bit: set on a row for something that is not a placement (a composition, a person, a trigger
+/// or a note), so it names no piece and offers no pin and no eye.
+pub const THING_BIT: u64 = 1 << 62;
+
+/// **The key of the row for the piece `id`**, with both high bits clear so no family can collide with it.
 pub fn placement_key(id: &str) -> u64 {
-    fnv(id) & !GROUP_BIT
+    fnv(id) & !(GROUP_BIT | THING_BIT)
 }
 
 /// The key of the row for the group `kind`.
@@ -102,11 +142,27 @@ pub fn group_key(kind: &str) -> u64 {
     fnv(kind) | GROUP_BIT
 }
 
+/// **The key of the row for something that is not a placement**, hashed from its section and its id so a
+/// note and a person that happen to share a name are still two rows.
+pub fn thing_key(section: &str, id: &str) -> u64 {
+    (fnv(&format!("{section}\u{1f}{id}")) & !GROUP_BIT) | THING_BIT
+}
+
 pub struct OutlinerPlugin;
 
 impl Plugin for OutlinerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (rebuild_the_tree, follow_the_viewport, tick_the_menu_row).chain().run_if(in_state(Screen::Editor)));
+        // **The eye is registered here and reset by the door** (`screen::door_state!`): it holds ids of the
+        // open map's rows, so it cannot outlive the map.
+        app.init_resource::<Eyes>();
+        app.add_systems(
+            Update,
+            (rebuild_the_tree, follow_the_viewport, tick_the_menu_row).chain().run_if(in_state(Screen::Editor)),
+        );
+        // **A row's menu** (UI-51, #237): gooey's own `context_menu`, named on the piece rows and taken off the
+        // others — never a control built here.
+        app.add_systems(OnEnter(Screen::Editor), spawn_row_menu)
+            .add_systems(Update, name_the_menu_on_rows.run_if(in_state(Screen::Editor)));
     }
 }
 
@@ -199,56 +255,139 @@ fn select_the_pieces(
     selection.set(ids);
 }
 
-/// **The tree, built from the map and the search.** Returns the nodes and the piece behind each key.
+/// **What the map holds that is not a placement**, read at a rebuild and handed to [`nodes_for`]: the stamps,
+/// the people, the triggers and the notes, as the rows that name them.
+#[derive(Default, Clone, PartialEq)]
+pub struct Contents {
+    /// `(id, the composition it is of)` for each stamp.
+    pub compositions: Vec<(String, String)>,
+    /// Each person's name.
+    pub people: Vec<String>,
+    /// Each trigger's id.
+    pub triggers: Vec<String>,
+    /// `(id, the first words of its text)` for each note.
+    pub notes: Vec<(String, String)>,
+}
+
+impl Contents {
+    /// Whether there is nothing but the pieces.
+    pub fn is_empty(&self) -> bool {
+        self.compositions.is_empty() && self.people.is_empty() && self.triggers.is_empty() && self.notes.is_empty()
+    }
+}
+
+/// The group a stamp stands under.
+pub const COMPOSITIONS: &str = "compositions";
+/// The group a person stands under.
+pub const PEOPLE: &str = "people";
+/// The group a trigger stands under.
+pub const TRIGGERS: &str = "triggers";
+/// The group a note stands under.
+pub const NOTES: &str = "notes";
+
+/// How much of a note's text a row shows. One line, so the row stays one line tall however long the note is.
+const NOTE_PREVIEW_CHARS: usize = 48;
+
+/// **The tree, built from the map, the map's other contents and the search.** Returns the nodes, the piece
+/// behind each key, and the rows drawn under each group.
 ///
-/// A piece is kept when every word of `query` is in its id, its descriptor or its group's name. A group
-/// with no piece kept is not drawn. Groups and pieces are in a stable order (groups by name, pieces in
-/// the map's order), so a rebuild never shuffles rows under the pointer. `group_open` says whether a
-/// group the tree already had is open; a group it did not have starts open, and so does every group
-/// while something is searched for.
+/// A row is kept when every word of `query` is in its words or its group's name. A group with no row kept is
+/// not drawn. A piece's groups are in name order; the map's own four (compositions, people, triggers, notes)
+/// come after them in the order the issue names them, because a piece is what a map is mostly made of and a
+/// reader looks for it first. Pieces are in the map's order, so a rebuild never shuffles rows under the
+/// pointer. `group_open` says whether a group the tree already had is open; a group it did not have starts
+/// open, and so does every group while something is searched for.
+#[allow(clippy::type_complexity)]
 pub fn nodes_for(
     map: &Map,
     library: &bevy_grimoire_core::library::Library,
+    contents: &Contents,
     query: &str,
     group_open: impl Fn(u64) -> Option<bool>,
-) -> (Vec<TreeNode>, HashMap<u64, String>) {
+) -> (Vec<TreeNode>, HashMap<u64, String>, HashMap<u64, Vec<u64>>) {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-    // **No search builds no haystack.** The haystack is a lowercased copy of three fields per piece — two allocations per
-    // placement, measured at 2.5 ms of the tree's rebuild for ten thousand pieces (UI-93, #259) — and with nothing typed
-    // there is nothing to compare it against, so it is built only while something is searched for.
     let searching = !words.is_empty();
-    let mut groups: std::collections::BTreeMap<String, Vec<TreeNode>> = std::collections::BTreeMap::new();
+    let kept = |haystack: &str, group: &str| {
+        if !searching {
+            return true;
+        }
+        let haystack = format!("{haystack} {group}").to_lowercase();
+        words.iter().all(|word| haystack.contains(word.as_str()))
+    };
+    // **A piece's group**: a `BTreeMap`, so the groups of pieces are in name order.
+    let mut piece_groups: std::collections::BTreeMap<String, Vec<(u64, String)>> = std::collections::BTreeMap::new();
     let mut rows = HashMap::new();
     for placed in &map.placements {
         let kind = descriptor_of(library, placed).and_then(|d| d.kind.first().cloned()).unwrap_or_else(|| OTHER_GROUP.to_owned());
-        if searching {
-            let haystack = format!("{} {} {}", placed.id, placed.descriptor, kind).to_lowercase();
-            if !words.iter().all(|word| haystack.contains(word.as_str())) {
-                continue;
-            }
+        if !kept(&format!("{} {}", placed.id, placed.descriptor), &kind) {
+            continue;
         }
         let key = placement_key(&placed.id);
         rows.insert(key, placed.id.clone());
-        groups.entry(kind).or_default().push(TreeNode::new(key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
+        piece_groups.entry(kind).or_default().push((key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
     }
-    let nodes = groups
-        .into_iter()
-        .map(|(kind, pieces)| {
-            let key = group_key(&kind);
-            let node = TreeNode::new(key, kind).children(pieces);
-            if searching || group_open(key).unwrap_or(true) { node.expanded() } else { node }
-        })
+    // **The map's other contents, four groups of their own** (UI-51, #237), after the pieces' groups.
+    let notes: Vec<(u64, String)> = contents
+        .notes
+        .iter()
+        .filter(|(id, text)| kept(&format!("{id} {text}"), NOTES))
+        .map(|(id, text)| (thing_key(NOTES, id), if text.is_empty() { id.clone() } else { format!("{id} \u{b7} {text}") }))
         .collect();
-    (nodes, rows)
+    let others: [(String, Vec<(u64, String)>); 4] = [
+        (
+            COMPOSITIONS.to_owned(),
+            contents
+                .compositions
+                .iter()
+                .filter(|(id, of)| kept(&format!("{id} {of}"), COMPOSITIONS))
+                .map(|(id, of)| (thing_key(COMPOSITIONS, id), format!("{id} \u{b7} {of}")))
+                .collect(),
+        ),
+        (
+            PEOPLE.to_owned(),
+            contents.people.iter().filter(|name| kept(name, PEOPLE)).map(|name| (thing_key(PEOPLE, name), name.clone())).collect(),
+        ),
+        (
+            TRIGGERS.to_owned(),
+            contents.triggers.iter().filter(|id| kept(id, TRIGGERS)).map(|id| (thing_key(TRIGGERS, id), id.clone())).collect(),
+        ),
+        (NOTES.to_owned(), notes),
+    ];
+    let mut nodes = Vec::with_capacity(piece_groups.len() + others.len());
+    let mut children = HashMap::new();
+    let group_of = |kind: &str, rows_here: Vec<(u64, String)>, children: &mut HashMap<u64, Vec<u64>>| -> TreeNode {
+        let key = group_key(kind);
+        children.insert(key, rows_here.iter().map(|(k, _)| *k).collect::<Vec<u64>>());
+        let node = TreeNode::new(key, kind.to_owned()).children(rows_here.into_iter().map(|(k, label)| TreeNode::new(k, label)));
+        if searching || group_open(key).unwrap_or(true) { node.expanded() } else { node }
+    };
+    for (kind, rows_here) in piece_groups {
+        if !rows_here.is_empty() {
+            nodes.push(group_of(&kind, rows_here, &mut children));
+        }
+    }
+    for (kind, rows_here) in others {
+        if !rows_here.is_empty() {
+            nodes.push(group_of(&kind, rows_here, &mut children));
+        }
+    }
+    (nodes, rows, children)
 }
 
-/// Whether the tree needs building again: a fingerprint of the query and of every piece's identity.
+/// Whether the tree needs building again: a fingerprint of the query, every piece's identity, the map's stamps, the
+/// notes' generation, and **the stat of each side file** the map's other contents live in.
 ///
 /// **Hashed as it is read, with no string built.** It used to append every piece's id and descriptor to a `String` — a few
 /// hundred kilobytes for ten thousand pieces, allocated and filled on the frame a change lands on — and hash that. The hash
 /// is the same one ([`fnv`]), taken over the pieces' own bytes as they are walked, so a build allocates nothing. The two
 /// separator bytes are the ones the old text used, so a piece that gained or lost a character still moves the fingerprint.
-fn fingerprint(map: &Map, query: &str) -> u64 {
+///
+/// **Two stats, and no file's contents.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts the map cannot
+/// show: `person_set` and `trigger_set` write them and change no pixel of the map, and a hand edit is the same. Each
+/// contributes its path, its modification time and its length — one `metadata` call each — so a write is a rebuild
+/// while a settled frame still opens nothing. Parsing them is [`contents_of`]'s work, after this has said a rebuild
+/// is due.
+fn fingerprint(map: &Map, notes: u64, files: &[FileStat], query: &str) -> u64 {
     const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
     fn fold(mut hash: u64, bytes: &[u8]) -> u64 {
@@ -264,13 +403,97 @@ fn fingerprint(map: &Map, query: &str) -> u64 {
         hash = fold(hash, b"\x1e");
         hash = fold(hash, placed.descriptor.as_bytes());
     }
+    // **The map's own stamps**, which are rows of the tree too.
+    for stamped in &map.stamps {
+        hash = fold(hash, b"\x1d");
+        hash = fold(hash, stamped.id.as_bytes());
+        hash = fold(hash, stamped.of.as_bytes());
+    }
+    // **The notes' generation**, because the notes view marks itself changed every frame and its own count of
+    // replacements is what says they moved.
+    hash = fold(hash, &notes.to_le_bytes());
+    // **Each side file's identity**, so a write to `people/` or `scripts/` is a rebuild even though the map did not
+    // move. The path is folded too, so opening another map is a different fingerprint whatever its stats are.
+    for FileStat { path, modified, len } in files {
+        hash = fold(hash, b"\x19");
+        hash = fold(hash, path.as_bytes());
+        hash = fold(hash, &modified.unwrap_or(0).to_le_bytes());
+        hash = fold(hash, &len.unwrap_or(0).to_le_bytes());
+    }
     hash
+}
+
+/// **A side file as cheaply as it can be told apart**: its path, and its modification time and length (both `None`
+/// when it is not there). One `metadata` call, no read.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct FileStat {
+    path: String,
+    modified: Option<u64>,
+    len: Option<u64>,
+}
+
+impl FileStat {
+    /// The stat of `path`, with the modification time in whole seconds since the epoch.
+    fn of(path: &std::path::Path) -> FileStat {
+        let shown = path.to_string_lossy().into_owned();
+        let Ok(meta) = std::fs::metadata(path) else {
+            return FileStat { path: shown, modified: None, len: None };
+        };
+        let modified = meta
+            .modified()
+            .ok()
+            .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|since| since.as_secs());
+        let len = meta.len();
+        FileStat { path: shown, modified, len: Some(len) }
+    }
+}
+
+/// **The two side files a map's other contents live in**: its people and its triggers. Statted on every look,
+/// because a write to either is a change the map itself cannot show.
+fn side_files(project: &Project, map: &Map) -> Vec<FileStat> {
+    [
+        project.grimoire_dir.join("people").join(format!("{}.ron", map.name)),
+        project.grimoire_dir.join("scripts").join(format!("{}.ron", map.name)),
+    ]
+    .iter()
+    .map(|path| FileStat::of(path))
+    .collect()
+}
+
+/// **The contents the tree draws that are not placements**, each read from where it already lives: the map's
+/// own stamps, its `people/` and `scripts/` files, and the notes the editor holds ([`crate::notes_view`]).
+///
+/// **Read only when a rebuild is really going to happen.** Two of the four are files, so reading them on every
+/// `OpenMap` change would be disk work on a frame that turns out to change no row; the cheap fingerprint is
+/// taken first and the files are opened only when it says the tree must be rebuilt.
+fn contents_of(open: &OpenMap, project: &Project, notes: Option<&crate::notes_view::NotesView>) -> Contents {
+    let map = &open.map;
+    let compositions = map.stamps.iter().map(|s| (s.id.clone(), s.of.clone())).collect();
+    let people = crate::ops_people::people_of(project, &map.name).people.into_iter().map(|p| p.name).collect();
+    let triggers = crate::ops_scripts::scripts_of(project, &map.name).triggers.into_iter().map(|t| t.id).collect();
+    let notes = notes
+        .map(|view| view.notes().notes.iter().map(|n| (n.id.clone(), first_words(&n.text, NOTE_PREVIEW_CHARS))).collect())
+        .unwrap_or_default();
+    Contents { compositions, people, triggers, notes }
+}
+
+/// **The first `chars` characters of `text`, one line**, for a row that must stay one line tall.
+fn first_words(text: &str, chars: usize) -> String {
+    let one_line: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if one_line.chars().count() <= chars {
+        return one_line;
+    }
+    let mut out: String = one_line.chars().take(chars.saturating_sub(1)).collect();
+    out.push('\u{2026}');
+    out
 }
 
 /// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
 fn rebuild_the_tree(
     open: Option<Res<OpenMap>>,
     project: Option<Res<Project>>,
+    notes: Option<Res<crate::notes_view::NotesView>>,
     mut outliners: Query<&mut Outliner>,
     mut tables: Query<&mut Table, With<OutlinerTree>>,
     mut budget: ResMut<crate::ui_budget::UiFrame>,
@@ -281,27 +504,45 @@ fn rebuild_the_tree(
     let spent = crate::ui_budget::measure(&mut budget);
     let (Some(open), Some(project)) = (open, project) else { return };
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
+    // **Two stats, not two parses.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts no resource in the
+    // editor can show: `person_set` writes one and a hand edit the other, and the map does not change at all. A
+    // `metadata` call each is the whole cost of noticing, and they are taken **before** the gate below, because a
+    // change in either is precisely a reason the gate has to open.
+    let files = side_files(&project, &open.map);
     // **A settled frame does no work that grows with the map.** The fingerprint reads every piece, so it is taken
-    // only when the map, the library or the search moved, or the tree has not been built yet: ten thousand pieces
-    // at sixty frames a second was a second of string building for a tree nobody touched.
-    let moved = outliner.built_from == 0 || open.is_changed() || project.is_changed() || outliner.built_for != outliner.query;
+    // only when the map, the library, the notes, the search or one of those two files moved, or the tree has not
+    // been built yet: ten thousand pieces at sixty frames a second was a second of string building for a tree
+    // nobody touched.
+    let notes_now = notes.as_ref().map(|n| n.generation()).unwrap_or(0);
+    let moved = outliner.built_from == 0
+        || open.is_changed()
+        || project.is_changed()
+        || outliner.built_for != outliner.query
+        || outliner.built_notes != notes_now
+        || outliner.built_files != files;
     if !moved {
         return;
     }
     outliner.looks += 1;
-    let now = fingerprint(&open.map, &outliner.query);
-    if outliner.built_from == now {
+    let now = fingerprint(&open.map, notes_now, &files, &outliner.query);
+    if outliner.built_from == now && outliner.built_notes == notes_now {
         let query = outliner.query.clone();
         outliner.built_for = query;
         return;
     }
     // **From here it is a rebuild**, which the budget reports apart from a settled frame.
     let _rebuild = spent.rebuilding();
+    // **The two files are read here and nowhere earlier**: the cheap fingerprint has already said a rebuild is due,
+    // so opening `people/` and `scripts/` is work that reaches the screen in this frame.
+    let contents = contents_of(&open, &project, notes.as_deref());
     let Some(tree) = table.source_mut::<Tree>() else { return };
-    let (nodes, rows) = nodes_for(&open.map, &project.library, &outliner.query, |key| tree.is_open(key));
+    let (nodes, rows, children) = nodes_for(&open.map, &project.library, &contents, &outliner.query, |key| tree.is_open(key));
     tree.set_nodes(nodes);
     outliner.rows = rows;
+    outliner.children = children;
     outliner.built_from = now;
+    outliner.built_notes = notes_now;
+    outliner.built_files = files;
     let query = outliner.query.clone();
     outliner.built_for = query;
     outliner.rebuilds += 1;
@@ -324,5 +565,134 @@ fn follow_the_viewport(
     let want: BTreeSet<u64> = selected.iter().map(|id| placement_key(id)).filter(|key| outliner.rows.contains_key(key)).collect();
     if now.map(|n| &n.0) != Some(&want) && !(now.is_none() && want.is_empty()) {
         commands.entity(tree).insert(TableSelection(want));
+    }
+}
+
+/// **The pieces a person's eye has taken out of the viewport, for this session** (UI-51, #237).
+///
+/// A resource and not a field of the section, because the eye outlives the section: closing the outliner is not
+/// showing everything again, and the map's own drawing system ([`crate::editor::hide_carried`]) is the one place
+/// a placement's `Visibility` is written — a second writer would fight it for the same component.
+///
+/// **Not a map field, on purpose.** A hidden piece is view state, and a map file that says a wall is invisible is
+/// a map every consumer (a game, a generator, this editor) has to agree with. The eye is therefore this session's
+/// and is **reset at every door** (`screen::door_state!`): opening another map shows everything, because the ids
+/// it holds name rows of the map that was open.
+#[derive(Resource, Default)]
+pub struct Eyes {
+    hidden: BTreeSet<String>,
+}
+
+impl Eyes {
+    /// Whether the piece `id` is behind the eye.
+    pub fn is_hidden(&self, id: &str) -> bool {
+        self.hidden.contains(id)
+    }
+
+    /// **Put the piece `id` behind the eye (`hidden` true) or in front of it.** Returns whether it moved.
+    pub fn set(&mut self, id: &str, hidden: bool) -> bool {
+        if hidden {
+            self.hidden.insert(id.to_owned())
+        } else {
+            self.hidden.remove(id)
+        }
+    }
+
+    /// Every piece behind the eye, in name order.
+    pub fn hidden(&self) -> Vec<String> {
+        self.hidden.iter().cloned().collect()
+    }
+
+    /// Whether nothing is hidden.
+    pub fn is_empty(&self) -> bool {
+        self.hidden.is_empty()
+    }
+}
+
+/// **The one context menu an outliner row names.** A component on the entity, not a resource, for the reason
+/// [`crate::piece_menu::PieceMenu`] gives: it is one entity's identity, not editor state.
+#[derive(Component)]
+pub struct OutlinerRowMenu;
+
+/// **What one item of a row's menu does.** Public because [`ROW_ITEMS`] is: a table of labels decoded by an index
+/// would be two lists that can drift, and the menu and a test both read this one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RowVerb {
+    /// The piece's lock: `placement_set_pin`, through the `O` key's own [`crate::editor::pin_or_unpin`].
+    Pin,
+    /// The piece out of the viewport for this session.
+    Hide,
+}
+
+/// What the menu holds, top to bottom: the words and what each one does. One table, so the menu and its test read
+/// the same list, and there is no index to decode.
+pub const ROW_ITEMS: [(&str, RowVerb); 2] = [("Pin", RowVerb::Pin), ("Hide", RowVerb::Hide)];
+
+/// **The row's menu, spawned once with the screen.** gooey's `context_menu`; the items are gooey's
+/// `menu_item`s, and the row they were opened for is gooey's `ContextTarget`.
+fn spawn_row_menu(mut commands: Commands) {
+    let menu = commands.spawn((bevy_gooey::context_menu(()), OutlinerRowMenu)).id();
+    for (label, verb) in ROW_ITEMS {
+        commands
+            .spawn((bevy_gooey::menu_item(label), ChildOf(menu)))
+            .observe(move |activate: On<bevy::ui_widgets::Activate>,
+                           parents: Query<&ChildOf>,
+                           targets: Query<&bevy_gooey::ContextTarget>,
+                           rows: Query<&bevy_gooey::TableRow>,
+                           outliners: Query<&Outliner>,
+                           mut project: Option<ResMut<Project>>,
+                           mut open: Option<ResMut<OpenMap>>,
+                           mut state: Option<ResMut<crate::editor::EditorState>>,
+                           mut eyes: ResMut<Eyes>| {
+                let Some(row) = bevy_gooey::ContextTarget::of(activate.entity, &parents, &targets) else { return };
+                let Ok(table_row) = rows.get(row) else { return };
+                let Ok(outliner) = outliners.single() else { return };
+                // A row rebound to a group or to something that is not a piece offers nothing: the menu is taken
+                // off such a row below, and this is the same answer if a click races that.
+                let Some(id) = outliner.piece_of(table_row.key).map(str::to_owned) else { return };
+                match verb {
+                    RowVerb::Pin => {
+                        let (Some(project), Some(open), Some(state)) = (project.as_deref_mut(), open.as_deref_mut(), state.as_deref_mut()) else { return };
+                        crate::editor::pin_or_unpin(project, open, state, &id);
+                    }
+                    RowVerb::Hide => {
+                        let hidden = !eyes.is_hidden(&id);
+                        eyes.set(&id, hidden);
+                    }
+                }
+            });
+    }
+}
+
+/// **The menu sits on the piece rows and on nothing else**, and a row that is rebound to something else loses it.
+///
+/// The tree's rows are a **pool**: the same entity shows row 3 now and row 40 after a scroll, and a group, a
+/// person, a trigger and a note are rows too. So this both puts the menu on a row whose key names a piece and
+/// **takes it off** a row whose key does not — otherwise a group row would offer Pin and Hide, and choosing one
+/// would do nothing and say nothing.
+fn name_the_menu_on_rows(
+    menu: Query<Entity, With<OutlinerRowMenu>>,
+    trees: Query<Entity, With<OutlinerTree>>,
+    outliners: Query<&Outliner>,
+    rows: Query<(Entity, &bevy_gooey::TableRow, Has<bevy_gooey::ContextMenu>)>,
+    mut commands: Commands,
+) {
+    let Ok(menu) = menu.single() else { return };
+    let Ok(tree) = trees.single() else { return };
+    let Ok(outliner) = outliners.single() else { return };
+    for (row, table_row, named) in &rows {
+        if table_row.table != tree {
+            continue;
+        }
+        match (outliner.piece_of(table_row.key).is_some(), named) {
+            (true, false) => {
+                // `try_`: the tree rebinds its pool in the same frame and may despawn a row this has just seen.
+                commands.entity(row).try_insert(bevy_gooey::ContextMenu(menu));
+            }
+            (false, true) => {
+                commands.entity(row).try_remove::<bevy_gooey::ContextMenu>();
+            }
+            _ => {}
+        }
     }
 }

@@ -70,6 +70,7 @@ pub mod editor;
 pub mod inspector_view;
 pub mod familiar;
 pub mod outliner;
+pub mod library_browser;
 pub mod shell_view;
 pub mod app_verbs;
 pub mod menu_bar;
