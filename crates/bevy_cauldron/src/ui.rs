@@ -38,7 +38,7 @@ const LEAST_TEXT_CONTRAST: f32 = bevy_gooey::TEXT_CONTRAST;
 /// **This is the skin a theme *means*, not necessarily the one the editor runs.** Which of them can
 /// be honours is [`honoured_from`]'s question, and it has to be asked: `chrome.rs` still draws its
 /// labels from its own constants (the last half of #210, which needs the protected colour tests
-/// re-pinned), so a light theme's ground would leave every `chrome::TEXT` label at about 1.1:1.
+/// re-pinned), so a light theme's ground would leave every `chrome::ink().text` label at about 1.1:1.
 pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
     use crate::settings::Theme;
     match theme {
@@ -55,7 +55,7 @@ pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
 /// headings, rows, hints, chips and status band with them, not with the skin; #210's acceptance is
 /// that they all come from the skin, and until it is met those colours are the editor's ink whatever
 /// the running skin says. So Parchment — whose `surface` is cream and whose `text` is dark brown —
-/// would paint every panel cream while each `chrome::TEXT` label over it stayed near-white:
+/// would paint every panel cream while each `chrome::ink().text` label over it stayed near-white:
 /// **1.12:1**, measured on [`skin_for`]`(Theme::Parchment).surface`. Tool dark and High contrast both
 /// clear the floor (`muted` on `surface_raised` is the tightest pair in each, 4.61:1 and 4.94:1), so
 /// Parchment is the one theme the editor cannot honour yet.

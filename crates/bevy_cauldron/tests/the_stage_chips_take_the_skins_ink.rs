@@ -1,7 +1,7 @@
 //! **The rig bench's staging chips take the skin's ink too** (UI-02, #210).
 //!
 //! `anim_stage::spawn_chips` drew a slot chip's words and the "click: solo" line from
-//! `chrome::TEXT` and `chrome::LABEL`, so a project's skin could not reach the one row of the bench an
+//! `chrome::ink().text` and `chrome::ink().label`, so a project's skin could not reach the one row of the bench an
 //! author *drives*. `BenchInk` already carried both colours (slice 4d moved the column labels onto
 //! it); this file pins that the chips read the same struct, with the shipped palette where there is
 //! no skin — which is what keeps a harness byte-identical to the editor.

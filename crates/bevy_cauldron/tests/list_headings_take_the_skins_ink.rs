@@ -1,7 +1,7 @@
 //! **A list heading draws in the skin's ink** (UI-02, #210).
 //!
 //! `chrome::list_heading` is the one builder behind the PLACE palette's heading, the rig list's and the
-//! kit's piece list, and it drew `chrome::LABEL` — the constant — so a project's skin could not reach the
+//! kit's piece list, and it drew `chrome::ink().label` — the constant — so a project's skin could not reach the
 //! name of any of the three lists. `ListHeadingInk` is the seam: the shipped `Ink::label` where there is no
 //! skin (which keeps every protected test and the editor itself byte-identical), the skin's own `label`
 //! tone where a skin names one.

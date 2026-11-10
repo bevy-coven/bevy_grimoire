@@ -1,6 +1,6 @@
 //! **A theme edit reaches the shared list's words** (UI-02, #210, the `tiles.rs` seam).
 //!
-//! `draw_ink` was the largest remaining reader of `chrome::TEXT` and `chrome::DIM` in the editor — 181
+//! `draw_ink` was the largest remaining reader of `chrome::ink().text` and `chrome::ink().dim` in the editor — 181
 //! colour uses in `tiles.rs`, most of them through this one function and its builders — and none of
 //! them could see a project's skin file. The three inks it draws a row's own words in now come from
 //! `ListInk`, which reads the running `GooeySkin` and falls back to the constants when no skin is up (a

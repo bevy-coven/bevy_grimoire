@@ -182,9 +182,9 @@ impl AgentInk {
     }
 }
 
-/// The skin's tone for "excluded on purpose", the role behind [`chrome::MUTED`].
+/// The skin's tone for "excluded on purpose", the role behind `chrome::ink().muted`.
 const MUTED_TONE: &str = "muted";
-/// The skin's tone for "judged and ready", the role behind [`chrome::LABELED`].
+/// The skin's tone for "judged and ready", the role behind `chrome::ink().labeled`.
 const LABELED_TONE: &str = "labeled";
 
 /// One check's state.

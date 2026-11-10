@@ -2332,7 +2332,7 @@ pub struct BadgeInk {
     /// colours no field carries, and this is one.
     pub key: Color,
     /// A description's ink, one step quieter than the chord. The skin's `text_muted` **is**
-    /// `chrome::DIM` (0.700, 0.685, 0.655), so this is a field and not a tone.
+    /// `chrome::ink().dim` (0.700, 0.685, 0.655), so this is a field and not a tone.
     pub dim: Color,
     /// The wash the layer paints across the window so badges read over any ground.
     pub veil: Color,

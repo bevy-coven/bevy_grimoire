@@ -31,8 +31,8 @@ use crate::chrome;
 
 /// **The ANSI slots 0–15**, in the standard's order: eight normal, then the same eight bright.
 ///
-/// The picks are the editor's own words wherever one exists — [`chrome::TEXT`] for "foreground" ink,
-/// [`chrome::DANGER`] for red, [`chrome::ACCENT`] for yellow — and the slots this palette has no word
+/// The picks are the editor's own words wherever one exists — `chrome::ink().text` for "foreground" ink,
+/// `chrome::ink().danger` for red, `chrome::ink().accent` for yellow — and the slots this palette has no word
 /// for are chosen to sit at the same lightness as the ones beside them, so a line mixing `31` and
 /// `33` does not flicker between two eras of design.
 /// **The ANSI slots 0–15**, in the standard's order: eight normal, then the same eight bright.
@@ -80,12 +80,12 @@ pub fn default_fg() -> Color {
     chrome::ink().text
 }
 
-/// The pane's own ground. [`chrome::PANEL_BG`], because the terminal is a panel.
+/// The pane's own ground. `chrome::ink().panel_bg`, because the terminal is a panel.
 pub fn default_bg() -> Color {
     chrome::ink().panel_bg
 }
 
-/// **The selection's ground**, under the selected cells' own ink (#309). [`chrome::ROW_SELECTED`],
+/// **The selection's ground**, under the selected cells' own ink (#309). `chrome::ink().row_selected`,
 /// the editor's one word for "selected", so a terminal selection reads like a chosen row anywhere
 /// else in the window and the cells keep their colours (a red error stays red).
 pub fn selection_bg() -> Color {
@@ -94,7 +94,7 @@ pub fn selection_bg() -> Color {
 
 /// **A find match's ground** (#321): the accent, faint, so every match on screen is lit without
 /// drowning the text, and the current one ([`find_current_bg`]) stands out among them. Mixed from the
-/// pane's ground toward [`chrome::ACCENT`] rather than a new hue, so the terminal keeps the editor's one
+/// pane's ground toward `chrome::ink().accent` rather than a new hue, so the terminal keeps the editor's one
 /// accent.
 pub fn find_bg() -> Color {
     chrome::ink().panel_bg.mix(&chrome::ink().accent, FIND_MIX)

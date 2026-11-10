@@ -1,11 +1,11 @@
 //! **The Meshes pane's ink — suggest, danger, accent — comes from the skin** (UI-02, #210).
 //!
 //! `rebuild_detail` is one system with the pane's whole content, so it is where the pane's inks live.
-//! Twelve of its sites read `chrome::SUGGEST`, `chrome::DANGER` and `chrome::ACCENT`; they read
+//! Twelve of its sites read `chrome::ink().suggest`, `chrome::ink().danger` and `chrome::ink().accent`; they read
 //! `GooeySkin` now — `tone("suggest")` for a model's proposal (a *tone*, not a field: gooey#33's `tones`
 //! is where a host keeps its own colours), `danger` and `accent` for the two fields.
 //!
-//! **No protected assertion moved.** The skin's `suggest` tone *is* `chrome::SUGGEST`, and its `danger`
+//! **No protected assertion moved.** The skin's `suggest` tone *is* `chrome::ink().suggest`, and its `danger`
 //! and `accent` are those two constants, so reading the skin is behaviour-identical today. All 8 of
 //! `the_meshes_pane_says_how_sure_the_labels_are`'s tests pass unmodified, and the 5 skin tests.
 //!

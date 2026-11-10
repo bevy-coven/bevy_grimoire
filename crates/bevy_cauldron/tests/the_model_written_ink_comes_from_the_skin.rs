@@ -1,12 +1,12 @@
 //! **A theme edit reaches the "a machine decided this" ink** (UI-02, #210).
 //!
-//! `chrome::UNCHECKED` is what the Meshes pane paints a model-written label with, and it is drawn from
+//! `chrome::ink().unchecked` is what the Meshes pane paints a model-written label with, and it is drawn from
 //! `rebuild_detail` — one system, both draw sites (the labels row and the kind chips). It reads
 //! `GooeySkin::unchecked` now, through `DetailInputs`, so a theme edit reaches every place the editor
 //! says *a machine wrote this and nobody has confirmed it*.
 //!
 //! **The protected test still passes untouched.** `the_meshes_pane_says_how_sure_the_labels_are` asserts
-//! the ink equals `chrome::UNCHECKED`, and the skin's `unchecked` is that same colour
+//! the ink equals `chrome::ink().unchecked`, and the skin's `unchecked` is that same colour
 //! (`SUGGEST x 1.45`), so reading the skin is behaviour-identical today and no assertion moved. This
 //! file is what makes the *next* change — a theme that moves `unchecked` — visible.
 //!

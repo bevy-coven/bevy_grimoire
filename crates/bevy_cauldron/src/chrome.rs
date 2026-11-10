@@ -574,7 +574,7 @@ pub fn theme() -> bevy::feathers::theme::ThemeProps {
 /// smaller of the two.
 ///
 /// A role is not the same thing as a distinct size, and two roles sharing a value is not a defect:
-/// [`HEADING`] and `Ink::label` are both 10 because both are quiet supporting text, and what separates
+/// [`HEADING`] and [`text::LABEL`] are both 10 because both are quiet supporting text, and what separates
 /// a heading from a label is that it is uppercase, in a different ink, and preceded by
 /// [`GAP_GROUP`]. `section`'s own doc says so — *"quiet, and separated from what came before it…
 /// the separation is the work"* — which is why the fix for three heading dialects is the smallest
@@ -620,7 +620,7 @@ pub mod text {
     /// The dim half of a label/value pair, and a log line.
     pub const LABEL: Role = Role(10.0);
     /// **A control's own word** — the text on a chip, a button, a field. Ten pixels, the same
-    /// number as `Ink::label` and [`HEADING`], and a seventh role anyway.
+    /// number as [`LABEL`] and [`HEADING`], and a seventh role anyway.
     ///
     /// `the_type_scale_stays_short` says a seventh role *"is a decision somebody should have to make
     /// on purpose"*, so here is the purpose. The 2026-09-03 decision was **shape carries kind,
@@ -4197,7 +4197,7 @@ fn stand_down_the_back_chord(
 ///
 /// This is the other half of letting a badge stand on a panel's empty middle. `badges::ink` reads
 /// [`Ground`] to say that a container's fill carries nothing a reader needs, so the ground under a
-/// short list is placeable — but a badge is itself a `Ink::panel_bg` box, and an opaque box on an
+/// short list is placeable — but a badge is itself an `Ink::panel_bg` box, and an opaque box on an
 /// opaque box of the same colour reads as one shape with a line through it. Dropping the ground to
 /// [`GROUND_HELD`] lets the `Ink::veil` and the window behind it show through, and the badge — which
 /// keeps its own opacity — separates by depth rather than by its border alone.

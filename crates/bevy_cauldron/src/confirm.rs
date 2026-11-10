@@ -118,7 +118,7 @@ impl Asked {
     }
 
     /// **Does saying yes throw work away?** The only thing the affirmative button's severity
-    /// depends on, and the only place this application decides what red means (`chrome::DANGER`:
+    /// depends on, and the only place this application decides what red means (`chrome::ink().danger`:
     /// *"destructive, and only destructive"*).
     ///
     /// Every question used to render its agreeing button filled `Ink::danger`, whichever question it

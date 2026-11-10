@@ -830,7 +830,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
 /// # Why it is shaped this way (design review, 2026-11-05)
 ///
 /// The shipped 0.2.4 screen was a centred block whose loudest element was the splash and whose title was
-/// **the same 10 px as the sentence under it** (`chrome::text::HEADING` and `Ink::label` are both 10), while the
+/// **the same 10 px as the sentence under it** (`chrome::text::HEADING` and `chrome::text::LABEL` are both 10), while the
 /// sidebar's own nav buttons were 13. FiraMono ships one weight, so size is the only lever a title has — and
 /// it was not being used. Four changes, each a finding:
 ///

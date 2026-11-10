@@ -103,7 +103,7 @@ const OVERLAP_ALPHA: u8 = 90;
 /// A pick already taken, drawn on the live overlay: the same arm as the picture's mark, so what a
 /// person sees while pointing matches what is saved.
 const TAKEN_MARK_ARM_PX: f32 = 8.0;
-/// **How strong a taken pick's wash is, as a share of [`chrome::SNIP_WASH`].** Half: it is the record
+/// **How strong a taken pick's wash is, as a share of `chrome::ink().snip_wash`.** Half: it is the record
 /// of a decision already made, not the one being made now, so the live outline stays the loudest thing
 /// on the frozen frame.
 const PICK_TAKEN_SHARE: f32 = 0.5;
@@ -1706,7 +1706,7 @@ fn accent_rgb() -> [u8; 4] {
     rgba8(chrome::ink().accent)
 }
 
-/// **[`chrome::DANGER`] as RGBA8**, for the newest pick: the same red the interface uses for "wrong",
+/// **`chrome::ink().danger` as RGBA8**, for the newest pick: the same red the interface uses for "wrong",
 /// so a person opening the picture finds the thing they added last.
 fn danger_rgb() -> [u8; 4] {
     rgba8(chrome::ink().danger)

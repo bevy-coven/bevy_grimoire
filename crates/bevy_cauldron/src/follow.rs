@@ -99,11 +99,11 @@ pub struct FollowRequest {
 /// disagree with the first about where a thing is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Manner {
-    /// A change that was applied — or an undo of one. The outline is [`crate::chrome::ACCENT`].
+    /// A change that was applied — or an undo of one. The outline is `chrome::ink().accent`.
     #[default]
     Applied,
     /// **A proposal**, followed before anything is written (AF-05, #361). The outline is
-    /// [`crate::chrome::SUGGEST`], the ink this editor already uses for what a model suggests, so the
+    /// `chrome::ink().suggest`, the ink this editor already uses for what a model suggests, so the
     /// preview reads as a proposal everywhere it is drawn.
     Preview,
 }

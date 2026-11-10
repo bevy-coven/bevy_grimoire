@@ -3279,7 +3279,7 @@ fn the_pointer_is_over_the_panel_when_it_is_over_a_row() {
 /// **Every tab carries a badge, and it boots silent.**
 ///
 /// The badge is the stale count's own text child, in its own colour, because `style_tabs` owns
-/// every `TabLabel`'s `TextColor` per frame — a `Ink::danger` written into the label was stomped a
+/// every `TabLabel`'s `TextColor` per frame — an `Ink::danger` written into the label was stomped a
 /// frame later, which is how "the one word here allowed to shout" rendered in the tab's ordinary
 /// grey. The label itself must no longer carry the count: one fact, one node.
 #[test]
@@ -11052,7 +11052,7 @@ fn a_tab_is_not_a_button() {
 ///
 /// It also asserts the seeding is *this editor's*, not Feathers'. `docs/ui.md` §5 says of the crate
 /// "its visuals are Bevy's editor skin — do not adopt them"; the machinery is adopted and the greys
-/// are not, and `PANE_BODY_BG` reading `chrome::PANEL_BG` is what that reconciliation looks like
+/// are not, and `PANE_BODY_BG` reading `chrome::ink().panel_bg` is what that reconciliation looks like
 /// from the outside.
 #[test]
 fn the_theme_is_seeded_from_the_palette() {
@@ -12154,7 +12154,7 @@ fn a_badge_lights_while_its_key_is_down() {
 ///
 /// `chrome_census` bans raw font sizes but does not pin roles, so nothing else would notice if the
 /// one number this overlay exists to show quietly returned to 9 px. Ink identifies the part: the
-/// chord is [`chrome::KEY`], the description [`chrome::DIM`], and no third ink draws in a badge.
+/// chord is `chrome::ink().key`, the description `chrome::ink().dim`, and no third ink draws in a badge.
 #[test]
 fn a_badge_chord_reads_at_body_size() {
     use bevy_cauldron::badges::Badge;
@@ -13538,7 +13538,7 @@ fn a_badge_takes_the_ground_a_dock_leaves() {
 
 /// **While the shortcuts key is held, the grounds step back — and every word on them does not.**
 ///
-/// The other half of letting a badge stand on a panel's empty middle: a `Ink::panel_bg` box on a
+/// The other half of letting a badge stand on a panel's empty middle: an `Ink::panel_bg` box on a
 /// `Ink::panel_bg` panel is one shape with a line through it. `chrome::GROUND_HELD` is what separates
 /// them by depth, and this pins both ends of it — the drop while held, and the exact restore on
 /// release, which is what `chrome::Ground` carries its colour for.

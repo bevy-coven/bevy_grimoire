@@ -53,7 +53,7 @@ const UNSORTED: &str = "unsorted";
 /// and it was the one piece of state the world did not show.
 const BOUNDS_FILL: Color = Color::srgb(0.105, 0.100, 0.092); // CHROME-OK: world ink — the slab under this map, read against chrome::ink().void, no panel role
 
-// The map grid's line is `chrome::GRID_LINE` — world ink two tabs state, one value in the palette.
+// The map grid's line is `chrome::ink().grid_line` — world ink two tabs state, one value in the palette.
 /// **The dressing rungs' lines, quieter than the module's.**
 ///
 /// A minor line that reads as loud as a major one is not a second scale, it is noise: the eye has to
@@ -61,7 +61,7 @@ const BOUNDS_FILL: Color = Color::srgb(0.105, 0.100, 0.092); // CHROME-OK: world
 /// they are the same ladder and a colour change would say they were not.
 /// **A cell a pending layout would take.**
 ///
-/// The same slate `chrome::SUGGEST` uses for the VLM labeler's machine-proposed state, and for the
+/// The same slate `chrome::ink().suggest` uses for the VLM labeler's machine-proposed state, and for the
 /// same reason its note gives: a proposal is *a question*, so it must read as neither an answer
 /// (amber, a live edit of yours) nor an alarm (red, something wrong).
 pub(crate) const PROPOSAL_LINE: Color = Color::srgb(0.42, 0.55, 0.68); // CHROME-OK: world ink — a pending layout's cell gizmo, crate::chrome::ink().suggest's role in the world
@@ -7340,7 +7340,7 @@ fn refresh_size(
     for (field, hovered, mut bg) in &mut fields {
         let focused = matches!(&edit.active, Some((axis, _)) if *axis == field.0);
         // Focus beats hover: while a field is being typed into, the pointer resting on it is not
-        // news. Hover is `chrome::ROW_HOVER`'s signifier — this is clickable, and not yet chosen.
+        // news. Hover is `chrome::ink().row_hover`'s signifier — this is clickable, and not yet chosen.
         let want = if focused {
             crate::chrome::ink().focus_bg
         } else if hovered.0 {

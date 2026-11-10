@@ -368,7 +368,7 @@ pub fn refresh(
     let ink = FieldInk::of(skin.as_deref());
     // The fill answers to the pointer as well as to focus, so it repaints every frame — hover
     // cannot wait for `Filters` to change. The `!=` guard keeps the steady state a comparison.
-    // Focus beats hover; hover is `chrome::ROW_HOVER`'s signifier that the box takes a click.
+    // Focus beats hover; hover is `chrome::ink().row_hover`'s signifier that the box takes a click.
     for (which, hovered, mut bg) in &mut boxes {
         let want = if filters.focus == Some(which.0) {
             ink.focus

@@ -64,7 +64,7 @@ fn danger_ink() -> [u8; 4] {
 }
 
 /// One color per gait slot, raster and legend alike — the table is the contract between them.
-/// Entry 0 is `chrome::ACCENT`, bridged; the rest are a deliberately separate categorical palette
+/// Entry 0 is `chrome::ink().accent`, bridged; the rest are a deliberately separate categorical palette
 /// (series need distinguishability, not brand), at comparable value.
 fn slot_colors() -> [[u8; 4]; 8] {
     [

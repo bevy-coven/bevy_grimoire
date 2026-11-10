@@ -5827,7 +5827,7 @@ struct LabelStores<'w> {
 ///
 /// **The review did not disappear; it moved after the fact**, which is what the provenance work of
 /// the same day is for. Every value written here is stamped `By::Model`, so the pane draws it in
-/// [`crate::chrome::UNCHECKED`] until a person confirms it — *"a machine decided this and you have
+/// `chrome::ink().unchecked` until a person confirms it — *"a machine decided this and you have
 /// not"* is now a thing you can see across a whole kit, rather than a keypress you had to spend
 /// before the value existed. `Cmd+Z` undoes a piece, `Delete` sends one back to `NOT IMPORTED`
 /// stripped, and `Shift+Y` abandons a running walk with everything it has staged.
@@ -9790,7 +9790,7 @@ struct DetailInputs<'w, 's> {
 }
 
 /// **The ink a model-written label is drawn in** (UI-02, #210): the running skin's `unchecked`, or
-/// `chrome::UNCHECKED` when there is no skin (a headless harness that never ran `EditorUiPlugin`).
+/// `chrome::ink().unchecked` when there is no skin (a headless harness that never ran `EditorUiPlugin`).
 ///
 /// One function, read by the pane and by
 /// `tests/the_model_written_ink_comes_from_the_skin.rs`, so an assertion about it is an assertion about
@@ -9803,7 +9803,7 @@ pub fn unchecked_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
 /// expression the system and a test both read, so an assertion here is an assertion about what is
 /// painted.
 ///
-/// `draw_ink` was the largest single reader of `chrome::TEXT` and `chrome::LABEL` in this file — 181
+/// `draw_ink` was the largest single reader of `chrome::ink().text` and `chrome::ink().label` in this file — 181
 /// sites between the two and its siblings — and none of them could see a project's skin file. Each
 /// falls back to its constant when no skin is running (a headless harness that never added
 /// `EditorUiPlugin`), which is what every protected test already reads.
@@ -9887,7 +9887,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
         skin,
     } = detail;
     // **The colour a model-written label is drawn in** (UI-02, #210): the skin's `unchecked` when there
-    // is a skin, `chrome::UNCHECKED` otherwise. Both draw sites in this pane use it, so a theme edit
+    // is a skin, `chrome::ink().unchecked` otherwise. Both draw sites in this pane use it, so a theme edit
     // reaches every "a machine decided this" in one place.
     // **The pane's ink, from the skin** (UI-02, #210): `suggest` (a model's proposal), `danger` (a
     // refusal) and `accent` (the one live-edit colour). Each falls back to its constant for a harness
@@ -9899,7 +9899,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
     let accent_ink = skin.as_deref().map_or(crate::chrome::ink().accent, |s| s.accent);
     let unchecked_ink = unchecked_ink(skin.as_deref());
     // **A quiet note's ink** (UI-02, #210, slice 5): the "m up the wall", the size note, a remedy under
-    // a warning, a layer's label. All five used `chrome::LABEL` beside `chrome::font(text::LABEL)` — a
+    // a warning, a layer's label. All five used `chrome::ink().label` beside `chrome::font(text::LABEL)` — a
     // colour and a *font size* that share a name, which is what made the colour table's ratchet count
     // them twice. `quiet` is the skin's `text_muted`, falling back to the constant.
     let quiet_ink = skin.as_deref().map_or(crate::chrome::ink().label, |s| s.text_muted);
@@ -10608,7 +10608,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     // It asked `== Some(By::Model)`, which made `None` — no provenance record at
                     // all, which is every descriptor written before the labeller existed and every
                     // one a hand edit produced — paint in `TEXT`. `TEXT` on a chip means *you did*
-                    // (see `chrome::UNCHECKED`), so the pane claimed a human confirmation that no
+                    // (see `chrome::ink().unchecked`), so the pane claimed a human confirmation that no
                     // file records. `By` has two variants and `None` is a third answer; only `Human`
                     // is the one that clears the doubt.
                     //
