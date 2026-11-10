@@ -8694,8 +8694,13 @@ pub mod door_open {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Params {
-        /// The workspace's id: `map`, `kit`, `animation`, and the six that are not built yet.
-        pub workspace: String,
+        /// The workspace's id (`map`, `kit`, `animation`, and the six that are not built yet), or
+        /// `rigs`, the word this field took before the workspaces. **The field keeps its name**:
+        /// `door_open` is a wire contract (recorded BRP runs, the guide and the protected tests send
+        /// `door`), and the issue replaces the type behind it, not the operation. `workspace` is
+        /// read too, so a caller who has learned the new word is not refused.
+        #[serde(alias = "workspace")]
+        pub door: String,
         /// A panel that workspace shows, by its label (e.g. `meshes`). Absent opens the workspace on
         /// its first panel.
         #[serde(default)]
@@ -8709,12 +8714,12 @@ pub mod door_open {
             json!({
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["workspace"],
+                "required": ["door"],
                 "properties": {
-                    "workspace": {
+                    "door": {
                         "type": "string",
                         "enum": workspaces,
-                        "description": "The workspace to switch to. map builds the level; kit makes reusable content; animation is the rig bench. The others are not built yet and say which issue brings them."
+                        "description": "The workspace to switch to (`workspace` is read as well). map builds the level; kit makes reusable content; animation is the rig bench, and `rigs` is read as animation. The others are not built yet and say which issue brings them."
                     },
                     "tab": {
                         "type": "string",
@@ -8728,7 +8733,7 @@ pub mod door_open {
         pub fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
             serde_json::from_value(raw.clone()).map_err(|e| {
                 Refusal::new(format!(
-                    "this is not a workspace to open: {e}. The fields are `workspace` and `tab`, and nothing else."
+                    "this is not a workspace to open: {e}. The fields are `door` (or `workspace`) and `tab`, and nothing else."
                 ))
             })
         }
@@ -8748,11 +8753,12 @@ pub mod door_open {
         read_map: bool,
     ) -> Result<serde_json::Value, Refusal> {
         let p = Params::parse(params)?;
-        let Some(workspace) = Workspace::from_flag(&p.workspace) else {
-            let names: Vec<&str> = Workspace::ALL.iter().map(|w| w.id()).collect();
+        let Some(workspace) = Workspace::from_flag(&p.door) else {
+            let mut names: Vec<&str> = Workspace::ALL.iter().map(|w| w.id()).collect();
+            names.push("rigs");
             return Err(Refusal::new(format!(
-                "`{}` is not a workspace. The workspaces are {}.",
-                p.workspace,
+                "`{}` is not a workspace. The workspaces are {} (`rigs` is read as animation).",
+                p.door,
                 names.join(", ")
             )));
         };
@@ -8818,10 +8824,6 @@ pub mod door_open {
         // cannot answer it for them.
         let waiting = workspace != Workspace::Map && ctx.open.as_ref().is_some_and(|open| open.dirty());
         let mut answer = json!({
-            "workspace": workspace.id(),
-            // **And the old key too**, because `editor::request_door` reads either and a
-            // recorded BRP run from before this issue names `door`. One answer, two spellings, for
-            // as long as an old script exists.
             "door": workspace.id(),
             "tab": tab.map(|m| m.label().to_lowercase()),
         });
@@ -8860,7 +8862,7 @@ pub mod door_open {
 
         fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
             let plan = door_answer(ctx, params, false)?;
-            let workspace = plan["workspace"].as_str().unwrap_or("");
+            let workspace = plan["door"].as_str().unwrap_or("");
             let target = match plan["tab"].as_str() {
                 Some(tab) => format!("the {workspace} workspace on {tab}"),
                 None => format!("the {workspace} workspace"),

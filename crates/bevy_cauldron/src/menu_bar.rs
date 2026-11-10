@@ -40,10 +40,11 @@ use crate::screen::Screen;
 ///
 /// It is a list rather than a sort so the bar does not move when a category is added: a new one is
 /// appended.
-pub const MENUS: [(&str, &str); 10] = [
+pub const MENUS: [(&str, &str); 11] = [
     ("file", "File"),
     ("edit", "Edit"),
     ("view", "View"),
+    ("workspace", "Workspace"),
     ("map", "Map"),
     ("meshes", "Meshes"),
     ("tiles", "Tiles"),

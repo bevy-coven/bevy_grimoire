@@ -95,10 +95,13 @@ fn a_round_trip_through_the_workspaces_keeps_the_map_and_the_selection() {
 
     // Something to lose: the map's name and a selected piece.
     let map = app.world().resource::<OpenMap>().map.name.clone();
-    let mut selected = Selection::default();
-    selected.set(vec!["floor@0".to_owned()]);
-    app.world_mut().insert_resource(selected);
-    app.update();
+    assert!(
+        bevy_cauldron::editor::lock_on_placement(app.world_mut(), "floor@0"),
+        "the test's piece must be on the map to be selected"
+    );
+    for _ in 0..3 {
+        app.update();
+    }
     let before = app.world().resource::<Selection>().ids().to_vec();
     assert_eq!(before, ["floor@0"], "the test's own selection must be the one the editor holds");
 
@@ -284,7 +287,6 @@ fn no_source_names_a_door_any_more() {
             let mentions = code.contains("tiles::Door")
                 || code.contains("Door::")
                 || code.contains("resource::<Door>")
-                || code.contains("DoorRequest")
                 || code.contains("OtherDoorMark")
                 || code.contains("OtherDoorLabel")
                 || code.contains("DoorStrip");

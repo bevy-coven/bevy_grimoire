@@ -153,13 +153,13 @@ impl Workspace {
     /// went; it stopped being a *place*.
     pub const fn panels(self) -> &'static [Mode] {
         match self {
-            Workspace::Map | Workspace::World => &[Mode::Map],
+            Workspace::Map => &[Mode::Map],
             Workspace::Kit => &[Mode::Meshes, Mode::Tiles, Mode::Compose],
             Workspace::Animation => &[Mode::Anim],
             // **Nothing yet.** These workspaces hold documents rather than panels (NV-04, NV-07) or
             // a page of their own (NV-08, NV-09, NV-10), and until they are built they show no
             // panel and are not registered.
-            Workspace::Project | Workspace::Sound | Workspace::Files | Workspace::Game | Workspace::Agent => &[],
+            Workspace::Project | Workspace::World | Workspace::Sound | Workspace::Files | Workspace::Game | Workspace::Agent => &[],
         }
     }
 

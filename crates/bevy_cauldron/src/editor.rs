@@ -3430,8 +3430,8 @@ pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) 
         return;
     };
     let workspace = after
-        .get("workspace")
-        .or_else(|| after.get("door"))
+        .get("door")
+        .or_else(|| after.get("workspace"))
         .and_then(serde_json::Value::as_str)
         .and_then(crate::workspace::Workspace::from_flag);
     let tab = after
@@ -3452,7 +3452,6 @@ pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) 
 /// this, so a key and an agent get the same answer about what may be opened.
 pub fn open_door(world: &mut World, workspace: crate::workspace::Workspace, tab: Option<crate::tiles::Mode>) {
     let params = serde_json::json!({
-        "workspace": workspace.id(),
         "door": workspace.id(),
         "tab": tab.map(|m| m.label().to_lowercase()),
     });
