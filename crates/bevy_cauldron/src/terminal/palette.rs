@@ -126,7 +126,11 @@ const GREY_STEP: u8 = 10;
 /// returns a `Color` rather than an `Option`, and a caller has no branch to get wrong.
 pub fn resolve(index: u8) -> Color {
     if index < 16 {
-        return ansi()[index as usize];
+        // **Built once** (review, 2026-11-10): `ansi()` mixes the ink into sixteen colours, and a
+        // terminal repaints a whole screen of cells per frame — a rebuild per cell was that work
+        // repeated for an answer that cannot change while the palette does not.
+        static ANSI: std::sync::OnceLock<[Color; 16]> = std::sync::OnceLock::new();
+        return ANSI.get_or_init(ansi)[index as usize];
     }
     let (r, g, b) = rgb(index);
     Color::srgb_u8(r, g, b)

@@ -37,8 +37,9 @@ const LEAST_TEXT_CONTRAST: f32 = bevy_gooey::TEXT_CONTRAST;
 ///
 /// **This is the skin a theme *means*, not necessarily the one the editor runs.** Which of them can
 /// be honours is [`honoured_from`]'s question, and it has to be asked: `chrome.rs` still draws its
-/// labels from its own constants (the last half of #210, which needs the protected colour tests
-/// re-pinned), so a light theme's ground would leave every `chrome::ink().text` label at about 1.1:1.
+/// labels from `chrome::Ink`, which is the *editor's own* skin rather than the running one (#210's
+/// compiled-in read), so a light theme's ground would leave every `chrome::ink().text` label at about
+/// 1.1:1 until the chrome's ink follows the theme — which is UI-73's remaining item, not this one's.
 pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
     use crate::settings::Theme;
     match theme {
@@ -51,21 +52,19 @@ pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
 /// **The inks the editor's own labels are drawn in, named** — the side a theme's ground is measured
 /// against (UI-73, #251).
 ///
-/// **Why a theme needs measuring at all.** `chrome.rs` declares 28 colour constants and draws its
-/// headings, rows, hints, chips and status band with them, not with the skin; #210's acceptance is
-/// that they all come from the skin, and until it is met those colours are the editor's ink whatever
-/// the running skin says. So Parchment — whose `surface` is cream and whose `text` is dark brown —
+/// **Why a theme needs measuring at all.** `chrome.rs` draws its headings, rows, hints, chips and
+/// status band with `chrome::Ink`, which is the *editor's own* skin (`src/editor_skin.ron`) rather
+/// than the running one, so those colours do not move with a theme. So Parchment — whose `surface` is
+/// cream and whose `text` is dark brown —
 /// would paint every panel cream while each `chrome::ink().text` label over it stayed near-white:
 /// **1.12:1**, measured on [`skin_for`]`(Theme::Parchment).surface`. Tool dark and High contrast both
 /// clear the floor (`muted` on `surface_raised` is the tightest pair in each, 4.61:1 and 4.94:1), so
 /// Parchment is the one theme the editor cannot honour yet.
 ///
-/// **Read from [`editor_skin`], not from the constants**, and the two are the same colour by protected
-/// assertion: `tests/editor_skin.rs`, `tests/the_skin_carries_the_editors_other_colours.rs` and
-/// `tests/the_skin_carries_the_editors_state_colours.rs` pin every field and tone of the editor's skin
-/// to the constant of the same meaning. Going through the skin here is therefore not an
-/// approximation — it is the same nine colours under the name a skin can carry, so this function
-/// cannot drift from the ink the chrome paints while those assertions hold.
+/// **Read from [`editor_skin`], which is the same file `chrome::ink()` reads.** `tests/editor_skin.rs`
+/// and `tests/no_colour_lives_in_chrome.rs` pin that skin to the values the old palette table held, so
+/// this is not an approximation: it is the same nine colours under the name a skin can carry, and this
+/// function cannot drift from the ink the chrome paints while those assertions hold.
 ///
 /// A tone the skin does not carry is left out rather than guessed: `the_skin_carries_the_editors_other_colours.rs`
 /// asserts all five, and a check that invented a colour for a missing one would be measuring a
@@ -123,8 +122,9 @@ pub fn unreadable_pairs(theme_skin: &GooeySkin) -> Vec<String> {
 
 /// **The running skin this theme can be honoured as, and why not when it cannot** (UI-73, #251).
 ///
-/// The editor has one set of inks it can paint — [`editor_inks`], which are `chrome.rs`'s constants
-/// until #210 finishes moving them onto the skin. So a theme is applied only when the ground it would
+/// The editor has one set of inks it can paint — [`editor_inks`], which are `chrome::Ink`'s, and
+/// `chrome::Ink` reads the editor's own `editor_skin.ron` rather than the theme. So a theme is applied
+/// only when the ground it would
 /// paint still leaves those inks readable, and one that would not is refused here naming the pair that
 /// failed — **one path, and a real validation rather than a fallback**: the alternative, painting
 /// Parchment's cream under the editor's near-white labels at 1.12:1 and calling it a theme, is a
@@ -334,13 +334,20 @@ impl Plugin for EditorUiPlugin {
         // because the file is a game's palette: it reaches the window only through the Game UI preview
         // panel, never the editor's chrome.
         app.add_plugins(crate::ui_skin::GameUiPreviewPlugin);
+        // **The person's text size reaches the editor's own labels** (UI-73, #251): `chrome::font`
+        // reads one atomic, so a size chosen in Settings enlarges them with gooey's own widgets.
+        app.add_systems(
+            Update,
+            follow_the_text_size.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
+        );
         // **The player's Reduced motion reaches gooey** (UI-R01): travel lands, colours and fades still ease.
         app.add_systems(
             Update,
             follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
-        // **The theme and the text size reach the skin** (UI-73, #251), after the settings are read and
-        // after the project's skin file, so a project's `family/bevy_gooey.ron` still wins.
+        // **The theme reaches the running skin** (UI-73, #251), after the settings are read. A project's
+        // `family/bevy_gooey.ron` is not consulted: it is the *game's* palette and lives in `GameSkin`
+        // for the Game UI preview (UI-03, #211), so the running skin here is always the person's theme.
         app.add_systems(
             Update,
             follow_the_theme
@@ -541,6 +548,23 @@ pub fn follow_the_saved_layout(
             dock.0 = want.clone();
         }
     }
+}
+
+/// **The person's text size reaches every label the editor draws by hand** (UI-73, #251).
+///
+/// gooey scales its own widgets' type by the skin's `text_scale`; the editor's hand-drawn labels read
+/// [`crate::chrome::font`], which has no system parameter to reach a setting through. So the setting is
+/// copied into the module's one atomic here, and a settled editor costs one comparison.
+///
+/// `None` is a harness that never added the settings, and it leaves the scale at 1.0 — the size the
+/// design was made at.
+fn follow_the_text_size(settings: Option<Res<crate::settings::EditorSettings>>, mut applied: Local<Option<f32>>) {
+    let Some(settings) = settings else { return };
+    if applied.is_some_and(|last| (last - settings.text_scale).abs() < f32::EPSILON) {
+        return;
+    }
+    *applied = Some(settings.text_scale);
+    crate::chrome::set_text_scale(settings.text_scale);
 }
 
 /// **Reduced motion is the player's setting, and gooey's `MotionSettings::reduced` is how it is kept**: with it on,

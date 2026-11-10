@@ -417,8 +417,22 @@ pub const ORDER_WINDOW: isize = 0;
 /// it in proportion, up to [`MAX_GROWTH`]. Below the reference nothing shrinks: the design has a
 /// smallest legible size and a cramped window needs the *stage* back, not smaller type.
 pub fn ui_scale_for(logical_width: f32, scale_factor: f32) -> f32 {
+    ui_scale_for_a_person(logical_width, scale_factor, 1.0)
+}
+
+/// **The same fit, times the interface size a person chose** (UI-73, #251).
+///
+/// The setting is a multiple of the skin's own spacing and target sizes — 100% is the size the editor
+/// was designed at — so it multiplies the whole interface's `UiScale` and every panel grows together.
+/// `UiScale` reaches every `Val::Px` and every font size, which is exactly what "the interface size"
+/// means; the text size is a separate lever (`text_scale`) that moves type alone.
+///
+/// A person's multiple is clamped where [`crate::settings::SCALE_RANGE`] clamps it, so a hand-edited
+/// file cannot ask for an interface two pixels wide or a hundred times larger.
+pub fn ui_scale_for_a_person(logical_width: f32, scale_factor: f32, interface_scale: f32) -> f32 {
     let growth = (logical_width / REFERENCE_W).clamp(1.0, MAX_GROWTH);
-    crate::chrome::EDITOR_UI_SCALE * growth * scale_factor
+    let wanted = interface_scale.clamp(crate::settings::SCALE_RANGE.0, crate::settings::SCALE_RANGE.1);
+    crate::chrome::EDITOR_UI_SCALE * growth * scale_factor * wanted
 }
 
 /// The width the editor's pixel constants were chosen against — a 16:10 laptop's logical width, and
@@ -450,26 +464,36 @@ fn fit_surface_to_window(
     surface: Option<Res<Surface>>,
     mut mirror: Query<(&mut Transform, &mut Sprite), With<Mirror>>,
     mut ui_scale: ResMut<UiScale>,
+    settings: Option<Res<crate::settings::EditorSettings>>,
     mut images: ResMut<Assets<Image>>,
     mut events: MessageWriter<bevy::asset::AssetEvent<Image>>,
 ) {
-    // No window is a headless run: there is nothing to fit to, and the initial 16:9 stands.
-    let (Ok(window), Some(surface), Ok((mut mirror, mut mirror_sprite))) =
-        (windows.single(), surface, mirror.single_mut())
-    else {
+    // **The interface's scale is the window's business, not the surface's**, and it is answered
+    // first: a window with no surface yet — a headless harness, the frame before the target is made —
+    // still gets the scale it should lay out at, and that is what lets a test of the person's
+    // interface-size setting read `UiScale` without a render target.
+    let Some(window) = windows.single().ok() else {
+        // No window is a headless run with no size: nothing is fitted and nothing is scaled.
         return;
     };
-
     let sf = window.scale_factor().max(1.0);
+    // **The person's interface size multiplies the fit** (UI-73, #251): the setting is the whole
+    // interface's scale, so 125% enlarges the panels and the type together, in the units `UiScale`
+    // already scales.
+    let interface_scale = settings.as_deref().map_or(1.0, |s| s.interface_scale);
+    let want_ui = ui_scale_for_a_person(window.resolution.width(), sf, interface_scale);
+    if ui_scale.0 != want_ui {
+        ui_scale.0 = want_ui;
+    }
+
+    // The mirror and the target: only a surface has them.
+    let (Some(surface), Ok((mut mirror, mut mirror_sprite))) = (surface, mirror.single_mut()) else {
+        return;
+    };
     let (iw, ih) = (
         window.resolution.physical_width().max(1),
         window.resolution.physical_height().max(1),
     );
-
-    let want_ui = ui_scale_for(window.resolution.width(), sf);
-    if ui_scale.0 != want_ui {
-        ui_scale.0 = want_ui;
-    }
 
     // A `1554`-texel image drawn at `0.5` covers `777` logical pixels — the whole window, one texel
     // per physical pixel, which is what sharp means here.

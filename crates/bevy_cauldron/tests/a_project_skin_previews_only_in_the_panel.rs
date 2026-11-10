@@ -150,23 +150,48 @@ fn editing_the_projects_accent_moves_the_previews_buttons() {
     }
     assert_eq!(seen, Some(moved), "the preview's scope follows the file's accent");
 
-    // **And the fill the button is drawn with is that accent**, read through the library's own answer
-    // for a primary button at rest — so this is a claim about what is painted, not about a resource.
-    let skin: GooeySkin = app.world().get::<SkinScope>(panel).expect("a scope").0.clone();
-    let fill = skin.variant_fill(bevy_gooey::ButtonVariant::Submit, bevy_gooey::ButtonPhase::Rest);
-    assert_eq!(fill, moved, "a primary button under this skin is filled with its accent");
-    // The plain button is filled from the same skin's raised surface, so the two are not one colour.
-    assert_ne!(
-        skin.variant_fill(bevy_gooey::ButtonVariant::Neutral, bevy_gooey::ButtonPhase::Rest),
-        fill,
-        "the ordinary button is not also the accent"
-    );
-    // The plain button is in the panel too, so both sample buttons are under the scope.
+    // **And the fill the button is actually drawn with is that accent**, read off its own
+    // `BackgroundColor` once gooey has styled it (review, 2026-11-10): `variant_fill` is the library's
+    // answer for a skin, and the question here is what reached the widget on screen.
+    let primary = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<PreviewPrimary>>().single(world).expect("the sample screen's main action")
+    };
+    let drawn = app
+        .world()
+        .get::<BackgroundColor>(primary)
+        .map(|bg| bg.0)
+        .expect("a gooey button is filled by `apply_skin`, so it has a BackgroundColor");
+    assert_eq!(drawn, moved, "the preview's primary button is painted the file's accent");
+    // **The ordinary button beside it is a different fill**, so "the accent reached it" is not "every
+    // button is the accent".
     let plain = {
         let world = app.world_mut();
         world.query_filtered::<Entity, With<PreviewPlain>>().single(world).expect("a plain sample button")
     };
-    assert!(app.world().get::<ChildOf>(plain).is_some(), "the plain button stands in the panel");
+    let plain_fill = app.world().get::<BackgroundColor>(plain).map(|bg| bg.0);
+    assert_ne!(plain_fill, Some(moved), "the ordinary button is not also the accent");
+}
+
+/// **The scope is on the preview panel and nowhere else.**
+///
+/// #211's acceptance is that the editor chrome never takes the project's skin, and `bevy_gooey` styles
+/// a widget from the nearest `SkinScope` at or above it — so one scope landing on the window root, a
+/// door, or any panel that is not the preview would restyle the chrome without changing the resource.
+/// This walks every scope in the world and holds each to the preview panel, which is the only check
+/// that can catch that.
+#[test]
+fn the_projects_skin_scope_is_on_the_preview_panel_and_nowhere_else() {
+    let (_root, mut app) = editor_with_a_game_skin("preview_scope_only");
+    let panel = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<GameUiPreview>>().single(world).expect("the panel is open")
+    };
+    let scopes: Vec<Entity> = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<SkinScope>>().iter(world).collect()
+    };
+    assert_eq!(scopes, vec![panel], "one scope, on the preview panel: any other would restyle the chrome");
 }
 
 /// **No chrome button takes the project's skin.** The editor's running skin is the editor's own and the

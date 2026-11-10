@@ -60,7 +60,7 @@ pub fn sync_placed_lights(
         return;
     }
     for (entity, Placement(id), children) in &placed {
-        let wanted = open.map.placements.iter().find(|p| &p.id == id).and_then(|p| p.family.get(crate::chrome::ink().key)).map(|text| Fixture::read(text));
+        let wanted = open.map.placements.iter().find(|p| &p.id == id).and_then(|p| p.family.get(KEY)).map(|text| Fixture::read(text));
         let existing = children.and_then(|c| c.iter().find(|e| lights.contains(*e) || fires.contains(*e)));
         let existing_is_fire = existing.is_some_and(|e| fires.contains(e));
         match (wanted, existing) {

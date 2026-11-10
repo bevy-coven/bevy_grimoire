@@ -10,7 +10,7 @@
 use bevy_lights::{FIRE_EDGE_LUX, Fire, Flicker, flame_light_offset};
 
 /// The family key a placement's fixture is saved under, as listed in `family.ron`.
-pub const crate::chrome::ink().key: &str = "bevy_lights";
+pub const KEY: &str = "bevy_lights";
 
 /// The fields only a `Fire` has. A value that names any of them is a `Fire`.
 pub const FIRE_FIELDS: [&str; 7] = ["kind", "lumens", "color", "embers", "smoke", "tongues", "bed"];

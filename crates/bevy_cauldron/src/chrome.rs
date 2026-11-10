@@ -641,7 +641,40 @@ pub mod text {
 /// [`text::Role`] and cannot. `the_type_scale_is_a_type` fails the build on a `from_font_size`
 /// outside this module, which is the rule the old digit-matching regex was reaching for.
 pub fn font(role: text::Role) -> TextFont {
-    TextFont::from_font_size(role.px())
+    TextFont::from_font_size(role.px() * text_scale())
+}
+
+/// **The person's text size, as every `chrome::font` call sees it** (UI-73, #251).
+///
+/// `chrome::font` has 117 call sites, every one of them a label the editor draws by hand, and none of
+/// them has a system parameter to spare: a role's size is a fact of the type scale, and the scale a
+/// person chose is a fact about the editor. So the running scale is kept here, in one atomic, and
+/// [`set_text_scale`] is the only writer — a system turns the setting into it each frame
+/// ([`crate::ui::follow_the_text_size`]).
+///
+/// **`u32` thousandths rather than an `f32`**, because an `AtomicU32` is lock-free on every target
+/// this editor ships and an `f32` atomic does not exist; 1.0 is [`TEXT_SCALE_ONE`], a text size is
+/// never negative, and a thousandth of a step is finer than any type the scale can draw.
+///
+/// **A frame that has not set it reads 1.0**, so a label built before any settings were read — a
+/// harness, a build step — is drawn at the size the design was made at, not at zero.
+static TEXT_SCALE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(TEXT_SCALE_ONE);
+
+/// 1.0 as [`TEXT_SCALE`] holds it: the shipped size, in thousandths.
+const TEXT_SCALE_ONE: u32 = 1_000;
+
+/// **How large the type is against the size the editor was designed at.** 1.0 is as designed; see
+/// [`crate::settings::SCALE_RANGE`] for the ends a file may ask for.
+pub fn text_scale() -> f32 {
+    TEXT_SCALE.load(std::sync::atomic::Ordering::Relaxed) as f32 / TEXT_SCALE_ONE as f32
+}
+
+/// **Set the type's size** (UI-73, #251). The only writer, and the value is clamped to the range a
+/// settings file may hold so a hand-edited file cannot draw a label of no height.
+pub fn set_text_scale(scale: f32) {
+    let clamped = scale.clamp(crate::settings::SCALE_RANGE.0, crate::settings::SCALE_RANGE.1);
+    let thousandths = (clamped * TEXT_SCALE_ONE as f32).round() as u32;
+    TEXT_SCALE.store(thousandths, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// **A role's size times a person's scale** (#324): the terminal's text size setting multiplies the
