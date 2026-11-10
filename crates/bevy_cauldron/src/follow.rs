@@ -349,6 +349,11 @@ impl Following {
 /// still followed, and a person who does nothing is still shown it.
 fn a_persons_input_takes_the_camera_back(
     keys: Option<Res<ButtonInput<KeyCode>>>,
+    // **The one press that is not a gesture**: Look asks the camera to move, so reading its own chord
+    // as "the person is working the view" would have the follow drop the very change the person just
+    // asked to be shown (AF-04, #360). Asked as the key edge, so holding the chord is not a second
+    // gesture and a drag on the same frame still counts.
+    live: Option<Res<crate::keys::Live>>,
     mouse: Option<Res<ButtonInput<MouseButton>>>,
     time: Res<Time<Real>>,
     // **The wheel**, read here for the reason the zoom reads it: it is the person's hand on the view.
@@ -360,6 +365,28 @@ fn a_persons_input_takes_the_camera_back(
     // person working", and the two would disagree the first time one of them changed.
     mut revealing: Option<ResMut<crate::reveal::Revealing>>,
 ) {
+    // **The Look chord is a request, not a gesture** (AF-04, #360): `look_on_the_key` runs first and
+    // sets the follow's clocks aside, and this system would set them straight back from the same
+    // press — measured on the first version, where Look framed nothing while the queue was cleared
+    // under it. One reading of the key, here, because this is the system that decides what "working"
+    // means for every other verb.
+    // **Held, not only pressed.** The first cut skipped only the frame the chord went down on, and
+    // that was wrong in the way this system punishes: frame two of the same hold fell through to
+    // `working`, took the "a gesture's first frame" branch, and cleared the ease, the outline and the
+    // queue — so a person leaning on Look for two frames cancelled the Look they had just asked for.
+    // The release frame counts too: `just_released` is in `working` below, and letting go is not a
+    // gesture either.
+    if keys
+        .as_deref()
+        .zip(live.as_deref())
+        .is_some_and(|(keys, live)| {
+            crate::keys::pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+                || crate::keys::just_pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+                || just_released_on_the_chord(keys, *live)
+        })
+    {
+        return;
+    }
     // **`pressed`, not `just_pressed`**: the press state is what survives the frame it was made on,
     // and a person holding a key is working just as much as one who tapped it. It is also the only
     // honest answer in a headless run — `ButtonInput`'s `just_pressed` is cleared in `PreUpdate`, so
@@ -537,6 +564,56 @@ pub fn look_at_the_change(
     }
 }
 
+/// **Was the Look chord let go of this frame?** The release is a frame of the same press, and
+/// `working` below counts any released key as the person acting — which it is for every other verb,
+/// and is not for the one chord whose whole job is to move the camera.
+///
+/// Asked of the chord's own key rather than of `Action`s, because there is no `keys::just_released`
+/// and a second gate here could disagree with `pressed`: the key and the modifiers are what the
+/// census row holds.
+fn just_released_on_the_chord(keys: &ButtonInput<KeyCode>, live: crate::keys::Live) -> bool {
+    let binding = crate::keys::binding(crate::keys::Action::LookAtAgentChange);
+    // A rebound chord is the person's own, and the census row no longer fires; the release of the
+    // census's key must not hold the follow back in an app where it means something else.
+    if live.3.chord(crate::keys::Action::LookAtAgentChange).is_some() {
+        return false;
+    }
+    // **The key and the context are enough on the release.** The modifiers are not asked: a person
+    // letting go of all three keys in one frame has already released the modifier by the time this
+    // reads, so requiring `mod_held` would miss exactly the release it is here for. The frame is one
+    // long, and the census row's key is not `L` in any context but this one.
+    keys.just_released(binding.key) && crate::keys::fires_in(binding.context, live.0)
+}
+
+/// **Look now, from the chord** (AF-04, #360): the third of the three routes the issue names, beside
+/// the look chip's button and the AGENT block's Look.
+///
+/// **The one that works with no chip on screen.** The chip exists only while something waits, and a
+/// person with View ▸ Follow the agent off sees it and may dismiss it; this says *"show me what the
+/// agent changed"* anyway. **One answer to "show it"**, exactly as the chip's button is: it calls
+/// [`Following::look_now`] and nothing else, so the three routes cannot come to wait on different
+/// things.
+///
+/// **Behind a key EDGE**, so the write below happens once per press: `just_pressed` is false on every
+/// frame but the one the chord went down on.
+fn look_on_the_key(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    live: Option<Res<crate::keys::Live>>,
+    mut following: ResMut<Following>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    let (Some(keyboard), Some(live)) = (keyboard, live) else {
+        return;
+    };
+    if !crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::LookAtAgentChange) {
+        return;
+    }
+    following.look_now();
+    if let Some(state) = state.as_mut() {
+        state.status.note(format!("looking at what {FAMILIAR} changed"));
+    }
+}
+
 /// **The plugin that owns the follow**: the resource, the system that carries one request a frame,
 /// and the ring drawn round the changed pieces.
 pub struct FollowPlugin;
@@ -566,6 +643,12 @@ impl Plugin for FollowPlugin {
                 // **And before it too**, so the frame a person presses a key on is a frame the
                 // camera does not move on: the press and the follow would otherwise land together
                 // and the click after it would aim at where things used to be.
+                //
+                // **The Look chord is read before that system**, so a Look pressed on this frame is
+                // shown on this frame rather than counting as the person working the view: it clears
+                // the clocks the gesture check reads, and a check run after it would set them again
+                // from the very key press that asked to be shown.
+                look_on_the_key.before(a_persons_input_takes_the_camera_back),
                 a_persons_input_takes_the_camera_back.before(take_the_follow_request),
                 take_the_follow_request
                     .before(crate::view::drive)
