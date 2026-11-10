@@ -45,15 +45,12 @@ impl Drawn {
     /// **A cell's colour as the shipped palette draws it**: dark is a cool blue (where a light-shy
     /// creature hides), lit runs to amber at intensity 1, the reference `Flicker::base`.
     ///
-    /// This is the no-skin answer and the editor's own; [`LightOverlayInk::colour`] is what the
-    /// viewport draws, so a project's skin and a theme reach the overlay (UI-80, #254).
+    /// This is the no-skin answer and the editor's own, and it is **`LightOverlayInk::of(None).colour`
+    /// written where the cell is** — one expression, so a change to the shipped pair cannot reach one
+    /// of them and miss the other. The viewport draws through [`LightOverlayInk::colour`] with the
+    /// running skin's ink (UI-80, #254), so a project's skin and a theme reach the overlay.
     pub fn colour_for(lux: f32) -> Color {
-        SHIPPED.colour(lux)
-    }
-
-    /// The drawn value of the cell a map-space point falls in, from `ink`.
-    pub fn colour_with(lux: f32, ink: &LightOverlayInk) -> Color {
-        ink.colour(lux)
+        LightOverlayInk::of(None).colour(lux)
     }
 }
 

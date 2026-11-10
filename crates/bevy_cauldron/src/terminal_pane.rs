@@ -1405,30 +1405,31 @@ fn give_the_keyboard_back(mut focus: ResMut<TerminalFocus>) {
 /// [`crate::chrome::dim_the_ground`] makes for a panel's ground: the spawn paints what it always
 /// painted, and this system reads the skin, so a card built before an edit follows it.
 ///
+/// **It writes ink and nothing else.** The chip's *words* have one writer,
+/// [`fill_the_bar`], which is what rebuilds the bar whenever the post's revision moves — and a check
+/// passing is exactly that. Two writers would be two answers to one question, and the one that ran
+/// last would win the frame.
+///
 /// It compares before writing, so a settled editor costs one comparison per row.
 fn dress_the_agent_tab(
     terminal: Res<Terminal>,
     skin: Option<Res<bevy_gooey::GooeySkin>>,
     chips: Query<Entity, With<TerminalAgentStatusChip>>,
     mut rows: Query<(&TerminalAgentCardRow, &mut TextColor)>,
-    mut chips_text: Query<(&mut Text, &mut TextColor), Without<TerminalAgentCardRow>>,
+    mut chips_text: Query<&mut TextColor, Without<TerminalAgentCardRow>>,
     children: Query<&Children>,
 ) {
     let ink = crate::terminal_agent::AgentInk::of(skin.as_deref());
     let post = terminal.tab().and_then(|tab| tab.agent());
 
-    // The chip: its words and its ink are one answer, so both come from the post.
+    // The chip's ink, from the state its words already say.
+    let chip_ink = post.map_or(ink.muted, |post| post.chip_ink(&ink));
     for chip in &chips {
         let Ok(kids) = children.get(chip) else { continue };
         for part in kids.iter() {
-            let Ok((mut text, mut colour)) = chips_text.get_mut(part) else { continue };
-            let said = post.map_or_else(String::new, |post| post.chip_words().to_owned());
-            let want = post.map_or(ink.muted, |post| post.chip_ink(&ink));
-            if text.0 != said {
-                text.0 = said;
-            }
-            if colour.0 != want {
-                colour.0 = want;
+            let Ok(mut colour) = chips_text.get_mut(part) else { continue };
+            if colour.0 != chip_ink {
+                colour.0 = chip_ink;
             }
         }
     }

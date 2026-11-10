@@ -405,8 +405,9 @@ impl AgentPost {
         }
     }
 
-    /// The chip's words, one sentence per state. Public so a host that paints from the skin
-    /// ([`crate::terminal_pane`]'s repaint) says exactly what [`AgentPost::chip`] says.
+    /// The chip's words, one sentence per state. **The one writer**: the terminal pane's
+    /// `fill_the_bar` puts these on the chip and nothing rewrites them, so what a person reads and
+    /// what [`AgentPost::chip`] answers are one string rather than two that agree.
     pub fn chip_words(&self) -> String {
         let name = self.harness.name();
         if self.failed() {

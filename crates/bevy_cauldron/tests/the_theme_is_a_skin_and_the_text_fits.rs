@@ -6,8 +6,23 @@
 //! `EditorSettings` has carried `theme`, `text_scale`, `interface_scale` and `reduced_motion` since
 //! UI-70 (#248), and only `reduced_motion` reached the running editor. `theme` had no consumer at all:
 //! choosing Parchment in the settings screen wrote the file, resolved into `EditorSettings`, and left
-//! the editor dark. `text_scale` had none either, because the number the editor draws text at is
-//! `chrome::text::Role`'s, and nothing multiplied it by a person's choice.
+//! the editor dark. `text_scale` had none either.
+//!
+//! # What a theme can be, today, and why
+//!
+//! **`chrome.rs` still draws the editor's labels from 28 colour constants** — the other half of #210,
+//! which needs the protected colour tests re-pinned, so a worker may not finish it. High contrast is
+//! therefore honourable, because a white-on-black ground keeps near-white labels readable (the tightest
+//! pair is 4.94:1); **Parchment is not**, because a cream ground under near-white labels is 1.12:1. So
+//! the theme is applied only when the ground it paints still leaves the editor's own inks readable —
+//! `ui::honoured_from` — and Parchment is refused, on the status line, with the pair that failed.
+//! `tests/the_theme_refuses_one_it_cannot_paint` is that refusal as an assertion, and
+//! `choosing_a_theme_changes_the_running_skin` is the theme that does reach the running skin.
+//!
+//! **Text size reaches gooey's own widgets**, because gooey scales `type_size` by `text_scale`. It does
+//! not yet enlarge the `chrome.rs` labels: `chrome::font(role)` builds a fixed `TextFont` from the role
+//! and nothing multiplies it. That is stated rather than implied — #251's changelog line says so too —
+//! because a person who sets 200% expects the whole editor, not only the gooey-drawn part of it.
 //!
 //! # The two acceptance items, as tests
 //!
@@ -15,8 +30,14 @@
 //!   library's own enhanced-contrast check agrees, so the test asks `high_contrast_problems()` rather
 //!   than a hand-written ratio: 7:1 is WCAG 2.2 SC 1.4.6 and Xbox Accessibility Guideline 102.
 //! - **Text size 200% keeps every panel usable.** No text a person reads is drawn outside the panel
-//!   that clips it. A scroll area is not a clip: what it holds is reachable by the wheel, which is the
-//!   point of one, so the walk skips it and stops at the panel behind it.
+//!   that clips it — **on either axis**. A scroll area is not a clip: what it holds is reachable by the
+//!   wheel, which is the point of one, so the walk skips it and stops at the panel behind it.
+//!
+//! # One frame's cost, as a test
+//!
+//! `follow_the_theme` used to call `ui::skin_for` every frame, which parses `editor_skin.ron` and
+//! builds a whole `GooeySkin` to write what was already running. `the_theme_is_read_once_per_change`
+//! pins the fix: the theme is applied on the frame the setting changes and on no other.
 
 use bevy::prelude::*;
 use bevy_cauldron::settings::{Theme, UserSettingsFile};
@@ -80,6 +101,118 @@ fn choosing_a_theme_changes_the_running_skin() {
     assert_eq!(running.text, GooeySkin::high_contrast().text, "and its ink");
 }
 
+/// **Parchment is refused, and says why** (UI-73, #251). This is the regression the review caught:
+/// applying Parchment painted its cream `surface` under the editor's near-white `chrome.rs` labels —
+/// **1.12:1**, measured — and every screen in the editor became unreadable. Until #210 finishes moving
+/// those constants onto the skin there is no light theme the editor can paint, so `honoured_from`
+/// refuses one, naming the pair, and the theme that was running stays.
+///
+/// The refusal is a *validation* rather than a silent fallback: the same function answers `Ok` for the
+/// two themes this editor can paint, so nothing here is a special case keyed on a theme's name.
+#[test]
+fn the_theme_refuses_one_it_cannot_paint() {
+    // **The two that can be painted**, so the refusal is a measurement and not a list of one.
+    for theme in [Theme::ToolDark, Theme::HighContrast] {
+        let skin = bevy_cauldron::ui::honoured_from(theme)
+            .unwrap_or_else(|e| panic!("{theme:?} is paintable today and must not be refused: {e}"));
+        assert_eq!(
+            bevy_cauldron::ui::unreadable_pairs(&skin),
+            Vec::<String>::new(),
+            "{theme:?}: every ink clears every ground it is drawn on"
+        );
+    }
+    // **The one that cannot**, and the pair that stops it.
+    let why = bevy_cauldron::ui::honoured_from(Theme::Parchment)
+        .expect_err("a cream ground under near-white labels is not a theme this editor can paint");
+    assert!(why.contains("Parchment"), "the refusal names the theme a person chose: {why}");
+    assert!(why.contains("text on surface"), "and the pair that failed, so it can be looked at: {why}");
+    assert!(why.contains("4.5:1"), "and the floor it missed, in the numbers WCAG is written in: {why}");
+    let parchment = bevy_cauldron::ui::skin_for(Theme::Parchment);
+    let unreadable = bevy_cauldron::ui::unreadable_pairs(&parchment);
+    assert!(!unreadable.is_empty(), "Parchment's ground leaves the editor's own inks unreadable: {unreadable:?}");
+    assert!(
+        unreadable.iter().any(|pair| pair.starts_with("text on surface ")),
+        "and the first failure is `text` on the panel's own ground: {unreadable:?}"
+    );
+}
+
+/// **A person who chooses Parchment keeps the editor they had, and reads why.**
+///
+/// The unit above is the measurement; this is what a person gets. The status line is where this editor
+/// says things, so the reason is there rather than only in a log — and the ground on screen is the one
+/// that was running, not the cream that would have made every label unreadable.
+#[test]
+fn choosing_a_theme_that_cannot_be_painted_keeps_the_editor_it_had() {
+    let app = editor("theme_refused", Theme::Parchment, 1.0);
+    let running = app.world().resource::<GooeySkin>().clone();
+    assert_eq!(
+        running.surface,
+        bevy_cauldron::ui::editor_skin().surface,
+        "the panel's ground is the one that was running, not Parchment's cream"
+    );
+    let said: Vec<String> =
+        app.world().resource::<bevy_cauldron::editor::EditorState>().status.problems().iter().map(|p| p.text.clone()).collect();
+    assert!(
+        said.iter().any(|line| line.contains("Parchment") && line.contains("4.5:1")),
+        "the status line says why the theme was not applied: {said:?}"
+    );
+}
+
+/// **The theme is read once per change, not once per frame** (UI-73, #251).
+///
+/// `follow_the_theme` used to call `skin_for` on every pass, which parses `editor_skin.ron` into a whole
+/// `GooeySkin` (28 colours, a ladder of 8, three shadow stacks, a map of tones) and measures nine inks
+/// against two grounds — to write a value that was already there. The `Local`s it keeps make a settled
+/// editor one comparison. **Measured as the count of changes**: `is_changed` on the resource is true for
+/// the frames that wrote it, and it must be a handful rather than one per frame.
+#[test]
+fn the_theme_is_read_once_per_change() {
+    let mut app = editor("theme_once", Theme::HighContrast, 1.0);
+    // Settle: twelve frames went by in `editor`, and every one of them after the first is a no-op.
+    let quiet = app.world().is_resource_changed::<GooeySkin>();
+    for _ in 0..30 {
+        app.update();
+    }
+    assert!(
+        !app.world().is_resource_changed::<GooeySkin>(),
+        "the running skin is unchanged over thirty settled frames: {quiet:?} on the frame before them"
+    );
+}
+
+/// **A project's `family/bevy_gooey.ron` keeps its colours and still gets the person's text size**
+/// (UI-73, #251). The early `return` that left a project's skin alone also skipped the `text_scale`
+/// write, though the comment beside it said the size still applied — so a person on a project with its
+/// own skin set 200% and nothing happened. This is that half, as an assertion.
+#[test]
+fn a_projects_skin_keeps_its_colours_and_takes_the_persons_text_size() {
+    let root = fixtures::Fixture::new(&format!("theme_project_skin_{}", std::process::id()))
+        .descriptor("site/wall", "alpha")
+        .build("m");
+    std::fs::create_dir_all(root.join("family")).expect("a family folder");
+    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
+    // The project's own accent, so "the project wins" is visible and not a coincidence of defaults.
+    std::fs::write(root.join("family/bevy_gooey.ron"), "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))")
+        .expect("a project skin");
+    let settings_file = root.join(format!("user_config_project_skin_{}/settings.ron", std::process::id()));
+    std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
+    // A theme *and* a size, so a system that returned early would be seen to drop both.
+    std::fs::write(&settings_file, "(version: 1, theme: Some(HighContrast), text_scale: Some(2.0))")
+        .expect("a settings file");
+
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.insert_resource(UserSettingsFile(settings_file));
+    for _ in 0..12 {
+        app.update();
+    }
+    let running = app.world().resource::<GooeySkin>().clone();
+    assert_eq!(
+        running.accent,
+        Color::srgba(0.2, 0.6, 0.9, 1.0),
+        "the project's skin is the running skin's accent: the theme does not overwrite it"
+    );
+    assert_eq!(running.text_scale, 2.0, "and the person's 200% text still applies, which the early return dropped");
+}
+
 /// **High contrast passes the library's enhanced-contrast check at 7:1.** Every pair `problems()`
 /// checks is held to gooey's `ENHANCED_CONTRAST`, 7:1.
 #[test]
@@ -124,34 +257,45 @@ fn every_label_fits_its_panel_at_two_hundred_percent_text() {
     );
 }
 
-/// Every `Text` in the world whose own box leaves a clipping ancestor's, as
-/// `"words: spans a..b, shows c..d"`.
+/// Every `Text` in the world whose **ink** leaves a clipping ancestor's, as
+/// `"words: spans x a..b, shows c..d"` — **on either axis**, because a label cut short horizontally is as
+/// unreadable as one cut vertically.
+///
+/// **The glyphs, not the node's box.** A `Text` node in a flex row is stretched to the row's width, so
+/// its `ComputedNode` is far wider than the letters in it: "INSPECTOR" measured 29..454 against a 256 px
+/// panel and drew nothing outside it. `TextLayoutInfo::size` is the laid-out run's own extent — what
+/// `bevy_text` measured for these glyphs — so that is what the walk compares, and a real overflow (a word
+/// too long for its column) still shows as one.
 ///
 /// **A scroll area is skipped, and it is not a clip.** `chrome::scroll_list` puts `overflow: scroll_y`
 /// on a list so a panel taller than the window can be reached with the wheel; content past its edge is
 /// *reachable*, which is what the acceptance asks ("every panel usable"), not cut off. What the walk
-/// stops at is the panel behind it, which does not scroll.
+/// stops at is the panel behind it — and only the axis that panel actually clips is measured, so a row
+/// that can scroll sideways in a box that clips vertically is not a defect.
 fn clipped_text(app: &mut App) -> Vec<String> {
     let world = app.world_mut();
-    let mut texts = world.query::<(Entity, &Text, &ComputedNode, &UiGlobalTransform)>();
-    let rows: Vec<(Entity, String, f32, f32)> = texts
+    let mut texts = world.query::<(Entity, &Text, &ComputedNode, &UiGlobalTransform, &bevy::text::TextLayoutInfo)>();
+    let rows: Vec<(Entity, String, [f32; 4])> = texts
         .iter(world)
-        .filter(|(_, text, node, _)| !text.trim().is_empty() && node.size().y > 0.0)
-        .map(|(entity, text, node, transform)| {
-            let h = node.size().y;
-            (entity, text.0.clone(), transform.translation.y - h / 2.0, transform.translation.y + h / 2.0)
+        .filter(|(_, text, node, _, layout)| !text.trim().is_empty() && node.size().y > 0.0 && layout.size.x > 0.0)
+        .map(|(entity, text, node, transform, layout)| {
+            // **The ink, from the node's own leading corner.** `TextLayoutInfo::size` is the run
+            // `bevy_text` laid out, and its glyphs start at the node's top-left — the node is often far
+            // wider than the words in it, because a `Text` under a `Node` with no width is stretched to
+            // its row. So the ink is the corner plus the run, not the box narrowed and centred: a
+            // centred reading put "INSPECTOR" 164 px right of where the letters are drawn and reported
+            // a cut that neither a person nor 100% text ever saw.
+            let corner = transform.translation - node.size() / 2.0;
+            (entity, text.0.clone(), span_of(corner, layout.size))
         })
         .collect();
 
     let mut out = Vec::new();
-    for (entity, words, top, bottom) in rows {
+    for (entity, words, span) in rows {
         let mut at = entity;
         while let Some(parent) = world.get::<ChildOf>(at).map(|c| c.parent()) {
             at = parent;
             let Some(node) = world.get::<bevy::ui::Node>(at) else { continue };
-            if node.overflow.y == bevy::ui::OverflowAxis::Visible {
-                continue;
-            }
             // **A scroller is where the walk ends, not a box to check past.** It clips first, and what
             // it holds past its edge is reached with the wheel; a panel above it that also clips would
             // report a label the person can bring into view. So the scroller is the final answer.
@@ -163,13 +307,76 @@ fn clipped_text(app: &mut App) -> Vec<String> {
             else {
                 continue;
             };
-            let h = computed.size().y;
-            let (ptop, pbottom) = (transform.translation.y - h / 2.0, transform.translation.y + h / 2.0);
-            if bottom > pbottom + 0.5 || top < ptop - 0.5 {
-                out.push(format!("{words:?}: spans {top:.1}..{bottom:.1}, shows {ptop:.1}..{pbottom:.1}"));
-                break;
-            }
+            let box_ = span_of(transform.translation - computed.size() / 2.0, computed.size());
+            // **Only the axis this box clips.** A box with `overflow: visible` sideways does not cut a
+            // row that overhangs it, and a test that said it did would fail on the shipped layout for a
+            // reason nobody could fix.
+            let Some(cut) = cut_axis(span, box_, node.overflow) else {
+                continue;
+            };
+            out.push(format!("{words:?}: {cut}"));
+            break;
         }
     }
     out
+}
+
+/// `[left, right, top, bottom]` of a box of `size` whose top-left corner is `corner`.
+fn span_of(corner: Vec2, size: Vec2) -> [f32; 4] {
+    [
+        corner.x,
+        corner.x + size.x,
+        corner.y,
+        corner.y + size.y,
+    ]
+}
+
+/// **Which axis of `box_` cuts `ink`, if any**, as `"spans x 0.0..98.0, shows 0.0..40.0"`.
+///
+/// A separate function so the rule can be driven without a laid-out world: an `App` in a test cannot run
+/// `bevy_ui`'s layout pass (`UiPlugin` needs a camera and a render target), so `clipped_text`'s walk over
+/// a real editor is the integration half and this is the half that can be asserted on its own — including
+/// that a box which does **not** clip an axis reports nothing for it.
+fn cut_axis(ink: [f32; 4], box_: [f32; 4], overflow: bevy::ui::Overflow) -> Option<String> {
+    /// The least overflow, logical pixels, that is a cut rather than a rounding difference between
+    /// `bevy_text`'s layout and `bevy_ui`'s measurement of the same node.
+    const SLACK: f32 = 0.5;
+
+    let axes = [
+        ("x", 0usize, 1usize, overflow.x != bevy::ui::OverflowAxis::Visible),
+        ("y", 2usize, 3usize, overflow.y != bevy::ui::OverflowAxis::Visible),
+    ];
+    let (axis, low, high, _) = axes.iter().find(|(_, low, high, clips)| {
+        *clips && (ink[*high] > box_[*high] + SLACK || ink[*low] < box_[*low] - SLACK)
+    })?;
+    Some(format!(
+        "spans {axis} {:.1}..{:.1}, shows {:.1}..{:.1}",
+        ink[*low], ink[*high], box_[*low], box_[*high]
+    ))
+}
+
+/// **The sideways half of the walk is real**: a label 98 px wide in a 40 px box that clips sideways is
+/// reported, and the same label in a box that clips only vertically is not.
+///
+/// This is what stops `every_label_fits_its_panel_at_two_hundred_percent_text` from being a check that
+/// can only ever pass. The 98 px is the width `bevy_text` measured for "INSPECTOR" at 100%; the 40 px
+/// box is that label in a column a third its size, which is exactly the defect the vertical-only walk
+/// could not see.
+#[test]
+fn a_label_wider_than_its_column_is_reported() {
+    use bevy::ui::Overflow;
+    let ink = span_of(Vec2::ZERO, Vec2::new(98.0, 22.0));
+    let narrow = span_of(Vec2::ZERO, Vec2::new(40.0, 22.0));
+    let cut = cut_axis(ink, narrow, Overflow::clip_x()).expect("98 px of ink in a 40 px column is cut");
+    assert!(cut.contains("spans x"), "and the cut is named on the axis it is on: {cut}");
+    assert_eq!(
+        cut_axis(ink, narrow, Overflow::clip_y()),
+        None,
+        "the same label in a box that clips only downward is not cut sideways"
+    );
+    let wide = span_of(Vec2::ZERO, Vec2::new(256.0, 22.0));
+    assert_eq!(cut_axis(ink, wide, Overflow::clip()), None, "and a column it fits in cuts nothing");
+    // The other axis, so neither half of the rule is a coincidence of the first.
+    let tall = span_of(Vec2::ZERO, Vec2::new(98.0, 4.0));
+    assert!(cut_axis(ink, tall, Overflow::clip()).is_some_and(|cut| cut.contains("spans y")), "and height is measured too");
 }

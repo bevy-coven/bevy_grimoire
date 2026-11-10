@@ -17,6 +17,10 @@ pub fn editor_skin() -> GooeySkin {
     crate::ui_skin::from_ron(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.ron does not read: {e}"))
 }
 
+/// The least contrast the editor's own ink may have against a theme's ground: WCAG 2.2, success
+/// criterion 1.4.3, the floor `bevy_gooey::problems()` holds a skin's own text to.
+const LEAST_TEXT_CONTRAST: f32 = bevy_gooey::TEXT_CONTRAST;
+
 /// **The editor's skin for a theme** (UI-73, #251): its own measured colours for [`Theme::ToolDark`],
 /// and `bevy_gooey`'s preset for the two the editor does not ship.
 ///
@@ -30,6 +34,11 @@ pub fn editor_skin() -> GooeySkin {
 /// a person who set 200% text and then asks for high contrast has both. The one exception is high
 /// contrast's **opaque** surfaces — its look is what makes a faint ground into a solid one — which
 /// `with_colours_of` carries with the rest of the colours.
+///
+/// **This is the skin a theme *means*, not necessarily the one the editor runs.** Which of them can
+/// be honours is [`honoured_from`]'s question, and it has to be asked: `chrome.rs` still draws its
+/// labels from its own constants (the last half of #210, which needs the protected colour tests
+/// re-pinned), so a light theme's ground would leave every `chrome::TEXT` label at about 1.1:1.
 pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
     use crate::settings::Theme;
     match theme {
@@ -39,41 +48,203 @@ pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
     }
 }
 
+/// **The inks the editor's own labels are drawn in, named** — the side a theme's ground is measured
+/// against (UI-73, #251).
+///
+/// **Why a theme needs measuring at all.** `chrome.rs` declares 28 colour constants and draws its
+/// headings, rows, hints, chips and status band with them, not with the skin; #210's acceptance is
+/// that they all come from the skin, and until it is met those colours are the editor's ink whatever
+/// the running skin says. So Parchment — whose `surface` is cream and whose `text` is dark brown —
+/// would paint every panel cream while each `chrome::TEXT` label over it stayed near-white:
+/// **1.12:1**, measured on [`skin_for`]`(Theme::Parchment).surface`. Tool dark and High contrast both
+/// clear the floor (`muted` on `surface_raised` is the tightest pair in each, 4.61:1 and 4.94:1), so
+/// Parchment is the one theme the editor cannot honour yet.
+///
+/// **Read from [`editor_skin`], not from the constants**, and the two are the same colour by protected
+/// assertion: `tests/editor_skin.rs`, `tests/the_skin_carries_the_editors_other_colours.rs` and
+/// `tests/the_skin_carries_the_editors_state_colours.rs` pin every field and tone of the editor's skin
+/// to the constant of the same meaning. Going through the skin here is therefore not an
+/// approximation — it is the same nine colours under the name a skin can carry, so this function
+/// cannot drift from the ink the chrome paints while those assertions hold.
+///
+/// A tone the skin does not carry is left out rather than guessed: `the_skin_carries_the_editors_other_colours.rs`
+/// asserts all five, and a check that invented a colour for a missing one would be measuring a
+/// palette nothing draws.
+pub fn editor_inks() -> Vec<(&'static str, Color)> {
+    let skin = editor_skin();
+    let mut inks = vec![
+        ("text", skin.text),
+        ("text_muted", skin.text_muted),
+        ("accent", skin.accent),
+        ("danger", skin.danger),
+    ];
+    // The named tones `chrome.rs` draws labels with, in the order `editor_skin.ron` lists them.
+    for tone in ["key", "label", "labeled", "muted", "suggest"] {
+        if let Some(colour) = skin.tone(tone) {
+            inks.push((tone, colour));
+        }
+    }
+    inks
+}
+
+/// **The grounds a theme puts under the editor's own ink**: its `surface` — a panel, composited onto
+/// its background because a panel is what a label is drawn on — and its `surface_raised`, which is a
+/// row, a header and a slot.
+fn grounds_of(skin: &GooeySkin) -> [(&'static str, Color); 2] {
+    [("surface", skin.solid_surface()), ("surface_raised", skin.surface_raised)]
+}
+
+/// **One sRGB colour's channels**, as [`bevy_gooey::contrast_ratio`] takes them. Alpha is dropped: the
+/// rule [`GooeySkin::problems`](bevy_gooey::GooeySkin::problems) keeps, and `solid_surface` has
+/// already composited the ground.
+fn channels(colour: Color) -> [f32; 3] {
+    let c = bevy::color::Srgba::from(colour);
+    [c.red, c.green, c.blue]
+}
+
+/// **Every pair a theme's ground would drop below [`LEAST_TEXT_CONTRAST`]**, as
+/// `"text on surface 1.12:1"`, over [`editor_inks`] and then a panel's ground and a row's.
+///
+/// Empty is the editor saying it can honour this theme today; anything in it is the reason it cannot.
+/// [`honoured_from`] turns the first into the one sentence a person reads.
+pub fn unreadable_pairs(theme_skin: &GooeySkin) -> Vec<String> {
+    let grounds = grounds_of(theme_skin);
+    let mut out = Vec::new();
+    for (ink_name, ink) in editor_inks() {
+        for (ground_name, ground) in grounds {
+            let ratio = bevy_gooey::contrast_ratio(channels(ink), channels(ground));
+            if ratio < LEAST_TEXT_CONTRAST {
+                out.push(format!("{ink_name} on {ground_name} {ratio:.2}:1"));
+            }
+        }
+    }
+    out
+}
+
+/// **The running skin this theme can be honoured as, and why not when it cannot** (UI-73, #251).
+///
+/// The editor has one set of inks it can paint — [`editor_inks`], which are `chrome.rs`'s constants
+/// until #210 finishes moving them onto the skin. So a theme is applied only when the ground it would
+/// paint still leaves those inks readable, and one that would not is refused here naming the pair that
+/// failed — **one path, and a real validation rather than a fallback**: the alternative, painting
+/// Parchment's cream under the editor's near-white labels at 1.12:1 and calling it a theme, is a
+/// screen nobody can read.
+///
+/// `Ok(skin)` is what to write into the running [`GooeySkin`]; `Err(why)` is the sentence the caller
+/// says. The caller is [`follow_the_theme`], which puts it on the status line and in one log warning.
+///
+/// **The sentence names no issue and no code word**, because a person reads it: it says which theme,
+/// which pair, and that this is temporary.
+pub fn honoured_from(theme: crate::settings::Theme) -> Result<GooeySkin, String> {
+    let skin = skin_for(theme);
+    let unreadable = unreadable_pairs(&skin);
+    let Some(first) = unreadable.first() else {
+        return Ok(skin);
+    };
+    Err(format!(
+        "{} cannot be drawn yet: its ground leaves the editor's own labels at {first}, and 4.5:1 is \
+         the least that can be read. The colours keep the theme they had. This is temporary — the \
+         editor's labels have to take their colour from the theme before a light one can be shown.",
+        theme_name(theme),
+    ))
+}
+
+/// What a person calls a theme, for the sentence [`honoured_from`] refuses one with.
+///
+/// The names are [`crate::setting_catalogue::THEMES`]', so a refusal and the Settings row say the same
+/// word — a person told "Parchment cannot be drawn" can find Parchment in the list.
+pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
+    use crate::settings::Theme;
+    match theme {
+        Theme::ToolDark => crate::setting_catalogue::THEMES[0],
+        Theme::Parchment => crate::setting_catalogue::THEMES[1],
+        Theme::HighContrast => crate::setting_catalogue::THEMES[2],
+    }
+}
+
 /// **The theme and the text size reach the running skin** (UI-73, #251): the settings resolve into
 /// [`crate::settings::EditorSettings`], and this is how a choice in the settings screen — or a file a
 /// person edited — becomes the skin a widget draws from.
 ///
-/// **The colours and the scale are written separately, and that is not tidiness.** `skin_for` builds
+/// **A settled editor costs one comparison.** The theme, the size and the refusal last decided are
+/// kept in `Local`s, and a pass whose three inputs are the ones already answered returns before
+/// [`skin_for`] is called: parsing `editor_skin.ron` and measuring nine inks against two grounds sixty
+/// times a second, to write what is already there, is work with no answer at the end of it.
+///
+/// **The colours and the scale are written separately, and that is not tidiness.** [`skin_for`] builds
 /// the theme's colours at the editor's own sizes, so a person's 200% text would be reset by a theme
-/// change if the two were assigned together. Comparing before writing means a settled editor costs one
-/// comparison, which is the same rule every follower here follows.
+/// change if the two were assigned together — and a project that ships `family/bevy_gooey.ron` gets the
+/// scale *without* the colours, which is the half a bare `return` used to drop.
+///
+/// **The first pass under Tool dark writes no colours.** [`EditorUiPlugin`] has already put the
+/// editor's own skin in as the running one, and removing a project's skin file clears the running skin
+/// to gooey's own default (`ui_skin::apply_ui_skin`), which `tests/family_gooey_skin.rs` pins. A
+/// *return* to Tool dark after another theme is still an application.
+///
+/// **A theme the editor cannot honour is refused, once, and said.** See [`honoured_from`]: Parchment's
+/// ground would leave the editor's own inks at 1.12:1 while `chrome.rs`'s constants are still what
+/// paints them, so choosing it keeps the colours that were running and puts the reason on the status
+/// line, with one log warning for the person who edited a settings file by hand. The warning is raised
+/// for a *changed* refusal only, so an editor sitting on a refused theme is silent.
 ///
 /// It runs after the settings are read and before gooey styles, so a theme chosen this frame is the
 /// skin this frame's widgets are painted from.
 pub fn follow_the_theme(
     settings: Option<Res<crate::settings::EditorSettings>>,
     family: Option<Res<crate::family_host::FamilySettings>>,
+    state: Option<ResMut<crate::editor::EditorState>>,
     mut skin: ResMut<GooeySkin>,
-    // The theme this system last applied, so a run that has only ever seen the default leaves the skin
-    // exactly as `EditorUiPlugin` put it, and a *return* to the default is still an application.
+    // The theme this system last decided, so a settled editor returns at once — and so a run that has
+    // only ever seen the default leaves the skin exactly as `EditorUiPlugin` put it.
     mut applied: Local<Option<crate::settings::Theme>>,
+    // The refusal last said, so a settled editor does not warn every frame and a *new* one is said.
+    mut refused: Local<Option<String>>,
 ) {
     let Some(settings) = settings else { return };
-    // `family/bevy_gooey.ron` is the running skin (`ui_skin::apply_ui_skin`), so a project that ships
-    // one has said what its chrome looks like, and a person's theme setting must not overwrite it. The
-    // text size is the person's and still applies — `with_colours_of` never touches it.
-    if family.as_deref().is_some_and(|family| family.text.contains_key(crate::ui_skin::CRATE)) {
+    let theme = settings.theme;
+    // **One comparison is the whole frame.** Nothing moved, so nothing is measured, parsed or written.
+    if applied.as_ref() == Some(&theme) && skin.text_scale == settings.text_scale {
         return;
     }
-    // **A run that has only ever seen the default theme writes no colours.** `EditorUiPlugin` has
-    // already put the editor's own skin in as the running one, and the one state that must not move is
-    // the untouched default: removing a project's skin file clears the running skin to gooey's own
-    // default (`ui_skin::apply_ui_skin`), which `tests/family_gooey_skin.rs` pins. The scale is still
-    // the person's, so it is written below either way.
-    let first_default = settings.theme == crate::settings::Theme::default() && applied.is_none();
-    *applied = Some(settings.theme);
-    let mut want = if first_default { skin.clone() } else { skin_for(settings.theme) };
-    // The theme's colours *and* the person's scale, in one value: `skin_for` builds at the editor's
+    let first_default = applied.is_none() && theme == crate::settings::Theme::default();
+    *applied = Some(theme);
+    // **A project's skin is the running skin, and the text size is still the person's.** A project that
+    // ships `family/bevy_gooey.ron` has said what its chrome looks like, so the theme setting does not
+    // overwrite its colours — but the scale is the person's, and it is written here rather than skipped
+    // with the rest, which is what the early `return` used to do.
+    if family.as_deref().is_some_and(|family| family.text.contains_key(crate::ui_skin::CRATE)) {
+        if skin.text_scale != settings.text_scale {
+            skin.text_scale = settings.text_scale;
+        }
+        return;
+    }
+    let mut want = if first_default {
+        // The colours `EditorUiPlugin` inserted stay; only the person's scale is this system's to write.
+        skin.clone()
+    } else {
+        match honoured_from(theme) {
+            Ok(skin) => {
+                *refused = None;
+                skin
+            }
+            Err(why) => {
+                if refused.as_deref() != Some(why.as_str()) {
+                    // The status line is where this editor says things, so a person who chose the theme
+                    // in the Settings screen reads why there; the log warning is for a settings file
+                    // edited by hand, where no screen was asked and no screen will answer.
+                    if let Some(mut state) = state {
+                        state.status.problem(why.clone());
+                    }
+                    bevy::log::warn!("{why}");
+                }
+                *refused = Some(why);
+                // The colours that were running stay: a refused theme is not a theme, it is a theme
+                // this editor cannot paint. Only the person's scale moves.
+                skin.clone()
+            }
+        }
+    };
+    // The theme's colours *and* the person's scale, in one value: the theme is built at the editor's
     // own sizes, so the scale is written on top of them, never instead of them.
     want.text_scale = settings.text_scale;
     if *skin != want {
