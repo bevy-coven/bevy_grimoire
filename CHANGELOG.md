@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **ui-93-change-frame** `7caea249` The UI budget counts gooey's own table and tree drawing, holds the frame after a change to its measured 3.8 ms floor (6 ms asserted), and measures a typed search reaching the 10,000-node tree inside 100 ms; the outliner's rebuild went from 4.3 ms to 2.7 ms *No clip: instrumentation and measurement, nothing a person sees; proved by the_ui_frame_covers_a_change_and_the_input_path::**
 - **ui-51-outliner-layers** `7e842d45` The outliner groups placements by layer (floor, wall, ceiling, surface, opening, decal) and then by kind, and its stamp and note rows say what they are *No clip: visible, not yet recorded: fleet worker*
 - **ui-53-wheel-hands-on** `ef2745a3` A history or outliner list that cannot use a wheel notch hands it to the inspector, and a jump needs a click, not a key walk; the current history line is not hoverable *No clip: visible, not yet recorded: fleet worker*
 - **ui-53-history-list** `8230892` The history panel scrolls: 5,000 log lines in a virtualized list, with the agent's lines marked *No clip: visible, not yet recorded: fleet worker*
