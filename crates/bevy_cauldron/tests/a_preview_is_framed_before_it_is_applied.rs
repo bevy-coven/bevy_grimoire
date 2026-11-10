@@ -228,6 +228,47 @@ fn a_preview_and_its_apply_move_the_camera_once() {
     );
 }
 
+/// **4. A preview rings its own footprint `rect`, and nothing else.**
+///
+/// A piece that does not exist yet has no id, so `Shown::Map`'s `placements` is empty — and the follow
+/// then rang whatever already stood inside the framed box, in the proposal colour. That is a proposal
+/// attributed to the wrong thing: measured on a map with a bed in the corner, previewing a second bed
+/// elsewhere rang the first.
+#[test]
+fn a_preview_outlines_its_own_footprint_and_not_what_stands_there() {
+    let root = room("preview_outline");
+    let mut app = editor(&root);
+    let answer = preview(
+        &mut app,
+        "placement_add",
+        serde_json::json!({"piece": "bed", "at": [20.0, 18.0]}),
+    );
+    assert_eq!(answer["outcome"], "previewed", "{answer}");
+    let rect: [f32; 4] = serde_json::from_value(answer["shown"]["rect"].clone()).expect("a rect");
+    app.update();
+    app.update();
+    // **What is ringed is the preview's own box**, which the follow holds for the outline's duration.
+    let boxed = app
+        .world()
+        .resource::<Following>()
+        .outlined_box()
+        .expect("a preview rings its footprint, and says what it rang");
+    for (got, want) in boxed.iter().zip(rect.iter()) {
+        assert!(
+            (got - want).abs() < 1e-2,
+            "the preview rang {boxed:?}, not the footprint it named ({rect:?}): a piece that does not \
+             exist yet has no id, and ringing what happens to stand inside the box blames the wrong \
+             piece"
+        );
+    }
+    // **And no placement id was claimed**: the ring is the box, not a row.
+    assert!(
+        app.world().resource::<Following>().outlined().is_empty(),
+        "the preview claimed placement ids for a piece that does not exist yet: {:?}",
+        app.world().resource::<Following>().outlined()
+    );
+}
+
 /// **3. A preview is followed while agent writes are paused**, because planning is exactly what a
 /// person watching an agent may want to see (the issue's own Decisions).
 #[test]
