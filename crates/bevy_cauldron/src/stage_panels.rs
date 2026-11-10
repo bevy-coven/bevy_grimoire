@@ -101,7 +101,12 @@ pub fn arrange(world: &mut World, id: &str) -> Result<Staged, String> {
     let Some(stage) = stage(id) else {
         return Err(format!("`{id}` is not a panel a capture can start on. The panels are: {}.", names()));
     };
-    let now = *world.resource::<State<Screen>>().get();
+    // **No resource is assumed to exist.** `resource::<..>()` panics in Bevy when a resource is absent, and a BRP
+    // command is reachable from a screen whose plugins have not put it there — so a missing one is a refusal that
+    // names it, not a panic that takes the editor down.
+    let Some(now) = world.get_resource::<State<Screen>>().map(|state| *state.get()) else {
+        return Err("the editor has no screen state, so there is nothing here to arrange. Open a project first.".to_owned());
+    };
     // **What the last stage put up comes down first**, or a clip of the panel after the settings screen would film the
     // settings screen. The dialog is gooey's own, so the way down is the `Leave` a person's Escape writes.
     if stage.id != "settings" {
@@ -113,7 +118,10 @@ pub fn arrange(world: &mut World, id: &str) -> Result<Staged, String> {
     match stage.id {
         // **The launcher is a state**, reached the way File ▸ Close project reaches it.
         "launcher" => {
-            world.resource_mut::<NextState<Screen>>().set(Screen::Launcher);
+            let Some(mut next) = world.get_resource_mut::<NextState<Screen>>() else {
+                return Err("the editor has no screen state to move to, so the launcher cannot be staged".to_owned());
+            };
+            next.set(Screen::Launcher);
             Ok(Staged { id: stage.id, screen: Screen::Launcher })
         }
         // **The loader is a state with work in it**, so staging it asks for the open it shows: the project this editor
@@ -122,9 +130,12 @@ pub fn arrange(world: &mut World, id: &str) -> Result<Staged, String> {
             let Some(argv) = re_open_argv(world) else {
                 return Err("`loader` shows a project opening, and no project is open to open again".to_owned());
             };
+            let Some(mut next) = world.get_resource_mut::<NextState<Screen>>() else {
+                return Err("the editor has no screen state to move to, so the loader cannot be staged".to_owned());
+            };
+            next.set(Screen::Loading);
             world.insert_resource(crate::loading::LoadRequest(argv));
             world.insert_resource(crate::loading::StageDelay(std::time::Duration::from_secs_f32(STAGE_HOLD_S)));
-            world.resource_mut::<NextState<Screen>>().set(Screen::Loading);
             Ok(Staged { id: stage.id, screen: Screen::Loading })
         }
         // **The settings screen is a dialog over the workbench**, so it goes up where the person is.

@@ -48,17 +48,19 @@ pub const PAGES: &[GuidePage] = &[
     GuidePage { id: "loop", title: "The development loop", file: "loop.md" },
 ];
 
-/// Where a page is published: the repository's copy, so the link always names the page the editor was built from.
-const PUBLISHED_AT: &str = "https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/";
-
-/// The page with this id, if the guide has one.
+/// **The page with this id**, if the guide has one.
 pub fn page(id: &str) -> Option<&'static GuidePage> {
     PAGES.iter().find(|page| page.id == id)
 }
 
-/// The address a page opens at.
+/// **The address a page opens at**, built from [`crate::launcher::GUIDE_URL`] so the guide has one address to keep.
+///
+/// "Getting started guide" already opens that page elsewhere, and the editor's links have been one string for the whole
+/// guide since UI-10: a second copy of the prefix here is two places to change when the repository moves. The page's own
+/// file replaces the one the constant names.
 pub fn url(page: &GuidePage) -> String {
-    format!("{PUBLISHED_AT}{}", page.file)
+    let published = crate::launcher::guide_dir_url();
+    format!("{published}{}", page.file)
 }
 
 /// **The page that covers what a panel holds**, by the heading the panel draws (`INSPECTOR`, `PLACE`, `PIECES`, `RIGS`,
@@ -68,9 +70,11 @@ pub fn url(page: &GuidePage) -> String {
 /// the page is about, so the same answer serves all three.
 pub fn page_for_panel(heading: &str) -> Option<&'static GuidePage> {
     let id = match heading {
+        // The Map door: what is being placed, and where to look at what is there.
         "INSPECTOR" | "PLACE" => "building-maps",
-        "PIECES" | "TILES" | "CONTROLS" => "kits-and-labels",
-        "RIGS" | "COMPOSE" => "kits-and-labels",
+        // The Kit door's panels and the rig bench's: pieces, groups and the clips they carry are one subject, which is
+        // the page that walks kit → tile → composition → rig.
+        "PIECES" | "TILES" | "CONTROLS" | "RIGS" | "COMPOSE" => "kits-and-labels",
         "AGENT" => "agents",
         _ => return None,
     };

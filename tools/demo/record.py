@@ -131,6 +131,12 @@ class McpClient:
         self.proc.kill()
 
 
+# **The editor's own capture rate floor and ceiling**, frames a second. `sequencer::MIN_FPS`/`MAX_FPS` refuse a rate
+# outside this range, so a plan is refused here rather than by a capture that fails halfway through a take.
+MIN_FPS = 2
+MAX_FPS = 15
+
+
 def brp(port, method, params):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
     req = urllib.request.Request(f"http://127.0.0.1:{port}/", data=body, method="POST",
@@ -166,17 +172,21 @@ def plan_staged_panels(name, fps, panels):
     A clip of every panel is a capture per panel, because a capture starts from the state the editor was in
     when the sequence began: staging two panels inside one sequence would film the second from whatever frame
     the first had already passed. So the plan is one chunk of a single frame per panel, each chunk staging its
-    panel before its capture starts. The frame count is therefore the panel count, which is what the run
-    checks rather than assumes."""
-    if fps < 1:
-        raise ValueError("a staged run captures at least one frame a second")
+    panel before its capture starts. The frame count is therefore the panel count, which the run checks rather
+    than assumes.
+
+    **`fps` is the editor's range, not any number.** `grimoire_capture_sequence` refuses a rate outside
+    `MIN_FPS..=MAX_FPS`, so a plan below or above it is refused here rather than by a capture that fails halfway
+    through a take."""
+    if not MIN_FPS <= fps <= MAX_FPS:
+        raise ValueError(f"a capture runs between {MIN_FPS} and {MAX_FPS} frames a second; {fps} is outside that")
     if not panels:
         raise ValueError("the editor named no panel to stage")
     return {
         "name": name,
         "fps": fps,
         "setup": [],
-        "chunks": [{"seconds": 1.0 / fps, "stage": panel, "frames": 1} for panel in panels],
+        "chunks": [{"seconds": 1.0 / fps, "stage": panel} for panel in panels],
         "steps": [],
     }
 
@@ -242,9 +252,10 @@ def run_chunks(storyboard, server, project, port, timeline, errors):
         for i, chunk in enumerate(storyboard["chunks"]):
             wait_until(timeline, start)
             if "stage" in chunk:
-                # **Before the sequence starts**, so frame 0 is the staged panel and not the one before it.
+                # **Before the sequence starts**, so frame 0 is the staged panel and not the one before it, and stamped on
+                # this chunk's own clock — `wall` is this chunk's start, which is only known below.
                 staged = stage_a_panel(port, chunk["stage"])
-                timeline.add(t=wall, type="stage", panel=chunk["stage"], screen=staged.get("screen"))
+                timeline.add(t=timeline.now(), type="stage", panel=chunk["stage"], screen=staged.get("screen"))
             args = {"label": f"demo_{storyboard['name']}_{i}", "seconds": chunk["seconds"],
                     "fps": storyboard["fps"]}
             if "operation" in chunk:
@@ -262,6 +273,10 @@ def run_chunks(storyboard, server, project, port, timeline, errors):
                 raise RuntimeError(f"chunk {i} refused: {answer['refused']}")
             if answer.get("status") != "done":
                 raise RuntimeError(f"chunk {i} did not finish capturing: {json.dumps(answer)}")
+            if not answer["frames"]:
+                # **A take of nothing is not a take.** The plan asked for a frame per panel, and the editor that answered
+                # with none leaves a clip of the panel before it or of nothing at all.
+                raise RuntimeError(f"chunk {i} planned {max(int(chunk['seconds'] * storyboard['fps']), 1)} frame(s) and captured none")
             with timeline.lock:
                 timeline.chunks.append({
                     "index": i, "label": args["label"], "start": round(wall, 3),

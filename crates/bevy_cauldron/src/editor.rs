@@ -8182,13 +8182,10 @@ fn refresh_history(
     mut texts: Query<(&mut Text, &mut TextColor), With<HistoryText>>,
     mut budget: ResMut<crate::ui_budget::UiFrame>,
 ) {
-    // **This system's cost, into the frame's total** (UI-93, #259). It is here because it reads the
-    // history, and the history is the list the budget is written against: a refreshed label per
-    // entry would grow with a long session, and the number in `ui_budget::UiFrame` is what says it
-    // does not.
-    let started = crate::ui_budget::begin();
+    // **This system's cost, into the frame's total** (UI-93, #259). The guard writes on drop, so the early return below
+    // and every path after it are measured without the body having to remember to.
+    let _spent = crate::ui_budget::measure(&mut budget);
     if !state.is_changed() && !open.is_changed() {
-        crate::ui_budget::end(started, &mut budget);
         return;
     }
     let depth = state.undo_depth();
@@ -8258,7 +8255,6 @@ fn refresh_history(
             }
         }
     }
-    crate::ui_budget::end(started, &mut budget);
 }
 
 #[allow(clippy::too_many_arguments)]

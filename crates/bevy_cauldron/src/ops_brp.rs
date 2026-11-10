@@ -2690,7 +2690,12 @@ impl Plugin for OpsBridgePlugin {
                  arrangement a storyboard and an agent share; it refuses a name the shell has not \
                  got, and a workbench panel asked for from another screen, saying what is available.",
             )
-            .params("panel: one of launcher, loader, settings, inspector, viewport, place, status.")
+            // **The catalog's own names**, so this text cannot list a panel the command refuses (it said `status`,
+            // which is registered and deliberately unstaged) and a panel added to the catalog appears here.
+            .params(format!(
+                "panel: one of {}. A name that is not here is refused with this list.",
+                crate::stage_panels::names()
+            ))
             .example(json!({"panel": "settings"})),
             stage_panel,
         );
