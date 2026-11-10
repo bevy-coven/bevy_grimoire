@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-10
+
+- **gd-04-schemas** `4709d20f` Every project file kind has a JSON Schema generated from the Rust type it is read by, written into .dark_factory/schema/ when a project opens, and the seven kinds whose YAML carries an enum tag now validate against theirs *No clip: generated files; proved by bevy_grimoire_core/tests/a_tagged_file_validates_against_its_schema.rs (every_tagged_kinds_fixture_validates_against_its_schema, the_tagged_kinds_are_the_ones_whose_fixture_carries_a_tag, a_field_wrong_inside_a_variant_is_refused_at_its_own_path, the_reader_names_the_same_path_the_schema_refuses), bevy_grimoire_core/tests/a_generated_schema_is_replaced_and_a_hand_written_one_is_not.rs (3), bevy_cauldron/tests/schemas_are_written_where_an_outside_editor_looks.rs (3) and bevy_grimoire/tests/a_games_schema_reaches_the_file_an_outside_editor_reads.rs (4)*
+
 ## 2026-11-09
 
 - **ui-infra-review** `815d628` The staging plan stamps each panel on its own chunk's clock, and the UI budget reports a rebuild apart from a settled frame *For you: Clips of every panel no longer die on the first one, and the editor's speed check says exactly what it measures.* *No clip: a corrected clock in a tool, two faster list builds and an honest budget test, with no picture of their own; proved by tools/demo/test_stage.py (test_every_chunk_stamps_its_stage_on_its_own_start, test_a_capture_that_writes_fewer_frames_than_planned_is_refused) and bevy_cauldron/tests/the_uis_budget_is_two_milliseconds_a_frame.rs (a_settled_frame_on_the_reference_fixture_stays_under_the_ui_budget, a_rebuild_frame_is_measured_and_is_not_claimed_as_settled, the_clock_counts_every_way_out_and_marks_a_rebuild)*
