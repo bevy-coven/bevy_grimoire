@@ -9,7 +9,7 @@
 //! The refusal half is one test, over the whole project: an open is handed a folder holding a `.ron`
 //! project file and must answer the file's name and the command that converts it, never open it.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use bevy_grimoire_core::migrate;
 use bevy_grimoire_core::play::PlayConfig;
@@ -70,7 +70,7 @@ fn a_project_holding_ron_files_is_refused_naming_the_command() {
     // `kits.ron` alone is not a refusal yet.
     std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
 
-    let problem = migrate::leftover(&root)
+    let problem = migrate::leftover(&root, migrate::COMMAND)
         .unwrap_or_else(|p| panic!("a folder with no project files: {}", p.line()))
         .expect("a `.ron` project file is refused");
 
@@ -84,15 +84,10 @@ fn a_project_holding_ron_files_is_refused_naming_the_command() {
     std::fs::write(root.join("agent.yaml"), "version: 1\n").unwrap_or_else(|e| panic!("{e}"));
     std::fs::remove_file(root.join("agent.ron")).unwrap_or_else(|e| panic!("{e}"));
     assert!(
-        migrate::leftover(&root).unwrap_or_else(|p| panic!("{}", p.line())).is_none(),
+        migrate::leftover(&root, migrate::COMMAND).unwrap_or_else(|p| panic!("{}", p.line())).is_none(),
         "a YAML project is opened"
     );
 
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// The root a fixture project lives under, for a test that reads one.
-#[allow(dead_code)]
-fn root_of(dir: &Path) -> PathBuf {
-    dir.to_path_buf()
-}

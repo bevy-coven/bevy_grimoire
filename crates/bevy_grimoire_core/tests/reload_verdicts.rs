@@ -176,7 +176,7 @@ fn wrong_type(text: &str, field: &str) -> String {
     let was = text[value..end].trim_end_matches(',').trim();
     // A number becomes a string; anything else becomes a number, which no struct, list or string takes.
     let wrong = if was.starts_with(|c: char| c.is_ascii_digit() || c == '-') { "\"wrong\"" } else { "7" };
-    format!("{}{wrong}{}", &text[..value], &text[end..])
+    format!("{}{wrong}{}", &text[..value], &text[end - usize::from(text[..end].ends_with(','))..])
 }
 
 fn missing(text: &str, field: &str) -> String {

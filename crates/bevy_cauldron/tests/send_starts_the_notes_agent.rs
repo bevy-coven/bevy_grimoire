@@ -137,7 +137,7 @@ fn an_agent_that_cannot_start_is_a_problem_and_the_notes_stay_sent() {
     let notes = bevy_grimoire_core::notes::Notes::load(&bevy_grimoire_core::notes::path_for_map(&r.app.world().resource::<OpenMap>().map_path)).unwrap();
     assert!(notes.notes.iter().all(|n| !n.is_draft()));
 
-    std::fs::write(r.root.join("agent.yaml"), "(version: 9)").unwrap();
+    std::fs::write(r.root.join("agent.yaml"), "version: 9\n").unwrap();
     r.draft("two");
     assert!(r.send().contains("version 9"), "an unreadable setting is reported too");
 }

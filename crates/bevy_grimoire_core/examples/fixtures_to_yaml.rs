@@ -4,6 +4,10 @@
 //! `errors` for the ones that would not convert. It exists so `tools/migrate/re-pin-fixtures.py` can move a
 //! whole file's fixtures in one pass, using `migrate::written_as_yaml` rather than a text substitution.
 //!
+//! **`--moved-kinds` answers the kinds whose reader already parses YAML** (`migrate::READS_YAML`), one per
+//! line, and reads no stdin. The re-pin script asks for it rather than carrying a copy of a list that moves
+//! every commit of the cutover.
+//!
 //! Not a product path: nothing in the editor or the game calls it.
 
 use serde::Deserialize;
@@ -26,6 +30,15 @@ struct Done {
 }
 
 fn main() {
+    // **One question the script asks before it touches a file**: which kinds have moved. A copy of the list
+    // in the script would be a second place a kind has to move, and the two disagreeing rewrites YAML under
+    // a reader that still wants RON.
+    if std::env::args().skip(1).any(|a| a == "--moved-kinds") {
+        for kind in bevy_grimoire_core::migrate::READS_YAML {
+            println!("{kind}");
+        }
+        return;
+    }
     let mut input = String::new();
     use std::io::Read as _;
     if std::io::stdin().read_to_string(&mut input).is_err() {
@@ -41,7 +54,7 @@ fn main() {
     };
     let done: Vec<Done> = asks
         .into_iter()
-        .map(|ask| match bevy_grimoire_core::migrate::written_as_yaml(ask.kind.as_str(), &ask.text) {
+        .map(|ask| match bevy_grimoire_core::migrate::written_as_yaml(ask.kind.as_str(), &ask.text, bevy_grimoire_core::migrate::COMMAND) {
             Ok((_, yaml)) => Done { id: ask.id, yaml: Some(yaml), why: None },
             Err(problem) => Done { id: ask.id, yaml: None, why: Some(problem.line()) },
         })

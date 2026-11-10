@@ -258,7 +258,8 @@ impl Project {
         // would write fresh YAML beside files a person still has — the one state nobody can read off the disk.
         // The migration library's own walk decides what "still RON" means (`migrate::leftover`), so the editor,
         // the command line and an agent cannot disagree about it.
-        if let Some(problem) = bevy_grimoire_core::migrate::leftover(root)
+        if let Some(problem) =
+            bevy_grimoire_core::migrate::leftover(root, &format!("{} migrate <project folder>", crate::args::PROGRAM))
             .map_err(|p| format!("{}: {}", root.display(), p.line()))?
         {
             return Err(problem.line());

@@ -1,13 +1,17 @@
 //! **Moving a project's files from RON to YAML, losslessly** (GD-03, #365).
 //!
 //! A project used to be RON (`kits.ron`, `maps/town.map.ron`, `editor.ron`, …). [`migrate`] turns one
-//! into YAML, and [`leftover`] is the refusal an open raises when a project has not been converted —
-//! written and tested here, and not yet called by any open (see below).
+//! into YAML, [`migrate_moved`] is the narrower run a person's command takes while the cutover is
+//! unfinished, and [`leftover`] is the refusal an open raises when a project has not been converted.
 //!
-//! **This is a library, and nothing reaches it yet.** It is deliberately not wired into the binary: the
-//! editor still opens the `.ron` paths and the readers still parse RON, so a project converted under a
-//! person's feet would open empty and the next save would write fresh RON beside the YAML. The cutover
-//! that makes it reachable is the rest of #365, and it needs the fixtures and the readers moved first.
+//! # One kind at a time, and why the command is the narrow one
+//!
+//! The cutover moves one file kind at a time, so a build reads some kinds as YAML and the rest as RON.
+//! Converting a kind whose reader has not moved would write a file nothing reads *and* archive the RON
+//! everything needs, which is a project that opens empty with its content in the archive. So the command a
+//! person runs converts only the kinds on [`READS_YAML`], and [`migrate`] — every kind, refusing what it
+//! cannot read — is what the finished cutover runs. The list only grows, and the last kind to join it is
+//! the commit that deletes the RON readers.
 //!
 //! # Two rules, and neither is a suggestion
 //!
@@ -67,14 +71,15 @@ pub const RON_EXT: &str = "ron";
 /// **Where the old files go**, under the project root: `<root>/.dark_factory/migrated-ron/`.
 pub const ARCHIVE_DIR: &str = ".dark_factory/migrated-ron";
 
-/// **The command that fixes a project still holding RON files**, as every refusal names it: the binary's
-/// own subcommand, run on the project's folder.
+/// **The shape of the line that fixes a project still holding RON files**, for a caller that has no
+/// program name of its own — a test, or a library whose binary somebody else names.
 ///
-/// It is one constant so the sentence a refusal prints and the line a person types cannot drift apart.
-/// The command's own name is `cauldron` — the app's, not the crate's — which is also why this crate can
-/// spell it: this file must not name an engine crate (`tests/engine_free.rs`), and a word a person reads
-/// in a refusal is not a dependency.
-pub const COMMAND: &str = "cauldron migrate <project folder>";
+/// **The program's own name is not this crate's to spell.** It is `bevy_cauldron`, and
+/// `tests/engine_free.rs` refuses that identifier in this crate's sources; a refusal naming a command a
+/// person cannot run is worse than one naming no command at all. So every entry point takes the line as
+/// an argument ([`migrate`], [`migrate_moved`], [`leftover`]), the editor passes `args::PROGRAM` — the
+/// name of the binary it is built as — and this constant is only what an engine-free caller gets.
+pub const COMMAND: &str = "<the editor> migrate <project folder>";
 
 /// The page of the guide that explains the move: "Moving a project to YAML" in it.
 const DOCS: &str = "docs/guide/your-game.md";
@@ -174,7 +179,15 @@ pub fn yaml_path(rom: &Path) -> Option<PathBuf> {
 #[allow(clippy::result_large_err)]
 pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Problem> {
     let mut out = Vec::new();
-    walk(root, root, &mut out, &mut Vec::new())?;
+    let mut skipped = Vec::new();
+    walk(root, root, &mut out, &mut Vec::new(), &mut skipped)?;
+    // **A folder that cannot be listed is reported, never fatal.** [`leftover`] is what an *open* calls, and
+    // a project whose one unreadable subfolder (a key-only backup, a folder from another account) refused
+    // the open would be a project nobody can open again. The list still answers what it could read, and the
+    // folders it could not are said out loud on stderr rather than swallowed.
+    for (dir, why) in &skipped {
+        eprintln!("migrate: cannot read {} ({why}), so its files are not part of this plan", dir.display());
+    }
     out.sort();
     Ok(out
         .into_iter()
@@ -203,46 +216,8 @@ fn kind_of_rel(rel: &str) -> Option<&'static FileKind> {
             Base::Root => Some(rel),
         };
         let before = ron_spelling_of(k.pattern);
-        under.is_some_and(|rest| k.matches(rest) || matches_pattern(&before, rest))
+        under.is_some_and(|rest| k.matches(rest) || crate::reload::matches_pattern(&before, rest))
     })
-}
-
-/// **Whether `path` (relative to its base, with `/`) is a file of the pattern `pattern`.** A free copy of
-/// [`FileKind::matches`]' walk, because the pattern here is the cutover's old spelling rather than the
-/// kind's own: the same `<name>`/`<file>` placeholders, one segment each.
-fn matches_pattern(pattern: &str, path: &str) -> bool {
-    if pattern.is_empty() {
-        return false;
-    }
-    let mut want = pattern.split('/');
-    let mut have = path.split('/');
-    loop {
-        match (want.next(), have.next()) {
-            (None, None) => return true,
-            (Some(w), Some(h)) => {
-                let any = w.contains("<file>");
-                let literal = !w.contains('<');
-                let one = if literal {
-                    w == h
-                } else {
-                    // `<name>`/`<file>` stand for one segment: this build's files never nest a name, and
-                    // the pattern's own extension must still be at the end.
-                    let (head, tail) = match w.split_once('<') {
-                        Some((head, rest)) => (head, rest.split_once('>').map(|(_, t)| t).unwrap_or("")),
-                        None => (w, ""),
-                    };
-                    h.len() > head.len() + tail.len()
-                        && h.starts_with(head)
-                        && h.ends_with(tail)
-                        && (any || h[head.len()..h.len() - tail.len()].chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-                };
-                if !one {
-                    return false;
-                }
-            }
-            _ => return false,
-        }
-    }
 }
 
 /// **A kind's path pattern as the cutover left it**: `play.yaml` → `play.ron`, `maps/<name>.map.yaml` →
@@ -265,16 +240,39 @@ fn ron_spelling_of(pattern: &str) -> String {
 /// original out of that folder into the archive, which is a migration of somebody else's directory. A
 /// project that really wants a file from elsewhere copies it in.
 #[allow(clippy::result_large_err)]
-fn walk(root: &Path, dir: &Path, out: &mut Vec<String>, seen: &mut Vec<PathBuf>) -> Result<(), Problem> {
+fn walk(
+    root: &Path,
+    dir: &Path,
+    out: &mut Vec<String>,
+    seen: &mut Vec<PathBuf>,
+    skipped: &mut Vec<(PathBuf, std::io::Error)>,
+) -> Result<(), Problem> {
     // A symlinked directory that points at one of its own parents would walk forever.
     let real = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     if seen.contains(&real) {
         return Ok(());
     }
     seen.push(real);
-    let entries = std::fs::read_dir(dir).map_err(|e| io_problem(dir, e))?;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            // The project's own root failing is the caller's business; a subfolder is not.
+            if dir == root {
+                return Err(io_problem(dir, e));
+            }
+            skipped.push((dir.to_path_buf(), e));
+            return Ok(());
+        }
+    };
     for entry in entries {
-        let entry = entry.map_err(|e| io_problem(dir, e))?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                // One unreadable name does not make the folder unreadable.
+                skipped.push((dir.to_path_buf(), e));
+                continue;
+            }
+        };
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
         // **`symlink_metadata` reads the link, not what it points at**, so a link is recognised before it
@@ -287,7 +285,7 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>, seen: &mut Vec<PathBuf>)
             if SKIP_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            walk(root, &path, out, seen)?;
+            walk(root, &path, out, seen, skipped)?;
         } else if let Ok(rel) = path.strip_prefix(root) {
             out.push(rel.to_string_lossy().replace('\\', "/"));
         }
@@ -321,7 +319,7 @@ fn io_problem(path: &Path, e: std::io::Error) -> Problem {
 /// A difference at either step refuses, and the caller writes nothing. `file` is only what a refusal
 /// names.
 #[allow(clippy::result_large_err)]
-fn convert<T>(text: &str, file: &str) -> Result<Converted, Problem>
+fn convert<T>(text: &str, file: &str, command: &str) -> Result<Converted, Problem>
 where
     T: Serialize + DeserializeOwned,
 {
@@ -331,7 +329,7 @@ where
             Detail::default()
                 .at(Location::file(file.to_owned()))
                 .because(e.to_string())
-                .fix(format!("a file this old is read by the build that wrote it; `{COMMAND}` refuses rather than guessing"))
+                .fix(format!("a file this old is read by the build that wrote it; `{command}` refuses rather than guessing"))
                 .docs(DOCS),
         )
     })?;
@@ -395,32 +393,32 @@ fn first_difference(before: &str, after: &str) -> String {
 /// rather than guessed at: a mapper's forest, an editor settings file and a game's own data file are read
 /// by the crate that declares them, and only that crate can say whether the YAML holds the same value.
 #[allow(clippy::result_large_err)]
-fn write_kind(kind: &FileKind, text: &str, file: &str) -> Result<Converted, Problem> {
+fn write_kind(kind: &FileKind, text: &str, file: &str, command: &str) -> Result<Converted, Problem> {
     match kind.id {
-        "kits" => convert::<Kits>(text, file),
-        "vocab" => convert::<Vocabularies>(text, file),
-        "library" => convert::<Library>(text, file),
-        "policy" => convert::<Policy>(text, file),
-        "rules" => convert::<Rules>(text, file),
-        "compositions" => convert::<Compositions>(text, file),
-        "standards" => convert::<Standards>(text, file),
-        "repetition" => convert::<RepetitionRules>(text, file),
-        "rigs" => convert::<Rigs>(text, file),
-        "notes" => convert::<Notes>(text, file),
-        "plan" => convert::<Plan>(text, file),
-        "references" => convert::<References>(text, file),
-        "relations" => convert::<Relations>(text, file),
-        "map" => convert::<Map>(text, file),
-        "terrain" => convert::<Heightfield>(text, file),
-        "water_plan" => convert::<WaterPlan>(text, file),
-        "water_field" => convert::<WaterField>(text, file),
-        "volume" => convert::<Volume>(text, file),
-        "data_registry" => convert::<DataFiles>(text, file),
-        "family_list" => convert::<Family>(text, file),
-        "agent" => convert::<AgentSettings>(text, file),
-        "play" => convert::<PlayConfig>(text, file),
-        "destructible_marks" => convert::<Marks>(text, file),
-        "destructible_bake" => convert::<Bake>(text, file),
+        "kits" => convert::<Kits>(text, file, command),
+        "vocab" => convert::<Vocabularies>(text, file, command),
+        "library" => convert::<Library>(text, file, command),
+        "policy" => convert::<Policy>(text, file, command),
+        "rules" => convert::<Rules>(text, file, command),
+        "compositions" => convert::<Compositions>(text, file, command),
+        "standards" => convert::<Standards>(text, file, command),
+        "repetition" => convert::<RepetitionRules>(text, file, command),
+        "rigs" => convert::<Rigs>(text, file, command),
+        "notes" => convert::<Notes>(text, file, command),
+        "plan" => convert::<Plan>(text, file, command),
+        "references" => convert::<References>(text, file, command),
+        "relations" => convert::<Relations>(text, file, command),
+        "map" => convert::<Map>(text, file, command),
+        "terrain" => convert::<Heightfield>(text, file, command),
+        "water_plan" => convert::<WaterPlan>(text, file, command),
+        "water_field" => convert::<WaterField>(text, file, command),
+        "volume" => convert::<Volume>(text, file, command),
+        "data_registry" => convert::<DataFiles>(text, file, command),
+        "family_list" => convert::<Family>(text, file, command),
+        "agent" => convert::<AgentSettings>(text, file, command),
+        "play" => convert::<PlayConfig>(text, file, command),
+        "destructible_marks" => convert::<Marks>(text, file, command),
+        "destructible_bake" => convert::<Bake>(text, file, command),
         other => Err(Problem::with(
             format!("{file} is a `{other}` file, whose type this crate does not declare, so nothing was migrated"),
             Detail::default()
@@ -429,7 +427,7 @@ fn write_kind(kind: &FileKind, text: &str, file: &str) -> Result<Converted, Prob
                     "`{other}` is read by the crate that declares its type ({})",
                     unowned_by(other).unwrap_or("a layer above this one")
                 ))
-                .fix(format!("run `{COMMAND}` from that layer, which can compare the value it reads"))
+                .fix(format!("run `{command}` from that layer, which can compare the value it reads"))
                 .docs(DOCS),
         )),
     }
@@ -452,9 +450,41 @@ fn unowned_by(kind: &str) -> Option<&'static str> {
 /// Every conversion is computed in memory first. Only when all of them are lossless is a single file
 /// written; then the RON originals are moved into [`ARCHIVE_DIR`]. So a refusal leaves the project
 /// byte for byte as it was, and a success leaves no `.ron` project file behind.
+///
+/// **This is the whole cutover's migration**, for every kind this crate has a type for. A kind whose type
+/// lives above this crate stops it and is named, which is right when the layers migrate together and
+/// wrong for one build that has moved one kind at a time: [`migrate_moved`] is the narrower entry point a
+/// person's command runs until the last kind moves.
 #[allow(clippy::result_large_err)]
 pub fn migrate(root: &Path) -> Result<Report, Problem> {
-    let plan = plan(root)?;
+    migrate_where(root, COMMAND, |_| true)
+}
+
+/// **Convert the project files whose kind already reads YAML** ([`READS_YAML`]), and leave every other
+/// kind exactly where it is.
+///
+/// **This is what a person's command runs**, and the difference from [`migrate`] is not a convenience.
+/// The cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.ron`:
+/// converting `kits.ron` would write a `kits.yaml` nothing reads *and* archive the `kits.ron` everything
+/// does, which is a project that opens empty with its content in `.dark_factory/migrated-ron/`. Likewise a
+/// kind whose type belongs to another crate (`editor.ron`, `checks.ron`, a forest) is not this command's
+/// work and must not block the work it can do.
+///
+/// **The list only grows.** A kind joins [`READS_YAML`] in the commit that moves its reader, and the last
+/// kind to join is the commit that deletes the RON readers — after which this and [`migrate`] agree.
+#[allow(clippy::result_large_err)]
+pub fn migrate_moved(root: &Path, command: &str) -> Result<Report, Problem> {
+    migrate_where(root, command, |kind| reads_yaml(kind.id))
+}
+
+/// **The one migration body**: every file `wants` accepts, converted or nothing written at all.
+#[allow(clippy::result_large_err)]
+fn migrate_where(
+    root: &Path,
+    command: &str,
+    wants: impl Fn(&FileKind) -> bool,
+) -> Result<Report, Problem> {
+    let plan: Vec<_> = plan(root)?.into_iter().filter(|(_, _, kind)| wants(kind)).collect();
     let mut converted = Vec::new();
     let mut pending: Vec<(PathBuf, String, PathBuf)> = Vec::new();
     let mut unplaced = Vec::new();
@@ -468,7 +498,7 @@ pub fn migrate(root: &Path) -> Result<Report, Problem> {
             .map(|stem| format!("{stem}.{YAML_EXT}"))
             .unwrap_or_else(|| target.display().to_string());
         let text = std::fs::read_to_string(path).map_err(|e| io_problem(path, e))?;
-        let mut done = write_kind(kind, &text, rel)?;
+        let mut done = write_kind(kind, &text, rel, command)?;
         // **Nothing is replaced.** A `kits.yaml` already beside its RON is a file a person made, and the
         // migration refuses rather than writing over it.
         if target.exists() {
@@ -863,7 +893,7 @@ pub fn reads_yaml(kind: &str) -> bool {
 /// **A file whose kind this crate cannot read is refused, not passed through.** The conversion is the
 /// same one [`migrate`] runs, so a value that would change here is a value that would change there.
 #[allow(clippy::result_large_err)]
-pub fn written_as_yaml(rel: &str, text: &str) -> Result<(String, String), Problem> {
+pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, String), Problem> {
     // **The name a frozen fixture carries is the project-relative one** (`kits.ron`, `site/library.ron`),
     // and a [`Base::Grimoire`] pattern hangs from `assets/grimoire`, so both spellings are tried. The root
     // itself is the other base, whose patterns are already project-relative.
@@ -876,11 +906,11 @@ pub fn written_as_yaml(rel: &str, text: &str) -> Result<(String, String), Proble
             Detail::default()
                 .at(Location::file(rel.to_owned()))
                 .because("no kind's path pattern matches it, so its type is unknown".to_owned())
-                .fix(format!("run `{COMMAND}`, which converts what it knows and names what it does not"))
+                .fix(format!("run `{command}`, which converts what it knows and names what it does not"))
                 .docs(DOCS),
         )
     })?;
-    let done = write_kind(kind, text, rel)?;
+    let done = write_kind(kind, text, rel, command)?;
     let yaml = rel
         .strip_suffix(&format!(".{RON_EXT}"))
         .map(|stem| format!("{stem}.{YAML_EXT}"))
@@ -893,14 +923,18 @@ pub fn written_as_yaml(rel: &str, text: &str) -> Result<(String, String), Proble
 ///
 /// This is the one decision, so the editor, the command line and an agent cannot disagree about what an
 /// old project is.
+///
+/// **`command` is the caller's**, because the layer that reads the refusal is the layer that knows what
+/// binary a person types: this crate must not name an engine crate (`tests/engine_free.rs`), and a
+/// refusal naming a command that does not exist is a worse answer than one naming none.
+///
+/// **A folder that cannot be read does not hide the project.** The walk answers a refusal for a folder it
+/// cannot list, and an unmigrated project's whole worth is that it still opens: so an unreadable
+/// subfolder is *skipped* here and the other files still decide. A project with nothing readable is no
+/// project, and the open that follows says why with its own words.
 #[allow(clippy::result_large_err)]
-pub fn leftover(root: &Path) -> Result<Option<Problem>, Problem> {
+pub fn leftover(root: &Path, command: &str) -> Result<Option<Problem>, Problem> {
     let plan = plan(root)?;
-    // **Only a kind whose reader has moved to YAML refuses an open.** The cutover is one kind at a time
-    // ([`READS_YAML`]), and a kind it has not reached still reads its RON: refusing a project for a
-    // `kits.ron` would refuse every project in the world until the last kind moves, and the file it names
-    // would be one this build can still read. A project is refused once it holds a file of the spelling
-    // nothing reads any more, which is exactly what this answers.
     // **Only a kind whose reader has moved to YAML refuses an open.** A kind the cutover has not reached
     // still reads its RON, so a `kits.ron` is a file this build reads and no reason to refuse a project;
     // the refusal is for the spelling nothing reads any more, which is what [`READS_YAML`] answers. The
@@ -915,7 +949,7 @@ pub fn leftover(root: &Path) -> Result<Option<Problem>, Problem> {
             .because(format!(
                 "the editor reads and writes YAML now, and a project holding `.{RON_EXT}` files is the spelling it no longer reads"
             ))
-            .fix(format!("run `{COMMAND}`, then open it again"))
+            .fix(format!("run `{command}`, then open it again"))
             .docs(DOCS),
     )))
 }

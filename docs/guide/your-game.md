@@ -18,6 +18,9 @@ Your game keeps its bevy_grimoire data in one folder, `assets/grimoire/`, inside
 
 ```text
 <game root>/
+  play.yaml            how to run the game (optional)
+  agent.yaml           the command Send starts (optional)
+  family.ron           which family crates the project uses (optional)
   assets/
     grimoire/
       kits.ron           which kits the project uses, and the lattice
@@ -34,6 +37,8 @@ Your game keeps its bevy_grimoire data in one folder, `assets/grimoire/`, inside
 ```
 
 A kit folder must be bound in `kits.ron` before the game can load it. See the data file reference for every file's format.
+
+**A project written before the cutover holds `.ron` files, and it is refused at open** rather than opened half-read. Run `bevy_cauldron migrate <project folder>` once: it converts every file whose kind already reads YAML, leaves the RON originals in `<project>/.dark_factory/migrated-ron/`, and prints one line per converted file and every comment it could not place. A project it refuses is left byte for byte as it was. See [Moving a project to YAML](#moving-a-project-to-yaml).
 
 ### The rules a project file is read by
 
@@ -56,6 +61,38 @@ agent receives the same parts as JSON, so neither can drop something the other h
 
 What the reader writes is what it reads: block style, two spaces per level, the type's field order, a trailing
 newline, and a string quoted only where YAML needs it.
+
+### Moving a project to YAML
+
+A project written before the cutover keeps its `.ron` files, and this build reads none of them. It is refused at
+open, naming the file it met and the command that fixes it, because opening one half-read and saving would write
+fresh YAML beside files a person still has — the one state nobody can read off the disk.
+
+```sh
+bevy_cauldron migrate <project folder>
+```
+
+The command, in order:
+
+- **converts every file whose kind this build already reads as YAML**, and no other: a kind still read as RON is
+  left exactly where it is, so a project is never left with a file nothing reads and a `.ron` in the archive
+  everything needed;
+- **proves each one first.** A file is parsed as RON, written as YAML, and read back with the type's YAML reader.
+  A value that would come back different stops the whole run, names the file, and **writes nothing at all** — not
+  that file, not the ones before it;
+- **carries the comments.** A RON comment is written as a YAML comment above the same key wherever it has a place.
+  One that has none — above a list item, or after the file's last field — is printed in the report, never dropped
+  quietly;
+- **moves the old files, never deletes them**, to `<project>/.dark_factory/migrated-ron/`, keeping their paths, so
+  you can diff what it did and go back if you must;
+- **refuses rather than replace.** A `kits.yaml` already beside its `kits.ron` is a file a person made, and the run
+  stops before writing over it.
+
+It prints one line per converted file, then every comment it could not place, then where the originals went. A
+project with nothing left to convert prints that instead of nothing.
+
+Every file it writes is YAML in the style above, and every one names its schema on its first line, so an outside
+editor's YAML extension offers completion and hover from the same types the editor uses.
 
 ## Load a project in your game
 
@@ -189,21 +226,25 @@ Use `bevy_grimoire_rng::seeded(seed)` for any randomness in your game. It return
 
 ## Playing the map in your game
 
-The editor never links your game. A project says how to run it in `play.ron` beside `family.ron`:
+The editor never links your game. A project says how to run it in `play.yaml` at the project root:
 
-```ron
-(version: 1, command: ["cargo", "run", "--", "{map}"], cwd: Some("../game"), port: 15702)
+```yaml
+version: 2
+command: ["cargo", "run", "--", "{map}"]
+cwd: "../game"
+port: 15702
+build: []
 ```
 
 `{map}`, `{root}` and `{camera}` (`x,y,z`) in an argument are replaced by the open map, the project root and the editor camera's position; the game also gets them as `GRIMOIRE_PLAY_MAP`, `GRIMOIRE_PLAY_ROOT` and `GRIMOIRE_PLAY_CAMERA`. **Play** in the PLAY section of the controls panel (or the `play` operation, with `wait_s` to wait until the game's `bevy_fairy/status` says `ready: true`) starts it; **Stop** (`play_stop`) ends the process the editor started, by pid. A second Play while one runs is refused. Neither is an edit, so neither has an undo. An agent then reads the running game through `bevy_fairy`'s own MCP.
 
 ## A project's commands need your permission
 
-`play.ron` and `agent.ron` name programs, and a project you cloned brings its own. The editor starts neither until a person has allowed it, so opening a project is never one key press from running its author's command.
+`play.yaml` and `agent.yaml` name programs, and a project you cloned brings its own. The editor starts neither until a person has allowed it, so opening a project is never one key press from running its author's command.
 
 When Play or Send meets a command you have not allowed, nothing starts. The status line says which command and in which project, and a question appears with three answers:
 
-- **Y: allow this command.** The exact program, arguments and working directory you were shown. Edit `play.ron` or `agent.ron` afterwards, by hand or by an agent, and the editor asks again.
+- **Y: allow this command.** The exact program, arguments and working directory you were shown. Edit `play.yaml` or `agent.yaml` afterwards, by hand or by an agent, and the editor asks again.
 - **P: trust the whole project.** Every command in it, including later edits. Use it for your own game.
 - **N or Esc: not now.** Nothing is allowed and nothing starts.
 

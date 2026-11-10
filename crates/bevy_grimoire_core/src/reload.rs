@@ -242,21 +242,31 @@ fn segment_matches(pattern: &str, segment: &str) -> bool {
     !rest.is_empty() && (any || rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
 }
 
+/// **Whether `path`, relative to its base with `/`, is a file of `pattern`.**
+///
+/// Free rather than only a method, because a caller can hold a pattern that is not a [`FileKind`]'s own: the
+/// migration matches a file against a kind's path as the cutover left it (`play.ron`), and it must answer
+/// with exactly the walk the reload table answers with — a second copy is a second thing to keep in step,
+/// and the two disagreeing is how a file becomes a kind in one place and not in another.
+pub fn matches_pattern(pattern: &str, path: &str) -> bool {
+    if pattern.is_empty() {
+        return false;
+    }
+    let mut want = pattern.split('/');
+    let mut have = path.split('/');
+    loop {
+        match (want.next(), have.next()) {
+            (None, None) => return true,
+            (Some(w), Some(h)) if segment_matches(w, h) => {}
+            _ => return false,
+        }
+    }
+}
+
 impl FileKind {
     /// Whether `path`, written with `/` and relative to [`Self::base`], is a file of this kind.
     pub fn matches(&self, path: &str) -> bool {
-        if self.pattern.is_empty() {
-            return false;
-        }
-        let mut want = self.pattern.split('/');
-        let mut have = path.split('/');
-        loop {
-            match (want.next(), have.next()) {
-                (None, None) => return true,
-                (Some(w), Some(h)) if segment_matches(w, h) => {}
-                _ => return false,
-            }
-        }
+        matches_pattern(self.pattern, path)
     }
 }
 

@@ -178,7 +178,7 @@ pub const USAGE: &str = "\
 Cauldron: the editor that writes a grimoire, the book your game loads.
 
 usage: bevy_cauldron [ROOT] [MAP] [--door kit|map|rigs] [--kit NAME] [--live]
-       cauldron migrate <project folder>
+       bevy_cauldron migrate <project folder>
 
   ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
   MAP           the map to open on the Map door; naming one, or a --door, skips the launcher
@@ -209,6 +209,14 @@ pub fn subcommand(args: &[String]) -> Option<&str> {
 
 /// **Every subcommand this binary takes**, so [`subcommand`] and [`USAGE`] state one list.
 pub const SUBCOMMANDS: [&str; 1] = ["migrate"];
+
+/// **The name a person types to run this binary**, and the name every refusal that names a command spells.
+///
+/// `bevy_grimoire_core` cannot spell it — `tests/engine_free.rs` refuses an engine crate's name in the
+/// core's sources — so the migration library takes its command line as an argument and this is where the
+/// editor hands it over. One constant, so the usage text, the subcommand's own message and the refusal an
+/// open raises cannot name three different programs.
+pub const PROGRAM: &str = "bevy_cauldron";
 
 /// **The argument a subcommand was given**: the one positional after its name, if there is exactly one.
 /// `None` for none and for more than one, because both are a line to correct rather than a folder to

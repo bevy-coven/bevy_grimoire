@@ -26,7 +26,7 @@ use bevy_grimoire_core::reload_check::{self, Check};
 
 /// **`rel` with its `.ron` ending put to `.yaml`**, the spelling a project file has after the cutover.
 /// A frozen file is never edited, so its path still says `.ron`; this is what compares it with a pattern.
-fn before_the_cutover(rel: &str) -> String {
+fn written_by_an_earlier_release(rel: &str) -> String {
     match rel.rsplit_once('.') {
         Some((stem, migrate::RON_EXT)) => format!("{stem}.{}", migrate::YAML_EXT),
         _ => rel.to_owned(),
@@ -91,7 +91,7 @@ fn data_an_earlier_release_wrote_still_reads() {
         // and additionally that the migration does not lose it. A kind whose type the migration cannot read
         // (`checks`, `editor_settings`, a family crate's settings) still has its own reader checked.
         let (file, text) = if migrate::reads_yaml(f.kind) {
-            match migrate::written_as_yaml(f.file, f.text) {
+            match migrate::written_as_yaml(f.file, f.text, migrate::COMMAND) {
                 Ok((file, text)) => (file, text),
                 Err(e) => {
                     broken.push(format!("`{}` ({}) written by {} could not be migrated: {}", f.kind, f.file, f.since, e.line()));
@@ -132,7 +132,7 @@ fn every_kind_the_check_reads_has_frozen_data_and_each_file_is_its_kinds() {
         // **The spelling the file is read in today**: a frozen file keeps the name it had, and the
         // pattern it is compared with is the kind's current one (`kits.yaml`) or the old one (`kits.ron`),
         // whichever the cutover has moved that kind to.
-        let named = if migrate::reads_yaml(f.kind) { before_the_cutover(f.file) } else { f.file.to_owned() };
+        let named = if migrate::reads_yaml(f.kind) { written_by_an_earlier_release(f.file) } else { f.file.to_owned() };
         assert!(
             kind.matches(&named),
             "`{}` is not a path of kind `{}`",

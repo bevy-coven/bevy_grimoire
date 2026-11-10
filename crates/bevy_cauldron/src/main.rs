@@ -32,9 +32,9 @@ fn main() -> AppExit {
     // **`migrate` runs and exits** (GD-03, #365): a project's files are moved from RON to YAML, and the
     // editor is never started, so the command works with no window, on a machine with no GPU, over ssh.
     // It is a *subcommand* rather than a flag because it changes a project on disk and never opens one —
-    // the same reason `cauldron migrate` is what every refusal names (`migrate::COMMAND`).
+    // the same reason this subcommand is what every refusal names (`migrate::COMMAND`).
     if args::subcommand(&argv) == Some("migrate") {
-        return migrate_and_exit(&argv);
+        return migrate_and_exit(&argv, args::PROGRAM);
     }
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
@@ -255,32 +255,51 @@ fn name_the_window(
 }
 
 
-/// **`cauldron migrate <project folder>`**: move a project's files from RON to YAML, and say what
+/// **`bevy_cauldron migrate <project folder>`**: move a project's files from RON to YAML, and say what
 /// happened (GD-03, #365).
 ///
 /// The work is the library's (`bevy_grimoire_core::migrate`), which computes every conversion before it
 /// writes one — so a project this refuses is byte for byte what it was. This function only prints:
 ///
-/// - one line per converted file, then every comment that had no place, then where the old files went;
+/// - one line per converted file, then every comment that had no place, then where the old files went,
+///   or one line saying there was nothing to convert;
 /// - on a refusal, the `Problem`'s own line, which names the file and the fix, and a non-zero exit.
 ///
+/// **It converts the kinds that already read YAML, and no others** ([`migrate::migrate_moved`]). The
+/// cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.ron`:
+/// converting the second would write a file nothing reads and archive the one everything does. The list
+/// grows as kinds move, and the last kind to join it is the commit that deletes the RON readers.
+///
 /// **The folder is required and is the first positional.** A missing one is a refusal rather than a guess
-/// at the current folder: `migrate` moves a person's files, and `cauldron migrate` in the wrong
-/// directory is a run they did not mean.
-fn migrate_and_exit(argv: &[String]) -> AppExit {
+/// at the current folder: `migrate` moves a person's files, and running it in the wrong directory is a
+/// run they did not mean.
+fn migrate_and_exit(argv: &[String], program: &str) -> AppExit {
+    let command = format!("{program} migrate <project folder>");
     let Some(root) = args::subcommand_argument(argv) else {
         eprintln!(
-            "usage: cauldron migrate <project folder>\n\n\
+            "usage: {command}\n\n\
              Moves a project's files from RON to YAML. Every file is converted in memory and read back \
              before anything is written, so a project this refuses is left exactly as it was, and the \
-             old files are moved to .dark_factory/migrated-ron/ rather than deleted."
+             old files are moved to .dark_factory/migrated-ron/ rather than deleted.\n\n\
+             Only the kinds this build already reads as YAML are converted; a kind still read as RON is \
+             left where it is, so a project is never left with a file nothing reads."
         );
         return AppExit::error();
     };
+    // **An unknown flag is refused, never dropped.** This command moves a person's files: a run that
+    // silently ignored `--dry-run` would do exactly the thing the flag was written to prevent.
+    if let Some(flag) = argv.iter().skip(1).find(|a| a.starts_with('-')) {
+        eprintln!("{program} migrate: `{flag}` is not a flag this command takes. usage: {command}");
+        return AppExit::error();
+    }
     let root = std::path::Path::new(root);
-    match bevy_grimoire_core::migrate::migrate(root) {
+    match bevy_grimoire_core::migrate::migrate_moved(root, &command) {
         Ok(report) => {
-            for line in report.lines() {
+            let lines = report.lines();
+            if lines.is_empty() {
+                println!("nothing to migrate: no file of a kind this build already reads as YAML is still RON");
+            }
+            for line in lines {
                 println!("{line}");
             }
             AppExit::Success

@@ -283,7 +283,7 @@ fn a_project_with_a_ron_file_left_over_is_refused_naming_the_file_and_the_comman
     // reads its RON, so only a moved kind's old spelling is what an open refuses.
     std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
 
-    let problem = migrate::leftover(&root)
+    let problem = migrate::leftover(&root, COMMAND)
         .unwrap_or_else(|p| panic!("{}", p.line()))
         .expect("a project holding a RON file is refused");
     let line = problem.line();
@@ -300,7 +300,7 @@ fn a_project_of_yaml_files_is_not_refused() {
     std::fs::write(grimoire.join("kits.yaml"), "version: 3\nbind: []\nbash: []\nauthoring: null\n")
         .unwrap_or_else(|e| panic!("{e}"));
 
-    assert_eq!(migrate::leftover(&root).unwrap_or_else(|p| panic!("{}", p.line())), None);
+    assert_eq!(migrate::leftover(&root, COMMAND).unwrap_or_else(|p| panic!("{}", p.line())), None);
     let _ = std::fs::remove_dir_all(&root);
 }
 
