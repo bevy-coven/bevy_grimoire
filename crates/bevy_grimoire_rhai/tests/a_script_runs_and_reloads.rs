@@ -196,9 +196,10 @@ fn an_endless_loop_is_stopped_at_the_step_limit() {
         "the problem says the step budget was spent, at {SCRIPT_STEP_LIMIT}: {line}"
     );
 
-    // And the game is alive: the next frame runs, and the script is stopped again rather than never run.
+    // **The game is alive and the fault is reported once**: the next frame is stopped the same way, and a runaway
+    // script is one fault rather than sixty a second.
     frame(&mut app);
-    assert_eq!(sent::<ScriptProblem>(&mut app).len(), 1, "the next frame is stopped the same way, not frozen");
+    assert!(sent::<ScriptProblem>(&mut app).is_empty(), "the same runaway reports once per edit, not once a frame");
 
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -260,7 +261,9 @@ fn a_script_starts_a_timer_that_fires_once() {
         "fn on_start() {\n    timer(\"bang\", 1.0);\n}\nfn on_event(name, data) {\n    if name == \"timer\" && data == \"bang\" { this.Health.current = 0; }\n}\n",
     );
     let mut app = game(&root);
-    let fuse = app.world_mut().spawn((Script { file: format!("{SCRIPTS_DIR}/fuse.rhai") }, Health { current: 10, max: 10 })).id();
+    // **A `Name`, because a timer's event is addressed to its entity**: two doors running one script must not
+    // close each other, which is what the review of this crate found the broadcast did.
+    let fuse = app.world_mut().spawn((Name::new("fuse"), Script { file: format!("{SCRIPTS_DIR}/fuse.rhai") }, Health { current: 10, max: 10 })).id();
     // **Half the timer's length**: it has not fired yet, so the component is untouched.
     frames(&mut app, 4);
     assert_eq!(health(&app, fuse).current, 10, "a second has not passed");

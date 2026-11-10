@@ -6,7 +6,7 @@
 //! ```rhai
 //! // scripts/door.rhai
 //! fn on_start()             { this.state.open = false; }
-//! fn on_update(dt)          { this.Health.current -= 0; this.state.frames += 1; }
+//! fn on_update(dt)          { this.state.frames = (this.state.frames ?? 0) + 1; }
 //! fn on_event(name, data)   { if name == "pressed" { this.Door.open = true; } }
 //! fn on_trigger(other)      { print(other); }
 //! ```
@@ -23,7 +23,14 @@
 //!   would silently change nothing. Two calls that both work beat one that looks better and loses the write.
 //! - **Send and receive events**: `emit("door_open")` writes a [`ScriptEvent`] every scripted entity may see,
 //!   and `on_event(name, data)` is called for each whose `to` is this entity or empty.
-//! - **Start a timer**: `timer("slow", 2.5)` makes `on_event("timer", "slow")` fire once, `2.5` s later.
+//! - **Start a timer**: `timer("slow", 2.5)` makes `on_event("timer", "slow")` fire once, `2.5` s later, **for the
+//!   entity that started it**: two doors running one script do not close each other. A timer needs its entity to
+//!   have a `Name`, because that is how a message is addressed; one without is a problem rather than a broadcast.
+//!
+//! **`on_trigger(other)` runs from a [`ScriptEvent`] named [`TRIGGER_EVENT`]** — an event is an event. This crate
+//! does not depend on `bevy_grimoire`'s behaviours, so a game that wants a script told about a `Trigger` volume
+//! writes that event with the other entity's `Name` as its data. One vocabulary for both hooks rather than a
+//! second wire.
 //!
 //! # State survives a reload
 //!
@@ -33,15 +40,29 @@
 //!
 //! # A bad script never takes the game down
 //!
+//! Every one of these was a defect the review of this crate found, and each has a test:
+//!
 //! - **A file that does not compile leaves the old version running** and raises a [`ScriptProblem`] naming the
 //!   file and the line — GD-01's [`Problem`] shape, so a game reports it where it reports any other fault.
-//! - **A call that runs past [`SCRIPT_STEP_LIMIT`] operations is stopped**, with a problem naming the file. A
-//!   runaway script costs one call and never freezes the game.
+//! - **A call past [`SCRIPT_STEP_LIMIT`] operations is stopped**, with a problem naming the file. So is one whose
+//!   string, array or map outgrows its named cap ([`SCRIPT_MAX_STRING_BYTES`] and its neighbours): a doubling
+//!   string spends few operations and gigabytes, so a step count alone does not bound it. A problem is raised
+//!   **once per edit**, not once a frame: a runaway script is one fault, not sixty a second.
 //! - **A runtime error becomes a problem naming the file and the line** of the statement that raised it.
+//! - **A component write is checked before it happens.** The engine's `ReflectComponent::apply` panics on a
+//!   component the entity does not have and on an immutable one, so both are refused with a problem naming the
+//!   script. **A write into `this.<Name>` for a component the entity does not carry changes nothing and is named
+//!   once**, because rhai cannot make that write a no-op (`()` has no setter): the alternative was rhai's raw
+//!   sentence every frame in a shape nobody can act on.
+//! - **`import` resolves nothing**: the engine's module resolver is a dummy, so a script cannot load a file the
+//!   game did not put in its project.
+//! - **A cast never panics.** A hook's argument is taken by `try_cast`, falling back to the value's text: an
+//!   event whose data is `5` reaching `on_trigger(other)` is a string, not a panic.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use bevy::prelude::*;
 use bevy_grimoire_core::problem::{Detail, Location, Problem};
@@ -60,6 +81,23 @@ pub const SCRIPTS_EXT: &str = "rhai";
 /// and function call as one operation.
 pub const SCRIPT_STEP_LIMIT: u64 = 200_000;
 
+/// **The longest string a script may build**, in bytes. A doubling string spends few operations and gigabytes,
+/// so the step budget does not bound it; this does.
+pub const SCRIPT_MAX_STRING_BYTES: usize = 64 * 1024;
+
+/// **The most elements a script's array may hold.** Same reason as the string cap: growth is cheap in
+/// operations and dear in memory.
+pub const SCRIPT_MAX_ARRAY_LEN: usize = 4_096;
+
+/// **The most entries a script's map may hold.**
+pub const SCRIPT_MAX_MAP_LEN: usize = 1_024;
+
+/// **How deep a script's function calls may nest**, so recursion is a refusal rather than a stack overflow.
+pub const SCRIPT_MAX_CALL_DEPTH: usize = 16;
+
+/// **How deep a script's expressions may nest**, checked when the file compiles.
+pub const SCRIPT_MAX_EXPR_DEPTH: usize = 32;
+
 /// **The hook a script defines to run once, when it loads and after every reload.**
 pub const HOOK_START: &str = "on_start";
 
@@ -69,7 +107,7 @@ pub const HOOK_UPDATE: &str = "on_update";
 /// **The hook a script defines to receive an event, with its name and its data.**
 pub const HOOK_EVENT: &str = "on_event";
 
-/// **The hook a script defines to be told another entity came near it.**
+/// **The hook a script defines to be told another entity reached it.**
 pub const HOOK_TRIGGER: &str = "on_trigger";
 
 /// **The event name a timer fires under.**
@@ -193,6 +231,9 @@ struct Running {
     started: bool,
     /// Which hooks this file defines.
     hooks: Hooks,
+    /// **The last problem this script raised**, so one runaway call is one problem rather than one a frame. Cleared
+    /// by a call that succeeds, which is what makes a fault reported once per edit rather than once per frame.
+    reported: Option<String>,
 }
 
 /// **Every scripted entity's running state**, keyed by the entity.
@@ -224,6 +265,11 @@ impl Scripts {
         self.running.get(&entity).is_some_and(|one| one.started)
     }
 
+    /// **The file one entity's script is running from**, which a changed `Script` is compared against.
+    fn file_of(&self, entity: Entity) -> Option<&str> {
+        self.running.get(&entity).map(|one| one.file.as_str())
+    }
+
     /// **Mark one entity's setup as done**, which is what lets its other hooks run.
     fn mark_started(&mut self, entity: Entity) {
         if let Some(one) = self.running.get_mut(&entity) {
@@ -237,6 +283,18 @@ impl Scripts {
             for (name, seconds) in timers {
                 one.timers.push(Pending { name, remaining_s: seconds });
             }
+        }
+    }
+
+    /// **Whether this problem is the one this script last raised**, so one fault is reported once.
+    fn already_reported(&self, entity: Entity, signature: &str) -> bool {
+        self.running.get(&entity).is_some_and(|one| one.reported.as_deref() == Some(signature))
+    }
+
+    /// **Remember the problem this script raised**, or forget it after a call that worked.
+    fn report(&mut self, entity: Entity, signature: Option<String>) {
+        if let Some(one) = self.running.get_mut(&entity) {
+            one.reported = signature;
         }
     }
 }
@@ -265,11 +323,11 @@ impl Plugin for ScriptPlugin {
             .init_resource::<ScriptEngine>()
             .add_message::<ScriptEvent>()
             .add_message::<ScriptProblem>()
-            // **`First`**, so a recompile lands before the frame's hooks run: a save that is compiled this frame
-            // is the code this frame executes.
-            .add_systems(First, reload_changed_scripts)
+            // **`First`**, so a recompile and a lifecycle change land before the frame's hooks run: a save that is
+            // compiled this frame is the code this frame executes.
+            .add_systems(First, (follow_scripts, reload_changed_scripts).chain())
             // **`PostUpdate`**, after the world has moved: a hook that reads a `Transform` sees this frame's.
-            .add_systems(PostUpdate, (attach_scripts, settle_timers, run_hooks).chain());
+            .add_systems(PostUpdate, (settle_timers, run_hooks).chain());
     }
 }
 
@@ -280,7 +338,9 @@ pub struct ScriptsRoot(pub PathBuf);
 /// **The one rhai engine**, with the functions a script may call on it.
 ///
 /// **One engine, not one per script**: an `Engine` carries the registered function set, which *is* the script
-/// API. Building it per entity would give two entities two APIs that could drift.
+/// API. Building it per entity would give two entities two APIs that could drift — and a compile through a second
+/// engine would not see a function `engine_mut` registered. So **every compile and every call goes through this
+/// one**.
 #[derive(Resource)]
 pub struct ScriptEngine {
     engine: Engine,
@@ -300,17 +360,30 @@ impl ScriptEngine {
     }
 }
 
-/// **The host**: rhai's engine with this crate's functions on it and the budget set.
+/// **The host**: rhai's engine with this crate's functions on it and every limit set.
 ///
 /// **An unknown map property reads as `()`, and that is right here.** A script writes `this.Health.current`, and
 /// the map carries `Health` only when the entity has it. With rhai's default, reading an unknown property is an
 /// error, so guarding with `if this.Switch != ()` would raise on every entity without one — the natural spelling
-/// of "if I have a switch" would be a refusal. **A write to an unknown property still changes nothing**, because
-/// the map is rebuilt from the entity's real components and only components the script changed are written back.
+/// of "if I have a switch" would be a refusal.
+///
+/// **A read of `this.<Component>` a scripted entity does not carry is `()`, and a *write* into one is refused
+/// once by name.** Rhai cannot make that write a no-op — `()` has no setter — so the single path is a refusal
+/// naming the script and the component, raised once per edit rather than once per frame. Nothing on the entity
+/// changes either way: `a_write_to_a_component_the_scripted_entity_does_not_have_changes_nothing_and_is_named_once`
+/// proves it, and `write_back` skips a key the entity does not carry.
 fn host() -> Engine {
     let mut engine = Engine::new();
     engine.set_max_operations(SCRIPT_STEP_LIMIT);
+    engine.set_max_string_size(SCRIPT_MAX_STRING_BYTES);
+    engine.set_max_array_size(SCRIPT_MAX_ARRAY_LEN);
+    engine.set_max_map_size(SCRIPT_MAX_MAP_LEN);
+    engine.set_max_call_levels(SCRIPT_MAX_CALL_DEPTH);
+    engine.set_max_expr_depths(SCRIPT_MAX_EXPR_DEPTH, SCRIPT_MAX_EXPR_DEPTH);
     engine.set_fail_on_invalid_map_property(false);
+    // **`import` resolves nothing**, so a script cannot read a file the game did not give it: rhai's default
+    // resolver opens whatever path a script names.
+    engine.set_module_resolver(rhai::module_resolvers::DummyModuleResolver::new());
     register_script_functions(&mut engine);
     engine
 }
@@ -318,11 +391,11 @@ fn host() -> Engine {
 /// **The functions a script may call.**
 ///
 /// **They answer from the call's tag, not from a `&mut World`**, because a rhai native function is not given
-/// one. The tag is the [`Outbox`]: a snapshot of every scripted entity's components, plus the lists a script's
-/// own calls append to. `find` and `world_get` read the snapshot; `world_set`, `emit` and `timer` record, and the
-/// call applies what was recorded once the hook returns. That is why `find("guard").Health.current -= 1` is not
-/// the API: a write through a returned map lands on a copy, measured, while `world_set` is one recorded write
-/// that lands on the entity.
+/// one. The tag is the [`Outbox`]: a snapshot of every named entity's components, plus the lists a script's own
+/// calls append to. `find` and `world_get` read the snapshot; `world_set`, `emit` and `timer` record, and the call
+/// applies what was recorded once the hook returns. That is why `find("guard").Health.current -= 1` is not the
+/// API: a write through a returned map lands on a copy, measured, while `world_set` is one recorded write that
+/// lands on the entity.
 fn register_script_functions(engine: &mut Engine) {
     engine.register_type_with_name::<Outbox>("Outbox");
 
@@ -367,7 +440,8 @@ fn register_script_functions(engine: &mut Engine) {
         }
     });
 
-    // **`timer(name, seconds)`**: an event called `name`, fired once after `seconds`.
+    // **`timer(name, seconds)`**: an event called `name`, fired once after `seconds`, for the entity that started
+    // it.
     engine.register_fn("timer", |context: rhai::NativeCallContext, name: String, seconds: f64| {
         if let Some(outbox) = outbox_of(&context) {
             outbox.timer(&name, seconds);
@@ -380,18 +454,46 @@ fn outbox_of(context: &rhai::NativeCallContext) -> Option<Outbox> {
     context.tag().cloned()?.try_cast::<Outbox>()
 }
 
-/// **Give every entity with a [`Script`] and no running state its state.**
-fn attach_scripts(
+/// **Attach, replace and detach scripts as `Script` comes and goes**, and as it is set to another file.
+///
+/// **A replace is a change, not an addition**: `Added<Script>` does not fire when an entity's `Script` is set to a
+/// different file, so a save that points an entity at another script reached nothing. **A removal is a detach**:
+/// the first version kept a removed script's entry forever, so a despawned entity's file was still recompiled when
+/// it was saved.
+#[allow(clippy::too_many_arguments)] // one parameter per thing a script's lifecycle reads, each needed here
+fn follow_scripts(
     mut commands: Commands,
-    scripts: Query<(Entity, &Script), Added<Script>>,
+    added: Query<(Entity, &Script), Added<Script>>,
+    changed: Query<(Entity, &Script), Changed<Script>>,
+    mut removed: RemovedComponents<Script>,
     root: Option<Res<ScriptsRoot>>,
+    engine: Option<Res<ScriptEngine>>,
     mut running: ResMut<Scripts>,
+    mut stat: ResMut<ScriptStats>,
     mut problems: MessageWriter<ScriptProblem>,
 ) {
-    let Some(root) = root else { return };
-    for (entity, script) in &scripts {
+    let (Some(root), Some(engine)) = (root, engine) else { return };
+
+    // **The entity is gone, or its `Script` was taken off**: either way nothing runs on it any more.
+    for entity in removed.read() {
+        if running.running.remove(&entity).is_some() {
+            // **The marker comes off too**, so a `find` and a `probe` agree about who is scripted.
+            if let Ok(mut entity_mut) = commands.get_entity(entity) {
+                entity_mut.remove::<Scripted>();
+            }
+        }
+    }
+
+    // **A new or re-pointed script.**
+    for (entity, script) in added.iter().chain(changed.iter()) {
+        if running.file_of(entity) == Some(script.file.as_str()) {
+            continue;
+        }
         let path = root.0.join(&script.file);
-        let (ast, hooks) = match compile(&path) {
+        // **The stamp is recorded at attach**, so the first poll is not a change: without this, every script
+        // recompiled on the first poll and `on_start` ran twice.
+        stat.seen.insert(path.clone(), stamp_of(&path));
+        let (ast, hooks) = match compile(&engine.engine, &path) {
             Ok(ast) => {
                 let hooks = Hooks::of(&ast);
                 (Some(ast), hooks)
@@ -405,17 +507,22 @@ fn attach_scripts(
         // place rather than through a second path.
         running.running.insert(
             entity,
-            Running { file: script.file.clone(), ast, state: Map::new(), timers: Vec::new(), started: false, hooks },
+            Running { file: script.file.clone(), ast, state: Map::new(), timers: Vec::new(), started: false, hooks, reported: None },
         );
         commands.entity(entity).insert(Scripted);
     }
 }
 
-/// **Compile one script file**, or say where it is wrong.
+/// **A file's modification time**, or `None` when it is not there.
+fn stamp_of(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|meta| meta.modified()).ok()
+}
+
+/// **Compile one script file with the game's own engine**, or say where it is wrong.
 // `Problem` is the workspace's one refusal shape; boxing a copy of it here would make this crate's answer a
 // different type from the editor's, which is the whole point of sharing it.
 #[allow(clippy::result_large_err)]
-fn compile(path: &Path) -> Result<rhai::AST, Problem> {
+fn compile(engine: &Engine, path: &Path) -> Result<rhai::AST, Problem> {
     let file = path.display().to_string();
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
@@ -426,8 +533,9 @@ fn compile(path: &Path) -> Result<rhai::AST, Problem> {
             ));
         }
     };
-    // **The same host the run uses**, so a compile that passed here cannot fail on a missing function later.
-    host().compile(&text).map_err(|e| script_problem(&file, e.position().line(), e.to_string()))
+    // **The game's engine, not a fresh one**: a function `engine_mut` registered is a function a script may call,
+    // and a compile through a second engine would refuse a script that then ran.
+    engine.compile(&text).map_err(|e| script_problem(&file, e.position().line(), e.to_string()))
 }
 
 /// **A problem naming the file and the line**, in GD-01's shape.
@@ -452,11 +560,12 @@ fn script_problem(file: &str, line: Option<usize>, why: String) -> Problem {
 fn reload_changed_scripts(
     mut running: ResMut<Scripts>,
     mut stat: ResMut<ScriptStats>,
+    engine: Option<Res<ScriptEngine>>,
     mut problems: MessageWriter<ScriptProblem>,
     root: Option<Res<ScriptsRoot>>,
     time: Option<Res<Time>>,
 ) {
-    let (Some(root), Some(time)) = (root, time) else { return };
+    let (Some(root), Some(time), Some(engine)) = (root, time, engine) else { return };
     let now = time.elapsed_secs_f64();
     if stat.last_poll.is_some_and(|last| now - last < SCRIPT_POLL_S) {
         return;
@@ -464,18 +573,10 @@ fn reload_changed_scripts(
     stat.last_poll = Some(now);
 
     // **Which files moved since the last poll**, so only those scripts are recompiled.
-    let present: Vec<PathBuf> = running
-        .running
-        .values()
-        .map(|one| root.0.join(&one.file))
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let mut moved: Vec<PathBuf> = Vec::new();
+    let present: Vec<PathBuf> = running.running.values().map(|one| root.0.join(&one.file)).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
     for path in &present {
-        let stamp = std::fs::metadata(path).and_then(|meta| meta.modified()).ok();
+        let stamp = stamp_of(path);
         if stat.seen.get(path).copied() != Some(stamp) {
-            moved.push(path.clone());
             stat.stable.insert(path.clone(), now);
         }
         stat.seen.insert(path.clone(), stamp);
@@ -483,12 +584,7 @@ fn reload_changed_scripts(
     // **Read what has stopped moving**, which is the files waiting from an earlier poll as well as this one: a
     // save is noticed on one poll and settles on a later one, so a loop over only this poll's movers would leave
     // every save waiting for a second edit that never comes.
-    let ready: Vec<PathBuf> = stat
-        .stable
-        .iter()
-        .filter(|(_, since)| now - *since >= SCRIPT_SETTLE_S)
-        .map(|(path, _)| path.clone())
-        .collect();
+    let ready: Vec<PathBuf> = stat.stable.iter().filter(|(_, since)| now - *since >= SCRIPT_SETTLE_S).map(|(path, _)| path.clone()).collect();
     for path in &ready {
         stat.stable.remove(path);
     }
@@ -501,13 +597,15 @@ fn reload_changed_scripts(
         if !ready.iter().any(|ready| ready == &path) {
             continue;
         }
-        match compile(&path) {
+        match compile(&engine.engine, &path) {
             Ok(ast) => {
                 one.hooks = Hooks::of(&ast);
                 one.ast = Some(ast);
                 // **`started` goes back to false**, so the new code's `on_start` runs: a save that adds a setup
                 // line expects it to have run once the save lands.
                 one.started = false;
+                // **A fixed script may fail again for a new reason**, so the last report is forgotten.
+                one.reported = None;
                 info!("the script `{}` recompiled; its state is carried across", path.display());
             }
             // **The old AST stays**, and the problem names the file and its line.
@@ -523,42 +621,71 @@ fn reload_changed_scripts(
 #[derive(Resource, Default)]
 pub struct ScriptStats {
     /// The modification time each file had at the last poll.
-    seen: BTreeMap<PathBuf, Option<std::time::SystemTime>>,
+    seen: BTreeMap<PathBuf, Option<SystemTime>>,
     /// When each moved file last changed, so it is read once it has stopped.
     stable: BTreeMap<PathBuf, f64>,
     /// The last poll, so a script file is not stat'd more often than [`SCRIPT_POLL_S`].
     last_poll: Option<f64>,
 }
 
-/// **Advance every running timer** and fire the ones that reach zero as a [`ScriptEvent`].
-fn settle_timers(mut running: ResMut<Scripts>, time: Option<Res<Time>>, mut events: MessageWriter<ScriptEvent>) {
+/// **Advance every running timer** and fire the ones that reach zero, **each to the entity that started it**.
+///
+/// The first version wrote every timer's event with an empty `to`, which is "every script" — so two doors running
+/// one script both closed when one door's timer rang. A timer belongs to its entity, so its event is addressed
+/// to that entity's `Name`; an entity without one gets a problem saying so, because an unaddressable timer
+/// silently delivered to everyone is the bug this replaced.
+fn settle_timers(
+    mut running: ResMut<Scripts>,
+    time: Option<Res<Time>>,
+    names: Query<&Name>,
+    mut events: MessageWriter<ScriptEvent>,
+    mut problems: MessageWriter<ScriptProblem>,
+) {
     let Some(time) = time else { return };
     let delta_s = time.delta_secs();
-    let mut fired: Vec<String> = Vec::new();
-    for one in running.running.values_mut() {
+    let mut fired: Vec<(Entity, String)> = Vec::new();
+    for (entity, one) in &mut running.running {
         for timer in &mut one.timers {
             timer.remaining_s -= delta_s;
             if timer.remaining_s <= 0.0 {
-                fired.push(timer.name.clone());
+                fired.push((*entity, timer.name.clone()));
             }
         }
         one.timers.retain(|timer| timer.remaining_s > 0.0);
     }
-    for name in fired {
-        events.write(ScriptEvent { name: TIMER_EVENT.to_owned(), data: name, to: String::new() });
+    for (entity, name) in fired {
+        let Ok(address) = names.get(entity) else {
+            let file = running.file_of(entity).unwrap_or_default().to_owned();
+            let signature = format!("timer `{name}` has no recipient");
+            if !running.already_reported(entity, &signature) {
+                running.report(entity, Some(signature.clone()));
+                problems.write(ScriptProblem {
+                    problem: script_problem(&file, None, format!("a `timer` fired but its entity has no `Name`, so it has no recipient: `{signature}`")),
+                });
+            }
+            continue;
+        };
+        events.write(ScriptEvent { name: TIMER_EVENT.to_owned(), data: name, to: address.as_str().to_owned() });
     }
 }
 
 /// **Run every scripted entity's hooks for this frame**: `on_start` once, then `on_update(dt)`.
+///
+/// **The world's picture is taken once per frame**, not once per hook: a scene with fifty scripts would otherwise
+/// walk the whole world fifty times a frame to answer a `find` most of them never call.
 fn run_hooks(world: &mut World) {
     let delta_s = world.get_resource::<Time>().map(|time| time.delta_secs()).unwrap_or(0.0);
     let entities: Vec<Entity> = world.get_resource::<Scripts>().map(Scripts::scripted).unwrap_or_default();
+    if entities.is_empty() {
+        return;
+    }
+    let snapshot = Arc::new(snapshot(world));
     for entity in entities {
         // **`on_start` first, always**: a script's frame code assumes what its setup did.
-        run_one(world, entity, HOOK_START, Hook::Start, vec![]);
-        run_one(world, entity, HOOK_UPDATE, Hook::Update, vec![Dynamic::from_float(f64::from(delta_s))]);
+        run_one(world, entity, Hook::Start, vec![], &snapshot);
+        run_one(world, entity, Hook::Update, vec![Dynamic::from_float(f64::from(delta_s))], &snapshot);
     }
-    run_events(world);
+    run_events(world, &snapshot);
 }
 
 /// **Which hook a call is for**, so its arity is the compiler's business and not a `match` on a string.
@@ -579,6 +706,16 @@ impl Hook {
             Hook::Trigger => hooks.trigger,
         }
     }
+
+    /// The name a script writes the hook under.
+    fn name(self) -> &'static str {
+        match self {
+            Hook::Start => HOOK_START,
+            Hook::Update => HOOK_UPDATE,
+            Hook::Event => HOOK_EVENT,
+            Hook::Trigger => HOOK_TRIGGER,
+        }
+    }
 }
 
 /// **Call one hook of one entity when its script defines it and its setup has run.**
@@ -586,19 +723,15 @@ impl Hook {
 /// **`on_start` counts as done whether or not a script defines it**, which is what makes a script with only
 /// `on_update` run at all: a hook that does not exist has nothing to wait for, so waiting for it would idle the
 /// script forever.
-fn run_one(world: &mut World, entity: Entity, name: &str, which: Hook, args: Vec<Dynamic>) {
+fn run_one(world: &mut World, entity: Entity, which: Hook, args: Vec<Dynamic>, snapshot: &Arc<BTreeMap<String, Map>>) {
     // **`on_start` runs once**, so a script that resets a counter there does not reset it every frame. `started`
     // is the flag, and it is read here rather than in `ready_hook` because a start that has already happened is
     // not a hook waiting to be called — it is a hook that is done.
     if which == Hook::Start && world.get_resource::<Scripts>().is_some_and(|scripts| scripts.started(entity)) {
         return;
     }
-    match ready_hook(world, entity, which) {
-        Some(ast) => call(world, entity, name, which, ast, args),
-        // **The start is spent rather than skipped**: a script without `on_start` has nothing to set up, so its
-        // frame code is ready on its first frame.
-        None if which == Hook::Start => {}
-        None => return,
+    if let Some(ast) = ready_hook(world, entity, which) {
+        call(world, entity, which, ast, args, snapshot);
     }
     if which == Hook::Start
         && let Some(mut scripts) = world.get_resource_mut::<Scripts>()
@@ -608,18 +741,16 @@ fn run_one(world: &mut World, entity: Entity, name: &str, which: Hook, args: Vec
 }
 
 /// **Run `on_event(name, data)` for every script that should see this frame's events.**
-fn run_events(world: &mut World) {
+fn run_events(world: &mut World, snapshot: &Arc<BTreeMap<String, Map>>) {
     // **Every event of this frame, taken once**, so a script that sends one during its own hook cannot make the
     // loop run forever: what it sends this frame is read on the next.
-    let events: Vec<ScriptEvent> =
-        world.get_resource_mut::<Messages<ScriptEvent>>().map(|mut messages| messages.drain().collect()).unwrap_or_default();
+    let events: Vec<ScriptEvent> = world.get_resource_mut::<Messages<ScriptEvent>>().map(|mut messages| messages.drain().collect()).unwrap_or_default();
     if events.is_empty() {
         return;
     }
     for entity in world.get_resource::<Scripts>().map(Scripts::scripted).unwrap_or_default() {
         // **No name is not no recipient**: a broadcast goes to every script, so an entity that was never given a
-        // `Name` still hears it. Only an addressed event needs one, and an entity without a name cannot be its
-        // addressee — which is the honest answer rather than dropping the event for everybody else.
+        // `Name` still hears it. Only an addressed event needs one.
         let name = name_of(world, entity).unwrap_or_default();
         for event in &events {
             // **Addressed or broadcast**: an empty `to` goes to every script, a named one to its own.
@@ -627,16 +758,15 @@ fn run_events(world: &mut World) {
                 continue;
             }
             // **`on_trigger(other)` reads the same event**, for the one name that means a near miss, so a script
-            // declares the hook its job actually is. A script that defines both gets both, which is what writing
-            // both means.
+            // declares the hook its job actually is. A script that defines both gets both.
             if event.name == TRIGGER_EVENT
                 && let Some(ast) = ready_hook(world, entity, Hook::Trigger)
             {
-                call(world, entity, HOOK_TRIGGER, Hook::Trigger, ast, vec![json_to_dynamic_str(&event.data)]);
+                call(world, entity, Hook::Trigger, ast, vec![json_to_dynamic_str(&event.data)], snapshot);
             }
             let Some(ast) = ready_hook(world, entity, Hook::Event) else { continue };
             let data = json_to_dynamic_str(&event.data);
-            call(world, entity, HOOK_EVENT, Hook::Event, ast, vec![Dynamic::from(event.name.clone()), data]);
+            call(world, entity, Hook::Event, ast, vec![Dynamic::from(event.name.clone()), data], snapshot);
         }
     }
 }
@@ -659,13 +789,13 @@ fn ready_hook(world: &World, entity: Entity, which: Hook) -> Option<rhai::AST> {
 /// **What a script asked the world while its hook ran.** A rhai function has no `&mut World`, so a script asks
 /// through the call's tag and the code beside it acts once the hook returns.
 ///
-/// The snapshot is every scripted entity's components by `Name`, which is what `find` and `world_get` answer
-/// from; the three lists are what `world_set`, `emit` and `timer` record. **A clone of this struct shares the
-/// lists**, because the tag holds one copy and the caller holds the other.
+/// The snapshot is every named entity's components, which is what `find` and `world_get` answer from; the three
+/// lists are what `world_set`, `emit` and `timer` record. **A clone of this struct shares the lists**, because the
+/// tag holds one copy and the caller holds the other.
 #[derive(Clone, Default)]
 struct Outbox {
-    /// Every scripted entity's components, by its name.
-    entities: Arc<Mutex<BTreeMap<String, Map>>>,
+    /// Every named entity's components, by its name.
+    entities: Arc<BTreeMap<String, Map>>,
     /// Components a script asked to write, as `(entity name, component, value)`.
     writes: Arc<Mutex<Vec<(String, String, Dynamic)>>>,
     /// Events a script asked to send, as `(name, data)`.
@@ -675,18 +805,15 @@ struct Outbox {
 }
 
 impl Outbox {
-    /// **Build the snapshot** a hook's `find` answers from.
-    fn with_entities(entities: BTreeMap<String, Map>) -> Outbox {
-        Outbox { entities: Arc::new(Mutex::new(entities)), ..Outbox::default() }
+    /// **Build the snapshot** a hook's `find` answers from. The map is shared, not copied, because it is the same
+    /// picture for every script in the frame.
+    fn with_entities(entities: Arc<BTreeMap<String, Map>>) -> Outbox {
+        Outbox { entities, ..Outbox::default() }
     }
 
     /// **One entity's components**, or `()` when nothing is called `name`.
     fn entity(&self, name: &str) -> Dynamic {
-        let entities = match self.entities.lock() {
-            Ok(entities) => entities,
-            Err(_) => return Dynamic::UNIT,
-        };
-        match entities.get(name) {
+        match self.entities.get(name) {
             Some(map) => Dynamic::from_map(map.clone()),
             None => Dynamic::UNIT,
         }
@@ -711,19 +838,16 @@ impl Outbox {
     }
 }
 
-/// **Call one hook of one script**, binding `this` to a map built from the entity's real components plus its
-/// kept state, then writing back what the script changed.
-fn call(world: &mut World, entity: Entity, name: &str, which: Hook, ast: rhai::AST, args: Vec<Dynamic>) {
+/// **Call one hook of one script**, binding `this` to a map built from the entity's real components plus its kept
+/// state, then applying what the script asked for.
+fn call(world: &mut World, entity: Entity, which: Hook, ast: rhai::AST, args: Vec<Dynamic>, snapshot: &Arc<BTreeMap<String, Map>>) {
     let Some(map) = this_map(world, entity) else { return };
     let before = map.clone();
+    let file = world.get_resource::<Scripts>().and_then(|s| s.file_of(entity)).unwrap_or_default().to_owned();
     // **`this` is a `Dynamic` holding the map**, because that is what rhai binds: a write is `this.Health.current`,
     // which lands in the map inside it, and the map is read back out once the call returns.
     let mut then = Dynamic::from_map(map);
-    let file = world.get_resource::<Scripts>().and_then(|s| s.running.get(&entity)).map(|one| one.file.clone()).unwrap_or_default();
-    // **Every scripted entity's picture**, which is what `find` answers from: the same map `this` is, under each
-    // entity's `Name`. Built once per call rather than once per `find`, because a script that looks up five
-    // entities should cost one walk of the world.
-    let outbox = Outbox::with_entities(snapshot(world));
+    let outbox = Outbox::with_entities(snapshot.clone());
 
     let mut scope = Scope::new();
     let options = {
@@ -731,33 +855,55 @@ fn call(world: &mut World, entity: Entity, name: &str, which: Hook, ast: rhai::A
         options.tag = Some(Dynamic::from(outbox.clone()));
         options.bind_this_ptr(&mut then)
     };
-    // **The engine is borrowed for the call and not moved out**, because an `Engine` owns its function set and
-    // is not `Clone`: a copy per call would be the second host `AGENTS.md` forbids.
-    let result = world.resource_scope(|world, engine: Mut<ScriptEngine>| {
-        let _ = world;
-        with_args(&engine.engine, &mut scope, options, &ast, name, which, args)
-    });
+    // **The engine is borrowed for the call and not moved out**, because an `Engine` owns its function set and is
+    // not `Clone`: a copy per call would be the second host this crate's rules forbid.
+    let result = world.resource_scope(|_world, engine: Mut<ScriptEngine>| with_args(&engine.engine, &mut scope, options, &ast, which, args));
 
     // **The world is written back after the call**, so the hook ran against one consistent picture of it.
-    match result {
-        Ok(()) => {}
-        Err(error) => {
-            let problem = script_problem(&file, error.position().line(), error.to_string());
-            if let Some(mut messages) = world.get_resource_mut::<Messages<ScriptProblem>>() {
-                messages.write(ScriptProblem { problem });
-            }
-        }
+    let call_failure = result.as_ref().err().map(|error| {
+        format!("{}:{}: {error}", file, error.position().line().unwrap_or(0))
+    });
+    let mut messages: Vec<Problem> = Vec::new();
+    if let Some(signature) = &call_failure {
+        messages.push(script_problem(&file, result_line(signature), signature.clone()));
     }
-    // **What the script left `this` as**, which is the map after its writes rather than the one it began from.
+
+    // **What the script left `this` as** is what is written back; a problem of its own is raised for a component it
+    // asked to write that cannot be written.
     let after = then.clone().try_cast::<Map>().unwrap_or_default();
-    write_back(world, entity, &before, &after);
+    let mut problems: Vec<Problem> = Vec::new();
+    write_back(world, entity, &before, &after, &file, &mut problems);
     keep_state(world, entity, &after);
 
     // **The writes a script asked for**, each one applied to the entity its name resolves to.
     let writes = outbox.writes.lock().map(|writes| writes.clone()).unwrap_or_default();
     for (target, component, value) in writes {
         let Some(target) = entity_named(world, &target) else { continue };
-        set_component(world, target, &component, &value);
+        if let Err(problem) = set_component(world, target, &component, &value, &file) {
+            problems.push(problem);
+        }
+    }
+
+    // **Each fault is reported once per edit, not once a frame.** A runaway script and a script naming a component
+    // its target lacks are the same shape of fault: it stays true until the file is edited, so saying it sixty
+    // times a second is noise a person cannot act on. The signature is the fault's own sentence, and a frame that
+    // raises nothing forgets the last one so a fault that comes back is reported again.
+    messages.extend(problems);
+    let signature = messages.first().map(Problem::line);
+    let report = match &signature {
+        Some(signature) => world.get_resource::<Scripts>().is_none_or(|scripts| !scripts.already_reported(entity, signature)),
+        // **Nothing wrong this frame**: forget the last fault.
+        None => true,
+    };
+    if let Some(mut scripts) = world.get_resource_mut::<Scripts>() {
+        scripts.report(entity, signature.clone());
+    }
+    if report
+        && let Some(mut out) = world.get_resource_mut::<Messages<ScriptProblem>>()
+    {
+        for problem in messages {
+            out.write(ScriptProblem { problem });
+        }
     }
 
     let timers = outbox.timers.lock().map(|t| t.clone()).unwrap_or_default();
@@ -774,6 +920,12 @@ fn call(world: &mut World, entity: Entity, name: &str, which: Hook, ast: rhai::A
             messages.write(ScriptEvent { name: event_name, data, to: String::new() });
         }
     }
+    let _ = which.name();
+}
+
+/// **The line a problem signature carries**, so a report names where it happened.
+fn result_line(signature: &str) -> Option<usize> {
+    signature.split(':').nth(1).and_then(|line| line.parse().ok()).filter(|line| *line > 0)
 }
 
 /// **Every named entity's components, by its `Name`**, which is what a script's `find` answers from.
@@ -798,38 +950,61 @@ fn entity_named(world: &mut World, name: &str) -> Option<Entity> {
     query.iter(world).find(|(_, candidate)| candidate.as_str() == name).map(|(entity, _)| entity)
 }
 
-/// **Write one component of one entity**, through the type's own `Deserialize` — the door GD-05's file reader
-/// uses, so a script and a YAML file cannot disagree about what a component's data is.
-fn set_component(world: &mut World, entity: Entity, component: &str, value: &Dynamic) {
-    let Some(registry_handle) = world.get_resource::<AppTypeRegistry>().cloned() else { return };
+/// **Write one component of one entity**, refusing where the engine's `apply` would panic.
+///
+/// `ReflectComponent::apply` **panics** on an entity that does not carry the component and on an immutable one
+/// (bevy_ecs 0.20 `reflect/component.rs`), so both are checked first and answered as a [`Problem`] naming the
+/// script — a refusal a game can show rather than a crash it cannot.
+#[allow(clippy::result_large_err)] // the workspace's one refusal shape, shared on purpose
+fn set_component(world: &mut World, entity: Entity, component: &str, value: &Dynamic, file: &str) -> Result<(), Problem> {
+    let Some(registry_handle) = world.get_resource::<AppTypeRegistry>().cloned() else { return Ok(()) };
     let registry = registry_handle.read();
     let Some(registration) = registry.get_with_short_type_path(component).or_else(|| registry.get_with_type_path(component))
     else {
-        return;
+        // **A type the game did not register is nothing to write**, not a fault of the script: `this.Nowhere` and
+        // `world_set(…, "Nowhere", …)` both do nothing, which is what the module's docs promise.
+        return Ok(());
     };
-    // **Cloned out of the registry**, which is `Clone`, so the registry's read borrow ends before the world is
-    // written: a refusal here is no write at all rather than a half-applied one.
-    let Some(reflect_component) = registration.data::<ReflectComponent>().cloned() else { return };
-    let Some(deserialize) = registration.data::<bevy::reflect::ReflectDeserialize>() else { return };
+    let Some(reflect_component) = registration.data::<ReflectComponent>().cloned() else { return Ok(()) };
+    let Some(deserialize) = registration.data::<bevy::reflect::ReflectDeserialize>() else {
+        return Err(script_problem(file, None, format!("`{component}` is registered without `#[reflect(Deserialize)]`, so a value cannot be written to it")));
+    };
+    // **The two panics, asked before the write.** `contains` is the engine's own answer to "does this entity carry
+    // it", and `mutability` is the engine's own answer to "can it be changed through reflection".
+    let present = world.get_entity(entity).is_ok_and(|candidate| reflect_component.contains(candidate));
+    let mutable = reflect_component.register_component(world);
+    let mutable = world.components().get_info(mutable).is_some_and(|info| info.mutable());
+    if !present {
+        return Err(script_problem(file, None, format!("`{component}` is not on the entity a script wrote it to")));
+    }
+    if !mutable {
+        return Err(script_problem(file, None, format!("`{component}` is an immutable component, so a script cannot change it")));
+    }
     let text = serde_json::to_string(&dynamic_to_json(value)).unwrap_or_default();
     let mut deserializer = serde_json::Deserializer::from_str(&text);
-    let Ok(built) = deserialize.deserialize(&mut deserializer) else { return };
+    let Ok(built) = deserialize.deserialize(&mut deserializer) else {
+        return Err(script_problem(file, None, format!("the value a script wrote to `{component}` did not read as that type")));
+    };
     drop(registry);
-    let Ok(mut entity_mut) = world.get_entity_mut(entity) else { return };
+    let Ok(mut entity_mut) = world.get_entity_mut(entity) else { return Ok(()) };
     reflect_component.apply(&mut entity_mut, built.as_partial_reflect());
+    Ok(())
 }
 
 /// **Call a hook with the arguments its signature takes**, which is the one place the four arities live.
+///
+/// **A cast here is `try_cast` and never `cast`**: rhai's `cast` **panics** on a value of another type, so an event
+/// whose data is `5` reaching `on_trigger(other)` killed the game. A value that is not a string becomes its text.
 fn with_args(
     engine: &Engine,
     scope: &mut Scope,
     options: rhai::CallFnOptions,
     ast: &rhai::AST,
-    name: &str,
     which: Hook,
     args: Vec<Dynamic>,
 ) -> Result<(), Box<rhai::EvalAltResult>> {
     let mut args = args.into_iter();
+    let name = which.name();
     match which {
         Hook::Start => engine.call_fn_with_options::<()>(options, scope, ast, name, ()),
         Hook::Update => {
@@ -837,15 +1012,26 @@ fn with_args(
             engine.call_fn_with_options::<()>(options, scope, ast, name, (dt,))
         }
         Hook::Event => {
-            let event = args.next().map(|v| v.cast::<String>()).unwrap_or_default();
+            let event = args.next().map(|v| as_text(&v)).unwrap_or_default();
             let data = args.next().unwrap_or(Dynamic::UNIT);
             engine.call_fn_with_options::<()>(options, scope, ast, name, (event, data))
         }
         Hook::Trigger => {
-            let other = args.next().map(|v| v.cast::<String>()).unwrap_or_default();
+            let other = args.next().map(|v| as_text(&v)).unwrap_or_default();
             engine.call_fn_with_options::<()>(options, scope, ast, name, (other,))
         }
     }
+}
+
+/// **A value as the text a hook takes**, without panicking on one that is not a string.
+fn as_text(value: &Dynamic) -> String {
+    if let Some(text) = value.clone().try_cast::<String>() {
+        return text;
+    }
+    if value.is_unit() {
+        return String::new();
+    }
+    value.to_string()
 }
 
 /// **A script's `this` map**: each component the entity carries, by its short type path, plus `state`.
@@ -878,8 +1064,11 @@ fn components_of(world: &World, entity: Entity) -> Option<Map> {
     Some(map)
 }
 
-/// **Write `this` back to the entity**: every component whose entry the script changed, by name.
-fn write_back(world: &mut World, entity: Entity, before: &Map, after: &Map) {
+/// **Write `this` back to the entity**: every component whose entry the script changed **and the entity carries**.
+///
+/// A key the entity does not carry is not a write at all — that is what "a write to an unknown property changes
+/// nothing" means, and `a_write_to_a_component_the_scripted_entity_does_not_have_changes_nothing` proves it.
+fn write_back(world: &mut World, entity: Entity, before: &Map, after: &Map, file: &str, problems: &mut Vec<Problem>) {
     // **Compared as the JSON they would be written as**, because `Dynamic` has no `PartialEq`: two maps are the
     // same component when they serialise the same, which is also what the write would send.
     let changed: Vec<(String, Dynamic)> = after
@@ -890,7 +1079,13 @@ fn write_back(world: &mut World, entity: Entity, before: &Map, after: &Map) {
         .map(|(key, value)| (key.to_string(), value.clone()))
         .collect();
     for (component, value) in changed {
-        set_component(world, entity, &component, &value);
+        // **Only a component the entity carries**, so a script inventing `this.Nowhere` writes nothing.
+        if before.get(component.as_str()).is_none() {
+            continue;
+        }
+        if let Err(problem) = set_component(world, entity, &component, &value, file) {
+            problems.push(problem);
+        }
     }
 }
 
@@ -962,11 +1157,11 @@ fn dynamic_to_json(value: &Dynamic) -> serde_json::Value {
     }
     // **The integer check comes first**, because rhai's `Dynamic::from(1_i32)` and `from_int(1)` both answer
     // `as_int`, and a `f32` field written from an integer must not become `1.0`'s text with a fraction.
-    // **`as_int` answers only rhai's own `INT`**, so a value that came in as an `i32` (which is what a reflected
-    // `Health.current` is) is asked for by its own type. Both are integers to JSON.
     if let Ok(i) = value.as_int() {
         return serde_json::Value::from(i);
     }
+    // **`as_int` answers only rhai's own `INT`**, so a value that came in as an `i32` (which is what a reflected
+    // `Health.current` is) is asked for by its own type. Both are integers to JSON.
     if let Some(i) = value.clone().try_cast::<i32>() {
         return serde_json::Value::from(i);
     }
@@ -1016,5 +1211,12 @@ mod tests {
         let hooks = Hooks::of(&ast);
         assert!(hooks.start && hooks.event, "{hooks:?}");
         assert!(!hooks.update && !hooks.trigger, "{hooks:?}");
+    }
+
+    #[test]
+    fn a_value_that_is_not_a_string_is_read_as_its_text_rather_than_panicking() {
+        assert_eq!(as_text(&Dynamic::from_int(5)), "5");
+        assert_eq!(as_text(&Dynamic::from("door".to_owned())), "door");
+        assert_eq!(as_text(&Dynamic::UNIT), "");
     }
 }

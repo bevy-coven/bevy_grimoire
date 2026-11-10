@@ -45,7 +45,15 @@ a script whose frame code assumes what its setup did is safe.
 own code writes the same message (`ScriptEvent`) to address one script by putting its `Name` in `to`, and an empty
 `to` goes to every script.
 
-`timer("slow", 2.5)` fires, once, `2.5` seconds later, as an event named `timer` with `slow` as its data.
+**`import` resolves nothing**: a script cannot load a file the game did not put in its project.
+
+`timer("slow", 2.5)` fires, once, `2.5` seconds later, as an event named `timer` with `slow` as its data,
+**addressed to the script that started it**: two doors running one script do not close each other. A timer needs its
+entity to have a `Name`, because that is how the event is addressed; one without gets a problem saying so.
+
+`on_trigger(other)` runs from an event named `trigger`, with the other entity's name as its data. A game's own code
+writes it (or a `Trigger`'s crossing does, from the game side), so a script never has to know how the trigger volume
+reports itself.
 
 ## Saving a script changes the running game
 
@@ -54,8 +62,11 @@ the state stays.
 
 - **A file that does not compile leaves the last good version running** and raises a problem naming the file and the
   line it is wrong at. A half-typed edit is not a reason to stop a door opening.
-- **A call that runs past `SCRIPT_STEP_LIMIT` operations is stopped**, with a problem naming the file. A runaway
-  script costs one call, never the frame loop.
+- **A call that runs past `SCRIPT_STEP_LIMIT` operations, or builds a string, array or map past its cap, is
+  stopped**, with a problem naming the file. A runaway script costs one call, never the frame loop, and one
+  fault is reported once per edit rather than once a frame.
+- **A write at a component the entity does not carry, or at an immutable one, is refused** with a problem naming
+  the script — the engine's own `apply` panics in both cases, so both are checked first.
 - **A runtime error becomes a problem naming the file and the line** of the statement that raised it.
 
 Every one of those is a `ScriptProblem`, which carries the same `Problem` shape a refused project file does, so a

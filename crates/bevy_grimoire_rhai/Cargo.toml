@@ -13,8 +13,8 @@ categories = ["game-development"]
 # **`serialize` for `Name`**, which is how a script names another entity: `find("guard")` resolves
 # through the engine's own name, not a second table this crate would have to keep in step.
 bevy = { workspace = true, features = ["serialize"] }
-# **For `FileWatch` and `Problem` and nothing else.** Both are engine-free, so a game that scripts entities
-# pays for the same poll interval and the same refusal shape its project files already use.
+# **For `Problem`, and nothing else.** It is the workspace's one refusal shape, so a script's fault reaches a
+# game's log the way a refused project file does. Engine-free, so nothing new is drawn in.
 bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.0" }
 # **The one Rhai host** (GD-06, #368). The owner decided it lives in this workspace rather than in
 # `bevy_society`: that crate's `ScriptEngine` registers only society types and keeps its entry points
