@@ -3277,7 +3277,7 @@ fn the_pointer_is_over_the_panel_when_it_is_over_a_row() {
 /// **Every tab carries a badge, and it boots silent.**
 ///
 /// The badge is the stale count's own text child, in its own colour, because `style_tabs` owns
-/// every `TabLabel`'s `TextColor` per frame — a `DANGER` written into the label was stomped a
+/// every `TabLabel`'s `TextColor` per frame — an `Ink::danger` written into the label was stomped a
 /// frame later, which is how "the one word here allowed to shout" rendered in the tab's ordinary
 /// grey. The label itself must no longer carry the count: one fact, one node.
 #[test]
@@ -11050,7 +11050,7 @@ fn a_tab_is_not_a_button() {
 ///
 /// It also asserts the seeding is *this editor's*, not Feathers'. `docs/ui.md` §5 says of the crate
 /// "its visuals are Bevy's editor skin — do not adopt them"; the machinery is adopted and the greys
-/// are not, and `PANE_BODY_BG` reading `chrome::PANEL_BG` is what that reconciliation looks like
+/// are not, and `PANE_BODY_BG` reading `chrome::ink().panel_bg` is what that reconciliation looks like
 /// from the outside.
 #[test]
 fn the_theme_is_seeded_from_the_palette() {
@@ -11071,10 +11071,10 @@ fn the_theme_is_seeded_from_the_palette() {
         "an empty theme is the default, and the default is a fuchsia editor"
     );
     for (token, want, what) in [
-        (bevy::feathers::tokens::PANE_BODY_BG, bevy_cauldron::chrome::PANEL_BG, "a panel's ground"),
-        (bevy::feathers::tokens::WINDOW_BG, bevy_cauldron::chrome::VOID, "the window's ground"),
-        (bevy::feathers::tokens::TEXT_MAIN, bevy_cauldron::chrome::TEXT, "body text"),
-        (bevy::feathers::tokens::LISTROW_BG_SELECTED, bevy_cauldron::chrome::ROW_SELECTED, "a chosen row"),
+        (bevy::feathers::tokens::PANE_BODY_BG, bevy_cauldron::chrome::ink().panel_bg, "a panel's ground"),
+        (bevy::feathers::tokens::WINDOW_BG, bevy_cauldron::chrome::ink().void, "the window's ground"),
+        (bevy::feathers::tokens::TEXT_MAIN, bevy_cauldron::chrome::ink().text, "body text"),
+        (bevy::feathers::tokens::LISTROW_BG_SELECTED, bevy_cauldron::chrome::ink().row_selected, "a chosen row"),
     ] {
         assert_eq!(
             theme.0.color(&token),
@@ -12117,7 +12117,7 @@ fn a_badge_lights_while_its_key_is_down() {
     let lit: Vec<Vec<Action>> = {
         let mut q = app.world_mut().query::<(&Badge, &BackgroundColor)>();
         q.iter(app.world())
-            .filter(|(_, bg)| bg.0 == bevy_cauldron::chrome::ROW_SELECTED)
+            .filter(|(_, bg)| bg.0 == bevy_cauldron::chrome::ink().row_selected)
             .map(|(b, _)| b.0.clone())
             .collect()
     };
@@ -12152,7 +12152,7 @@ fn a_badge_lights_while_its_key_is_down() {
 ///
 /// `chrome_census` bans raw font sizes but does not pin roles, so nothing else would notice if the
 /// one number this overlay exists to show quietly returned to 9 px. Ink identifies the part: the
-/// chord is [`chrome::KEY`], the description [`chrome::DIM`], and no third ink draws in a badge.
+/// chord is `chrome::ink().key`, the description `chrome::ink().dim`, and no third ink draws in a badge.
 #[test]
 fn a_badge_chord_reads_at_body_size() {
     use bevy_cauldron::badges::Badge;
@@ -12174,10 +12174,10 @@ fn a_badge_chord_reads_at_body_size() {
             while let Some(e) = queue.pop() {
                 if let (Some(font), Some(color)) = (world.get::<TextFont>(e), world.get::<TextColor>(e))
                 {
-                    if color.0 == bevy_cauldron::chrome::KEY {
+                    if color.0 == bevy_cauldron::chrome::ink().key {
                         assert_eq!(font.font_size, body, "a chord away from BODY size");
                         chords += 1;
-                    } else if color.0 == bevy_cauldron::chrome::DIM {
+                    } else if color.0 == bevy_cauldron::chrome::ink().dim {
                         assert_eq!(font.font_size, hint, "a description away from HINT size");
                         descs += 1;
                     } else {
@@ -12913,7 +12913,7 @@ fn the_tile_refits_while_another_tab_is_open() {
 /// **A pending proposal reaches the description box and STAYS there.**
 ///
 /// The pane holds one value: with a proposal outstanding, the box shows what the model offered, in
-/// `SUGGEST`, and `U`/`Y` decide. `tiles::rebuild_detail` did exactly that and it was never on
+/// `Ink::suggest`, and `U`/`Y` decide. `tiles::rebuild_detail` did exactly that and it was never on
 /// screen, because `tiles::refresh_cells` repaints the same node in place — it exists so a click
 /// does not respawn the pane — and it read `d.note` alone. Whatever the pane drew, the repainter
 /// overwrote a frame later with `describe it…`.
@@ -13536,8 +13536,8 @@ fn a_badge_takes_the_ground_a_dock_leaves() {
 
 /// **While the shortcuts key is held, the grounds step back — and every word on them does not.**
 ///
-/// The other half of letting a badge stand on a panel's empty middle: a `PANEL_BG` box on a
-/// `PANEL_BG` panel is one shape with a line through it. `chrome::GROUND_HELD` is what separates
+/// The other half of letting a badge stand on a panel's empty middle: an `Ink::panel_bg` box on a
+/// `Ink::panel_bg` panel is one shape with a line through it. `chrome::GROUND_HELD` is what separates
 /// them by depth, and this pins both ends of it — the drop while held, and the exact restore on
 /// release, which is what `chrome::Ground` carries its colour for.
 #[test]
@@ -16588,14 +16588,14 @@ fn clicking_a_tag_chip_writes_the_kind_and_lights_the_clicked_chip() {
 /// **A held chip carries a shape, so a hover cannot be mistaken for it** — the cause B-047 was
 /// reported as a symptom of.
 ///
-/// The palette's own rule is that a chosen thing is told apart by **shape**, because `ROW_HOVER`
-/// sits only ΔL\* 3.89 under `ROW_SELECTED` (`chrome.rs`). Chips never got that shape. Measured on
+/// The palette's own rule is that a chosen thing is told apart by **shape**, because `Ink::row_hover`
+/// sits only ΔL\* 3.89 under `Ink::row_selected` (`chrome.rs`). Chips never got that shape. Measured on
 /// the running editor: rest `(42,39,34)`, hovered `(54,50,44)` — 60% of the way to held — held
 /// `(63,59,51)`, and **all three drew the same 1 px dark border**. So the cycle-5 GIF, taken with
 /// "the cursor ring over it", could not say which state the chip was in; the pane was right and the
 /// picture was unreadable.
 ///
-/// This pins the shape: a held chip's border is `ACCENT`, an unheld one has none, and a proposal
+/// This pins the shape: a held chip's border is `Ink::accent`, an unheld one has none, and a proposal
 /// still wins on the border because a ghost is a question.
 #[test]
 fn a_held_tag_chip_carries_an_accent_edge_and_an_unheld_one_does_not() {
@@ -16634,7 +16634,7 @@ fn a_held_tag_chip_carries_an_accent_edge_and_an_unheld_one_does_not() {
         bevy_cauldron::tiles::kind_chip_edges_for_test(app.world_mut());
     assert_eq!(
         held_edge,
-        bevy_cauldron::chrome::ACCENT,
+        bevy_cauldron::chrome::ink().accent,
         "the held chip must carry the accent edge; without it a hover one ΔL* away is \
          indistinguishable from it"
     );

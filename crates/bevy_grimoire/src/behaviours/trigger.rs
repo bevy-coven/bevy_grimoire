@@ -56,8 +56,23 @@ pub struct Triggered {
 /// A map rather than a component on the volume, because it is the volume's memory of *other* entities and
 /// it must be pruned when either one despawns: two components holding each other's entities is the shape
 /// that leaks.
+///
+/// **A pair this map has never seen is not a crossing.** A body standing in a doorway is a *state*, not something
+/// that happened: a save put it there, nobody walked in. The pair is recorded and nothing is reported, and only a
+/// change afterwards is a crossing.
+///
+/// **One path decides that, and it is the `insert` in the loop below.** It covers a body that was there when the
+/// volume was first looked at and a body that appears inside it later — what a YAML reload does when it writes a
+/// walker into a yard that already exists — because a new volume has no pairs and every pair of an old one is
+/// either recorded or unseen. A second "first frame" set beside it changed no result and covered only half the
+/// cases; it is gone, and `a_body_a_save_adds_inside_an_existing_volume_does_not_press_its_switch` is the test that
+/// tells them apart.
 #[derive(Resource, Default)]
-pub(crate) struct Inside(std::collections::BTreeMap<(Entity, Entity), bool>);
+pub(crate) struct Inside {
+    /// The pairs this resource has seen, and whether the volume held the body. A pair absent here — either the
+    /// volume or the body is new to it — is being looked at for the first time.
+    seen: std::collections::BTreeMap<(Entity, Entity), bool>,
+}
 
 /// **Send a message for every body that entered or left a volume this frame**, and one signal for every volume
 /// a body entered.
@@ -77,7 +92,7 @@ pub(crate) fn crossings(
     // body respawned into the same index does not look like a body that was already inside.
     let here: std::collections::BTreeSet<Entity> =
         volumes.iter().map(|(volume, _, _)| volume).chain(bodies.iter().map(|(body, _, _)| body)).collect();
-    inside.0.retain(|(volume, body), _| here.contains(volume) && here.contains(body));
+    inside.seen.retain(|(volume, body), _| here.contains(volume) && here.contains(body));
 
     for (volume, trigger, at) in &volumes {
         // **`signalled` is per volume, not per body**: a signal is a name something happened, and a
@@ -88,7 +103,10 @@ pub(crate) fn crossings(
         let mut signalled = false;
         for (body, _, where_) in &bodies {
             let holds = super::within(trigger.radius_m, at.translation(), where_.translation());
-            let before = inside.0.insert((volume, body), holds).unwrap_or(false);
+            // **A pair with no record yet is a body or a volume this resource has never looked at**, so its first
+            // look records where it is and reports nothing: a save that puts someone in a doorway is a state, not
+            // something that happened. Every other case is the crossing.
+            let Some(before) = inside.seen.insert((volume, body), holds) else { continue };
             if holds == before {
                 continue;
             }

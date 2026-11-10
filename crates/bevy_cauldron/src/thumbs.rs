@@ -74,7 +74,9 @@ const MESH_WAIT_FRAMES: u32 = 600;
 /// An opaque tile rather than a transparent cut-out, so a row reads the same at rest, hovered and
 /// armed — and so thin or glazed geometry is not composited away to nothing. The palette's empty
 /// slot is the same ground under a different role, so the value is stated once, in chrome.
-const BACKDROP: Color = crate::chrome::SLOT_BG;
+fn backdrop() -> Color {
+    crate::chrome::ink().slot_bg
+}
 
 /// **The bake's key in [`crate::jobs::Jobs`]** (UI-22, #223) — the producer's own name for its work,
 /// so the band and the stop button reach *this* job and no other.
@@ -774,7 +776,7 @@ fn spawn_camera(commands: &mut Commands, first_target: &Handle<Image>) -> Entity
             Camera {
                 // Before the main camera, so the palette shows this frame's bake rather than the last.
                 order: -1,
-                clear_color: ClearColorConfig::Custom(BACKDROP),
+                clear_color: ClearColorConfig::Custom(backdrop()),
                 ..default()
             },
             // `RenderTarget` IS its own component in 0.19 — one of `Camera`'s `#[require]`s rather

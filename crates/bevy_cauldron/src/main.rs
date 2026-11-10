@@ -108,7 +108,7 @@ fn main() -> AppExit {
                 ..default()
             }),
     )
-    .insert_resource(ClearColor(bevy_cauldron::chrome::VOID))
+    .insert_resource(ClearColor(bevy_cauldron::chrome::ink().void))
     // **One knob for the whole interface.** `UiScale` multiplies every `Val::Px` and every font
     // size, so the panels grow together and nothing has to be re-tuned relative to anything else
     // — the alternative is forty constants that drift apart the first time one is missed.

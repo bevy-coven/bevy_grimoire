@@ -739,7 +739,6 @@ dependencies = [
  "bevy_grimoire",
  "bevy_grimoire_anim",
  "bevy_grimoire_core",
- "bevy_grimoire_migrate",
  "bevy_grimoire_snip",
  "bevy_light_grid",
  "bevy_lights",
@@ -753,6 +752,7 @@ dependencies = [
  "image",
  "isomesh 0.0.11",
  "rfd",
+ "ron",
  "rustix 1.1.5",
  "semver",
  "serde",
@@ -1101,6 +1101,7 @@ version = "0.46.0"
 source = "git+https://github.com/bevy-coven/bevy_flora?rev=25e956b3f88ba32a1b6d75957360c6840da6afd9#25e956b3f88ba32a1b6d75957360c6840da6afd9"
 dependencies = [
  "bevy",
+ "ron",
  "serde",
 ]
 
@@ -1257,13 +1258,13 @@ dependencies = [
 name = "bevy_grimoire_core"
 version = "0.10.1"
 dependencies = [
- "bevy_grimoire_migrate",
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",
  "dirs",
  "jsonschema",
  "rand",
  "rand_chacha",
+ "ron",
  "saphyr-parser",
  "schemars",
  "serde",
@@ -1274,14 +1275,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_grimoire_migrate"
+name = "bevy_grimoire_rhai"
 version = "0.1.0"
 dependencies = [
+ "bevy",
  "bevy_grimoire_core",
- "bevy_oracle",
- "ron",
+ "rhai",
  "serde",
- "serde_yaml_ng",
+ "serde_json",
 ]
 
 [[package]]
@@ -1619,9 +1620,9 @@ checksum = "bff34eb29ff4b8a8688bc7299f14fb6b597461ca80fec03ed7d22939ab33e48f"
 name = "bevy_oracle"
 version = "0.1.0"
 dependencies = [
+ "ron",
  "serde",
  "serde_json",
- "serde_yaml_ng",
  "ureq",
 ]
 
@@ -2675,6 +2676,7 @@ dependencies = [
  "castaway",
  "cfg-if",
  "itoa",
+ "serde",
  "static_assertions",
  "zmij",
 ]
@@ -5988,6 +5990,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "rhai_codegen",
+ "serde",
  "smallvec",
  "smartstring",
  "thin-vec",

@@ -529,7 +529,7 @@ fn draw_the_terminal(
                 .insert((
                     Text::new(String::new()),
                     TextLayout::no_wrap(),
-                    TextColor(chrome::TEXT),
+                    TextColor(chrome::ink().text),
                     terminal_font(metrics.text_scale()),
                     Pickable::IGNORE,
                 ))
@@ -585,8 +585,8 @@ fn draw_the_terminal(
     };
     let ground = match (held, caret.shape) {
         (false, _) => Color::NONE,
-        (true, CaretShape::Block) => chrome::ACCENT.with_alpha(crate::terminal_pane::CARET_BLOCK_ALPHA),
-        (true, _) => chrome::ACCENT,
+        (true, CaretShape::Block) => chrome::ink().accent.with_alpha(crate::terminal_pane::CARET_BLOCK_ALPHA),
+        (true, _) => chrome::ink().accent,
     };
     for (mut node, mut visibility, mut fill) in carets {
         let want = if caret_visible {
@@ -625,9 +625,9 @@ fn draw_the_terminal(
             .get(caret.row)
             .and_then(|line| line.cells.get(caret.column))
             .filter(|cell| cell.ch != ' ')
-            .map_or((String::new(), chrome::TEXT), |cell| (String::from(cell.ch), cell.fg))
+            .map_or((String::new(), chrome::ink().text), |cell| (String::from(cell.ch), cell.fg))
     } else {
-        (String::new(), chrome::TEXT)
+        (String::new(), chrome::ink().text)
     };
     // The glyph is drawn at the rows' size, so a block over a large cell holds a large character.
     let glyph_font = terminal_font(metrics.text_scale());
@@ -652,7 +652,7 @@ fn draw_the_terminal(
         commands.entity(*first).despawn_children();
         commands.entity(*first).with_child((
             Text::new(problem.to_owned()),
-            TextColor(chrome::DANGER),
+            TextColor(chrome::ink().danger),
             chrome::font(chrome::text::LABEL),
             TextLayout::no_wrap(),
             Pickable::IGNORE,

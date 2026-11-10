@@ -22,28 +22,28 @@ fn the_editor_skin_breaks_none_of_the_librarys_own_rules() {
 fn the_skin_and_the_palette_say_the_same_colours() {
     let skin = editor_skin();
     let ladder = [
-        ("VOID", chrome::VOID),
-        ("PANEL_BG", chrome::PANEL_BG),
-        ("HEADER_BG", chrome::HEADER_BG),
-        ("ROW_BG", chrome::ROW_BG),
-        ("SLOT_BG", chrome::SLOT_BG),
-        ("ROW_HOVER", chrome::ROW_HOVER),
-        ("ROW_SELECTED", chrome::ROW_SELECTED),
-        ("PANEL_EDGE", chrome::PANEL_EDGE),
+        ("VOID", chrome::ink().void),
+        ("PANEL_BG", chrome::ink().panel_bg),
+        ("HEADER_BG", chrome::ink().header_bg),
+        ("ROW_BG", chrome::ink().row_bg),
+        ("SLOT_BG", chrome::ink().slot_bg),
+        ("ROW_HOVER", chrome::ink().row_hover),
+        ("ROW_SELECTED", chrome::ink().row_selected),
+        ("PANEL_EDGE", chrome::ink().panel_edge),
     ];
     for (step, (name, colour)) in ladder.into_iter().enumerate() {
         assert_eq!(skin.surface_at(step as u8), colour, "ladder step {step} is {name}");
     }
     let roles = [
-        ("background is VOID", skin.background, chrome::VOID),
-        ("surface is PANEL_BG", skin.surface, chrome::PANEL_BG),
-        ("surface_raised is ROW_BG", skin.surface_raised, chrome::ROW_BG),
-        ("text is TEXT", skin.text, chrome::TEXT),
-        ("text_muted is DIM", skin.text_muted, chrome::DIM),
-        ("accent is ACCENT", skin.accent, chrome::ACCENT),
-        ("danger is DANGER", skin.danger, chrome::DANGER),
-        ("outline is EDGE_STRONG", skin.outline, chrome::EDGE_STRONG),
-        ("scrim is SCRIM", skin.scrim, chrome::SCRIM),
+        ("background is VOID", skin.background, chrome::ink().void),
+        ("surface is PANEL_BG", skin.surface, chrome::ink().panel_bg),
+        ("surface_raised is ROW_BG", skin.surface_raised, chrome::ink().row_bg),
+        ("text is TEXT", skin.text, chrome::ink().text),
+        ("text_muted is DIM", skin.text_muted, chrome::ink().dim),
+        ("accent is ACCENT", skin.accent, chrome::ink().accent),
+        ("danger is DANGER", skin.danger, chrome::ink().danger),
+        ("outline is EDGE_STRONG", skin.outline, chrome::ink().edge_strong),
+        ("scrim is SCRIM", skin.scrim, chrome::ink().scrim),
     ];
     for (what, from_skin, from_palette) in roles {
         assert_eq!(from_skin, from_palette, "{what}");

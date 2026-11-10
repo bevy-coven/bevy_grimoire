@@ -194,6 +194,8 @@ enum Slot {
     Outliner,
     /// View ▸ Show library (UI-52, #238): the same library as a grid of portraits.
     Library,
+    /// View ▸ Game UI preview (UI-03, #211): the project's game skin, drawn only inside that panel.
+    GameUi,
     /// View ▸ Show agent (UI-60, #246).
     Familiar,
     /// View ▸ Pause agent writes (UI-60, #246).
@@ -296,6 +298,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::Zen);
         slots.push(Slot::Outliner);
         slots.push(Slot::Library);
+        slots.push(Slot::GameUi);
         #[cfg(feature = "bevy_light_grid")]
         slots.push(Slot::LightMap);
         slots.push(Slot::Familiar);
@@ -423,6 +426,16 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::library_browser::LibraryItem,
                 bevy_gooey::check_item("Show library", false),
                 bevy_gooey::observe(crate::library_browser::toggle_the_library),
+            ));
+        }
+        // **View ▸ Game UI preview** (UI-03, #211): the one place a project's game skin is drawn. Asked
+        // for here for the outliner's reason — the sample screen's buttons are entities the screens
+        // counting every button in the world would find — so the panel is spawned on demand.
+        Slot::GameUi => {
+            menu.spawn((
+                crate::game_ui_preview::GameUiPreviewItem,
+                bevy_gooey::check_item("Game UI preview", false),
+                bevy_gooey::observe(crate::game_ui_preview::toggle_the_preview),
             ));
         }
         // **View ▸ Light map** (UI-80, #254). Gated with the slot: a build without the overlay has no

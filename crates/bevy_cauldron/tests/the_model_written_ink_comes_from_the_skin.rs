@@ -1,17 +1,17 @@
 //! **A theme edit reaches the "a machine decided this" ink** (UI-02, #210).
 //!
-//! `chrome::UNCHECKED` is what the Meshes pane paints a model-written label with, and it is drawn from
+//! `chrome::ink().unchecked` is what the Meshes pane paints a model-written label with, and it is drawn from
 //! `rebuild_detail` — one system, both draw sites (the labels row and the kind chips). It reads
 //! `GooeySkin::unchecked` now, through `DetailInputs`, so a theme edit reaches every place the editor
 //! says *a machine wrote this and nobody has confirmed it*.
 //!
 //! **The protected test still passes untouched.** `the_meshes_pane_says_how_sure_the_labels_are` asserts
-//! the ink equals `chrome::UNCHECKED`, and the skin's `unchecked` is that same colour
+//! the ink equals `chrome::ink().unchecked`, and the skin's `unchecked` is that same colour
 //! (`SUGGEST x 1.45`), so reading the skin is behaviour-identical today and no assertion moved. This
 //! file is what makes the *next* change — a theme that moves `unchecked` — visible.
 //!
 //! What is claimed: the ink the pane would use comes from the skin. What is not: that every colour in
-//! the pane does. `TEXT`, `LABEL` and `SUGGEST` still read the constants, and that is the rest of #210.
+//! the pane does. `Ink::text`, `Ink::label` and `Ink::suggest` still read the constants, and that is the rest of #210.
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
@@ -38,8 +38,8 @@ fn the_model_written_ink_comes_from_the_skin() {
         .clone();
     assert_eq!(
         skin.unchecked,
-        Some(bevy_cauldron::chrome::UNCHECKED),
-        "the skin's `unchecked` and `chrome::UNCHECKED` must be one colour, or the pane's ink moves \
+        Some(bevy_cauldron::chrome::ink().unchecked),
+        "the skin's `unchecked` and `bevy_cauldron::chrome::ink().unchecked` must be one colour, or the pane's ink moves \
          the moment it starts reading the skin — a change nobody asked for"
     );
 
@@ -65,7 +65,7 @@ fn the_model_written_ink_comes_from_the_skin() {
     // And with no skin at all, the constant — a harness that never ran `EditorUiPlugin` still draws.
     assert_eq!(
         bevy_cauldron::tiles::unchecked_ink(None),
-        bevy_cauldron::chrome::UNCHECKED,
+        bevy_cauldron::chrome::ink().unchecked,
         "a build with no skin must still have an ink for a model-written label"
     );
 }

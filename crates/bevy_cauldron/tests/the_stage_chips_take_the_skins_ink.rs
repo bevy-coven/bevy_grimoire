@@ -1,7 +1,7 @@
 //! **The rig bench's staging chips take the skin's ink too** (UI-02, #210).
 //!
 //! `anim_stage::spawn_chips` drew a slot chip's words and the "click: solo" line from
-//! `chrome::TEXT` and `chrome::LABEL`, so a project's skin could not reach the one row of the bench an
+//! `chrome::ink().text` and `chrome::ink().label`, so a project's skin could not reach the one row of the bench an
 //! author *drives*. `BenchInk` already carried both colours (slice 4d moved the column labels onto
 //! it); this file pins that the chips read the same struct, with the shipped palette where there is
 //! no skin — which is what keeps a harness byte-identical to the editor.
@@ -14,8 +14,8 @@ use bevy_cauldron::chrome;
 #[test]
 fn with_no_skin_the_chips_read_the_shipped_table() {
     let ink = BenchInk::of(None);
-    assert_eq!(ink.read, chrome::TEXT, "a chip's words are TEXT with no skin");
-    assert_eq!(ink.label, chrome::LABEL, "the quiet line under them is LABEL");
+    assert_eq!(ink.read, chrome::ink().text, "a chip's words are TEXT with no skin");
+    assert_eq!(ink.label, chrome::ink().label, "the quiet line under them is LABEL");
 }
 
 /// **A skin's `text` reaches the chips**, and a skin that names the `label` tone quietens the line

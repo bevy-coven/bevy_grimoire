@@ -43,11 +43,11 @@ fn the_bench_reads_the_skins_five_inks() {
 #[test]
 fn with_no_skin_the_bench_is_the_shipped_palette() {
     let ink = BenchInk::of(None);
-    assert_eq!(ink.read, chrome::TEXT);
-    assert_eq!(ink.quiet, chrome::DIM);
-    assert_eq!(ink.danger, chrome::DANGER);
-    assert_eq!(ink.accent, chrome::ACCENT);
-    assert_eq!(ink.rest, chrome::ROW_BG);
+    assert_eq!(ink.read, chrome::ink().text);
+    assert_eq!(ink.quiet, chrome::ink().dim);
+    assert_eq!(ink.danger, chrome::ink().danger);
+    assert_eq!(ink.accent, chrome::ink().accent);
+    assert_eq!(ink.rest, chrome::ink().row_bg);
 }
 
 /// **The editor's own skin is the shipped palette**, which is what lets the running editor and a
@@ -55,11 +55,11 @@ fn with_no_skin_the_bench_is_the_shipped_palette() {
 #[test]
 fn the_editor_skin_draws_the_shipped_palette() {
     let skin = bevy_cauldron::ui::editor_skin();
-    assert_eq!(skin.text, chrome::TEXT);
-    assert_eq!(skin.text_muted, chrome::DIM);
-    assert_eq!(skin.danger, chrome::DANGER);
-    assert_eq!(skin.accent, chrome::ACCENT);
-    assert_eq!(skin.surface_raised, chrome::ROW_BG);
+    assert_eq!(skin.text, chrome::ink().text);
+    assert_eq!(skin.text_muted, chrome::ink().dim);
+    assert_eq!(skin.danger, chrome::ink().danger);
+    assert_eq!(skin.accent, chrome::ink().accent);
+    assert_eq!(skin.surface_raised, chrome::ink().row_bg);
 }
 
 /// **The bench state the systems read still arrives with its rig list**, so the systems above run

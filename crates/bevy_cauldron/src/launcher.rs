@@ -495,16 +495,16 @@ pub(crate) fn shown_folder(path: &Path) -> String {
 
 /// A quiet line under a name: the skin's muted ink ([`quiet_ink`], painted by [`paint_the_quiet_lines`]).
 pub(crate) fn quiet(text: impl Into<String>) -> impl Bundle {
-    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::LABEL), Quiet)
+    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::ink().label), Quiet)
 }
 
 /// A line of muted words (a card's folder, a count).
 #[derive(Component)]
 pub struct Quiet;
 
-/// The ink of a [`Quiet`] line: the skin's `text_muted`, or the shipped palette's own `LABEL` in a harness with no skin.
+/// The ink of a [`Quiet`] line: the skin's `text_muted`, or the shipped palette's own `Ink::label` in a harness with no skin.
 pub fn quiet_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
-    skin.map_or(crate::chrome::LABEL, |s| s.text_muted)
+    skin.map_or(crate::chrome::ink().label, |s| s.text_muted)
 }
 
 /// Keeps every [`Quiet`] line in the skin's ink, from the frame it appears and whenever the skin changes.
@@ -830,7 +830,7 @@ fn projects_body(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &mut
 /// # Why it is shaped this way (design review, 2026-11-05)
 ///
 /// The shipped 0.2.4 screen was a centred block whose loudest element was the splash and whose title was
-/// **the same 10 px as the sentence under it** (`chrome::text::HEADING` and `LABEL` are both 10), while the
+/// **the same 10 px as the sentence under it** (`chrome::text::HEADING` and `chrome::text::LABEL` are both 10), while the
 /// sidebar's own nav buttons were 13. FiraMono ships one weight, so size is the only lever a title has — and
 /// it was not being used. Four changes, each a finding:
 ///

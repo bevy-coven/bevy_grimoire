@@ -29,10 +29,7 @@ use bevy::ui_widgets::{Activate, Button as UiButton};
 use bevy_grimoire_core::descriptor::{Descriptor, mount_label, mount_options};
 use bevy_grimoire_core::import::{self, Candidate, Severity};
 
-use crate::chrome::{
-    ACCENT, CHIP_PAD, DANGER, DIM, HEADER_BG, LABEL, MIN_FIELD_H, MUTED, PANEL_BG,
-    ROW_BG, ROW_HOVER, ROW_SELECTED, TEXT,
-};
+use crate::chrome::{CHIP_PAD, MIN_FIELD_H};
 use crate::keys::{self, Action};
 use crate::project::Project;
 
@@ -1604,7 +1601,7 @@ fn header_button(row: &mut ChildSpawnerCommands, header: FillHeader, glyph: &str
         UiButton,
         Hovered::default(),
         header,
-        crate::chrome::RowRest(HEADER_BG),
+        crate::chrome::RowRest(crate::chrome::ink().header_bg),
         Node {
             // 20 x `MIN_FIELD_H` is the smallest box a `*` / `v` / `>` glyph stays clickable in
             // (Fitts: selection time grows as the target narrows).
@@ -1615,12 +1612,12 @@ fn header_button(row: &mut ChildSpawnerCommands, header: FillHeader, glyph: &str
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(HEADER_BG),
+        BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|b| {
         b.spawn((
             Text::new(glyph.to_owned()),
-            TextColor(LABEL),
+            TextColor(crate::chrome::ink().label),
             crate::chrome::font(crate::chrome::text::HINT),
         ));
     });
@@ -2657,7 +2654,7 @@ fn draw_pick(
             (at.1 as f32 + 0.5) * step.y,
             (at.2 as f32 + 0.5) * step.z,
         );
-    gizmos.cube(Transform::from_translation(centre).with_scale(step), ACCENT);
+    gizmos.cube(Transform::from_translation(centre).with_scale(step), crate::chrome::ink().accent);
 }
 
 /// **The lattice, by keyboard** — cursor, layer, and the four verbs.
@@ -2960,7 +2957,7 @@ fn pending_proposal<'a>(
 ///
 /// # It was decided twice, and the second one won every frame
 ///
-/// `rebuild_detail` put a pending proposal in the box, in `SUGGEST`, so the pane holds one value
+/// `rebuild_detail` put a pending proposal in the box, in `Ink::suggest`, so the pane holds one value
 /// rather than an answer beside a question. [`refresh_cells`] then repainted the same node from
 /// `d.note` alone — it exists so a click does not respawn the pane — and since it runs after, **the
 /// proposal never reached the screen**. Measured on the running editor: a model that had answered
@@ -2980,9 +2977,9 @@ fn note_field_text(
     crate::chrome::field_text(
         editing,
         match (proposed, note) {
-            (Some(p), _) => (p.to_owned(), crate::chrome::SUGGEST),
-            (None, Some(n)) if !n.is_empty() => (n.to_owned(), TEXT),
-            _ => ("describe it\u{2026}".to_owned(), LABEL),
+            (Some(p), _) => (p.to_owned(), crate::chrome::ink().suggest),
+            (None, Some(n)) if !n.is_empty() => (n.to_owned(), crate::chrome::ink().text),
+            _ => ("describe it\u{2026}".to_owned(), crate::chrome::ink().label),
         },
     )
 }
@@ -3036,7 +3033,7 @@ fn refresh_cells(
     // `RowRest == ROW_SELECTED` is how it is told that this is the one being acted on.
     for (button, layer, mut rest) in &mut cells {
         let selected = cell_edit.at == Some((button.0, layer.0, button.1));
-        let want = if selected { ROW_SELECTED } else { ROW_BG };
+        let want = if selected { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg };
         if rest.0 != want {
             rest.0 = want;
         }
@@ -3047,7 +3044,7 @@ fn refresh_cells(
         if text.0 != want {
             text.0 = want.to_owned();
         }
-        let tint = if cell.is_some() { ACCENT } else { LABEL };
+        let tint = if cell.is_some() { crate::chrome::ink().accent } else { crate::chrome::ink().label };
         if colour.0 != tint {
             colour.0 = tint;
         }
@@ -3073,9 +3070,9 @@ fn refresh_cells(
             text.0 = detail.clone();
         }
         let tint = if cell_edit.active.is_some() {
-            ACCENT
+            crate::chrome::ink().accent
         } else {
-            DIM
+            crate::chrome::ink().dim
         };
         if colour.0 != tint {
             colour.0 = tint;
@@ -3114,10 +3111,10 @@ fn refresh_cells(
             .editing(&project.measured)
             .and_then(bevy_grimoire_core::descriptor::placed_footprint)
         {
-            Some((w, _)) => (format!("{w:.2}"), TEXT),
+            Some((w, _)) => (format!("{w:.2}"), crate::chrome::ink().text),
             // LABEL, matching what `rebuild_detail` paints for the same fact — the repaint used to
             // say TEXT here, a micro-fork the shared helper closes.
-            None => ("--".to_owned(), LABEL),
+            None => ("--".to_owned(), crate::chrome::ink().label),
         },
     );
     for (mut text, mut colour) in &mut widths {
@@ -3140,7 +3137,7 @@ fn refresh_cells(
                 .and_then(|e| e.mount.as_ref())
                 .and_then(bevy_grimoire_core::descriptor::mount_height)
                 .map_or_else(|| "--".to_owned(), |h| format!("{h:.2}")),
-            TEXT,
+            crate::chrome::ink().text,
         ),
     );
     for (mut text, mut colour) in &mut heights {
@@ -3709,7 +3706,7 @@ struct TabKey;
 /// next frame. The badge carries no `TabLabel`, so the frame-owner never touches it — the same
 /// division that keeps [`TabKey`] a step quieter than the name.
 ///
-/// `DANGER`, and only the count: a persistent peripheral element wants medium intensity, not
+/// `Ink::danger`, and only the count: a persistent peripheral element wants medium intensity, not
 /// maximum (Lewandowska, Dziśko & Jankowski 2022, `10.1038/s41598-022-16284-2` — high contrast is
 /// burst-only, and habituation appears at low contrast only), and the word and the count are the
 /// non-colour channels `docs/ui.md` §1.3 requires; the hue is the redundant one.
@@ -3855,12 +3852,14 @@ struct ActionLine;
 const FOOTPRINT: Color = Color::srgb(0.35, 0.72, 0.85); // CHROME-OK: world ink — the stage's measurement gizmos are a categorical palette, not panel chrome
 /// The grid cells it occupies. Where this and the footprint differ is the tiling slack.
 /// The Map tab's bounds wireframe is the same warm grey — one value, one name, in chrome.
-const CELLS: Color = crate::chrome::BOUNDS_LINE;
+fn cells() -> Color {
+    crate::chrome::ink().bounds_line
+}
 /// The volume, so a height is seen rather than only read.
 const EXTENT: Color = Color::srgb(0.24, 0.42, 0.50); // CHROME-OK: world ink — see FOOTPRINT
 /// The stage floor and the plumb line up to a wall-mounted piece — dimmer than anything describing
 /// the piece itself, because it is the reference rather than the subject.
-const GROUND: Color = Color::srgb(0.30, 0.28, 0.26); // CHROME-OK: world ink — a stage floor; NEAR ROW_SELECTED by coincidence, distinct on purpose
+const GROUND: Color = Color::srgb(0.30, 0.28, 0.26); // CHROME-OK: world ink — a stage floor; NEAR crate::chrome::ink().row_selected by coincidence, distinct on purpose
 
 pub struct TilesPlugin;
 
@@ -4186,7 +4185,7 @@ fn spawn_tab_strip(
                         ..default()
                     },
                     BorderColor::all(Color::NONE),
-                    BackgroundColor(ROW_BG),
+                    BackgroundColor(crate::chrome::ink().row_bg),
                 ))
                 .with_children(|tab| {
                     // **The tab states its key.** Cockburn et al. 2014 on the intermodal-transition
@@ -4201,7 +4200,7 @@ fn spawn_tab_strip(
                     if let Some(chord) = chord {
                         tab.spawn((
                             Text::new(chord),
-                            TextColor(LABEL),
+                            TextColor(crate::chrome::ink().label),
                             crate::chrome::font(crate::chrome::text::LABEL),
                             Node {
                                 margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
@@ -4212,7 +4211,7 @@ fn spawn_tab_strip(
                     }
                     tab.spawn((
                         Text::new(mode.label()),
-                        TextColor(LABEL),
+                        TextColor(crate::chrome::ink().label),
                         crate::chrome::font(crate::chrome::text::TAB),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                         TabLabel,
@@ -4220,7 +4219,7 @@ fn spawn_tab_strip(
                     // Empty until the anim bench has something stale to say — see [`TabBadge`].
                     tab.spawn((
                         Text::new(String::new()),
-                        TextColor(DANGER),
+                        TextColor(crate::chrome::ink().danger),
                         crate::chrome::font(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                         Node {
@@ -4269,13 +4268,13 @@ fn spawn_tab_strip(
                 // (`feedback-1793928006124`: a bare `Map` on the tab row's baseline read as a tab).
                 m.spawn((
                     Text::new(SWITCH_TO),
-                    TextColor(MUTED),
+                    TextColor(crate::chrome::ink().muted),
                     crate::chrome::font(crate::chrome::text::BODY),
                 ));
                 m.spawn((
                     // Written every frame by [`name_the_other_door`], which says the other workspace's name.
                     Text::new(String::new()),
-                    TextColor(MUTED),
+                    TextColor(crate::chrome::ink().muted),
                     // **`BODY`, not `LABEL`.** `LABEL` is 10 px and the strip's own labels are
                     // `TAB`'s 13 — so at `LABEL` the phrase is a whisper beside a shout. `BODY` is
                     // 11 px, the readable default, and it is still a step below the panels: **the
@@ -4396,16 +4395,16 @@ fn style_tabs(
         // The active tab continues the panel beneath it, so the two read as one surface rather than
         // as a button sitting on top of a box.
         let want_bg = if active {
-            PANEL_BG
+            crate::chrome::ink().panel_bg
         } else if hovered.0 {
-            ROW_HOVER
+            crate::chrome::ink().row_hover
         } else {
-            ROW_BG
+            crate::chrome::ink().row_bg
         };
         if bg.0 != want_bg {
             bg.0 = want_bg;
         }
-        let want_border = if active { ACCENT } else { Color::NONE };
+        let want_border = if active { crate::chrome::ink().accent } else { Color::NONE };
         // Guarded like every other write in this function. `BorderColor` is change-detected and the
         // UI extraction reads that, so an unconditional assignment dirtied the whole strip sixty
         // times a second for a colour that changes when a tab does.
@@ -4415,13 +4414,13 @@ fn style_tabs(
 
         for child in children.iter() {
             if let Ok(mut colour) = names.get_mut(child) {
-                let want = if active { TEXT } else { DIM };
+                let want = if active { crate::chrome::ink().text } else { crate::chrome::ink().dim };
                 if colour.0 != want {
                     colour.0 = want;
                 }
             }
             if let Ok(mut colour) = chords.get_mut(child) {
-                let want = if active { ACCENT } else { LABEL };
+                let want = if active { crate::chrome::ink().accent } else { crate::chrome::ink().label };
                 if colour.0 != want {
                     colour.0 = want;
                 }
@@ -4621,7 +4620,7 @@ fn spawn_tiles_panel(
         crate::chrome::title(p, "INSPECTOR");
         p.spawn((
             Text::new(""),
-            TextColor(DIM),
+            TextColor(crate::chrome::ink().dim),
             crate::chrome::font(crate::chrome::text::LABEL),
             // No `Node` of its own any more: `chrome::title` carries the gap below itself and
             // `panel_root`'s `row_gap` carries the rest. The bare 6 that stood here was one of the
@@ -4652,7 +4651,7 @@ fn spawn_tiles_panel(
 
         p.spawn((
             Text::new(""),
-            TextColor(ACCENT),
+            TextColor(crate::chrome::ink().accent),
             crate::chrome::font(crate::chrome::text::LABEL),
             ActionLine,
         ));
@@ -4696,7 +4695,7 @@ fn spawn_tiles_panel(
         .with_children(|b| {
             b.spawn((
                 Text::new(""),
-                TextColor(ACCENT),
+                TextColor(crate::chrome::ink().accent),
                 crate::chrome::font(crate::chrome::text::LABEL),
                 LabelProgressText,
             ));
@@ -4710,7 +4709,7 @@ fn spawn_tiles_panel(
                     height: Val::Px(4.0),
                     ..default()
                 },
-                BackgroundColor(crate::chrome::SLOT_BG),
+                BackgroundColor(crate::chrome::ink().slot_bg),
             ))
             .with_children(|trough| {
                 trough.spawn((
@@ -4719,13 +4718,13 @@ fn spawn_tiles_panel(
                         height: Val::Percent(100.0),
                         ..default()
                     },
-                    BackgroundColor(ACCENT),
+                    BackgroundColor(crate::chrome::ink().accent),
                     LabelProgressBar,
                 ));
             });
             b.spawn((
                 Text::new(""),
-                TextColor(DIM),
+                TextColor(crate::chrome::ink().dim),
                 crate::chrome::font(crate::chrome::text::HINT),
                 LabelProgressNow,
             ));
@@ -5828,7 +5827,7 @@ struct LabelStores<'w> {
 ///
 /// **The review did not disappear; it moved after the fact**, which is what the provenance work of
 /// the same day is for. Every value written here is stamped `By::Model`, so the pane draws it in
-/// [`crate::chrome::UNCHECKED`] until a person confirms it — *"a machine decided this and you have
+/// `chrome::ink().unchecked` until a person confirms it — *"a machine decided this and you have
 /// not"* is now a thing you can see across a whole kit, rather than a keypress you had to spend
 /// before the value existed. `Cmd+Z` undoes a piece, `Delete` sends one back to `NOT IMPORTED`
 /// stripped, and `Shift+Y` abandons a running walk with everything it has staged.
@@ -7564,7 +7563,7 @@ pub fn click_tag_chip_for_test(world: &mut World, axis: &str, token: &str) {
 
 /// **The edges of one held `kind` chip and one unheld one**, for the shape assertion — B-047.
 ///
-/// The fill alone cannot answer "is this chosen": `ROW_HOVER` is ΔL\* 3.89 under `ROW_SELECTED`, and
+/// The fill alone cannot answer "is this chosen": `Ink::row_hover` is ΔL\* 3.89 under `Ink::row_selected`, and
 /// the palette's answer to that is a **shape**. This reads the shape.
 pub fn kind_chip_edges_for_test(world: &mut World) -> (Color, Color) {
     let mut chips = world.query::<(&TagChip, &BackgroundColor, &BorderColor)>();
@@ -7574,7 +7573,7 @@ pub fn kind_chip_edges_for_test(world: &mut World) -> (Color, Color) {
         if c.axis != Axis::Kind {
             continue;
         }
-        if bg.0 == ROW_SELECTED {
+        if bg.0 == crate::chrome::ink().row_selected {
             held.get_or_insert(edge.top);
         } else {
             unheld.get_or_insert(edge.top);
@@ -7590,8 +7589,8 @@ pub fn kind_chip_edges_for_test(world: &mut World) -> (Color, Color) {
 ///
 /// A chip's colour is the pane's only statement about which tokens a piece holds, so a test that
 /// wants to know whether the panel agrees with the file has to read the colour and not the model.
-/// `chrome::chip` paints a held token in `TEXT` (or `UNCHECKED` when a model wrote it), and an
-/// unheld one in `LABEL`; those two are what is compared.
+/// `chrome::chip` paints a held token in `Ink::text` (or `Ink::unchecked` when a model wrote it), and an
+/// unheld one in `Ink::label`; those two are what is compared.
 pub fn lit_kind_chips(world: &mut World) -> Vec<String> {
     let names: Vec<String> = world
         .get_resource::<Project>()
@@ -7606,7 +7605,7 @@ pub fn lit_kind_chips(world: &mut World) -> Vec<String> {
     let held: Vec<usize> = chips
         .iter(world)
         .filter(|(c, _)| c.axis == Axis::Kind)
-        .filter(|(_, rest)| rest.0 == ROW_SELECTED)
+        .filter(|(_, rest)| rest.0 == crate::chrome::ink().row_selected)
         .map(|(c, _)| c.token)
         .collect();
     let mut out: Vec<String> = held
@@ -8317,7 +8316,7 @@ fn draw_preview_footprint(state: Res<ImportState>, project: Res<Project>, mut gi
             cx as f32 * bevy_grimoire_core::grid::SNAP,
             cz as f32 * bevy_grimoire_core::grid::SNAP,
         ),
-        CELLS,
+        cells(),
     );
     // And the volume, so height is visible rather than only stated.
     //
@@ -8489,8 +8488,8 @@ fn shelf_strip(
                 ShelfChip(*shelf),
                 &shelf.label(library, candidates, kit),
                 crate::chrome::text::CONTROL,
-                if active { TEXT } else { DIM },
-                if active { ROW_SELECTED } else { ROW_BG },
+                if active { crate::chrome::ink().text } else { crate::chrome::ink().dim },
+                if active { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg },
                 Color::NONE,
             )
             .observe(on_shelf_click);
@@ -8500,7 +8499,7 @@ fn shelf_strip(
         // the page drill: `right` into the Meshes page, `left` back to the Tiles page.
         row.spawn((
             Text::new("right: meshes / left: tiles"),
-            TextColor(crate::chrome::LABEL),
+            TextColor(crate::chrome::ink().label),
             crate::chrome::font(crate::chrome::text::HINT),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
@@ -9068,7 +9067,7 @@ fn draw_ink(
                         }),
                         TextColor(match mark {
                             Some(s) => crate::chrome::severity_style(*s).0,
-                            None => LABEL,
+                            None => crate::chrome::ink().label,
                         }),
                         crate::chrome::font(crate::chrome::text::BODY),
                     ));
@@ -9114,7 +9113,7 @@ fn draw_ink(
                             flex_shrink: 0.0,
                             ..default()
                         },
-                        BackgroundColor(crate::chrome::SLOT_BG),
+                        BackgroundColor(crate::chrome::ink().slot_bg),
                     ));
                     // The ink carries only `portrait: bool` — a `Handle<Image>` in a compared
                     // value would make the comparison about handle identity — so the handle is
@@ -9130,7 +9129,7 @@ fn draw_ink(
                             ..default()
                         },
                         Text::new(id.clone()),
-                        TextColor(if *judged { crate::chrome::LABELED } else { TEXT }),
+                        TextColor(if *judged { crate::chrome::ink().labeled } else { crate::chrome::ink().text }),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                 });
@@ -9166,21 +9165,21 @@ fn draw_ink(
                         // and deliberately not participating, which is exactly what that ink is
                         // for.
                         TextColor(if *open {
-                            ACCENT
+                            crate::chrome::ink().accent
                         } else if *openable {
-                            TEXT
+                            crate::chrome::ink().text
                         } else {
-                            MUTED
+                            crate::chrome::ink().muted
                         }),
                         crate::chrome::font(crate::chrome::text::BODY),
                     ));
                     if *openable {
-                        count_cell(row, format!("{members} member(s)"), LABEL);
+                        count_cell(row, format!("{members} member(s)"), crate::chrome::ink().label);
                     } else {
                         // The reason, in the count's column, because that is where the eye
                         // already is and because a row that refuses should say so before it is
                         // pressed.
-                        count_cell(row, "no tile — see COMPOSE".to_owned(), MUTED);
+                        count_cell(row, "no tile — see COMPOSE".to_owned(), crate::chrome::ink().muted);
                     }
                 });
             }
@@ -9233,7 +9232,7 @@ fn draw_pack_band(
         // The band's rest fill, so the shared repainter gives it hover and press. `ROW_SELECTED`
         // is how `style_list_rows` recognises "the one being acted on", and `arm_list_rows`
         // writes it there when the cursor stands on this heading.
-        crate::chrome::RowRest(HEADER_BG),
+        crate::chrome::RowRest(crate::chrome::ink().header_bg),
         Node {
             width: Val::Percent(100.0),
             // `CHIP_PAD`, not the hand copy of its two numbers that stood here — the audit found
@@ -9244,7 +9243,7 @@ fn draw_pack_band(
             margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
             ..default()
         },
-        BackgroundColor(HEADER_BG),
+        BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|row| {
         row.spawn((
@@ -9254,7 +9253,7 @@ fn draw_pack_band(
                 ..default()
             },
             Text::new(if folded { ">" } else { "v" }),
-            TextColor(LABEL),
+            TextColor(crate::chrome::ink().label),
             crate::chrome::font(crate::chrome::text::LABEL),
         ));
         // **The pack's name, and — when it is excluded — the way back.**
@@ -9274,7 +9273,7 @@ fn draw_pack_band(
             } else {
                 pack.to_owned()
             }),
-            TextColor(if excluded { MUTED } else { LABEL }),
+            TextColor(if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label }),
             crate::chrome::font(crate::chrome::text::LABEL),
         ));
         // **The count, and nothing else.** A folded pack used to say "{n} hidden — click to
@@ -9284,12 +9283,12 @@ fn draw_pack_band(
         count_cell(
             row,
             format!("{members}"),
-            if excluded { MUTED } else { LABEL },
+            if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label },
         );
     });
 }
 
-/// **The `EXCLUDED` band.** It keeps `HEADER_BG` because it is a signpost over rows rather than one
+/// **The `EXCLUDED` band.** It keeps `Ink::header_bg` because it is a signpost over rows rather than one
 /// of them, and carries `RowRest` so the five states still come from `chrome::style_list_rows` —
 /// and so `arm_list_rows` can put the cursor on it, now that the arrows reach it (M8).
 fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize, open: bool) {
@@ -9298,7 +9297,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
         UiButton,
         Hovered::default(),
         ExcludedHeader,
-        crate::chrome::RowRest(HEADER_BG),
+        crate::chrome::RowRest(crate::chrome::ink().header_bg),
         Node {
             width: Val::Percent(100.0),
             padding: CHIP_PAD,
@@ -9309,7 +9308,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
             margin: UiRect::top(Val::Px(crate::chrome::GAP_GROUP)),
             ..default()
         },
-        BackgroundColor(HEADER_BG),
+        BackgroundColor(crate::chrome::ink().header_bg),
     ))
     .with_children(|row| {
         row.spawn((
@@ -9319,7 +9318,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
                 ..default()
             },
             Text::new(if open { "v" } else { ">" }),
-            TextColor(MUTED),
+            TextColor(crate::chrome::ink().muted),
             crate::chrome::font(crate::chrome::text::LABEL),
         ));
         // **The name column wraps within itself; the tally does not.** The state and the way
@@ -9337,10 +9336,10 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
                 "EXCLUDED  -  {} restores one",
                 keys::chord(Action::ExcludePack)
             )),
-            TextColor(MUTED),
+            TextColor(crate::chrome::ink().muted),
             crate::chrome::font(crate::chrome::text::LABEL),
         ));
-        count_cell(row, format!("{packs} pack(s), {meshes} mesh(es)"), MUTED);
+        count_cell(row, format!("{packs} pack(s), {meshes} mesh(es)"), crate::chrome::ink().muted);
     });
 }
 
@@ -9528,11 +9527,11 @@ fn arm_list_rows(
         if selected.0 != armed {
             selected.0 = armed;
         }
-        let fill = if armed { ROW_SELECTED } else { ROW_BG };
+        let fill = if armed { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg };
         if rest.0 != fill {
             rest.0 = fill;
         }
-        let edge = if armed { ACCENT } else { Color::NONE };
+        let edge = if armed { crate::chrome::ink().accent } else { Color::NONE };
         if border.left != edge {
             *border = BorderColor::all(edge);
         }
@@ -9545,7 +9544,7 @@ fn arm_list_rows(
             Selected::Excluded => excluded,
             _ => false,
         };
-        let fill = if armed { ROW_SELECTED } else { HEADER_BG };
+        let fill = if armed { crate::chrome::ink().row_selected } else { crate::chrome::ink().header_bg };
         if rest.0 != fill {
             rest.0 = fill;
         }
@@ -9577,23 +9576,23 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         line(
             p,
             "no tile open — press N to start one".to_owned(),
-            ACCENT,
+            crate::chrome::ink().accent,
             crate::chrome::text::LABEL,
         );
         return;
     };
     let bevy_grimoire_core::composition::Envelope::Bounded { size } = comp.envelope else {
-        line(p, format!("`{}` claims no tile", comp.id), DANGER, crate::chrome::text::LABEL);
+        line(p, format!("`{}` claims no tile", comp.id), crate::chrome::ink().danger, crate::chrome::text::LABEL);
         return;
     };
 
     // Was a bare `12.0`, a size nothing else in the editor used. The open tile's id is the loudest
     // thing in this block and `BODY` is the readable default, so it takes the role it always meant.
-    line(p, comp.id.clone(), TEXT, crate::chrome::text::BODY);
+    line(p, comp.id.clone(), crate::chrome::ink().text, crate::chrome::text::BODY);
     line(
         p,
         format!("{:.2} x {:.2} x {:.2} m", size.0, size.1, size.2),
-        DIM,
+        crate::chrome::ink().dim,
         crate::chrome::text::HINT,
     );
     // **Whether a solver can place this, said where the size is said.**
@@ -9612,14 +9611,14 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         line(
             p,
             format!("{nx} x {nz} tiles — hand-stamped, too big to generate"),
-            ACCENT,
+            crate::chrome::ink().accent,
             crate::chrome::text::HINT,
         );
         // **And which member did it.** The line above is a consequence; on a tile with six members
         // it left the author to find the cause by opening each one. `docs/ui.md` §3.2 asks for the
         // delta, and the delta here is a named piece and a distance.
         if let Some(why) = crate::build::what_made_it_big(&comp.members, &project.library, size) {
-            line(p, why, DIM, crate::chrome::text::HINT);
+            line(p, why, crate::chrome::ink().dim, crate::chrome::text::HINT);
         }
     }
 
@@ -9642,7 +9641,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
             0 => "centre and flush — J for thirds".to_owned(),
             _ => format!("centre to flush in {n} steps — J deepens, and wraps"),
         },
-        TEXT,
+        crate::chrome::ink().text,
         crate::chrome::text::LABEL,
     );
     // **Where the arrows are, which is where the focused member is** — there is no cursor beside it
@@ -9655,7 +9654,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
             line(
                 p,
                 format!("focus ({:+.3}, {:+.3}) at {:.3} m", m.at.0, m.at.1, m.lift),
-                ACCENT,
+                crate::chrome::ink().accent,
                 crate::chrome::text::LABEL,
             );
         }
@@ -9663,7 +9662,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         None => line(
             p,
             "empty — the next drop lands centred".to_owned(),
-            ACCENT,
+            crate::chrome::ink().accent,
             crate::chrome::text::LABEL,
         ),
     }
@@ -9675,7 +9674,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
         line(
             p,
             "nothing yet — pick a piece in the list and press Enter".to_owned(),
-            ACCENT,
+            crate::chrome::ink().accent,
             crate::chrome::text::LABEL,
         );
         return;
@@ -9711,13 +9710,13 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
                     ..default()
                 },
                 Text::new(what),
-                TextColor(TEXT),
+                TextColor(crate::chrome::ink().text),
                 crate::chrome::font(crate::chrome::text::LABEL),
             ));
             count_cell(
                 row,
                 format!("({:+.2}, {:+.2}) +{:.2}{yaw}", m.at.0, m.at.1, m.lift),
-                LABEL,
+                crate::chrome::ink().label,
             );
         });
     }
@@ -9791,20 +9790,20 @@ struct DetailInputs<'w, 's> {
 }
 
 /// **The ink a model-written label is drawn in** (UI-02, #210): the running skin's `unchecked`, or
-/// `chrome::UNCHECKED` when there is no skin (a headless harness that never ran `EditorUiPlugin`).
+/// `chrome::ink().unchecked` when there is no skin (a headless harness that never ran `EditorUiPlugin`).
 ///
 /// One function, read by the pane and by
 /// `tests/the_model_written_ink_comes_from_the_skin.rs`, so an assertion about it is an assertion about
 /// what is painted rather than about a resource that happens to hold the same value.
 pub fn unchecked_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
-    skin.and_then(|s| s.unchecked).unwrap_or(crate::chrome::UNCHECKED)
+    skin.and_then(|s| s.unchecked).unwrap_or(crate::chrome::ink().unchecked)
 }
 
 /// **The three inks the shared list draws its words in** (UI-02, #210), on `RowFills`' shape: one
 /// expression the system and a test both read, so an assertion here is an assertion about what is
 /// painted.
 ///
-/// `draw_ink` was the largest single reader of `chrome::TEXT` and `chrome::LABEL` in this file — 181
+/// `draw_ink` was the largest single reader of `chrome::ink().text` and `chrome::ink().label` in this file — 181
 /// sites between the two and its siblings — and none of them could see a project's skin file. Each
 /// falls back to its constant when no skin is running (a headless harness that never added
 /// `EditorUiPlugin`), which is what every protected test already reads.
@@ -9825,7 +9824,7 @@ impl ListInk {
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> ListInk {
         match skin {
             Some(s) => ListInk { read: s.text, quiet: s.text_muted, accent: s.accent, danger: s.danger },
-            None => ListInk { read: TEXT, quiet: DIM, accent: ACCENT, danger: DANGER },
+            None => ListInk { read: crate::chrome::ink().text, quiet: crate::chrome::ink().dim, accent: crate::chrome::ink().accent, danger: crate::chrome::ink().danger },
         }
     }
 }
@@ -9888,22 +9887,22 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
         skin,
     } = detail;
     // **The colour a model-written label is drawn in** (UI-02, #210): the skin's `unchecked` when there
-    // is a skin, `chrome::UNCHECKED` otherwise. Both draw sites in this pane use it, so a theme edit
+    // is a skin, `chrome::ink().unchecked` otherwise. Both draw sites in this pane use it, so a theme edit
     // reaches every "a machine decided this" in one place.
     // **The pane's ink, from the skin** (UI-02, #210): `suggest` (a model's proposal), `danger` (a
     // refusal) and `accent` (the one live-edit colour). Each falls back to its constant for a harness
     // with no skin, exactly as `unchecked_ink` does.
     // `SUGGEST` is a **tone**, not a skin field (gooey#33's `tones` is where a host keeps its own
     // colours), and `danger`/`accent` are plain fields rather than `Option`s.
-    let suggest_ink = skin.as_deref().and_then(|s| s.tone("suggest")).unwrap_or(crate::chrome::SUGGEST);
-    let danger_ink = skin.as_deref().map_or(DANGER, |s| s.danger);
-    let accent_ink = skin.as_deref().map_or(ACCENT, |s| s.accent);
+    let suggest_ink = skin.as_deref().and_then(|s| s.tone("suggest")).unwrap_or(crate::chrome::ink().suggest);
+    let danger_ink = skin.as_deref().map_or(crate::chrome::ink().danger, |s| s.danger);
+    let accent_ink = skin.as_deref().map_or(crate::chrome::ink().accent, |s| s.accent);
     let unchecked_ink = unchecked_ink(skin.as_deref());
     // **A quiet note's ink** (UI-02, #210, slice 5): the "m up the wall", the size note, a remedy under
-    // a warning, a layer's label. All five used `chrome::LABEL` beside `chrome::font(text::LABEL)` — a
+    // a warning, a layer's label. All five used `chrome::ink().label` beside `chrome::font(text::LABEL)` — a
     // colour and a *font size* that share a name, which is what made the colour table's ratchet count
     // them twice. `quiet` is the skin's `text_muted`, falling back to the constant.
-    let quiet_ink = skin.as_deref().map_or(LABEL, |s| s.text_muted);
+    let quiet_ink = skin.as_deref().map_or(crate::chrome::ink().label, |s| s.text_muted);
     // Borrowed for the tag box's placeholder; `skin` itself is not needed past here.
     let skin_ref = skin.as_deref();
     for pane in &panes {
@@ -9937,7 +9936,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 crate::chrome::section(p, "MESH");
                 p.spawn((
                     Text::new("no mesh selected — walk NOT IMPORTED and press Enter to bring one in"),
-                    TextColor(DIM),
+                    TextColor(crate::chrome::ink().dim),
                     crate::chrome::font(crate::chrome::text::BODY),
                 ));
                 return;
@@ -9958,9 +9957,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             let (id_text, id_tint) = match &state.renaming {
                 Some(raw) => (
                     format!("id  {}_", bevy_grimoire_core::naming::to_snake_case(&raw.raw)),
-                    ACCENT,
+                    crate::chrome::ink().accent,
                 ),
-                None => (format!("id  {}", d.id), TEXT),
+                None => (format!("id  {}", d.id), crate::chrome::ink().text),
             };
             // **The headline.** It is the thing being named, so it is the only 13 px line in the
             // block — hierarchy by size, so the eye lands here first without reading anything.
@@ -10123,8 +10122,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             let (width_text, width_tint) = crate::chrome::field_text(
                 scale_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
                 match placed_fp {
-                    Some((w, _)) => (format!("{w:.2}"), TEXT),
-                    None => ("--".to_owned(), LABEL),
+                    Some((w, _)) => (format!("{w:.2}"), crate::chrome::ink().text),
+                    None => ("--".to_owned(), crate::chrome::ink().label),
                 },
             );
             // **The cells come off the same footprint the row shows**, so the two cannot disagree —
@@ -10292,8 +10291,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // `apply_what_arrives` settles it. Clicking steps the mount, which is what `M` does.
             let (mount_text, mount_ink) = match (proposed_mount, d.mount.as_ref()) {
                 (Some(m), _) => (mount_label(Some(m)), suggest_ink),
-                (None, Some(m)) => (mount_label(Some(m)), TEXT),
-                (None, None) => (mount_label(None), ACCENT),
+                (None, Some(m)) => (mount_label(Some(m)), crate::chrome::ink().text),
+                (None, None) => (mount_label(None), crate::chrome::ink().accent),
             };
             // The front used to be a row inside the old `MEASURED` block *and* a proposal line
             // above it in a different colour, saying `front unset -> proposed: South`. One value,
@@ -10304,8 +10303,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 .filter(|f| d.align.front != Some(*f));
             let (front_text, front_ink) = match (proposed_front, d.align.front) {
                 (Some(f), _) => (format!("{} face", f.label()), suggest_ink),
-                (None, Some(f)) => (format!("{} face", f.label()), TEXT),
-                (None, None) => ("none".to_owned(), LABEL),
+                (None, Some(f)) => (format!("{} face", f.label()), crate::chrome::ink().text),
+                (None, None) => ("none".to_owned(), crate::chrome::ink().label),
             };
             p.spawn((
                 Node {
@@ -10328,7 +10327,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     &mount_text,
                     crate::chrome::text::CONTROL,
                     mount_ink,
-                    ROW_BG,
+                    crate::chrome::ink().row_bg,
                     Color::NONE,
                 );
                 // The second pair, spaced off the first by a group gap so the line reads as two
@@ -10347,10 +10346,10 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // provenance is who wrote the labels and when. `row_value` wraps, which a long mesh
             // path needs; `chip` is `NoWrap` and would clip it.
             let (mesh_text, mesh_ink) = match d.mesh.as_deref() {
-                Some(path) => (path.to_owned(), TEXT),
+                Some(path) => (path.to_owned(), crate::chrome::ink().text),
                 // A descriptor with no mesh is legal — `remove_blockers` reasons about exactly
                 // that case — so the row reads as an absence, not an error.
-                None => ("—".to_owned(), LABEL),
+                None => ("—".to_owned(), crate::chrome::ink().label),
             };
             p.spawn(Node {
                 flex_direction: FlexDirection::Row,
@@ -10367,7 +10366,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // manifest-generated descriptor — which is a different fact from "by hand". The
             // per-axis author already drives the tag-chip colour and is not duplicated as text.
             let (labels_text, labels_ink) = match &d.labels {
-                None => ("not labelled".to_owned(), LABEL),
+                None => ("not labelled".to_owned(), crate::chrome::ink().label),
                 Some(l) => {
                     // **How sure the model said it was**, read first on the row, so the word a person
                     // scans for is the part a long model name cannot push past the panel's edge. A
@@ -10401,9 +10400,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         match &l.model {
                             Some(m) => {
                                 let short = crate::labels::model_short(m).to_owned();
-                                (joined(&[sure, Some(short), Some(format!("checked {}", l.at))]), TEXT)
+                                (joined(&[sure, Some(short), Some(format!("checked {}", l.at))]), crate::chrome::ink().text)
                             }
-                            None => (joined(&[Some("by hand".to_owned()), Some(l.at.clone())]), TEXT),
+                            None => (joined(&[Some("by hand".to_owned()), Some(l.at.clone())]), crate::chrome::ink().text),
                         }
                     } else {
                         // **Some axis is unconfirmed**: the unchecked colour. The model's name and date
@@ -10449,7 +10448,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             if let Some(now) = d.mount.as_ref().and_then(bevy_grimoire_core::descriptor::mount_height) {
                 let (height_text, height_tint) = crate::chrome::field_text(
                     height_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
-                    (format!("{now:.2}"), TEXT),
+                    (format!("{now:.2}"), crate::chrome::ink().text),
                 );
                 p.spawn(Node {
                     flex_direction: FlexDirection::Row,
@@ -10566,7 +10565,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     };
                     p.spawn((
                         Text::new(line),
-                        TextColor(DIM),
+                        TextColor(crate::chrome::ink().dim),
                         crate::chrome::font(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
@@ -10609,7 +10608,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     // It asked `== Some(By::Model)`, which made `None` — no provenance record at
                     // all, which is every descriptor written before the labeller existed and every
                     // one a hand edit produced — paint in `TEXT`. `TEXT` on a chip means *you did*
-                    // (see `chrome::UNCHECKED`), so the pane claimed a human confirmation that no
+                    // (see `chrome::ink().unchecked`), so the pane claimed a human confirmation that no
                     // file records. `By` has two variants and `None` is a third answer; only `Human`
                     // is the one that clears the doubt.
                     //
@@ -10674,13 +10673,13 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 if on && unchecked {
                                     unchecked_ink
                                 } else if on {
-                                    TEXT
+                                    crate::chrome::ink().text
                                 } else if ghost {
-                                    crate::chrome::SUGGEST
+                                    crate::chrome::ink().suggest
                                 } else {
-                                    LABEL
+                                    crate::chrome::ink().label
                                 },
-                                if on { ROW_SELECTED } else { ROW_BG },
+                                if on { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg },
                                 // **A held chip carries a SHAPE, not only a fill** — B-047.
                                 //
                                 // The palette is built so that a selected thing is told apart by
@@ -10700,7 +10699,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                 // second layout. A proposal still wins, because a ghost is a
                                 // question and a held token is an answer.
                                 if ghost {
-                                    crate::chrome::SUGGEST
+                                    crate::chrome::ink().suggest
                                 } else if on {
                                     accent_ink
                                 } else {
@@ -10717,8 +10716,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             NewTokenChip { axis },
                             "+",
                             crate::chrome::text::CONTROL,
-                            LABEL,
-                            ROW_BG,
+                            crate::chrome::ink().label,
+                            crate::chrome::ink().row_bg,
                             Color::NONE,
                         );
                     });
@@ -10755,8 +10754,8 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         // mount now follow, so the block has one grammar instead of three.
                         let (value, ink) = match (prop, now.is_empty()) {
                             (Some(p), _) => (p, suggest_ink),
-                            (None, false) => (now, TEXT),
-                            (None, true) => ("-".to_owned(), LABEL),
+                            (None, false) => (now, crate::chrome::ink().text),
+                            (None, true) => ("-".to_owned(), crate::chrome::ink().label),
                         };
                         crate::chrome::row_value(row, value, ink, ());
                     });
@@ -10792,7 +10791,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 crate::chrome::section(p, "FINDINGS");
                 p.spawn((
                     Text::new("what the importer noticed about this mesh"),
-                    TextColor(DIM),
+                    TextColor(crate::chrome::ink().dim),
                     crate::chrome::font(crate::chrome::text::HINT),
                     Node {
                         margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
@@ -10809,7 +10808,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         ));
                         block.spawn((
                             Text::new(f.message.clone()),
-                            TextColor(TEXT),
+                            TextColor(crate::chrome::ink().text),
                             crate::chrome::font(crate::chrome::text::LABEL),
                             // Wrapped prose at 10 px needs the leading; the 1.2 default packs these
                             // into the block of text the screenshot showed.
@@ -10849,7 +10848,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     crate::chrome::section(p, "SUBGRID");
                     p.spawn((
                         Text::new(why),
-                        TextColor(ACCENT),
+                        TextColor(crate::chrome::ink().accent),
                         crate::chrome::font(crate::chrome::text::HINT),
                     ));
                     return;
@@ -10869,7 +10868,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             let subunit_mm = bevy_grimoire_core::grid::SNAP / project.lattice.face_bands as f32 * 1000.0;
             p.spawn((
                 Text::new(format!("{dx} x {dy} x {dz} cells of {subunit_mm:.0} mm")),
-                TextColor(TEXT),
+                TextColor(crate::chrome::ink().text),
                 crate::chrome::font(crate::chrome::text::BODY),
                 DivReadout,
             ));
@@ -10883,7 +10882,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     project.lattice.face_bands,
                     bevy_grimoire_core::grid::SNAP,
                 )),
-                TextColor(DIM),
+                TextColor(crate::chrome::ink().dim),
                 crate::chrome::font(crate::chrome::text::HINT),
                 Node {
                     margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
@@ -10991,9 +10990,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                             CellButton(x, z),
                                             CellLayer(y),
                                             crate::chrome::RowRest(if selected {
-                                                ROW_SELECTED
+                                                crate::chrome::ink().row_selected
                                             } else {
-                                                ROW_BG
+                                                crate::chrome::ink().row_bg
                                             }),
                                             Node {
                                                 // The smallest box a cell glyph stays clickable
@@ -11006,9 +11005,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                                 ..default()
                                             },
                                             BackgroundColor(if selected {
-                                                ROW_SELECTED
+                                                crate::chrome::ink().row_selected
                                             } else {
-                                                ROW_BG
+                                                crate::chrome::ink().row_bg
                                             }),
                                         ))
                                         .with_children(
@@ -11018,9 +11017,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                                     // A marked cell is brighter than an empty one —
                                                     // luminance, not hue, per `docs/ui.md` §1.3.
                                                     TextColor(if cell.is_some() {
-                                                        ACCENT
+                                                        crate::chrome::ink().accent
                                                     } else {
-                                                        LABEL
+                                                        crate::chrome::ink().label
                                                     }),
                                                     crate::chrome::font(crate::chrome::text::BODY),
                                                     CellGlyph(x, z),
@@ -11055,9 +11054,9 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             p.spawn((
                 Text::new(detail),
                 TextColor(if cell_edit.active.is_some() {
-                    ACCENT
+                    crate::chrome::ink().accent
                 } else {
-                    DIM
+                    crate::chrome::ink().dim
                 }),
                 crate::chrome::font(crate::chrome::text::HINT),
                 SelectedCellLine,
@@ -11157,7 +11156,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 if let Some(c) = cand {
                     chips.spawn((
                         Text::new(format!("{} tris", c.triangles)),
-                        TextColor(DIM),
+                        TextColor(crate::chrome::ink().dim),
                         crate::chrome::font(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),

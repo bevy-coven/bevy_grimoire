@@ -47,19 +47,28 @@ pub(crate) const SHOW_W: f32 = crate::chrome::CONTROLS_W - 2.0 * crate::chrome::
 pub(crate) const SHOW_PLOT_H: f32 = 96.0;
 pub(crate) const SHOW_TRACE_H: f32 = 224.0;
 
-/// Plot background — `chrome::SLOT_BG`, through the one bridge, not a hand-transcribed byte copy
-/// that a palette edit would silently strand.
-const BG: [u8; 4] = crate::chrome::ink(crate::chrome::SLOT_BG);
+/// Plot background — the skin's slot ground, through the one bridge, not a hand-transcribed byte
+/// copy that a palette edit would silently strand.
+///
+/// **A function and not a `const`** (UI-02, #210): the palette is the editor's skin now, and a skin
+/// is read from a RON file at run time, so the byte form cannot be a compile-time constant any more.
+fn bg() -> [u8; 4] {
+    crate::chrome::ink_bytes(crate::chrome::ink().slot_bg)
+}
 /// Axis and grid ink, a step above the background. Genuinely plot-only — no chrome analogue.
 const GRID: [u8; 4] = [70, 68, 64, 255];
-/// The root-motion threshold line — `chrome::DANGER`, bridged.
-const DANGER_INK: [u8; 4] = crate::chrome::ink(crate::chrome::DANGER);
+/// The root-motion threshold line — the skin's danger ink, bridged. See [`bg`] for why it is a
+/// function.
+fn danger_ink() -> [u8; 4] {
+    crate::chrome::ink_bytes(crate::chrome::ink().danger)
+}
 
 /// One color per gait slot, raster and legend alike — the table is the contract between them.
-/// Entry 0 is `chrome::ACCENT`, bridged; the rest are a deliberately separate categorical palette
+/// Entry 0 is `chrome::ink().accent`, bridged; the rest are a deliberately separate categorical palette
 /// (series need distinguishability, not brand), at comparable value.
-pub(crate) const SLOT_COLORS: [[u8; 4]; 8] = [
-    crate::chrome::ink(crate::chrome::ACCENT),
+fn slot_colors() -> [[u8; 4]; 8] {
+    [
+    crate::chrome::ink_bytes(crate::chrome::ink().accent),
     [86, 180, 190, 255],
     [170, 120, 220, 255],
     [120, 190, 110, 255],
@@ -67,11 +76,13 @@ pub(crate) const SLOT_COLORS: [[u8; 4]; 8] = [
     [110, 140, 220, 255],
     [200, 200, 90, 255],
     [220, 130, 180, 255],
-];
+    ]
+}
 
 /// The k-th gait slot's color (wrapping past eight — no rig has that many gaits).
 pub(crate) fn slot_color(k: usize) -> [u8; 4] {
-    SLOT_COLORS[k % SLOT_COLORS.len()]
+    let colors = slot_colors();
+    colors[k % colors.len()]
 }
 
 /// The same color as a UI `Color`, for legends.
@@ -115,10 +126,10 @@ fn blank(images: &mut Assets<Image>, w: u32, h: u32, fill: [u8; 4]) -> Handle<Im
 
 pub(crate) fn create_plot_images(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(BenchPlots {
-        height: blank(&mut images, PLOT_W, PLOT_H, BG),
-        speed: blank(&mut images, PLOT_W, PLOT_H, BG),
-        drift: blank(&mut images, PLOT_W, PLOT_H, BG),
-        trace: blank(&mut images, TRACE_W, TRACE_H, BG),
+        height: blank(&mut images, PLOT_W, PLOT_H, bg()),
+        speed: blank(&mut images, PLOT_W, PLOT_H, bg()),
+        drift: blank(&mut images, PLOT_W, PLOT_H, bg()),
+        trace: blank(&mut images, TRACE_W, TRACE_H, bg()),
         hover: blank(&mut images, PLOT_W, PLOT_H, [0, 0, 0, 0]),
         hovered_bin: None,
         plotted: None,
@@ -439,7 +450,7 @@ fn range(slots: &[SlotCurves], pick: impl Fn(&SlotCurves) -> &[f32]) -> (f32, f3
 /// Foot height vs phase, with a per-slot contact tick row along the bottom — stance is the flat
 /// part, and the ticks say where each clip believes its feet are down.
 fn paint_height(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &mut Assets<Image>) {
-    let mut r = Raster::new(PLOT_W as usize, PLOT_H as usize, BG);
+    let mut r = Raster::new(PLOT_W as usize, PLOT_H as usize, bg());
     // The measured variant is a rotation of the same bins, so it never widens the range.
     let (lo, hi) = range(slots, |s| &s.height);
     r.hline(PLOT_H as usize - 1, GRID);
@@ -470,7 +481,7 @@ fn paint_height(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: 
 /// Foot ground speed vs phase. During stance this should sit at the body's speed — deviation
 /// inside the stance IS foot skate, visible as a wobble where a plateau should be.
 fn paint_speed(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &mut Assets<Image>) {
-    let mut r = Raster::new(PLOT_W as usize, PLOT_H as usize, BG);
+    let mut r = Raster::new(PLOT_W as usize, PLOT_H as usize, bg());
     let (_, hi) = range(slots, |s| &s.speed);
     r.hline(PLOT_H as usize - 1, GRID);
     for s in slots {
@@ -493,12 +504,12 @@ fn paint_drift(
     ab: bool,
     images: &mut Assets<Image>,
 ) {
-    let mut r = Raster::new(PLOT_W as usize, PLOT_H as usize, BG);
+    let mut r = Raster::new(PLOT_W as usize, PLOT_H as usize, bg());
     let threshold = bevy_grimoire_core::rig_check::ROOT_MOTION_EPS * scale;
     let (_, measured_hi) = range(slots, |s| &s.drift);
     let hi = (2.0 * threshold).max(measured_hi);
     let threshold_row = ((1.0 - threshold / hi) * (PLOT_H - 1) as f32) as usize;
-    r.hline(threshold_row.min(PLOT_H as usize - 1), DANGER_INK);
+    r.hline(threshold_row.min(PLOT_H as usize - 1), danger_ink());
     for s in slots {
         if ab
             && let Some(m) = &s.measured
@@ -517,7 +528,7 @@ fn paint_drift(
 /// own footprints. The grid is spaced at the reference slot's declared cycle distance.
 fn paint_trace(handle: &Handle<Image>, slots: &[SlotCurves], ab: bool, images: &mut Assets<Image>) {
     let (w, h) = (TRACE_W as usize, TRACE_H as usize);
-    let mut r = Raster::new(w, h, BG);
+    let mut r = Raster::new(w, h, bg());
     if slots.is_empty() {
         commit(handle, r, images);
         return;

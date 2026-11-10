@@ -264,7 +264,7 @@ fn the_project_is_loaded_before_the_editor_is_built() {
          `OnEnter(Editor)` system looks for it."
     );
     assert!(
-        src.contains("OnExit(Screen::Editor), close_the_door"),
+        src.contains("!OnExit {Screen: :, Editor}, close_the_door"),
         "and a door must tear down on the way out, or its entities and its `Project` survive into \
          the next one."
     );

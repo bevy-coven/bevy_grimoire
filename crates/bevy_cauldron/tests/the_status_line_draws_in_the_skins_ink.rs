@@ -48,10 +48,10 @@ fn a_live_answer_is_not_a_settled_one() {
 #[test]
 fn with_no_skin_the_band_is_the_shipped_palette() {
     let ink = StatusInk::of(None);
-    assert_eq!(ink.read, chrome::TEXT);
-    assert_eq!(ink.quiet, chrome::DIM);
-    assert_eq!(ink.accent, chrome::ACCENT);
-    assert_eq!(ink.danger, chrome::DANGER);
+    assert_eq!(ink.read, chrome::ink().text);
+    assert_eq!(ink.quiet, chrome::ink().dim);
+    assert_eq!(ink.accent, chrome::ink().accent);
+    assert_eq!(ink.danger, chrome::ink().danger);
 }
 
 /// **The editor's own skin is the shipped palette**, so the running editor and a harness draw one
@@ -59,8 +59,8 @@ fn with_no_skin_the_band_is_the_shipped_palette() {
 #[test]
 fn the_editor_skin_draws_the_shipped_palette() {
     let ink = StatusInk::of(Some(&bevy_cauldron::ui::editor_skin()));
-    assert_eq!(ink.read, chrome::TEXT);
-    assert_eq!(ink.quiet, chrome::DIM);
-    assert_eq!(ink.accent, chrome::ACCENT);
-    assert_eq!(ink.danger, chrome::DANGER);
+    assert_eq!(ink.read, chrome::ink().text);
+    assert_eq!(ink.quiet, chrome::ink().dim);
+    assert_eq!(ink.accent, chrome::ink().accent);
+    assert_eq!(ink.danger, chrome::ink().danger);
 }

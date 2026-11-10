@@ -737,6 +737,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **Derived from the open map's `references.ron` and the pictures it lists**: what the editor last found when it read their headers (#200). Another map or project starts it afresh.
     ("bevy_cauldron::reference_view::ReferenceView", Ownership::Project),
     ("bevy_cauldron::family_host::FamilySettings", Ownership::Session),
+    // **`Session`, for `FamilySettings`' reason**: the project's `family/bevy_gooey.ron` read as the game
+    // skin the Game UI preview draws (UI-03, #211). It is a fact about the open project that the panel
+    // reads, never the door's working state; a crossing keeps it and the file watch fills it again.
+    ("bevy_cauldron::ui_skin::GameSkin", Ownership::Session),
     // **The editor's settings** (UI-70): the defaults, the user's file and the project's laid over them. The user's layer is the app's and the project's layer follows the open project's path (`sync_settings` starts afresh when it moves), so both are true for as long as the app runs.
     ("bevy_cauldron::settings::EditorSettings", Ownership::Session),
     ("bevy_cauldron::settings::SettingsView", Ownership::Session),

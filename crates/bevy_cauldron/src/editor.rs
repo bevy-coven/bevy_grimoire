@@ -23,10 +23,7 @@ use bevy::ui_widgets::{Activate, Button as UiButton};
 use bevy_grimoire_core::map::Placed;
 use bevy_grimoire_core::stack::{descriptor_of, descriptor_with};
 
-use crate::chrome::{
-    ACCENT, BOUNDS_LINE, CHIP_PAD, DANGER, DIM, FOCUS_BG, GRID_LINE, HEADER_BG, LABEL, LIST_W,
-    ROW_BG, ROW_HOVER, ROW_SELECTED, SLOT_BG, TEXT,
-};
+use crate::chrome::{CHIP_PAD, LIST_W};
 use crate::keys::{self, Action};
 use crate::project::{OpenMap, Project};
 use crate::view::{MainCamera, cursor_ground};
@@ -54,9 +51,9 @@ const UNSORTED: &str = "unsorted";
 /// A wireframe box said where the bounds were and an author still had to trace it with their eye to
 /// tell inside from outside; `Map::bounds` is the thing every refusal in `fill` and `flood` is about,
 /// and it was the one piece of state the world did not show.
-const BOUNDS_FILL: Color = Color::srgb(0.105, 0.100, 0.092); // CHROME-OK: world ink — the slab under this map, read against chrome::VOID, no panel role
+const BOUNDS_FILL: Color = Color::srgb(0.105, 0.100, 0.092); // CHROME-OK: world ink — the slab under this map, read against chrome::ink().void, no panel role
 
-// The map grid's line is `chrome::GRID_LINE` — world ink two tabs state, one value in the palette.
+// The map grid's line is `chrome::ink().grid_line` — world ink two tabs state, one value in the palette.
 /// **The dressing rungs' lines, quieter than the module's.**
 ///
 /// A minor line that reads as loud as a major one is not a second scale, it is noise: the eye has to
@@ -64,10 +61,10 @@ const BOUNDS_FILL: Color = Color::srgb(0.105, 0.100, 0.092); // CHROME-OK: world
 /// they are the same ladder and a colour change would say they were not.
 /// **A cell a pending layout would take.**
 ///
-/// The same slate `chrome::SUGGEST` uses for the VLM labeler's machine-proposed state, and for the
+/// The same slate `chrome::ink().suggest` uses for the VLM labeler's machine-proposed state, and for the
 /// same reason its note gives: a proposal is *a question*, so it must read as neither an answer
 /// (amber, a live edit of yours) nor an alarm (red, something wrong).
-pub(crate) const PROPOSAL_LINE: Color = Color::srgb(0.42, 0.55, 0.68); // CHROME-OK: world ink — a pending layout's cell gizmo, SUGGEST's role in the world
+pub(crate) const PROPOSAL_LINE: Color = Color::srgb(0.42, 0.55, 0.68); // CHROME-OK: world ink — a pending layout's cell gizmo, crate::chrome::ink().suggest's role in the world
 
 /// The **least** the slab drops below the datum, metres — enough to beat z-fighting against a piece
 /// lying at `y_offset: 0.0`. See [`ground_drop`], which is usually deeper.
@@ -2232,7 +2229,7 @@ fn draw_notes(
     };
     for n in view.notes().notes.iter().filter(|n| n.stands()) {
         if let Some(site) = &n.site {
-            let color = if n.is_draft() { Color::WHITE } else { ACCENT };
+            let color = if n.is_draft() { Color::WHITE } else { crate::chrome::ink().accent };
             let (x0, z0, x1, z1) = site.world;
             rect(x0, z0, x1, z1, color);
         }
@@ -2255,7 +2252,7 @@ fn draw_notes(
         a.1.min(b.1) as f32 * t,
         (a.0.max(b.0) + 1) as f32 * t,
         (a.1.max(b.1) + 1) as f32 * t,
-        ACCENT,
+        crate::chrome::ink().accent,
     );
 }
 
@@ -2602,6 +2599,9 @@ impl Plugin for EditorPlugin {
         // **The LIBRARY browser** (UI-52, #238): the same library as a grid of portraits, with its own
         // search, a tag row and a card that carries its piece onto the map.
         app.add_plugins(crate::library_browser::LibraryBrowserPlugin);
+        // **The Game UI preview** (UI-03, #211): the project's game skin, shown under a `SkinScope` and
+        // never taken by the editor's chrome.
+        app.add_plugins(crate::game_ui_preview::GameUiPreviewPanelPlugin);
         app.add_plugins(crate::problems_view::ProblemsViewPlugin);
         app.add_plugins(crate::familiar::FamiliarPlugin);
         // **The AGENT block's rows** (#354): the list a wish is a row of, its answers, and the status
@@ -3039,7 +3039,7 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
         .with_children(|p| {
             p.spawn((
                 Text::new(""),
-                TextColor(DIM),
+                TextColor(crate::chrome::ink().dim),
                 crate::chrome::font(crate::chrome::text::BODY),
                 TriangleTotal,
             ));
@@ -3737,7 +3737,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                                 ..default()
                             })
                             .with_children(|col| {
-                                crate::chrome::row_value(col, "", TEXT, Field::Last);
+                                crate::chrome::row_value(col, "", crate::chrome::ink().text, Field::Last);
                             });
                         } else {
                             // `READOUT_LABEL_W` holds the longest single word here (`RELATIONS`), and
@@ -3748,7 +3748,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                             } else {
                                 crate::chrome::row_label(row, READOUT_LABEL_W, field.label());
                             }
-                            crate::chrome::row_value(row, "", TEXT, field);
+                            crate::chrome::row_value(row, "", crate::chrome::ink().text, field);
                         }
                     });
                 }
@@ -3788,7 +3788,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                             Val::Px(crate::chrome::NUM_FIELD_W),
                             SizeField(axis),
                             crate::chrome::text::BODY,
-                            (String::new(), TEXT),
+                            (String::new(), crate::chrome::ink().text),
                             SizeReadout(axis),
                         );
                     });
@@ -3810,7 +3810,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     Val::Percent(100.0),
                     FamilyField,
                     crate::chrome::text::BODY,
-                    ("crate field value".to_owned(), TEXT),
+                    ("crate field value".to_owned(), crate::chrome::ink().text),
                     FamilyReadout,
                 );
             });
@@ -3882,7 +3882,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     Val::Percent(100.0),
                     TerrainField,
                     crate::chrome::text::BODY,
-                    ("brush x z radius strength".to_owned(), TEXT),
+                    ("brush x z radius strength".to_owned(), crate::chrome::ink().text),
                     TerrainReadout,
                 );
             });
@@ -3902,7 +3902,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     Val::Percent(100.0),
                     CrowdField,
                     crate::chrome::text::BODY,
-                    ("from_x from_z to_x to_z walkers".to_owned(), TEXT),
+                    ("from_x from_z to_x to_z walkers".to_owned(), crate::chrome::ink().text),
                     CrowdReadout,
                 );
             });
@@ -3922,7 +3922,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                     Val::Percent(100.0),
                     DataField,
                     crate::chrome::text::BODY,
-                    ("file path value".to_owned(), TEXT),
+                    ("file path value".to_owned(), crate::chrome::ink().text),
                     DataReadout,
                 );
                 s.spawn((
@@ -4217,7 +4217,7 @@ fn rebuild_palette(
                     // The band's rest fill, carried so `chrome::style_list_rows` gives it the same
                     // five states every row and chip has. It sensed `Hovered` and nothing repainted
                     // it.
-                    crate::chrome::RowRest(HEADER_BG),
+                    crate::chrome::RowRest(crate::chrome::ink().header_bg),
                     Node {
                         width: Val::Percent(100.0),
                         padding: CHIP_PAD,
@@ -4226,7 +4226,7 @@ fn rebuild_palette(
                         margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
                         ..default()
                     },
-                    BackgroundColor(HEADER_BG),
+                    BackgroundColor(crate::chrome::ink().header_bg),
                 ))
                 .with_children(|row| {
                     // A caret, so folded and unfolded differ by shape and not only by what is below
@@ -4238,7 +4238,7 @@ fn rebuild_palette(
                             ..default()
                         },
                         Text::new(if folded { ">" } else { "v" }),
-                        TextColor(LABEL),
+                        TextColor(crate::chrome::ink().label),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
@@ -4249,12 +4249,12 @@ fn rebuild_palette(
                             ..default()
                         },
                         Text::new(category.to_uppercase()),
-                        TextColor(LABEL),
+                        TextColor(crate::chrome::ink().label),
                         crate::chrome::font(crate::chrome::text::LABEL),
                     ));
                     // The count in a non-wrapping column of its own, through the one builder — F6
                     // was this same defect on the Kit door's pack headings.
-                    crate::tiles::count_cell(row, format!("{}", members.len()), LABEL);
+                    crate::tiles::count_cell(row, format!("{}", members.len()), crate::chrome::ink().label);
                 });
 
                 if folded {
@@ -4300,7 +4300,7 @@ fn rebuild_palette(
                                     flex_shrink: 0.0,
                                     ..default()
                                 },
-                                BackgroundColor(SLOT_BG),
+                                BackgroundColor(crate::chrome::ink().slot_bg),
                             ));
                             // **By id, not by index.** The library grows on Accept and shrinks on
                             // remove, and an index into a portrait list that was sized at startup
@@ -4324,7 +4324,7 @@ fn rebuild_palette(
                                     ..default()
                                 },
                                 Text::new(bevy_grimoire_core::naming::display_name(&d.id)),
-                                TextColor(TEXT),
+                                TextColor(crate::chrome::ink().text),
                                 crate::chrome::font(crate::chrome::text::BODY),
                                 // **A word longer than the column breaks inside itself** (#289): with
                                 // the default word-boundary break, `toilet_roll_holder` was one word
@@ -5580,7 +5580,7 @@ fn refresh_family(
     for (mut text, mut colour) in &mut readouts {
         let (want, want_colour) = crate::chrome::field_text(
             edit.active.as_deref(),
-            ("crate field value".to_owned(), TEXT),
+            ("crate field value".to_owned(), crate::chrome::ink().text),
         );
         if text.0 != want {
             text.0 = want;
@@ -5591,11 +5591,11 @@ fn refresh_family(
     }
     for (hovered, mut bg) in &mut fields {
         let want = if edit.active.is_some() {
-            FOCUS_BG
+            crate::chrome::ink().focus_bg
         } else if hovered.0 {
-            ROW_HOVER
+            crate::chrome::ink().row_hover
         } else {
-            ROW_BG
+            crate::chrome::ink().row_bg
         };
         if bg.0 != want {
             bg.0 = want;
@@ -6504,7 +6504,7 @@ fn refresh_crowd(
 ) {
     for (mut text, mut colour) in &mut readouts {
         let (want, want_colour) =
-            crate::chrome::field_text(edit.active.as_deref(), ("from_x from_z to_x to_z walkers".to_owned(), TEXT));
+            crate::chrome::field_text(edit.active.as_deref(), ("from_x from_z to_x to_z walkers".to_owned(), crate::chrome::ink().text));
         if text.0 != want {
             text.0 = want;
         }
@@ -6514,11 +6514,11 @@ fn refresh_crowd(
     }
     for (hovered, mut bg) in &mut fields {
         let want = if edit.active.is_some() {
-            FOCUS_BG
+            crate::chrome::ink().focus_bg
         } else if hovered.0 {
-            ROW_HOVER
+            crate::chrome::ink().row_hover
         } else {
-            ROW_BG
+            crate::chrome::ink().row_bg
         };
         if bg.0 != want {
             bg.0 = want;
@@ -6533,7 +6533,7 @@ fn refresh_terrain(
 ) {
     for (mut text, mut colour) in &mut readouts {
         let (want, want_colour) =
-            crate::chrome::field_text(edit.active.as_deref(), ("brush x z radius strength".to_owned(), TEXT));
+            crate::chrome::field_text(edit.active.as_deref(), ("brush x z radius strength".to_owned(), crate::chrome::ink().text));
         if text.0 != want {
             text.0 = want;
         }
@@ -6543,11 +6543,11 @@ fn refresh_terrain(
     }
     for (hovered, mut bg) in &mut fields {
         let want = if edit.active.is_some() {
-            FOCUS_BG
+            crate::chrome::ink().focus_bg
         } else if hovered.0 {
-            ROW_HOVER
+            crate::chrome::ink().row_hover
         } else {
-            ROW_BG
+            crate::chrome::ink().row_bg
         };
         if bg.0 != want {
             bg.0 = want;
@@ -6630,7 +6630,7 @@ fn refresh_scripts_list(
             if rows.is_empty() {
                 p.spawn((
                     Text::new("no triggers on this map"),
-                    TextColor(DIM),
+                    TextColor(crate::chrome::ink().dim),
                     crate::chrome::font(crate::chrome::text::LABEL),
                 ));
             }
@@ -6648,7 +6648,7 @@ fn refresh_scripts_list(
                         };
                         row.spawn((
                             Text::new(format!("{} · {}{}", t.id, t.on, who)),
-                            TextColor(TEXT),
+                            TextColor(crate::chrome::ink().text),
                             crate::chrome::font(crate::chrome::text::BODY),
                         ));
                     });
@@ -6962,10 +6962,10 @@ fn refresh_reload_list(
         commands.entity(list).with_children(|p| {
             for (line, tone) in &now {
                 let colour = match tone {
-                    Tone::Dim => DIM,
-                    Tone::Text => TEXT,
-                    Tone::Accent => ACCENT,
-                    Tone::Danger => DANGER,
+                    Tone::Dim => crate::chrome::ink().dim,
+                    Tone::Text => crate::chrome::ink().text,
+                    Tone::Accent => crate::chrome::ink().accent,
+                    Tone::Danger => crate::chrome::ink().danger,
                 };
                 let size = if *tone == Tone::Dim { crate::chrome::text::LABEL } else { crate::chrome::text::BODY };
                 p.spawn((Text::new(line.clone()), TextColor(colour), crate::chrome::font(size)));
@@ -7002,20 +7002,20 @@ fn refresh_plan_list(
         commands.entity(list).with_children(|p| {
             let lines = crate::ops_plan::plan_text(&now);
             if now.items.is_empty() {
-                p.spawn((Text::new(lines.join("\n")), TextColor(DIM), crate::chrome::font(crate::chrome::text::LABEL)));
+                p.spawn((Text::new(lines.join("\n")), TextColor(crate::chrome::ink().dim), crate::chrome::font(crate::chrome::text::LABEL)));
                 return;
             }
             let mut lines = lines.into_iter();
             p.spawn((
                 Text::new(lines.next().unwrap_or_default()),
-                TextColor(DIM),
+                TextColor(crate::chrome::ink().dim),
                 crate::chrome::font(crate::chrome::text::LABEL),
             ));
             for (item, line) in now.items.iter().zip(lines) {
                 let colour = match item.status {
-                    Status::Pending => TEXT,
-                    Status::Doing => ACCENT,
-                    Status::Done | Status::Skipped => DIM,
+                    Status::Pending => crate::chrome::ink().text,
+                    Status::Doing => crate::chrome::ink().accent,
+                    Status::Done | Status::Skipped => crate::chrome::ink().dim,
                 };
                 p.spawn((Text::new(line), TextColor(colour), crate::chrome::font(crate::chrome::text::BODY)));
             }
@@ -7100,7 +7100,7 @@ fn refresh_notes_list(
             if rows.is_empty() {
                 p.spawn((
                     Text::new("no notes"),
-                    TextColor(DIM),
+                    TextColor(crate::chrome::ink().dim),
                     crate::chrome::font(crate::chrome::text::LABEL),
                 ));
             }
@@ -7114,7 +7114,7 @@ fn refresh_notes_list(
                 crate::chrome::list_row(p, chosen, NoteRow { id: id.clone() }).with_children(|row| {
                     row.spawn((
                         Text::new(format!("{id} [{status}] {text}")),
-                        TextColor(TEXT),
+                        TextColor(crate::chrome::ink().text),
                         crate::chrome::font(crate::chrome::text::BODY),
                     ));
                     // **An auto note says so on its row** (E-070): the agent decides its minor
@@ -7128,19 +7128,19 @@ fn refresh_notes_list(
                                 border_radius: BorderRadius::all(Val::Px(crate::chrome::RADIUS_ROW)),
                                 ..default()
                             },
-                            BorderColor::all(crate::chrome::SUGGEST),
+                            BorderColor::all(crate::chrome::ink().suggest),
                         ))
                         .with_children(|chip| {
                             chip.spawn((
                                 Text::new("auto"),
-                                TextColor(crate::chrome::SUGGEST),
+                                TextColor(crate::chrome::ink().suggest),
                                 crate::chrome::font(crate::chrome::text::LABEL),
                             ));
                         });
                     }
                 });
                 for line in &review.lines {
-                    p.spawn((Text::new(line.clone()), TextColor(DIM), crate::chrome::font(crate::chrome::text::LABEL)));
+                    p.spawn((Text::new(line.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::font(crate::chrome::text::LABEL)));
                 }
                 let loaded: Vec<Handle<Image>> = review
                     .pictures
@@ -7287,7 +7287,7 @@ fn refresh_data(
     for (mut text, mut colour) in &mut readouts {
         let (want, want_colour) = crate::chrome::field_text(
             edit.active.as_deref(),
-            ("file path value".to_owned(), TEXT),
+            ("file path value".to_owned(), crate::chrome::ink().text),
         );
         if text.0 != want {
             text.0 = want;
@@ -7298,11 +7298,11 @@ fn refresh_data(
     }
     for (hovered, mut bg) in &mut fields {
         let want = if edit.active.is_some() {
-            FOCUS_BG
+            crate::chrome::ink().focus_bg
         } else if hovered.0 {
-            ROW_HOVER
+            crate::chrome::ink().row_hover
         } else {
-            ROW_BG
+            crate::chrome::ink().row_bg
         };
         if bg.0 != want {
             bg.0 = want;
@@ -7331,7 +7331,7 @@ fn refresh_size(
         } else {
             format!("{v:.1}")
         };
-        let (want, want_colour) = crate::chrome::field_text(editing, (idle, TEXT));
+        let (want, want_colour) = crate::chrome::field_text(editing, (idle, crate::chrome::ink().text));
         if text.0 != want {
             text.0 = want;
         }
@@ -7343,13 +7343,13 @@ fn refresh_size(
     for (field, hovered, mut bg) in &mut fields {
         let focused = matches!(&edit.active, Some((axis, _)) if *axis == field.0);
         // Focus beats hover: while a field is being typed into, the pointer resting on it is not
-        // news. Hover is `chrome::ROW_HOVER`'s signifier — this is clickable, and not yet chosen.
+        // news. Hover is `chrome::ink().row_hover`'s signifier — this is clickable, and not yet chosen.
         let want = if focused {
-            FOCUS_BG
+            crate::chrome::ink().focus_bg
         } else if hovered.0 {
-            ROW_HOVER
+            crate::chrome::ink().row_hover
         } else {
-            ROW_BG
+            crate::chrome::ink().row_bg
         };
         if bg.0 != want {
             bg.0 = want;
@@ -7412,7 +7412,7 @@ fn draw_edge_faults(
                     Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
                 ),
                 Vec2::new(footprint.0, footprint.1),
-                FAULT_LINE,
+                fault_line(),
             );
         }
     }
@@ -7420,7 +7420,9 @@ fn draw_edge_faults(
 
 /// The colour a disagreeing face is outlined in — the palette's refusal colour, because a fault is
 /// the map and the tokens contradicting each other and that is a thing to fix, not a warning.
-const FAULT_LINE: Color = DANGER;
+fn fault_line() -> Color {
+    crate::chrome::ink().danger
+}
 
 /// **How far apart the drawn grid's lines are, in metres.**
 ///
@@ -7650,6 +7652,7 @@ fn draw_map_grid(
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
     settings: Option<Res<crate::settings::EditorSettings>>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut gizmos: Gizmos,
 ) {
     // **The settings screen's two grid keys** (UI-71): `show_grid` turns the lines off and
@@ -7658,6 +7661,7 @@ fn draw_map_grid(
     if !show {
         return;
     }
+    let grid = crate::chrome::grid_ink(skin.as_deref());
     let (min_x, min_z, max_x, max_z) = open.map.floor_rect();
     let (w, _h, d) = open.map.bounds;
     // **The grid IS the lattice you will land on. There is no longer a second answer.**
@@ -7709,7 +7713,10 @@ fn draw_map_grid(
             ((d / step).round() as u32).max(1),
         ),
         Vec2::splat(step),
-        GRID_LINE.with_alpha(GRID_LINE.alpha() * strength),
+        // **The running skin's grid ink** (UI-80, #254): the shipped `grid_line` tone where the skin
+        // carries none, so the editor's look is unchanged by construction and a theme or a project
+        // that names `grid_line` moves the lattice an author reads the map by.
+        grid.with_alpha(grid.alpha() * strength),
     );
 }
 
@@ -8067,7 +8074,7 @@ fn draw_bounds(
     // the box's size (`bevy_gizmos-0.19.0/src/gizmos.rs:637`).
     gizmos.cube(
         Transform::from_translation(centre).with_scale(size),
-        crate::chrome::stepped_back(BOUNDS_LINE, held),
+        crate::chrome::stepped_back(crate::chrome::ink().bounds_line, held),
     );
 }
 
@@ -8101,11 +8108,11 @@ fn arm_palette_rows(
         if selected.0 != armed {
             selected.0 = armed;
         }
-        let fill = if armed { ROW_SELECTED } else { ROW_BG };
+        let fill = if armed { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg };
         if rest.0 != fill {
             rest.0 = fill;
         }
-        let edge = if armed { ACCENT } else { Color::NONE };
+        let edge = if armed { crate::chrome::ink().accent } else { Color::NONE };
         if border.left != edge {
             *border = BorderColor::all(edge);
         }
@@ -8116,9 +8123,9 @@ fn arm_palette_rows(
 /// stacked behind it, or a dim `nothing` when the stack is empty.
 fn stack_row(next: Option<String>, depth: usize) -> (String, Color) {
     match next {
-        Some(phrase) if depth > 1 => (format!("{phrase} (+{})", depth - 1), TEXT),
-        Some(phrase) => (phrase, TEXT),
-        None => ("nothing".to_owned(), DIM),
+        Some(phrase) if depth > 1 => (format!("{phrase} (+{})", depth - 1), crate::chrome::ink().text),
+        Some(phrase) => (phrase, crate::chrome::ink().text),
+        None => ("nothing".to_owned(), crate::chrome::ink().dim),
     }
 }
 
@@ -8174,7 +8181,7 @@ fn history_block(s: &mut ChildSpawnerCommands) {
             row.with_children(|line| {
                 line.spawn((
                     Text::new(""),
-                    TextColor(TEXT),
+                    TextColor(crate::chrome::ink().text),
                     crate::chrome::font(crate::chrome::text::BODY),
                     bevy::text::TextLayout::new(
                         bevy::text::Justify::Left,
@@ -8290,7 +8297,7 @@ fn refresh_history(
             *pickable = pick;
         }
         let (want, tint) = match position {
-            None => (String::new(), TEXT),
+            None => (String::new(), crate::chrome::ink().text),
             Some(p) => {
                 let (what, who) = if p == 0 {
                     ("before the first change".to_owned(), "")
@@ -8306,7 +8313,7 @@ fn refresh_history(
                 } else {
                     format!("  \u{b7} {who}")
                 };
-                let tint = if p > depth { DIM } else { TEXT };
+                let tint = if p > depth { crate::chrome::ink().dim } else { crate::chrome::ink().text };
                 (format!("{now}{what}{who}"), tint)
             }
         };
@@ -8345,7 +8352,7 @@ impl StatusInk {
     /// The skin's ink where it has one, the shipped constants where it does not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> StatusInk {
         let Some(skin) = skin else {
-            return StatusInk { read: TEXT, quiet: DIM, accent: ACCENT, danger: DANGER };
+            return StatusInk { read: crate::chrome::ink().text, quiet: crate::chrome::ink().dim, accent: crate::chrome::ink().accent, danger: crate::chrome::ink().danger };
         };
         StatusInk { read: skin.text, quiet: skin.text_muted, accent: skin.accent, danger: skin.danger }
     }
@@ -8694,10 +8701,10 @@ fn relations_readout(open: &OpenMap) -> (String, Color) {
     let path = path_for_map(&open.map_path);
     let unreadable = || {
         let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
-        (format!("{name} does not read"), DANGER)
+        (format!("{name} does not read"), crate::chrome::ink().danger)
     };
     let relations = match std::fs::read_to_string(&path) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return ("none".to_owned(), DIM),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return ("none".to_owned(), crate::chrome::ink().dim),
         Err(_) => return unreadable(),
         Ok(text) => match Relations::parse(&text) {
             Ok(r) => r,
@@ -8705,13 +8712,13 @@ fn relations_readout(open: &OpenMap) -> (String, Color) {
         },
     };
     if relations.relations.is_empty() {
-        return ("none".to_owned(), DIM);
+        return ("none".to_owned(), crate::chrome::ink().dim);
     }
     let outcomes = check_map(&open.map.placements, &relations);
     let unmet = outcomes.iter().filter(|o| matches!(o, Outcome::Unmet { .. })).count();
     let missing = outcomes.iter().filter(|o| matches!(o, Outcome::Missing { .. })).count();
     if unmet + missing == 0 {
-        return (format!("{} met", outcomes.len()), DIM);
+        return (format!("{} met", outcomes.len()), crate::chrome::ink().dim);
     }
     // The first unmet hard relation, else the first unmet one, else the first one naming a piece
     // the map does not have.
@@ -8728,7 +8735,7 @@ fn relations_readout(open: &OpenMap) -> (String, Color) {
     if missing > 0 {
         counts.push(format!("{missing} missing"));
     }
-    (format!("{}: {words}", counts.join(", ")), DANGER)
+    (format!("{}: {words}", counts.join(", ")), crate::chrome::ink().danger)
 }
 
 /// **Every text field that can be taking raw keys, in one parameter.**
@@ -9290,11 +9297,11 @@ fn refresh_triangle_total(
             text.0 = want.clone();
         }
         let tint = if total > HEAVY_SCENE {
-            DANGER
+            crate::chrome::ink().danger
         } else if total > BUSY_SCENE {
-            ACCENT
+            crate::chrome::ink().accent
         } else {
-            DIM
+            crate::chrome::ink().dim
         };
         if colour.0 != tint {
             colour.0 = tint;
@@ -9347,11 +9354,11 @@ pub fn with_thousands(n: usize) -> String {
 /// second-densest piece is 7,996, so 20k is well clear of everything except the one genuine outlier.
 fn cost_tint(triangles: usize) -> Color {
     if triangles > bevy_grimoire_core::import::BUSY_TRIANGLES {
-        DANGER
+        crate::chrome::ink().danger
     } else if triangles > 5_000 {
-        ACCENT
+        crate::chrome::ink().accent
     } else {
-        LABEL
+        crate::chrome::ink().label
     }
 }
 
@@ -10026,7 +10033,7 @@ fn drive_run(
                     open.map.origin.1 + MARKER_LIFT,
                     open.map.origin.2 + at.1,
                 ),
-                ACCENT,
+                crate::chrome::ink().accent,
             );
         }
     }
@@ -11402,7 +11409,7 @@ fn drive_place(
                     Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
                 ),
                 Vec2::new(x1 - x0, z1 - z0),
-                ACCENT,
+                crate::chrome::ink().accent,
             );
         }
     }

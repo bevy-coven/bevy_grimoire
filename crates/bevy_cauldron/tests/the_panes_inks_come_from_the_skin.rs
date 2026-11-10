@@ -1,11 +1,11 @@
 //! **The Meshes pane's ink — suggest, danger, accent — comes from the skin** (UI-02, #210).
 //!
 //! `rebuild_detail` is one system with the pane's whole content, so it is where the pane's inks live.
-//! Twelve of its sites read `chrome::SUGGEST`, `chrome::DANGER` and `chrome::ACCENT`; they read
+//! Twelve of its sites read `chrome::ink().suggest`, `chrome::ink().danger` and `chrome::ink().accent`; they read
 //! `GooeySkin` now — `tone("suggest")` for a model's proposal (a *tone*, not a field: gooey#33's `tones`
 //! is where a host keeps its own colours), `danger` and `accent` for the two fields.
 //!
-//! **No protected assertion moved.** The skin's `suggest` tone *is* `chrome::SUGGEST`, and its `danger`
+//! **No protected assertion moved.** The skin's `suggest` tone *is* `chrome::ink().suggest`, and its `danger`
 //! and `accent` are those two constants, so reading the skin is behaviour-identical today. All 8 of
 //! `the_meshes_pane_says_how_sure_the_labels_are`'s tests pass unmodified, and the 5 skin tests.
 //!
@@ -47,9 +47,9 @@ fn the_panes_suggest_danger_and_accent_inks_come_from_the_skin() {
 
     // **One colour to begin with**, which is why the protected tests above still pass: the skin and
     // the constants agree today, and reading the skin changed nothing to the eye.
-    assert_eq!(skin.tone("suggest"), Some(chrome::SUGGEST), "the `suggest` tone must be SUGGEST");
-    assert_eq!(skin.danger, chrome::DANGER, "`danger` must be DANGER");
-    assert_eq!(skin.accent, chrome::ACCENT, "`accent` must be ACCENT");
+    assert_eq!(skin.tone("suggest"), Some(chrome::ink().suggest), "the `suggest` tone must be SUGGEST");
+    assert_eq!(skin.danger, chrome::ink().danger, "`danger` must be DANGER");
+    assert_eq!(skin.accent, chrome::ink().accent, "`accent` must be ACCENT");
 
     // **And each is a colour a theme can move.** Move all three, then read the expression the pane
     // paints with — the same ones `rebuild_detail` binds — so this is a claim about the pane's ink
@@ -89,9 +89,9 @@ fn the_editor_requires_a_skin_so_the_fallbacks_are_for_harnesses_only() {
     // And the fallback expressions are still what a hand-built harness would get.
     let none: Option<&bevy_gooey::GooeySkin> = None;
     assert_eq!(
-        none.and_then(|s| s.tone("suggest")).unwrap_or(chrome::SUGGEST),
-        chrome::SUGGEST
+        none.and_then(|s| s.tone("suggest")).unwrap_or(chrome::ink().suggest),
+        chrome::ink().suggest
     );
-    assert_eq!(none.map_or(chrome::DANGER, |s| s.danger), chrome::DANGER);
-    assert_eq!(none.map_or(chrome::ACCENT, |s| s.accent), chrome::ACCENT);
+    assert_eq!(none.map_or(chrome::ink().danger, |s| s.danger), chrome::ink().danger);
+    assert_eq!(none.map_or(chrome::ink().accent, |s| s.accent), chrome::ink().accent);
 }

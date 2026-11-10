@@ -41,10 +41,10 @@ fn the_panel_draws_in_the_skins_ink() {
 #[test]
 fn with_no_skin_the_panel_is_the_shipped_palette() {
     let ink = PanelInk::of(None);
-    assert_eq!(ink.read, chrome::TEXT);
-    assert_eq!(ink.quiet, chrome::DIM);
-    assert_eq!(ink.accent, chrome::ACCENT);
-    assert_eq!(ink.danger, chrome::DANGER);
+    assert_eq!(ink.read, chrome::ink().text);
+    assert_eq!(ink.quiet, chrome::ink().dim);
+    assert_eq!(ink.accent, chrome::ink().accent);
+    assert_eq!(ink.danger, chrome::ink().danger);
 }
 
 /// **The editor's own skin is the shipped palette**, which is what lets the running editor and a
@@ -52,8 +52,8 @@ fn with_no_skin_the_panel_is_the_shipped_palette() {
 #[test]
 fn the_editor_skin_draws_the_shipped_palette() {
     let ink = PanelInk::of(Some(&bevy_cauldron::ui::editor_skin()));
-    assert_eq!(ink.read, chrome::TEXT, "the editor skin's `text` is `TEXT`");
-    assert_eq!(ink.quiet, chrome::DIM, "its `text_muted` is `DIM`");
-    assert_eq!(ink.accent, chrome::ACCENT, "its `accent` is `ACCENT`");
-    assert_eq!(ink.danger, chrome::DANGER, "its `danger` is `DANGER`");
+    assert_eq!(ink.read, chrome::ink().text, "the editor skin's `text` is `TEXT`");
+    assert_eq!(ink.quiet, chrome::ink().dim, "its `text_muted` is `DIM`");
+    assert_eq!(ink.accent, chrome::ink().accent, "its `accent` is `ACCENT`");
+    assert_eq!(ink.danger, chrome::ink().danger, "its `danger` is `DANGER`");
 }

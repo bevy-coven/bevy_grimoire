@@ -53,7 +53,7 @@ fn a_skin_without_the_tone_keeps_the_editors_label() {
 #[test]
 fn with_no_skin_the_new_fields_are_the_shipped_table() {
     let ink = BenchInk::of(None);
-    let shipped = BenchInk::SHIPPED;
+    let shipped = BenchInk::shipped();
     assert_eq!(ink.label, shipped.label);
     assert_eq!(ink.on, shipped.on);
 }

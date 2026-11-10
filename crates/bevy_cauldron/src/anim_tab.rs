@@ -23,7 +23,7 @@ use bevy::ui_widgets::{Activate, Button as UiButton};
 use bevy_grimoire_core::rig_check::{Level, Staleness};
 use bevy_grimoire_core::rigs::{Playback, Rigs};
 
-use crate::chrome::{ACCENT, DANGER, DIM, LABEL, PAD, ROW_BG, ROW_SELECTED, TEXT};
+use crate::chrome::{PAD};
 use crate::tiles::{AnimRoot, Mode};
 
 /// How many manifest snapshots the bench keeps. The undo unit is the whole file's text — writes are
@@ -372,7 +372,7 @@ fn spawn_panels(
         crate::chrome::title(p, "INSPECTOR");
         p.spawn((
             Text::new(""),
-            TextColor(DIM),
+            TextColor(crate::chrome::ink().dim),
             crate::chrome::font(crate::chrome::text::LABEL),
             // No `Node` of its own: `chrome::title` carries the gap below itself and `panel_root`'s
             // `row_gap` carries the rest. The bare 6 that stood here was one of the four different
@@ -906,20 +906,23 @@ pub struct BenchInk {
 impl BenchInk {
     /// The shipped palette, for a build with no skin — the one place the seven constants the bench
     /// used to read at its call sites are still named, so the fallback is written once.
-    pub const SHIPPED: BenchInk = BenchInk {
-        read: TEXT,
-        quiet: DIM,
-        danger: DANGER,
-        accent: ACCENT,
-        rest: ROW_BG,
-        label: LABEL,
-        on: ROW_SELECTED,
-    };
+    pub fn shipped() -> BenchInk {
+        let ink = crate::chrome::ink();
+        BenchInk {
+            read: ink.text,
+            quiet: ink.dim,
+            danger: ink.danger,
+            accent: ink.accent,
+            rest: ink.row_bg,
+            label: ink.label,
+            on: ink.row_selected,
+        }
+    }
 
     /// The skin's ink where it has one, the shipped constants where it does not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> BenchInk {
         let Some(skin) = skin else {
-            return BenchInk::SHIPPED;
+            return BenchInk::shipped();
         };
         BenchInk {
             read: skin.text,
@@ -929,10 +932,10 @@ impl BenchInk {
             rest: skin.surface_raised,
             // A named tone, like `key` elsewhere: gooey has no field for a column's quiet label. The
             // editor's own skin does not carry one (its tone set is pinned exactly by
-            // `the_skin_carries_the_editors_other_colours`), so this falls back to [`LABEL`] — the
+            // `the_skin_carries_the_editors_other_colours`), so this falls back to `LABEL` — the
             // colour the bench has always drawn — and a **project's** skin that names `label` gets the
             // column quieted in its own palette rather than the editor's.
-            label: skin.tone("label").unwrap_or(LABEL),
+            label: skin.tone("label").unwrap_or(crate::chrome::ink().label),
             // A rung of the elevation ladder, not a tone: `ROW_SELECTED` is the seventh step.
             on: skin.surface_at(6),
         }

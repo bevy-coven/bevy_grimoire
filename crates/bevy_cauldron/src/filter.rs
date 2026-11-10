@@ -16,7 +16,7 @@ use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 
-use crate::chrome::{ACCENT, DIM, FOCUS_BG, ROW_BG, ROW_HOVER, TEXT};
+
 
 /// Which list a box narrows.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
@@ -199,8 +199,8 @@ pub struct FilterText(pub Pane);
 /// **A filter box's ink, from the editor's skin** (UI-02, #210).
 ///
 /// The box has four inks and one of them is a *state*: the ground it sits on
-/// ([`ROW_BG`]), the ground it turns under the pointer ([`ROW_HOVER`]) and the ground it
-/// holds while it owns the keyboard ([`FOCUS_BG`]), which is the one field gooey calls
+/// (`Ink::row_bg`), the ground it turns under the pointer (`Ink::row_hover`) and the ground it
+/// holds while it owns the keyboard (`Ink::focus_bg`), which is the one field gooey calls
 /// `pressed` — a recessed well, not a raised card. The caret's ink is the accent, and the
 /// two text inks are `text` and `text_muted`.
 ///
@@ -225,12 +225,12 @@ struct FieldInk {
 impl FieldInk {
     fn of(skin: Option<&bevy_gooey::GooeySkin>) -> FieldInk {
         let Some(skin) = skin else {
-            return FieldInk { rest: ROW_BG, hover: ROW_HOVER, focus: FOCUS_BG, typed: TEXT, quiet: DIM, accent: ACCENT };
+            return FieldInk { rest: crate::chrome::ink().row_bg, hover: crate::chrome::ink().row_hover, focus: crate::chrome::ink().focus_bg, typed: crate::chrome::ink().text, quiet: crate::chrome::ink().dim, accent: crate::chrome::ink().accent };
         };
         FieldInk {
             rest: skin.surface_raised,
-            hover: skin.tone("hover").unwrap_or(ROW_HOVER),
-            focus: skin.tone("pressed").unwrap_or(FOCUS_BG),
+            hover: skin.tone("hover").unwrap_or(crate::chrome::ink().row_hover),
+            focus: skin.tone("pressed").unwrap_or(crate::chrome::ink().focus_bg),
             typed: skin.text,
             quiet: skin.text_muted,
             accent: skin.accent,
@@ -368,7 +368,7 @@ pub fn refresh(
     let ink = FieldInk::of(skin.as_deref());
     // The fill answers to the pointer as well as to focus, so it repaints every frame — hover
     // cannot wait for `Filters` to change. The `!=` guard keeps the steady state a comparison.
-    // Focus beats hover; hover is `chrome::ROW_HOVER`'s signifier that the box takes a click.
+    // Focus beats hover; hover is `chrome::ink().row_hover`'s signifier that the box takes a click.
     for (which, hovered, mut bg) in &mut boxes {
         let want = if filters.focus == Some(which.0) {
             ink.focus

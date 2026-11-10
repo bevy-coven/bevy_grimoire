@@ -7,7 +7,7 @@
 //!
 //! Two claims, and each can fail:
 //!
-//! 1. **A hovered row takes the skin's `hover` colour**, not `ROW_HOVER`. This is what a person sees
+//! 1. **A hovered row takes the skin's `hover` colour**, not `Ink::row_hover`. This is what a person sees
 //!    change when they edit `editor_skin.yaml`: the row under their pointer.
 //! 2. **A pressed row takes the skin's `pressed` colour.** The pair gooey's `problems()` refuses to let
 //!    collapse (ΔL\* under 4) is exactly this one against hover, so a theme that moves one and not the
@@ -33,7 +33,7 @@ use crate::fixtures;
 /// colour by construction rather than by a pointer the harness cannot place.
 ///
 /// This is weaker than a picture of a hovered row and stronger than nothing: the failure it catches is
-/// the real one — `hover` read from `chrome::ROW_HOVER` instead of the skin.
+/// the real one — `hover` read from `chrome::ink().row_hover` instead of the skin.
 #[test]
 fn the_hover_colour_the_editor_paints_comes_from_the_skin() {
     let root = fixtures::Fixture::new("theme-hover-row")
@@ -82,9 +82,9 @@ fn a_pressed_row_takes_its_colour_from_the_skin() {
     let row = app
         .world_mut()
         .spawn((
-            chrome::RowRest(chrome::ROW_BG),
+            chrome::RowRest(chrome::ink().row_bg),
             Hovered::default(),
-            BackgroundColor(chrome::ROW_BG),
+            BackgroundColor(chrome::ink().row_bg),
             // The pointer down on it, which is what `style_list_rows` reads as pressed.
             bevy::ui::Pressed,
         ))

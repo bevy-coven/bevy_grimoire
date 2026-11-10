@@ -2620,11 +2620,16 @@ pub fn draw_build_grid(
     mode: Res<crate::tiles::Mode>,
     build: Res<Build>,
     project: Res<crate::project::Project>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut gizmos: Gizmos,
 ) {
     if *mode != crate::tiles::Mode::Tiles {
         return;
     }
+    // **One colour for the whole pane's lattice work** (UI-80, #254): the envelope's snap ladder and
+    // the seating lattice are the same grid to an author, so both read the running skin's `grid_line`
+    // through `chrome::grid_ink`, and neither can drift from the other.
+    let grid = crate::chrome::grid_ink(skin.as_deref());
     let Some((centre, size)) = tile_envelope(&build) else {
         return;
     };
@@ -2637,7 +2642,7 @@ pub fn draw_build_grid(
     let held = crate::keys::pressed(&keyboard, *live, crate::keys::Action::Shortcuts);
     gizmos.cube(
         Transform::from_translation(centre).with_scale(Vec3::new(size.0, size.1, size.2)),
-        crate::chrome::stepped_back(crate::chrome::DIM, held),
+        crate::chrome::stepped_back(crate::chrome::ink().dim, held),
     );
 
     // A third of a cell — the old unit rung, kept as the orientation grid and as the box drawn for
@@ -2684,7 +2689,7 @@ pub fn draw_build_grid(
                     gizmos.line(
                         stage + Vec3::new(x, 0.0, -size.2 * 0.5),
                         stage + Vec3::new(x, 0.0, size.2 * 0.5),
-                        crate::chrome::GRID_LINE,
+                        grid,
                     );
                 }
                 if f.1 > ON_STOP {
@@ -2698,7 +2703,7 @@ pub fn draw_build_grid(
                     gizmos.line(
                         stage + Vec3::new(-size.0 * 0.5, 0.0, z),
                         stage + Vec3::new(size.0 * 0.5, 0.0, z),
-                        crate::chrome::GRID_LINE,
+                        grid,
                     );
                 }
             }
@@ -2721,7 +2726,7 @@ pub fn draw_build_grid(
         gizmos.cube(
             Transform::from_translation(stage + Vec3::new(m.at.0, m.lift + height * 0.5, m.at.1))
                 .with_scale(Vec3::new(span.0, height, span.1)),
-            crate::chrome::ACCENT,
+            crate::chrome::ink().accent,
         );
     }
     // Nothing in hand: the unit lattice for orientation, bounded by a cell count so it stops at
@@ -2732,7 +2737,7 @@ pub fn draw_build_grid(
             Isometry3d::new(stage, Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             UVec2::new(nx, nz),
             Vec2::splat(unit),
-            crate::chrome::GRID_LINE,
+            grid,
         );
     }
 }

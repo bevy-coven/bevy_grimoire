@@ -56,7 +56,9 @@ const CAPTURE_WAIT_FRAMES: u32 = 120;
 
 /// The same opaque backdrop the thumbnails use — the model should see the asset the author sees.
 /// Through chrome, so "the same" is a fact the compiler holds rather than a promise.
-const BACKDROP: Color = crate::chrome::SLOT_BG;
+fn backdrop() -> Color {
+    crate::chrome::ink().slot_bg
+}
 
 /// The two view directions, as offsets per unit extent: the palette's proven three-quarter front,
 /// and its mirror — the far side a single thumbnail never shows.
@@ -406,7 +408,7 @@ fn spawn_camera(commands: &mut Commands, first_target: &Handle<Image>) -> Entity
                 // Before the thumbnail camera's -1, so the two booths' passes never interleave a
                 // half-drawn frame into each other's targets.
                 order: -2,
-                clear_color: ClearColorConfig::Custom(BACKDROP),
+                clear_color: ClearColorConfig::Custom(backdrop()),
                 ..default()
             },
             RenderTarget::Image(ImageRenderTarget {

@@ -457,7 +457,7 @@ pub fn build_headless_at(
     // is what `Screen::default()` gives. Inserting the state rather than initialising it runs
     // `OnEnter(Editor)` on the first transition, which is where every former `Startup` spawn lives.
     .insert_state(crate::screen::Screen::Editor)
-    .insert_resource(ClearColor(crate::chrome::VOID))
+    .insert_resource(ClearColor(crate::chrome::ink().void))
     // The same knob the binary sets, by the same name — a literal here would be the second
     // definition the constant exists to prevent, and headless is where a drift goes unseen.
     .insert_resource(UiScale(crate::chrome::EDITOR_UI_SCALE));

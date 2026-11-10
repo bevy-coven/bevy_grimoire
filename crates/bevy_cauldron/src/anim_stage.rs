@@ -21,7 +21,7 @@ use bevy::ui_widgets::Activate;
 use bevy_grimoire_core::rigs::Playback;
 
 use crate::anim_tab::BenchState;
-use crate::chrome::{DIM, ROW_BG, ROW_SELECTED};
+
 use crate::tiles::Mode;
 
 /// The bench's staging corner — the third one.
@@ -185,7 +185,7 @@ pub(crate) fn create_ghost_material(
 ) {
     let Some(mut mats) = mats else { return };
     let handle = mats.add(StandardMaterial {
-        base_color: crate::chrome::ACCENT.with_alpha(0.35),
+        base_color: crate::chrome::ink().accent.with_alpha(0.35),
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
@@ -708,14 +708,14 @@ pub(crate) fn refresh_scrub_ui(
             Some(s) => s == chip.0,
             None => scrub.mixed.contains(&chip.0),
         };
-        let want = if lit { ROW_SELECTED } else { ROW_BG };
+        let want = if lit { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg };
         if rest.0 != want {
             rest.0 = want;
         }
     }
     let ghost_on = ab.is_some_and(|a| a.0);
     for mut rest in &mut ghost_chips {
-        let want = if ghost_on { ROW_SELECTED } else { ROW_BG };
+        let want = if ghost_on { crate::chrome::ink().row_selected } else { crate::chrome::ink().row_bg };
         if rest.0 != want {
             rest.0 = want;
         }
@@ -766,7 +766,7 @@ pub(crate) fn spawn_chips(
                 &format!("{i} {label}"),
                 crate::chrome::text::CONTROL,
                 ink.read,
-                ROW_BG,
+                crate::chrome::ink().row_bg,
                 Color::NONE,
             );
         }
@@ -786,7 +786,7 @@ pub(crate) fn spawn_chips(
                 "ghost (G): play the measured values over the declared",
                 crate::chrome::text::CONTROL,
                 ink.read,
-                ROW_BG,
+                crate::chrome::ink().row_bg,
                 Color::NONE,
             );
         });
@@ -798,7 +798,7 @@ pub(crate) fn spawn_chips(
     ));
     p.spawn((
         Text::new(String::new()),
-        TextColor(DIM),
+        TextColor(crate::chrome::ink().dim),
         crate::chrome::font(crate::chrome::text::HINT),
         ScrubLine,
     ));

@@ -14,7 +14,7 @@
 //!
 //! **Why a count and not "no new names".** A rename is how a duplicate arrives: the audit in
 //! `chrome_census.rs`'s own header records one hover grey as an unnamed literal in two files and a
-//! hand-halved copy of `ACCENT`. A name-by-name list would not see "the same colour twice under two
+//! hand-halved copy of `Ink::accent`. A name-by-name list would not see "the same colour twice under two
 //! names", which is the failure this table has actually had. The count cannot see it either, but
 //! the *ceiling* means the second name has to displace the first.
 
@@ -43,8 +43,8 @@ fn colour_constants() -> Vec<String> {
     names
 }
 
-/// Uses of any of `names` outside `chrome.rs`, in `dir`. Whole-word only, so `DIM` does not count a
-/// `DIM_EDGE` and `TEXT` does not count `text::BODY`.
+/// Uses of any of `names` outside `chrome.rs`, in `dir`. Whole-word only, so `Ink::dim` does not count a
+/// `DIM_EDGE` and `Ink::text` does not count `text::BODY`.
 fn uses_outside_chrome(names: &[String], dir: &Path) -> usize {
     let mut total = 0;
     let mut files: Vec<_> = std::fs::read_dir(dir)
@@ -110,43 +110,60 @@ fn uses_outside_chrome(names: &[String], dir: &Path) -> usize {
 ///
 /// The rest of the drop is a **bug in this scan**, found by pass 375. It accepted any non-alphanumeric
 /// left boundary, so `crate::chrome::text::LABEL` — a *font size* role that happens to share a name with
-/// the colour `LABEL` — counted as paint: 46 such uses across `src/`, and the ceiling read 518 when the
+/// the colour `Ink::label` — counted as paint: 46 such uses across `src/`, and the ceiling read 518 when the
 /// real number was 403. `:` is now excluded on the left, and the ceiling is set to what the scan
 /// actually measures. A count is only worth having if it counts the thing it names.
-const CONSTANTS_CEILING: usize = 28;
-const PRODUCT_USES_CEILING: usize = 403;
-const TEST_USES_CEILING: usize = 287;
+/// **The ratchet reached zero (UI-02, #210, 2026-11-10), which is what it was for.**
+///
+/// The three legs below were a ceiling on a table that was being emptied. It is empty now: the 28
+/// constants are `chrome::Ink`, read from `src/editor_skin.yaml`, and `tests/no_colour_lives_in_chrome.rs`
+/// is the check that keeps it that way — it asserts the scan finds *nothing*, which is the same rule
+/// with no ceiling left to lower. These three stay at 0 as the second statement of it, so a constant
+/// reintroduced here fails both tests rather than one.
+const CONSTANTS_CEILING: usize = 0;
+const PRODUCT_USES_CEILING: usize = 0;
+const TEST_USES_CEILING: usize = 0;
 
 #[test]
 fn the_colour_table_only_shrinks() {
     let names = colour_constants();
+    // **The scan is still reading the file.** With the table at zero an empty answer is the expected
+    // one, so "found nothing" no longer tells a migration from a scanner that stopped opening
+    // `chrome.rs` — a metric that must still exist is what says the file was read.
+    let src = std::fs::read_to_string(src_dir().join("chrome.rs"))
+        .unwrap_or_else(|e| panic!("cannot read chrome.rs: {e}"));
     assert!(
-        !names.is_empty(),
-        "no colour constants found in chrome.rs — the scan is broken, so this test proves nothing"
+        src.contains("pub const EDGE_W: f32"),
+        "chrome.rs is where this crate's furniture lives, and the scan found it empty — the scan is \
+         broken, so this test proves nothing"
     );
     let product = uses_outside_chrome(&names, &src_dir());
     let tests = uses_outside_chrome(&names, &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests"));
 
     // The three numbers travel together in the message, so a slice that migrates one call site sees
     // all three and knows which ceiling it moved.
-    assert!(
-        names.len() <= CONSTANTS_CEILING,
-        "chrome.rs declares {} colour constants, ceiling {CONSTANTS_CEILING}. #210's acceptance is \
-         zero; a slice lowers the ceiling, it does not add a colour. If a *new* colour is genuinely \
-         needed, it belongs in `editor_skin.yaml` (a `tones` entry) or a `GooeySkin` field — not as a \
-         second constant beside the table it is being migrated out of.",
+    // **The three checks are equalities now, and they still fail for the thing they were written
+    // for.** A ceiling of 0 read as `names.len() <= 0`, which the compiler rejects as a comparison
+    // against a type's minimum — and it was right to: a bound that can only be met one way is a
+    // bound with nothing left to say. Stated as "none", each one is still the check that a colour
+    // constant coming back fails, and a use of one coming back with it.
+    assert_eq!(
+        names.len(),
+        CONSTANTS_CEILING,
+        "chrome.rs declares {} colour constant(s): {names:?}. #210's acceptance is zero. If a *new* \
+         colour is genuinely needed, it belongs in `editor_skin.yaml` (a `tones` entry) or a \
+         `GooeySkin` field — not as a second constant beside the palette the chrome paints from.",
         names.len()
     );
-    assert!(
-        product <= PRODUCT_USES_CEILING,
-        "src/ uses the colour table {product} times, ceiling {PRODUCT_USES_CEILING}. A slice that \
-         migrates call sites lowers this number; this failing means a call site was added rather \
-         than moved onto `GooeySkin` / `RowFills` / the skin's tones."
+    assert_eq!(
+        product, PRODUCT_USES_CEILING,
+        "src/ uses the colour table {product} times. A call site added rather than moved onto \
+         `chrome::Ink` / `RowFills` / the skin's tones shows here."
     );
-    assert!(
-        tests <= TEST_USES_CEILING,
-        "tests/ uses the colour table {tests} times, ceiling {TEST_USES_CEILING}. The protected tests \
-         pin the constants to the skin on purpose, so this number only falls when a test moves to \
-         reading the skin directly — never by deleting an assertion."
+    assert_eq!(
+        tests, TEST_USES_CEILING,
+        "tests/ uses the colour table {tests} times. A test that pins a *skin* still passes — the \
+         ink is the skin — so this number only rises for a test that reached back into a table \
+         that no longer exists."
     );
 }

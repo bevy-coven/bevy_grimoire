@@ -147,6 +147,10 @@ fn the_overlay_colours_come_from_the_skin() {
 
 /// **The editor's own skin draws the overlay the colours it always did**, so this changes where the
 /// colours come from and not what a person sees today.
+///
+/// **Exact, not approximate.** The skin states its two overlay tones in `LinearRgba` — the only tones in
+/// `src/editor_skin.yaml` that are linear — because `light_overlay::SHIPPED` is linear, so the two are
+/// the same numbers in the same space and a change to either fails here on the value itself.
 #[test]
 fn the_editor_skin_draws_the_shipped_overlay() {
     let ink = LightOverlayInk::of(Some(&bevy_cauldron::ui::editor_skin()));
@@ -215,4 +219,35 @@ fn the_rows_tick_follows_the_overlay_from_either_door() {
     app.update();
     assert!(!app.world().resource::<LightOverlay>().on, "the button hid it again");
     assert!(!ticked(&mut app, row), "and the tick is cleared");
+}
+
+/// **The map's grid and the seating lattice are coloured by the running skin** (UI-80, #254).
+///
+/// Both used to read `chrome::ink().grid_line` whatever skin was running, so the two lattices an author
+/// reads the map by were the one overlay a theme could not reach. `chrome::grid_ink` is the one
+/// expression both grids draw through — a function rather than a line inside a `Gizmos` call because a
+/// headless app renders no gizmos, so this is the only place the colour can be asked about.
+///
+/// The three claims: the shipped tone where a skin carries none (so the editor's look is unchanged by
+/// construction), the skin's own `grid_line` where it names one, and the editor's own skin answering
+/// the shipped tone — which is what makes "a theme or a project moves it" true of the editor's grid and
+/// not only of a hand-made skin.
+#[test]
+fn the_grid_is_drawn_in_the_running_skins_ink() {
+    use bevy_cauldron::chrome;
+
+    assert_eq!(
+        chrome::grid_ink(None),
+        chrome::ink().grid_line,
+        "with no skin, the shipped tone — a harness's answer"
+    );
+    let mut skin = bevy_cauldron::ui::editor_skin();
+    assert_eq!(
+        chrome::grid_ink(Some(&skin)),
+        chrome::ink().grid_line,
+        "the editor's own skin carries the shipped tone, so its grid does not move"
+    );
+    let moved = Color::srgb(0.20, 0.90, 0.40);
+    skin.tones.insert("grid_line".to_owned(), moved);
+    assert_eq!(chrome::grid_ink(Some(&skin)), moved, "a skin that names `grid_line` moves the lattice");
 }

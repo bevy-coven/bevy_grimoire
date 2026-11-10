@@ -2,7 +2,7 @@
 //!
 //! A card's folder, a map's size and a kit's piece count are *quiet* lines: the words under a name. They were a `chrome.rs` constant, so
 //! a project's skin file could not reach the first screen anyone sees. [`launcher::quiet_ink`] reads the skin's `text_muted` and keeps
-//! the shipped palette's `LABEL` as the answer for a harness with no skin, which is why every test that reads the colour of one still
+//! the shipped palette's `Ink::label` as the answer for a harness with no skin, which is why every test that reads the colour of one still
 //! reads the colour it always read.
 
 use bevy::prelude::*;
@@ -23,8 +23,8 @@ fn a_skin_of_its_own() -> GooeySkin {
 fn a_quiet_line_is_the_skins_muted_ink_and_the_shipped_palettes_with_no_skin() {
     let skin = a_skin_of_its_own();
     assert_eq!(launcher::quiet_ink(Some(&skin)), skin.text_muted, "a quiet line is the skin's `text_muted`");
-    assert_ne!(launcher::quiet_ink(Some(&skin)), chrome::LABEL, "and the skin's, not the palette's, is what it draws");
-    assert_eq!(launcher::quiet_ink(None), chrome::LABEL, "with no skin it is the shipped palette, so tests written before the seam read the colour they always read");
+    assert_ne!(launcher::quiet_ink(Some(&skin)), chrome::ink().label, "and the skin's, not the palette's, is what it draws");
+    assert_eq!(launcher::quiet_ink(None), chrome::ink().label, "with no skin it is the shipped palette, so tests written before the seam read the colour they always read");
 }
 
 /// **On the page itself**: every quiet line of a drawn project page is in the skin's ink, including the ones a later skin change reaches.

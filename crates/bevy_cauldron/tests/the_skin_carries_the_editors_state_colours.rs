@@ -33,17 +33,17 @@ fn skin() -> bevy_gooey::GooeySkin {
 fn every_interaction_state_role_carries_the_editors_own_colour() {
     let skin = skin();
     let got = [
-        ("hover", skin.hover, chrome::ROW_HOVER),
-        ("pressed", skin.pressed, chrome::ROW_PRESSED),
+        ("hover", skin.hover, chrome::ink().row_hover),
+        ("pressed", skin.pressed, chrome::ink().row_pressed),
         // `GROUND_HELD` and `WORLD_HELD` are *opacities* (0.55 and 0.25), not colours: a held ground
         // fades its fill and a held gizmo fades further. gooey's `held`/`held_ground` are the colours
         // those opacities are applied to, and `held_fade` is the one number — so the pair is checked by
         // `one_fade_serves_both_held_colours` below, against the two constants, rather than as colours.
-        ("held", skin.held, chrome::PANEL_BG),
-        ("held_ground", skin.held_ground, chrome::ACCENT),
-        ("unchecked", skin.unchecked, chrome::UNCHECKED),
-        ("card", skin.card, chrome::OVERLAY_BG),
-        ("preview_edge", skin.preview_edge, chrome::EDGE_STRONG),
+        ("held", skin.held, chrome::ink().panel_bg),
+        ("held_ground", skin.held_ground, chrome::ink().accent),
+        ("unchecked", skin.unchecked, chrome::ink().unchecked),
+        ("card", skin.card, chrome::ink().overlay_bg),
+        ("preview_edge", skin.preview_edge, chrome::ink().edge_strong),
     ];
     let mut missing = Vec::new();
     let mut wrong = Vec::new();

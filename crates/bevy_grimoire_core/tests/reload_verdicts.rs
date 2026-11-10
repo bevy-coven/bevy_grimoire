@@ -279,10 +279,13 @@ const UNCHECKED: &[&str] = &[
     // A JSON Schema is generated on write and read by an outside editor's extension; this crate's own
     // reader never opens one, so there is nothing here to check it against.
     "schema",
+    // A script is Rhai, not RON: this crate has no Rhai parser, and the host that does compile one names the
+    // file and the line itself (GD-06's own tests).
+    "scripts_rhai",
 ];
 
 /// **A literal, not `UNCHECKED.len()`**: a number that is its own measure can never fail.
-const UNCHECKED_MAX: usize = 11;
+const UNCHECKED_MAX: usize = 12;
 
 #[test]
 fn the_unchecked_list_only_shrinks() {

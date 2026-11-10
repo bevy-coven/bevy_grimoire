@@ -62,13 +62,34 @@ pub struct Transitioned {
     pub on: String,
 }
 
-/// **Step every machine a signal moves**, once per signal, and only along a transition its own state carries.
+/// **One name per signal in a frame**, in first-seen order: the shape every consumer reads.
+///
+/// Order is kept rather than sorted, because two *different* signals in one frame are still two things that happened
+/// and the machine steps twice for them — it is the second copy of one name that is not a second event.
+pub(crate) fn deduped(names: impl Iterator<Item = String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for name in names {
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
+/// **Step every machine a signal moves**, once per signal name, and only along a transition its own state carries.
+///
+/// **Repeats are dropped here, not only at the producer.** Pass 183 made one volume write one signal per frame, so a
+/// switch and a machine agreed about a *crossing*; it left two **producers** free to name one signal in one frame — a
+/// tripwire and a bell, say — and the switch would flip once (it dedupes with `contains`) while the machine stepped
+/// twice. A signal is a name something happened, so the same name twice in a frame is one thing happening: the
+/// consumer is where the two must agree, because a game's own code and a `Countdown` write this message too, and
+/// neither can know what the other wrote.
 pub(crate) fn steps(
     mut signals: MessageReader<super::Signal>,
     mut machines: Query<(Entity, &mut StateMachine)>,
     mut out: MessageWriter<Transitioned>,
 ) {
-    let pressed: Vec<String> = signals.read().map(|signal| signal.name.clone()).collect();
+    let pressed: Vec<String> = deduped(signals.read().map(|signal| signal.name.clone()));
     if pressed.is_empty() {
         return;
     }

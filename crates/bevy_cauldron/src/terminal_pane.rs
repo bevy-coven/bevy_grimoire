@@ -617,8 +617,8 @@ fn build_the_pane(
                 display: if terminal.is_collapsed() { Display::None } else { Display::Flex },
                 ..default()
             },
-            BackgroundColor(chrome::PANEL_BG),
-            BorderColor::all(chrome::PANEL_EDGE),
+            BackgroundColor(chrome::ink().panel_bg),
+            BorderColor::all(chrome::ink().panel_edge),
             // **`Pickable::default()`, not `IGNORE`.** The body has to be clickable to take the
             // keyboard and draggable to select — and `IGNORE` skips an entity *and everything below
             // it*, the trap `chrome::spawn_frame` records for the shell split's divider.
@@ -636,7 +636,7 @@ fn build_the_pane(
                 flex_shrink: 0.0,
                 ..default()
             },
-            BackgroundColor(chrome::PANEL_EDGE),
+            BackgroundColor(chrome::ink().panel_edge),
             TerminalGrip,
             Pickable::default(),
             Name::new("terminal grip"),
@@ -655,7 +655,7 @@ fn build_the_pane(
                 flex_shrink: 0.0,
                 ..default()
             },
-            BackgroundColor(chrome::BAR_BG),
+            BackgroundColor(chrome::ink().bar_bg),
             TerminalBar,
             Pickable::default(),
             Name::new("terminal bar"),
@@ -681,7 +681,7 @@ fn build_the_pane(
                 ),
                 ..default()
             },
-            BackgroundColor(chrome::PANEL_BG),
+            BackgroundColor(chrome::ink().panel_bg),
             TerminalBody,
             // **A right-click offers the three things a terminal's clipboard needs.** A shell with no
             // way to copy its output is a toy; gooey's `context_menu` is the editor's one menu
@@ -714,8 +714,8 @@ fn build_the_pane(
                 height: Val::Px(crate::terminal_view::TERMINAL_CELL_H),
                 ..default()
             },
-            BackgroundColor(chrome::ACCENT),
-            BorderColor::all(chrome::ACCENT),
+            BackgroundColor(chrome::ink().accent),
+            BorderColor::all(chrome::ink().accent),
             // **Above the rows, its siblings** (#320): a block caret is a tint over its cell with the
             // cell's character drawn on it, in that cell's own ink ([`TerminalCaretGlyph`]), so the
             // letter stays crisp through the tint rather than being dimmed by it.
@@ -725,7 +725,7 @@ fn build_the_pane(
             Name::new("terminal caret"),
             children![(
                 Text::new(String::new()),
-                TextColor(chrome::TEXT),
+                TextColor(chrome::ink().text),
                 TextLayout::no_wrap(),
                 crate::terminal_view::terminal_font(1.0),
                 TerminalCaretGlyph,
@@ -872,8 +872,8 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 &label,
                 chrome::text::CONTROL,
                 ink,
-                chrome::BAR_BG,
-                chrome::PANEL_EDGE,
+                chrome::ink().bar_bg,
+                chrome::ink().panel_edge,
             )
             .insert(bevy_gooey::Tooltip::new(TIP_AGENT_STATUS));
         }
@@ -883,8 +883,8 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
         // and `chrome_census::a_clickable_is_one_of_the_three_shapes` fails the build on exactly that.
         for (index, tab) in terminal.tabs().iter().enumerate() {
             let active = index == terminal.active();
-            let ink = if active { chrome::ACCENT } else { chrome::TEXT };
-            let fill = if active { chrome::ROW_SELECTED } else { chrome::BAR_BG };
+            let ink = if active { chrome::ink().accent } else { chrome::ink().text };
+            let fill = if active { chrome::ink().row_selected } else { chrome::ink().bar_bg };
             let kind = if tab.agent().is_some() { "agent" } else { "shell" };
             chrome::chip(
                 bar,
@@ -893,7 +893,7 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 chrome::text::CONTROL,
                 ink,
                 fill,
-                chrome::PANEL_EDGE,
+                chrome::ink().panel_edge,
             )
             .insert(bevy_gooey::Tooltip::new(format!("Show this {kind} session")));
         }
@@ -909,9 +909,9 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 TerminalCdChip,
                 &format!("Go to {folder}"),
                 chrome::text::CONTROL,
-                chrome::ACCENT,
-                chrome::BAR_BG,
-                chrome::PANEL_EDGE,
+                chrome::ink().accent,
+                chrome::ink().bar_bg,
+                chrome::ink().panel_edge,
             )
             .insert(bevy_gooey::Tooltip::new(format!(
                 "Move this shell into the open project: types cd {} for you",
@@ -924,9 +924,9 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
                 TerminalAgentChip,
                 "Agent",
                 chrome::text::CONTROL,
-                chrome::ACCENT,
-                chrome::BAR_BG,
-                chrome::PANEL_EDGE,
+                chrome::ink().accent,
+                chrome::ink().bar_bg,
+                chrome::ink().panel_edge,
             )
             .insert(bevy_gooey::Tooltip::new(format!("Start another agent session in {folder}")));
         }
@@ -935,9 +935,9 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             TerminalNewTab,
             "+",
             chrome::text::CONTROL,
-            chrome::TEXT,
-            chrome::BAR_BG,
-            chrome::PANEL_EDGE,
+            chrome::ink().text,
+            chrome::ink().bar_bg,
+            chrome::ink().panel_edge,
         )
         .insert(bevy_gooey::Tooltip::new(format!("Open a new shell in {folder}")));
         chrome::chip(
@@ -945,9 +945,9 @@ fn fill_the_bar(commands: &mut Commands, bar: Entity, terminal: &Terminal) {
             TerminalCloseTab,
             "x",
             chrome::text::CONTROL,
-            chrome::DANGER,
-            chrome::BAR_BG,
-            chrome::PANEL_EDGE,
+            chrome::ink().danger,
+            chrome::ink().bar_bg,
+            chrome::ink().panel_edge,
         )
         .insert(bevy_gooey::Tooltip::new(TIP_CLOSE_TAB));
     });
@@ -1105,8 +1105,8 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
                 border: UiRect::all(Val::Px(chrome::EDGE_W)),
                 ..default()
             },
-            BackgroundColor(chrome::BAR_BG),
-            BorderColor::all(chrome::PANEL_EDGE),
+            BackgroundColor(chrome::ink().bar_bg),
+            BorderColor::all(chrome::ink().panel_edge),
             // Above the rows and the caret, which are its siblings.
             ZIndex(2),
             TerminalFindFrame,
@@ -1121,7 +1121,7 @@ fn spawn_the_find_box(commands: &mut Commands, body: Entity) {
                 ),
                 (
                     Text::new(String::new()),
-                    TextColor(chrome::MUTED),
+                    TextColor(chrome::ink().muted),
                     TextLayout::no_wrap(),
                     chrome::font(chrome::text::LABEL),
                     TerminalFindCount,
@@ -1150,8 +1150,8 @@ fn spawn_the_agent_card(commands: &mut Commands, body: Entity, post: &crate::ter
     let card = commands
         .spawn((
             agent_card_node(),
-            BackgroundColor(chrome::BAR_BG),
-            BorderColor::all(chrome::PANEL_EDGE),
+            BackgroundColor(chrome::ink().bar_bg),
+            BorderColor::all(chrome::ink().panel_edge),
             // Above the rows and the caret, which are its siblings.
             ZIndex(2),
             TerminalAgentCard,
@@ -1201,9 +1201,9 @@ fn spawn_the_invitation(commands: &mut Commands, body: Entity) {
                 TerminalInvokeButton,
                 "Invoke Agent",
                 chrome::text::CONTROL,
-                chrome::ACCENT,
-                chrome::BAR_BG,
-                chrome::PANEL_EDGE,
+                chrome::ink().accent,
+                chrome::ink().bar_bg,
+                chrome::ink().panel_edge,
             );
         })
         .id();

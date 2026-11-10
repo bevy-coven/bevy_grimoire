@@ -14,6 +14,7 @@
 //! **Tests now share a process**, with tests from other files running beside them: a scratch path
 //! must be unique to its test (its name and `std::process::id()`), never a fixed name.
 
+mod a_project_skin_previews_only_in_the_panel;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
 mod fixtures;
 
@@ -291,6 +292,7 @@ mod light_pool;
 mod light_view;
 mod live_writes_each_change_through;
 mod navigation;
+mod no_colour_lives_in_chrome;
 mod no_internal_words_on_screen;
 mod no_observer_hides_a_resource_in_a_bundle;
 mod no_system_writes_every_frame;
@@ -377,6 +379,7 @@ mod the_picker_says_when_there_is_no_chooser;
 mod the_shortcut_overlay_answers_to_k;
 mod the_shell_can_be_staged_on_every_panel;
 mod the_shell_is_a_gooey_dock;
+mod the_theme_reaches_the_editors_own_labels;
 mod the_viewport_keeps_the_arrow_keys;
 mod the_status_band_counts_the_set_in_hand;
 mod the_status_band_says_when_a_file_needs_attention;

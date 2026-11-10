@@ -102,11 +102,11 @@ fn what_is_typed_is_the_skins_ink() {
 #[test]
 fn with_no_skin_a_filter_box_is_the_shipped_palette() {
     let mut app = app_with(None);
-    assert_eq!(ground(&mut app), chrome::ROW_BG, "a box at rest is `ROW_BG`");
-    assert_eq!(ink_of(&mut app), chrome::DIM, "an empty box shows `DIM`");
+    assert_eq!(ground(&mut app), chrome::ink().row_bg, "a box at rest is `ROW_BG`");
+    assert_eq!(ink_of(&mut app), chrome::ink().dim, "an empty box shows `DIM`");
 
     app.world_mut().resource_mut::<Filters>().take_focus(Pane::Palette);
     app.update();
-    assert_eq!(ground(&mut app), chrome::FOCUS_BG, "a focused box is `FOCUS_BG`");
-    assert_eq!(ink_of(&mut app), chrome::ACCENT, "the caret is `ACCENT`");
+    assert_eq!(ground(&mut app), chrome::ink().focus_bg, "a focused box is `FOCUS_BG`");
+    assert_eq!(ink_of(&mut app), chrome::ink().accent, "the caret is `ACCENT`");
 }

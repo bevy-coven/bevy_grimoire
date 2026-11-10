@@ -30,7 +30,7 @@ use bevy::prelude::*;
 
 use bevy_grimoire_core::composition::{self, Band, Composition, Envelope};
 
-use crate::chrome::{ACCENT, DANGER, DIM, TEXT};
+
 use crate::keys::{self, Action};
 use crate::project::Project;
 use crate::tiles::{ComposeRoot, Mode};
@@ -153,7 +153,7 @@ pub struct ComposeState {
     /// neighbours change and the scales move.
     pub staged: Option<(usize, Vec<Composition>)>,
     /// What this tab has to say — see [`crate::chrome::Status`] for why a refusal and a receipt are
-    /// two slots rather than one string. This panel used to paint every message [`ACCENT`], so
+    /// two slots rather than one string. This panel used to paint every message `Ink::accent`, so
     /// `cannot record` and `recorded 3 member(s)` were the same colour and the first was gone as soon
     /// as anything else happened.
     pub status: crate::chrome::Status,
@@ -627,7 +627,7 @@ fn spawn_compose_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
         p.spawn((
             ComposeReceipt,
             Text::new(""),
-            TextColor(ACCENT),
+            TextColor(crate::chrome::ink().accent),
             crate::chrome::font(crate::chrome::text::LABEL),
         ));
     });
@@ -1527,10 +1527,16 @@ pub struct StagedCarousel(pub Carousel);
 
 /// The envelope of a group that is not the focal one.
 ///
-/// [`ACCENT`] at half luminance: the same hue, so a reader sees one kind of thing at two weights,
+/// `Ink::accent` at half luminance: the same hue, so a reader sees one kind of thing at two weights,
 /// rather than a second colour to learn. **Derived, not transcribed** — this was a hand-halved
-/// copy of `ACCENT`'s channels, which a change to `ACCENT` would have silently desynchronised.
-const ENVELOPE_IDLE: Color = crate::chrome::scaled(crate::chrome::ACCENT, 0.5);
+/// copy of `Ink::accent`'s channels, which a change to `Ink::accent` would have silently desynchronised.
+fn envelope_idle() -> Color {
+    crate::chrome::scaled(crate::chrome::ink().accent, ENVELOPE_IDLE_SHARE)
+}
+
+/// How far an unselected group's envelope is dimmed off the accent: the same hue at half luminance,
+/// so a reader sees one kind of thing at two weights rather than a second colour to learn.
+const ENVELOPE_IDLE_SHARE: f32 = 0.5;
 
 /// One group's id, floating over its slot. Carries the slot's index into the carousel.
 #[derive(Component)]
@@ -1773,16 +1779,20 @@ fn restage_group(
 /// and nothing whatever in the viewport. A ring is about *a member's position*, which an anchored
 /// group has; only the envelope and the lattice need a declared size.
 ///
-/// The miniatures draw their boxes at [`ENVELOPE_IDLE`] so the strip reads as *claimed tiles* rather
-/// than floating meshes; only the focal group draws at full [`ACCENT`], and only it gets the lattice
+/// The miniatures draw their boxes at [`envelope_idle()`] so the strip reads as *claimed tiles* rather
+/// than floating meshes; only the focal group draws at full `Ink::accent`, and only it gets the lattice
 /// and the member ring, because those answer "what am I seating, and where" about one group.
 fn draw_stage(
     state: Res<ComposeState>,
     project: Res<Project>,
     carousel: Res<StagedCarousel>,
+    // **The running skin** (UI-80, #254): the seating lattice is the same grid the Map draws, so it
+    // reads the same `grid_line` tone rather than the editor's own constant.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut gizmos: Gizmos,
 ) {
     let step = bevy_grimoire_core::grid::SNAP;
+    let grid = crate::chrome::grid_ink(skin.as_deref());
     for slot in &carousel.0.slots {
         let Some(c) = project.compositions.compositions.get(slot.index) else {
             continue;
@@ -1795,7 +1805,7 @@ fn draw_stage(
             gizmos.cube(
                 Transform::from_translation(base + Vec3::new(0.0, size.1 * 0.5, 0.0))
                     .with_scale(Vec3::new(size.0, size.1, size.2)),
-                if focal { crate::chrome::ACCENT } else { ENVELOPE_IDLE },
+                if focal { crate::chrome::ink().accent } else { envelope_idle() },
             );
             if focal {
                 // The seating lattice on its floor — `grid::SNAP`, the same quantum `seated` steps by
@@ -1815,7 +1825,7 @@ fn draw_stage(
                         ),
                         UVec2::new(cells.0, cells.1),
                         Vec2::splat(step),
-                        crate::chrome::GRID_LINE,
+                        grid,
                     )
                     .outer_edges();
             }
@@ -1840,7 +1850,7 @@ fn draw_stage(
                     Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
                 ),
                 step * 0.75,
-                crate::chrome::ACCENT,
+                crate::chrome::ink().accent,
             );
         }
     }
@@ -2360,8 +2370,8 @@ struct ComposeInput<'w, 's> {
 
 /// **The composition panel's ink, from the editor's skin** (UI-02, #210).
 ///
-/// Three inks carry its prose: what is read (`TEXT`), the quieter count and hint lines (`DIM`),
-/// and the accent that marks the row being acted on. A refusal that is the budget's is `DANGER`.
+/// Three inks carry its prose: what is read (`Ink::text`), the quieter count and hint lines (`Ink::dim`),
+/// and the accent that marks the row being acted on. A refusal that is the budget's is `Ink::danger`.
 /// **Each falls back to its `chrome.rs` constant**, the seam `chrome::RowFills` established, so a
 /// harness with no skin draws the shipped palette and no protected test re-pins.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2380,7 +2390,7 @@ impl PanelInk {
     /// The skin's ink where it has one, the shipped constants where it does not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> PanelInk {
         let Some(skin) = skin else {
-            return PanelInk { read: TEXT, quiet: DIM, accent: ACCENT, danger: DANGER };
+            return PanelInk { read: crate::chrome::ink().text, quiet: crate::chrome::ink().dim, accent: crate::chrome::ink().accent, danger: crate::chrome::ink().danger };
         };
         PanelInk { read: skin.text, quiet: skin.text_muted, accent: skin.accent, danger: skin.danger }
     }

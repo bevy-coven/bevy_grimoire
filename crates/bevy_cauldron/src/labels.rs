@@ -2426,7 +2426,7 @@ mod tests {
     /// `Axis::Effects` was stamped `By::Model` unconditionally and `settle_implied_effects` runs
     /// after the stamps — writing the tokens [`settled_effects`] records the model is *deliberately
     /// never asked for*, because no render can show them. So a bed answering `effects: []` landed
-    /// with `["stamina-recharge"]` stamped `Model`, and the tag block drew that chip `UNCHECKED`:
+    /// with `["stamina-recharge"]` stamped `Model`, and the tag block drew that chip `Ink::unchecked`:
     /// *"a machine decided this and you have not"*, about a value no machine was asked about.
     #[test]
     fn an_effect_only_the_vocabulary_asked_for_is_credited_to_nobody() {

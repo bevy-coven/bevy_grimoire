@@ -58,7 +58,7 @@ impl Drawn {
 /// is lit, mixed between by the cell's own illuminance.
 ///
 /// The two colours are the skin's own named tones (`bevy_gooey`'s `GooeySkin::tones`), because no
-/// field of a skin means "this map is dark" — the same reason `SUGGEST` and `GRID_LINE` are tones. A
+/// field of a skin means "this map is dark" — the same reason `Ink::suggest` and `Ink::grid_line` are tones. A
 /// skin that carries neither falls back to the shipped pair, so the editor's own look is unchanged by
 /// construction: `tests/the_view_menu_toggles_the_overlays.rs` pins that the editor's skin draws
 /// exactly what the constants drew.

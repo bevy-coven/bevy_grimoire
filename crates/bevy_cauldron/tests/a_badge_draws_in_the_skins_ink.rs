@@ -43,11 +43,11 @@ fn a_badge_draws_in_the_skins_ink() {
 #[test]
 fn with_no_skin_a_badge_is_the_shipped_palette() {
     let ink = BadgeInk::of(None);
-    assert_eq!(ink, BadgeInk::SHIPPED);
-    assert_eq!(ink.panel, chrome::PANEL_BG);
-    assert_eq!(ink.key, chrome::KEY);
-    assert_eq!(ink.dim, chrome::DIM);
-    assert_eq!(ink.veil, chrome::VEIL);
+    assert_eq!(ink, BadgeInk::shipped());
+    assert_eq!(ink.panel, chrome::ink().panel_bg);
+    assert_eq!(ink.key, chrome::ink().key);
+    assert_eq!(ink.dim, chrome::ink().dim);
+    assert_eq!(ink.veil, chrome::ink().veil);
 }
 
 /// **The shipped palette and the editor's own skin are one palette**, which is the claim that lets a
@@ -57,8 +57,8 @@ fn with_no_skin_a_badge_is_the_shipped_palette() {
 #[test]
 fn the_editor_skin_draws_the_shipped_palette() {
     let ink = BadgeInk::of(Some(&bevy_cauldron::ui::editor_skin()));
-    assert_eq!(ink.panel, chrome::PANEL_BG, "the editor skin's `surface` is `PANEL_BG`");
-    assert_eq!(ink.key, chrome::KEY, "its `key` tone is `KEY`");
-    assert_eq!(ink.dim, chrome::DIM, "its `text_muted` is `DIM`");
-    assert_eq!(ink.veil, chrome::VEIL, "its `veil` tone is `VEIL`");
+    assert_eq!(ink.panel, chrome::ink().panel_bg, "the editor skin's `surface` is `PANEL_BG`");
+    assert_eq!(ink.key, chrome::ink().key, "its `key` tone is `KEY`");
+    assert_eq!(ink.dim, chrome::ink().dim, "its `text_muted` is `DIM`");
+    assert_eq!(ink.veil, chrome::ink().veil, "its `veil` tone is `VEIL`");
 }

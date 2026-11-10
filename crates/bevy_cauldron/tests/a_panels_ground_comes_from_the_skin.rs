@@ -28,7 +28,7 @@ fn a_panels_ground_is_the_skins_surface() {
         "the panel's fill must be the skin's `surface`, so a theme edit reaches every panel"
     );
     assert_eq!(
-        fills.panel, chrome::PANEL_BG,
+        fills.panel, chrome::ink().panel_bg,
         "and the shipped skin's surface is the constant this panel used to be built from — the edit \
          changes where the colour comes from, not which colour the editor looks like today"
     );
@@ -40,19 +40,19 @@ fn a_panels_ground_is_the_skins_surface() {
 #[test]
 fn with_no_skin_the_constant_still_paints() {
     let fills = chrome::PanelFills::of(None);
-    assert_eq!(fills.panel, chrome::PANEL_BG);
-    assert_eq!(fills.band, chrome::BAR_BG);
+    assert_eq!(fills.panel, chrome::ink().panel_bg);
+    assert_eq!(fills.band, chrome::ink().bar_bg);
 }
 
 /// **A theme edit changes the expression**, and this is the half that would have failed before: the
-/// value has to come *from the skin*, so a skin whose `surface` is not `PANEL_BG` must paint its own.
+/// value has to come *from the skin*, so a skin whose `surface` is not `Ink::panel_bg` must paint its own.
 #[test]
 fn a_skin_that_is_not_the_editors_paints_its_own_surface() {
     let mut skin = bevy_cauldron::ui::editor_skin();
     skin.surface = Color::srgb(0.2, 0.6, 0.95);
     let fills = chrome::PanelFills::of(Some(&skin));
     assert_eq!(fills.panel, Color::srgb(0.2, 0.6, 0.95));
-    assert_ne!(fills.panel, chrome::PANEL_BG);
+    assert_ne!(fills.panel, chrome::ink().panel_bg);
 }
 
 /// **The repaint reaches every panel, including one built before the edit** — which is the half the
@@ -60,7 +60,7 @@ fn a_skin_that_is_not_the_editors_paints_its_own_surface() {
 ///
 /// A panel is spawned while the shipped skin is running, then the skin is replaced with one whose
 /// `surface` is blue, then the system runs. A panel that read its fill only at spawn stays
-/// `PANEL_BG`; a panel whose ground is the skin's turns blue. That is exactly the difference between
+/// `Ink::panel_bg`; a panel whose ground is the skin's turns blue. That is exactly the difference between
 /// "the constant still exists" and "a theme edit reaches the UI".
 #[test]
 fn a_theme_edit_reaches_a_panel_that_was_already_built() {
@@ -74,27 +74,27 @@ fn a_theme_edit_reaches_a_panel_that_was_already_built() {
     let panel = app
         .world_mut()
         .spawn((
-            chrome::Ground(chrome::PANEL_BG),
+            chrome::Ground(chrome::ink().panel_bg),
             chrome::PanelGround,
-            BackgroundColor(chrome::PANEL_BG),
+            BackgroundColor(chrome::ink().panel_bg),
         ))
         .id();
     // A band is marked as a band, and follows the skin's `"bar_bg"` tone through the same system.
     let band = app
         .world_mut()
         .spawn((
-            chrome::Ground(chrome::BAR_BG),
+            chrome::Ground(chrome::ink().bar_bg),
             chrome::BandGround,
-            BackgroundColor(chrome::BAR_BG),
+            BackgroundColor(chrome::ink().bar_bg),
         ))
         .id();
     // A ground with neither marker — a row's, a field's — keeps its own colour.
     let plain = app
         .world_mut()
-        .spawn((chrome::Ground(chrome::SLOT_BG), BackgroundColor(chrome::SLOT_BG)))
+        .spawn((chrome::Ground(chrome::ink().slot_bg), BackgroundColor(chrome::ink().slot_bg)))
         .id();
     app.update();
-    assert_eq!(app.world().get::<BackgroundColor>(panel).unwrap().0, chrome::PANEL_BG);
+    assert_eq!(app.world().get::<BackgroundColor>(panel).unwrap().0, chrome::ink().panel_bg);
 
     // The edit: a project writes a skin with a blue surface while the panel already exists.
     let mut edited = bevy_cauldron::ui::editor_skin();
@@ -109,12 +109,12 @@ fn a_theme_edit_reaches_a_panel_that_was_already_built() {
     );
     assert_eq!(
         app.world().get::<BackgroundColor>(band).unwrap().0,
-        chrome::BAR_BG,
+        chrome::ink().bar_bg,
         "the shipped skin carries the band's colour as its `bar_bg` tone, so a band is unchanged today"
     );
     assert_eq!(
         app.world().get::<BackgroundColor>(plain).unwrap().0,
-        chrome::SLOT_BG,
+        chrome::ink().slot_bg,
         "a ground with no marker keeps its own colour through the same system"
     );
 }
@@ -137,9 +137,9 @@ fn a_projects_bar_tone_repaints_the_bands() {
     let band = app
         .world_mut()
         .spawn((
-            chrome::Ground(chrome::BAR_BG),
+            chrome::Ground(chrome::ink().bar_bg),
             chrome::BandGround,
-            BackgroundColor(chrome::BAR_BG),
+            BackgroundColor(chrome::ink().bar_bg),
         ))
         .id();
 

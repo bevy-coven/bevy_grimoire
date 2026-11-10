@@ -99,11 +99,11 @@ pub struct FollowRequest {
 /// disagree with the first about where a thing is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Manner {
-    /// A change that was applied — or an undo of one. The outline is [`crate::chrome::ACCENT`].
+    /// A change that was applied — or an undo of one. The outline is `chrome::ink().accent`.
     #[default]
     Applied,
     /// **A proposal**, followed before anything is written (AF-05, #361). The outline is
-    /// [`crate::chrome::SUGGEST`], the ink this editor already uses for what a model suggests, so the
+    /// `chrome::ink().suggest`, the ink this editor already uses for what a model suggests, so the
     /// preview reads as a proposal everywhere it is drawn.
     Preview,
 }
@@ -944,8 +944,8 @@ fn draw_the_follow_outline(
     // **A proposal is drawn in the proposal ink** (AF-05, #361): `SUGGEST` is what this editor already
     // paints what a model suggests, so a preview reads as a proposal everywhere it appears.
     let ink = match following.shown_manner() {
-        Manner::Applied => crate::chrome::ACCENT,
-        Manner::Preview => crate::chrome::SUGGEST,
+        Manner::Applied => crate::chrome::ink().accent,
+        Manner::Preview => crate::chrome::ink().suggest,
     };
     if following.outline.is_empty() && following.outline_box.is_none() {
         return;
@@ -1074,7 +1074,7 @@ fn draw_the_look_chip(
                 border_radius: BorderRadius::all(Val::Px(crate::chrome::RADIUS_ROW)),
                 ..default()
             },
-            BackgroundColor(crate::chrome::PANEL_BG),
+            BackgroundColor(crate::chrome::ink().panel_bg),
             GlobalZIndex(crate::chrome::COMPASS_Z),
             // **The chip's own text is not a target**; the button beside it is.
             bevy::picking::Pickable::IGNORE,
@@ -1082,7 +1082,7 @@ fn draw_the_look_chip(
         .with_children(|chip_node| {
             chip_node.spawn((
                 Text::new(sentence),
-                TextColor(crate::chrome::TEXT),
+                TextColor(crate::chrome::ink().text),
                 crate::chrome::font(crate::chrome::text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));

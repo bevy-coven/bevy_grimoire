@@ -231,14 +231,14 @@ pub fn toggle_the_familiar(
                 block.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|row| {
                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
                     row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
-                        crate::chrome::row_value(col, "", crate::chrome::TEXT, line);
+                        crate::chrome::row_value(col, "", crate::chrome::ink().text, line);
                     });
                 });
             }
             block.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::FlexStart, flex_shrink: 0.0, ..default() }).with_children(|row| {
                 crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, "PLAN");
                 row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() }).with_children(|col| {
-                    crate::chrome::row_value(col, "", crate::chrome::TEXT, FamiliarPlanLine);
+                    crate::chrome::row_value(col, "", crate::chrome::ink().text, FamiliarPlanLine);
                 });
             });
             block.spawn((toggle("Pause agent writes", pause.0), FamiliarSwitch, observe(toggle_the_pause)));
@@ -581,7 +581,7 @@ fn follow_the_hand_back(
                                     crate::chrome::row_label(row, crate::editor::READOUT_LABEL_W, name);
                                     row.spawn(Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_width: Val::Px(0.0), ..default() })
                                         .with_children(|col| {
-                                            crate::chrome::row_value(col, text, crate::chrome::TEXT, ());
+                                            crate::chrome::row_value(col, text, crate::chrome::ink().text, ());
                                         });
                                 });
                         }

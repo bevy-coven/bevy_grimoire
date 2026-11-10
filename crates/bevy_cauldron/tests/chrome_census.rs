@@ -2,7 +2,7 @@
 //!
 //! `chrome.rs`'s founding argument is that a fact stated more than once drifts, and the 2026-08-17
 //! audit measured how far this crate had drifted from it: one hover grey as an unnamed literal in
-//! two files, a hand-halved copy of `ACCENT`, three byte-transcribed chrome colours in the plot
+//! two files, a hand-halved copy of `Ink::accent`, three byte-transcribed chrome colours in the plot
 //! palette, and two font-size dialects for one role in one pane. FVS-R-19/20/21 swept all of that
 //! onto names; this is what keeps it swept — the same move `keys.rs` makes for bindings,
 //! `stages::distinct` for staging points, and `census_is_the_one_counter.rs` for counts: a rule
@@ -249,35 +249,52 @@ fn spacing_comes_from_the_scale() {
 
 // ── the ladder, measured ─────────────────────────────────────────────────────────────────────────
 
-/// A palette constant's sRGB triple, parsed out of `chrome.rs`.
+/// **The editor's palette, by the name that used to be a constant.**
+///
+/// It was parsed out of `chrome.rs`'s `pub const … : Color = Color::srgb(…)` lines. Those are gone
+/// (UI-02, #210): the palette is `chrome::Ink`, read from `src/editor_skin.yaml`. So the scan reads the
+/// ink instead — **the same colours, in the same names**, which is what lets every assertion below
+/// keep its `("VOID", "PANEL_BG")` pair and go on measuring the thing it was written to measure.
+///
+/// The names are the old constants' because the *contract* below is written in them: "a panel stands
+/// apart from the window behind it" is a fact about two roles, and the role is what the doc says. A
+/// rename here would make the contract read like a different rule.
 fn palette() -> std::collections::HashMap<String, [f32; 3]> {
-    let src = std::fs::read_to_string(src_dir().join("chrome.rs"))
-        .unwrap_or_else(|e| panic!("chrome.rs: {e}"));
-    let mut out = std::collections::HashMap::new();
-    for line in src.lines() {
-        let line = line.trim();
-        let Some(rest) = line.strip_prefix("pub const ") else {
-            continue;
-        };
-        let Some((name, value)) = rest.split_once(": Color = Color::srgb") else {
-            continue;
-        };
-        // `srgba` carries a fourth component; the ladder is opaque grounds only.
-        let Some(args) = value.strip_prefix('(').and_then(|v| v.split_once(')')).map(|(a, _)| a)
-        else {
-            continue;
-        };
-        let parts: Vec<f32> = args
-            .split(',')
-            .filter_map(|p| p.trim().parse::<f32>().ok())
-            .collect();
-        if let [r, g, b] = parts[..] {
-            out.insert(name.to_owned(), [r, g, b]);
-        }
-    }
+    let ink = bevy_cauldron::chrome::ink();
+    let triple = |c: bevy::prelude::Color| {
+        let c = bevy::color::Srgba::from(c);
+        [c.red, c.green, c.blue]
+    };
+    let named: [(&str, bevy::prelude::Color); 23] = [
+        ("VOID", ink.void),
+        ("PANEL_BG", ink.panel_bg),
+        ("HEADER_BG", ink.header_bg),
+        ("ROW_BG", ink.row_bg),
+        ("SLOT_BG", ink.slot_bg),
+        ("ROW_HOVER", ink.row_hover),
+        ("ROW_SELECTED", ink.row_selected),
+        ("ROW_PRESSED", ink.row_pressed),
+        ("PANEL_EDGE", ink.panel_edge),
+        ("EDGE_STRONG", ink.edge_strong),
+        ("OVERLAY_BG", ink.overlay_bg),
+        ("FOCUS_BG", ink.focus_bg),
+        ("BAR_BG", ink.bar_bg),
+        ("TEXT", ink.text),
+        ("DIM", ink.dim),
+        ("MUTED", ink.muted),
+        ("KEY", ink.key),
+        ("LABEL", ink.label),
+        ("ACCENT", ink.accent),
+        ("DANGER", ink.danger),
+        ("SUGGEST", ink.suggest),
+        ("UNCHECKED", ink.unchecked),
+        ("LABELED", ink.labeled),
+    ];
+    let out: std::collections::HashMap<String, [f32; 3]> =
+        named.into_iter().map(|(name, colour)| (name.to_owned(), triple(colour))).collect();
     assert!(
         out.len() > 15,
-        "the palette scan found only {} opaque colours — it has stopped reading chrome.rs, which \
+        "the palette scan found only {} colours — it has stopped reading `chrome::Ink`, which \
          would make every assertion below vacuous",
         out.len()
     );
@@ -325,8 +342,22 @@ fn ratio(a: [f32; 3], b: [f32; 3]) -> f32 {
 /// large flat field, which is what *"the layout overall is muddy as hell"* means in numbers.
 ///
 /// 2.5 is the floor, not the target; the shipped ladder's tightest adjacent pair is 2.95.
+///
+/// **It is also the library's rule now** (UI-02, #210). The ladder lives in the skin
+/// (`editor_skin.yaml`'s `surfaces`, lowest first), and `GooeySkin::problems()` checks every adjacent
+/// step at gooey's own [`ELEVATION_STEP`] — so the first thing this test asks is the library's
+/// verdict, and the pairs below are the ones gooey cannot know: a *recessed* ground (`Ink::focus_bg`,
+/// `Ink::row_pressed`) and a card above the scrim (`Ink::overlay_bg`) are not on the ladder, and a ladder
+/// check that cannot see them would stop measuring half of what this test was written for.
 #[test]
 fn the_ladder_is_a_ladder() {
+    // The library's own ladder check, on the skin the chrome paints from.
+    assert_eq!(
+        bevy_cauldron::ui::editor_skin().problems(),
+        vec![],
+        "the editor's skin must pass `GooeySkin::problems()`: the elevation ladder, the pressed-against-hovered \
+         step and every ink/ground pair are the library's to measure now"
+    );
     let p = palette();
     let get = |name: &str| {
         *p.get(name)
@@ -375,12 +406,12 @@ fn the_ladder_is_a_ladder() {
 /// **Every ink clears 4.5:1 on the grounds it actually renders on.**
 ///
 /// Named per ink rather than "every ink on every ground", because that is a rule this palette
-/// cannot satisfy and should not pretend to: `MUTED` means *an excluded pack*, it appears on a panel
+/// cannot satisfy and should not pretend to: `Ink::muted` means *an excluded pack*, it appears on a panel
 /// and on a group band, and requiring it to stay legible on a selected row would force it up to
-/// `LABEL`'s value and delete the distinction it exists to carry. The pairing is the decision; this
+/// `Ink::label`'s value and delete the distinction it exists to carry. The pairing is the decision; this
 /// test is the decision written down.
 ///
-/// The audit found three inks failing here, all of them small type — `LABEL` at 3.65:1 is the label
+/// The audit found three inks failing here, all of them small type — `Ink::label` at 3.65:1 is the label
 /// column of every label/value row in the editor, at 10 px, which wants *more* contrast than body
 /// text rather than less.
 #[test]

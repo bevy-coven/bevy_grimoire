@@ -63,6 +63,10 @@ const OWNED_ELSEWHERE: &[(&str, &str)] = &[
     ("family", "one file per family crate, in that crate's own serde type: the crate versions it"),
     ("trees", "a family crate's own species type: the crate versions it"),
     ("schema", "a JSON Schema generated from the type on every write: it is derived, so a version of it is the type's"),
+    // **A Rhai script's syntax is Rhai's**, not this workspace's: rhai 1.27 parses it, and a script is authored
+    // text rather than a record this project reads back. What a script may *touch* is versioned by the game's
+    // registry (GD-04), not by a header in the file.
+    ("scripts_rhai", "a script in the Rhai language: the crate that parses it owns its syntax, and the script has no header of its own"),
 ];
 
 /// **Versioned kinds that are a cache**: a file of another version is stale, never damaged, and the
