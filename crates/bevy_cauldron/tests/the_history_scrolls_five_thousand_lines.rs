@@ -298,23 +298,37 @@ fn three_placements(tag: &str) -> App {
     app
 }
 
-/// **A walk down the list with the keys reads it and does not jump** (UI-53, N4). gooey sends the same selection
-/// for an arrow, a Page key, Home, End or a type-ahead character that it sends for a click, and a jump for each of
-/// them would walk the map back a line at a time while a person read down the list.
+/// **A held arrow walks the list and does not jump** (UI-53, N4; manager N-M2). gooey sends the same selection change
+/// for an arrow, a Page key, Home, End, a type-ahead character, a pad's D-pad and a held key's auto-repeat that it sends
+/// for a click, and a jump for each of them would walk the map back a line at a time while a person read down the list.
+/// The arrow here has been down for a frame — `just_pressed` is clear, which is all a held key's repeats ever show —
+/// and the jump is taken from a click, which a key never makes.
 #[test]
-fn a_key_walk_down_the_list_does_not_jump() {
+fn a_held_arrow_walks_the_list_and_does_not_jump() {
     let mut app = three_placements("history_keywalk");
     let tree = history_tree(&mut app);
     app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ArrowUp);
+    app.update();
+    assert!(
+        app.world().resource::<ButtonInput<KeyCode>>().pressed(KeyCode::ArrowUp)
+            && app.world().resource::<ButtonInput<KeyCode>>().get_just_pressed().next().is_none(),
+        "the arrow is held and is no fresh press, as a repeat finds it"
+    );
     app.world_mut().trigger(bevy_gooey::ValueChange {
         source: tree,
         value: bevy_gooey::TableSelection::of(1),
         is_final: true,
     });
+    app.update();
     let state = app.world().resource::<EditorState>();
-    assert_eq!(state.undo_depth(), 3, "an arrow key's selection is a look, not a jump");
+    assert_eq!(state.undo_depth(), 3, "a held arrow's selection is a look, not a jump");
     assert_eq!(state.redo_depth(), 0, "nothing was undone");
     assert_eq!(app.world().resource::<OpenMap>().map.placements.len(), 4, "the map is as it was");
+    assert_eq!(
+        app.world().get::<bevy_gooey::TableSelection>(tree).cloned().unwrap_or_default(),
+        bevy_gooey::TableSelection::of(3),
+        "and the selected row is still the line the editor stands on"
+    );
 }
 
 /// **A jump that is refused leaves the selection on the line the editor stands on** (UI-53, N5): a row left lit
@@ -353,17 +367,19 @@ fn a_list_at_its_end_hands_the_wheel_to_the_inspector() {
     let mut app = rig("history_handoff");
     let (_, range) = inspector_scroll(&mut app);
     assert!(range > 0.0, "the inspector has somewhere to scroll, or this proves nothing: {range}");
-    // **Wheeled up over the list**: the list takes the notches it can use and carries itself to the top of the
-    // session, and the notches after that — it has nowhere left to go — are the inspector's.
+    // **Wheeled down over the list, which opens on the newest line**: the list has nowhere further to go, so its
+    // notches are the inspector's. (gooey's `ScrollArea` stopped every one of them at the list.)
     let (before, _) = inspector_scroll(&mut app);
-    assert!(before > 0.0, "the inspector rests below its top, so a notch up has somewhere to take it: {before}");
-    for _ in 0..8 {
-        wheel(&mut app, -WHEEL_TRAVEL_PX);
+    for _ in 0..4 {
+        wheel(&mut app, WHEEL_TRAVEL_PX);
     }
     let rows = rows_in_the_world(&mut app);
-    assert!(rows.iter().any(|(key, _)| *key == 0), "the list reached the top of the session first: {rows:?}");
+    assert!(
+        rows.iter().any(|(key, _)| *key as usize == HISTORY_LINES),
+        "the list is still at the end of the session, where it opened: {rows:?}"
+    );
     let (after, _) = inspector_scroll(&mut app);
-    assert!(after < before, "notches on a list resting at its top scrolled the inspector ({before} -> {after})");
+    assert!(after > before, "notches on a list resting at its end scrolled the inspector ({before} -> {after})");
 }
 
 /// **Scrolling 5,000 lines stays inside the UI frame budget** (UI-53, #259): the frames a wheel produces are

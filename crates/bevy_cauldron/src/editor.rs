@@ -2969,7 +2969,7 @@ impl Plugin for EditorPlugin {
                 // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
                 // gooey recycles its rows as the list scrolls, so a row can become the current line without
                 // `EditorState` changing at all — which is why this cannot be gated on the change flag.
-                (mark_the_current_line.after(bevy_gooey::GooeySystems::Style),),
+                (mark_the_current_line.after(bevy_gooey::GooeySystems::Style), hand_the_wheel_on),
             )
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went
@@ -2999,7 +2999,8 @@ impl Plugin for EditorPlugin {
             .add_observer(on_terrain_field_click)
             .add_observer(on_crowd_field_click)
             .add_observer(on_script_row_click)
-            .add_observer(on_notes_click);
+            .add_observer(on_notes_click)
+            .add_observer(history_row_clicked);
     }
 }
 
@@ -8175,9 +8176,9 @@ fn history_block(s: &mut ChildSpawnerCommands) {
         HistoryTree,
         HistoryBuilt::default(),
         bevy_gooey::TableRows(HISTORY_LIST_ROWS),
-        // **The selection, and the jump it causes**: `history_line_clicked` is on the list because every change
-        // gooey sends arrives from the table.
-        bevy_gooey::observe(history_line_clicked),
+        // **The selection stays on the line the editor stands on**, whoever moved it: a click jumps
+        // (`history_row_clicked`), and everything else gooey sends from the table is a look.
+        bevy_gooey::observe(history_selection_moved),
     ));
 }
 
@@ -8204,13 +8205,14 @@ fn history_nodes(state: &EditorState) -> Vec<bevy_gooey::TreeNode> {
         .collect()
 }
 
-/// What a history row needs to jump: the same resources the keyboard's undo system takes.
+/// What a history row needs to jump: the same resources the keyboard's undo system takes. The map's two are
+/// `Option`s because the click observer is global and a click can land where no map is open.
 #[derive(bevy::ecs::system::SystemParam)]
 struct HistoryJump<'w, 's> {
     commands: Commands<'w, 's>,
     assets: Res<'w, AssetServer>,
-    project: ResMut<'w, Project>,
-    open: ResMut<'w, OpenMap>,
+    project: Option<ResMut<'w, Project>>,
+    open: Option<ResMut<'w, OpenMap>>,
     state: ResMut<'w, EditorState>,
     placed: Query<'w, 's, (Entity, &'static Placement)>,
     /// **A drawn piece's own transform**, which is how the sweep tells a piece standing where the
@@ -8218,61 +8220,55 @@ struct HistoryJump<'w, 's> {
     transforms: Query<'w, 's, &'static Transform>,
 }
 
-/// **A click on a line of the history jumps there, as one group (E-018, UI-53).** gooey selects the row it was
-/// clicked on and sends the selection; the line the editor already stands on is the one the panel keeps
-/// selected, so a click there is the same selection and sends nothing.
+/// **A click on a line of the history jumps there, as one group (E-018, UI-53).** The jump is the *click's*: it
+/// reads the row the pointer clicked (`TableRow.key` is the line's position) and nothing gooey sends from the table.
 ///
-/// **A jump is a click, not a look** (N4). gooey sends this same change for its own keyboard walk — an arrow, a Page
-/// key, Home, End, a type-ahead character, `*` — and jumping for each of those would walk the map back a step at a
-/// time while a person merely read down the list. A key that moved the list was pressed this frame and a click has
-/// no key behind it, which is the whole difference between the two.
+/// **Not the selection change, which a key also makes** (N4, N-M2). gooey's own keyboard walk — an arrow, a Page key,
+/// Home, End, a type-ahead character, `*`, a held key's auto-repeat, a pad's D-pad — sends the very same
+/// `ValueChange<TableSelection>` a click does, and jumping for each would walk the map back a line at a time while a
+/// person merely read down the list. A `PointerClick` has no keyboard form, so a jump taken from it cannot be one.
 ///
 /// Refused while the leaving question is up, as the undo chord is: a jump edits the map the question is asking
-/// about.
-fn history_line_clicked(
-    picked: On<bevy_gooey::ValueChange<bevy_gooey::TableSelection>>,
-    keys: Res<ButtonInput<KeyCode>>,
+/// about. A click on the line the editor already stands on is no jump either.
+fn history_row_clicked(
+    click: On<bevy::picking::events::PointerClick>,
+    rows: Query<&bevy_gooey::TableRow>,
+    trees: Query<(), With<HistoryTree>>,
     mut jump_to: HistoryJump,
-    mut commands: Commands,
 ) {
-    if keys.get_just_pressed().next().is_some() {
+    if click.button != bevy::picking::pointer::PointerButton::Primary {
         return;
     }
-    let depth = jump_to.state.undo_depth();
-    // **A jump that does not happen leaves the selection where it was** (N5). gooey moved it to the row that was
-    // clicked; a row left lit while the map did not move says the click happened and the history did not.
-    let put_it_back = |jump_to: &mut HistoryJump, commands: &mut Commands| {
-        commands
-            .entity(picked.source)
-            .insert(bevy_gooey::TableSelection::of(jump_to.state.undo_depth() as u64));
-    };
-    if jump_to.state.leaving {
-        put_it_back(&mut jump_to, &mut commands);
+    let Ok(row) = rows.get(click.entity) else { return };
+    if !trees.contains(row.table) {
         return;
     }
-    // **The last of them**, because the list is one line per position and a click on a row is one row.
-    let Some(position) = picked.value.0.iter().next_back().map(|key| *key as usize) else { return };
-    if position == depth {
-        // The line the editor stands on: nothing to do, and nothing to record.
+    let position = row.key as usize;
+    let HistoryJump { commands, assets, project, open, state, placed, transforms } = &mut jump_to;
+    let (Some(project), Some(open)) = (project.as_deref_mut(), open.as_deref_mut()) else { return };
+    if state.leaving || position == state.undo_depth() {
         return;
     }
-    {
-        let j = &mut jump_to;
-        jump(
-            &mut j.commands,
-            &j.assets,
-            &mut j.project,
-            &mut j.open,
-            &mut j.state,
-            &j.placed,
-            &j.transforms,
-            position,
-        );
-    }
-    // **A refused jump moves neither stack** (`jump` stops where it is and says so), so the row must not stay lit.
-    if jump_to.state.undo_depth() == depth {
-        put_it_back(&mut jump_to, &mut commands);
-    }
+    jump(commands, assets, project, open, state, placed, transforms, position);
+}
+
+/// **The history's selection is the line the editor stands on, and a selection that is not a click puts it back**
+/// (N5, N-M2).
+///
+/// gooey moves the selection to the row a key walked onto or a pointer clicked, and sends the change. A click that
+/// jumped has just made that row the current line, so there is nothing to undo; any other change — a key walk, or a
+/// click the jump refused — would leave a row lit that the map is not at, which says the click happened and the
+/// history did not. The answer is read when the command runs, after a jump has moved the stacks.
+fn history_selection_moved(picked: On<bevy_gooey::ValueChange<bevy_gooey::TableSelection>>, mut commands: Commands) {
+    let tree = picked.source;
+    commands.queue(move |world: &mut World| {
+        let Some(depth) = world.get_resource::<EditorState>().map(|state| state.undo_depth() as u64) else { return };
+        let want = bevy_gooey::TableSelection::of(depth);
+        let Ok(mut tree) = world.get_entity_mut(tree) else { return };
+        if tree.get::<bevy_gooey::TableSelection>() != Some(&want) {
+            tree.insert(want);
+        }
+    });
 }
 
 /// **The history list's lines (E-018, UI-53).** Runs on the same change as the UNDO and REDO rows: the tree's
@@ -8292,7 +8288,7 @@ fn refresh_history(
 ) {
     // **This system's cost, into the frame's total** (UI-93, #259). The guard writes on drop, so the early return below
     // and every path after it are measured without the body having to remember to.
-    let _spent = crate::ui_budget::measure(&mut budget);
+    let spent = crate::ui_budget::measure(&mut budget);
     let Ok((mark, tree)) = built.single() else { return };
     if !state.is_changed() && !open.is_changed() {
         return;
@@ -8302,6 +8298,9 @@ fn refresh_history(
     if mark.seen == Some((depth, redo)) {
         return;
     }
+    // **From here it is a rebuild of the history's nodes**, which the budget reports apart from a settled frame: 5,000
+    // labels are built on the frame a stack moves and never on one where nothing did.
+    let _rebuild = spent.rebuilding();
     let Ok(mut table) = tables.get_mut(tree) else { return };
     let Some(nodes) = table.source_mut::<bevy_gooey::Tree>() else { return };
     nodes.set_nodes(history_nodes(&state));
@@ -8440,6 +8439,7 @@ const LIST_WHEEL_MIN_MOVE_PX: f32 = 0.5;
 /// use moves it and stops there, and one it cannot — a list that fits its window, or one resting on the end the notch
 /// pushes toward — bubbles to the inspector, as a wheel over plain text does. Taken once: the marker is the missing
 /// `ScrollArea`.
+#[allow(clippy::type_complexity)]
 fn hand_the_wheel_on(
     lists: Query<Entity, (With<bevy_gooey::ListView>, With<bevy::ui_widgets::ScrollArea>)>,
     parents: Query<&ChildOf>,
