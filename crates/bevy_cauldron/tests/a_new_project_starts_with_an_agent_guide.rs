@@ -11,9 +11,8 @@
 //! grant fails it.
 //!
 //! **The store is left at its default.** A real editor's `trust.file` is `None`, which means the person's
-//! own `<data_dir>/Grimoire/trusted.ron` (`crate::trusted::store_path`); the test points `HOME` at a scratch
-//! folder through [`bevy_grimoire_core::user_dirs`]'s own resolution, so the grant lands in a store of the
-//! test's making and not the developer's.
+//! own `<data_dir>/Grimoire/trusted.ron` (`crate::trusted::resolve`); the test inserts a scratch
+//! `trusted::StoreRoot`, so the grant lands in a store of the test's making and not the developer's.
 //!
 //! **A project the wizard did not create gets no file.** Opening an existing game must write nothing into
 //! it; the project page's Create guide is how such a project gets one, and it calls the same writer.
