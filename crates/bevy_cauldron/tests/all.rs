@@ -387,6 +387,7 @@ mod the_toolbar_arms_a_tool_through_its_key;
 mod the_layout_score_counts_crossings;
 mod the_library_seed_is_a_selection;
 mod the_lists_words_come_from_the_skin;
+mod the_look_command_frames_the_change;
 mod the_map_opens_framed;
 mod the_meshes_pane_names_modules_that_do_not_nest;
 mod the_meshes_pane_names_the_standards_a_piece_breaks;

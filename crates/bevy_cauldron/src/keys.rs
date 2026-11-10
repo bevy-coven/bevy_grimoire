@@ -633,6 +633,21 @@ enumerated! {
     /// Frame the view: the locked placement when there is one, otherwise the whole map. Camera
     /// state, not a document change, so it has no operation.
     FrameView,
+    /// **Show what the agent changed, now** (AF-04, #360) — the third route to Look, beside the look
+    /// chip's button and the AGENT block's.
+    ///
+    /// The follow waits for a person who is using the view, and the chip disappears once the change
+    /// has been shown; this is the way back to it for someone who has the *follow* switched off and no
+    /// chip on screen, and the way an agent asks for it, because `grimoire/run_command` runs exactly
+    /// what this chord runs. It moves the camera and clears the follow's own clocks, and it writes
+    /// nothing: camera state, like [`Action::FrameView`], so it has no operation.
+    ///
+    /// **`Cmd+Shift+L`, and no tab owns it.** The issue's Decisions ask for a command with no default
+    /// chord, which this cannot be: a [`Binding`] is a key by construction, so the chord is chosen to
+    /// cost nothing a person has to learn — `L` is spoken for on the Map (the rule seed) and on Meshes
+    /// (the labeler), and no context has this chord. A person who wants it on a key of their own
+    /// rebinds it in the keymap screen, which is what the issue's "a person can bind it" means.
+    LookAtAgentChange,
     /// Arm the move tool: click a piece to pick it up, click again to put it down.
     MoveMode,
     RenameMap,
@@ -978,6 +993,7 @@ impl Action {
             | Action::TurnViewLeft
             | Action::TurnViewRight
             | Action::FrameView
+            | Action::LookAtAgentChange
             | Action::CycleCamPreset
             | Action::ToggleGhost
             | Action::PlayPause
@@ -1709,6 +1725,30 @@ pub const BINDINGS: &[Binding] = &[
         "frame the view",
     )
     .at(Home::Control(ControlId::Under)),
+    // **Look, and it costs the Map context one key rather than a new one to learn**: `Cmd+Shift+L`
+    // is bound in no context (`L` bare is the rule seed here and the labeler on Meshes; the modified
+    // and shifted form was free), and the verb is the same one the chip's button and the AGENT
+    // block's Look perform — all three call `Following::look_now`, so a click, a button and a chord
+    // cannot wait on different things (AF-04, #360).
+    //
+    // `Context::Map` because the camera it moves is the Map door's: an off-map change is opened by
+    // `reveal`, not framed. The issue's Decisions ask for a command a person can bind, and every
+    // command is a row in the keymap screen, so a person who wants this on another chord rebinds it.
+    bs(
+        Action::LookAtAgentChange,
+        KeyCode::KeyL,
+        true,
+        true,
+        Context::Map,
+        "L",
+        "look at the agent's change",
+    )
+    // **Its home is the pane that reports the change**, not the legend: `Detail` is the Map's status
+    // block, which is where the receipt naming what the Familiar did is drawn — the same pane every
+    // tab's readout verb lives on (`Cmd+C`, each tab's undo pair). The legend already carries the
+    // Map's eight, and `no_home_carries_more_than_it_can_show` is right that a ninth chord piled on
+    // that anchor is one nobody reads.
+    .at(Home::Control(ControlId::Detail)),
     // **`B` is the last free key under the left hand.** The cluster an author's hand already rests on
     // is `Q W E R T / A S D F G / Z X C V B`, and every other letter in it is spoken for — pan, turn
     // view, aim, aim-reset, turn-piece, fill, remove. `B` is bound in the Tiles tab too (`ScanMesh`),
@@ -3996,6 +4036,10 @@ mod tests {
             Action::ShowErrors,
             Action::Snip,
             Action::FrameView,
+            // Owner exception (2026-11-10): the hand-written action list follows the new row
+            // `Action::LookAtAgentChange`, which AF-04 (#360) adds. The assertion it feeds —
+            // `actions.len() == BINDINGS.len()` — is unchanged.
+            Action::LookAtAgentChange,
             Action::SetRule,
         ];
         assert_eq!(
@@ -4614,7 +4658,11 @@ mod tests {
             // agent an instruction about a place, which the parity test refuses by name once
             // `note_add` exists. `N` alone stays rename (now "Shift must be up"); the note shares the
             // Control anchor beside it, as the two verbs that name the map's own data.
-            (Context::Map, 32),
+            // 32 -> 33: `LookAtAgentChange`, on `Cmd+Shift+L` (AF-04, #360). The issue asks for a
+            // command a person can bind, and a `Binding` is a key by construction, so it costs this
+            // context one. Owner exception (2026-11-10): the count is re-pinned, and it is the only
+            // assertion moved — the ratchet's direction and everything it guards are unchanged.
+            (Context::Map, 33),
             // 31 -> 32: `ExcludePack`. The importer scans every `.glb` under `assets/`, which is
             // right for finding art and wrong for offering it — a labelling batch spent its tenth
             // call of 778 describing `characters/cipher_field`, a character rig that could not be

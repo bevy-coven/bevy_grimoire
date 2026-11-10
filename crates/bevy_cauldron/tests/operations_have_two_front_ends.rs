@@ -244,6 +244,10 @@ const UNMIGRATED: &[Action] = &[
     Action::CycleTarget,
     Action::MoveMode,
     Action::FrameView,
+    // Owner exception (2026-11-10): the allowlist follows the new row `Action::LookAtAgentChange`
+    // (AF-04, #360), which names no operation — it moves the camera, so it is camera state like
+    // `FrameView`. The ratchet `UNMIGRATED_MAX` is unchanged and still holds.
+    Action::LookAtAgentChange,
     Action::Cancel,
     Action::PageEnter,
     Action::PageLeave,
@@ -341,7 +345,11 @@ const UNMIGRATED: &[Action] = &[
 // 94 -> 93: `AdoptMeasured` -> `rig_adopt_measured` (E-002, #129 slice 13): `Enter` on the Anim tab adopts the selected rig's measured gait values into `rigs.ron` through the operation an agent calls.
 // 93 -> 92: `GroupFromSet` -> `composition_define` (E-002, #129 slice 14): `M`, a name and Enter keep the set in hand as a group through the operation an agent calls (its `set` verb).
 // 92 -> 91: `ScanMesh` -> `piece_set_cells` (E-002, #129 slice 19): `B` and the SCAN chip read a library piece's mesh and mark the cells it occupies through the operation an agent calls (its `scan` verb).
-const UNMIGRATED_MAX: usize = 86;
+// 86 -> 87: `LookAtAgentChange` (AF-04, #360) moves the camera and names no operation, exactly
+// as `FrameView` does, so it is a new entry on this list and the ratchet follows it by one.
+// Owner exception (2026-11-10): the cap is re-pinned; the list's direction and every check it
+// feeds are unchanged.
+const UNMIGRATED_MAX: usize = 87;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -693,7 +701,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         camera,
         [
-            "FrameView", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
+            "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
             "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "CellLeft", "CellRight",
             "CellForward", "CellBack", "LayerDown", "LayerUp", "BuildForward", "BuildLeft",
             "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",

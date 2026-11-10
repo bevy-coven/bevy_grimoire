@@ -225,6 +225,7 @@ pub fn identity(action: Action) -> (&'static str, &'static str) {
         Action::CopyInfo => ("edit.copy_tab_text", "Copy this tab's text"),
         Action::Cancel => ("edit.cancel", "Back out"),
         Action::FrameView => ("view.frame", "Frame the view"),
+        Action::LookAtAgentChange => ("view.look_at_agent_change", "Look at what the agent changed"),
         Action::PanForward => ("view.pan_forward", "Pan forward"),
         Action::PanLeft => ("view.pan_left", "Pan left"),
         Action::PanBack => ("view.pan_back", "Pan back"),
