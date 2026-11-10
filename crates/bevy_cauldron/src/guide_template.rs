@@ -22,7 +22,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy_grimoire_core::agent_guide::PROJECT_PATH;
-use bevy_grimoire_core::trust::{self, TrustStore};
+use bevy_grimoire_core::trust::TrustStore;
 
 /// **The template, compiled in**, so a build that has no assets directory still writes it. One file, and
 /// `include_str!` is what keeps the shape a person reads and the shape the test asserts the same text.
@@ -60,19 +60,22 @@ pub fn write_file(root: &Path) -> Result<PathBuf, String> {
 }
 
 /// **Write the template into `root` and grant it**, which is one act: a person who made the project has
-/// written this text, so it is allowed. The grant goes to `store` — the person's own trust file — and a
-/// store that cannot be read or written is an `Err` naming it, never a silent grant-less guide.
-pub fn write(root: &Path, store: &Path) -> Result<PathBuf, String> {
+/// written this text, so it is allowed. `store` is the **override**: `None` is the person's own
+/// `<data_dir>/Grimoire/trusted.ron` ([`crate::trusted::store_path`]), which is what a real editor has, and a
+/// test names a file of its own. A store that cannot be read or written is an `Err` naming it, never a
+/// silent grant-less guide.
+pub fn write(root: &Path, store_root: Option<&crate::trusted::StoreRoot>, store: Option<&Path>) -> Result<PathBuf, String> {
     let file = write_file(root)?;
-    grant(root, store)?;
+    grant(root, store_root, store)?;
     Ok(file)
 }
 
 /// **Grant the template as it stands in `root`**, for a caller that wrote the file already.
-pub fn grant(root: &Path, store: &Path) -> Result<(), String> {
-    let mut trusted = TrustStore::load(store)?;
-    trust::grant_guide(&mut trusted, root, TEMPLATE)?;
-    trusted.save(store)
+pub fn grant(root: &Path, store_root: Option<&crate::trusted::StoreRoot>, store: Option<&Path>) -> Result<(), String> {
+    let path = crate::trusted::resolve(store_root, store)?;
+    let mut trusted = TrustStore::load(&path)?;
+    trusted.trust_guide(root, TEMPLATE)?;
+    trusted.save(&path)
 }
 
 #[cfg(test)]
@@ -96,6 +99,23 @@ mod tests {
             );
             at = from;
         }
+    }
+
+    #[test]
+    fn a_grant_with_no_override_lands_in_the_store_root() {
+        let dir = std::env::temp_dir().join(format!("grimoire-guide-template-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let root = dir.join("project");
+        std::fs::create_dir_all(&root).expect("the project folder");
+        let store_root = crate::trusted::StoreRoot(dir.clone());
+        write(&root, Some(&store_root), None).expect("the guide and its grant");
+        let trusted = TrustStore::load(&dir.join(bevy_grimoire_core::trust::STORE_FILE)).expect("the store reads");
+        assert_eq!(
+            trusted.guide_decision(&root, TEMPLATE).expect("resolves"),
+            bevy_grimoire_core::trust::Decision::Trusted(bevy_grimoire_core::trust::Scope::Command),
+            "a `None` override is the store root, not \"no store\""
+        );
     }
 
     #[test]

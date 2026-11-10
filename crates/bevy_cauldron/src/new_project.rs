@@ -367,7 +367,7 @@ fn spawn_the_card(
                         // **Return presses it** from the name field (UI-R03, #333): a dialog with a text field names its main action.
                         bevy_gooey::DefaultButton,
                         CreateButton,
-                        observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, state: Option<ResMut<crate::editor::EditorState>>, mut out: MessageWriter<OpenMapRequest>| {
+                        observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, state: Option<ResMut<crate::editor::EditorState>>, store_root: Option<Res<crate::trusted::StoreRoot>>, mut out: MessageWriter<OpenMapRequest>| {
                             // Checked again here: a dimmed button can still be activated by a script.
                             match create(&form.0) {
                                 Ok(dir) => {
@@ -377,12 +377,14 @@ fn spawn_the_card(
                                     // store that will not take it is a problem the person is shown, and
                                     // the project still opens — the guide is simply withheld until the
                                     // project page can allow it.
-                                    let granted = match state.as_deref().and_then(|s| s.trust.file.as_deref()) {
-                                        Some(store) => crate::guide_template::grant(&dir, store),
-                                        None => Ok(()),
-                                    };
-                                    if let Err(e) = granted {
-                                        launcher.problem = Some(e);
+                                    // **The grant is part of making the project**, and its store is
+                                    // resolved here: `None` is the person's own `trusted.ron`
+                                    // (`crate::trusted::store_path`), so a real editor always writes one.
+                                    // There is no silent "no store, no grant" arm: a guide nobody allowed
+                                    // is the state this whole slice exists to prevent.
+                                    match crate::guide_template::grant(&dir, store_root.as_deref(), state.as_deref().and_then(|s| s.trust.file.as_deref())) {
+                                        Ok(()) => launcher.problem = None,
+                                        Err(e) => launcher.problem = Some(e),
                                     }
                                     launcher.new_project_done = true;
                                     out.write(OpenMapRequest(dir, FIRST_MAP.to_owned()));
