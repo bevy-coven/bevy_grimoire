@@ -2599,6 +2599,9 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::ui_budget::UiBudgetPlugin);
         app.add_plugins(crate::inspector_view::InspectorPlugin);
         app.add_plugins(crate::outliner::OutlinerPlugin);
+        // **The LIBRARY browser** (UI-52, #238): the same library as a grid of portraits, with its own
+        // search, a tag row and a card that carries its piece onto the map.
+        app.add_plugins(crate::library_browser::LibraryBrowserPlugin);
         app.add_plugins(crate::problems_view::ProblemsViewPlugin);
         app.add_plugins(crate::familiar::FamiliarPlugin);
         app.add_plugins(crate::shell_view::ShellViewPlugin);
