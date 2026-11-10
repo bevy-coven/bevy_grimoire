@@ -56,8 +56,20 @@ pub struct Triggered {
 /// A map rather than a component on the volume, because it is the volume's memory of *other* entities and
 /// it must be pruned when either one despawns: two components holding each other's entities is the shape
 /// that leaks.
+///
+/// **A pair this map has never seen is not a crossing.** A body standing in a doorway when the game starts is a
+/// *state*, not something that happened: the save put it there, nobody walked in. So the first look records where
+/// every body is and reports nothing, and only a pair whose `holds` changes afterwards is a crossing. Without that,
+/// a project reopening flipped the switch of every volume someone had been saved inside.
 #[derive(Resource, Default)]
-pub(crate) struct Inside(std::collections::BTreeMap<(Entity, Entity), bool>);
+pub(crate) struct Inside {
+    /// The volumes seen at least once, and the bodies each held. A volume absent here is being looked at for the
+    /// first time.
+    seen: std::collections::BTreeMap<(Entity, Entity), bool>,
+    /// **Whether this is a volume's first frame**, which is what makes its bodies a starting state rather than
+    /// crossings.
+    first: std::collections::BTreeSet<Entity>,
+}
 
 /// **Send a message for every body that entered or left a volume this frame**, and one signal for every volume
 /// a body entered.
@@ -77,7 +89,23 @@ pub(crate) fn crossings(
     // body respawned into the same index does not look like a body that was already inside.
     let here: std::collections::BTreeSet<Entity> =
         volumes.iter().map(|(volume, _, _)| volume).chain(bodies.iter().map(|(body, _, _)| body)).collect();
-    inside.0.retain(|(volume, body), _| here.contains(volume) && here.contains(body));
+    inside.seen.retain(|(volume, body), _| here.contains(volume) && here.contains(body));
+
+    // **A volume nobody has looked at yet starts from where its bodies are.** This is the whole of "a save that
+    // puts someone in a doorway does not press the switch": a pair the map has never held is recorded and nothing
+    // is reported, and only a pair whose `holds` changes afterwards is a crossing.
+    for (volume, trigger, at) in &volumes {
+        let first_look = !inside.first.contains(&volume);
+        inside.first.insert(volume);
+        if !first_look {
+            continue;
+        }
+        for (body, _, where_) in &bodies {
+            let holds = super::within(trigger.radius_m, at.translation(), where_.translation());
+            inside.seen.insert((volume, body), holds);
+        }
+    }
+    inside.first.retain(|volume| here.contains(volume));
 
     for (volume, trigger, at) in &volumes {
         // **`signalled` is per volume, not per body**: a signal is a name something happened, and a
@@ -88,7 +116,9 @@ pub(crate) fn crossings(
         let mut signalled = false;
         for (body, _, where_) in &bodies {
             let holds = super::within(trigger.radius_m, at.translation(), where_.translation());
-            let before = inside.0.insert((volume, body), holds).unwrap_or(false);
+            // **A pair with no record yet is a body this volume has never looked at** — one spawned after the
+            // volume's first frame — so its first look is a recording too, not an entry from nowhere.
+            let Some(before) = inside.seen.insert((volume, body), holds) else { continue };
             if holds == before {
                 continue;
             }

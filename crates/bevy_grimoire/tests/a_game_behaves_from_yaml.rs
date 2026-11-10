@@ -742,16 +742,26 @@ fn a_countdown_that_rings_writes_the_signal_its_machine_names() {
 
 /// **A `Trigger` or `Countdown` with no `signal` writes none**, so a file that forgot one does not fire an
 /// empty name that matches every other nameless part.
+///
+/// **The body walks in rather than starting inside** (#369): a body the save puts in a volume is a state, not a
+/// crossing, so it would report nothing — and this test is about the *signal*, which it must still prove by a
+/// crossing that really happened.
 #[test]
 fn a_volume_or_a_countdown_with_no_signal_name_writes_no_signal() {
     let root = project("behaviour_no_signal_name");
     write(
         &root,
-        "entities:\n  tripwire:\n    Trigger: { radius_m: 5.0 }\n  bell:\n    Countdown: { duration_s: 1.0 }\n  walker:\n    Body: {}\n",
+        &format!(
+            "entities:\n  tripwire:\n    Trigger: {{ radius_m: 5.0 }}\n  bell:\n    Countdown: {{ duration_s: 1.0 }}\n  walker:\n    Body: {{}}\n    Transform: {}\n",
+            at(10.0, 0.0, 0.0)
+        ),
     );
     let mut app = game(&root);
     frame(&mut app);
-    // The walker is at the origin, inside the volume, and the bell has rung.
+    // The walker walks in, and the bell has rung.
+    let walker = entity(&app, &root, "walker");
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::ZERO;
+    frame(&mut app);
     assert_eq!(sent::<Triggered>(&mut app).len(), 1, "the volume reports the crossing");
     assert_eq!(sent::<CountdownElapsed>(&mut app).len(), 1, "and the bell rang");
     for _ in 0..3 {
