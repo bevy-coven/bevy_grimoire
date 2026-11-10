@@ -56,6 +56,12 @@ pub struct LibraryBrowser {
     built_from: u64,
     /// The `kind`s the tag row was last built from, so a redraw does not replace the toggle a person just pressed.
     drawn_tags: Vec<String>,
+    /// The search and the kept tags the cards were last drawn for, so a settled frame is one string comparison and
+    /// **does not walk the library**.
+    drawn_for: (String, Vec<String>),
+    /// How many times the library has been walked to decide whether to draw: the cost that grows with the library,
+    /// and the number the budget is written against. A settled frame adds none.
+    looks: u32,
     /// How many times the cards have been drawn, for the UI budget (#259): a settled frame costs none.
     draws: u32,
 }
@@ -84,6 +90,12 @@ impl LibraryBrowser {
     /// How many times the cards have been drawn since the section opened.
     pub fn draws(&self) -> u32 {
         self.draws
+    }
+
+    /// **How many times the library has been walked to decide whether to draw**, since the section opened. A settled
+    /// frame adds none: what moves the cards is compared as two strings first.
+    pub fn looks(&self) -> u32 {
+        self.looks
     }
 
     /// **Whether a piece belongs in the browser**: every word of the search is in its id or a `kind` tag,
@@ -283,12 +295,21 @@ fn draw_the_cards(
     let spent = crate::ui_budget::measure(&mut budget);
     let Some(project) = project else { return };
     let Ok(mut browser) = browsers.single_mut() else { return };
-    // **A settled frame does nothing**: a fingerprint of what the cards depend on decides, and it is taken only
-    // when the thing it describes could have moved.
-    let now = fingerprint(&browser, &project);
-    if browser.built_from == now {
+    // **A settled frame is two comparisons and nothing that grows with the library.** What a person can change
+    // without touching the library — the search and the tags — is compared as it stands; a library edit marks
+    // `Project` changed. Only then is the library walked, by the fingerprint, to decide the same question exactly.
+    let request = (browser.query.clone(), browser.kept());
+    let moved = project.is_changed() || browser.drawn_for != request || browser.built_from == 0;
+    if !moved {
         return;
     }
+    browser.looks += 1;
+    let now = fingerprint(&browser, &project);
+    if browser.built_from == now {
+        browser.drawn_for = request;
+        return;
+    }
+    browser.drawn_for = request;
     let _rebuild = spent.rebuilding();
     browser.built_from = now;
     browser.draws += 1;

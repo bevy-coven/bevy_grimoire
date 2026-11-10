@@ -333,3 +333,23 @@ fn another_card_grid(app: &mut App) -> Entity {
         .id()
 }
 
+
+/// **A settled frame does not walk the library** (UI-93, #259): the search and the tags are compared as they stand
+/// and a library edit marks `Project` changed, so the fingerprint over every descriptor is taken only when the
+/// answer could differ. A drawn frame is charged for the look; a settled one is not.
+#[test]
+fn a_settled_frame_walks_no_descriptor_and_draws_nothing() {
+    let mut app = rig("library_settled");
+    let looks = |app: &mut App| browser(app).looks();
+    let draws = |app: &mut App| browser(app).draws();
+    let (built, drawn) = (looks(&mut app), draws(&mut app));
+    updates(&mut app, 60);
+    assert_eq!(looks(&mut app), built, "sixty settled frames walk the library no times");
+    assert_eq!(draws(&mut app), drawn, "and draw nothing");
+
+    search_for(&mut app, "lamp");
+    assert_eq!(draws(&mut app), drawn + 1, "a search is one draw");
+    let walked = looks(&mut app);
+    updates(&mut app, 30);
+    assert_eq!(looks(&mut app), walked, "and holding it walks nothing more");
+}
