@@ -370,11 +370,19 @@ fn a_persons_input_takes_the_camera_back(
     // press — measured on the first version, where Look framed nothing while the queue was cleared
     // under it. One reading of the key, here, because this is the system that decides what "working"
     // means for every other verb.
+    // **Held, not only pressed.** The first cut skipped only the frame the chord went down on, and
+    // that was wrong in the way this system punishes: frame two of the same hold fell through to
+    // `working`, took the "a gesture's first frame" branch, and cleared the ease, the outline and the
+    // queue — so a person leaning on Look for two frames cancelled the Look they had just asked for.
+    // The release frame counts too: `just_released` is in `working` below, and letting go is not a
+    // gesture either.
     if keys
         .as_deref()
         .zip(live.as_deref())
         .is_some_and(|(keys, live)| {
-            crate::keys::just_pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+            crate::keys::pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+                || crate::keys::just_pressed(keys, *live, crate::keys::Action::LookAtAgentChange)
+                || just_released_on_the_chord(keys, *live)
         })
     {
         return;
@@ -554,6 +562,27 @@ pub fn look_at_the_change(
     if let Some(state) = state.as_mut() {
         state.status.note(format!("looking at what {FAMILIAR} changed"));
     }
+}
+
+/// **Was the Look chord let go of this frame?** The release is a frame of the same press, and
+/// `working` below counts any released key as the person acting — which it is for every other verb,
+/// and is not for the one chord whose whole job is to move the camera.
+///
+/// Asked of the chord's own key rather than of `Action`s, because there is no `keys::just_released`
+/// and a second gate here could disagree with `pressed`: the key and the modifiers are what the
+/// census row holds.
+fn just_released_on_the_chord(keys: &ButtonInput<KeyCode>, live: crate::keys::Live) -> bool {
+    let binding = crate::keys::binding(crate::keys::Action::LookAtAgentChange);
+    // A rebound chord is the person's own, and the census row no longer fires; the release of the
+    // census's key must not hold the follow back in an app where it means something else.
+    if live.3.chord(crate::keys::Action::LookAtAgentChange).is_some() {
+        return false;
+    }
+    // **The key and the context are enough on the release.** The modifiers are not asked: a person
+    // letting go of all three keys in one frame has already released the modifier by the time this
+    // reads, so requiring `mod_held` would miss exactly the release it is here for. The frame is one
+    // long, and the census row's key is not `L` in any context but this one.
+    keys.just_released(binding.key) && crate::keys::fires_in(binding.context, live.0)
 }
 
 /// **Look now, from the chord** (AF-04, #360): the third of the three routes the issue names, beside

@@ -45,6 +45,10 @@ const FRAME: f32 = 1.0 / 60.0;
 /// How much of the viewport the change's own box fills for the frame to count as framed.
 const FRAMED_MIN_FILL: f32 = 0.25;
 
+/// How many frames the held-chord test leans on the key. More than one is the whole point: the
+/// second frame of a hold is what used to be read as a fresh gesture.
+const HELD_FRAMES: usize = 5;
+
 fn frames_of(seconds: f32) -> usize {
     (seconds / FRAME).ceil() as usize + 2
 }
@@ -231,6 +235,87 @@ fn running_look_frames_the_change_the_follow_is_holding_back() {
     assert!(
         filled >= FRAMED_MIN_FILL,
         "Look did not frame the change: it fills {:.0}% of the viewport",
+        filled * 100.0
+    );
+}
+
+/// **One frame of the chord, as the keyboard sends it**: the message, which Bevy's input system turns
+/// into `ButtonInput`. A press set on the resource itself is cleared at the start of the frame, so a
+/// test that wrote the resource would measure a frame late.
+fn chord_keys() -> Vec<KeyCode> {
+    vec![keys::MOD_KEYS[0], KeyCode::ShiftLeft, KeyCode::KeyL]
+}
+
+fn send_chord(app: &mut App, state: bevy::input::ButtonState) {
+    use bevy::input::keyboard::{Key, NativeKey};
+    for key in chord_keys() {
+        app.world_mut().write_message(bevy::input::keyboard::KeyboardInput {
+            key_code: key,
+            logical_key: Key::Unidentified(NativeKey::Unidentified),
+            state,
+            text: None,
+            repeat: false,
+            window: Entity::PLACEHOLDER,
+        });
+    }
+}
+
+/// **3. Holding the chord is one Look, not a gesture that cancels itself.**
+///
+/// `a_persons_input_takes_the_camera_back` decides what "the person is working the view" means for
+/// every verb, and a *held* key is working: that is what makes a long drag hold the follow. Look is
+/// the one chord that asks the camera to move, so a held Look must not be read as the person taking
+/// the view back — the first cut skipped the gesture check only on the frame the chord went down, so
+/// frame two of the same hold took the "a gesture's first frame" branch: `ease = None`, the outline
+/// cleared, the queue cleared. The Look was cancelled by the hand that asked for it.
+///
+/// The test holds the chord for five frames and lets go, then measures the same projection the other
+/// Look test measures. If the ease is cancelled on frame two the camera stops short of the change and
+/// the fill falls under the threshold.
+#[test]
+fn holding_the_look_chord_is_one_look_and_is_not_read_as_a_gesture() {
+    let root = room("look_held");
+    let mut app = editor(&root);
+    let settings = app.world().resource::<Project>().project_dir.join("editor.ron");
+    std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.ron");
+    for _ in 0..frames_of(1.5) {
+        app.update();
+    }
+    assert!(
+        !app.world().resource::<EditorSettings>().follow_agent,
+        "the setting did not reach the running editor, so this would prove nothing about Look"
+    );
+
+    point_away(&mut app);
+    let before = rig(&app);
+    let answer = apply(
+        &mut app,
+        "placement_add",
+        serde_json::json!({"piece": "bed", "at": [20.0, 18.0]}),
+    );
+    assert_eq!(answer["outcome"], "applied", "{answer}");
+    let placed = the_one_placed(&app);
+    for _ in 0..frames_of(bevy_cauldron::follow::FOLLOW_IDLE_S) {
+        app.update();
+    }
+    assert_eq!(rig(&app), before, "the follow moved the camera with Follow the agent off");
+
+    // **Held**, five frames, then let go — a person leaning on the chord rather than tapping it.
+    send_chord(&mut app, bevy::input::ButtonState::Pressed);
+    for _ in 0..HELD_FRAMES {
+        app.update();
+    }
+    send_chord(&mut app, bevy::input::ButtonState::Released);
+    for _ in 0..frames_of(bevy_cauldron::follow::FOLLOW_EASE_S + FRAME) {
+        app.update();
+    }
+
+    let corners = footprint_corners(&app, &placed).expect("the placed bed measures");
+    let filled = fill(&mut app, &corners);
+    assert!(
+        filled >= FRAMED_MIN_FILL,
+        "holding the Look chord cancelled it: the change fills {:.0}% of the viewport after {HELD_FRAMES} \
+         frames of the same press",
         filled * 100.0
     );
 }
