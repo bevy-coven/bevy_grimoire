@@ -1625,7 +1625,6 @@ struct NotesFilterButton;
 #[derive(Component, Clone, Copy)]
 struct NotesSendAll;
 
-/// What the Notes list last drew: the filter and `(id, status, text, waiting, review, auto)` per row.
 /// What the Notes list last drew: the filter, the rows, and **which note was selected** — the
 /// selection is in the key so a reveal that moves it redraws the rows it colours (review of #359).
 type NotesShown = (
@@ -6984,8 +6983,6 @@ fn refresh_plan_list(
     *shown = Some(now);
 }
 
-/// Keep [`NotesList`] equal to the open map's notes under the current filter: newest first, every
-/// status, resolved notes included. Read twice a second; rebuilt only when what it says changed.
 /// **What the Notes list is built from besides its rows**: the open map's notes and the note a reveal
 /// selected. One bundle because the system is at clippy's argument cap, and these two are the same
 /// subject — what the list draws, and which of it is the person's cursor.
@@ -6997,6 +6994,8 @@ struct NoteSelection<'w, 's> {
     _marker: std::marker::PhantomData<&'s ()>,
 }
 
+/// Keep [`NotesList`] equal to the open map's notes under the current filter: newest first, every
+/// status, resolved notes included. Read twice a second; rebuilt only when what it says changed.
 fn refresh_notes_list(
     mut commands: Commands,
     time: Res<Time>,
@@ -7067,9 +7066,9 @@ fn refresh_notes_list(
             for (id, status, text, waiting, review, auto) in rows {
                 // **The revealed note is drawn selected** (review of #359, M3/M2): `SelectedNote` is
                 // what a reveal writes, and the row it names is the row a person's eye lands on. The
-                // list is rebuilt when its rows change and the selection is repainted in place by
-                // `arm_note_rows`, the shape `tiles::arm_list_rows` uses — so a selection set by a
-                // reveal does not respawn the list to show itself.
+                // selection is part of the list's own rebuild key, so a reveal that moves it rebuilds
+                // the rows it colours — the list is rebuilt twice a second anyway, and a selection
+                // arriving alone is one more reason to.
                 let chosen = revealed.as_deref() == Some(id.as_str());
                 crate::chrome::list_row(p, chosen, NoteRow { id: id.clone() }).with_children(|row| {
                     row.spawn((

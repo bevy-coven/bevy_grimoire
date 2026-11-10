@@ -450,33 +450,35 @@ fn tick_the_follow_row(
 /// **The row was chosen: the setting follows the tick.** Written through the settings screen's own
 /// `write_key`, so the file, the running editor and the row are one change rather than three.
 ///
-/// **The project's layer**, because the follow is about *this project's* agent: a person working on
-/// two projects with different agents has a different answer in each. The user's file would make the
-/// choice global, which is the wider change than the issue asked for.
+/// **The user's layer**, which is where `settings.rs`'s own doc puts this key: *"it is how a person
+/// wants to watch an agent, not a fact about one project"*. The first version wrote the project's
+/// `editor.ron`, which would have made one person's preference a file every other person opening
+/// that project inherits — the opposite of what the doc says, and the disagreement is what the review
+/// caught.
+///
+/// **A missing user file is said, not worked around.** A machine with no config directory has nowhere
+/// to keep a preference; writing the project's instead would let the project decide for its authors,
+/// so the refusal is shown and nothing is written anywhere.
 pub fn toggle_the_follow(
     change: On<ValueChange<bool>>,
     file: Option<Res<crate::settings::UserSettingsFile>>,
-    project: Option<Res<crate::project::Project>>,
     mut state: Option<ResMut<EditorState>>,
 ) {
-    let Some(project) = project else {
+    let Some(file) = file else {
         if let Some(state) = state.as_deref_mut() {
-            state.status.problem("no project is open, so the follow setting was not saved".to_owned());
+            state.status.problem(format!(
+                "no personal settings file is available on this machine, so Follow the agent was not \
+                 saved. It is {} until this session ends.",
+                if change.value { "on" } else { "off" }
+            ));
         }
         return;
     };
-    let path = project.project_dir.join(crate::settings::PROJECT_FILE);
-    let wrote = crate::setting_catalogue::write_key(
-        &path,
+    if let Err(why) = crate::setting_catalogue::write_key(
+        &file.0,
         "follow_agent",
         Some(crate::setting_catalogue::Value::On(change.value)),
-    );
-    // **The user's file is not a fallback.** A missing `UserSettingsFile` is not a reason to write
-    // the project's — the project's is where this key belongs, and the file is read back by
-    // `settings::sync_settings` whichever layer wrote it.
-    let _ = file;
-    if let Err(why) = wrote
-        && let Some(state) = state.as_deref_mut()
+    ) && let Some(state) = state.as_deref_mut()
     {
         state.status.problem(format!("could not save Follow the agent: {why}"));
     }
