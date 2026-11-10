@@ -57,7 +57,7 @@ fn a_valid_edit_is_written_and_reads_back_as_the_crates_own_script() {
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(matches!(done, Applied::Done { .. }));
-    let script: bevy_speech_bubbles::DialogueScript = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let script: bevy_speech_bubbles::DialogueScript = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert_eq!(script.conversation("hello").unwrap().start, "b");
 }
 
@@ -77,7 +77,7 @@ fn placed(name: &str) -> (Ctx, std::path::PathBuf) {
 
 fn saved_family(root: &std::path::Path) -> std::collections::BTreeMap<String, String> {
     let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap();
-    let map: bevy_grimoire_core::map::Map = ron::from_str(&text).unwrap();
+    let map: bevy_grimoire_core::map::Map = bevy_grimoire_core::yaml::from_str(&text, "test").unwrap();
     map.placements[0].family.clone().into_iter().collect()
 }
 
@@ -108,7 +108,7 @@ fn barks_attached_to_a_piece_are_the_crates_own_bark_list_and_a_malformed_one_is
     let barks = r#"[(speaker: "Mara", kind: Speech, emotion: Joy, text: "Fine day."), (speaker: "Mara", kind: Thought, emotion: Neutral, text: "Rain soon.")]"#;
     let done = ops::dispatch(&mut ctx, "placement_set_family", &json!({"id": id, "crate": "bevy_speech_bubbles", "value": barks})).unwrap();
     assert!(matches!(done, Applied::Done { .. }), "{done:?}");
-    let saved: Vec<bevy_speech_bubbles::Bark> = ron::from_str(&saved_family(&root)["bevy_speech_bubbles"]).unwrap();
+    let saved: Vec<bevy_speech_bubbles::Bark> = bevy_grimoire_core::yaml::from_str(&saved_family(&root)["bevy_speech_bubbles"], "test").unwrap();
     assert_eq!(saved.len(), 2);
     assert_eq!(saved[0].text, "Fine day.");
 

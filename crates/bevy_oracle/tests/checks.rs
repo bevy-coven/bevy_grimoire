@@ -70,9 +70,11 @@ fn the_request_sends_images_in_the_checks_order_and_the_facts() {
 
 #[test]
 fn a_games_check_replaces_the_editors_of_the_same_name_and_adds_its_own() {
-    let game = Checks::from_ron(
-        r#"(checks: [(name: "floating", question: "Floating?", threshold: 0.5),
-                     (name: "lava", question: "Is there lava?", threshold: 0.9)])"#,
+    let game = Checks::from_yaml(
+        r#"checks:
+  - {name: floating, question: "Floating?", threshold: 0.5}
+  - {name: lava, question: "Is there lava?", threshold: 0.9}
+"#,
     )
     .unwrap();
     let m = Checks::builtin().merged(game);
@@ -82,11 +84,11 @@ fn a_games_check_replaces_the_editors_of_the_same_name_and_adds_its_own() {
 }
 
 #[test]
-fn checks_ron_rejects_duplicates_and_thresholds_outside_zero_to_one() {
-    let dup = r#"(checks: [(name: "a", question: "q", threshold: 0.5), (name: "a", question: "q", threshold: 0.5)])"#;
-    assert!(matches!(Checks::from_ron(dup), Err(Error::Checks(m)) if m.contains("two checks")));
-    let hi = r#"(checks: [(name: "a", question: "q", threshold: 1.5)])"#;
-    assert!(matches!(Checks::from_ron(hi), Err(Error::Checks(m)) if m.contains("threshold")));
+fn checks_yaml_rejects_duplicates_and_thresholds_outside_zero_to_one() {
+    let dup = r#"checks: [{name: a, question: q, threshold: 0.5}, {name: a, question: q, threshold: 0.5}]"#;
+    assert!(matches!(Checks::from_yaml(dup), Err(Error::Checks(m)) if m.contains("two checks")));
+    let hi = r#"checks: [{name: a, question: q, threshold: 1.5}]"#;
+    assert!(matches!(Checks::from_yaml(hi), Err(Error::Checks(m)) if m.contains("threshold")));
 }
 
 #[test]
@@ -106,5 +108,5 @@ fn only_a_calibrated_check_at_the_bar_may_block() {
     });
     assert!(c.may_block(0.9) && !c.may_block(0.96));
     let round = Checks { checks: vec![c.clone()], ..Checks::default() };
-    assert_eq!(Checks::from_ron(&round.to_ron().unwrap()).unwrap(), round);
+    assert_eq!(Checks::from_yaml(&round.to_yaml().unwrap()).unwrap(), round);
 }

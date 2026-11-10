@@ -20,7 +20,7 @@ fn project(tag: &str) -> (Ctx, std::path::PathBuf) {
 }
 
 fn load(file: &std::path::Path) -> Heightfield {
-    ron::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+    bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(file).unwrap(), "test").unwrap()
 }
 
 fn bake(ctx: &mut Ctx, preset: &str, seed: u64) -> Result<Applied, ops::Refusal> {

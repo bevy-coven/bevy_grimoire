@@ -74,7 +74,7 @@ fn the_carved_ground_wears_the_files_cover_and_follows_an_edit() {
     }
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
     std::fs::create_dir_all(project.grimoire_dir.join("terrain")).unwrap();
-    std::fs::write(project.grimoire_dir.join("terrain/m.ron"), ron::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.3)).unwrap()).unwrap();
+    std::fs::write(project.grimoire_dir.join("terrain/m.ron"), bevy_grimoire_core::yaml::to_string(&Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.3)).unwrap()).unwrap();
     let mut ctx = Ctx { project: Some(project), session: "test".to_owned(), ..Ctx::default() };
     let carve = json!({"map": "m", "edit": {"shape": {"Sphere": {"center": [16.0, 0.3, 16.0], "radius_m": 5.0}}, "mode": "Carve"}});
     done(ops::dispatch(&mut ctx, "volume_edit", &carve));
@@ -97,7 +97,7 @@ fn the_carved_ground_wears_the_files_cover_and_follows_an_edit() {
     let before = ids(&mut app);
     let snow = SurfaceCover { snow: CoverBand::snow(1.0), ..default() };
     let set = |ctx: &mut Ctx, value: String| done(ops::dispatch(ctx, "family_set", &json!({"crate": "bevy_elements", "field": "volume_cover", "value": value})));
-    set(&mut ctx, ron::to_string(&Some(snow)).unwrap());
+    set(&mut ctx, bevy_grimoire_core::yaml::to_string(&Some(snow)).unwrap());
     assert!(until(&mut app, all_wear(wearing(Some(snow)))), "the snow cover replaces the wet one: {:?}", chunks(&mut app));
     assert_eq!(ids(&mut app), before, "a cover edit remeshed the carved ground");
     set(&mut ctx, "None".to_owned());

@@ -121,7 +121,7 @@ fn project(tag: &str) -> std::path::PathBuf {
 /// **A value as RON**, through the crate that owns the type — a hand-written note row drifted from the
 /// schema the first time, which is what `status: None` was.
 fn ron_string<T: serde::Serialize>(value: &T) -> String {
-    ron::ser::to_string(value).unwrap_or_else(|e| panic!("the note does not serialize: {e}"))
+    bevy_grimoire_core::yaml::to_string(value).unwrap_or_else(|e| panic!("the note does not serialize: {e}"))
 }
 
 fn workspace_asset(rel: &str) -> std::path::PathBuf {

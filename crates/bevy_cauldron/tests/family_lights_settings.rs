@@ -26,6 +26,6 @@ fn a_brazier_flicker_is_set_through_family_set_and_reads_back_as_the_crates_own_
     let mut ctx = Ctx { project: Some(project), session: "test".to_owned(), ..Ctx::default() };
     let done = ops::dispatch(&mut ctx, "family_set", &json!({"crate": "bevy_lights", "field": "depth", "value": "0.3"})).unwrap();
     assert!(matches!(done, Applied::Done { .. }));
-    let flicker: Flicker = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let flicker: Flicker = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert_eq!((flicker.base, flicker.phase, flicker.depth), (900.0, 1.3, 0.3));
 }

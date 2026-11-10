@@ -37,7 +37,7 @@ fn the_skin_has_three_heights_each_softer_and_longer_than_the_last_and_is_still_
 fn the_file_states_the_stacks_itself() {
     // Not the library's default filling a gap: the file names `elevation`, so the depth is the editor's data.
     let text = include_str!("../src/editor_skin.ron");
-    let value: ron::Value = ron::from_str(text).expect("the editor skin reads as RON");
+    let value: ron::Value = bevy_grimoire_core::yaml::from_str(text, "test").expect("the editor skin reads as RON");
     let ron::Value::Map(fields) = value else { panic!("a skin is a struct") };
     let stated = fields.iter().any(|(name, _)| matches!(name, ron::Value::String(n) if n == "elevation"));
     assert!(stated, "src/editor_skin.ron states its own `elevation`");

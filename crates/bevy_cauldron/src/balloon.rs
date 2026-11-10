@@ -53,7 +53,7 @@ pub fn speaker_of<'a>(map: &'a Map, conversation: &str) -> Option<&'a str> {
         .find(|p| {
             p.family
                 .get("bevy_speech_bubbles")
-                .and_then(|v| serde_yaml_ng::from_str::<String>(v).ok())
+                .and_then(|v| bevy_grimoire_core::yaml::from_str::<String>(v, "bevy_speech_bubbles").ok())
                 .is_some_and(|name| name == conversation)
         })
         .map(|p| p.id.as_str())

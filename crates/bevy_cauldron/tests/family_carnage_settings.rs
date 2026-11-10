@@ -26,6 +26,6 @@ fn a_hit_stop_is_set_through_family_set_and_reads_back_as_the_crates_own_type() 
     let mut ctx = Ctx { project: Some(project), session: "test".to_owned(), ..Ctx::default() };
     let done = ops::dispatch(&mut ctx, "family_set", &json!({"crate": "bevy_carnage", "field": "hitstop_seconds", "value": "0.1"})).unwrap();
     assert!(matches!(done, Applied::Done { .. }));
-    let flicker: CarnageSettings = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let flicker: CarnageSettings = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert_eq!((flicker.trauma_per_wound, flicker.hitstop_seconds), (0.4, 0.1));
 }

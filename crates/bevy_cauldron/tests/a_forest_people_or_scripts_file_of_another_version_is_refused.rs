@@ -135,13 +135,13 @@ fn a_file_with_no_version_is_taken_and_written_back_with_one() {
 /// **The same, for a reader that is not an operation**: an old file is the first version, with its rows.
 #[test]
 fn a_file_from_before_the_version_reads_as_the_first() {
-    let forest: Forest = ron::from_str("(trees: [])").unwrap();
-    let people: People = ron::from_str("(people: [(name: \"Mara\", at: (1.0, 2.0))])").unwrap();
-    let scripts: Scripts = ron::from_str("(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\", then: \"let x = 1;\")])").unwrap();
+    let forest: Forest = bevy_grimoire_core::yaml::from_str("(trees: [])", "test").unwrap();
+    let people: People = bevy_grimoire_core::yaml::from_str("(people: [(name: \"Mara\", at: (1.0, 2.0))])", "test").unwrap();
+    let scripts: Scripts = bevy_grimoire_core::yaml::from_str("(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\", then: \"let x = 1;\")])", "test").unwrap();
     assert_eq!((forest.version, people.version, scripts.version), (1, 1, 1));
     assert_eq!((people.people.len(), scripts.triggers.len()), (1, 1), "and the rows are there");
     // Written again, the version it was missing comes with it, and the text reads back as the same value.
-    let again: People = ron::from_str(&ron::to_string(&people).unwrap()).unwrap();
+    let again: People = bevy_grimoire_core::yaml::from_str(&bevy_grimoire_core::yaml::to_string(&people).unwrap(), "test").unwrap();
     assert_eq!(again, people);
 }
 
@@ -149,9 +149,9 @@ fn a_file_from_before_the_version_reads_as_the_first() {
 #[test]
 fn a_new_file_is_written_with_its_version() {
     for (kind, text) in [
-        ("forest", ron::to_string(&Forest::default()).unwrap()),
-        ("people", ron::to_string(&People::default()).unwrap()),
-        ("scripts", ron::to_string(&Scripts::default()).unwrap()),
+        ("forest", bevy_grimoire_core::yaml::to_string(&Forest::default()).unwrap()),
+        ("people", bevy_grimoire_core::yaml::to_string(&People::default()).unwrap()),
+        ("scripts", bevy_grimoire_core::yaml::to_string(&Scripts::default()).unwrap()),
     ] {
         assert!(text.starts_with("(version:1") || text.starts_with("(version: 1"), "`{kind}` is written with its version first: {text}");
     }

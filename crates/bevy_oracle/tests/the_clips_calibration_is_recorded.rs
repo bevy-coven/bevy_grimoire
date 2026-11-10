@@ -3,7 +3,7 @@
 //!
 //! *"On the labelled clip set, the clip check's agreement is measured and recorded (test reads the
 //! record)."* The measurement is a calibration run against a served clef-flash, which a test may not
-//! make (`fixtures/clip_samples.ron` is 122 samples; the repo's rule is that tests never call a live
+//! make (`fixtures/clip_samples.yaml` is 122 samples; the repo's rule is that tests never call a live
 //! model). So the run writes what it measured, and this test is what keeps that record honest: it must
 //! name the check and the model, cover **every** sample in the labelled set, and its agreement must be
 //! the one its own confusion counts produce.
@@ -12,7 +12,7 @@
 //! whole subject is that the loop's visual judgement has been wrong before. The record is the difference
 //! between "we measured it" and "we think so".
 //!
-//! The record lives at `crates/bevy_oracle/fixtures/clip_calibration.ron` and is written by
+//! The record lives at `crates/bevy_oracle/fixtures/clip_calibration.yaml` and is written by
 //! `cargo run -p bevy_oracle --bin decide_calibrate -- --clip-set ...` (a run; see `docs/decide/`).
 
 use std::path::PathBuf;
@@ -40,10 +40,10 @@ fn fixture(name: &str) -> PathBuf {
 
 #[test]
 fn the_clip_check_s_agreement_is_recorded_against_every_labelled_sample() {
-    let text = std::fs::read_to_string(fixture("clip_calibration.ron"))
-        .unwrap_or_else(|e| panic!("fixtures/clip_calibration.ron: {e}"));
+    let text = std::fs::read_to_string(fixture("clip_calibration.yaml"))
+        .unwrap_or_else(|e| panic!("fixtures/clip_calibration.yaml: {e}"));
     let record: Record =
-        ron::from_str(&text).unwrap_or_else(|e| panic!("fixtures/clip_calibration.ron: {e}"));
+        serde_yaml_ng::from_str(&text).unwrap_or_else(|e| panic!("fixtures/clip_calibration.yaml: {e}"));
 
     assert_eq!(
         record.check, "clip_shows_its_title",
@@ -58,10 +58,10 @@ fn the_clip_check_s_agreement_is_recorded_against_every_labelled_sample() {
     // **Every sample, both halves.** The mismatch half is what stops a check that always says "that is
     // fine" from scoring 100%, so a record that covers only the matches is not a measurement of this
     // check.
-    let set: Vec<Labelled> = ron::from_str(
-        &std::fs::read_to_string(fixture("clip_samples.ron")).expect("fixtures/clip_samples.ron"),
+    let set: Vec<Labelled> = serde_yaml_ng::from_str(
+        &std::fs::read_to_string(fixture("clip_samples.yaml")).expect("fixtures/clip_samples.yaml"),
     )
-    .expect("fixtures/clip_samples.ron parses");
+    .expect("fixtures/clip_samples.yaml parses");
     assert_eq!(
         record.set_size,
         set.len(),

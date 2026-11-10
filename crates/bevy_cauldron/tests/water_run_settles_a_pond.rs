@@ -44,7 +44,7 @@ fn done(r: Result<Applied, ops::Refusal>) -> String {
 fn setup(tag: &str) -> (Ctx, std::path::PathBuf) {
     let (mut ctx, dir) = project(tag);
     std::fs::create_dir_all(dir.join("terrain")).unwrap();
-    std::fs::write(dir.join("terrain/m.ron"), ron::to_string(&valley()).unwrap()).unwrap();
+    std::fs::write(dir.join("terrain/m.ron"), bevy_grimoire_core::yaml::to_string(&valley()).unwrap()).unwrap();
     // A spring inside the bowl, so the pond has to hold it.
     done(ops::dispatch(&mut ctx, "water_place", &json!({"map": "m", "place": {"Spring": {"x": 11.5, "z": 16.5, "rate_m3_s": 2.0, "radius_m": 1.0}}})));
     (ctx, dir)
@@ -58,7 +58,7 @@ fn a_spring_in_a_bowl_settles_into_a_pond_that_reloads() {
     let planned = ops::preview(&ctx, &bevy_cauldron::ops_water::WaterRun, &json!({"map": "m", "pour_s": 20.0})).unwrap();
     assert!(!file.exists(), "a preview keeps nothing: {planned}");
     done(ops::dispatch(&mut ctx, "water_run", &json!({"map": "m", "pour_s": 20.0})));
-    let field: WaterField = ron::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let field: WaterField = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(&file).unwrap(), "test").unwrap();
     assert!(field.settled, "the water stopped moving after {} steps", field.steps);
     // 2 m3/s for 20 s = 40 m3; the bowl (6x4 inside the rim, floor 1 m below the slope) holds it.
     assert!(field.volume_m3() > 38.0, "the bowl kept the poured water: {}", field.volume_m3());

@@ -34,12 +34,12 @@ fn a_chosen_date_and_climate_are_in_the_file_and_read_back_after_a_restart() {
     set(&mut ctx, "clock.hour", "18.5");
     set(&mut ctx, "climate.mean_temperature_c", "-4.0");
     // "Restart": nothing but the file is read.
-    let s = ElementsSettings::from_ron(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let s = ElementsSettings::from_yaml(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(s.clock.date.month, 12);
     assert_eq!(s.clock.hour, 18.5);
     assert_eq!(s.climate.mean_temperature_c, -4.0);
     ops::undo(&mut ctx, None).unwrap();
-    let s = ElementsSettings::from_ron(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let s = ElementsSettings::from_yaml(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(s.climate.mean_temperature_c, Climate::default().mean_temperature_c, "one undo per change");
     assert_eq!(s.clock.hour, 18.5);
 }
@@ -50,7 +50,7 @@ fn forcing_rain_holds_until_it_is_released_back_to_the_climate() {
     let (mut clock, mut loc, mut climate, mut director) =
         (WorldClock::default(), GeoLocation::default(), Climate::default(), WeatherDirector::default());
     let mut applied = None;
-    let read = |file: &std::path::Path| ElementsSettings::from_ron(&std::fs::read_to_string(file).unwrap()).unwrap();
+    let read = |file: &std::path::Path| ElementsSettings::from_yaml(&std::fs::read_to_string(file).unwrap()).unwrap();
 
     set(&mut ctx, "forced_weather", "Some(Rain)");
     apply(&read(&file), &mut clock, &mut loc, &mut climate, &mut director, &mut applied);
@@ -98,7 +98,7 @@ fn scrubbing_the_clock_moves_the_preview_clock_and_writes_nothing() {
 fn the_panels_weather_buttons_write_the_forced_weather_and_the_clock_buttons_write_nothing() {
     use bevy_cauldron::environment::EnvAction;
     let (mut ctx, file) = project("buttons");
-    let read = |file: &std::path::Path| ElementsSettings::from_ron(&std::fs::read_to_string(file).unwrap()).unwrap();
+    let read = |file: &std::path::Path| ElementsSettings::from_yaml(&std::fs::read_to_string(file).unwrap()).unwrap();
     let dispatch = |ctx: &mut Ctx, a: EnvAction| {
         let r = ops::dispatch(ctx, "family_set", &a.family_params().unwrap());
         assert!(matches!(r, Ok(Applied::Done { .. })), "{a:?}");
@@ -116,7 +116,7 @@ fn the_panels_weather_buttons_write_the_forced_weather_and_the_clock_buttons_wri
 fn the_panels_season_and_climate_buttons_are_one_undo_step_each() {
     use bevy_cauldron::environment::{ClimatePreset, EnvAction};
     let (mut ctx, file) = project("season_climate");
-    let read = |file: &std::path::Path| ElementsSettings::from_ron(&std::fs::read_to_string(file).unwrap()).unwrap();
+    let read = |file: &std::path::Path| ElementsSettings::from_yaml(&std::fs::read_to_string(file).unwrap()).unwrap();
     let dispatch = |ctx: &mut Ctx, a: EnvAction| {
         let r = ops::dispatch(ctx, "family_set", &a.family_params().unwrap());
         assert!(matches!(r, Ok(Applied::Done { .. })), "{a:?}: {r:?}");
@@ -127,11 +127,11 @@ fn the_panels_season_and_climate_buttons_are_one_undo_step_each() {
     }
     for (preset, _) in ClimatePreset::ALL {
         dispatch(&mut ctx, EnvAction::Climate(preset));
-        assert_eq!(ron::to_string(&read(&file).climate).unwrap(), ron::to_string(&preset.climate()).unwrap());
+        assert_eq!(bevy_grimoire_core::yaml::to_string(&read(&file).climate).unwrap(), bevy_grimoire_core::yaml::to_string(&preset.climate()).unwrap());
     }
     ops::undo(&mut ctx, None).unwrap();
-    let now = ron::to_string(&read(&file).climate).unwrap();
-    assert_eq!(now, ron::to_string(&ClimatePreset::Tropical.climate()).unwrap(), "one undo steps back one climate");
+    let now = bevy_grimoire_core::yaml::to_string(&read(&file).climate).unwrap();
+    assert_eq!(now, bevy_grimoire_core::yaml::to_string(&ClimatePreset::Tropical.climate()).unwrap(), "one undo steps back one climate");
 }
 
 #[test]
@@ -140,16 +140,16 @@ fn snow_rocks_and_sand_are_set_in_the_crates_own_types_and_an_old_file_still_loa
     set(&mut ctx, "snow.drift", "false");
     set(&mut ctx, "rocks.talus_cover", "0.5");
     set(&mut ctx, "wetness.wet_per_mm", "0.9");
-    let s = ElementsSettings::from_ron(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let s = ElementsSettings::from_yaml(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert!(!s.snow.drift);
     assert_eq!((s.rocks.talus_cover, s.wetness.wet_per_mm), (0.5, 0.9));
     ops::undo(&mut ctx, None).unwrap();
-    let s = ElementsSettings::from_ron(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let s = ElementsSettings::from_yaml(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(s.wetness.wet_per_mm, bevy_elements::WetnessSettings::default().wet_per_mm, "one undo per change");
     // A file written before these fields existed takes the crate's defaults.
     let old = ElementsSettings::defaults().to_yaml();
     let start = old.find("snow:").unwrap();
     let trimmed = format!("{})", &old[..start]);
-    let s = ElementsSettings::from_ron(&trimmed).unwrap();
+    let s = ElementsSettings::from_yaml(&trimmed).unwrap();
     assert_eq!(s.snow, bevy_elements::SnowSettings::default());
 }

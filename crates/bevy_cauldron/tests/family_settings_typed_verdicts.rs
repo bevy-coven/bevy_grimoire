@@ -34,8 +34,8 @@ struct Case {
 fn elements() -> Case {
     use bevy_cauldron::environment::ElementsSettings;
     let good = ElementsSettings::defaults().to_yaml();
-    let clock = ron::to_string(&bevy_elements::WorldClock::default()).unwrap();
-    let climate = ron::to_string(&bevy_elements::Climate::default()).unwrap();
+    let clock = bevy_grimoire_core::yaml::to_string(&bevy_elements::WorldClock::default()).unwrap();
+    let climate = bevy_grimoire_core::yaml::to_string(&bevy_elements::Climate::default()).unwrap();
     let mut other = ElementsSettings::defaults();
     other.clock.hour = 18.5;
     Case {
@@ -147,7 +147,7 @@ fn a_file_that_is_not_the_crates_type_is_refused_naming_the_field_once_and_the_l
             let raised = (app.world().resource::<EditorState>().status.raised() - raised_before) as usize;
             let said: Vec<String> = app.world().resource::<EditorState>().status.problems().iter().rev().take(raised).map(|p| p.text.clone()).collect();
             assert_eq!(raised, 1, "{}: {what}: the refusal is said once: {said:?}", case.krate);
-            if ron::from_str::<ron::Value>(bad).is_err() {
+            if bevy_grimoire_core::yaml::from_str::<ron::Value>(bad, "test").is_err() {
                 // Not RON at all: the host's own sentence, which the gooey test pins by its words.
                 assert!(said[0].contains(case.krate) && said[0].contains("not valid RON"), "{}: {what}: {said:?}", case.krate);
             } else {

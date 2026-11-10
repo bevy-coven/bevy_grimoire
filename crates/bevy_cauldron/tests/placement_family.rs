@@ -21,7 +21,7 @@ fn editor(name: &str) -> (std::path::PathBuf, Ctx) {
 
 fn saved(root: &std::path::Path) -> bevy_grimoire_core::map::Map {
     let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap();
-    ron::from_str(&text).unwrap()
+    bevy_grimoire_core::yaml::from_str(&text, "test").unwrap()
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn a_flicker_set_on_a_piece_is_saved_on_its_row_and_undone() {
     let done = ops::dispatch(&mut ctx, "placement_set_family", &json!({"id": id, "crate": "bevy_lights", "value": flicker})).unwrap();
     assert!(matches!(done, Applied::Done { .. }), "{done:?}");
     let row = &saved(&root).placements[0];
-    let read: bevy_lights::Flicker = ron::from_str(&row.family["bevy_lights"]).unwrap();
+    let read: bevy_lights::Flicker = bevy_grimoire_core::yaml::from_str(&row.family["bevy_lights"], "test").unwrap();
     assert_eq!((read.base, read.phase, read.depth), (900.0, 1.3, 0.15));
 
     ops::undo(&mut ctx, None).unwrap();

@@ -232,7 +232,7 @@ fn every_key_a_settings_file_can_set_is_listed_on_the_screen() {
         let said = setting_catalogue::say(setting, default);
         assert!(!said.is_empty() && said != "?", "`{}` says its default: {said}", setting.key);
     }
-    let text = ron::ser::to_string(&everything).unwrap();
+    let text = bevy_grimoire_core::yaml::to_string(&everything).unwrap();
     let keys = text.matches(':').count() - 1; // `version` is not a setting
     assert_eq!(keys, CATALOGUE.len(), "a settings file has a key the screen does not list (or the other way round): {text}");
     let mut labels: Vec<_> = CATALOGUE.iter().map(|s| s.label).collect();

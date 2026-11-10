@@ -34,7 +34,7 @@ fn write_keymap(user: &Path, rebound: &[(&str, Shortcut)]) {
     for (id, chord) in rebound {
         layer.keymap.insert((*id).to_owned(), *chord);
     }
-    std::fs::write(user, ron::to_string(&layer).unwrap()).unwrap();
+    std::fs::write(user, bevy_grimoire_core::yaml::to_string(&layer).unwrap()).unwrap();
 }
 
 fn updates(app: &mut App, n: usize) {

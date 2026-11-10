@@ -45,9 +45,9 @@ fn the_conversation_a_piece_carries_is_walked_by_the_crates_runtime_down_the_cho
 
     // The game reads the saved map and the saved script, as it would at load.
     let map: bevy_grimoire_core::map::Map =
-        ron::from_str(&std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap()).unwrap();
-    let name: String = ron::from_str(&map.placements[0].family["bevy_speech_bubbles"]).unwrap();
-    let script: DialogueScript = ron::from_str(&std::fs::read_to_string(root.join("family/bevy_speech_bubbles.ron")).unwrap()).unwrap();
+        bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap(), "test").unwrap();
+    let name: String = bevy_grimoire_core::yaml::from_str(&map.placements[0].family["bevy_speech_bubbles"], "test").unwrap();
+    let script: DialogueScript = bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(root.join("family/bevy_speech_bubbles.ron")).unwrap(), "test").unwrap();
 
     let mut game = App::new();
     game.add_plugins((MinimalPlugins, AssetPlugin::default(), SpeechBubblesPlugin::<Talker>::default()))

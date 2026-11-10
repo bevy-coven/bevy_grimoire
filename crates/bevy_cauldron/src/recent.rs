@@ -1,6 +1,6 @@
 //! **The projects the editor has opened, most recent first** (UI-11, #217).
 //!
-//! One file per user, `<data_dir>/Grimoire/recent.ron`, where `<data_dir>` is the platform's own
+//! One file per user, `<data_dir>/Grimoire/recent.yaml`, where `<data_dir>` is the platform's own
 //! (`dirs::data_dir`: `~/.local/share` on Linux, `~/Library/Application Support` on macOS,
 //! `%APPDATA%` on Windows). It is not in any project: a project is a folder a person owns and may
 //! share, and where one author opened it from is no business of its files.
@@ -99,7 +99,7 @@ fn key(path: &Path) -> PathBuf {
 
 impl Recent {
     pub fn from_yaml(text: &str) -> Result<Recent, String> {
-        let r: Recent = bevy_grimoire_core::yaml::from_str(text, RECENT_FILE)
+        let r: Recent = bevy_grimoire_core::yaml::from_str(text, FILE)
             .map_err(|p| format!("recent: parse: {}", p.line()))?;
         if r.version != RECENT_VERSION {
             return Err(format!("recent: version {} is not the {RECENT_VERSION} this build reads", r.version));

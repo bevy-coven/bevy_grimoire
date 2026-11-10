@@ -25,7 +25,7 @@ fn raise(ctx: &mut Ctx, extra: serde_json::Value) -> Result<Applied, ops::Refusa
 }
 
 fn load(file: &std::path::Path) -> Heightfield {
-    ron::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+    bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(file).unwrap(), "test").unwrap()
 }
 
 #[test]

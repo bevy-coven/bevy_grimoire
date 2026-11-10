@@ -23,7 +23,7 @@ fn a_16_bit_png_round_trips_and_undo_removes_it() {
     let p = json!({"map": "m", "file": "hills.png", "cell_m": 2.0, "range_m": [0.0, 100.0], "origin": [1.0, 1.0]});
     let Applied::Done { operation_id, .. } = ops::dispatch(&mut ctx, "terrain_import", &p).unwrap() else { panic!("refused") };
     let text = std::fs::read_to_string(project.grimoire_dir.join("terrain").join("m.ron")).unwrap();
-    let field: bevy_grimoire_core::heightfield::Heightfield = ron::from_str(&text).unwrap();
+    let field: bevy_grimoire_core::heightfield::Heightfield = bevy_grimoire_core::yaml::from_str(&text, "test").unwrap();
     assert_eq!((field.width, field.depth, field.cell_m, field.origin), (3, 2, 2.0, (1.0, 1.0)));
     assert_eq!(field.to_u16((0.0, 100.0)).unwrap(), samples, "the saved field reads back as the same 16-bit samples");
     ops::undo(&mut ctx, Some(&operation_id)).unwrap();

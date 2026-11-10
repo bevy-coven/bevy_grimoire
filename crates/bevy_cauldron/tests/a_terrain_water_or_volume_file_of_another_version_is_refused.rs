@@ -88,6 +88,6 @@ fn a_file_with_no_version_is_taken_and_written_back_with_one() {
     }
     let written = std::fs::read_to_string(&file).unwrap();
     assert!(written.contains("version: 1"), "the rewritten plan carries its version:\n{written}");
-    let plan: bevy_grimoire_core::water::WaterPlan = ron::from_str(&written).unwrap();
+    let plan: bevy_grimoire_core::water::WaterPlan = bevy_grimoire_core::yaml::from_str(&written, "test").unwrap();
     assert_eq!(plan.springs.len(), 1, "and the spring:\n{written}");
 }

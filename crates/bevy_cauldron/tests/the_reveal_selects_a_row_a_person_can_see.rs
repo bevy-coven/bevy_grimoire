@@ -77,7 +77,7 @@ fn project(tag: &str) -> std::path::PathBuf {
         }],
         lease_secs: bevy_grimoire_core::notes::DEFAULT_LEASE_SECS,
     };
-    std::fs::write(&notes, ron::ser::to_string(&file).expect("the notes serialize")).expect("notes file");
+    std::fs::write(&notes, bevy_grimoire_core::yaml::to_string(&file).expect("the notes serialize")).expect("notes file");
     root
 }
 

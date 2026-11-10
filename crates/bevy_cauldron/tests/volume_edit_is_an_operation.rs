@@ -19,7 +19,7 @@ fn project(tag: &str) -> (Ctx, std::path::PathBuf) {
 }
 
 fn load(file: &std::path::Path) -> Volume {
-    ron::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+    bevy_grimoire_core::yaml::from_str(&std::fs::read_to_string(file).unwrap(), "test").unwrap()
 }
 
 fn done(r: Result<Applied, ops::Refusal>) -> String {

@@ -47,6 +47,6 @@ fn a_valid_edit_is_written_and_reads_back_as_the_crates_own_definitions() {
     )
     .unwrap_or_else(|e| panic!("{e:?}"));
     assert!(matches!(done, Applied::Done { .. }));
-    let defs = bevy_society::SocietyDefs::from_ron(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let defs = bevy_society::SocietyDefs::from_yaml(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert!(defs.need_id("rest").is_some());
 }

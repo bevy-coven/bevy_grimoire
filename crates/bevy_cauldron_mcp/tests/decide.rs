@@ -128,8 +128,8 @@ fn a_projects_checks_are_read_on_every_call_and_replace_the_editors_of_the_same_
     let dir = project("hot");
     assert!(load_checks(&dir).unwrap().get("floating").unwrap().threshold > 0.5);
     std::fs::write(
-        dir.join("assets/grimoire/checks.ron"),
-        r#"(checks: [(name: "floating", question: "Mine?", threshold: 0.2), (name: "mine", question: "Q?", threshold: 0.5)])"#,
+        dir.join("assets/grimoire/checks.yaml"),
+        r#"checks: [{name: floating, question: "Mine?", threshold: 0.2}, {name: mine, question: "Q?", threshold: 0.5}]"#,
     )
     .unwrap();
     let c = load_checks(&dir).unwrap();
