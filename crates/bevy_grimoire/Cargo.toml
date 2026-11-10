@@ -25,3 +25,8 @@ bevy_remote = { version = "0.20.0", default-features = false, features = ["bevy_
 # The registry's answer is a JSON value this writes as text, so this is the module's own dependency and not a
 # test's.
 serde_json.workspace = true
+
+[dev-dependencies]
+# The test game's components derive `Deserialize`, which is what `#[reflect(Deserialize)]` needs for a file's
+# value to build them.
+serde.workspace = true

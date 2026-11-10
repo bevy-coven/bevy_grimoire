@@ -149,6 +149,52 @@ where
     })
 }
 
+/// **Read `text` as the plain JSON a value holds**, keeping nothing but names, numbers and strings: a YAML tag
+/// names an enum variant, and a JSON Schema and a reflected type both spell a named variant as the key of a
+/// one-key object, so `!Near {to: …}` becomes `{"Near": {"to": …}}`.
+///
+/// **It is the same walk every refusal comes from**: the file is first checked by [`walk`] — no duplicate key,
+/// no anchor, no alias, no second document — and only then converted, so a document a person could not see the
+/// fault in is refused with a line rather than quietly reshaped. This is what a game's entity files are read
+/// through, so they meet the rules every project file meets (#367).
+#[allow(clippy::result_large_err)]
+pub fn to_json(text: &str, path: &str) -> Result<serde_json::Value, Problem> {
+    let walk = walk(text);
+    if let Some(site) = first_fault(text, &walk) {
+        return Err(refusal(path, site));
+    }
+    let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(text).map_err(|e| {
+        Problem::with(
+            format!("{path} {WHAT}"),
+            Detail::default().because(positioned(e.location(), &e.to_string())).docs(DOCS),
+        )
+    })?;
+    Ok(json_of(value))
+}
+
+/// A `serde_yaml_ng` value as JSON, a tag as the key of a one-key object.
+fn json_of(value: serde_yaml_ng::Value) -> serde_json::Value {
+    use serde_yaml_ng::Value as Y;
+    match value {
+        Y::Tagged(tagged) => {
+            let mut map = serde_json::Map::new();
+            let name = tagged.tag.to_string();
+            map.insert(name.trim_start_matches('!').to_owned(), json_of(tagged.value));
+            serde_json::Value::Object(map)
+        }
+        Y::Null => serde_json::Value::Null,
+        Y::Bool(b) => serde_json::Value::Bool(b),
+        Y::Number(n) => serde_json::to_value(n).unwrap_or(serde_json::Value::Null),
+        Y::String(s) => serde_json::Value::String(s),
+        Y::Sequence(items) => serde_json::Value::Array(items.into_iter().map(json_of).collect()),
+        Y::Mapping(map) => serde_json::Value::Object(
+            map.into_iter()
+                .map(|(k, v)| (k.as_str().unwrap_or_default().to_owned(), json_of(v)))
+                .collect(),
+        ),
+    }
+}
+
 /// **The field path a refusal names**, from `serde_path_to_error`'s path: `.` is the file's root and is
 /// no field at all; `placements[0].turn_deg` is kept as it is.
 fn path_of(path: &str) -> Option<String> {
