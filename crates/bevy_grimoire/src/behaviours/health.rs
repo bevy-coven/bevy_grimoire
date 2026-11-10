@@ -101,26 +101,60 @@ pub struct Died {
     pub entity: Entity,
 }
 
+/// **How many entities [`take_damage`]'s queries visited in the last frame it ran.**
+///
+/// A counter rather than an inference, because the thing worth knowing is what the system *looked at*: the
+/// first version's query matched every entity in the world, a camera and a UI node included, and there is no
+/// way to see that from the world afterwards. It is read by `a_frame_with_no_damage_removes_nothing`, which is
+/// the claim the query shape is for.
+pub mod take_damage {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    /// The count the system last wrote.
+    static VISITED: AtomicUsize = AtomicUsize::new(0); // TEST-COUNTER: no behaviour reads this.
+
+    /// **The number of entities the last frame's queries matched**, zero when the system has not run.
+    pub fn visited() -> usize {
+        VISITED.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn record(count: usize) {
+        VISITED.store(count, Ordering::Relaxed);
+    }
+}
+
 /// **Settle every entity's [`Health`], then take any waiting [`Damage`] off it**, and say what happened.
 ///
 /// The clamp is here rather than in the reader because the reader is GD-05's and knows nothing about hit
 /// points: a file says `current: 99, max: 10`, and the first frame it is live the value is 10. **One pass
 /// over one query**, so a wound lands in the same frame the value it lands on is made legal and there is no
 /// order between them to get wrong.
+///
+/// # Two queries, and no query over the whole world
+///
+/// The work runs over entities that have a `Health`; the sweep for a blow that fell on something without one
+/// runs over entities that have a `Damage` and no `Health`. **Neither query matches an entity with neither**,
+/// which matters twice over: a query of only `Option` parts matches every entity in the world — a camera, a UI
+/// node, a piece — and queued `remove::<Damage>()` on each of them every frame; and a `remove` on an entity
+/// another system despawned that frame (a pickup `pickup::taken` took) logs a warning through
+/// `EntityCommands`'s handled command. An empty archetype match costs nothing, so this is a query shape, not a
+/// guard.
 pub(crate) fn take_damage(
     mut commands: Commands,
-    mut healths: Query<(Entity, Option<&mut Health>, Option<&Damage>)>,
+    mut healths: Query<(Entity, &mut Health, Option<&Damage>)>,
+    orphans: Query<Entity, (With<Damage>, Without<Health>)>,
     mut damaged: MessageWriter<Damaged>,
     mut died: MessageWriter<Died>,
 ) {
-    for (entity, health, damage) in &mut healths {
-        // **A blow on an entity with no hit points is still taken off it**: there is nothing for it to come
-        // off, and a `Damage` left where it fell would land the day a `Health` was added. Nothing is
-        // reported, because nothing was damaged.
-        let Some(mut health) = health else {
-            commands.entity(entity).remove::<Damage>();
-            continue;
-        };
+    // **The one place the count is written**, so what a test reads is what the system did.
+    take_damage::record(healths.iter().len() + orphans.iter().len());
+    // **A blow on an entity with no hit points is taken off it, once**: there is nothing for it to come off,
+    // and a `Damage` left where it fell would land the day a `Health` was added. Nothing is reported, because
+    // nothing was damaged. The query above cannot see these entities, so `remove` is queued for them here.
+    for entity in &orphans {
+        commands.entity(entity).remove::<Damage>();
+    }
+    for (entity, mut health, damage) in &mut healths {
         // Written only when it differs, so a settled entity is not marked changed every frame.
         let settled = health.clamped();
         if health.current != settled.current || health.max != settled.max {

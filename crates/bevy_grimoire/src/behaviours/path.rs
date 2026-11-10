@@ -60,10 +60,14 @@ pub struct WaypointReached {
 /// **Move every follower toward its next waypoint, reporting each it reaches**, and stop at the last.
 pub(crate) fn walks(
     time: Option<Res<Time>>,
-    mut followers: Query<(Entity, &mut PathFollow, &mut Transform), Without<Camera>>,
+    mut followers: Query<(Entity, &mut PathFollow, &mut Transform)>,
     mut out: MessageWriter<WaypointReached>,
 ) {
     // **No clock, no walking**: a game without `Time` moves nothing rather than teleporting.
+    //
+    // The query is narrowed by `PathFollow` itself — a follower is an entity a file gave one to — so no
+    // `Without<…>` filter is needed, and one was here before: a camera cannot be a follower, and a filter for
+    // it said a camera could.
     let Some(time) = time else { return };
     let delta_s = time.delta_secs();
     for (entity, mut follow, mut transform) in &mut followers {

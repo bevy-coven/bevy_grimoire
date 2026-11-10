@@ -689,10 +689,15 @@ fn crossing_a_trigger_writes_the_signal_its_switch_names() {
     frame(&mut app);
     assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "still on while the body stays");
 
-    // **Out**: the way out presses it again, so a tripwire is a toggle and a game reads `entered` to tell.
+    // **Out**: the crossing is reported and **writes no signal**, so the door stays open behind the person who
+    // walked through it — a switch toggles, and a signal on the way out would close it again.
     app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::new(10.0, 0.0, 0.0);
     frame(&mut app);
-    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(false), "leaving pressed it back off");
+    let left = sent::<Triggered>(&mut app);
+    assert_eq!(left.len(), 1, "the way out is reported: {left:?}");
+    assert!(!left[0].entered, "as the way out");
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "and the switch was not pressed again");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(true), "so the gate is still open");
 
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -945,4 +950,159 @@ fn the_plugins_registration_is_the_list() {
         assert!(shorts.contains(&required), "`{required}` is one of the shipped behaviours: {shorts:?}");
     }
     assert_eq!(shorts.len(), named.len(), "no two rows share a short path");
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Review round 3: N-M1 (a volume wrote a signal on the way out too, so consumers disagreed) and N-M2
+// (`take_damage` matched every entity in the world). Each test below failed before its fix.
+// ---------------------------------------------------------------------------------------------------
+
+/// **N-M1: a volume writes its signal on entry only, and at most once a frame.**
+///
+/// The guide promises "crossing the tripwire opens the gate", and with a toggling `Switch` an exit signal
+/// closes it again — so a room whose door is a tripwire's signal had a door that shut behind the person who
+/// walked through it. `Triggered` still reports both crossings, because a listener may want the way out; the
+/// **signal** is the way in, which is what a switch and a machine read.
+#[test]
+fn a_volume_writes_its_signal_on_entry_only() {
+    let root = project("behaviour_trigger_entry_only");
+    write(
+        &root,
+        &format!(
+            "entities:\n  latch:\n    Switch: {{ latch: gate_crossed, on: false }}\n  gate:\n    Door: {{ link: gate_crossed, open: false }}\n  tripwire:\n    Trigger: {{ radius_m: 1.5, signal: gate_crossed }}\n  walker:\n    Body: {{}}\n    Transform: {}\n",
+            at(10.0, 0.0, 0.0)
+        ),
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    let walker = entity(&app, &root, "walker");
+    let latch = entity(&app, &root, "latch");
+    let gate = entity(&app, &root, "gate");
+
+    // In: the entry writes the signal, and the switch answers.
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::ZERO;
+    frame(&mut app);
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "walking in pressed the switch");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(true), "and opened the gate");
+
+    // Out: `Triggered` reports it, and **no signal is written**, so the gate stays open behind them.
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::new(10.0, 0.0, 0.0);
+    frame(&mut app);
+    let left: Vec<Triggered> = sent::<Triggered>(&mut app).into_iter().filter(|t| !t.entered).collect();
+    assert_eq!(left.len(), 1, "the way out is reported: {left:?}");
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "leaving wrote no signal, so the switch is still on");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(true), "and the gate is still open");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **N-M1: two bodies entering one volume in one frame write one signal, not two.**
+///
+/// A signal is a name something happened, and a `StateMachine` takes one step per signal it reads — so two
+/// signals for one crossing would step a machine twice, while `Switch` (which dedupes with `contains`) would
+/// flip once. That is consumers disagreeing about one event; one signal per volume per frame is what makes
+/// them agree.
+#[test]
+fn two_bodies_entering_one_volume_in_one_frame_write_one_signal() {
+    let root = project("behaviour_trigger_two_bodies");
+    write(
+        &root,
+        &format!(
+            // **Two steps are legal on one signal**, so a second signal is observable as a second step: with
+            // one signal the machine goes calm→alarmed; a second would take it alarmed→deeper.
+            "entities:\n  latch:\n    Switch: {{ latch: crowd, on: false }}\n  guard:\n    StateMachine:\n      initial: calm\n      state: calm\n      transitions:\n        - {{ from: calm, on: crowd, to: alarmed }}\n        - {{ from: alarmed, on: crowd, to: panicked }}\n  tripwire:\n    Trigger: {{ radius_m: 2.0, signal: crowd }}\n  one:\n    Body: {{}}\n    Transform: {}\n  two:\n    Body: {{}}\n    Transform: {}\n",
+            at(10.0, 0.0, 0.0),
+            at(-10.0, 0.0, 0.0)
+        ),
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    let one = entity(&app, &root, "one");
+    let two = entity(&app, &root, "two");
+    let latch = entity(&app, &root, "latch");
+    let guard = entity(&app, &root, "guard");
+
+    // Both walk in on the same frame.
+    app.world_mut().get_mut::<Transform>(one).expect("a body has a position").translation = Vec3::new(-0.5, 0.0, 0.0);
+    app.world_mut().get_mut::<Transform>(two).expect("a body has a position").translation = Vec3::new(0.5, 0.0, 0.0);
+    frame(&mut app);
+    assert_eq!(sent::<Triggered>(&mut app).len(), 2, "two crossings are two events");
+    // **One signal**, so the switch flips once and the machine steps once — the same answer from both.
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "the switch answered the crossing");
+    assert_eq!(
+        app.world().get::<StateMachine>(guard).map(|m| m.state.as_str()),
+        Some("alarmed"),
+        "and the machine took one step, not one per body (a second would be `panicked`)"
+    );
+    assert_eq!(sent::<Transitioned>(&mut app).len(), 1, "one step, so the consumers agree about one event");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **N-M2: `take_damage` writes to the entities that have its components and to nothing else.**
+///
+/// The first version queried `(Entity, Option<&mut Health>, Option<&Damage>)`, which matches **every** entity
+/// in the world — a camera, a UI node, a piece, a body — and queued `remove::<Damage>()` for every one of them
+/// without a `Health`. Bevy 0.20's `entity_command::remove` hands the removal an `EntityWorldMut` it is given,
+/// so a queued removal on an entity another system despawned that frame is skipped rather than logged:
+/// **measured**, under a capturing `WARN` subscriber a `remove` queued for a despawned entity logs nothing, and
+/// a `on_remove` hook fires only on a real removal. So the defect's cost is **work**, and this test reads it
+/// where it is visible: the number of entities the system's two queries visit.
+///
+/// The count comes from the system itself ([`take_damage::visited`]), which is the one honest way to say "it
+/// looked at four entities" rather than "the world has four entities".
+#[test]
+fn a_frame_with_no_damage_removes_nothing() {
+    let root = project("behaviour_damage_untouched");
+    write(
+        &root,
+        &format!(
+            "entities:\n  lamp:\n    Countdown: {{ duration_s: 100.0, signal: nothing }}\n  coin:\n    Pickup: {{ item: gold, radius_m: 1.0 }}\n    Transform: {}\n  hero:\n    Collector: {{}}\n    Transform: {}\n",
+            at(0.0, 0.0, 0.0),
+            at(0.0, 0.0, 0.0)
+        ),
+    );
+    let mut app = game(&root);
+    // A camera and a bare entity: the shapes the old query matched and wrote to.
+    app.world_mut().spawn((Camera3d::default(), Transform::default()));
+    app.world_mut().spawn_empty();
+
+    frame(&mut app);
+    assert_eq!(sent::<PickedUp>(&mut app).len(), 1, "the pickup was taken on this frame, which is the despawn");
+    // **The system visited no entity at all**: nothing in the world has a `Health` or a `Damage`, so neither of
+    // its queries has a row — where the old shape visited every entity in the world, every frame.
+    assert_eq!(
+        bevy_grimoire::behaviours::take_damage::visited(),
+        0,
+        "a frame where nothing has `Health` or `Damage` visits nothing"
+    );
+
+    // **And when something does have a `Damage`, exactly the entities that have one are visited**, which keeps
+    // the count from being zero for the trivial reason.
+    let lamp = entity(&app, &root, "lamp");
+    app.world_mut().entity_mut(lamp).insert(Damage { amount: 1 });
+    frame(&mut app);
+    assert_eq!(bevy_grimoire::behaviours::take_damage::visited(), 1, "one entity has a `Damage`, so one is visited");
+    assert!(app.world().get::<Damage>(lamp).is_none(), "and it was taken off");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **N-M2: a `Damage` on an entity with no `Health` is still taken off, once.**
+#[test]
+fn a_damage_with_no_health_is_removed_exactly_once() {
+    let root = project("behaviour_damage_removed_once");
+    write(&root, "entities:\n  crate:\n    Damage: { amount: 3 }\n");
+    let mut app = game(&root);
+    frame(&mut app);
+    let crate_ = entity(&app, &root, "crate");
+    assert!(app.world().get::<Damage>(crate_).is_none(), "the stray blow was taken off");
+    // Put one back and let several frames pass: it is taken off once and never again becomes present.
+    app.world_mut().entity_mut(crate_).insert(Damage { amount: 2 });
+    frame(&mut app);
+    assert!(app.world().get::<Damage>(crate_).is_none(), "taken off again on the next frame");
+    frame(&mut app);
+    assert!(app.world().get::<Damage>(crate_).is_none(), "and stays off");
+    assert!(sent::<Damaged>(&mut app).is_empty(), "nothing was damaged, so nothing is reported");
+    let _ = std::fs::remove_dir_all(&root);
 }

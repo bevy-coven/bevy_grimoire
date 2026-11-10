@@ -59,7 +59,13 @@ pub struct Triggered {
 #[derive(Resource, Default)]
 pub(crate) struct Inside(std::collections::BTreeMap<(Entity, Entity), bool>);
 
-/// **Send a message for every body that entered or left a volume this frame.**
+/// **Send a message for every body that entered or left a volume this frame**, and one signal for every volume
+/// a body entered.
+///
+/// Two messages with two readings: `Triggered` reports a crossing in either direction, once per (volume, body)
+/// pair, because a listener may want to know a guard left; [`Signal`](super::Signal) is the **way in**, once
+/// per volume per frame, because it is what a `Switch` and a `StateMachine` read and the two must agree about
+/// one event.
 pub(crate) fn crossings(
     mut inside: ResMut<Inside>,
     volumes: Query<(Entity, &Trigger, &GlobalTransform)>,
@@ -74,6 +80,12 @@ pub(crate) fn crossings(
     inside.0.retain(|(volume, body), _| here.contains(volume) && here.contains(body));
 
     for (volume, trigger, at) in &volumes {
+        // **`signalled` is per volume, not per body**: a signal is a name something happened, and a
+        // `StateMachine` takes one step per signal it reads while a `Switch` flips once however many it reads
+        // — so two bodies entering one volume in one frame through two signals would step a machine twice
+        // and flip a switch once. That is the two consumers disagreeing about one event. One signal per
+        // volume per frame is what makes them agree.
+        let mut signalled = false;
         for (body, _, where_) in &bodies {
             let holds = super::within(trigger.radius_m, at.translation(), where_.translation());
             let before = inside.0.insert((volume, body), holds).unwrap_or(false);
@@ -81,12 +93,15 @@ pub(crate) fn crossings(
                 continue;
             }
             out.write(Triggered { trigger: volume, body, entered: holds, signal: trigger.signal.clone() });
-            // **The volume writes the signal as well as reporting the crossing**, so a `Switch` or a
-            // `StateMachine` that names it answers without a game's code in between: one vocabulary across
-            // every part of a room. A volume with no `signal` writes none, rather than an empty name that
-            // would match every other nameless part.
-            if !trigger.signal.is_empty() {
+            // **The signal is the way IN.** A volume writes it on entry and not on exit: a `Switch` toggles,
+            // so signalling the way out would close the door the person just walked through — the guide's
+            // "crossing the tripwire opens the gate" has to stay true after they have crossed. `Triggered`
+            // still reports both, because a listener may want the exit; the signal is the one-way reading of
+            // the same crossing. A volume with no `signal` writes none, rather than an empty name that would
+            // match every other nameless part.
+            if holds && !signalled && !trigger.signal.is_empty() {
                 signals.write(super::Signal { name: trigger.signal.clone() });
+                signalled = true;
             }
         }
     }

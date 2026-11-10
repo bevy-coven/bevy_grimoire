@@ -36,8 +36,11 @@ name, a key a type does not have is refused at its line, and a refusal changes n
 |`Collector`|Marks an entity that takes a `Pickup`|—|
 
 `Signal { name }` is the one message every named thing listens for, and **the behaviours write it as well as
-read it**: a `Trigger` a body enters and a `Countdown` that rings each write a `Signal` named by their own
-`signal` field. So a volume and a bell press a `Switch` or step a `StateMachine` that names them, with no
+read it**: a `Trigger` a body **enters** and a `Countdown` that rings each write a `Signal` named by their own
+`signal` field. A volume signals the way in and not the way out — a `Switch` toggles, so signalling an exit
+would close the door the person just walked through. `Triggered` still reports both crossings, with `entered`
+saying which; the signal is the one-way reading of the same event, once per volume per frame, so a switch and
+a state machine agree about one crossing when two bodies cross together. So a volume and a bell press a `Switch` or step a `StateMachine` that names them, with no
 game's code in between:
 
 ```yaml

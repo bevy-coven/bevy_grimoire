@@ -30,12 +30,14 @@
 //!   a refusal at its line instead of a behaviour that quietly does nothing.
 //! - **A behaviour never spawns anything.** `spawn_descriptor` is this project's only spawner, so a
 //!   `Spawner` writes a [`SpawnRequested`] message and the game answers it.
-//! - **One signal vocabulary, and the behaviours write it too.** A `Trigger` that a body enters, and a
-//!   `Countdown` that rings, each write a [`Signal`] named by their own `signal` field, so a volume and a
-//!   bell press a `Switch` or step a `StateMachine` that names them without a game's code in between. The
-//!   producer runs before the consumer in the same frame ([`BehaviourSystems`]), so a crossing opens its door
-//!   on the frame it happened. A `signal` left empty writes nothing, rather than a name that would match
-//!   every other nameless part.
+//! - **One signal vocabulary, and the behaviours write it too.** A `Trigger` a body *enters*, and a
+//!   `Countdown` that rings, each write a [`Signal`] named by their own `signal` field, so a volume and a bell
+//!   press a `Switch` or step a `StateMachine` that names them without a game's code in between. A volume
+//!   signals the way **in** only: a switch toggles, so an exit signal would close the door the person just
+//!   walked through. The producer runs before the consumer in the same frame ([`BehaviourSystems`]), and one
+//!   signal per volume per frame is written however many bodies cross together, so the two consumers agree
+//!   about one event. A `signal` left empty writes nothing, rather than a name that would match every other
+//!   nameless part.
 //! - **A behaviour that needs a clock takes `Option<Res<Time>>`**, so a game without one ticks nothing
 //!   rather than panicking — the rule `entities.rs` states for its own reload.
 //! - **A behaviour reads `GlobalTransform` and acts in `PostUpdate` after `TransformSystems::Propagate`**, so
@@ -51,10 +53,11 @@
 //! game that ships its own `Health`: such a game writes `bevy_grimoire::behaviours::Health`, which is this
 //! type's reflected path — its one path, since the submodules are private.
 
-// **The submodules are private, and each type names its own path** with
-// `#[reflect(type_path = "bevy_grimoire::behaviours")]`: one path per type, which is the path the docs, the
-// guide and [`behaviours_named`] use, rather than a public `behaviours::health::Health` beside a re-exported
-// `behaviours::Health`.
+// **The submodules are private, and each type names its own path.** The attribute is bevy_reflect's own,
+// written beside the derive: `#[type_path = "bevy_grimoire::behaviours"]` — a bare attribute, not
+// `#[reflect(type_path = …)]`, which is a different thing (that spelling turns the *derived* path off). One
+// path per type, which is the path the docs, the guide and [`behaviours_named`] use, rather than a public
+// `behaviours::health::Health` beside a re-exported `behaviours::Health`.
 mod countdown;
 mod door;
 mod health;
@@ -82,15 +85,18 @@ pub enum BehaviourSystems {
     Consumes,
 }
 
-pub use countdown::{Countdown, CountdownElapsed};
+// **Every item these types' docs name is re-exported here**, because their modules are private: a `pub const`
+// a game cannot reach is a number a game cannot read, and a doc link to one from a public type would dangle.
+// One path for all of it, `bevy_grimoire::behaviours::…`.
+pub use countdown::{Countdown, CountdownElapsed, DEFAULT_COUNTDOWN_S};
 pub use door::{Door, Switch};
-pub use health::{DEFAULT_DAMAGE, DEFAULT_HEALTH, Damage, Damaged, Died, Health};
+pub use health::{DEFAULT_DAMAGE, DEFAULT_HEALTH, Damage, Damaged, Died, Health, NO_HEALTH, take_damage};
 pub use machine::{StateMachine, Transition, Transitioned};
-pub use path::{PathFollow, WaypointReached};
-pub use pickup::{Body, Collector, Pickup, PickedUp};
+pub use path::{ARRIVAL_TOLERANCE_M, DEFAULT_PATH_SPEED_M_S, PathFollow, WaypointReached};
+pub use pickup::{Body, Collector, DEFAULT_PICKUP_RADIUS_M, Pickup, PickedUp};
 pub use signal::Signal;
-pub use spawner::{SpawnRequested, Spawner};
-pub use trigger::{Trigger, Triggered};
+pub use spawner::{DEFAULT_SPAWN_INTERVAL_S, SpawnRequested, Spawner};
+pub use trigger::{DEFAULT_TRIGGER_RADIUS_M, Trigger, Triggered};
 
 /// **Whether one world position is within `radius_m` of another**, as squared distance so no square root is
 /// taken for a comparison that needs none — the two callers are the trigger volume and the pickup's reach.
