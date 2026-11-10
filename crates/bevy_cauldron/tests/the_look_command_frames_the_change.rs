@@ -311,6 +311,17 @@ fn holding_the_look_chord_is_one_look_and_is_not_read_as_a_gesture() {
     }
 
     let corners = footprint_corners(&app, &placed).expect("the placed bed measures");
+    // **Measured on the rig as well as on the projection**: the ease being cancelled on frame two left
+    // the camera one step from where it started, and a fill threshold alone did not notice. The
+    // change's centre must be well closer to the focus than it was when the chord went down.
+    let centre = corners.iter().fold(Vec3::ZERO, |sum, c| sum + *c) / 4.0;
+    let gap = |focus: Vec3| Vec2::new(focus.x - centre.x, focus.z - centre.z).length();
+    let (start, end) = (gap(before.0), gap(rig(&app).0));
+    assert!(
+        end < start * 0.5,
+        "holding the Look chord cancelled it: the camera is {end:.1} m from the change after \
+         {HELD_FRAMES} frames of the same press, from {start:.1} m before"
+    );
     let filled = fill(&mut app, &corners);
     assert!(
         filled >= FRAMED_MIN_FILL,
