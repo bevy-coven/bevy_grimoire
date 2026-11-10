@@ -26,6 +26,15 @@ struct Spin {
     degrees_per_second: f32,
 }
 
+/// **An immutable component**, which `ReflectComponent::apply` panics on: the engine refuses to change one
+/// through reflection, so a file's second save must insert rather than apply.
+#[derive(Component, Reflect, Default, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[component(immutable)]
+#[reflect(Component, Deserialize, Serialize)]
+struct Stamped {
+    value: i32,
+}
+
 /// A resource, to prove `resources:` goes through the same door.
 #[derive(Resource, Reflect, Default, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Resource, Deserialize, Serialize)]
@@ -50,7 +59,9 @@ fn write(root: &Path, text: &str) {
 fn game(root: &Path) -> App {
     let mut app = App::new();
     app.init_resource::<AppTypeRegistry>();
-    app.register_type::<Health>().register_type::<Spin>().register_type::<Clock>();
+    // A bare `App` has no `Time`; the reload polls on one, so the test's game has a clock it can advance.
+    app.init_resource::<Time>();
+    app.register_type::<Health>().register_type::<Spin>().register_type::<Clock>().register_type::<Stamped>();
     // **A reflected resource needs its `ComponentId` to exist**, which the engine makes when the type is used
     // as a `Resource` — the same requirement `registry.schema`'s own `world.insert_resources` has. A game
     // already inserts its resources; this test's game inserts the one it registers.
@@ -61,10 +72,24 @@ fn game(root: &Path) -> App {
 
 /// **One frame, with the commands a `Startup` system queued applied**: `update` runs `Startup` and the
 /// schedule's systems, and the queued reads reach the world at `finish`/`cleanup`.
+///
+/// **The clock moves a second per frame**, which is what the reload's `FileWatch` needs: it polls at the
+/// project's half second and waits out its settle time, so a write is read by the second frame after it and
+/// never on the frame it happens — a half-written save is not read.
 fn frame(app: &mut App) {
+    let mut time = app.world_mut().resource_mut::<Time>();
+    time.advance_by(std::time::Duration::from_secs(1));
     app.update();
     app.finish();
     app.cleanup();
+}
+
+/// **One save: the watch sees the new bytes, then settles on them, then the read runs.** Two frames, because
+/// that is what the watch's contract is — one poll notices the change, the next confirms it has stopped.
+fn save(app: &mut App) {
+    frame(app);
+    frame(app);
+    frame(app);
 }
 
 /// The same read, done directly so a test can see the fault instead of an empty world.
@@ -124,7 +149,7 @@ fn changing_a_field_on_disk_changes_it_in_place_on_the_same_entity() {
     // **Only `max` moves.** `current` and the `Spin` beside it must survive, which is what "applied in place"
     // means and what a respawn would lose.
     write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 25 }\n    Spin: { degrees_per_second: 45.0 }\nresources:\n  Clock: { elapsed: 1.0 }\n");
-    frame(&mut app);
+    save(&mut app);
 
     let after = door(&app, &root);
     assert_eq!(after, before, "the entity is the same one, not a respawn");
@@ -146,7 +171,7 @@ fn removing_an_entity_despawns_it_and_adding_one_spawns_it() {
 
     // The file drops `door_north` and adds `lamp_hall`.
     write(&root, "entities:\n  lamp_hall:\n    Health: { current: 5, max: 5 }\nresources:\n  Clock: { elapsed: 1.0 }\n");
-    frame(&mut app);
+    save(&mut app);
 
     assert!(app.world().get_entity(gone).is_err(), "an entity the file no longer names is despawned");
     let key = root.join(entities::ENTITIES_DIR).join(format!("main{}", entities::ENTITIES_EXT));
@@ -220,7 +245,7 @@ fn a_refused_document_leaves_the_last_good_state_live() {
 
     // The file now names a type the game never registered — a typo, say.
     write(&root, "entities:\n  door_north:\n    Mana: { current: 3 }\n");
-    frame(&mut app);
+    save(&mut app);
 
     assert!(app.world().get_entity(kept).is_ok(), "an entity is not despawned because a file was refused");
     assert_eq!(app.world().get::<Health>(kept).map(|h| h.max), Some(10), "and its values are the last good ones");
@@ -282,4 +307,155 @@ mod second {
 fn a_fault_names_the_file_the_line_and_the_path() {
     let fault = Fault { file: "a.entities.yaml".to_owned(), line: 4, at: "entities.door.Health".to_owned(), why: "no".to_owned() };
     assert_eq!(fault.line(), "a.entities.yaml: line 4: entities.door.Health: no");
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Manager review of #367: M1 to M5. Each of these failed before the fix below.
+// ---------------------------------------------------------------------------------------------------
+
+/// **M1: a fault names the line the fault is on**, not `line 0`. The core walk already knows where every
+/// path stands; this is the number a person needs to go to.
+#[test]
+fn a_fault_names_the_actual_line_it_is_on() {
+    // `Mana` is on line 3 of this file, and `Health` on line 2.
+    let text = "entities:\n  door_north:\n    Mana: { current: 3 }\n";
+    let document = entities::read_document("a.entities.yaml", text).expect("the file reads as YAML");
+    let mut app = game(&project("entities_m1"));
+    let err = entities::apply(app.world_mut(), "a.entities.yaml", "a.entities.yaml", &document)
+        .expect_err("an unregistered type is refused");
+    assert!(err.at.ends_with("Mana"), "the fault is at the component: {}", err.at);
+    assert_eq!(err.line, 3, "the fault is on the line `Mana` stands on: {}", err.line());
+
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("entities_m1-{}", std::process::id())));
+}
+
+/// **M2: a refused document changes nothing.** A component written before the bad one must not stay, and no
+/// entity the refusal left behind may be spawned.
+#[test]
+fn a_refused_document_holds_no_changed_value_and_no_extra_entity() {
+    let root = project("entities_m2");
+    // `Health` is valid and comes first in BTreeMap order; `Mana` is the refusal after it.
+    write(&root, "entities:\n  door_north:\n    Health: { current: 99, max: 99 }\n    Mana: { current: 3 }\n");
+    let mut app = game(&root);
+    frame(&mut app);
+
+    let key = root.join(entities::ENTITIES_DIR).join(format!("main{}", entities::ENTITIES_EXT));
+    let held = app.world().resource::<GameEntities>().spawned.clone();
+    assert!(held.get(&key.display().to_string()).is_none_or(|by_name| by_name.is_empty()), "a refused file spawns nothing: {held:?}");
+    // **No entity at all was left behind**, so nothing can be duplicated by the next good save.
+    let mut query = app.world_mut().query::<&Health>();
+    assert_eq!(query.iter(app.world()).count(), 0, "a refused document leaves no entity");
+
+    // And the next good save makes exactly one.
+    write(&root, FIRST);
+    save(&mut app);
+    let spawned = app.world().resource::<GameEntities>().spawned.get(&key.display().to_string()).cloned().unwrap_or_default();
+    assert_eq!(spawned.len(), 1, "one entity, not one plus a leftover: {spawned:?}");
+    let mut query = app.world_mut().query::<&Health>();
+    assert_eq!(query.iter(app.world()).count(), 1, "and the world holds one `Health`, not two");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **M3: children are tracked like top-level entities**, so five saves leave one child and removing it from
+/// the file removes it.
+#[test]
+fn a_child_does_not_multiply_on_every_save() {
+    let root = project("entities_m3");
+    write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 10 }\n    children:\n      hinge:\n        Spin: { degrees_per_second: 90.0 }\n");
+    let mut app = game(&root);
+    frame(&mut app);
+    for _ in 0..4 {
+        // Each save carries the same child, so a fifth read must still find one.
+        write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 10 }\n    children:\n      hinge:\n        Spin: { degrees_per_second: 90.0 }\n");
+        save(&mut app);
+    }
+    let mut query = app.world_mut().query::<&Spin>();
+    assert_eq!(query.iter(app.world()).count(), 1, "five saves leave one child, not five");
+
+    // Removing the child from the file removes it.
+    write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 10 }\n");
+    save(&mut app);
+    let mut query = app.world_mut().query::<&Spin>();
+    assert_eq!(query.iter(app.world()).count(), 0, "a child the file dropped is despawned");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **M4: an immutable component inserted on the first read must not panic on the next save.**
+///
+/// `Stamped` is immutable (`#[component(immutable)]`) and registered with `ReflectComponent`, which is the
+/// shape that panicked: `ReflectComponent::apply` is a `panic!` on an immutable component, and a second save of
+/// the same file reached it.
+#[test]
+fn an_immutable_component_is_inserted_rather_than_panicked_over() {
+    let root = project("entities_m4");
+    write(&root, "entities:\n  door_north:\n    Stamped: { value: 7 }\n");
+    let mut app = game(&root);
+    save(&mut app);
+    // **The second save is the one that panics**, because the component is now on the entity and the value is
+    // there to be applied.
+    write(&root, "entities:\n  door_north:\n    Stamped: { value: 7 }\n");
+    save(&mut app);
+
+    let key = root.join(entities::ENTITIES_DIR).join(format!("main{}", entities::ENTITIES_EXT));
+    let spawned = app.world().resource::<GameEntities>().spawned.get(&key.display().to_string()).cloned().unwrap_or_default();
+    let entity = *spawned.get("door_north").unwrap_or_else(|| panic!("the entity is tracked: {spawned:?}"));
+    assert_eq!(app.world().get::<Stamped>(entity).map(|s| s.value), Some(7), "the immutable value is on the entity");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **NIT: removing a component from an entity in the file removes it from the entity.**
+#[test]
+fn a_component_the_file_drops_is_removed_from_the_entity() {
+    let root = project("entities_drop_component");
+    write(&root, FIRST);
+    let mut app = game(&root);
+    frame(&mut app);
+    let entity = door(&app, &root);
+    assert!(app.world().get::<Spin>(entity).is_some(), "the file sets `Spin`");
+
+    // The file keeps the entity and drops `Spin`.
+    write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 10 }\nresources:\n  Clock: { elapsed: 1.0 }\n");
+    save(&mut app);
+
+    assert_eq!(door(&app, &root), entity, "and it is still the same entity");
+    assert!(app.world().get::<Spin>(entity).is_none(), "a component the file no longer names is taken off the entity");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **NIT: deleting a whole file despawns what it made.**
+#[test]
+fn deleting_a_file_despawns_its_entities() {
+    let root = project("entities_delete_file");
+    write(&root, FIRST);
+    let mut app = game(&root);
+    frame(&mut app);
+    let entity = door(&app, &root);
+
+    std::fs::remove_file(root.join(entities::ENTITIES_DIR).join(format!("main{}", entities::ENTITIES_EXT))).expect("the file is deleted");
+    save(&mut app);
+    assert!(app.world().get_entity(entity).is_err(), "a deleted file's entities are despawned");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **NIT: a reload reports only what changed**, so a save nobody altered does not claim every entity did.
+#[test]
+fn a_reload_of_an_unchanged_document_reports_no_change() {
+    let root = project("entities_no_change");
+    write(&root, FIRST);
+    let mut app = game(&root);
+    frame(&mut app);
+
+    let path = root.join(entities::ENTITIES_DIR).join(format!("main{}", entities::ENTITIES_EXT));
+    let document = entities::load(&path).expect("the file reads");
+    let applied = entities::apply(app.world_mut(), &path.display().to_string(), &path.display().to_string(), &document)
+        .expect("the same document applies");
+    assert!(applied.spawned.is_empty(), "nothing spawned: {applied:?}");
+    assert!(applied.changed.is_empty(), "nothing changed, because nothing differs: {applied:?}");
+
+    let _ = std::fs::remove_dir_all(&root);
 }

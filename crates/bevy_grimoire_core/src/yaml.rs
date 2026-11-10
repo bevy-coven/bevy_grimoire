@@ -149,6 +149,25 @@ where
     })
 }
 
+/// **The line each path in `text` stands on**, counted from 1 as an editor shows it.
+///
+/// **A fault a caller builds needs a line, not only a path**: `entities.door_north.Mana` is where a reader is
+/// told to look, and the line is what they go to. The walk already knows both — every node carries the path it
+/// stands at and the bytes it occupies — so this is that map, and a caller asks it instead of guessing 0.
+///
+/// **A path the file does not contain is absent**, rather than line 1: a caller that asks about a path it built
+/// itself then gets `None` and can say where the file is without inventing a place in it.
+///
+/// A path's line is the line its **first character** is on, which for a mapping or a sequence is the line its
+/// first `-` or first key is on — the line a person would click.
+pub fn lines(text: &str) -> std::collections::BTreeMap<String, usize> {
+    let walk = walk(text);
+    walk.nodes
+        .iter()
+        .map(|node| (node.path.clone(), line_of(text, node.span.0)))
+        .collect()
+}
+
 /// **Read `text` as the plain JSON a value holds**, keeping nothing but names, numbers and strings: a YAML tag
 /// names an enum variant, and a JSON Schema and a reflected type both spell a named variant as the key of a
 /// one-key object, so `!Near {to: …}` becomes `{"Near": {"to": …}}`.
@@ -169,30 +188,57 @@ pub fn to_json(text: &str, path: &str) -> Result<serde_json::Value, Problem> {
             Detail::default().because(positioned(e.location(), &e.to_string())).docs(DOCS),
         )
     })?;
-    Ok(json_of(value))
+    json_of(value, "", path)
 }
 
-/// A `serde_yaml_ng` value as JSON, a tag as the key of a one-key object.
-fn json_of(value: serde_yaml_ng::Value) -> serde_json::Value {
+/// **A `serde_yaml_ng` value as JSON**, a tag as the key of a one-key object, and **nothing quietly changed**:
+/// a key that is not a string and a number JSON cannot hold are refused rather than turned into `""` and
+/// `null`, because a value a reader silently replaces is one the file does not say.
+#[allow(clippy::result_large_err)]
+fn json_of(value: serde_yaml_ng::Value, at: &str, path: &str) -> Result<serde_json::Value, Problem> {
     use serde_yaml_ng::Value as Y;
-    match value {
+    let here = |why: String| {
+        Problem::with(
+            format!("{path} {WHAT}"),
+            Detail::default().at(Location::file(path.to_owned()).field(Some(at.to_owned()))).because(why).docs(DOCS),
+        )
+    };
+    Ok(match value {
         Y::Tagged(tagged) => {
             let mut map = serde_json::Map::new();
             let name = tagged.tag.to_string();
-            map.insert(name.trim_start_matches('!').to_owned(), json_of(tagged.value));
+            map.insert(
+                name.trim_start_matches('!').to_owned(),
+                json_of(tagged.value, at, path)?,
+            );
             serde_json::Value::Object(map)
         }
         Y::Null => serde_json::Value::Null,
         Y::Bool(b) => serde_json::Value::Bool(b),
-        Y::Number(n) => serde_json::to_value(n).unwrap_or(serde_json::Value::Null),
+        // **`.nan` and `.inf` have no JSON spelling**, so they are refused rather than written as `null`.
+        Y::Number(n) => serde_json::to_value(&n).map_err(|_| {
+            here(format!("`{n}` is not a number JSON holds, so it cannot be read as one"))
+        })?,
         Y::String(s) => serde_json::Value::String(s),
-        Y::Sequence(items) => serde_json::Value::Array(items.into_iter().map(json_of).collect()),
-        Y::Mapping(map) => serde_json::Value::Object(
-            map.into_iter()
-                .map(|(k, v)| (k.as_str().unwrap_or_default().to_owned(), json_of(v)))
-                .collect(),
+        Y::Sequence(items) => serde_json::Value::Array(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(index, v)| json_of(v, &format!("{at}[{index}]"), path))
+                .collect::<Result<_, _>>()?,
         ),
-    }
+        Y::Mapping(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                let Some(key) = k.as_str() else {
+                    return Err(here(format!("a key at `{at}` is not a string, and a JSON object's keys are")));
+                };
+                let child = if at.is_empty() { key.to_owned() } else { format!("{at}.{key}") };
+                out.insert(key.to_owned(), json_of(v, &child, path)?);
+            }
+            serde_json::Value::Object(out)
+        }
+    })
 }
 
 /// **The field path a refusal names**, from `serde_path_to_error`'s path: `.` is the file's root and is
