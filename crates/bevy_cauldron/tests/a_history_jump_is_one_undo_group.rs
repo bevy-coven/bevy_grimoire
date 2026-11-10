@@ -198,7 +198,7 @@ fn the_list_says_who_made_each_change() {
 fn clicking_a_history_row_jumps_there_as_one_group() {
     use bevy::camera::{ImageRenderTarget, NormalizedRenderTarget};
     use bevy::picking::backend::HitData;
-    use bevy::picking::events::{Pointer, PointerClick};
+    use bevy::picking::events::{Pointer, PointerClick, PointerPress};
     use bevy::picking::pointer::{Location, PointerButton, PointerId};
 
     let mut app = booted("jumpclick");
@@ -223,26 +223,23 @@ fn clicking_a_history_row_jumps_there_as_one_group() {
             .expect("a history row for position 1 is on screen")
     };
 
+    // **A press and then the click**, which is what a mouse sends and what arms the jump (UI-53: gooey's own
+    // keyboard walk sends the same selection a click does, so the panel jumps for a press and nothing else).
+    let pointer = Pointer::new(
+        PointerId::Mouse,
+        Location {
+            target: NormalizedRenderTarget::Image(ImageRenderTarget { handle: Default::default(), scale_factor: 1.0 }),
+            position: Vec2::ZERO,
+        },
+    );
+    let hit = HitData { camera: Entity::PLACEHOLDER, depth: 0.0, position: None, normal: None, extra: None };
+    // **One frame, both events**, as a mouse delivers them: the arming lives the frame it is spent in.
+    app.world_mut().trigger(PointerPress { entity: row, pointer: pointer.clone(), button: PointerButton::Primary, hit: hit.clone(), count: 1 });
     app.world_mut().trigger(PointerClick {
         entity: row,
-        pointer: Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Image(ImageRenderTarget {
-                    handle: Default::default(),
-                    scale_factor: 1.0,
-                }),
-                position: Vec2::ZERO,
-            },
-        ),
+        pointer,
         button: PointerButton::Primary,
-        hit: HitData {
-            camera: Entity::PLACEHOLDER,
-            depth: 0.0,
-            position: None,
-            normal: None,
-            extra: None,
-        },
+        hit,
         duration: std::time::Duration::ZERO,
         count: 1,
     });
@@ -272,15 +269,15 @@ fn clicking_a_history_row_jumps_there_as_one_group() {
     assert_eq!(pieces(&app), 2, "one undo removes the whole group");
 }
 
-/// **The line the editor stands on is the selected row, and every row drawn takes the pointer (E-018, UI-53).**
+/// **A row is a pointer target unless it is the line the editor stands on, and no row's text is (E-018, UI-53).**
 ///
-/// The list is gooey's virtualized `tree` now, so its rows are the pool: gooey rebinds them as the list scrolls
-/// and every one of them is a jump target. What is left of the hand-built window's rule is the two facts a click
-/// depends on — the row is hoverable, so it lights under the pointer, and its text is `Pickable::IGNORE`, so the
-/// pointer hits the row and not a word inside it. A click on the line the editor stands on is not a jump because
-/// the panel keeps that line selected: see `a_click_on_a_line_steps_back_to_it`.
+/// The window's rule, kept on the list: a spare or current row was refused by the click observer, so it must not
+/// light up under the pointer either — `Hovered` is read from the pointer's hit, and an entity with
+/// `Pickable::IGNORE` is never hit. On gooey's virtualized list the current line is the row whose key is the undo
+/// depth ([`bevy_cauldron::editor::mark_the_current_line`]), and every other drawn row is a jump target. A row's
+/// text is ignored too, because an unignored child is hit and marks the row hovered through its descendant.
 #[test]
-fn every_row_takes_the_pointer_and_its_text_does_not() {
+fn the_current_line_is_not_a_pointer_target_and_no_rows_text_is() {
     use bevy::picking::Pickable;
     let mut app = booted("rowpick");
     place_for_test(app.world_mut(), "tile_a", (1.5, 0.5));
@@ -311,7 +308,12 @@ fn every_row_takes_the_pointer_and_its_text_does_not() {
     assert!(!rows.is_empty(), "the list draws the lines it holds");
     let world = app.world();
     for (key, hoverable, children) in rows {
-        assert!(hoverable, "the row for line {key} takes the pointer");
+        let target = key != depth as u64;
+        assert_eq!(
+            hoverable, target,
+            "the row for line {key} is a pointer target: {} (the editor stands on {depth})",
+            target
+        );
         for child in children {
             assert_eq!(
                 world.get::<Pickable>(child).copied(),

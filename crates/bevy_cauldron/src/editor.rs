@@ -2965,6 +2965,15 @@ impl Plugin for EditorPlugin {
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went
             // stale. Gated like the rest of the Map door, because it takes `Res<OpenMap>`.
+            // **After gooey has rebound its pool** (UI-53, #239, M4): the rows are reused as the list scrolls, so the
+            // line the editor stands on must be named on whichever row carries it *after* that rebind, not before.
+            .add_systems(
+                Update,
+                // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
+                // gooey recycles its rows as the list scrolls, so a row can become the current line without
+                // `EditorState` changing at all — which is why this cannot be gated on the change flag.
+                mark_the_current_line.after(bevy_gooey::GooeySystems::Style),
+            )
             .add_systems(
                 Update,
                 relevel_placements
@@ -8166,9 +8175,8 @@ fn history_block(s: &mut ChildSpawnerCommands) {
         HistoryTree,
         HistoryBuilt::default(),
         bevy_gooey::TableRows(HISTORY_LIST_ROWS),
-        // **The line is a jump target, and clicking the line you stand on is not a jump.** A click on a row
-        // selects it, and the selection is what the panel set to the current position, so a click on the current
-        // line changes nothing and sends no event (`bevy_gooey::table::pick` compares before it tells).
+        // **The selection, and the jump it causes**: `history_line_clicked` is on the list because every change
+        // gooey sends arrives from the table.
         bevy_gooey::observe(history_line_clicked),
     ));
 }
@@ -8214,30 +8222,57 @@ struct HistoryJump<'w, 's> {
 /// clicked on and sends the selection; the line the editor already stands on is the one the panel keeps
 /// selected, so a click there is the same selection and sends nothing.
 ///
+/// **A jump is a click, not a look** (N4). gooey sends this same change for its own keyboard walk — an arrow, a Page
+/// key, Home, End, a type-ahead character, `*` — and jumping for each of those would walk the map back a step at a
+/// time while a person merely read down the list. A key that moved the list was pressed this frame and a click has
+/// no key behind it, which is the whole difference between the two.
+///
 /// Refused while the leaving question is up, as the undo chord is: a jump edits the map the question is asking
 /// about.
-fn history_line_clicked(picked: On<bevy_gooey::ValueChange<bevy_gooey::TableSelection>>, mut jump_to: HistoryJump) {
-    if jump_to.state.leaving {
+fn history_line_clicked(
+    picked: On<bevy_gooey::ValueChange<bevy_gooey::TableSelection>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut jump_to: HistoryJump,
+    mut commands: Commands,
+) {
+    if keys.get_just_pressed().next().is_some() {
         return;
     }
-    // **The last of them**, because the list is one line per position and a click on a row is one row. A click that
-    // somehow named several takes the furthest along, which is the one whose line was under the pointer last.
+    let depth = jump_to.state.undo_depth();
+    // **A jump that does not happen leaves the selection where it was** (N5). gooey moved it to the row that was
+    // clicked; a row left lit while the map did not move says the click happened and the history did not.
+    let mut put_it_back = |jump_to: &mut HistoryJump, commands: &mut Commands| {
+        commands
+            .entity(picked.source)
+            .insert(bevy_gooey::TableSelection::of(jump_to.state.undo_depth() as u64));
+    };
+    if jump_to.state.leaving {
+        put_it_back(&mut jump_to, &mut commands);
+        return;
+    }
+    // **The last of them**, because the list is one line per position and a click on a row is one row.
     let Some(position) = picked.value.0.iter().next_back().map(|key| *key as usize) else { return };
-    if position == jump_to.state.undo_depth() {
+    if position == depth {
         // The line the editor stands on: nothing to do, and nothing to record.
         return;
     }
-    let j = &mut jump_to;
-    jump(
-        &mut j.commands,
-        &j.assets,
-        &mut j.project,
-        &mut j.open,
-        &mut j.state,
-        &j.placed,
-        &j.transforms,
-        position,
-    );
+    {
+        let j = &mut jump_to;
+        jump(
+            &mut j.commands,
+            &j.assets,
+            &mut j.project,
+            &mut j.open,
+            &mut j.state,
+            &j.placed,
+            &j.transforms,
+            position,
+        );
+    }
+    // **A refused jump moves neither stack** (`jump` stops where it is and says so), so the row must not stay lit.
+    if jump_to.state.undo_depth() == depth {
+        put_it_back(&mut jump_to, &mut commands);
+    }
 }
 
 /// **The history list's lines (E-018, UI-53).** Runs on the same change as the UNDO and REDO rows: the tree's
@@ -8300,7 +8335,6 @@ fn keep_now_in_view(
     children: Query<&Children>,
     mut aimed: Local<(Option<usize>, bool)>,
 ) {
-    let _ = ();
     let Ok(tree) = trees.single() else { return };
     let depth = state.undo_depth();
     // **A moved position re-aims the list**; a settled one has landed and is the person's now.
@@ -8353,6 +8387,41 @@ fn keep_now_in_view(
         && cursor.0 != Some(depth as u64)
     {
         cursor.0 = Some(depth as u64);
+    }
+}
+
+/// **The line the editor stands on is not a pointer target** (E-018, UI-53, M4).
+///
+/// The window's rule, kept on the list: a click on the line you are already on does nothing, so that row must not
+/// light up under the pointer either — `Hovered` is read from the pointer's hit, and an entity with
+/// `Pickable::IGNORE` is never hit. Every other row is a jump target and stays hoverable.
+///
+/// **The rows are a pool**, so the answer is written on every drawn row: a row rebound from the current line onto
+/// another gets its hover back, and one rebound onto the current line loses it. A settled frame compares and
+/// writes nothing.
+fn mark_the_current_line(
+    state: Res<EditorState>,
+    trees: Query<Entity, With<HistoryTree>>,
+    mut rows: Query<(Entity, &bevy_gooey::TableRow, Option<&bevy::picking::Pickable>)>,
+    mut commands: Commands,
+) {
+    let Ok(tree) = trees.single() else { return };
+    let depth = state.undo_depth() as u64;
+    // **The pool's rows are reused**, so the answer has to move with the key: a row rebound off the current line gets
+    // its hover back, and one rebound onto it loses it. gooey spawns a row with no `Pickable` at all, which is the
+    // same hit as `Pickable::default()`, so a missing component on a target row is already right and costs nothing.
+    for (entity, row, pickable) in &mut rows {
+        if row.table != tree {
+            continue;
+        }
+        let now = pickable.copied();
+        if row.key == depth {
+            if now != Some(bevy::picking::Pickable::IGNORE) {
+                commands.entity(entity).insert(bevy::picking::Pickable::IGNORE);
+            }
+        } else if now == Some(bevy::picking::Pickable::IGNORE) {
+            commands.entity(entity).insert(bevy::picking::Pickable::default());
+        }
     }
 }
 
