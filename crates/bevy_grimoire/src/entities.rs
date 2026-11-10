@@ -40,6 +40,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use bevy::ecs::component::ComponentId;
 use bevy::ecs::reflect::{ReflectComponent, ReflectResource};
 use bevy::prelude::*;
 use bevy::reflect::{ReflectDeserialize, TypeRegistration, TypeRegistry};
@@ -111,16 +112,7 @@ impl Document {
     ///
     /// A path the file has nothing for answers `0`, which a fault renders as no line rather than a wrong one.
     fn line_of(&self, at: &str) -> usize {
-        let mut probe = at.to_owned();
-        loop {
-            if let Some(line) = self.lines.get(&probe) {
-                return *line;
-            }
-            match probe.rfind('.') {
-                Some(dot) => probe.truncate(dot),
-                None => return 0,
-            }
-        }
+        nearest_line(&self.lines, at)
     }
 }
 
@@ -135,11 +127,12 @@ pub struct GameEntities {
     pub carried: BTreeMap<String, Vec<String>>,
 }
 
-/// **The line a core `Problem` names**, or `0` when its text has none: GD-01's refusal spells it
-/// `line 4, column 3: …` inside `why`, so this reads the number back rather than a second reader inventing one.
+/// **The line a core `Problem` carries**, or `0` when it names none.
+///
+/// Read off the location rather than scraped out of the sentence: a refusal's `why` spells
+/// `line 4, column 3:` as prose, and a caller that parsed that would be reading a message rather than a value.
 fn problem_line(problem: &bevy_grimoire_core::problem::Problem) -> usize {
-    let why = problem.why.clone().unwrap_or_default();
-    why.split("line ").nth(1).and_then(|rest| rest.split([',', ':']).next()).and_then(|n| n.trim().parse().ok()).unwrap_or(0)
+    problem.where_.as_ref().and_then(|w| w.line).unwrap_or(0)
 }
 
 /// **A document read from its text**, refusing with the line rather than only the path.
@@ -157,14 +150,15 @@ pub fn read_document(file: &str, text: &str) -> Result<Document, Fault> {
     })?;
     let root = json.as_object().ok_or_else(|| Fault {
         file: file.to_owned(),
-        line: 0,
+        // **The line the document itself starts on**, which its first node knows.
+        line: lines.values().copied().min().unwrap_or(0),
         at: String::new(),
         why: format!("a document is a mapping of `{ENTITIES_KEY}` and `{RESOURCES_KEY}`"),
     })?;
     let mut document = Document::default();
     for (key, value) in root {
         match key.as_str() {
-            ENTITIES_KEY => document.entities = read_entities(file, "", value)?,
+            ENTITIES_KEY => document.entities = read_entities(file, ENTITIES_KEY, value, &lines)?,
             RESOURCES_KEY => {
                 let map = value.as_object().ok_or_else(|| Fault {
                     file: file.to_owned(),
@@ -190,26 +184,43 @@ pub fn read_document(file: &str, text: &str) -> Result<Document, Fault> {
 
 /// The entities of one level: the `entities` section, or a `children` mapping inside one.
 #[allow(clippy::result_large_err)]
-fn read_entities(file: &str, prefix: &str, value: &Value) -> Result<BTreeMap<String, EntityDef>, Fault> {
+fn read_entities(
+    file: &str,
+    prefix: &str,
+    value: &Value,
+    lines: &BTreeMap<String, usize>,
+) -> Result<BTreeMap<String, EntityDef>, Fault> {
     let map = value.as_object().ok_or_else(|| Fault {
         file: file.to_owned(),
-        line: 0,
+        line: nearest_line(lines, prefix),
         at: prefix.to_owned(),
         why: "entities are a mapping of a name to that entity's components".to_owned(),
     })?;
     let mut out = BTreeMap::new();
     for (name, body) in map {
-        let at = if prefix.is_empty() { format!("{ENTITIES_KEY}.{name}") } else { format!("{prefix}.{name}") };
+        let at = format!("{prefix}.{name}");
+        // **A dot in a name would collide with a child's key**, which is `parent.children.name`: a top-level
+        // entity called `door.children.hinge` and the `hinge` child of `door` would be one key, so the save
+        // could not tell them apart. Refused at the door rather than escaped, because there is no spelling of
+        // the file this module would then have to explain.
+        if name.contains('.') {
+            return Err(Fault {
+                file: file.to_owned(),
+                line: nearest_line(lines, &at),
+                at: at.clone(),
+                why: "an entity's name may not contain a dot: a child is tracked as `parent.children.name`, so a dotted name could stand for the same key as a child".to_owned(),
+            });
+        }
         let fields = body.as_object().ok_or_else(|| Fault {
             file: file.to_owned(),
-            line: 0,
+            line: nearest_line(lines, &at),
             at: at.clone(),
             why: "an entity is a mapping of a type path to its value".to_owned(),
         })?;
         let mut def = EntityDef::default();
         for (key, value) in fields {
             if key == CHILDREN_KEY {
-                def.children = read_entities(file, &format!("{at}.{CHILDREN_KEY}"), value)?;
+                def.children = read_entities(file, &format!("{at}.{CHILDREN_KEY}"), value, lines)?;
             } else {
                 def.components.insert(key.clone(), value.clone());
             }
@@ -217,6 +228,20 @@ fn read_entities(file: &str, prefix: &str, value: &Value) -> Result<BTreeMap<Str
         out.insert(name.clone(), def);
     }
     Ok(out)
+}
+
+/// **The line the nearest node at or above `at` stands on**, so a shape fault names a place.
+fn nearest_line(lines: &BTreeMap<String, usize>, at: &str) -> usize {
+    let mut probe = at.to_owned();
+    loop {
+        if let Some(line) = lines.get(&probe) {
+            return *line;
+        }
+        match probe.rfind('.') {
+            Some(dot) => probe.truncate(dot),
+            None => return 0,
+        }
+    }
 }
 
 /// **The registration a type path names**, refusing when the game did not register it or the short path is
@@ -302,12 +327,16 @@ pub struct Applied {
 
 /// **One component of one entity, checked and built**, before anything in the world changes.
 struct Planned<'a> {
-    /// The path in the file, for a refusal.
-    at: String,
     /// The component's type path as the file spelled it.
     path: String,
     registration: &'a TypeRegistration,
     built: Box<dyn bevy::reflect::Reflect>,
+    /// **The id the world holds a RESOURCE under**, resolved here so nothing after the first world change can
+    /// fail on it: a resource the game registered and never inserted has none, and asking for it after entities
+    /// were spawned is what leaked them (M2, round 3). `None` for a component, whose id the insert itself makes.
+    resource_id: Option<ComponentId>,
+    /// **The value as the world's own reflected storage takes it**, cloned here for the same reason.
+    dynamic: Option<Box<dyn bevy::reflect::PartialReflect>>,
 }
 
 /// **One entity's plan**: its own components, and each child's.
@@ -325,10 +354,10 @@ struct Plan<'a> {
 
 /// **Build every registration and every value a document names**, refusing at the first thing that is wrong.
 #[allow(clippy::result_large_err)]
-fn plan<'a>(registry: &'a TypeRegistry, file: &str, document: &Document) -> Result<Plan<'a>, Fault> {
+fn plan<'a>(world: &World, registry: &'a TypeRegistry, file: &str, document: &Document) -> Result<Plan<'a>, Fault> {
     let mut entities = BTreeMap::new();
     for (name, def) in &document.entities {
-        entities.insert(name.clone(), plan_entity(registry, file, &format!("{ENTITIES_KEY}.{name}"), def, document)?);
+        entities.insert(name.clone(), plan_entity(world, registry, file, &format!("{ENTITIES_KEY}.{name}"), def, document)?);
     }
     let mut resources = Vec::new();
     for (path, value) in &document.resources {
@@ -337,19 +366,51 @@ fn plan<'a>(registry: &'a TypeRegistry, file: &str, document: &Document) -> Resu
         registration.data::<ReflectResource>().ok_or_else(|| {
             fault(file, document.line_of(&at), at.clone(), format!("`{path}` is registered but not as a `Resource`, so `{RESOURCES_KEY}` cannot set it"))
         })?;
-        resources.push(Planned {
-            at: at.clone(),
-            path: path.clone(),
-            registration,
-            built: reflected(registration, value, file, &at, document)?,
-        });
+        let built = reflected(registration, value, file, &at, document)?;
+        resources.push(planned(world, registry, file, document, at, path, registration, built, true)?);
     }
     Ok(Plan { entities, resources })
 }
 
+/// **One resolved plan entry**: the value built, its component id, and the dynamic copy the world's storage
+/// takes — every failure a write could meet, met here.
+#[allow(clippy::result_large_err)]
+#[allow(clippy::too_many_arguments)]
+fn planned<'a>(
+    world: &World,
+    _registry: &'a TypeRegistry,
+    file: &str,
+    document: &Document,
+    at: String,
+    path: &str,
+    registration: &'a TypeRegistration,
+    built: Box<dyn bevy::reflect::Reflect>,
+    is_resource: bool,
+) -> Result<Planned<'a>, Fault> {
+    let line = document.line_of(&at);
+    // **A resource's id must exist already**, and a resource the game registered and never inserted has none:
+    // that is a refusal here — before anything is spawned — not after. A component's id does not exist until it
+    // is first inserted, so it is not asked for: `insert` makes it.
+    let resource_id = match is_resource {
+        true => Some(world.components().get_id(registration.type_id()).ok_or_else(|| {
+            fault(
+                file,
+                line,
+                at.clone(),
+                format!("`{path}` is registered as a `Resource` but is never inserted into the game, so `{RESOURCES_KEY}` cannot set it: `app.init_resource::<{path}>()` gives it somewhere to live"),
+            )
+        })?),
+        false => None,
+    };
+    let dynamic = built.as_partial_reflect().to_dynamic().map_err(|e| {
+        fault(file, line, at.clone(), format!("the value did not clone into the world's storage: {e:?}"))
+    })?;
+    Ok(Planned { path: path.to_owned(), registration, built, resource_id, dynamic: Some(dynamic) })
+}
+
 /// **One entity and its children, checked and built**, without touching the world.
 #[allow(clippy::result_large_err)]
-fn plan_entity<'a>(registry: &'a TypeRegistry, file: &str, at: &str, def: &EntityDef, document: &Document) -> Result<EntityPlan<'a>, Fault> {
+fn plan_entity<'a>(world: &World, registry: &'a TypeRegistry, file: &str, at: &str, def: &EntityDef, document: &Document) -> Result<EntityPlan<'a>, Fault> {
     let mut components = Vec::new();
     for (path, value) in &def.components {
         let component_at = format!("{at}.{path}");
@@ -357,16 +418,12 @@ fn plan_entity<'a>(registry: &'a TypeRegistry, file: &str, at: &str, def: &Entit
         registration.data::<ReflectComponent>().ok_or_else(|| {
             fault(file, document.line_of(&component_at), component_at.clone(), format!("`{path}` is registered but not as a `Component`, so an entity cannot carry it"))
         })?;
-        components.push(Planned {
-            at: component_at.clone(),
-            path: path.clone(),
-            registration,
-            built: reflected(registration, value, file, &component_at, document)?,
-        });
+        let built = reflected(registration, value, file, &component_at, document)?;
+        components.push(planned(world, registry, file, document, component_at, path, registration, built, false)?);
     }
     let mut children = BTreeMap::new();
     for (name, child) in &def.children {
-        children.insert(name.clone(), plan_entity(registry, file, &format!("{at}.{CHILDREN_KEY}.{name}"), child, document)?);
+        children.insert(name.clone(), plan_entity(world, registry, file, &format!("{at}.{CHILDREN_KEY}.{name}"), child, document)?);
     }
     Ok(EntityPlan { components, children })
 }
@@ -383,7 +440,7 @@ fn plan_entity<'a>(registry: &'a TypeRegistry, file: &str, at: &str, def: &Entit
 pub fn apply(world: &mut World, file: &str, key: &str, document: &Document) -> Result<Applied, Fault> {
     let registry_handle = world.resource::<AppTypeRegistry>().clone();
     let registry = registry_handle.read();
-    let plan = plan(&registry, file, document)?;
+    let plan = plan(world, &registry, file, document)?;
 
     let mut applied = Applied::default();
     let previous = world
@@ -438,19 +495,12 @@ pub fn apply(world: &mut World, file: &str, key: &str, document: &Document) -> R
         }
     }
 
-    for planned in &plan.resources {
-        let component_id = world.components().get_id(planned.registration.type_id()).ok_or_else(|| {
-            fault(
-                file,
-                document.line_of(&planned.at),
-                planned.at.clone(),
-                format!("`{}` is registered as a type but not as a component or resource this world can hold", planned.path),
-            )
-        })?;
-        let value = planned.built.as_partial_reflect().to_dynamic().map_err(|e| {
-            fault(file, document.line_of(&planned.at), planned.at.clone(), format!("the value did not clone: {e:?}"))
-        })?;
-        world.insert_reflect_resource(component_id, value);
+    for planned in plan.resources {
+        // **Nothing here can fail**: the id and the value were resolved in the plan, so no refusal can land
+        // after the first entity was spawned.
+        if let (Some(id), Some(value)) = (planned.resource_id, planned.dynamic) {
+            world.insert_reflect_resource(id, value);
+        }
         applied.resources.push(planned.path.clone());
     }
 

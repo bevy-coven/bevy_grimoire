@@ -376,7 +376,7 @@ fn refusal(path: &str, site: Site) -> Problem {
     Problem::with(
         format!("{path} {WHAT}"),
         Detail::default()
-            .at(Location::file(path.to_owned()).field(site.field))
+            .at(Location::file(path.to_owned()).field(site.field).line(site.line))
             .because(format!("line {}, column {}: {} — {}", site.line, site.column, site.what, site.why))
             .fix(site.fix)
             .docs(DOCS),
@@ -459,6 +459,13 @@ impl Style {
             Style::Plain => !is_number(text) && !matches!(text, "true" | "false" | "null" | "Null" | "NULL" | "~" | ""),
         }
     }
+}
+
+/// **Whether `text` is a YAML number with no JSON spelling**: the infinities and NaN, which `serde_json`
+/// silently turns into `null`.
+fn is_non_finite_number(text: &str) -> bool {
+    let unsigned = text.strip_prefix(['-', '+']).unwrap_or(text);
+    matches!(unsigned, ".inf" | ".Inf" | ".INF" | ".nan" | ".NaN" | ".NAN")
 }
 
 /// **Whether `text` reads as a number** to this reader: a YAML 1.2 integer or float, and its infinities
@@ -640,6 +647,24 @@ pub(crate) fn walk(text: &str) -> Walk {
                     walk.blocks.push((span.start.line(), span.end.line()));
                 }
                 let path = child_path(&stack);
+                // **A number JSON cannot hold is refused here**, at the walk: `.nan` and `.inf` are YAML
+                // numbers a `serde_json::Value` has no spelling for, and `serde_json` turns a non-finite float
+                // into `null` rather than failing — so the check has to be the text's, and it has to be here,
+                // where the line is known.
+                if style == Style::Plain && is_non_finite_number(value.as_ref()) {
+                    walk.site = Some(Site {
+                        what: format!("`{}` is not a number a reader can carry", value),
+                        field: path_of(&path),
+                        line,
+                        column,
+                        why: "JSON has no way to write a NaN or an infinity, so a value here would arrive as `null` \
+                              and say something the file does not"
+                            .to_owned(),
+                        fix: "write a finite number, or keep the value as text".to_owned(),
+                        tab_report: false,
+                    });
+                    return walk;
+                }
                 let key = take_key(&mut stack);
                 let dash = dash_before(text, start);
                 walk.nodes.push(Node { path, kind: NodeKind::Scalar, span: (start, end), key, dash, scalar: Some(Leaf { text: value.to_string(), style }) });

@@ -35,6 +35,14 @@ struct Stamped {
     value: i32,
 }
 
+/// **A resource the game registers and never inserts**, which has no `ComponentId` until it is used as a
+/// resource: the shape whose write is refused.
+#[derive(Resource, Reflect, Default, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[reflect(Resource, Deserialize, Serialize)]
+struct Never {
+    count: i32,
+}
+
 /// A resource, to prove `resources:` goes through the same door.
 #[derive(Resource, Reflect, Default, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[reflect(Resource, Deserialize, Serialize)]
@@ -61,7 +69,7 @@ fn game(root: &Path) -> App {
     app.init_resource::<AppTypeRegistry>();
     // A bare `App` has no `Time`; the reload polls on one, so the test's game has a clock it can advance.
     app.init_resource::<Time>();
-    app.register_type::<Health>().register_type::<Spin>().register_type::<Clock>().register_type::<Stamped>();
+    app.register_type::<Health>().register_type::<Spin>().register_type::<Clock>().register_type::<Stamped>().register_type::<Never>();
     // **A reflected resource needs its `ComponentId` to exist**, which the engine makes when the type is used
     // as a `Resource` — the same requirement `registry.schema`'s own `world.insert_resources` has. A game
     // already inserts its resources; this test's game inserts the one it registers.
@@ -458,4 +466,68 @@ fn a_reload_of_an_unchanged_document_reports_no_change() {
     assert!(applied.changed.is_empty(), "nothing changed, because nothing differs: {applied:?}");
 
     let _ = std::fs::remove_dir_all(&root);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Manager review round 3.
+// ---------------------------------------------------------------------------------------------------
+
+/// **A resource refused AFTER the entities would have been applied changes nothing** (M2, round 3).
+///
+/// A `Resource` the game registered and never inserted has no `ComponentId`, so the write is refused — and that
+/// refusal used to happen inside `apply`, after the entities were spawned, which left them untracked and made
+/// the next good save spawn them a second time.
+#[test]
+fn a_resource_that_is_never_inserted_refuses_before_any_entity_is_spawned() {
+    let root = project("entities_m2_round3");
+    // `Never` is registered as a `Resource` and never inserted into the world, which is the shape that has no
+    // `ComponentId` at all.
+    write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 10 }\nresources:\n  Never: { count: 1 }\n");
+    let mut app = game(&root);
+    let path = root.join(entities::ENTITIES_DIR).join(format!("main{}", entities::ENTITIES_EXT));
+    let document = entities::load(&path).expect("the file reads");
+    let err = entities::apply(app.world_mut(), &path.display().to_string(), &path.display().to_string(), &document)
+        .expect_err("a resource with no component id is refused");
+    assert!(err.line().contains("Never"), "the refusal names the resource: {}", err.line());
+
+    // **No entity exists at all**, so nothing leaked untracked.
+    let mut query = app.world_mut().query::<&Health>();
+    assert_eq!(query.iter(app.world()).count(), 0, "a refused document leaves no entity");
+
+    // And the next good save makes exactly one.
+    write(&root, "entities:\n  door_north:\n    Health: { current: 10, max: 10 }\n");
+    save(&mut app);
+    let mut query = app.world_mut().query::<&Health>();
+    assert_eq!(query.iter(app.world()).count(), 1, "the next good save makes one entity, not two");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **`.nan` and `.inf` are refused, not written as `null`** (NIT, round 3): a number JSON cannot hold is a
+/// value the reader cannot carry, and a `null` in its place would be a value the file does not say.
+#[test]
+fn a_number_json_cannot_hold_is_refused() {
+    let err = entities::read_document("a.entities.yaml", "entities:\n  door_north:\n    Health: { current: .nan }\n")
+        .expect_err("`.nan` is not a value JSON holds");
+    let line = err.line();
+    assert!(line.contains("nan") || line.contains("NaN") || line.contains("not a number"), "the refusal names the number: {line}");
+    assert!(line.contains("line 3"), "and the line it is on: {line}");
+}
+
+/// **A document whose shape is wrong names a line too** (NIT, round 3): `entities` holding a list is refused at
+/// the line `entities` stands on, not at line 0.
+#[test]
+fn a_shape_fault_names_the_line_it_is_on() {
+    let err = entities::read_document("a.entities.yaml", "entities:\n  - one\n  - two\n")
+        .expect_err("a list is not a map of entities");
+    assert_eq!(err.line, 2, "the refusal is at the line the list starts on: {}", err.line());
+}
+
+/// **An entity name with a dot in it is refused** (NIT, round 3): the key a child is tracked under is
+/// `parent.children.name`, so a top-level name containing a dot could collide with a child's key.
+#[test]
+fn an_entity_name_with_a_dot_is_refused() {
+    let err = entities::read_document("a.entities.yaml", "entities:\n  door.children.hinge:\n    Health: { current: 1, max: 1 }\n")
+        .expect_err("a name with a dot could collide with a child's key");
+    assert!(err.line().contains("dot"), "the refusal says why: {}", err.line());
 }
