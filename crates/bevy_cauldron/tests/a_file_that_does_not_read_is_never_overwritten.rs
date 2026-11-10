@@ -176,10 +176,13 @@ const STILL_UNCHECKED: &[&str] = &[
     // extension; no reader in this project opens one, so nothing here can name a field of it. Joined
     // with the owner's exception recorded in the fleet wave-2 report.
     "schema",
+    // A Rhai script (#368) is read by `bevy_grimoire_rhai`, which compiles it and names the file and
+    // line of a syntax error, but core cannot name a field of it and this layer does not open one.
+    "scripts_rhai",
 ];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 1;
+const STILL_UNCHECKED_MAX: usize = 2;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {
