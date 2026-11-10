@@ -33,21 +33,51 @@ use crate::problem::{Detail, Location, Problem};
 /// agent's context is the thing this limit protects.
 pub const GUIDE_MAX_BYTES: usize = 65_536;
 
+/// **The row count of a text a box cannot be trusted to show**, whatever its length: large enough that no
+/// box's row limit holds it, small enough that adding it to another row count cannot overflow.
+pub const UNSHOWABLE_ROWS: usize = 1_000_000;
+
+/// **Whether a character can hide text or break a line the box does not count**: a control character, a tab
+/// (a variable width), a Unicode line or paragraph separator (a text layout breaks on them where
+/// [`str::lines`] does not), and the zero-width and bidirectional controls that make characters invisible
+/// or reorder them.
+fn hides_or_breaks(c: char) -> bool {
+    c.is_control()
+        || c == '\t'
+        || matches!(c, '\u{2028}' | '\u{2029}')
+        || ('\u{200b}'..='\u{200f}').contains(&c)
+        || ('\u{202a}'..='\u{202e}').contains(&c)
+        || ('\u{2060}'..='\u{2064}').contains(&c)
+        || ('\u{2066}'..='\u{206f}').contains(&c)
+        || c == '\u{feff}'
+}
+
 /// **How many visual rows `text` occupies in a box `columns` characters wide**, counting a line that wraps
-/// as the rows it wraps onto and an empty line as one row.
+/// as the rows it wraps onto and an empty line as one row, **never fewer than it needs and never guessing
+/// kindly**.
 ///
 /// **Characters are not rows.** A file of twenty short lines and a file of three long ones can hold the same
 /// number of characters and need very different amounts of room, and a box that clips shows the first and
 /// hides the rest. Every place that decides "can a person see all of this?" asks this, so the answer is one
-/// answer: `ceil(chars_in_line / columns)`, at least one row per line.
+/// answer: `ceil(columns_in_line / columns)`, at least one row per line, where a character outside ASCII
+/// takes two columns (full-width and wide glyphs are about twice an average advance).
+///
+/// **A text with a character that hides or breaks** ([`hides_or_breaks`]) is [`UNSHOWABLE_ROWS`]: a person
+/// cannot be shown what a layout would break or hide where this counts one line, so the answer fails
+/// closed. A line ending `\r\n` is the one exception, being what a Windows file's lines end with.
 pub fn visual_rows(text: &str, columns: usize) -> usize {
     let columns = columns.max(1);
-    text.lines()
-        .map(|line| {
-            let chars = line.chars().count();
-            chars.div_ceil(columns).max(1)
-        })
-        .sum()
+    let mut rows = 0usize;
+    for line in text.lines() {
+        // `lines` drops one `\r` before `\n`; any other control character, a lone `\r` included, is a break
+        // or a hidden character the layout would act on.
+        if line.chars().any(hides_or_breaks) {
+            return UNSHOWABLE_ROWS;
+        }
+        let width: usize = line.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+        rows += width.div_ceil(columns).max(1);
+    }
+    rows
 }
 
 /// The person's file, inside `user_dirs::config_dir()`.
