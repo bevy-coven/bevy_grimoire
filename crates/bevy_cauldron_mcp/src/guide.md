@@ -18,6 +18,8 @@
 
 **An operation refused is an operation that changed nothing**, and the refusal names the field and the reason. Read it, fix the parameter, call again — do not reach for `grimoire_run_command` to do the same thing by a different door. That tool runs a registered editor command by its id, exactly as its keyboard shortcut would, and it is for what has no operation.
 
+**Before you hand-write a project file, ask for its schema.** `grimoire_schema` returns one kind's JSON Schema (`kind` is a file kind's id: `map`, `library`, `kits` and the rest), generated from the type the reader reads, so it lists every field the file may have, each field's description, and which other file's value it names.
+
 ## When the person says wait
 
 **View ▸ Pause agent writes refuses every write with one sentence.** The answer reads: the agent's writes are paused, so `<operation>` changed nothing; a person turned them off with View > Pause agent writes; turn that off to let the agent write again; previews still work. That is not an error to work around and not a reason to retry: a person asked for it. **Read it and wait**, keep planning with `grimoire_preview_operation` and `grimoire_state`, and tell them in one line what you would do when they unpause.
