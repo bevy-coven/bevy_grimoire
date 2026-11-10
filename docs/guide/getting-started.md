@@ -29,7 +29,7 @@ A **kit** is a folder of pieces. A **piece** is one thing you can place on a map
 
 ## Make a map
 
-A **map** is a file that holds your placements. It is saved as `<name>.map.ron` in the project's maps folder.
+A **map** is a file that holds your placements. It is saved as `<name>.map.yaml` in the project's maps folder.
 
 1. Press Right. The MAPS column is selected. Its first row is `+ new map`, and below it is `bedroom`, a one-room map that ships with this repo (Enter on it opens it). The hint bar reads `up/down map · left/right column · Enter new map · Esc quit`.
 2. Press `N`. A form titled `NEW MAP IN furniture` opens in the panel under MAPS. It has four fields: NAME, BOUNDS, ORIGIN and NOTE. NAME is blank, BOUNDS is `10 x 4 x 10` and ORIGIN is `0 x 0 x 0`. The hint reads `type · Enter makes the map · Esc cancel`. Enter on `+ new map` also starts the name prompt.
@@ -68,7 +68,7 @@ Press Home to frame the view. With a locked placement, Home frames that placemen
 
 **Resize the docks.** The thin bar between the INSPECTOR on the left and the map is a divider. Drag it left or right and the inspector narrows or widens with it, its rows reflowing to the new width, while the map keeps the rest of the window. Until you drag it, the dock is as wide as the inspector asks to be. The wheel over the inspector scrolls it to the sections below the fold, such as ENVIRONMENT.
 
-**Your arrangement is kept.** A divider you drag, a tab you pick and a panel you move into another group are saved in your settings file (`settings.ron`, in the application's data folder) as the shell's layout, and the editor opens on that arrangement next time. **View ▸ Reset layout** puts the default back — the inspector on the left, the map in the middle, the place panel on the right — and takes the key out of the file, so the default is what every later start begins from. A project's own `editor.ron` may state a layout too; the project's is the one read when a project is open.
+**Your arrangement is kept.** A divider you drag, a tab you pick and a panel you move into another group are saved in your settings file (`settings.yaml`, in the application's data folder) as the shell's layout, and the editor opens on that arrangement next time. **View ▸ Reset layout** puts the default back — the inspector on the left, the map in the middle, the place panel on the right — and takes the key out of the file, so the default is what every later start begins from. A project's own `editor.yaml` may state a layout too; the project's is the one read when a project is open.
 
 ## Undo and redo
 
@@ -82,7 +82,7 @@ Press Home to frame the view. With a locked placement, Home frames that placemen
 
 1. Press Cmd+S.
 
-**What you see:** a line in the status band reads `saved`, followed by the file path. The file is `maps/first_map.map.ron` inside the project, which is `assets/grimoire/maps/first_map.map.ron`.
+**What you see:** a line in the status band reads `saved`, followed by the file path. The file is `maps/first_map.map.yaml` inside the project, which is `assets/grimoire/maps/first_map.map.yaml`.
 
 **If it goes wrong:** if the map cannot be saved, the status band shows `NOT SAVED:` followed by the reason. The map stays open and nothing on disk changes. Fix the reason, then press Cmd+S again.
 

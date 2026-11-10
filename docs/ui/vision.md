@@ -88,12 +88,12 @@ There is one registry. A command has an `id` (`map.place`, `edit.undo`), a title
 ## 6. Settings layers
 
 1. Built-in defaults.
-2. The user file, `<config_dir>/Grimoire/settings.ron`.
-3. The project file, `<root>/assets/grimoire/editor.ron`.
+2. The user file, `<config_dir>/Grimoire/settings.yaml`.
+3. The project file, `<root>/assets/grimoire/editor.yaml`.
 
-Precedence is per key, and the later layer wins. `EditorSettings` is versioned and has `#[serde(default)]`, so an old file still reads. It is registered in the reload contract as **Live**: editing a file changes the running editor. A file that does not read keeps the last good value and reports a problem. Recent projects live apart, in `<data_dir>/Grimoire/recent.ron`.
+Precedence is per key, and the later layer wins. `EditorSettings` is versioned and has `#[serde(default)]`, so an old file still reads. It is registered in the reload contract as **Live**: editing a file changes the running editor. A file that does not read keeps the last good value and reports a problem. Recent projects live apart, in `<data_dir>/Grimoire/recent.yaml`.
 
-The settings screen is searchable with categories as tabs. Each setting shows its default, a description and a modified marker, and has Reset, which removes the key from the file. A User and Project switch chooses the layer being edited. The keymap editor stores its bindings as `keymap` in `settings.ron` and refuses to save a conflict.
+The settings screen is searchable with categories as tabs. Each setting shows its default, a description and a modified marker, and has Reset, which removes the key from the file. A User and Project switch chooses the layer being edited. The keymap editor stores its bindings as `keymap` in `settings.yaml` and refuses to save a conflict.
 
 ## 7. Component inventory
 

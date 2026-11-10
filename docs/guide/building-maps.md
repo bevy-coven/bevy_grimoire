@@ -74,7 +74,7 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **Goal:** Change one number of a game's own tuning file, and see what you changed.
 
-1. List the file in `assets/grimoire/data.ron`, as the game's guide describes. Without that file the DATA section says `no data files registered (data.ron)` and shows no table.
+1. List the file in `assets/grimoire/data.yaml`, as the game's guide describes. Without that file the DATA section says `no data files registered (data.yaml)` and shows no table.
 2. In the INSPECTOR, find **DATA**. Each leaf of each registered file is a row of the table: file, path and value. Click a column's title to sort by it.
 3. Open a row with Enter or a double click. A text field opens over the value. Type the new value and press Enter.
 
@@ -197,7 +197,7 @@ An agent can lay only part of the map: `layout_propose` takes an `area`, `[x0, z
 1. Drag a png, jpg, jpeg, webp or gif file onto the editor window. Or type `ref <path> [caption]` in the terrain field.
 2. Type `ref <id> remove` in the terrain field to take one off.
 
-**What you see:** The status line says `added reference r1 (references/court.png)`. A picture from outside the project is copied into the project's `references/` folder first; one already inside stays where it is. The list is kept beside the map as `<map>.references.ron`, and an agent reads it in `grimoire_state` and cites a picture by its id. `Cmd+Z` takes the reference back and leaves the copied file. A file that is not an image, or a different picture under a name `references/` already holds, is refused and nothing changes.
+**What you see:** The status line says `added reference r1 (references/court.png)`. A picture from outside the project is copied into the project's `references/` folder first; one already inside stays where it is. The list is kept beside the map as `<map>.references.yaml`, and an agent reads it in `grimoire_state` and cites a picture by its id. `Cmd+Z` takes the reference back and leaves the copied file. A file that is not an image, or a different picture under a name `references/` already holds, is refused and nothing changes.
 
 ## Move the camera
 

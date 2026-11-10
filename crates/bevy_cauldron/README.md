@@ -13,7 +13,7 @@ Started with no project, it opens on a launcher: a pixel-art splash of a murder 
 - **Map** — palette, ghost, place, fill, undo.
 - **Tiles** — mesh import, measurement review, descriptor authoring, and a vision-LLM labeler whose suggestions stage behind the same commit door a human edit goes through.
 - **Compose** — reusable groups a map holds a *reference* to rather than a copy of: members, the edge tokens their boundary derives, where those members disagree, and which were built against a descriptor that has since changed.
-- **Anim** — a rig bench: measure GLB clips, compare against `rigs.ron`, plot diagnostics, and scrub a staged figure driven by the **real** `bevy_grimoire_anim` blender rather than a preview copy of it. Last, because the other three are three views of building a level and this is a different job.
+- **Anim** — a rig bench: measure GLB clips, compare against `rigs.yaml`, plot diagnostics, and scrub a staged figure driven by the **real** `bevy_grimoire_anim` blender rather than a preview copy of it. Last, because the other three are three views of building a level and this is a different job.
 
 ## Every refusal sticks, and can be copied
 
