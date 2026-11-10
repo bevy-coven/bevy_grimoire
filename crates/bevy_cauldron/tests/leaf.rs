@@ -44,7 +44,7 @@ const ALLOWED: &[(&str, &str)] = &[
         "roles and setters for the widget layer's a11y tree; `bevy_a11y` does not re-export it, and \
          0.24 is what `bevy_feathers` itself depends on so the two cannot drift",
     ),
-    ("ron", "map and library serialization"),
+    ("bevy_grimoire_migrate", "the RON-to-YAML migration: `cauldron migrate`, and the refusal an open raises for a project still holding RON files (GD-03, #365)"),
     ("serde", "derives on every schema type this crate reads and writes"),
     ("dirs", "the platform's own data directory, where the user's recent-projects list lives (UI-11, #217); no family crate finds platform directories"),
     ("serde_json", "the VLM chat request and reply bodies"),

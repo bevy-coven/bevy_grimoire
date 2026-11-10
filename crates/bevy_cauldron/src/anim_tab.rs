@@ -1637,7 +1637,7 @@ mod write_back_tests {
         let manifest = dir.join("assets/grimoire/rigs.yaml");
         let before = std::fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("{e}"));
         let mut bench = bench_for(&dir);
-        let refused = commit_text(&dir, &mut bench, "(version: 99, rigs: {})".to_owned());
+        let refused = commit_text(&dir, &mut bench, "{version: 99, rigs: {}}".to_owned());
         assert!(refused.is_err());
         let still = std::fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(before, still, "a refused write must not touch the file");

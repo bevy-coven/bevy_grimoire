@@ -309,6 +309,22 @@ fn write_yaml<T: serde::Serialize>(path: &Path, value: &T) {
     std::fs::write(path, text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
+/// **Change a fixture's library the typed way**: read the file the builder wrote, let `edit` change the
+/// value, write it back through the one writer. A test that needs a row shaped unlike what the builder
+/// writes says so here, and never by text, which is where RON's spelling and YAML's disagree.
+pub fn edit_library(path: &Path, edit: impl FnOnce(&mut Library)) {
+    let mut library: Library = bevy_grimoire_core::yaml::read(path).unwrap_or_else(|p| panic!("{}", p.line()));
+    edit(&mut library);
+    write_yaml(path, &library);
+}
+
+/// **The same, for a map**: read, change, write.
+pub fn edit_map(path: &Path, edit: impl FnOnce(&mut Map)) {
+    let mut map: Map = bevy_grimoire_core::yaml::read(path).unwrap_or_else(|p| panic!("{}", p.line()));
+    edit(&mut map);
+    write_yaml(path, &map);
+}
+
 impl Fixture {
     /// An empty project: a vocabulary, an empty library, a policy, and the font.
     pub fn new(name: &str) -> Fixture {

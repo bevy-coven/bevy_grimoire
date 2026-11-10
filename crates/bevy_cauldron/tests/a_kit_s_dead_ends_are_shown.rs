@@ -21,12 +21,15 @@ fn project(name: &str) -> PathBuf {
         .descriptor("crate", "alpha")
         .build("m");
     let lib = root.join("assets/grimoire/furniture/library.yaml");
-    let text = std::fs::read_to_string(&lib).unwrap_or_else(|e| panic!("{lib:?}: {e}"));
-    let jamb_at = text.find("id: \"jamb\"").unwrap_or_else(|| panic!("no jamb row: {text}"));
-    let (head, tail) = text.split_at(jamb_at);
-    let cells = r#"subgrid: Some(( cells: [( at: (1, 0, 0), edge: Some("jamb_l") ), ( at: (1, 0, 1), edge: Some("jamb_r") )] ))"#;
-    let tail = tail.replacen("subgrid: None", cells, 1);
-    std::fs::write(&lib, format!("{head}{tail}")).unwrap_or_else(|e| panic!("{e}"));
+    fixtures::edit_library(&lib, |library| {
+        let jamb = library.descriptors.iter_mut().find(|d| d.id == "jamb").unwrap_or_else(|| panic!("no jamb row"));
+        jamb.subgrid = Some(bevy_grimoire_core::descriptor::Subgrid {
+            cells: vec![
+                bevy_grimoire_core::descriptor::SubCell { at: (1, 0, 0), edge: Some("jamb_l".to_owned()), ..Default::default() },
+                bevy_grimoire_core::descriptor::SubCell { at: (1, 0, 1), edge: Some("jamb_r".to_owned()), ..Default::default() },
+            ],
+        });
+    });
     root
 }
 

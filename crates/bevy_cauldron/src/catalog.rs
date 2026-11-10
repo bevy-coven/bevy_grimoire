@@ -464,17 +464,14 @@ fn strands(label: &str, users: &[String]) -> Option<String> {
 /// so `kit_create` can tell on undo that a kit's files are still exactly what it wrote.
 pub(crate) fn new_kit_files(name: &str) -> (String, String) {
     let library = format!(
-        "(\n    version: 1,\n    note: Some(\"Empty on purpose — `{name}` is a new kit. Import \
-         meshes on the Meshes tab; they land here.\"),\n    descriptors: [],\n)\n"
+        "{{version: 1, note: \"Empty on purpose — `{name}` is a new kit. Import meshes on the Meshes tab; they land here.\", descriptors: []}}\n"
     );
     // **No lattice setting here, and that is the change of 2026-08-16.** `face_bands` and
     // `snap_divisor` describe a lattice, and a kit does not have one — a map has exactly one, so
     // they live on `Map` now. A new kit's policy is genuinely empty, and it says so rather than
     // carrying a number it cannot own.
     let policy = format!(
-        "(\n    version: 2,\n    note: Some(\"The policy layer for `{name}`. No patches yet: \
-         `Project::open` refuses a rule that matches nothing, so one cannot be added before the \
-         pieces it names exist.\"),\n)\n"
+        "{{version: 2, note: \"The policy layer for `{name}`. No patches yet: `Project::open` refuses a rule that matches nothing, so one cannot be added before the pieces it names exist.\"}}\n"
     );
     (library, policy)
 }
@@ -577,7 +574,7 @@ fn write_project_files(dir: &Path, vocab: &[u8]) -> Result<(), String> {
     // **The version comes from the constant, never a literal** — the same rule the chooser's own
     // fixture records: bumping `KITS_VERSION` must not write a file the schema refuses.
     let kits = format!(
-        "(version: {}, bind: [], authoring: None, bash: [])",
+        "{{version: {}, bind: [], authoring: null, bash: []}}",
         bevy_grimoire_core::kits::KITS_VERSION
     );
     let kits_path = grimoire.join(bevy_grimoire_core::kits::KITS_FILE);
@@ -968,7 +965,7 @@ mod tests {
             std::fs::write(
                 base.join(bevy_grimoire_core::kits::KITS_FILE),
                 format!(
-                    "(version: {}, bind: [], authoring: None, bash: [])",
+                    "{{version: {}, bind: [], authoring: null, bash: []}}",
                     bevy_grimoire_core::kits::KITS_VERSION
                 ),
             )
@@ -1022,9 +1019,9 @@ mod tests {
             };
             std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
             let ids: Vec<String> = (0..n)
-                .map(|i| format!("(id: \"p{i}\", mesh: Some(\"p{i}.glb\"))"))
+                .map(|i| format!("{{id: \"p{i}\", mesh: \"p{i}.glb\"}}"))
                 .collect();
-            let text = format!("(version: 1, descriptors: [{}])", ids.join(", "));
+            let text = format!("{{version: 1, descriptors: [{}]}}", ids.join(", "));
             std::fs::write(dir.join(LIBRARY_FILE), text)
                 .unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
             if let Some(k) = name {
@@ -1043,9 +1040,9 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
             let ids: Vec<String> = pieces
                 .iter()
-                .map(|p| format!("(id: \"{ns}/{p}\", mesh: Some(\"{p}.glb\"))"))
+                .map(|p| format!("{{id: \"{ns}/{p}\", mesh: \"{p}.glb\"}}"))
                 .collect();
-            let text = format!("(version: 1, descriptors: [{}])", ids.join(", "));
+            let text = format!("{{version: 1, descriptors: [{}]}}", ids.join(", "));
             std::fs::write(dir.join(LIBRARY_FILE), text)
                 .unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
             self.bind(name);
@@ -1086,9 +1083,9 @@ mod tests {
             let body: Vec<String> = names
                 .iter()
                 .enumerate()
-                .map(|(i, id)| format!("    slot{i}: \"{id}\","))
+                .map(|(i, id)| format!("slot{i}: \"{id}\""))
                 .collect();
-            std::fs::write(dir.join(file), format!("(\n{}\n)\n", body.join("\n")))
+            std::fs::write(dir.join(file), format!("{}\n", body.join("\n")))
                 .unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
         }
     }
@@ -1330,7 +1327,7 @@ mod tests {
         let vocab = root.0.join(GRIMOIRE_DIR).join("vocab.yaml");
         std::fs::write(
             &vocab,
-            "(// a comment that must survive\n kind: (tokens: []), effects: (tokens: []), look: (tokens: []), surfaces: (tokens: []), )",
+            "# a comment that must survive\nkind: {tokens: []}\neffects: {tokens: []}\nlook: {tokens: []}\nsurfaces: {tokens: []}\n",
         )
         .unwrap_or_else(|e| panic!("{}: {e}", vocab.display()));
 
@@ -1391,7 +1388,7 @@ mod tests {
     fn a_project_name_cannot_escape_the_parent() {
         let root = Root::new("escape");
         let vocab = root.0.join(GRIMOIRE_DIR).join("vocab.yaml");
-        std::fs::write(&vocab, "()").unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(&vocab, "{}").unwrap_or_else(|e| panic!("{e}"));
         let parent = root.0.parent().unwrap_or_else(|| panic!("temp dir has a parent"));
 
         for hostile in ["../evil", "foo/bar", "..", "a/../../b"] {
@@ -1719,16 +1716,7 @@ mod tests {
         let path = root.0.join(GRIMOIRE_DIR).join("site").join(bevy_grimoire_core::policy::POLICY_FILE);
         std::fs::write(
             &path,
-            r#"(
-    version: 2,
-    // A comment that must survive.
-    note: Some("a kit with policy"),
-    exclude: ["characters"],
-    patches: [
-        ( match: Id("wall"), because: "this game's walls are 2.4 m", patch: ( align: ( stretch_y: Some(1.2) ) ) ),
-    ],
-)
-"#,
+            "version: 2\n# A comment that must survive.\nnote: a kit with policy\nexclude: [characters]\npatches:\n- match: !Id wall\n  because: this game's walls are 2.4 m\n  patch:\n    align:\n      stretch_y: 1.2\n",
         )
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let catalog = Catalog::scan(&root.0).unwrap_or_else(|e| panic!("{e}"));
@@ -1743,7 +1731,7 @@ mod tests {
 
         remove_policy_entry(kit, &rows[0].row).unwrap_or_else(|e| panic!("{e}"));
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{e}"));
-        assert!(text.contains("// A comment that must survive"), "the comment stands:\n{text}");
+        assert!(text.contains("# A comment that must survive"), "the comment stands:\n{text}");
         let left = policy_entries(kit).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(left.iter().map(|r| r.row.clone()).collect::<Vec<_>>(), vec![PolicyRow::Patch(0)], "only the exclusion went");
 

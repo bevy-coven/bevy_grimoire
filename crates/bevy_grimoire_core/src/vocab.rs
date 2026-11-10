@@ -946,8 +946,7 @@ mod tests {
     #[test]
     fn an_unknown_axis_is_refused() {
         let err = Vocabularies::parse(
-            "( kind: ( tokens: [] ), effects: ( tokens: [] ), look: ( tokens: [] ), \
-             surfaces: ( tokens: [] ), mood: ( tokens: [] ) )",
+            "{kind: {tokens: []}, effects: {tokens: []}, look: {tokens: []}, surfaces: {tokens: []}, mood: {tokens: []}}",
         )
         .err()
         .unwrap_or_default();

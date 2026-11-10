@@ -9972,195 +9972,42 @@ pub mod rules_set {
         }
 
         /// **The text surgery itself**: replace this block's numbers, leaving every other byte.
+        ///
+        /// A block is found by its position among the file's `blocks`, which is the position it has in
+        /// the rules the editor holds (the file is read in order), and every field is a path into it, so
+        /// a `weights` row whose `prefix` holds the characters `cell:` cannot be mistaken for the field.
         fn surgery(
             text: &str,
             was: &bevy_grimoire_core::rules::BlockRules,
             expected: &bevy_grimoire_core::rules::Rules,
             example: &str,
         ) -> Result<String, String> {
-            let now = &expected
-                .blocks
-                .iter()
-                .find(|b| b.example == example)
-                .ok_or_else(|| format!("`{example}` is not a block"))?;
-            let needle = format!("example: \"{example}\"");
-            let seen = text.matches(&needle).count();
-            if seen != 1 {
-                return Err(format!(
-                    "`{needle}` appears {seen} times; a block is found by exactly one"
-                ));
-            }
-            let at = text.find(&needle).ok_or_else(|| format!("`{needle}` not found"))?;
-            // **The block's own parentheses.** A rules file is one struct of structs, so counting
-            // depth from the `(` before its `example` to the matching `)` bounds it exactly.
-            let open = text[..at]
-                .rfind('(')
-                .ok_or_else(|| "no `(` before the block".to_string())?;
-            let mut depth = 0usize;
-            let mut close = None;
-            for (i, ch) in text[open..].char_indices() {
-                match ch {
-                    '(' => depth += 1,
-                    ')' => {
-                        depth = depth.saturating_sub(1);
-                        if depth == 0 {
-                            close = Some(open + i);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let close = close.ok_or_else(|| "the block's `(` is never closed".to_string())?;
-            let mut body = text[open..=close].to_owned();
-
+            use bevy_grimoire_core::yaml_surgery::{Value, replace_value, set};
+            let found: Vec<usize> = expected.blocks.iter().enumerate().filter(|(_, b)| b.example == example).map(|(i, _)| i).collect();
+            let [index] = found[..] else {
+                return Err(format!("`example: {example}` appears {} times; a block is found by exactly one", found.len()));
+            };
+            let now = &expected.blocks[index];
+            let at = |field: &str| format!("blocks[{index}].{field}");
+            let mut out = text.to_owned();
             // **One field at a time, and only the ones that moved.**
             if was.cell != now.cell {
-                Self::set_field(&mut body, "cell", &now.cell.to_string())?;
+                out = set(&out, &at("cell"), Value::Float(f64::from(now.cell)), None).map_err(|p| p.line())?;
             }
             if was.seed != now.seed {
-                Self::set_field(&mut body, "seed", &now.seed.to_string())?;
+                out = set(&out, &at("seed"), Value::Int(now.seed as i64), None).map_err(|p| p.line())?;
             }
             if was.attempts != now.attempts {
-                Self::set_field(&mut body, "attempts", &now.attempts.to_string())?;
+                out = set(&out, &at("attempts"), Value::Int(i64::from(now.attempts)), None).map_err(|p| p.line())?;
             }
             if was.no_empty != now.no_empty {
-                Self::set_field(&mut body, "no_empty", &now.no_empty.to_string())?;
+                out = set(&out, &at("no_empty"), Value::Bool(now.no_empty), None).map_err(|p| p.line())?;
             }
             if was.weights != now.weights {
-                Self::set_field(&mut body, "weights", &Self::render_weights(&now.weights))?;
+                let weights = bevy_grimoire_core::yaml::to_string(&now.weights).map_err(|p| p.line())?;
+                out = replace_value(&out, &at("weights"), &weights).map_err(|p| p.line())?.0;
             }
-            let mut out = String::with_capacity(text.len() + 32);
-            out.push_str(&text[..open]);
-            out.push_str(&body);
-            out.push_str(&text[close + 1..]);
             Ok(out)
-        }
-
-        /// **`[(prefix: "a", times: 1.0)]`**, as the file writes it.
-        ///
-        /// **A whole number gets its `.0`.** `50.0f64.to_string()` is `50`, and RON reads that back as
-        /// an integer into a float field only by luck of the parser; more to the point, a file the
-        /// author wrote as `100.0` coming back as `100` is a diff in a file nobody asked to reformat,
-        /// and the round-trip a test compares is then unequal. Measured live on Sanctuary's own
-        /// `times: 100.0`, which came back `times: 50` — the number right and the spelling wrong.
-        fn render_weights(weights: &[bevy_grimoire_core::rules::Weight]) -> String {
-            let rows: Vec<String> = weights
-                .iter()
-                .map(|w| {
-                    let t = w.times;
-                    let text = if t.is_finite() && t.fract() == 0.0 {
-                        format!("{t:.1}")
-                    } else {
-                        t.to_string()
-                    };
-                    format!("(prefix: {:?}, times: {text})", w.prefix)
-                })
-                .collect();
-            format!("[{}]", rows.join(", "))
-        }
-
-        /// **Where a field's `name:` starts, at the block's own depth and outside any string.**
-        ///
-        /// **Not `body.find(name)`.** A weight's `prefix` is arbitrary text, so a file holding
-        /// `weights: [(prefix: "cell:x", times: 2.0)]` contains the characters `cell:` — and a
-        /// `find` that took the first match would edit inside the prefix and leave the real field
-        /// alone. Measured: with `weights` written before `cell` in a hand-edited file, that
-        /// produced `Expected end of string` and the whole-file parse check refused the write, so
-        /// the file survived — but the operation had aimed at the wrong bytes, and the parse check
-        /// was the only thing standing between the author and a broken rules file.
-        ///
-        /// A field of [`bevy_grimoire_core::rules::BlockRules`] is a depth-1 key of the block, so the
-        /// scan counts brackets and skips strings, and accepts the name only where the depth is 1.
-        fn field_at(body: &str, needle: &str) -> Option<usize> {
-            let bytes = body.as_bytes();
-            let mut depth = 0i32;
-            let mut in_string = false;
-            let mut escaped = false;
-            let mut i = 0;
-            while i < bytes.len() {
-                let c = bytes[i] as char;
-                if in_string {
-                    if escaped {
-                        escaped = false;
-                    } else if c == '\\' {
-                        escaped = true;
-                    } else if c == '"' {
-                        in_string = false;
-                    }
-                    i += 1;
-                    continue;
-                }
-                match c {
-                    '"' => in_string = true,
-                    '(' | '[' => depth += 1,
-                    ')' | ']' => depth -= 1,
-                    // **A name at depth 1 is this block's own field.** The block's opening `(` is
-                    // depth 1, and every nested value — a `weights` row, a `size` pair — is deeper.
-                    _ if depth == 1 && body[i..].starts_with(needle) => {
-                        // Only a real key: the character before must not be part of a longer name.
-                        let before = body[..i].chars().next_back();
-                        let boundary = before.is_none_or(|b| {
-                            !(b.is_alphanumeric() || b == '_' || b == ':')
-                        });
-                        if boundary {
-                            return Some(i);
-                        }
-                    }
-                    _ => {}
-                }
-                i += 1;
-            }
-            None
-        }
-
-        /// **Replace one field's value inside a block's text**, or say the field is not there.
-        ///
-        /// The value runs from after `name:` to the comma that ends it **at the field's own nesting
-        /// depth**, so `weights: [(prefix: "a", times: 1.0)]` is one value and the comma inside it is
-        /// not the end. Quotes are skipped, so a prefix containing a comma or a bracket is safe.
-        fn set_field(body: &mut String, name: &str, value: &str) -> Result<(), String> {
-            let needle = format!("{name}:");
-            let at = Self::field_at(body, &needle)
-                .ok_or_else(|| format!("the block states no `{name}` to replace"))?;
-            let from = at + needle.len();
-            let bytes = body.as_bytes();
-            let mut i = from;
-            let mut depth = 0i32;
-            let mut in_string = false;
-            let mut escaped = false;
-            while i < bytes.len() {
-                let c = bytes[i] as char;
-                if in_string {
-                    if escaped {
-                        escaped = false;
-                    } else if c == '\\' {
-                        escaped = true;
-                    } else if c == '"' {
-                        in_string = false;
-                    }
-                    i += 1;
-                    continue;
-                }
-                match c {
-                    '"' => in_string = true,
-                    '(' | '[' => depth += 1,
-                    ')' | ']' => {
-                        if depth == 0 {
-                            break;
-                        }
-                        depth -= 1;
-                    }
-                    ',' if depth == 0 => break,
-                    _ => {}
-                }
-                i += 1;
-            }
-            let span = &body[from..i];
-            let trimmed = span.trim();
-            let start = from + span.find(trimmed).unwrap_or(0);
-            body.replace_range(start..start + trimmed.len(), value);
-            Ok(())
         }
     }
 

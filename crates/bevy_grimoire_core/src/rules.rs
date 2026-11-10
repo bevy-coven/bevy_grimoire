@@ -1212,6 +1212,6 @@ blocks:
         let parsed = Rules::parse(text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(parsed.blocks[0].border, None);
         assert!(parsed.blocks[0].footprints.is_empty());
-        assert!(Rules::parse("(version: 1, blocks: [], surprise: 1)").is_err(), "unknown fields are refused");
+        assert!(Rules::parse("{version: 1, blocks: [], surprise: 1}").is_err(), "unknown fields are refused");
     }
 }

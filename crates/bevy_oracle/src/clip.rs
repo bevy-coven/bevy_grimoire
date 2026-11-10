@@ -261,7 +261,7 @@ mod tests {
         let path = dir.join(LABELLED_FILE);
         let one = |truth: bool| {
             format!(
-                "[(id: \"a\", title: \"t\", dir: \"d\", truth: {truth})]"
+                "[{{id: \"a\", title: \"t\", dir: \"d\", truth: {truth}}}]"
             )
         };
         std::fs::write(&path, one(true)).unwrap();
@@ -270,7 +270,7 @@ mod tests {
         assert!(load_labelled(&path).is_err(), "every sample a mismatch must be refused");
         std::fs::write(
             &path,
-            "[(id: \"a\", title: \"t\", dir: \"d\", truth: true), (id: \"b\", title: \"u\", dir: \"e\", truth: false)]",
+            "[{id: \"a\", title: \"t\", dir: \"d\", truth: true}, {id: \"b\", title: \"u\", dir: \"e\", truth: false}]",
         )
         .unwrap();
         assert_eq!(load_labelled(&path).unwrap().len(), 2, "one of each is a set");
