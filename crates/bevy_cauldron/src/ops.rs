@@ -5200,15 +5200,14 @@ pub fn preview_shows(ctx: &Ctx, op: &dyn Operation, params: &serde_json::Value) 
 /// would be a second answer to what the change would be (and, for an operation with a side effect in
 /// `plan`, a second side effect).
 ///
-/// **`would` is in front of the plan's own summary**, so the sentence a person reads while nothing has
-/// been written cannot be read as something that happened — and a preview and its apply cannot
-/// describe one change two ways.
+/// **The plan's own summary, and nothing in front of it**: the receipt supplies the tense (`the Familiar
+/// is about to place bed@02`), so a preview and its apply describe one change in one set of words.
 pub fn preview_summary(op: &dyn Operation, plan: &serde_json::Value) -> String {
     match plan.get("summary").and_then(serde_json::Value::as_str) {
-        Some(said) => format!("would {said}"),
+        Some(said) => said.to_owned(),
         // **A plan that names no summary is one whose answer is the change itself** — a
         // `placement_add`'s box, an undo's restore. Naming the operation is then the honest sentence.
-        None => format!("would do `{}`", op.name()),
+        None => format!("do `{}`", op.name()),
     }
 }
 

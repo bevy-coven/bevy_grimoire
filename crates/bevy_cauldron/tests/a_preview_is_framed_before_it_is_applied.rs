@@ -192,6 +192,7 @@ fn a_preview_is_framed_and_the_map_on_disk_does_not_move() {
         note.contains("the familiar") && (note.contains("preview") || note.contains("about to")),
         "the receipt does not name the change a preview: {note:?}"
     );
+    assert!(!note.contains("about to would"), "the receipt says `would` twice: {note:?}");
 }
 
 /// **2. A preview then its apply with the same parameters moves the camera once.**
