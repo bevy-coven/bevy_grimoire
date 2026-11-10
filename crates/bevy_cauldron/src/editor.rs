@@ -2969,7 +2969,7 @@ impl Plugin for EditorPlugin {
                 // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
                 // gooey recycles its rows as the list scrolls, so a row can become the current line without
                 // `EditorState` changing at all — which is why this cannot be gated on the change flag.
-                (mark_the_current_line.after(bevy_gooey::GooeySystems::Style), hand_the_wheel_on),
+                (mark_the_current_line.after(bevy_gooey::GooeySystems::Style),),
             )
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went

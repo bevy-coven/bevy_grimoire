@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **ui-51-outliner-layers** `7e842d45` The outliner groups placements by layer (floor, wall, ceiling, surface, opening, decal) and then by kind, and its stamp and note rows say what they are *No clip: visible, not yet recorded: fleet worker*
+- **ui-53-wheel-hands-on** `ef2745a3` A history or outliner list that cannot use a wheel notch hands it to the inspector, and a jump needs a click, not a key walk; the current history line is not hoverable *No clip: visible, not yet recorded: fleet worker*
 - **ui-53-history-list** `8230892` The history panel scrolls: 5,000 log lines in a virtualized list, with the agent's lines marked *No clip: visible, not yet recorded: fleet worker*
 - **ui-80-overlay-ink** `c2a7773` The editor's skin carries the light map's two inks, and the map's grid and the seating lattice are drawn in the running skin's grid tone instead of the editor's own *For you: The light map and the grid now take their colours from the theme you choose, so a high-contrast or a project skin reaches the overlays you read the map by.* *No clip: visible, not yet recorded: fleet worker*
 - **ui-73-accessibility-reaches-chrome** `50a5c9c` Theme, text size and interface size reach the editor's own labels: chrome::font scales with the text size, UiScale with the interface size, so all three settings move the whole window *For you: Changing the text size or the interface size now enlarges the editor's own labels and panels, not only the buttons it draws with the library.* *No clip: visible, not yet recorded: fleet worker*
