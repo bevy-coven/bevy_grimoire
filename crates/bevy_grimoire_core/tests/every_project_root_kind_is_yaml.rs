@@ -191,7 +191,7 @@ fn a_project_holding_any_root_kind_as_ron_is_refused_naming_that_file() {
         let _ = std::fs::remove_dir_all(&root);
         // **A kind's base decides where its file lives**: a `Base::Root` kind (`family.yaml`,
         // `destructible.yaml`) hangs from the project root, every other from `assets/grimoire`.
-        let kind = kind_at(&path);
+        let kind = kind_at(path);
         let base = match kind.base {
             bevy_grimoire_core::reload::Base::Root => root.clone(),
             bevy_grimoire_core::reload::Base::Grimoire => root.join("assets/grimoire"),

@@ -104,7 +104,7 @@ fn damaged(text: &str) -> String {
     let mut at = 0usize;
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("version:") {
+        if trimmed.strip_prefix("version:").is_some() {
             let key_at = at + (line.len() - trimmed.len());
             // The colon goes, leaving `version 2` — a key with no separator.
             return format!("{}{}", &text[..key_at], &text[key_at + "version:".len()..]);
@@ -122,7 +122,7 @@ fn damaged(text: &str) -> String {
 }
 
 fn wrong_type(text: &str, field: &str) -> String {
-    let (_, mut value, mut end) = field_span(text, field);
+    let (_, value, mut end) = field_span(text, field);
     // **A key whose value starts on the next line** (`kind:` then `  tokens: []`) has nothing on its own line,
     // so the value's range is empty and lands one byte before itself. The replacement then fills the key's line,
     // which is the edit that makes the value the wrong type.

@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use bevy_grimoire_core::migrate::{self, ARCHIVE_DIR, COMMAND, RON_EXT, YAML_EXT};
+use bevy_grimoire_core::migrate::{self, ARCHIVE_DIR, COMMAND};
 use bevy_grimoire_core::{standards::Standards, yaml};
 
 /// **A scratch project of this test's own**, named for the test and this process.
