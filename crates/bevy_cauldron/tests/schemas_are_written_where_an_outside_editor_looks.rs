@@ -24,6 +24,15 @@ fn kind_file(root: &Path, kind: &str) -> PathBuf {
     root.join(schema::SCHEMA_DIR).join(format!("{kind}{}", schema::SCHEMA_EXT))
 }
 
+/// **An open, accepted**: the schemas are written where the opened project is put in the World
+/// (`Opened::insert_into`), not on the staged load's thread, which a person can cancel.
+fn open_and_accept(argv: &[String]) -> Result<(), String> {
+    let opened = bevy_cauldron::args::open(argv)?;
+    let mut world = bevy::prelude::World::new();
+    opened.insert_into(&mut world);
+    Ok(())
+}
+
 #[test]
 fn opening_a_project_writes_a_schema_for_every_kind() {
     let root = fixtures::Fixture::new("schemas_on_open").descriptor("site/wall", "alpha").build("m");
@@ -32,7 +41,7 @@ fn opening_a_project_writes_a_schema_for_every_kind() {
     let folder = root.join(schema::SCHEMA_DIR);
     assert!(!folder.exists(), "the fixture is a project from before the schema folder");
 
-    bevy_cauldron::args::open(&[root.to_string_lossy().into_owned(), "m".to_owned()])
+    open_and_accept(&[root.to_string_lossy().into_owned(), "m".to_owned()])
         .unwrap_or_else(|e| panic!("the fixture project opens: {e}"));
 
     for kind in schema::KINDS {
@@ -52,7 +61,7 @@ fn opening_a_project_writes_a_schema_for_every_kind() {
 #[test]
 fn the_schema_written_on_open_describes_the_type_the_project_writes() {
     let root = fixtures::Fixture::new("schemas_describe_the_type").descriptor("site/wall", "alpha").build("m");
-    bevy_cauldron::args::open(&[root.to_string_lossy().into_owned(), "m".to_owned()])
+    open_and_accept(&[root.to_string_lossy().into_owned(), "m".to_owned()])
         .unwrap_or_else(|e| panic!("the fixture project opens: {e}"));
 
     // The map's schema is the type's, not a stale copy from another release.
@@ -80,7 +89,7 @@ fn a_persons_own_schema_file_is_kept_and_the_project_still_opens() {
 
     // **The open still succeeds.** A derived file that could not be written is a report, never an editor
     // that will not start: the schema is what completion is built from, not what the project is.
-    bevy_cauldron::args::open(&[root.to_string_lossy().into_owned(), "m".to_owned()])
+    open_and_accept(&[root.to_string_lossy().into_owned(), "m".to_owned()])
         .unwrap_or_else(|e| panic!("a refused schema write must not refuse the open: {e}"));
 
     assert_eq!(
@@ -97,7 +106,7 @@ fn a_persons_own_schema_file_is_kept_and_the_project_still_opens() {
 fn opening_again_overwrites_a_hand_edit_and_never_a_persons_own_file() {
     let root = fixtures::Fixture::new("schemas_hand_edit_on_open").descriptor("site/wall", "alpha").build("m");
     let argv = [root.to_string_lossy().into_owned(), "m".to_owned()];
-    bevy_cauldron::args::open(&argv).unwrap_or_else(|e| panic!("the fixture project opens: {e}"));
+    open_and_accept(&argv).unwrap_or_else(|e| panic!("the fixture project opens: {e}"));
 
     // A person edits a generated file, removing the warning comment as they do it.
     let generated = kind_file(&root, "map");
@@ -112,8 +121,8 @@ fn opening_again_overwrites_a_hand_edit_and_never_a_persons_own_file() {
     let theirs = kind_file(&theirs_root, "map");
     std::fs::write(&theirs, mine).expect("the person's file is written");
 
-    bevy_cauldron::args::open(&argv).unwrap_or_else(|e| panic!("reopening still opens: {e}"));
-    bevy_cauldron::args::open(&theirs_argv).unwrap_or_else(|e| panic!("a refused schema write must not refuse the open: {e}"));
+    open_and_accept(&argv).unwrap_or_else(|e| panic!("reopening still opens: {e}"));
+    open_and_accept(&theirs_argv).unwrap_or_else(|e| panic!("a refused schema write must not refuse the open: {e}"));
 
     let after = std::fs::read_to_string(&generated).expect("readable");
     assert_ne!(after, "{\"hand\": \"edit\"}", "a hand edit to a generated schema is overwritten on the next open");
