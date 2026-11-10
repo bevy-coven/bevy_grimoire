@@ -119,16 +119,17 @@ fn agent_guide(
     _: In<serde_json::Value>,
     project: Option<Res<crate::project::Project>>,
     user: Option<Res<crate::agent_guide::UserGuideFile>>,
+    store_root: Option<Res<crate::trusted::StoreRoot>>,
     state: Option<ResMut<crate::editor::EditorState>>,
 ) -> Result<Value, String> {
     // **The Projects home is not an open project.** The menu's folder is a card being looked at, not a
     // project whose guide an agent is following, so the project layer is absent there and only the
     // person's is served.
     let Some(mut state) = state else {
-        let composed = crate::agent_guide::compose(project.as_deref(), user.as_deref(), None);
+        let composed = crate::agent_guide::compose(project.as_deref(), user.as_deref(), store_root.as_deref(), None);
         return Ok(crate::agent_guide::json(&composed));
     };
-    let composed = crate::agent_guide::serve(&mut state, project.as_deref(), user.as_deref());
+    let composed = crate::agent_guide::serve(&mut state, project.as_deref(), user.as_deref(), store_root.as_deref());
     for problem in &composed.guide.problems {
         // **The same sentence each time, folded into one row by [`crate::chrome::Status`]**: an agent asks
         // at the start of every task, and a guide that stays broken would otherwise push the same line on

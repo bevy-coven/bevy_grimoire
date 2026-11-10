@@ -224,3 +224,44 @@ fn the_session_remembers_what_was_refused() {
     assert!(!trust.denied_at(Path::new("/p"), "other text"));
     assert!(!trust.denied_at(Path::new("/q"), "text"), "another project is another guide");
 }
+
+/// **A guide too long for the question is never offered for allowing.**
+///
+/// `Allow this guide` grants the whole file, so a question that showed only the first 1 200 characters
+/// would be asking a person to allow content they were never shown — the hole the truncation would open if
+/// the button stayed. The two answers that remain are the ones that never grant unseen text: **Trust this
+/// project** (a decision about the project, made with that meaning in front of the person) and **Not now**.
+#[test]
+fn a_guide_too_long_to_show_is_asked_about_without_an_allow() {
+    let (mut app, _home, root, store) = editor(&format!("guide_trust_long_{}", std::process::id()));
+    let text = "a rule that repeats. ".repeat(200);
+    write_guide(&root, &text);
+    assert!(text.chars().count() > bevy_cauldron::agent_guide::SHOWN_CHARS, "the guide is longer than the question can show");
+
+    let _ = call(&mut app);
+    let asking = app.world().resource::<Confirm>().asking(Asked::TrustGuide);
+    assert!(asking, "the person is still asked about it");
+    // **Yes is Trust this project**, the only grant a two-answer question offers.
+    tap(&mut app, Key::Character("y".into()), KeyCode::KeyY);
+    assert_eq!(
+        decision(&store, &root, "any later wording"),
+        Decision::Trusted(Scope::Project),
+        "the affirmative of a question with no Allow is the project, never a claim to have read the file"
+    );
+    assert_eq!(
+        store_guide(&store, &root, &text),
+        Decision::Trusted(Scope::Project),
+        "and the long text is allowed only through the project"
+    );
+
+    // **The text area on the project page is where the whole file is shown**, and that is what the question
+    // points the person at.
+    let app = app;
+    let note = app.world().resource::<EditorState>().status.note_text().to_owned();
+    assert!(!note.contains("Not allowed"), "nothing was refused: {note}");
+}
+
+/// The store's answer for one text of one project.
+fn store_guide(store: &Path, root: &Path, text: &str) -> Decision {
+    TrustStore::load(store).expect("the store reads").guide_decision(root, text).expect("the root resolves")
+}
