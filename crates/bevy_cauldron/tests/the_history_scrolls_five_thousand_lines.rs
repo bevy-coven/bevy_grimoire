@@ -281,3 +281,106 @@ fn a_click_on_a_line_steps_back_to_it() {
     assert_eq!(app.world().resource::<EditorState>().undo_depth(), 0, "a click on the top line takes every change back");
     assert_eq!(app.world().resource::<OpenMap>().map.placements.len(), 1, "and the map is the fixture's own piece");
 }
+
+/// **A fixture with three real placements**, so the lines a jump takes back are the ones an author made.
+fn three_placements(tag: &str) -> App {
+    let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
+        .descriptor("site/wall", "alpha")
+        .place("site/wall", (0.5, 0.5))
+        .build("m");
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    updates(&mut app, 6);
+    for x in [1.5, 2.5, 3.5] {
+        editor::place_for_test(app.world_mut(), "site/wall", (x, 0.5));
+        updates(&mut app, 2);
+    }
+    assert_eq!(app.world().resource::<EditorState>().undo_depth(), 3, "three placements are three lines");
+    app
+}
+
+/// **A walk down the list with the keys reads it and does not jump** (UI-53, N4). gooey sends the same selection
+/// for an arrow, a Page key, Home, End or a type-ahead character that it sends for a click, and a jump for each of
+/// them would walk the map back a line at a time while a person read down the list.
+#[test]
+fn a_key_walk_down_the_list_does_not_jump() {
+    let mut app = three_placements("history_keywalk");
+    let tree = history_tree(&mut app);
+    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ArrowUp);
+    app.world_mut().trigger(bevy_gooey::ValueChange {
+        source: tree,
+        value: bevy_gooey::TableSelection::of(1),
+        is_final: true,
+    });
+    let state = app.world().resource::<EditorState>();
+    assert_eq!(state.undo_depth(), 3, "an arrow key's selection is a look, not a jump");
+    assert_eq!(state.redo_depth(), 0, "nothing was undone");
+    assert_eq!(app.world().resource::<OpenMap>().map.placements.len(), 4, "the map is as it was");
+}
+
+/// **A jump that is refused leaves the selection on the line the editor stands on** (UI-53, N5): a row left lit
+/// while the map did not move says the click happened and the history did not.
+#[test]
+fn a_refused_jump_leaves_the_selection_on_the_current_line() {
+    let mut app = three_placements("history_refused");
+    app.world_mut().resource_mut::<EditorState>().leaving = true;
+    editor::click_history_line_for_test(app.world_mut(), 1);
+    updates(&mut app, 3);
+    let tree = history_tree(&mut app);
+    assert_eq!(app.world().resource::<EditorState>().undo_depth(), 3, "the leaving question holds the map");
+    assert_eq!(
+        app.world().get::<bevy_gooey::TableSelection>(tree).cloned().unwrap_or_default(),
+        bevy_gooey::TableSelection::of(3),
+        "the selected row is still the line the editor stands on"
+    );
+}
+
+/// The Map inspector's own scroll: `(offset, scrollable range)` in pixels.
+fn inspector_scroll(app: &mut App) -> (f32, f32) {
+    let world = app.world_mut();
+    let (position, node) = world
+        .query_filtered::<(&bevy::ui::ScrollPosition, &ComputedNode), With<editor::MapControlsPane>>()
+        .single(world)
+        .expect("the Map inspector is a scroll pane");
+    let scale = node.inverse_scale_factor();
+    (position.y, ((node.content_size().y - node.size().y) * scale).max(0.0))
+}
+
+/// **A list at its end hands the wheel to the inspector**, as a wheel over plain text does. gooey's `ScrollArea`
+/// would take every notch over the list and stop it there, so sixty notches down the inspector left the headings
+/// below the history unseen (`navigation::every_destination_is_measured_and_the_baseline_says_so`).
+#[test]
+fn a_list_at_its_end_hands_the_wheel_to_the_inspector() {
+    let mut app = rig("history_handoff");
+    let (_, range) = inspector_scroll(&mut app);
+    assert!(range > 0.0, "the inspector has somewhere to scroll, or this proves nothing: {range}");
+    // **Wheeled up over the list**: the list takes the notches it can use and carries itself to the top of the
+    // session, and the notches after that — it has nowhere left to go — are the inspector's.
+    let (before, _) = inspector_scroll(&mut app);
+    assert!(before > 0.0, "the inspector rests below its top, so a notch up has somewhere to take it: {before}");
+    for _ in 0..8 {
+        wheel(&mut app, -WHEEL_TRAVEL_PX);
+    }
+    let rows = rows_in_the_world(&mut app);
+    assert!(rows.iter().any(|(key, _)| *key == 0), "the list reached the top of the session first: {rows:?}");
+    let (after, _) = inspector_scroll(&mut app);
+    assert!(after < before, "notches on a list resting at its top scrolled the inspector ({before} -> {after})");
+}
+
+/// **Scrolling 5,000 lines stays inside the UI frame budget** (UI-53, #259): the frames a wheel produces are
+/// settled frames, and the systems that follow the list's content cost less than the budget on each.
+#[test]
+fn scrolling_five_thousand_lines_stays_inside_the_ui_frame_budget() {
+    let mut app = rig("history_budget");
+    for _ in 0..8 {
+        wheel(&mut app, -WHEEL_TRAVEL_PX);
+        let frame = *app.world().resource::<bevy_cauldron::ui_budget::UiFrame>();
+        assert!(frame.last_systems >= 1, "the content systems timed themselves: {frame:?}");
+        assert!(
+            frame.within_budget(),
+            "a frame of scrolling the history cost {:.3} ms of the {} ms the UI may spend (settled: {}): {frame:?}",
+            frame.last_ms,
+            bevy_cauldron::ui_budget::MAX_MS_PER_FRAME,
+            frame.settled()
+        );
+    }
+}

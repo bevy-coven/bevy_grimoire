@@ -33,18 +33,18 @@ did, in order.
 | A rig (the Rigs bench) | press = (cross), press = (cross), press = (cross), press = (cross), `--door rigs` on the command line | 4 | 0 | **no** — no key, menu row or command opens the Rigs door from inside the editor: four presses of `=` walk ["MESHES", "MAP", "MESHES", "MAP"] and never the bench |
 | One of a rig's clips | `--door rigs` on the command line, click a row in the bench's list | 0 | 0 | **no** — the bench is reachable only from the command line (see the row above), and a clip is chosen from a list inside it; this fixture has no rig, so its list reads ["no rigs in this project yet"] |
 | A sound cue | wheel 60 notches, never reaching `AUDIO` | 0 | 60 | **no** — the AUDIO block is behind the off-by-default `bevy_siren` feature: 60 wheel notches down the inspector never draw it, and nothing else draws a cue |
-| A map's terrain | wheel down to `TERRAIN` | 0 | 5 | yes |
+| A map's terrain | wheel down to `TERRAIN` | 0 | 3 | yes |
 | A map's water | wheel 60 notches, never reaching `WATER` | 0 | 60 | **no** — water is an operation (`water_place`) with no panel: nothing draws a map's water to walk to |
 | A map's forest | wheel 60 notches, never reaching `FOREST` | 0 | 60 | **no** — forest is an operation (`forest_scatter`) with no panel, so there is nothing to walk to |
 | A map's lights | wheel 60 notches, never reaching `LIGHTS` | 0 | 60 | **no** — the LIGHTS block is behind the off-by-default `bevy_lights` feature, and nothing else draws a pool |
-| A game data file | wheel down to `DATA` | 0 | 5 | yes |
-| The problems list | wheel down to `PROBLEMS` | 0 | 8 | yes |
-| The notes | wheel down to `NOTES` | 0 | 7 | yes |
-| The history | it is drawn beside UNDO and REDO, on screen at a cold start (7 rows) | 0 | 0 | yes |
+| A game data file | wheel down to `DATA` | 0 | 4 | yes |
+| The problems list | wheel down to `PROBLEMS` | 0 | 7 | yes |
+| The notes | wheel down to `NOTES` | 0 | 5 | yes |
+| The history | it is drawn beside UNDO and REDO, on screen at a cold start (1 line, 1 drawn) | 0 | 0 | yes |
 | The AGENT block | click `View`, click `Show agent` | 0 | 2 | yes |
 | The settings | Cmd+, | 1 | 0 | yes |
 | The running game's log | Cmd+O (close project) | 1 | 0 | **no** — no panel or screen draws the running game's output: the workbench and the project page both read no log, and the game's output goes to stdout and cauldron.log |
 
 ## What the numbers say
 
-7 of 20 destinations cannot be reached at all. Of the 13 that can, 2 are where the editor already starts, 1 is reached by a key alone, and 10 need the pointer. The inspector moves only by the wheel, so scrolling to a heading costs between 5 and 8 notches. Set against that, a workspace model asks for any workspace in one press, any named thing in at most `Cmd+P`, its name and `Enter`, and one press back: 2 of these 13 cost more than one press and 10 of them need the pointer.
+7 of 20 destinations cannot be reached at all. Of the 13 that can, 2 are where the editor already starts, 1 is reached by a key alone, and 10 need the pointer. The inspector moves only by the wheel, so scrolling to a heading costs between 3 and 7 notches. Set against that, a workspace model asks for any workspace in one press, any named thing in at most `Cmd+P`, its name and `Enter`, and one press back: 2 of these 13 cost more than one press and 10 of them need the pointer.

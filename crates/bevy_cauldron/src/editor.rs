@@ -2962,9 +2962,6 @@ impl Plugin for EditorPlugin {
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::tiles::Door::map_door_is_open),
             )
-            // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
-            // different piece is laid, so this runs on every map change and redraws only what went
-            // stale. Gated like the rest of the Map door, because it takes `Res<OpenMap>`.
             // **After gooey has rebound its pool** (UI-53, #239, M4): the rows are reused as the list scrolls, so the
             // line the editor stands on must be named on whichever row carries it *after* that rebind, not before.
             .add_systems(
@@ -2972,8 +2969,11 @@ impl Plugin for EditorPlugin {
                 // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
                 // gooey recycles its rows as the list scrolls, so a row can become the current line without
                 // `EditorState` changing at all — which is why this cannot be gated on the change flag.
-                mark_the_current_line.after(bevy_gooey::GooeySystems::Style),
+                (mark_the_current_line.after(bevy_gooey::GooeySystems::Style), hand_the_wheel_on),
             )
+            // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
+            // different piece is laid, so this runs on every map change and redraws only what went
+            // stale. Gated like the rest of the Map door, because it takes `Res<OpenMap>`.
             .add_systems(
                 Update,
                 relevel_placements
@@ -8241,7 +8241,7 @@ fn history_line_clicked(
     let depth = jump_to.state.undo_depth();
     // **A jump that does not happen leaves the selection where it was** (N5). gooey moved it to the row that was
     // clicked; a row left lit while the map did not move says the click happened and the history did not.
-    let mut put_it_back = |jump_to: &mut HistoryJump, commands: &mut Commands| {
+    let put_it_back = |jump_to: &mut HistoryJump, commands: &mut Commands| {
         commands
             .entity(picked.source)
             .insert(bevy_gooey::TableSelection::of(jump_to.state.undo_depth() as u64));
@@ -8423,6 +8423,52 @@ fn mark_the_current_line(
             commands.entity(entity).insert(bevy::picking::Pickable::default());
         }
     }
+}
+
+/// **The fewest pixels a wheel notch must move a list for the list to keep it**, so a list resting on an end does not
+/// swallow a notch that moved it by rounding.
+const LIST_WHEEL_MIN_MOVE_PX: f32 = 0.5;
+
+/// **A list in the inspector hands the wheel on when it cannot use it** (UI-53, #239; UI-51, #237).
+///
+/// gooey's table list carries `ScrollArea`, whose handler takes every notch over it and stops it there — even a notch
+/// that moves nothing. The history list and the outliner sit in the middle of the Map inspector, so a wheel over one
+/// of them never reached the inspector: sixty notches down the pane left TERRAIN, DATA, PROBLEMS and NOTES unseen
+/// (`navigation::every_destination_is_measured_and_the_baseline_says_so` counted four destinations lost).
+///
+/// So these two lists take their own wheel ([`the_list_wheel`]) in place of `ScrollArea`'s: a notch the list can
+/// use moves it and stops there, and one it cannot — a list that fits its window, or one resting on the end the notch
+/// pushes toward — bubbles to the inspector, as a wheel over plain text does. Taken once: the marker is the missing
+/// `ScrollArea`.
+fn hand_the_wheel_on(
+    lists: Query<Entity, (With<bevy_gooey::ListView>, With<bevy::ui_widgets::ScrollArea>)>,
+    parents: Query<&ChildOf>,
+    owners: Query<(), Or<(With<HistoryTree>, With<crate::outliner::OutlinerTree>)>>,
+    mut commands: Commands,
+) {
+    for list in &lists {
+        if parents.iter_ancestors(list).any(|ancestor| owners.contains(ancestor)) {
+            commands.entity(list).remove::<bevy::ui_widgets::ScrollArea>().observe(the_list_wheel);
+        }
+    }
+}
+
+/// **One wheel notch over a list the editor owns the wheel of**: the list moves if it can, else the notch goes on up.
+fn the_list_wheel(
+    mut scroll: On<bevy::picking::events::PointerScroll>,
+    mut lists: Query<(&ComputedNode, &mut ScrollPosition), With<bevy_gooey::ListView>>,
+    ratio: Res<bevy::input::mouse::MouseScrollPixelsPerLine>,
+) {
+    let Ok((computed, mut position)) = lists.get_mut(scroll.entity) else { return };
+    let scale = computed.inverse_scale_factor();
+    let range = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
+    let moved_to = (position.y - scroll.to_pixels(&ratio).y).clamp(0.0, range);
+    if (moved_to - position.y).abs() < LIST_WHEEL_MIN_MOVE_PX {
+        // Nowhere to go: the notch is the inspector's.
+        return;
+    }
+    position.y = moved_to;
+    scroll.propagate(false);
 }
 
 #[allow(clippy::too_many_arguments)]

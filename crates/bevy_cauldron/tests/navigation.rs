@@ -546,11 +546,27 @@ fn the_history() -> Destination {
         });
         (lines, drawn)
     };
-    assert!(drawn > 1, "the history list drew {drawn} row(s), so the undo list is not there");
+    // **A cold start has no edits, so the list is one line and one row is drawn** (gooey's pool is
+    // `(rows tall).ceil() + 1`, capped at the lines it holds): the list is there, and it draws exactly what it holds.
+    let pool = {
+        let world = d.app.world_mut();
+        world
+            .query_filtered::<&bevy_gooey::TableRows, With<bevy_cauldron::editor::HistoryTree>>()
+            .single(world)
+            .map_or(0, |rows| rows.0.ceil() as usize + 1)
+    };
+    assert!(lines >= 1 && drawn >= 1, "the history list holds {lines} line(s) and drew {drawn} row(s), so the undo list is not there");
+    assert_eq!(
+        drawn,
+        lines.min(pool),
+        "the history list drew {drawn} row(s) of its {lines} line(s); a pool of {pool} draws {} of them",
+        lines.min(pool)
+    );
     Destination {
         what: "The history",
         steps: vec![format!(
-            "it is drawn beside UNDO and REDO, on screen at a cold start ({lines} lines, {drawn} drawn)"
+            "it is drawn beside UNDO and REDO, on screen at a cold start ({lines} {}, {drawn} drawn)",
+            plural(lines, "line", "lines")
         )],
         cost: d.cost,
         reach: Reach::Arrived,
