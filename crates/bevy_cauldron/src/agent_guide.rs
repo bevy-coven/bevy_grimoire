@@ -212,6 +212,18 @@ impl Plugin for AgentGuidePlugin {
 /// allowed by its first lines and its size, which is the honest thing a modal can offer.
 pub const SHOWN_CHARS: usize = 1_200;
 
+/// **How many characters wide the question's card shows a guide.** The card is a label that wraps at the
+/// dialog's width; this is that width in characters, conservatively (the body text is proportional, and a
+/// narrow guess under-counts only by making the bound stricter).
+pub const SHOWN_COLUMNS: usize = 80;
+
+/// **How many visual rows the question can show before the text runs off the card.**
+///
+/// The card has no height limit and no scroll, so a guide of forty short lines is a hundred and sixty
+/// characters — under `SHOWN_CHARS` — with its last line thirty-nine rows below the fold, and `Y` would have
+/// been the answer to it. A bound in rows is the one that matches the box.
+pub const SHOWN_LINES: usize = 24;
+
 fn text_preview(text: &str) -> String {
     let total = text.chars().count();
     if total <= SHOWN_CHARS {
@@ -219,6 +231,18 @@ fn text_preview(text: &str) -> String {
     }
     let head: String = text.chars().take(SHOWN_CHARS).collect();
     format!("{}\n\n… and {} more characters.", head.trim_end(), total - SHOWN_CHARS)
+}
+
+/// **Whether the question can show all of `text`.**
+///
+/// **Two bounds, and the rows are the one that matters.** `SHOWN_CHARS` counts characters; the card has no
+/// height limit and no scroll, so forty short lines are a hundred and sixty characters with the last line
+/// thirty-nine rows below the fold — and a character-only check would have offered **Allow this guide**
+/// over it. A guide that fits neither bound is raised as a note, which has no affirmative at all.
+pub fn fully_shown(text: &str) -> bool {
+    let trimmed = text.trim_end();
+    trimmed.chars().count() <= SHOWN_CHARS
+        && bevy_grimoire_core::agent_guide::visual_rows(trimmed, SHOWN_COLUMNS) <= SHOWN_LINES
 }
 
 /// Raises the guide question a withheld layer left, once no other question is up.
@@ -238,17 +262,18 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
     // `agent.ron` and `play.ron`**, so a padded guide plus a habitual `Y` would trust the project's program
     // launches, which is a decision about a program nobody made. So there is no affirmative answer to give:
     // a note says what the file is and where to read it, and its one answer dismisses it.
-    if text_preview(&request.text) != request.text.trim_end() {
+    if !fully_shown(&request.text) {
         let mut request = request;
         request.offer_allow = false;
         confirm.note(
             Asked::TrustGuide,
             "This project's guide is too long to show here".to_owned(),
             format!(
-                "{}\n\nIt is {} characters, and this question can show {SHOWN_CHARS}. Read it in your own \
-                 editor, at the path above: the project page can open it, and there is where to allow it. \
-                 Nothing has been granted.",
+                "{}\n\nIt is {} lines and {} characters, and this question can show {SHOWN_LINES} lines and \
+                 {SHOWN_CHARS} characters. Read it in your own editor, at the path above, and shorten it to \
+                 fit: a guide too long to show cannot be allowed from here, and nothing has been granted.",
                 project_file(&request.root).display(),
+                bevy_grimoire_core::agent_guide::visual_rows(&request.text, SHOWN_COLUMNS),
                 request.text.chars().count()
             ),
             "Close",

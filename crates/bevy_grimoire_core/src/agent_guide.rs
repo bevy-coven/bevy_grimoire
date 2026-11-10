@@ -33,6 +33,23 @@ use crate::problem::{Detail, Location, Problem};
 /// agent's context is the thing this limit protects.
 pub const GUIDE_MAX_BYTES: usize = 65_536;
 
+/// **How many visual rows `text` occupies in a box `columns` characters wide**, counting a line that wraps
+/// as the rows it wraps onto and an empty line as one row.
+///
+/// **Characters are not rows.** A file of twenty short lines and a file of three long ones can hold the same
+/// number of characters and need very different amounts of room, and a box that clips shows the first and
+/// hides the rest. Every place that decides "can a person see all of this?" asks this, so the answer is one
+/// answer: `ceil(chars_in_line / columns)`, at least one row per line.
+pub fn visual_rows(text: &str, columns: usize) -> usize {
+    let columns = columns.max(1);
+    text.lines()
+        .map(|line| {
+            let chars = line.chars().count();
+            chars.div_ceil(columns).max(1)
+        })
+        .sum()
+}
+
 /// The person's file, inside `user_dirs::config_dir()`.
 pub const USER_FILE: &str = "AGENTS.md";
 

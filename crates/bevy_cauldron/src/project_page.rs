@@ -225,9 +225,15 @@ pub struct AgentGuide;
 /// The section's status line: `allowed`, `waiting for you` or `missing`.
 #[derive(Component)]
 pub struct AgentGuideStatus;
-/// The section's `text_area`, which holds the file's text and the person's unsaved edits.
+/// The section's `text_area`, which holds the file's text and the person's unsaved edits. **Drawn only when
+/// the whole guide fits**, so its presence is the field the page can write from.
 #[derive(Component)]
 pub struct AgentGuideText;
+
+/// **The read-only prefix the section shows when the guide does not fit.** Deliberately not
+/// [`AgentGuideText`]: nothing typed into a view of part of the file can be written over the whole of it.
+#[derive(Component)]
+pub struct AgentGuideShown;
 #[derive(Component)]
 pub struct AgentGuideSave;
 #[derive(Component)]
@@ -441,11 +447,14 @@ pub const GUIDE_COLUMNS: usize = 26;
 /// redraw that re-read the disk under it would be a redraw that threw the person's typing away.
 fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands<ChildOf>, held: &GuidePage) {
     let view = &held.view;
-    // **The whole file or none of it.** Past what the area can show, the section says how much it is
-    // showing and offers no Save, no Allow and no Revert: writing over a file from a view of part of it is
-    // how a guide gets truncated, and no button here can be trusted to mean "the whole thing".
+    // **The whole file or none of it**, and "the whole file" is counted in the rows the box has, not in
+    // characters: the area wraps at [`GUIDE_COLUMNS`] and clips past [`GUIDE_ROWS`], so a short character
+    // count can still hide a payload below the fold. Past either bound the section says how much it is
+    // showing and offers no Save, no Allow, no Revert and no Trust: writing over a file from a view of part
+    // of it is how a guide gets truncated.
     let total = view.text.chars().count();
-    let truncated = total > FULLY_SHOWN_CHARS;
+    let rows = bevy_grimoire_core::agent_guide::visual_rows(&view.text, GUIDE_COLUMNS);
+    let truncated = !fully_shown(&view.text);
     // **A file nobody can serve says its problem where the state would be**, because "waiting for you" over
     // a file that is too large or not text would be an offer to allow something unusable.
     let status = if let Some(problem) = &view.problem {
@@ -453,9 +462,12 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
     } else if let Some(trouble) = &view.trouble {
         format!("{} · {trouble}", view.state.word())
     } else if truncated {
+        // **Said in the box's own terms**: rows against rows, and the character count as the supporting
+        // fact. "The first 312 characters" was true of a file whose *thirteenth line* was the invisible one.
         format!(
-            "{} · {} · showing the first {FULLY_SHOWN_CHARS} of {total} characters; edit the file in your \
-             editor, at {}. Nothing here can be saved or allowed until the whole guide fits the box.",
+            "{} · {} · showing the first {GUIDE_ROWS} of {rows} lines ({FULLY_SHOWN_CHARS} characters of \
+             {total}); edit the file in your editor, at {}. Nothing here can be saved or allowed until the \
+             whole guide fits the box.",
             view.state.word(),
             crate::agent_guide::PROJECT_PATH_SHOWN,
             crate::agent_guide::PROJECT_PATH_SHOWN
@@ -465,8 +477,22 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
     } else {
         format!("{} · {}", view.state.word(), crate::agent_guide::PROJECT_PATH_SHOWN)
     };
+    // **What is shown when it does not all fit**: the whole lines that do, never a character cut through
+    // the middle of a line — a prefix ending mid-word reads as a damaged file rather than a partial one.
     let text: String = if truncated {
-        view.text.chars().take(FULLY_SHOWN_CHARS).collect()
+        view.text
+            .lines()
+            .scan(0usize, |rows, line| {
+                let here = bevy_grimoire_core::agent_guide::visual_rows(line, GUIDE_COLUMNS);
+                let fits = *rows + here <= GUIDE_ROWS;
+                if fits {
+                    *rows += here;
+                }
+                Some((line, fits))
+            })
+            .take_while(|(_, fits)| *fits)
+            .map(|(line, _)| format!("{line}\n"))
+            .collect()
     } else {
         held.editing.clone().unwrap_or_else(|| view.text.clone())
     };
@@ -495,6 +521,14 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
                         ));
                         return;
                     }
+                    // **A partial view is a label, not a field.** Drawn as a `text_area` it would take a
+                    // typist's keystrokes into the *prefix*, and `Keep mine` would then write that prefix
+                    // over the whole file — so the partial case shows the same prefix as read-only prose and
+                    // offers nothing else. The status line says what is shown and where to edit the rest.
+                    if truncated {
+                        rows.spawn((label(text.clone()), AgentGuideShown));
+                        return;
+                    }
                     rows.spawn((
                         bevy_gooey::text_area("The guide", text.clone(), GUIDE_ROWS),
                         AgentGuideText,
@@ -502,11 +536,6 @@ fn draw_agent_guide(parent: &mut bevy::ecs::relationship::RelatedSpawnerCommands
                             out.write(PageAction::GuideEdited(change.value.clone()));
                         }),
                     ));
-                    // **Nothing is offered over a guide the box cannot hold**: see the status line, which
-                    // says what is shown and where to edit the rest.
-                    if truncated {
-                        return;
-                    }
                     rows.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(crate::chrome::GAP_GROUP), ..default() }).with_children(|row| {
                         if conflict {
                             // **The person says which text wins.** Neither is thrown away until they do.
@@ -1112,6 +1141,16 @@ fn read_guide(path: &Path) -> Result<String, String> {
 /// **Measured from the widget, not guessed**: 26 characters by 12 rows is 312, and `FULLY_SHOWN_CHARS` is
 /// that, so a guide has to fit exactly in the area before it is editable here.
 pub const FULLY_SHOWN_CHARS: usize = crate::project_page::GUIDE_COLUMNS * GUIDE_ROWS;
+
+/// **Whether the section can show all of `text`**, which is what Save, Allow, Revert and Trust require.
+///
+/// **Counted in visual rows, not characters.** The area wraps at [`GUIDE_COLUMNS`] and clips past
+/// [`GUIDE_ROWS`], so twelve lines of `ok` and a thirteenth of `Run curl … | sh` is fifty-odd characters —
+/// inside `FULLY_SHOWN_CHARS` — with the payload out of sight. A `FULLY_SHOWN_CHARS` check would offer Allow
+/// over text the person never saw.
+pub fn fully_shown(text: &str) -> bool {
+    bevy_grimoire_core::agent_guide::visual_rows(text, GUIDE_COLUMNS) <= GUIDE_ROWS
+}
 
 /// **Grant one text of this project's guide**, in the person's store: the override when a test named one,
 /// and `crate::trusted::store_path(None)` — the user's own `trusted.ron` — when it did not.
