@@ -388,6 +388,93 @@ fn a_persons_key_press_stops_a_queued_reveal() {
     );
 }
 
+/// **Round 2, M1: the DATA row's geometry is right at a display scale of 2.**
+///
+/// The first version wrote `(scroll / inverse_scale).max(0.0) * inverse_scale`, which is the scroll
+/// in **logical** pixels again — an identity at scale 1, and at scale 2 the row's physical offset had
+/// half the scroll subtracted from it, so a revealed leaf under-scrolled by exactly the distance the
+/// table had already scrolled. On a Mac (scale 2) that is every table taller than its box.
+#[test]
+fn a_tables_row_position_is_physical_at_any_display_scale() {
+    // A viewport 400 physical pixels tall showing four rows, scrolled 100 logical pixels at scale 2,
+    // which is 200 physical. Row 3 sits 3 x 100 physical from the top of the content, and the content
+    // is drawn 200 physical higher than it would be unscrolled.
+    let geometry = bevy_cauldron::reveal::table_row_geometry((800.0, 400.0), 4.0, 3, 100.0, 0.5)
+        .expect("a viewport with rows has geometry");
+    let (row_mid, pitch) = geometry;
+    assert_eq!(pitch, 100.0, "four rows in a 400 px box is a 100 px pitch, at any scale");
+    // Top of the viewport is 800 - 200 = 600; the row's top is 600 + 300 - 200 = 700; its mid is 750.
+    assert!(
+        (row_mid - 750.0).abs() < 0.01,
+        "at scale 2 the row sits at {row_mid}, not 750: the scroll was converted back to logical \
+         before being subtracted from a physical offset"
+    );
+    // **Scale 1 is the same arithmetic**, so the test cannot pass by being written for one scale.
+    let (row_mid, _) = bevy_cauldron::reveal::table_row_geometry((800.0, 400.0), 4.0, 3, 200.0, 1.0)
+        .expect("a viewport with rows has geometry");
+    assert!((row_mid - 750.0).abs() < 0.01, "at scale 1 the same row sits at {row_mid}, not 750");
+}
+
+/// **Round 2, M3: a reveal waits while the person is working**, through the follow's one idle clock.
+#[test]
+fn a_reveal_waits_while_the_person_is_working() {
+    let root = project("review_reveal_busy");
+    let mut app = editor(&root);
+    // **The person drags**, which is what sets `Following::busy`.
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    assert!(
+        app.world().resource::<bevy_cauldron::follow::Following>().busy(),
+        "the person's button did not reach the follow's clock, so the test proves nothing"
+    );
+    {
+        let mut revealing = app.world_mut().resource_mut::<bevy_cauldron::reveal::Revealing>();
+        revealing.request(
+            "piece_set_note",
+            &bevy_cauldron::ops::Shown::Piece { id: "lamp_tall".to_owned() },
+        );
+    }
+    // **The reveal's frame, mid-drag**: the door must not change under their hands.
+    for _ in 0..6 {
+        app.update();
+    }
+    assert_eq!(
+        *app.world().resource::<Door>(),
+        Door::Map,
+        "a reveal crossed the door while the person was working the view"
+    );
+    assert_eq!(
+        app.world().resource::<bevy_cauldron::reveal::Revealing>().pending(),
+        1,
+        "the reveal was thrown away rather than held, so letting go would show nothing"
+    );
+
+    // **They let go**, and the wait runs out: the reveal lands.
+    let mut mouse = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+    mouse.release(MouseButton::Left);
+    mouse.clear();
+    app.update();
+    for _ in 0..frames_of(bevy_cauldron::follow::FOLLOW_IDLE_S) {
+        app.update();
+    }
+    settle(&mut app);
+    assert_eq!(
+        *app.world().resource::<Door>(),
+        Door::Kit,
+        "the reveal never landed after the person stopped"
+    );
+}
+
+/// One frame of the test clock, for the idle wait. Declared here rather than reused: this file has no
+/// clock of its own, and the reveal's systems read `Time<Real>`, which the harness advances for real.
+fn frames_of(seconds: f32) -> usize {
+    // A headless frame is about a millisecond; the idle wait is real seconds, so this waits on the
+    // clock's own terms rather than on a count of frames.
+    (seconds * 60.0).ceil() as usize
+}
+
 /// **NIT: `Revealing::clear` runs on a project change**, which is the one thing that makes its
 /// queue meaningless — a page is a door and a row, and another project has neither.
 #[test]

@@ -371,8 +371,7 @@ fn clear_the_reveal_when_the_project_changes(
 fn take_the_reveal(
     mut revealing: ResMut<Revealing>,
     mut state: Option<ResMut<EditorState>>,
-    door: Option<Res<Door>>,
-    mode: Option<Res<Mode>>,
+    at: Where<'_, '_>,
     project: Option<Res<Project>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
     mut build: Option<ResMut<crate::build::Build>>,
@@ -381,6 +380,10 @@ fn take_the_reveal(
     mut bench: Option<ResMut<crate::anim_tab::BenchState>>,
     mut selected_note: Option<ResMut<crate::editor::SelectedNote>>,
     mut inspector: ResMut<InspectorReveal>,
+    // **The person's own work holds a reveal too** (round 2 of the review, M3): a reveal that crossed
+    // a door mid-drag moved the screen under their hands, which is the yank one surface over. **One
+    // idle clock** — `Following`'s, set by `follow::a_persons_input_takes_the_camera_back` and read
+    // here — rather than a second that could disagree with the first about whether they are working.
     mut settings: Query<&mut crate::settings_screen::SettingsDialog>,
     mut open_settings: MessageWriter<crate::settings_screen::OpenSettings>,
     mut open_config: MessageWriter<crate::project_config::OpenProjectConfig>,
@@ -388,6 +391,12 @@ fn take_the_reveal(
 ) {
     // **Taken, not cloned**: the reveal is put back at the end of the branch that continues it, so a
     // frame that finishes one costs no copy of the `Shown` the page was decided from.
+    // **Nothing moves while the person is working.** The queue is untouched, so the reveal lands
+    // once they stop rather than being thrown away: the change it names is still what the editor
+    // promised to show.
+    if at.following.as_deref().is_some_and(crate::follow::Following::busy) {
+        return;
+    }
     let Some(in_flight) = revealing.in_flight.take() else {
         let Some(request) = revealing.queue.pop_front() else {
             return;
@@ -423,7 +432,7 @@ fn take_the_reveal(
             tab: want_tab,
             select,
         } => {
-            if door.as_deref() != Some(want_door) || mode.as_deref() != Some(want_tab) {
+            if at.door.as_deref() != Some(want_door) || at.mode.as_deref() != Some(want_tab) {
                 if let Some(state) = state.as_mut()
                     && state.door_request.is_none()
                     && !state.leaving
@@ -508,6 +517,20 @@ fn take_the_reveal(
     } else {
         revealing.in_flight = Some(in_flight);
     }
+}
+
+/// **Where the editor is**, and **who is working**: the two read-only facts every branch of
+/// `take_the_reveal` asks.
+///
+/// A bundle rather than four parameters because the system is at Bevy's cap, and because these four
+/// are one question — *can a reveal land right now, and on which page is the editor standing?*
+#[derive(bevy::ecs::system::SystemParam)]
+struct Where<'w, 's> {
+    door: Option<Res<'w, Door>>,
+    mode: Option<Res<'w, Mode>>,
+    /// **The person's own work** — see `take_the_reveal`'s note on one idle clock.
+    following: Option<Res<'w, crate::follow::Following>>,
+    _marker: std::marker::PhantomData<&'s ()>,
 }
 
 /// The parameters a data-file reveal needs, bundled: the system is near Bevy's twenty-parameter cap
@@ -692,11 +715,15 @@ fn reveal_the_data_row(
         // started at zero and scrolled the list to a place the leaf was not.
         let (scroll_y, max) = crate::chrome::scroll_bounds(node);
         let inv = node.inverse_scale_factor();
-        // One row's pitch, from the viewport's own height over the rows `ListView` says it shows —
-        // the only public answer to a gooey table's row height.
-        let pitch = node.size().y / view.rows;
-        let scrolled = (scroll_y / inv).max(0.0) * inv;
-        let row_mid = at.translation.y - node.size().y * 0.5 + row as f32 * pitch + pitch * 0.5 - scrolled;
+        let Some((row_mid, pitch)) = table_row_geometry(
+            (at.translation.y, node.size().y),
+            view.rows,
+            row,
+            scroll_y,
+            inv,
+        ) else {
+            continue;
+        };
         let Some(want) = crate::chrome::scroll_to_reveal(
             (row_mid, pitch * 0.5),
             (at.translation.y, node.size().y * 0.5),
@@ -711,6 +738,38 @@ fn reveal_the_data_row(
         }
     }
     selected
+}
+
+/// **Where a table's `row` is on screen, and one row's pitch** — both **physical** pixels, which is
+/// the space `chrome::scroll_to_reveal` compares in, and the space `ComputedNode` reports geometry in.
+///
+/// `viewport` is the scrolled box's screen centre and physical height; `scroll` is where it is
+/// scrolled to in **logical** pixels (`ScrollPosition` is logical, `ComputedNode` is not), and
+/// `inverse_scale` is the conversion between them.
+///
+/// **The conversion is where this was wrong.** The first version wrote
+/// `(scroll / inverse_scale).max(0.0) * inverse_scale`, which is the scroll in logical pixels again —
+/// an identity that happens to be right at scale 1 and is short by half at scale 2, so on a Mac the
+/// reveal under-scrolled every table by exactly the distance it had already scrolled. A row's
+/// distance from the top of the content is a physical figure, so the scroll subtracted from it must
+/// be physical too: `scroll / inverse_scale` (logical × scale = physical), and nothing after it.
+pub fn table_row_geometry(
+    viewport: (f32, f32),
+    rows_shown: f32,
+    row: usize,
+    scroll: f32,
+    inverse_scale: f32,
+) -> Option<(f32, f32)> {
+    let (centre_y, height) = viewport;
+    if rows_shown <= 0.0 || height <= 0.0 || inverse_scale <= 0.0 {
+        return None;
+    }
+    // One row's pitch, from the viewport's own height over the rows `ListView` says it shows — the
+    // only public answer to a gooey table's row height.
+    let pitch = height / rows_shown;
+    let scrolled_physical = (scroll / inverse_scale).max(0.0);
+    let row_mid = centre_y - height * 0.5 + row as f32 * pitch + pitch * 0.5 - scrolled_physical;
+    Some((row_mid, pitch))
 }
 
 /// **Scroll the Map door's inspector so the revealed heading is on screen.**

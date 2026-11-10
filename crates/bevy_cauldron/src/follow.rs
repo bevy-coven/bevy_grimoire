@@ -285,6 +285,16 @@ impl Following {
         &self.outline
     }
 
+    /// **Whether the person is using the view** (round 2 of the review, M3): input within
+    /// [`FOLLOW_IDLE_S`], cleared by the same clock that set it.
+    ///
+    /// **One idle clock, read by both halves of the follow.** A reveal that crossed a door mid-drag
+    /// was the same yank the camera's wait exists to prevent, and giving it a second clock would let
+    /// the two disagree about whether the person is working.
+    pub fn busy(&self) -> bool {
+        self.busy
+    }
+
     /// **Whether the camera is on its way somewhere.**
     pub fn settling(&self) -> bool {
         self.ease.is_some()
