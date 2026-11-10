@@ -141,6 +141,7 @@ pub mod fixture;
 pub mod palette_menu;
 pub mod piece_menu;
 pub mod ui;
+pub mod ui_budget;
 pub mod ui_skin;
 pub mod ops_terrain;
 pub mod ops_volume;

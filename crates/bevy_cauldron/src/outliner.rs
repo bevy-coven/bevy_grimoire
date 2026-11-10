@@ -256,14 +256,26 @@ fn rebuild_the_tree(
     project: Option<Res<Project>>,
     mut outliners: Query<&mut Outliner>,
     mut tables: Query<&mut Table, With<OutlinerTree>>,
+    mut budget: ResMut<crate::ui_budget::UiFrame>,
 ) {
-    let (Some(open), Some(project)) = (open, project) else { return };
-    let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
+    // **This system's cost, into the frame's total** (UI-93, #259): the tree is the list that grows
+    // with the map, and the budget's whole point is that a settled frame pays nothing for its depth.
+    let started = crate::ui_budget::begin();
+    let spent = |budget: &mut crate::ui_budget::UiFrame| crate::ui_budget::end(started, budget);
+    let (Some(open), Some(project)) = (open, project) else {
+        spent(&mut budget);
+        return;
+    };
+    let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else {
+        spent(&mut budget);
+        return;
+    };
     // **A settled frame does no work that grows with the map.** The fingerprint reads every piece, so it is taken
     // only when the map, the library or the search moved, or the tree has not been built yet: ten thousand pieces
     // at sixty frames a second was a second of string building for a tree nobody touched.
     let moved = outliner.built_from == 0 || open.is_changed() || project.is_changed() || outliner.built_for != outliner.query;
     if !moved {
+        spent(&mut budget);
         return;
     }
     outliner.looks += 1;
@@ -271,9 +283,13 @@ fn rebuild_the_tree(
     if outliner.built_from == now {
         let query = outliner.query.clone();
         outliner.built_for = query;
+        spent(&mut budget);
         return;
     }
-    let Some(tree) = table.source_mut::<Tree>() else { return };
+    let Some(tree) = table.source_mut::<Tree>() else {
+        spent(&mut budget);
+        return;
+    };
     let (nodes, rows) = nodes_for(&open.map, &project.library, &outliner.query, |key| tree.is_open(key));
     tree.set_nodes(nodes);
     outliner.rows = rows;
@@ -281,6 +297,7 @@ fn rebuild_the_tree(
     let query = outliner.query.clone();
     outliner.built_for = query;
     outliner.rebuilds += 1;
+    spent(&mut budget);
 }
 
 /// **A piece selected in the viewport is the selected row**, when the search leaves it in view.
