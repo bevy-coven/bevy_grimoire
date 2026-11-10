@@ -65,23 +65,24 @@ fn a_project_holding_ron_files_is_refused_naming_the_command() {
     let root = scratch("leftover");
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)\n")
-        .unwrap_or_else(|e| panic!("{e}"));
+    // **A kind whose reader has moved**: `agent.yaml` is YAML now, so an `agent.ron` is the spelling nothing
+    // reads, and the open must name it. A kind the cutover has not reached still reads its RON, so a
+    // `kits.ron` alone is not a refusal yet.
+    std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
 
     let problem = migrate::leftover(&root)
         .unwrap_or_else(|p| panic!("a folder with no project files: {}", p.line()))
         .expect("a `.ron` project file is refused");
 
-    assert!(problem.line().contains("kits.ron"), "the refusal names the file: {}", problem.line());
+    assert!(problem.line().contains("agent.ron"), "the refusal names the file: {}", problem.line());
     assert!(
         problem.line().contains(bevy_grimoire_core::migrate::COMMAND),
         "the refusal names the command that fixes it: {}",
         problem.line()
     );
 
-    std::fs::write(grimoire.join("kits.yaml"), "version: 3\nbind: []\nbash: []\n")
-        .unwrap_or_else(|e| panic!("{e}"));
-    std::fs::remove_file(grimoire.join("kits.ron")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("agent.yaml"), "version: 1\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::remove_file(root.join("agent.ron")).unwrap_or_else(|e| panic!("{e}"));
     assert!(
         migrate::leftover(&root).unwrap_or_else(|p| panic!("{}", p.line())).is_none(),
         "a YAML project is opened"

@@ -901,6 +901,11 @@ pub fn leftover(root: &Path) -> Result<Option<Problem>, Problem> {
     // `kits.ron` would refuse every project in the world until the last kind moves, and the file it names
     // would be one this build can still read. A project is refused once it holds a file of the spelling
     // nothing reads any more, which is exactly what this answers.
+    // **Only a kind whose reader has moved to YAML refuses an open.** A kind the cutover has not reached
+    // still reads its RON, so a `kits.ron` is a file this build reads and no reason to refuse a project;
+    // the refusal is for the spelling nothing reads any more, which is what [`READS_YAML`] answers. The
+    // list grows one kind at a time, and the last kind to leave it is the commit that deletes the RON
+    // readers entirely.
     let Some((_, rel, _)) = plan.iter().find(|(_, _, kind)| reads_yaml(kind.id)) else { return Ok(None) };
     let rel = rel.clone();
     Ok(Some(Problem::with(

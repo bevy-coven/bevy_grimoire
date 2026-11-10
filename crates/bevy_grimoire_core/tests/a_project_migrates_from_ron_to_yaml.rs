@@ -279,14 +279,15 @@ fn a_project_with_a_ron_file_left_over_is_refused_naming_the_file_and_the_comman
     let root = scratch("leftover");
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)\n")
-        .unwrap_or_else(|e| panic!("{e}"));
+    // **A kind whose reader has moved to YAML** (GD-03, #365): a kind the cutover has not reached still
+    // reads its RON, so only a moved kind's old spelling is what an open refuses.
+    std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
 
     let problem = migrate::leftover(&root)
         .unwrap_or_else(|p| panic!("{}", p.line()))
         .expect("a project holding a RON file is refused");
     let line = problem.line();
-    assert!(line.contains("kits.ron"), "the refusal names the file: {line}");
+    assert!(line.contains("agent.ron"), "the refusal names the file: {line}");
     assert!(line.contains(COMMAND), "the refusal names the command: {line}");
     let _ = std::fs::remove_dir_all(&root);
 }
