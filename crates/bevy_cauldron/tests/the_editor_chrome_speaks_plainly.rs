@@ -120,20 +120,41 @@ fn choosing_show_statistics_toggles_the_triangle_readout() {
     assert!(!ticked(&mut app), "and the tick goes with it");
 }
 
-/// **The history draws only the rows that exist and still holds the room of all seven** (#302): a fresh
-/// map has one entry (where it stands), so one row draws, and the six spare ones are hidden, not removed,
-/// so nothing below them moves when an edit fills one.
+/// **The history draws every line it holds, and the list stands a screenful tall** (#302, UI-53): the window's
+/// seven rows of room with only the real ones drawn is gooey's virtualized list now, so the rule reads: a fresh
+/// map's one entry (where it stands) plus *before the first change* are two nodes, the row for each is one
+/// pitch tall, and the viewport is a screenful with the half row cut that says there is more.
 #[test]
 fn the_history_draws_only_real_rows_and_keeps_its_height() {
     use bevy::ui::ComputedNode;
     let mut app = editor("plain_history");
-    let mut q = app.world_mut().query::<(&bevy_cauldron::editor::HistorySlot, &Visibility, &ComputedNode)>();
-    let rows: Vec<(bool, f32)> = q.iter(app.world()).map(|(_, v, n)| (*v != Visibility::Hidden, n.size().y)).collect();
-    assert_eq!(rows.len(), 7, "the list is seven rows tall");
-    assert_eq!(rows.iter().filter(|(shown, _)| *shown).count(), 1, "one row draws on a fresh map: {rows:?}");
-    assert!(rows.iter().all(|(_, height)| *height > 0.0), "a hidden row still holds its height: {rows:?}");
-    let first = rows[0].1;
-    assert!(rows.iter().all(|(_, height)| (*height - first).abs() < 0.01), "every row is the same height: {rows:?}");
+    let tree = app
+        .world_mut()
+        .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+        .single(app.world())
+        .expect("the INSPECTOR draws one history list");
+    let (nodes, labels) = {
+        let world = app.world_mut();
+        let table = world.get::<bevy_gooey::Table>(tree).expect("the history is a gooey table");
+        let rows = table.source::<bevy_gooey::Tree>().expect("a tree");
+        (rows.node_count(), (0..bevy_gooey::RowSource::len(rows)).map(|r| bevy_gooey::RowSource::key(rows, r)).collect::<Vec<_>>())
+    };
+    assert_eq!(nodes, 1, "a fresh map has no change recorded, so the list is the one line before the first: {labels:?}");
+    assert_eq!(labels, vec![0], "and that line is position 0");
+    let mut q = app.world_mut().query::<(&bevy_gooey::TableRow, &ComputedNode)>();
+    let rows: Vec<f32> = q
+        .iter(app.world())
+        .filter(|(row, _)| row.table == tree)
+        .map(|(_, node)| node.size().y)
+        .collect();
+    assert!(!rows.is_empty(), "the list draws its rows");
+    let first = rows[0];
+    assert!(first > 0.0, "a row is a pitch tall: {rows:?}");
+    assert!(rows.iter().all(|height| (*height - first).abs() < 0.01), "every row is the same height: {rows:?}");
+    // **A screenful, not one row**: the viewport is more rows than a session starts with, so the list never
+    // changes height as the history grows.
+    let standing = app.world().get::<bevy_gooey::TableRows>(tree).map(|r| r.0).unwrap_or(0.0);
+    assert!(standing > 1.0, "the list stands a screenful tall, not one row: {standing}");
 }
 
 /// The left and right edges of a laid-out text's box, in logical px.

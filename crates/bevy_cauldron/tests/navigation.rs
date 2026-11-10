@@ -529,15 +529,29 @@ fn an_inspector_section(what: &'static str, label: &'static str, tag: &'static s
 fn the_history() -> Destination {
     let mut d = Driver::cold_start("history");
     assert!(d.showing("UNDO") && d.showing("REDO"), "the undo and redo history is not on the Map panel: {:#?}", d.words());
-    // **The rows themselves**, which is what "the history" means: one per step either way.
-    let rows = {
+    // **The rows themselves**, which is what "the history" means. UI-53 made it gooey's virtualized list, so
+    // what is counted is the list's nodes — one per line of the session — and the rows it draws of them.
+    let (lines, drawn) = {
         let world = d.app.world_mut();
-        world.query::<&bevy_cauldron::editor::HistorySlot>().iter(world).count()
+        let tree = world
+            .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+            .single(world)
+            .ok();
+        let lines = tree
+            .and_then(|tree| world.get::<bevy_gooey::Table>(tree))
+            .and_then(|table| table.source::<bevy_gooey::Tree>())
+            .map_or(0, bevy_gooey::Tree::node_count);
+        let drawn = tree.map_or(0, |tree| {
+            world.query::<&bevy_gooey::TableRow>().iter(world).filter(|row| row.table == tree).count()
+        });
+        (lines, drawn)
     };
-    assert!(rows > 1, "the history list drew {rows} row(s), so the undo list is not there");
+    assert!(drawn > 1, "the history list drew {drawn} row(s), so the undo list is not there");
     Destination {
         what: "The history",
-        steps: vec![format!("it is drawn beside UNDO and REDO, on screen at a cold start ({rows} rows)")],
+        steps: vec![format!(
+            "it is drawn beside UNDO and REDO, on screen at a cold start ({lines} lines, {drawn} drawn)"
+        )],
         cost: d.cost,
         reach: Reach::Arrived,
     }
