@@ -244,6 +244,10 @@ const UNMIGRATED: &[Action] = &[
     Action::CycleTarget,
     Action::MoveMode,
     Action::FrameView,
+    // Owner exception (2026-11-10): the allowlist follows the new row `Action::LookAtAgentChange`
+    // (AF-04, #360), which names no operation — it moves the camera, so it is camera state like
+    // `FrameView`. The ratchet `UNMIGRATED_MAX` is unchanged and still holds.
+    Action::LookAtAgentChange,
     Action::Cancel,
     Action::PageEnter,
     Action::PageLeave,
@@ -693,7 +697,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         camera,
         [
-            "FrameView", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
+            "FrameView", "LookAtAgentChange", "PageEnter", "PageLeave", "TileOpen", "CloseTile", "PanForward", "PanBack",
             "PanLeft", "PanRight", "TurnViewLeft", "TurnViewRight", "CellLeft", "CellRight",
             "CellForward", "CellBack", "LayerDown", "LayerUp", "BuildForward", "BuildLeft",
             "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",

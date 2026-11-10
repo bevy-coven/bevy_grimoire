@@ -1,4 +1,4 @@
-//! **The editor takes gooey's desktop conventions** (UI-R04, #334): a tooltip waits 0.5 s, a card opens on a double press,
+//! **The editor takes gooey's desktop conventions** (UI-R04, #334): a tooltip waits 0.5 s, a card opens on a press (#344),
 //! typing a project's first letters moves to it, and a card shrinks a little under the press.
 //!
 //! The pointer is gooey's own picking input on the image the editor draws into; the clock is set by the test, 16 ms a frame.
@@ -128,20 +128,21 @@ fn tooltip_shown(app: &mut App) -> bool {
 }
 
 #[test]
-fn a_double_press_on_a_card_opens_the_project() {
+fn one_press_on_a_card_opens_the_project() {
     let scratch = Scratch::new("double");
     let (mut app, paths) = on_the_launcher("double", &scratch, &["alpha"]);
     let card = card_of(&mut app, &paths[0]);
     let at = centre_of(&app, card);
     let pointed = |app: &App| app.world().get_resource::<PointedAt>().map(|at| at.root.clone());
-    let before = pointed(&app);
-    click(&mut app, at);
-    settle(&mut app, 2);
-    assert_eq!(pointed(&app), before, "one press opens nothing");
-    assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Launcher, "one press chooses the card and opens nothing");
+    assert_eq!(pointed(&app), None, "nothing is open before the press");
     click(&mut app, at);
     settle(&mut app, 4);
-    assert_eq!(pointed(&app), Some(paths[0].clone()), "the second press of a double press opens that folder");
+    // Owner exception (2026-11-10): one press opens the card, per the owner's decision on #344
+    // (feedback-1794103491165). The double press was the two-press step's second half, and the
+    // behaviour this test guards — a press on a card opens *that* folder — is unchanged; only the
+    // count of presses the guard is exercised with.
+    assert_eq!(pointed(&app), Some(paths[0].clone()), "one press on a card opens that folder");
+    assert_ne!(*app.world().resource::<State<Screen>>().get(), Screen::Launcher, "and the screen moves on");
 }
 
 #[test]
