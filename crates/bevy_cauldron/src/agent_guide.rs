@@ -136,9 +136,10 @@ pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, store_ro
     composed
 }
 
-/// **What the project page's Agent guide section says about the file.**
+/// **What the project page's Agent guide section says about the project's guide file.** Named for what it
+/// describes: the layer at `PROJECT_PATH`, not the person's own file.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum UserGuideState {
+pub enum GuideState {
     /// The content is granted, or the project is trusted.
     #[default]
     Allowed,
@@ -148,13 +149,13 @@ pub enum UserGuideState {
     Missing,
 }
 
-impl UserGuideState {
+impl GuideState {
     /// The word the status line shows, and the word the tests read.
     pub fn word(self) -> &'static str {
         match self {
-            UserGuideState::Allowed => "allowed",
-            UserGuideState::Waiting => "waiting for you",
-            UserGuideState::Missing => "missing",
+            GuideState::Allowed => "allowed",
+            GuideState::Waiting => "waiting for you",
+            GuideState::Missing => "missing",
         }
     }
 }
@@ -164,9 +165,10 @@ impl UserGuideState {
 pub struct GuideRequest {
     pub root: PathBuf,
     pub text: String,
-    /// **Whether the question offered "Allow this guide".** A guide too long to show is asked about with
-    /// two answers — Trust this project, Not now — so its affirmative is the project, not the text: a Yes
-    /// read as a text grant would be a person's answer to one question taken as an answer to another.
+    /// **Whether the question offered "Allow this guide".** A guide too long to show is raised as a *note*,
+    /// which has no affirmative at all — not the text (unread) and not `Scope::Project`, whose list is the
+    /// one `TrustStore::decision` reads for `agent.ron` and `play.ron`. So a `Yes` can never reach a grant
+    /// about a file the question did not show.
     pub offer_allow: bool,
 }
 
@@ -229,24 +231,27 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
     // **The text is shown, because the text is what is being allowed.** A question that asked "allow this
     // project's guide?" over a filename would be asking a person to trust a file they have not read.
     let body = format!("{}\n\n---\n{}", project_file(&request.root).display(), text_preview(&request.text));
-    // **A guide too long to show is not offered: allowing what was not read is the hole this closes.** The
-    // person is told the file is longer than the question can show, and the answers that remain are the two
-    // that never grant unseen text — Not now, and Trust this project (which is a decision about the project
-    // and is made with that whole-project meaning in front of them, not a claim to have read the file).
+    // **A guide too long to show is a note, with no grant at all.**
+    //
+    // The grants a question could offer are the text's (which the person has not been shown) and
+    // `Scope::Project` — and `Scope::Project` is **the same list `TrustStore::decision` reads for
+    // `agent.ron` and `play.ron`**, so a padded guide plus a habitual `Y` would trust the project's program
+    // launches, which is a decision about a program nobody made. So there is no affirmative answer to give:
+    // a note says what the file is and where to read it, and its one answer dismisses it.
     if text_preview(&request.text) != request.text.trim_end() {
         let mut request = request;
         request.offer_allow = false;
-        confirm.ask(
+        confirm.note(
             Asked::TrustGuide,
             "This project's guide is too long to show here".to_owned(),
             format!(
-                "{}\n\nIt is {} characters, and a question can show {SHOWN_CHARS}. Read it in the project \
-                 page's Agent guide section, where the whole file is shown and can be allowed there.",
+                "{}\n\nIt is {} characters, and this question can show {SHOWN_CHARS}. Read it in your own \
+                 editor, at the path above: the project page can open it, and there is where to allow it. \
+                 Nothing has been granted.",
                 project_file(&request.root).display(),
                 request.text.chars().count()
             ),
-            "Trust this project",
-            "Not now",
+            "Close",
         );
         state.guide.awaiting = Some(request);
         return;
@@ -275,9 +280,9 @@ fn take_the_answer(
     let Some(mut state) = state else { return };
     let Some(choice) = confirm.answer_choice(Asked::TrustGuide) else { return };
     let Some(request) = state.guide.awaiting.take() else { return };
-    // **A question that asked with no Allow button cannot be answered `Yes`.** A two-answer question's
-    // affirmative is Trust this project (`Choice::Yes`), which the arm below reads as `Scope::Project`.
-    if choice == Choice::No {
+    // **A note grants nothing.** Its answer is a dismissal and its content is held for the session, the
+    // same as Not now: there is no affirmative on a note at all, and nothing here reads one.
+    if choice == Choice::No || !request.offer_allow {
         state.guide.denied.insert((request.root.clone(), digest(&request.text)));
         state.status.note(
             "Not allowed, so this project's guide was not given to your agent. You can allow it on the project page."
@@ -285,9 +290,9 @@ fn take_the_answer(
         );
         return;
     }
-    // **Which answer means the project** depends on which question was asked: a three-answer one has the
-    // middle button for it, and a two-answer one has its affirmative.
-    let scope = if !request.offer_allow || choice == Choice::Alt { Scope::Project } else { Scope::Command };
+    // **The middle answer is Trust this project**; only a question that offered Allow can be answered with
+    // the text, and [`ask_the_person`] is the one place that decides which question was asked.
+    let scope = if choice == Choice::Alt { Scope::Project } else { Scope::Command };
     // **The person's own store when none is named** (`store_path`), so the answer is written where the
     // next `grimoire/agent_guide` looks for it.
     let written = crate::trusted::resolve(store_root, state.trust.file.as_deref())

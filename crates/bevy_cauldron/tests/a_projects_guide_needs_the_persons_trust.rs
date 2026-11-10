@@ -225,43 +225,66 @@ fn the_session_remembers_what_was_refused() {
     assert!(!trust.denied_at(Path::new("/q"), "text"), "another project is another guide");
 }
 
-/// **A guide too long for the question is never offered for allowing.**
+/// **A guide too long for the question grants nothing at all, from any key.**
 ///
-/// `Allow this guide` grants the whole file, so a question that showed only the first 1 200 characters
-/// would be asking a person to allow content they were never shown — the hole the truncation would open if
-/// the button stayed. The two answers that remain are the ones that never grant unseen text: **Trust this
-/// project** (a decision about the project, made with that meaning in front of the person) and **Not now**.
+/// The long-guide question has **no affirmative grant**. A two-answer modal's `Y` would have to mean one of
+/// them, and the only grants available are the text's (unread — the question cannot show it) and
+/// `Scope::Project`, **which is the same list `TrustStore::decision` reads for `agent.ron` and `play.ron`**:
+/// a long guide plus a habitual `Y` would trust the project's program launches, which is a decision nobody
+/// made about a program. So the question is a note with one answer, and `Y` does nothing at all.
 #[test]
-fn a_guide_too_long_to_show_is_asked_about_without_an_allow() {
+fn a_guide_too_long_to_show_grants_nothing_and_y_is_not_an_answer() {
     let (mut app, _home, root, store) = editor(&format!("guide_trust_long_{}", std::process::id()));
     let text = "a rule that repeats. ".repeat(200);
     write_guide(&root, &text);
-    assert!(text.chars().count() > bevy_cauldron::agent_guide::SHOWN_CHARS, "the guide is longer than the question can show");
+    assert!(
+        text.chars().count() > bevy_cauldron::agent_guide::SHOWN_CHARS,
+        "the guide is longer than the question can show"
+    );
 
     let _ = call(&mut app);
-    let asking = app.world().resource::<Confirm>().asking(Asked::TrustGuide);
-    assert!(asking, "the person is still asked about it");
-    // **Yes is Trust this project**, the only grant a two-answer question offers.
+    assert!(
+        app.world().resource::<Confirm>().asking(Asked::TrustGuide),
+        "the person is still told about it"
+    );
+    // **`Y`, the reflex key, grants nothing**: not the text it was not shown, and not the project whose
+    // commands that grant would also allow.
     tap(&mut app, Key::Character("y".into()), KeyCode::KeyY);
     assert_eq!(
-        decision(&store, &root, "any later wording"),
-        Decision::Trusted(Scope::Project),
-        "the affirmative of a question with no Allow is the project, never a claim to have read the file"
+        decision(&store, &root, &text),
+        Decision::Untrusted,
+        "the text is not allowed"
     );
     assert_eq!(
-        store_guide(&store, &root, &text),
-        Decision::Trusted(Scope::Project),
-        "and the long text is allowed only through the project"
+        decision(&store, &root, "any later wording"),
+        Decision::Untrusted,
+        "and the project is not trusted, so its program launches are not either"
     );
-
-    // **The text area on the project page is where the whole file is shown**, and that is what the question
-    // points the person at.
-    let app = app;
-    let note = app.world().resource::<EditorState>().status.note_text().to_owned();
-    assert!(!note.contains("Not allowed"), "nothing was refused: {note}");
+    assert!(
+        !app.world().resource::<EditorState>().status.note_text().contains("Allowed"),
+        "the status line claims no grant: {}",
+        app.world().resource::<EditorState>().status.note_text()
+    );
 }
 
-/// The store's answer for one text of one project.
-fn store_guide(store: &Path, root: &Path, text: &str) -> Decision {
-    TrustStore::load(store).expect("the store reads").guide_decision(root, text).expect("the root resolves")
+/// **`N` on a long guide is Not now**, and the second call does not ask again.
+#[test]
+fn not_now_on_a_long_guide_holds_it_for_the_session() {
+    let (mut app, _home, root, store) = editor(&format!("guide_long_n_{}", std::process::id()));
+    let text = "a rule that repeats. ".repeat(200);
+    write_guide(&root, &text);
+    let _ = call(&mut app);
+    tap(&mut app, Key::Character("n".into()), KeyCode::KeyN);
+    assert!(!app.world().resource::<Confirm>().is_open(), "the note is dismissed");
+    assert_eq!(decision(&store, &root, &text), Decision::Untrusted, "nothing was granted");
+    assert!(
+        app.world().resource::<EditorState>().guide.denied_at(&root, &text),
+        "the content is held for the session"
+    );
+    let _ = call(&mut app);
+    assert!(
+        !app.world().resource::<Confirm>().asking(Asked::TrustGuide),
+        "the second call asks nothing"
+    );
 }
+
