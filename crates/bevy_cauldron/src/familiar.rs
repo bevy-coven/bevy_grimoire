@@ -165,6 +165,14 @@ pub struct FamiliarSwitch;
 #[derive(Component)]
 pub struct FamiliarUndo;
 
+/// **The block's Look button** (AF-04, #360): show the change the Familiar is waiting on, now. The
+/// issue names two places for Look — the chip over the viewport and this block's newest-change line —
+/// and both call [`crate::follow::Following::look_now`], so a click and a button cannot wait on
+/// different things.
+#[derive(Component)]
+pub struct AgentLookButton;
+
+
 /// The block's "Answer hand-backs here" switch.
 #[derive(Component)]
 pub struct HandBackSwitch;
@@ -244,6 +252,22 @@ pub fn toggle_the_familiar(
                 }),
             ));
             block.spawn((button("Undo the agent's change"), FamiliarUndo, observe(undo_the_agents_change)));
+            // **Look**, beside Undo: the block says what the agent did, so "show me" belongs under it
+            // (AF-04, #360). It calls the same `Following::look_now` the chip's button does.
+            block.spawn((
+                button("Look at the agent's change"),
+                AgentLookButton,
+                observe(|activate: On<Activate>, buttons: Query<(), With<AgentLookButton>>, mut following: Option<ResMut<crate::follow::Following>>, mut state: Option<ResMut<EditorState>>| {
+                    if !buttons.contains(activate.entity) {
+                        return;
+                    }
+                    let Some(following) = following.as_deref_mut() else { return };
+                    following.look_now();
+                    if let Some(state) = state.as_deref_mut() {
+                        state.status.note("looking at what the Familiar changed");
+                    }
+                }),
+            ));
         })
         .id();
     commands.entity(pane).insert_children(0, &[block]);

@@ -106,6 +106,13 @@ fn footprint_corners(app: &App, id: &str) -> Option<[Vec3; 4]> {
     ])
 }
 
+/// **How much of the viewport the box fills, and zero when it is not on screen at all.**
+///
+/// **A box that is off screen fills nothing**, and `Camera::world_to_viewport` answers `Ok` with
+/// coordinates outside the viewport for a point beside the camera — so a measurement that only took
+/// the corners' span read a piece twenty metres away as "framed". Measured: that made a five-change
+/// burst look like two changes arriving 0.02 s apart, because the second piece's off-screen span was
+/// large enough to pass the threshold. Every corner has to be inside for the box to count.
 fn fill(app: &mut App, corners: &[Vec3]) -> f32 {
     let world = app.world_mut();
     let mut cameras = world.query_filtered::<(&Camera, &GlobalTransform), With<MainCamera>>();
@@ -116,6 +123,9 @@ fn fill(app: &mut App, corners: &[Vec3]) -> f32 {
         let p = camera
             .world_to_viewport(transform, *corner)
             .unwrap_or_else(|e| panic!("{corner:?} is not in view: {e:?}"));
+        if p.x < rect.min.x || p.y < rect.min.y || p.x > rect.max.x || p.y > rect.max.y {
+            return 0.0;
+        }
         lo = lo.min(p);
         hi = hi.max(p);
     }
@@ -136,6 +146,25 @@ fn the_one_placed(app: &App) -> String {
     found[0].to_owned()
 }
 
+/// **The `n`th placed piece**, by map order rather than by the answer.
+fn the_one_placed_from(app: &App, n: usize) -> String {
+    use bevy_cauldron::project::OpenMap;
+    let open = app.world().resource::<OpenMap>();
+    let found: Vec<&str> = open
+        .map
+        .placements
+        .iter()
+        .map(|p| p.id.as_str())
+        .filter(|id| *id != "bed@0")
+        .collect();
+    assert!(
+        found.len() >= n,
+        "the map holds {} placed pieces, fewer than the {n}th asked for: {found:?}",
+        found.len()
+    );
+    found[n - 1].to_owned()
+}
+
 /// **Look frames the change inside the dwell**, which only a follow that was actually asked can do:
 /// the alternative is waiting `FOLLOW_DWELL_S` out, and this asserts *before* it has passed.
 #[test]
@@ -149,22 +178,36 @@ fn the_looks_button_frames_the_change_inside_the_dwell() {
         serde_json::json!({"piece": "bed", "at": [20.0, 18.0]}),
     );
     assert_eq!(answer["outcome"], "applied", "{answer}");
-    let placed = the_one_placed(&app);
     // **The first change is framed at once**, which starts the dwell.
     for _ in 0..frames_of(bevy_cauldron::follow::FOLLOW_EASE_S) {
         app.update();
     }
-    // **A second change**, held behind the dwell — and Look is what shows it now.
-    let second = apply(
-        &mut app,
-        "placement_add",
-        serde_json::json!({"piece": "bed", "at": [-20.0, -18.0]}),
-    );
-    assert_eq!(second["outcome"], "applied", "{second}");
+    // **Two more changes in one frame**, so a burst is waiting and the pace separates them — and Look
+    // is what shows the first of them now. **A change arriving alone is not paced** (the round-3 fix to
+    // `dwell_from`: the protected `an_agents_undo_frames_where_the_change_was` needs that), so a single
+    // second change would have been framed at once and left nothing for Look.
+    for at in [(-20.0, -18.0), (0.0, 24.0)] {
+        let next = apply(
+            &mut app,
+            "placement_add",
+            serde_json::json!({"piece": "bed", "at": [at.0, at.1]}),
+        );
+        assert_eq!(next["outcome"], "applied", "{next}");
+    }
     // **No `point_away` here**: it presses nothing, but the harness's own `Rig` write would be the
     // only thing that moved the camera, and the wait this test is about is the *second change's*.
-    let corners = footprint_corners(&app, &placed).expect("the bed measures");
+    // **The change Look will show**, which is the oldest one waiting: `placed` was framed already, so
+    // measuring it would read the camera leaving it as a failure.
+    let placed_count = {
+        use bevy_cauldron::project::OpenMap;
+        let open = app.world().resource::<OpenMap>();
+        open.map.placements.iter().filter(|p| p.id != "bed@0").count()
+    };
+    assert_eq!(placed_count, 3, "the test needs three placements to have a burst waiting");
+    let waiting_for = the_one_placed_from(&app, 2);
+    let corners = footprint_corners(&app, &waiting_for).expect("the bed measures");
     let before_fill = fill(&mut app, &corners);
+    assert!(before_fill < 0.25, "the second change is already framed, so Look has nothing to do");
     // **One frame, so the chip has been drawn**: `draw_the_look_chip` runs in `Update`, and the BRP
     // call above ran outside the schedule.
     app.update();
@@ -185,9 +228,9 @@ fn the_looks_button_frames_the_change_inside_the_dwell() {
     }
     let after = fill(&mut app, &corners);
     assert!(
-        after > before_fill,
-        "Look did nothing: the camera was pointed away at {before_fill:.2} of the viewport and is \
-         still at {after:.2} half a dwell later, so the button's click never reached the follow"
+        after >= 0.25,
+        "Look did nothing: the change waiting fills {before_fill:.2} of the viewport before the click \
+         and {after:.2} half a dwell later, so the button never reached the follow"
     );
 }
 
@@ -340,6 +383,161 @@ fn a_wheel_over_the_map_holds_the_follow() {
     assert!(
         app.world().resource::<bevy_cauldron::follow::LookChip>().sentence().is_some(),
         "the chip says nothing while a wheel-using person has a change waiting"
+    );
+}
+
+/// **The AGENT block's Look button shows the waiting change**, which is the issue's second Look place:
+/// the block sits beside what the agent did, so the answer to "show me" belongs under it.
+#[test]
+fn the_agent_blocks_look_button_frames_the_change() {
+    let root = room("round2_agent_block_look");
+    let mut app = editor(&root);
+    // **The block is opened by its own menu row**, so this is the block a person has and the same
+    // observer does the spawning: `toggle_the_familiar` is an entity observer on View ▸ Show agent.
+    let row = {
+        let world = app.world_mut();
+        let mut q = world.query_filtered::<Entity, With<bevy_cauldron::familiar::FamiliarItem>>();
+        q.iter(world).next().expect("the View menu has a Show agent row")
+    };
+    app.world_mut()
+        .trigger(bevy_gooey::ValueChange { source: row, value: true, is_final: true });
+    for _ in 0..frames_of(0.2) {
+        app.update();
+    }
+    let look = {
+        let world = app.world_mut();
+        let mut q = world.query_filtered::<Entity, With<bevy_cauldron::familiar::AgentLookButton>>();
+        q.iter(world).next().expect("the AGENT block draws its Look button")
+    };
+
+    point_away(&mut app);
+    let answer = apply(
+        &mut app,
+        "placement_add",
+        serde_json::json!({"piece": "bed", "at": [20.0, 18.0]}),
+    );
+    assert_eq!(answer["outcome"], "applied", "{answer}");
+    let placed = the_one_placed(&app);
+    let corners = footprint_corners(&app, &placed).expect("the placed bed measures");
+    let before = fill(&mut app, &corners);
+
+    app.world_mut().trigger(bevy_gooey::Activate { entity: look });
+    for _ in 0..frames_of(bevy_cauldron::follow::FOLLOW_EASE_S) {
+        app.update();
+    }
+    let after = fill(&mut app, &corners);
+    assert!(
+        after > before && after >= 0.25,
+        "the AGENT block's Look did not frame the change: {before:.2} -> {after:.2} of the viewport"
+    );
+}
+
+/// **The dwell holds five changes apart by `FOLLOW_DWELL_S` each**, measured on the editor's own clock
+/// rather than by counting frames: the review asked for the gap itself.
+#[test]
+fn five_changes_in_one_frame_are_held_apart_by_the_dwell() {
+    let root = room("round2_dwell_gap");
+    let mut app = editor(&root);
+    let mut made = Vec::new();
+    for (i, at) in [(20.0, 18.0), (-20.0, 18.0), (20.0, -18.0), (-20.0, -18.0), (0.0, 24.0)].into_iter().enumerate() {
+        let answer = apply(
+            &mut app,
+            "placement_add",
+            serde_json::json!({"piece": "bed", "at": [at.0, at.1]}),
+        );
+        assert_eq!(answer["outcome"], "applied", "{answer}");
+        // **The piece the `n`th add made**, by map order: `placement_add` mints its id at commit and
+        // the map is what a person sees.
+        made.push(the_one_placed_from(&app, i + 1));
+    }
+    // **The second the camera came to rest on each change**, in the order they were made.
+    //
+    // **One arrival per change, not one per frame it happens to be framed on.** The first version
+    // pushed a row every frame the *next* piece was in view, so an arrival and the arrival after it
+    // came from the same frame and were 0.02 s apart by construction. A change counts as arrived on
+    // the frame its own box is framed and the camera has stopped, and the next change is looked for
+    // only after that.
+    let mut arrivals: Vec<(usize, f64)> = Vec::new();
+    let limit = app.world().resource::<Time<Real>>().elapsed_secs_f64() + 8.0;
+    while app.world().resource::<Time<Real>>().elapsed_secs_f64() < limit && arrivals.len() < made.len() {
+        app.update();
+        if app.world().resource::<Following>().settling() {
+            continue;
+        }
+        let next = arrivals.len();
+        let corners = footprint_corners(&app, &made[next]).expect("the bed measures");
+        if fill(&mut app, &corners) >= 0.25 {
+            let at = app.world().resource::<Time<Real>>().elapsed_secs_f64();
+            arrivals.push((next, at));
+
+        }
+    }
+    assert_eq!(
+        arrivals.len(),
+        made.len(),
+        "{} of {} changes were framed, so their spacing cannot be measured",
+        arrivals.len(),
+        made.len()
+    );
+    // **In order**, and each held at least `FOLLOW_DWELL_S` after the one before.
+    let order: Vec<usize> = arrivals.iter().map(|(i, _)| *i).collect();
+    assert_eq!(order, (0..made.len()).collect::<Vec<_>>(), "the burst was framed out of order");
+    for pair in arrivals.windows(2) {
+        let held = pair[1].1 - pair[0].1;
+        assert!(
+            held >= f64::from(FOLLOW_DWELL_S) - f64::from(FRAME),
+            "two changes were framed {held:.2} s apart, less than the {FOLLOW_DWELL_S} s the issue \
+             holds them apart by"
+        );
+    }
+}
+
+/// **Another project clears the follow's queue and its chip**, which nothing did: a queued request
+/// names a place in metres on *that* project's map, so carrying it over would frame a spot the new
+/// project does not have — the same stale-value class `screen::OWNERSHIP` exists for.
+#[test]
+fn another_project_clears_the_follows_queue() {
+    let root = room("round3_project_change");
+    let mut app = editor(&root);
+    // **A door the follow cannot cross to**, so the request stays queued: on the Map door the very
+    // next frame would take it and an empty queue would prove nothing.
+    app.world_mut().insert_resource(bevy_cauldron::tiles::Door::Kit);
+    app.world_mut()
+        .resource_mut::<Following>()
+        .request(bevy_cauldron::follow::FollowRequest {
+            target: bevy_cauldron::editor::FrameTarget::Map,
+            ids: Vec::new(),
+        });
+    app.update();
+    assert!(
+        app.world().resource::<Following>().pending() > 0
+            || app.world().resource::<Following>().settling(),
+        "a request is held, so the test proves something"
+    );
+    assert!(app.world().resource::<Following>().pending() > 0, "a request waits, so the test proves something");
+    assert!(
+        app.world().resource::<bevy_cauldron::follow::LookChip>().sentence().is_some(),
+        "the chip names it while it waits"
+    );
+
+    // **Another project**, replaced the way `Project::open` leaves it.
+    let fresh = Project::open(&root, None).expect("the same project reopens");
+    app.world_mut().insert_resource(fresh);
+    app.update();
+
+    assert_eq!(
+        app.world().resource::<Following>().pending(),
+        0,
+        "a project change kept a follow whose place is a metre figure of the previous project's map"
+    );
+    // **The chip's words are a frame behind `Following` by design** (`follow_the_chip` reads the
+    // resource after this frame's other systems), so this waits one frame for it — the queue itself
+    // is asserted above, on the frame the project changed.
+    app.update();
+    assert!(
+        app.world().resource::<bevy_cauldron::follow::LookChip>().sentence().is_none(),
+        "the chip still names a change from the previous project: {:?}",
+        app.world().resource::<bevy_cauldron::follow::LookChip>().sentence()
     );
 }
 
