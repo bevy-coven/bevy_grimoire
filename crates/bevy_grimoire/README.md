@@ -12,6 +12,23 @@ Resolves masks, stacked Y, role masks and seat positions once at load, then spaw
 
 This is the only crate in the grimoire set that knows what a renderer is, on purpose.
 
+## Behaviours
+
+`bevy_grimoire::behaviours` ships a first set of game behaviours as reflected components, configured entirely
+from YAML: `Trigger`, `Switch` and `Door`, `Spawner`, `Pickup`, `Health` and `Damage`, `Countdown`,
+`PathFollow` and `StateMachine`. A game adds `BehaviourPlugin` and a file in `<project>/game/` sets them:
+
+```yaml
+entities:
+  latch: { Switch: { latch: north, on: false } }
+  gate:  { Door: { link: north, open: false } }
+```
+
+Each has its own doc comments, which reach the type information a schema and a hover are built from. A
+behaviour writes a message where another system has to act (`Spawner` asks; it never calls the one spawner),
+and none of them registers itself — `BehaviourPlugin` is the opt-in, so a game's own `Health` stays
+unambiguous. [The guide page](../../docs/guide/behaviours.md) has the table and the rules.
+
 ## Examples
 
 ```sh

@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2024"
 rust-version = "1.97.1"
 description = "The runtime half of grimoire: load a library and a map, and put it in a Bevy world."
@@ -14,7 +14,7 @@ repository = "https://github.com/bevy-coven/bevy_grimoire"
 # THIS rather than each growing a spawner, so a map looks the same in the editor and in play.
 [dependencies]
 bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.9.0" }
-bevy = { workspace = true, features = ["jpeg"] }
+bevy = { workspace = true, features = ["jpeg", "serialize", "reflect_documentation"] }
 # **The schema export, and nothing else of `bevy_remote`.** `registry.schema` is the only function that can say
 # what a game's own components are, so `game.schema.json` cannot be written without it — and a game that ships
 # must not gain a listening socket for one file written at start. `bevy_internal` takes this crate with
@@ -25,8 +25,7 @@ bevy_remote = { version = "0.20.0", default-features = false, features = ["bevy_
 # The registry's answer is a JSON value this writes as text, so this is the module's own dependency and not a
 # test's.
 serde_json.workspace = true
-
-[dev-dependencies]
-# The test game's components derive `Deserialize`, which is what `#[reflect(Deserialize)]` needs for a file's
-# value to build them.
+# **The behaviours' own fields, read from a file** (GD-07, #369). A component a file may set needs
+# `#[reflect(Deserialize)]`, which is a `serde::Deserialize` impl; GD-05's reader then builds it through
+# `ReflectDeserialize`. Not a test dependency any more: the crate itself derives them now.
 serde.workspace = true
