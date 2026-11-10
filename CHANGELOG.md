@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-10
+
+- **nav-01-baseline** `cb218eb` Every destination's route is measured and written down: twenty rows of keys and clicks, seven of them unreachable *No clip: a measurement and its generated document, with no picture of their own; proved by navigation.rs (every_destination_is_measured_and_the_baseline_is_written)*
+
 ## 2026-11-09
 
 - **ui-infra-review** `815d628` The staging plan stamps each panel on its own chunk's clock, and the UI budget reports a rebuild apart from a settled frame *For you: Clips of every panel no longer die on the first one, and the editor's speed check says exactly what it measures.* *No clip: a corrected clock in a tool, two faster list builds and an honest budget test, with no picture of their own; proved by tools/demo/test_stage.py (test_every_chunk_stamps_its_stage_on_its_own_start, test_a_capture_that_writes_fewer_frames_than_planned_is_refused) and bevy_cauldron/tests/the_uis_budget_is_two_milliseconds_a_frame.rs (a_settled_frame_on_the_reference_fixture_stays_under_the_ui_budget, a_rebuild_frame_is_measured_and_is_not_claimed_as_settled, the_clock_counts_every_way_out_and_marks_a_rebuild)*
