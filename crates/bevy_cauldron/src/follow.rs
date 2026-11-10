@@ -91,6 +91,22 @@ pub struct FollowRequest {
     pub ids: Vec<String>,
 }
 
+/// **What the follow is showing** (AF-05, #361): a change that happened, or one an agent proposes.
+///
+/// The only differences a person sees are the outline's colour and the receipt's words, which is the
+/// point: a proposal is followed exactly as a change is, so it is not a second mechanism that could
+/// disagree with the first about where a thing is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Manner {
+    /// A change that was applied — or an undo of one. The outline is [`crate::chrome::ACCENT`].
+    #[default]
+    Applied,
+    /// **A proposal**, followed before anything is written (AF-05, #361). The outline is
+    /// [`crate::chrome::SUGGEST`], the ink this editor already uses for what a model suggests, so the
+    /// preview reads as a proposal everywhere it is drawn.
+    Preview,
+}
+
 /// **The request a `Shown` makes**, or `None` when the change is not on the map.
 ///
 /// A library piece, a composition, a rig, a note or a project file is a place on another screen, and
@@ -142,8 +158,10 @@ struct Ease {
 /// be erased by the very crossing it asked for.
 #[derive(Resource, Default)]
 pub struct Following {
-    /// Each request with the words the chip says it in, or `None` for one raised without a sentence.
-    queue: VecDeque<(FollowRequest, Option<String>)>,
+    /// Each request with the words the chip says it in (`None` for one raised without a sentence) and
+    /// how it is drawn — a **preview** is followed exactly as a change is, in a colour that says it is
+    /// not one yet (AF-05, #361).
+    queue: VecDeque<(FollowRequest, Option<String>, Manner)>,
     ease: Option<Ease>,
     /// **Whether the person is using the view** (AF-04, #360): input within [`FOLLOW_IDLE_S`].
     ///
@@ -159,6 +177,15 @@ pub struct Following {
     /// **The change being waited on**, as the look chip says it: the one in flight, else the oldest
     /// queued. `None` when there is nothing to show.
     waiting: Option<String>,
+    /// **How the thing on screen was drawn** — a change, or a proposal (AF-05, #361).
+    ///
+    /// Kept after the frame it was taken on: the outline is drawn from it, and the preview-then-apply
+    /// rule asks it whether the place now being framed is one the person has already been shown.
+    shown: Manner,
+    /// **The box the last follow framed**, in map metres, and when. A preview followed by its apply
+    /// names the same box, and inside [`FOLLOW_DWELL_S`] the camera does not move again — only the
+    /// outline turns from the preview colour to the applied one.
+    shown_rect: Option<([f32; 4], f64)>,
     /// **Whether the person was working last frame**, so a gesture's *start* is told from a held
     /// button. See [`a_persons_input_takes_the_camera_back`]: a new gesture drops what was queued, and
     /// a held one only keeps the follow waiting (AF-04, #360).
@@ -178,7 +205,7 @@ impl Following {
     /// A request with no sentence is still a request: the chip says what it can, that the Familiar
     /// changed something. [`Self::request_named`] is the form an operation's own receipt fills in.
     pub fn request(&mut self, request: FollowRequest) {
-        self.queue.push_back((request, None));
+        self.queue.push_back((request, None, Manner::Applied));
         self.note_what_waits();
     }
 
@@ -189,8 +216,25 @@ impl Following {
     /// must fill in even when there is nothing to say, and the struct is built by a test that has no
     /// sentence to give it.
     pub fn request_named(&mut self, request: FollowRequest, summary: impl Into<String>) {
-        self.queue.push_back((request, Some(summary.into())));
+        self.queue.push_back((request, Some(summary.into()), Manner::Applied));
         self.note_what_waits();
+    }
+
+    /// **Ask the camera to go to a proposal** (AF-05, #361), with the words the receipt says it in —
+    /// `the Familiar is about to place bed@02`.
+    ///
+    /// **The same queue, the same dwell, the same idle wait.** A preview is not a second mechanism: a
+    /// person watching an agent plan sees the proposal arrive exactly as a change does, and the one
+    /// difference — the outline's colour — is [`Manner`]'s whole purpose.
+    pub fn request_a_preview(&mut self, request: FollowRequest, summary: impl Into<String>) {
+        self.queue.push_back((request, Some(summary.into()), Manner::Preview));
+        self.note_what_waits();
+    }
+
+    /// **What the change on screen was**: a change, or a preview of one. Read by the outline and by
+    /// the preview-then-apply rule.
+    pub fn shown_manner(&self) -> Manner {
+        self.shown
     }
 
     /// **What the look chip says**, or `None` when nothing is waiting to be shown (AF-04, #360).
@@ -223,7 +267,7 @@ impl Following {
 
     /// **Carry the chip's words from whatever is next**: the change in flight, else the queue's head.
     fn note_what_waits(&mut self) {
-        self.waiting = self.queue.front().map(|(request, said)| {
+        self.waiting = self.queue.front().map(|(request, said, _)| {
             said.clone()
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| format!("{FAMILIAR} changed {}", request.words()))
@@ -539,6 +583,28 @@ fn take_the_follow_request(
     // show must not pay 0.6 s to see. A burst is where the pacing matters: each change is held for
     // `FOLLOW_DWELL_S` *after* it is shown, so five changes are five views rather than a blur.
     if following.shown_at != 0.0 && now < following.shown_at + f64::from(FOLLOW_DWELL_S) {
+        // **A preview followed by its apply is ONE view** (AF-05, #361). The two resolve to the same
+        // box — the answer comes from `preview_shows`, which the apply reads too — so an apply naming
+        // the place already on screen is taken here rather than framed again: the camera stays where
+        // the preview put it and only the outline turns from the preview colour to the applied one.
+        //
+        // **At the gate, not later**, because the dwell is what holds the apply back: measured, the
+        // apply was queued until the dwell expired and then framed the same place again, so the
+        // person saw the camera arrive twice for one change.
+        if let Some((request, _, Manner::Applied)) = following.queue.front()
+            && let Some((was, at)) = following.shown_rect
+            && match &request.target {
+                FrameTarget::Rect(rect) => same_box(was, *rect),
+                _ => false,
+            }
+            && now < at + f64::from(FOLLOW_DWELL_S)
+        {
+            following.queue.pop_front();
+            // The proposal became the fact: the ring changes ink and nothing else moves.
+            following.shown = Manner::Applied;
+            following.note_what_waits();
+            return;
+        }
         following.note_what_waits();
         return;
     }
@@ -587,7 +653,7 @@ fn take_the_follow_request(
         following.queue.clear();
         return;
     };
-    let Some((request, _)) = following.queue.pop_front() else {
+    let Some((request, _, manner)) = following.queue.pop_front() else {
         return;
     };
     let settled = match resolve_frame(&request.target, project, open, None) {
@@ -609,11 +675,18 @@ fn take_the_follow_request(
         }
         return;
     };
+    // **The place, in map metres**: the request's own `Shown::Map` rect when it has one, else the box
+    // the frame resolved to. A proposal names a footprint and its apply names the placed piece, and
+    // the two differ in height — so comparing the *resolved* boxes would see two places where a
+    // person sees one. This is the value the preview-then-apply rule compares against, at the gate.
+    let rect = match &request.target {
+        FrameTarget::Rect(rect) => *rect,
+        _ => framed_rect(&settled),
+    };
     // **Where the ease starts from**, read before `apply_frame` writes the rig.
     let from_focus = rig.focus;
     let from_height = rig.height;
-    let (to_focus, to_height) =
-        apply_frame(&mut rig, &settled, aspect, open, FOLLOW_MARGIN_FRAC);
+    let (to_focus, to_height) = apply_frame(&mut rig, &settled, aspect, open, FOLLOW_MARGIN_FRAC);
     // **The map's own open-frame must not fight this one.** `frame_map_on_open` frames the whole map
     // once per door entry; a change that arrives just after a crossing would be framed by the follow
     // and then overwritten by the whole map.
@@ -662,6 +735,8 @@ fn take_the_follow_request(
     }
     // **The dwell starts now**, so the next change waits [`FOLLOW_DWELL_S`] behind this one.
     following.shown_at = now;
+    following.shown = manner;
+    following.shown_rect = Some((rect, now));
     following.note_what_waits();
 }
 
@@ -703,6 +778,12 @@ fn draw_the_follow_outline(
     open: Option<Res<OpenMap>>,
     mut gizmos: Gizmos,
 ) {
+    // **A proposal is drawn in the proposal ink** (AF-05, #361): `SUGGEST` is what this editor already
+    // paints what a model suggests, so a preview reads as a proposal everywhere it appears.
+    let ink = match following.shown_manner() {
+        Manner::Applied => crate::chrome::ACCENT,
+        Manner::Preview => crate::chrome::SUGGEST,
+    };
     if following.outline.is_empty() {
         return;
     }
@@ -728,7 +809,7 @@ fn draw_the_follow_outline(
                 Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
             ),
             size.max(Vec2::splat(OUTLINE_MIN_M)),
-            crate::chrome::ACCENT,
+            ink,
         );
     }
 }
@@ -829,6 +910,30 @@ fn draw_the_look_chip(
 
 /// How far in from the viewport's top-left corner the chip stands, pixels.
 const CHIP_INSET: f32 = 12.0;
+
+/// **The map-space box a frame resolved to**, so two follows can be told apart by where they go
+/// rather than by which request raised them.
+fn framed_rect(settled: &crate::editor::Framing) -> [f32; 4] {
+    let half = settled.size * 0.5;
+    [
+        settled.centre.x - half.x,
+        settled.centre.z - half.z,
+        settled.centre.x + half.x,
+        settled.centre.z + half.z,
+    ]
+}
+
+/// **Whether two boxes are the same place**, to the metre a map is authored in.
+///
+/// A preview and its apply are resolved from the same parameters through the same
+/// `ops::preview_shows`, so the two boxes are the same numbers; the tolerance is for float rounding in
+/// `resolve_frame` (a margin is a multiplication) and nothing else.
+fn same_box(a: [f32; 4], b: [f32; 4]) -> bool {
+    a.iter().zip(b.iter()).all(|(x, y)| (x - y).abs() <= SAME_BOX_M)
+}
+
+/// **How far apart two boxes may be and still be one place**, metres.
+const SAME_BOX_M: f32 = 1e-2;
 
 /// **How far above the piece's centre the ring is drawn**, metres: enough to clear a flat piece's
 /// surface, so the line is not buried inside the mesh it surrounds.

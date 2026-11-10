@@ -96,6 +96,7 @@ mod a_person_removes_a_piece_and_undoes_it;
 mod a_project_command_needs_the_persons_trust;
 mod a_project_opens_in_the_same_process;
 mod a_projects_own_font_applies_when_it_is_opened_in_the_same_process;
+mod a_preview_is_framed_before_it_is_applied;
 mod a_new_project_opens_something_to_edit;
 mod an_empty_library_leads_to_adding_meshes;
 mod a_person_reports_about_this_project;
