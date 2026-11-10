@@ -25,3 +25,5 @@ serde_yaml_ng.workspace = true
 # dev-dependency, and one direction only: the oracle does not know this crate exists.
 [dev-dependencies]
 bevy_oracle = { path = "../bevy_oracle", version = "0.1.0" }
+# The fixtures example prints what it read as JSON.
+serde_json.workspace = true
