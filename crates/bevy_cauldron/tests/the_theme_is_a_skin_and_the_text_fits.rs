@@ -219,19 +219,19 @@ fn a_refused_theme_is_said_once() {
     );
 }
 
-/// **A project skin coming or going re-applies the chosen theme** (UI-73, #251).
+/// **A project skin coming or going does not disturb the chosen theme** (UI-73, #251; UI-03, #211).
 ///
-/// The regression: `follow_the_theme` returned early whenever the *theme* had not changed, so a project
-/// that deleted its `family/bevy_gooey.ron` — or another project opened in its place — left the editor on
-/// `GooeySkin::default()`, which is what `ui_skin::apply_ui_skin` resets the running skin to when the file
-/// goes. High contrast was chosen, the file was removed, and the editor was neither. The project-skin
-/// state is now one of the three inputs the early return compares.
-///
-/// The protected `tests/family_gooey_skin.rs` still pins `GooeySkin::default()` as what removing a skin
-/// file leaves: this system runs *after* `apply_ui_skin`, so the default is what it starts from and the
-/// person's theme is what it puts back.
+/// **Owner exception (2026-11-10, #211): this test used to assert the chosen theme being re-applied after
+/// a project's `family/bevy_gooey.ron` was removed.** It was re-applied because that file *was* the
+/// running skin, and `ui_skin::apply_ui_skin` reset the running skin to `GooeySkin::default()` when it
+/// went. #211 moves the file into `ui_skin::GameSkin`, which the Game UI preview panel's `SkinScope`
+/// reads and the running skin never takes — so the chosen theme is not disturbed by the file at all,
+/// and there is nothing to put back. The check this test makes is kept and made **stronger**: the
+/// person's High contrast theme is the running skin *while* the project ships a skin, and it is still
+/// the running skin after the file goes, with no frame in between where the editor is on gooey's
+/// default. What is no longer asserted is a reset this issue removes on purpose.
 #[test]
-fn removing_a_projects_skin_brings_the_chosen_theme_back() {
+fn removing_a_projects_skin_leaves_the_chosen_theme_running() {
     let root = fixtures::Fixture::new(&format!("theme_skin_gone_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
         .build("m");
@@ -248,46 +248,53 @@ fn removing_a_projects_skin_brings_the_chosen_theme_back() {
     for _ in 0..12 {
         app.update();
     }
+    // **While the project ships a skin**, the person's theme is what the chrome draws from.
     assert_eq!(
-        app.world().resource::<GooeySkin>().accent,
-        Color::srgba(0.2, 0.6, 0.9, 1.0),
-        "while the project ships a skin, its accent is the running skin's"
+        app.world().resource::<GooeySkin>().surface,
+        GooeySkin::high_contrast().surface,
+        "the chosen theme is the running skin even with a project skin on disk"
+    );
+    assert_eq!(
+        app.world().resource::<bevy_cauldron::ui_skin::GameSkin>().0.as_ref().map(|s| s.accent),
+        Some(Color::srgba(0.2, 0.6, 0.9, 1.0)),
+        "and the project's skin is the preview's, in its own resource"
     );
 
-    // **The file goes**, which is what resets the running skin to gooey's default.
+    // **The file goes.** The preview loses its skin; the chrome does not move.
     std::fs::remove_file(&file).expect("the project skin is removed");
-    let mut back = None;
-    for _ in 0..60 {
+    for _ in 0..40 {
         app.update();
-        let running = app.world().resource::<GooeySkin>().surface;
-        if running == GooeySkin::high_contrast().surface {
-            back = Some(running);
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert_eq!(
+            app.world().resource::<GooeySkin>().surface,
+            GooeySkin::high_contrast().surface,
+            "the chosen theme stays running on every frame after the file goes"
+        );
     }
-    let running = back.unwrap_or_else(|| {
-        panic!(
-            "High contrast is the running skin again after the project's skin is removed, not \
-             GooeySkin::default(): {:?}",
-            app.world().resource::<GooeySkin>().surface
-        )
-    });
-    assert_eq!(running, GooeySkin::high_contrast().surface, "the person's chosen theme is back");
+    assert_eq!(
+        app.world().resource::<bevy_cauldron::ui_skin::GameSkin>().0,
+        None,
+        "and the preview is back on the editor's own palette"
+    );
 }
 
-/// **A project's `family/bevy_gooey.ron` keeps its colours and still gets the person's text size**
-/// (UI-73, #251). The early `return` that left a project's skin alone also skipped the `text_scale`
-/// write, though the comment beside it said the size still applied — so a person on a project with its
-/// own skin set 200% and nothing happened. This is that half, as an assertion.
+/// **A project's `family/bevy_gooey.ron` keeps its colours in the preview, and the person's text size
+/// reaches the running skin** (UI-73, #251; UI-03, #211).
+///
+/// **Owner exception (2026-11-10, #211): this test used to assert the project's accent was the *running*
+/// skin's while it kept the person's `text_scale`.** #211's What is that the editor chrome never takes
+/// a project's skin, so the project's accent is now `ui_skin::GameSkin`'s and the running skin is the
+/// person's theme; the text size still reaches the running skin, which is the half #251 fixed. Both
+/// halves are asserted, the first at its new home: no check is dropped, and the one that moved is
+/// stronger, because it now fails if the project's accent *does* reach the running skin.
 #[test]
-fn a_projects_skin_keeps_its_colours_and_takes_the_persons_text_size() {
+fn a_projects_skin_stays_in_the_preview_and_the_text_size_still_applies() {
     let root = fixtures::Fixture::new(&format!("theme_project_skin_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
     std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
-    // The project's own accent, so "the project wins" is visible and not a coincidence of defaults.
+    // The project's own accent, so "the project's skin reached the preview" is visible and not a
+    // coincidence of defaults.
     std::fs::write(root.join("family/bevy_gooey.ron"), "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))")
         .expect("a project skin");
     let settings_file = root.join(format!("user_config_project_skin_{}/settings.ron", std::process::id()));
@@ -301,13 +308,18 @@ fn a_projects_skin_keeps_its_colours_and_takes_the_persons_text_size() {
     for _ in 0..12 {
         app.update();
     }
+    assert_eq!(
+        app.world().resource::<bevy_cauldron::ui_skin::GameSkin>().0.as_ref().map(|s| s.accent),
+        Some(Color::srgba(0.2, 0.6, 0.9, 1.0)),
+        "the project's accent is the preview's skin's"
+    );
     let running = app.world().resource::<GooeySkin>().clone();
     assert_eq!(
         running.accent,
-        Color::srgba(0.2, 0.6, 0.9, 1.0),
-        "the project's skin is the running skin's accent: the theme does not overwrite it"
+        GooeySkin::high_contrast().accent,
+        "and the running skin is the person's theme, not the project's accent"
     );
-    assert_eq!(running.text_scale, 2.0, "and the person's 200% text still applies, which the early return dropped");
+    assert_eq!(running.text_scale, 2.0, "the person's 200% text still applies, which the early return dropped");
 }
 
 /// **High contrast passes the library's enhanced-contrast check at 7:1.** Every pair `problems()`

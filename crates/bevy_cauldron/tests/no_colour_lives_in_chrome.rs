@@ -121,6 +121,13 @@ fn the_ink_is_read_from_the_skin_it_is_given() {
 /// **The editor's own chrome never takes the project's skin** (UI-03, #211): `Ink::editor()` is the
 /// editor's shipped skin whatever a project ships, which is what keeps a game's palette inside the
 /// Game UI preview panel.
+///
+/// **Updated for #211 in this same issue's wave.** When this test was written, a project's
+/// `family/bevy_gooey.ron` *was* the running `GooeySkin`, so it could only ask the weaker question
+/// ("the chrome's ink is its own skin even though the resource is the project's"). #211 moves the file
+/// into [`bevy_cauldron::ui_skin::GameSkin`], so the question is now the strong one: the file is read
+/// into the preview's resource, the running skin is the editor's own, and the chrome's ink is that
+/// skin's. Both are asserted, so this fails if a project's palette reaches the running skin again.
 #[test]
 fn the_editor_ink_is_the_editors_skin_whatever_the_project_ships() {
     let root = fixtures::Fixture::new(&format!("ink_editor_{}", std::process::id()))
@@ -131,13 +138,21 @@ fn the_editor_ink_is_the_editors_skin_whatever_the_project_ships() {
     std::fs::write(root.join("family/bevy_gooey.ron"), "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))")
         .expect("a project skin");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    // The family settings are read over the first frames, which is when `ui::_skin::apply_ui_skin`
-    // puts the project's file into the running skin.
+    // The family settings are read over the first frames, which is when `ui_skin::apply_ui_skin`
+    // puts the project's file into `GameSkin`, the resource the Game UI preview reads.
     for _ in 0..12 {
         app.update();
     }
-    let running = app.world().resource::<bevy_gooey::GooeySkin>();
-    assert_eq!(running.accent, Color::srgba(0.2, 0.6, 0.9, 1.0), "the project skin is running");
+    assert_eq!(
+        app.world().resource::<bevy_cauldron::ui_skin::GameSkin>().0.as_ref().map(|s| s.accent),
+        Some(Color::srgba(0.2, 0.6, 0.9, 1.0)),
+        "the project skin is read, into the preview's own resource"
+    );
+    assert_eq!(
+        app.world().resource::<bevy_gooey::GooeySkin>().accent,
+        editor_skin().accent,
+        "and it is never the running skin: the chrome keeps the editor's palette"
+    );
     assert_eq!(
         Ink::editor().accent,
         editor_skin().accent,

@@ -2599,6 +2599,9 @@ impl Plugin for EditorPlugin {
         // **The LIBRARY browser** (UI-52, #238): the same library as a grid of portraits, with its own
         // search, a tag row and a card that carries its piece onto the map.
         app.add_plugins(crate::library_browser::LibraryBrowserPlugin);
+        // **The Game UI preview** (UI-03, #211): the project's game skin, shown under a `SkinScope` and
+        // never taken by the editor's chrome.
+        app.add_plugins(crate::game_ui_preview::GameUiPreviewPanelPlugin);
         app.add_plugins(crate::problems_view::ProblemsViewPlugin);
         app.add_plugins(crate::familiar::FamiliarPlugin);
         // **The AGENT block's rows** (#354): the list a wish is a row of, its answers, and the status

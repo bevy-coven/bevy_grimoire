@@ -170,25 +170,27 @@ pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
 ///
 /// **The colours and the scale are written separately, and that is not tidiness.** [`skin_for`] builds
 /// the theme's colours at the editor's own sizes, so a person's 200% text would be reset by a theme
-/// change if the two were assigned together — and a project that ships `family/bevy_gooey.ron` gets the
-/// scale *without* the colours, which is the half a bare `return` used to drop.
+/// change if the two were assigned together.
 ///
 /// **The first pass under Tool dark writes no colours.** [`EditorUiPlugin`] has already put the
-/// editor's own skin in as the running one, and removing a project's skin file clears the running skin
-/// to gooey's own default (`ui_skin::apply_ui_skin`), which `tests/family_gooey_skin.rs` pins. A
-/// *return* to Tool dark after another theme is still an application.
+/// editor's own skin in as the running one, so a run that has only ever seen the default leaves it
+/// exactly as it was found. A *return* to Tool dark after another theme is still an application.
 ///
-/// **A theme the editor cannot honour is refused, once, and said.** See [`honoured_from`]: Parchment's
-/// ground would leave the editor's own inks at 1.12:1 while `chrome.rs`'s constants are still what
-/// paints them, so choosing it keeps the colours that were running and puts the reason on the status
-/// line, with one log warning for the person who edited a settings file by hand. The warning is raised
-/// for a *changed* refusal only, so an editor sitting on a refused theme is silent.
+/// **A project's `family/bevy_gooey.ron` is not this system's business** (UI-03, #211). That file is a
+/// *game's* palette: it lives in [`crate::ui_skin::GameSkin`] and reaches the window only through the
+/// Game UI preview panel's `SkinScope`, so the running skin here is always the person's theme whatever
+/// a project ships.
+///
+/// **A theme the editor cannot honour is refused, once, and said.** Parchment's cream ground cannot
+/// carry the editor's own light ink; a theme that would paint it anyway is a screen nobody can read,
+/// so choosing it keeps the colours that were running and puts the measured pair on the status line,
+/// with one log warning for the person who edited a settings file by hand. The warning is raised for a
+/// *changed* refusal only, so an editor sitting on a refused theme is silent.
 ///
 /// It runs after the settings are read and before gooey styles, so a theme chosen this frame is the
 /// skin this frame's widgets are painted from.
 pub fn follow_the_theme(
     settings: Option<Res<crate::settings::EditorSettings>>,
-    family: Option<Res<crate::family_host::FamilySettings>>,
     state: Option<ResMut<crate::editor::EditorState>>,
     mut skin: ResMut<GooeySkin>,
     // The theme this system last decided, so a settled editor returns at once — and so a run that has
@@ -196,45 +198,16 @@ pub fn follow_the_theme(
     mut applied: Local<Option<crate::settings::Theme>>,
     // The refusal last said, so a settled editor does not warn every frame and a *new* one is said.
     mut refused: Local<Option<String>>,
-    // Whether a project's `family/bevy_gooey.ron` was the running skin last pass. **Its own input**,
-    // because the project skin coming and going is exactly the change this system has to answer: a file
-    // deleted, or another project opened, makes `ui_skin::apply_ui_skin` set the running skin back to
-    // `GooeySkin::default()` — so the chosen theme has to be re-applied, and an early return keyed on
-    // the theme alone left the editor on gooey's default with High contrast chosen.
-    mut project_skin: Local<bool>,
 ) {
     let Some(settings) = settings else { return };
     let theme = settings.theme;
-    let project_now = family.as_deref().is_some_and(|family| family.text.contains_key(crate::ui_skin::CRATE));
-    // **One comparison is the whole frame.** Nothing moved — not the theme, not the size, not which skin
-    // is the running one — so nothing is measured, parsed or written.
-    if applied.as_ref() == Some(&theme)
-        && skin.text_scale == settings.text_scale
-        && *project_skin == project_now
-    {
+    // **One comparison is the whole frame.** Nothing moved — not the theme, not the size — so nothing
+    // is measured, parsed or written.
+    if applied.as_ref() == Some(&theme) && (skin.text_scale - settings.text_scale).abs() < f32::EPSILON {
         return;
     }
-    // **A project's skin going away is `ui_skin::apply_ui_skin`'s answer to give, under Tool dark.**
-    // Removing the file resets the running skin to `GooeySkin::default()`, and
-    // `tests/family_gooey_skin.rs` — protected — pins exactly that, so a worker may not paint over it.
-    // Under a theme a person chose there is a colour to restore and this system restores it; under the
-    // default there is not, and writing `editor_skin()` there would be this system answering a question
-    // the reset already answered.
-    let leaving_a_project_skin = *project_skin && !project_now;
-    let first_default = theme == crate::settings::Theme::default()
-        && (applied.is_none() || leaving_a_project_skin);
+    let first_default = theme == crate::settings::Theme::default() && applied.is_none();
     *applied = Some(theme);
-    *project_skin = project_now;
-    // **A project's skin is the running skin, and the text size is still the person's.** A project that
-    // ships `family/bevy_gooey.ron` has said what its chrome looks like, so the theme setting does not
-    // overwrite its colours — but the scale is the person's, and it is written here rather than skipped
-    // with the rest, which is what the early `return` used to do.
-    if project_now {
-        if skin.text_scale != settings.text_scale {
-            skin.text_scale = settings.text_scale;
-        }
-        return;
-    }
     let mut want = if first_default {
         // The colours `EditorUiPlugin` inserted stay; only the person's scale is this system's to write.
         skin.clone()
@@ -357,12 +330,10 @@ impl Plugin for EditorUiPlugin {
         });
         // **Refusals stand at the top of the viewport** (UI-39, #233), where the card they replace stood.
         app.insert_resource(bevy_gooey::ToastSettings { anchor: bevy_gooey::ToastAnchor::TopCenter, ..default() });
-        app.add_systems(
-            Update,
-            crate::ui_skin::apply_ui_skin
-                .after(crate::family_host::Reloaded)
-                .before(bevy_gooey::GooeySystems::Style),
-        );
+        // **The project's game skin, and the preview's scope on it** (UI-03, #211). Its own plugin,
+        // because the file is a game's palette: it reaches the window only through the Game UI preview
+        // panel, never the editor's chrome.
+        app.add_plugins(crate::ui_skin::GameUiPreviewPlugin);
         // **The player's Reduced motion reaches gooey** (UI-R01): travel lands, colours and fades still ease.
         app.add_systems(
             Update,
@@ -374,7 +345,7 @@ impl Plugin for EditorUiPlugin {
             Update,
             follow_the_theme
                 .after(crate::settings::sync_settings)
-                .after(crate::ui_skin::apply_ui_skin)
+                .after(crate::ui_skin::skin_scope)
                 .before(bevy_gooey::GooeySystems::Style),
         );
         // Before gooey's colour motion, which leads every colour to the last one written: a button this paints
