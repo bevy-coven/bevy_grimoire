@@ -1,5 +1,5 @@
 //! **A write of a project file is all or nothing, for a reader, for a crash and for a second writer**
-//! (#199, H2). Everything here goes through `ron_surgery::save_atomic`, the call every operation
+//! (#199, H2). Everything here goes through `save::save_atomic`, the call every operation
 //! makes, so each test measures what an editor save does.
 //!
 //! - A reader that parses the map in a loop while it is replaced never sees a torn file.
@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use bevy_grimoire_core::live::{FileWatch, POLL_SECS};
 use bevy_grimoire_core::map::{Map, Placed};
-use bevy_grimoire_core::ron_surgery::save_atomic;
+use bevy_grimoire_core::save::save_atomic;
 
 /// A scratch directory under the OS's temp, removed when it goes out of scope.
 struct Scratch(PathBuf);

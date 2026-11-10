@@ -16,8 +16,8 @@
 //! # Two rules, and neither is a suggestion
 //!
 //! - **Lossless.** Each file is read with the type's own RON reader, written with the one YAML writer
-//!   ([`crate::yaml::to_string`]), **its comments placed in that text**, and then **the commented text is
-//!   read back with that same type's YAML reader** ([`crate::yaml::from_str`]). A read that fails, or a
+//!   ([`yaml::to_string`]), **its comments placed in that text**, and then **the commented text is
+//!   read back with that same type's YAML reader** ([`yaml::from_str`]). A read that fails, or a
 //!   value that writes differently than it read, stops the whole migration, names the file, and **writes
 //!   nothing at all** — not that file, not the ones before it. A half-migrated project is the one outcome
 //!   a person cannot repair by hand.
@@ -53,9 +53,9 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::problem::{Detail, Location, Problem};
-use crate::reload::{Base, FileKind, KINDS};
-use crate::{composition::Compositions, destructible::{Bake, Marks}, family::Family, heightfield::Heightfield,
+use bevy_grimoire_core::problem::{Detail, Location, Problem};
+use bevy_grimoire_core::reload::{Base, FileKind, KINDS};
+use bevy_grimoire_core::{composition::Compositions, destructible::{Bake, Marks}, family::Family, heightfield::Heightfield,
     kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
     play::PlayConfig, policy::Policy, references::References, relations::Relations,
     repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards, vocab::Vocabularies,
@@ -216,7 +216,7 @@ fn kind_of_rel(rel: &str) -> Option<&'static FileKind> {
             Base::Root => Some(rel),
         };
         let before = ron_spelling_of(k.pattern);
-        under.is_some_and(|rest| k.matches(rest) || crate::reload::matches_pattern(&before, rest))
+        under.is_some_and(|rest| k.matches(rest) || bevy_grimoire_core::reload::matches_pattern(&before, rest))
     })
 }
 
@@ -525,7 +525,7 @@ fn migrate_where(
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_problem(parent, e))?;
         }
-        crate::atomic_file::write_new(target, yaml_text).map_err(|e| io_problem(target, e))?;
+        bevy_grimoire_core::atomic_file::write_new(target, yaml_text).map_err(|e| io_problem(target, e))?;
     }
     let archive = root.join(ARCHIVE_DIR);
     for (path, _, _) in &pending {
@@ -541,7 +541,7 @@ fn migrate_where(
         // its final name and renamed into it by `atomic_file`) before the original is touched, so a failure
         // at any point leaves the original in place.
         let bytes = std::fs::read(path).map_err(|e| io_problem(path, e))?;
-        crate::atomic_file::write_new(&into, bytes).map_err(|e| io_problem(&into, e))?;
+        bevy_grimoire_core::atomic_file::write_new(&into, bytes).map_err(|e| io_problem(&into, e))?;
         std::fs::remove_file(path).map_err(|e| io_problem(path, e))?;
     }
     Ok(Report { converted, unplaced, archived_at: ARCHIVE_DIR.to_owned() })

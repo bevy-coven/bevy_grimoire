@@ -3,7 +3,7 @@
 //! An agent that means to do several things shows them first, so the person watching can see what it
 //! intends before it acts and how far it has got. The plan is data, not editor state: one file per map,
 //! **beside the map**: `maps/town.map.yaml` has `maps/town.plan.yaml`, written through
-//! [`crate::ron_surgery::save_atomic`] like the map and the notes are, so a [`crate::live::FileWatch`]
+//! [`crate::save::save_atomic`] like the map and the notes are, so a [`crate::live::FileWatch`]
 //! over the project sees it change.
 //!
 //! The plan is replaced whole. The agent sends the list as it now stands, so there is no item id to

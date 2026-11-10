@@ -231,7 +231,7 @@ fn copy_prototype_kit(dir: &Path) -> Result<(), String> {
     let meshes = example.join(PROTOTYPE_MESHES);
     crate::launcher::copy_tree(&meshes, &dir.join(PROTOTYPE_MESHES)).map_err(|e| format!("{} was not copied: {e}", meshes.display()))?;
     let into = dir.join(crate::catalog::GRIMOIRE_DIR).join(STARTER_KIT).join(bevy_grimoire_core::policy::LIBRARY_FILE);
-    bevy_grimoire_core::ron_surgery::save_atomic(&into, &library.to_yaml()?)
+    bevy_grimoire_core::save::save_atomic(&into, &library.to_yaml()?)
 }
 
 /// **The file a new project is given so the generated folder is not committed**, and what it says.

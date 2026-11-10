@@ -107,7 +107,7 @@ impl KitCreate {
             }
             std::fs::remove_dir(&dir)
                 .map_err(|e| Refusal::new(format!("could not remove {}: {e}", dir.display())))?;
-            bevy_grimoire_core::ron_surgery::save_atomic(&kits_path(&root), prior).map_err(Refusal::new)?;
+            bevy_grimoire_core::save::save_atomic(&kits_path(&root), prior).map_err(Refusal::new)?;
         }
         Ok(Outcome {
             summary: format!("took the empty kit `{name}` away and put kits.yaml back"),
@@ -301,7 +301,7 @@ impl Operation for KitSetAuthoring {
             kits.authoring = None;
             let out = kits.to_yaml().map_err(Refusal::new)?;
             bevy_grimoire_core::kits::Kits::parse(&out).map_err(Refusal::new)?;
-            bevy_grimoire_core::ron_surgery::save_atomic(&kits_path(&root), &out).map_err(Refusal::new)?;
+            bevy_grimoire_core::save::save_atomic(&kits_path(&root), &out).map_err(Refusal::new)?;
             ("new work lands in no particular kit again".to_owned(), None)
         } else {
             let kit = self.plan(ctx, params)?["authoring"].as_str().unwrap_or_default().to_owned();

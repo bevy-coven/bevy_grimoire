@@ -7,7 +7,7 @@
 //!
 //! **This is a thin policy layer, and it is smaller than it was.** It used to carry its own RON line
 //! scanner — a byte span per rig, a line index per slot record, an insertion point for a new field — because
-//! `ron_surgery` found only the *first* `slots: [` in a document and this file has sixteen. YAML has paths:
+//! the RON writer found only the *first* `slots: [` in a document and this file has sixteen. YAML has paths:
 //! a slot's duration is `rigs.alpha.slots[1].playback.duration`, so the surgery's own `set` and `add_entry`
 //! address the one leaf the caller meant, with no bookkeeping to keep in step with an edit.
 

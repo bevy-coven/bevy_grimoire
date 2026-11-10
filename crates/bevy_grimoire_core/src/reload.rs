@@ -204,7 +204,7 @@ pub const KINDS: &[FileKind] = &[
     kind("family_list", Root, "family.yaml", "Family", Live, Global, "by hand",
         "Which family crates the project uses, read when the editor needs the list; nothing holds it."),
     kind("editor_settings", Grimoire, "editor.yaml", "EditorSettings", Live, Global, "by hand",
-        "The project layer of the editor's settings, laid over the user's `<config_dir>/Grimoire/settings.ron` key by key. The editor looks at it while it runs and applies it in place; a file that does not read keeps the last good one and is refused in `grimoire_state.reloads`. The game has no reader."),
+        "The project layer of the editor's settings, laid over the user's `<config_dir>/Grimoire/settings.yaml` key by key. The editor looks at it while it runs and applies it in place; a file that does not read keeps the last good one and is refused in `grimoire_state.reloads`. The game has no reader."),
     kind("agent", Root, "agent.yaml", "AgentSettings", Live, Global, "by hand",
         "The note agent's model and prompt, read each time a note is sent; nothing holds it."),
     kind("play", Root, "play.yaml", "PlayConfig", Live, Global, "by hand",
@@ -225,7 +225,7 @@ pub fn kind_by_id(id: &str) -> Option<&'static FileKind> {
 }
 
 /// **Whether a path segment pattern matches one segment.** `<word>` stands for one run of letters,
-/// digits and underscores: no `.` and no `/`, so `<name>.ron` never matches `town.field.ron`. `<file>`
+/// digits and underscores: no `.` and no `/`, so `<name>.yaml` never matches `town.field.yaml`. `<file>`
 /// is the one exception: any non-empty file name.
 fn segment_matches(pattern: &str, segment: &str) -> bool {
     let Some(open) = pattern.find('<') else {

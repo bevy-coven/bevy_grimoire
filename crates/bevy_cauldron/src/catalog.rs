@@ -511,9 +511,9 @@ pub fn create_kit(root: &Path, raw_name: &str) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
 
     let (library, policy) = new_kit_files(&name);
-    bevy_grimoire_core::ron_surgery::save_atomic(&dir.join(LIBRARY_FILE), &library)?;
+    bevy_grimoire_core::save::save_atomic(&dir.join(LIBRARY_FILE), &library)?;
 
-    bevy_grimoire_core::ron_surgery::save_atomic(&dir.join(bevy_grimoire_core::policy::POLICY_FILE), &policy)?;
+    bevy_grimoire_core::save::save_atomic(&dir.join(bevy_grimoire_core::policy::POLICY_FILE), &policy)?;
 
     // **And bound, or it is a directory the project does not load.** Making a kit the editor cannot
     // open would be a verb that appears to work and does not — the `--kit` refusal an author would
@@ -609,7 +609,7 @@ pub fn write_bash(path: &Path, bash: Option<&str>) -> Result<(), String> {
     map.bash = bash.map(str::to_owned);
     map.validate()?;
     let out = map.to_yaml()?;
-    bevy_grimoire_core::ron_surgery::save_atomic(path, &out)
+    bevy_grimoire_core::save::save_atomic(path, &out)
 }
 
 /// **Add a binding for `name`**, leaving the rest of `kits.yaml` as it was.
@@ -644,7 +644,7 @@ fn bind_kit(root: &Path, name: &str) -> Result<(), String> {
     // Parsed back before it is written, so a binding that would refuse to load is refused here —
     // where the author is standing — rather than at the next open.
     bevy_grimoire_core::kits::Kits::parse(&out).map_err(|e| format!("{}: {e}", path.display()))?;
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &out)
+    bevy_grimoire_core::save::save_atomic(&path, &out)
 }
 
 /// **Point `authoring` at `name`, leaving the rest of `kits.yaml` as it was.**
@@ -675,7 +675,7 @@ pub(crate) fn set_authoring(root: &Path, name: &str) -> Result<(), String> {
     // Parsed back before it is written, so a binding that would refuse to load is refused here —
     // where the author is standing — rather than at the next open.
     bevy_grimoire_core::kits::Kits::parse(&out).map_err(|e| format!("{}: {e}", path.display()))?;
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &out)
+    bevy_grimoire_core::save::save_atomic(&path, &out)
 }
 
 /// **Drop `name`'s binding.** Called when its directory goes, so the project does not keep asking
@@ -704,7 +704,7 @@ pub fn unbind_kit(root: &Path, name: &str) -> Result<(), String> {
     kits.bind.retain(|b| b.dir != name);
     let out = kits.to_yaml().map_err(|e| format!("{}: {e}", path.display()))?;
     bevy_grimoire_core::kits::Kits::parse(&out).map_err(|e| format!("{}: {e}", path.display()))?;
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &out)
+    bevy_grimoire_core::save::save_atomic(&path, &out)
 }
 
 /// **Write a new, empty map into a kit** — the chooser's one creating verb.
@@ -717,7 +717,7 @@ pub fn unbind_kit(root: &Path, name: &str) -> Result<(), String> {
 /// screen keeps the field blank until the author types something. `Map::validate` would refuse it
 /// anyway; asking first means the refusal names the rule instead of a serializer.
 ///
-/// Goes through `validate` then `ron_surgery::save_atomic` — the same two steps `Project::save`
+/// Goes through `validate` then `save::save_atomic` — the same two steps `Project::save`
 /// takes, so a map made here and a map saved from the editor cannot disagree about what a map is.
 pub fn create_map(
     maps_dir: &Path,
@@ -749,7 +749,7 @@ pub fn create_map(
     };
     map.validate()?;
     let text = map.to_yaml()?;
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)?;
+    bevy_grimoire_core::save::save_atomic(&path, &text)?;
     Ok(path)
 }
 
@@ -917,7 +917,7 @@ pub fn policy_entries(kit: &Kit) -> Result<Vec<PolicyEntry>, String> {
 }
 
 /// **Remove one policy entry.** Nothing leaves the file system: a line is spliced out of the kit's `project.yaml`, which keeps every comment
-/// in it (`ron_surgery`).
+/// in it (`yaml_surgery`).
 pub fn remove_policy_entry(kit: &Kit, row: &PolicyRow) -> Result<(), String> {
     let path = policy_path(kit);
     match row {
@@ -926,7 +926,7 @@ pub fn remove_policy_entry(kit: &Kit, row: &PolicyRow) -> Result<(), String> {
             let mut exclude = read_policy(kit)?.exclude;
             exclude.retain(|p| p != pack);
             let out = bevy_grimoire_core::policy::rewrite_exclude(&text, &exclude).map_err(|e| format!("{}: {e}", path.display()))?;
-            bevy_grimoire_core::ron_surgery::save_atomic(&path, &out)
+            bevy_grimoire_core::save::save_atomic(&path, &out)
         }
         PolicyRow::Patch(ordinal) => bevy_grimoire_core::policy::remove_patch(&path, *ordinal),
     }

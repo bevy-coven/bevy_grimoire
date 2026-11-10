@@ -470,7 +470,7 @@ fn commit_text(
 ) -> Result<(), String> {
     let parsed = Rigs::parse(&new_text)?;
     let path = root.join("assets/grimoire/rigs.yaml");
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &new_text)?;
+    bevy_grimoire_core::save::save_atomic(&path, &new_text)?;
     bench.rigs = Some(parsed);
     bench.text = Some(new_text);
     Ok(())

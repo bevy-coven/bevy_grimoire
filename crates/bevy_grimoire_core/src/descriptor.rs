@@ -1842,9 +1842,8 @@ mod tests {
             effects: vec!["uses-electricity".into()],
             ..crate_desc()
         };
-        let text =
-            ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
-        let back: Descriptor = ron::from_str(&text).expect("parses");
+        let text = crate::yaml::to_string(&d).expect("serializes");
+        let back: Descriptor = crate::yaml::from_str(&text, "a descriptor").expect("parses");
         assert_eq!(d, back);
     }
 
@@ -1858,17 +1857,16 @@ mod tests {
     /// keeps the `skip_serializing_if`.
     #[test]
     fn a_descriptor_written_before_provenance_keeps_no_record_through_a_round_trip() {
-        let d: Descriptor = ron::from_str("(id: \"crate\")").expect("parses");
+        let d: Descriptor = crate::yaml::from_str("id: crate\n", "a descriptor").expect("parses");
         assert_eq!(d.labels, None, "no record means no record");
 
-        let text =
-            ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
+        let text = crate::yaml::to_string(&d).expect("serializes");
         assert!(
             !text.contains("labels"),
             "an absent record must not be written back as an empty one: {text}"
         );
 
-        let back: Descriptor = ron::from_str(&text).expect("parses");
+        let back: Descriptor = crate::yaml::from_str(&text, "a descriptor").expect("parses");
         assert_eq!(back.labels, None, "and it must still be absent on the way in");
     }
 
@@ -1886,8 +1884,9 @@ mod tests {
     /// passes when nothing was refused is the failure mode this whole step is about.
     #[test]
     fn a_provenance_record_with_no_date_is_refused_at_parse() {
-        let parsed = ron::from_str::<Descriptor>(
-            "(id: \"crate\", labels: Some(( by: ( kind: Some(Model) ), model: Some(\"qwen3-vl\") )))",
+        let parsed = crate::yaml::from_str::<Descriptor>(
+            "id: crate\nlabels:\n  by:\n    kind: Model\n  model: qwen3-vl\n",
+            "a descriptor",
         );
         let err = match parsed {
             Ok(d) => panic!(
@@ -1922,20 +1921,20 @@ mod tests {
             }),
             ..crate_desc()
         };
-        let text =
-            ron::ser::to_string_pretty(&d, ron::ser::PrettyConfig::default()).expect("serializes");
-        let back: Descriptor = ron::from_str(&text).expect("parses");
+        let text = crate::yaml::to_string(&d).expect("serializes");
+        let back: Descriptor = crate::yaml::from_str(&text, "a descriptor").expect("parses");
         assert_eq!(d, back);
     }
 
     #[test]
     fn a_record_written_before_model_at_reads_its_model_date_from_at() {
-        let old: LabelOrigin = ron::from_str(
-            r#"(by: (kind: Some(Model)), model: Some("qwen3-vl"), at: "2026-08-22")"#,
+        let old: LabelOrigin = crate::yaml::from_str(
+            "by:\n  kind: Model\nmodel: qwen3-vl\nat: 2026-08-22\n",
+            "a label origin",
         )
         .expect("parses");
         assert_eq!(old.model_date(), Some("2026-08-22"));
-        let human: LabelOrigin = ron::from_str(r#"(at: "2026-08-22")"#).expect("parses");
+        let human: LabelOrigin = crate::yaml::from_str("at: 2026-08-22\n", "a label origin").expect("parses");
         assert_eq!(human.model_date(), None);
         let stamped = LabelOrigin::stamped("qwen3-vl", "2026-08-20", None);
         assert_eq!(stamped.model_date(), Some("2026-08-20"));
@@ -2021,10 +2020,9 @@ mod face_tests {
             },
             ..Descriptor::default()
         };
-        let text = ron::ser::to_string_pretty(&before, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
+        let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
         assert!(text.contains("front: Some(East)"), "{text}");
-        let after: Descriptor = ron::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+        let after: Descriptor = crate::yaml::from_str(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(before, after);
     }
 }
@@ -2125,16 +2123,15 @@ mod subgrid_tests {
             }])),
             ..Descriptor::default()
         };
-        let text = ron::ser::to_string_pretty(&before, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
-        let after: Descriptor = ron::from_str(&text).unwrap_or_else(|e| panic!("{e}"));
+        let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
+        let after: Descriptor = crate::yaml::from_str(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(before, after);
     }
 
     /// An old library has no `subgrid` key at all and must still parse — the field defaults.
     #[test]
     fn a_descriptor_written_before_the_lattice_still_parses() {
-        let d: Descriptor = ron::from_str("(id: \"crate\")").unwrap_or_else(|e| panic!("{e}"));
+        let d: Descriptor = crate::yaml::from_str("id: crate\n", "a descriptor").unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(d.subgrid, None);
     }
 
@@ -2403,11 +2400,10 @@ mod rotate_tests {
             },
             ..Descriptor::default()
         };
-        let text = ron::ser::to_string_pretty(&before, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
+        let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
         assert!(text.contains("rotate: Some((90, 0, 180))"), "{text}");
         assert_eq!(
-            ron::from_str::<Descriptor>(&text).unwrap_or_else(|e| panic!("{e}")),
+            crate::yaml::from_str::<Descriptor>(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line())),
             before
         );
     }

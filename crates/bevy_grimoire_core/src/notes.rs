@@ -8,7 +8,7 @@
 //! # Where it lives
 //!
 //! One file per map, **beside the map**: `maps/town.map.yaml` has `maps/town.notes.yaml`. It is
-//! written through [`crate::ron_surgery::save_atomic`] like the map is, and its extension is `ron`,
+//! written through [`crate::save::save_atomic`] like the map is, and its extension is `ron`,
 //! so a [`crate::live::FileWatch`] over the project already sees it change and a running game or
 //! editor reloads it with the rest.
 //!

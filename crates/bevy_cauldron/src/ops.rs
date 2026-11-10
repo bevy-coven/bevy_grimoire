@@ -1121,7 +1121,7 @@ pub mod map_create {
                     });
                 }
                 let text = p.restore.map(|r| r.text).unwrap_or_default();
-                bevy_grimoire_core::ron_surgery::save_atomic(&path, &text).map_err(Refusal::new)?;
+                bevy_grimoire_core::save::save_atomic(&path, &text).map_err(Refusal::new)?;
                 return Ok(Outcome {
                     summary: format!("put map `{name}` back from the log"),
                     affected: 1,
@@ -4484,7 +4484,7 @@ pub mod vocab_add_token {
             if let Err(why) = project.reload_vocab() {
                 // **The file goes back as it was**: a vocabulary the project cannot resolve is not
                 // one to leave on disk.
-                let _ = bevy_grimoire_core::ron_surgery::save_atomic(&path, &was);
+                let _ = bevy_grimoire_core::save::save_atomic(&path, &was);
                 return Err(Refusal::new(format!("the project would not take it, so nothing was added: {why}")));
             }
             Ok(Outcome {
@@ -4675,7 +4675,7 @@ pub mod rig_adopt_measured {
                 return Err(Refusal::new("no project is open, so there is no rigs.yaml to adopt values into."));
             };
             let e = edit(project, &p)?;
-            bevy_grimoire_core::ron_surgery::save_atomic(&e.path, &e.text).map_err(|why| {
+            bevy_grimoire_core::save::save_atomic(&e.path, &e.text).map_err(|why| {
                 Refusal::new(format!("rigs.yaml refused the change, so nothing was written: {why}"))
             })?;
             Ok(Outcome {
@@ -5725,7 +5725,7 @@ fn civil_from_unix(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
 /// **Append one entry to the log.**
 ///
 /// **An append, not a replace.** The file is opened with `append(true)`, so the log cannot lose
-/// an earlier line by being rewritten — and the crate's own `ron_surgery::save_atomic` rules do
+/// an earlier line by being rewritten — and the crate's own `save::save_atomic` rules do
 /// not apply to it, because it is not a document anybody edits.
 fn append(ctx: &Ctx, entry: &mut Entry) -> Result<(), String> {
     // **A root is enough.** The log lives at a fixed place under it, and a change made from the menu
@@ -8359,7 +8359,7 @@ pub mod pack_set_excluded {
             };
             let e = edit(project, &p)?;
             // **The file first**, so a refused write leaves the policy as it was.
-            bevy_grimoire_core::ron_surgery::save_atomic(&e.path, &e.text).map_err(|why| {
+            bevy_grimoire_core::save::save_atomic(&e.path, &e.text).map_err(|why| {
                 Refusal::new(format!(
                     "the policy file refused the change, so nothing was written: {why}"
                 ))
@@ -9666,7 +9666,7 @@ pub mod stamp_remove {
 ///
 /// A rules file is prose about a layout as much as it is numbers (`// houses should outnumber the
 /// road`), and `to_string_pretty` would delete every comment in it — the failure
-/// [`bevy_grimoire_core::ron_surgery`] exists to prevent, and the reason `rules_renamed` already edits
+/// [`bevy_grimoire_core::yaml_surgery`] exists to prevent, and the reason `rules_renamed` already edits
 /// this file by hand.
 ///
 /// # The rewrite is checked before it is written
@@ -10233,7 +10233,7 @@ pub mod rules_set {
             };
             let before = Self::block_of(&project.rules, &p.example)?.clone();
             let file = project.project_dir.join(bevy_grimoire_core::rules::FILE);
-            if let Err(e) = bevy_grimoire_core::ron_surgery::save_atomic(&file, &new) {
+            if let Err(e) = bevy_grimoire_core::save::save_atomic(&file, &new) {
                 return Err(Refusal::new(format!(
                     "the rule was not changed, and nothing was written: {e}"
                 )));
@@ -10486,7 +10486,7 @@ pub mod map_rename {
             };
             let file = project.project_dir.join(bevy_grimoire_core::rules::FILE);
             if let Some((_, new)) = &rules
-                && let Err(e) = bevy_grimoire_core::ron_surgery::save_atomic(&file, new)
+                && let Err(e) = bevy_grimoire_core::save::save_atomic(&file, new)
             {
                 ctx.open = Some(open);
                 return Err(Refusal::new(format!(
@@ -10509,7 +10509,7 @@ pub mod map_rename {
                 // the refusal says so: the rules file then names the new map, and the author must fix it.
                 let mut message = format!("the map was not renamed, and nothing was written: {e}");
                 if let Some((old, _)) = &rules
-                    && let Err(restore) = bevy_grimoire_core::ron_surgery::save_atomic(&file, old)
+                    && let Err(restore) = bevy_grimoire_core::save::save_atomic(&file, old)
                 {
                     message.push_str(&format!(
                         "; {} could not be put back ({restore}), and it now names `{name}`, so change its example by hand",

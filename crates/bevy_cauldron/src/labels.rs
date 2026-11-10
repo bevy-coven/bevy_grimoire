@@ -882,7 +882,7 @@ fn record_proposals(root: &std::path::Path, entry: &Entry, asset: &str) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            if let Err(e) = bevy_grimoire_core::ron_surgery::save_atomic(&path, &text) {
+            if let Err(e) = bevy_grimoire_core::save::save_atomic(&path, &text) {
                 warn!("could not write {PROPOSALS_PATH}: {e}");
             }
         }

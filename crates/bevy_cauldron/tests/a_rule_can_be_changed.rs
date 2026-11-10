@@ -11,7 +11,7 @@
 //! 1. **A weight changes on disk and in memory**, and the author's comments survive the write. That
 //!    second half is the reason this is text surgery rather than a re-serialisation: a rules file is
 //!    prose about a layout as much as it is numbers, and `to_string_pretty` would delete every
-//!    comment in it — the failure `ron_surgery` exists to prevent.
+//!    comment in it — the failure `yaml_surgery` exists to prevent.
 //! 2. **Undo puts the number back**, in both places, so one Cmd+Z takes back what an agent did.
 //! 3. **A refusal changes nothing**, and says which rule and which field.
 //! 4. **Both front ends reach it**, which `operations_have_two_front_ends` asserts for every

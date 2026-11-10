@@ -28,7 +28,7 @@
 //! This project already knows what happens otherwise. `assets/site/site67.ron` is 15% comments and its
 //! props list carries more prose than data; `assets/config/config.ron` carries ~563 comment lines, and
 //! on 2026-07-16 a `to_string_pretty` bake deleted 279 of them. The response there was
-//! [`crate::ron_surgery`] — rewrite the file as text so the comments survive. That is the right answer
+//! a surgical text rewrite of the file so the comments survive. That is the right answer
 //! for a file a human authored and a tool visits.
 //!
 //! For a format being designed now it is the wrong problem to solve. If the reasoning is a **field**,
@@ -1148,11 +1148,11 @@ enclosure:
 
         // **Written back out every time.** No `skip_serializing_if`, so a map saved from this
         // program always says which combination it draws on.
-        let out = ron::ser::to_string(&Map { bash: Some("hub".into()), ..Map::default() })
-            .unwrap_or_else(|e| panic!("{e}"));
-        assert!(out.contains("bash:Some(\"hub\")") || out.contains("bash: Some(\"hub\")"), "{out}");
-        let out = ron::ser::to_string(&Map::default()).unwrap_or_else(|e| panic!("{e}"));
-        assert!(out.contains("bash:None") || out.contains("bash: None"), "{out}");
+        let out = crate::yaml::to_string(&Map { bash: Some("hub".into()), ..Map::default() })
+            .unwrap_or_else(|p| panic!("{}", p.line()));
+        assert!(out.contains("bash: hub"), "{out}");
+        let out = crate::yaml::to_string(&Map::default()).unwrap_or_else(|p| panic!("{}", p.line()));
+        assert!(out.contains("bash: null"), "{out}");
     }
 
     fn table_map() -> Map {

@@ -258,7 +258,7 @@ pub struct FamilyWatch {
 pub enum SettingsChange {
     /// The file now holds these settings.
     Reloaded { krate: String, text: String },
-    /// The file is not valid RON; the last good settings stay in force.
+    /// The file is not valid YAML; the last good settings stay in force.
     Invalid { krate: String, error: String },
     /// The file was deleted; the crate falls back to its own defaults.
     Removed { krate: String },
@@ -268,9 +268,9 @@ impl FamilyWatch {
     /// Stats and reads the project's settings now. Call before first use of them.
     pub fn new(root: &Path) -> FamilyWatch {
         let dir = settings_dir(root);
-        let mut watch = FamilyWatch { files: crate::live::FileWatch::new(&dir, &["ron"]).with_timing(SETTINGS_POLL_SECS, SETTINGS_SETTLE_SECS), dir, good: Default::default() };
+        let mut watch = FamilyWatch { files: crate::live::FileWatch::new(&dir, &["yaml"]).with_timing(SETTINGS_POLL_SECS, SETTINGS_SETTLE_SECS), dir, good: Default::default() };
         for (krate, text) in watch.read() {
-            if ron::from_str::<ron::Value>(&text).is_ok() {
+            if crate::yaml::to_json(&text, &krate).is_ok() {
                 watch.good.insert(krate, text);
             }
         }
@@ -288,7 +288,7 @@ impl FamilyWatch {
             .flatten()
             .filter_map(|e| {
                 let p = e.path();
-                if p.extension()? != "ron" || p.file_name()?.to_string_lossy().starts_with('.') {
+                if p.extension()? != "yaml" || p.file_name()?.to_string_lossy().starts_with('.') {
                     return None;
                 }
                 Some((p.file_stem()?.to_string_lossy().into_owned(), std::fs::read_to_string(&p).ok()?))
@@ -309,12 +309,12 @@ impl FamilyWatch {
             if self.good.get(krate) == Some(text) {
                 continue;
             }
-            match ron::from_str::<ron::Value>(text) {
+            match crate::yaml::to_json(text, krate) {
                 Ok(_) => {
                     self.good.insert(krate.clone(), text.clone());
                     out.push(SettingsChange::Reloaded { krate: krate.clone(), text: text.clone() });
                 }
-                Err(e) => out.push(SettingsChange::Invalid { krate: krate.clone(), error: e.to_string() }),
+                Err(p) => out.push(SettingsChange::Invalid { krate: krate.clone(), error: p.line() }),
             }
         }
         let gone: Vec<String> = self.good.keys().filter(|k| !now.iter().any(|(n, _)| n == *k)).cloned().collect();

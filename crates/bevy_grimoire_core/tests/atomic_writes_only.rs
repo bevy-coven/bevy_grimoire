@@ -3,7 +3,7 @@
 //! `std::fs::write` truncates the target and then fills it, so a running game, or the editor's own
 //! watcher, that reads in between parses an empty or half-written file (#187 was a truncated terrain
 //! file that panicked the editor; #158 a file created while open). Every project file goes through
-//! [`bevy_grimoire_core::atomic_file`] (or `ron_surgery::save_atomic`, which is a wrapper over it).
+//! [`bevy_grimoire_core::atomic_file`] (or `save::save_atomic`, which is a wrapper over it).
 //!
 //! This reads the non-test source of the two crates that write a project, and fails on a call that
 //! opens, truncates, copies or renames a file by any other route. **A new one is a failure with its

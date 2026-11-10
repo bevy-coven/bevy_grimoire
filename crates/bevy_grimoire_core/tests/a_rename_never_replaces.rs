@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use bevy_grimoire_core::ron_surgery::save_atomic_no_replace;
+use bevy_grimoire_core::save::save_atomic_no_replace;
 
 /// A directory under the OS's temp, removed when it goes out of scope.
 struct Temp(std::path::PathBuf);

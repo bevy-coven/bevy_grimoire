@@ -1275,6 +1275,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_grimoire_migrate"
+version = "0.1.0"
+dependencies = [
+ "bevy_grimoire_core",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "bevy_grimoire_rng"
 version = "0.1.0"
 dependencies = [

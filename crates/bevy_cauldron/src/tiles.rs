@@ -3542,7 +3542,7 @@ pub(crate) fn commit_measured(
 
     let path = project.library_path.clone();
     let text = measured.to_yaml()?;
-    bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)?;
+    bevy_grimoire_core::save::save_atomic(&path, &text)?;
     LIBRARY_WRITES.with(|n| n.set(n.get() + 1));
 
     // **What the Map has to redraw, worked out by comparison.** The already-placed entities were

@@ -853,7 +853,7 @@ impl Project {
             .project_dir
             .join(bevy_grimoire_core::composition::Compositions::FILE);
         let text = proposed.to_yaml()?;
-        bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)
+        bevy_grimoire_core::save::save_atomic(&path, &text)
             .map_err(|e| format!("NOT WRITTEN: {e}"))?;
         self.compositions = proposed;
         Ok(())
@@ -917,7 +917,7 @@ impl Project {
             .project_dir
             .join(bevy_grimoire_core::composition::Compositions::FILE);
         let text = proposed.to_yaml()?;
-        bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)
+        bevy_grimoire_core::save::save_atomic(&path, &text)
             .map_err(|e| format!("NOT WRITTEN: {e}"))?;
         self.compositions = proposed;
         Ok(())
@@ -974,7 +974,7 @@ impl Project {
             bevy_grimoire_core::composition::rename_composition(&text, &map_texts, from, to)?;
 
         // **The composition's file.**
-        bevy_grimoire_core::ron_surgery::save_atomic(&path, &renamed.compositions)
+        bevy_grimoire_core::save::save_atomic(&path, &renamed.compositions)
             .map_err(|e| format!("NOT RENAMED: cannot write {}: {e}", path.display()))?;
 
         // **And every map that named it.** A map the rename did not touch is not written at all —
@@ -988,7 +988,7 @@ impl Project {
             if unchanged {
                 continue;
             }
-            bevy_grimoire_core::ron_surgery::save_atomic(std::path::Path::new(name), new_text)
+            bevy_grimoire_core::save::save_atomic(std::path::Path::new(name), new_text)
                 .map_err(|e| {
                     format!(
                         "NOT RENAMED: the composition is renamed but {name} could not be written: \
@@ -1300,7 +1300,7 @@ impl OpenMap {
                     was
                 ));
             }
-            bevy_grimoire_core::ron_surgery::save_atomic_no_replace(&path, &text)?;
+            bevy_grimoire_core::save::save_atomic_no_replace(&path, &text)?;
             // **And now the old file goes — or the rename is taken back.** A rename is all or nothing:
             // a refused call changes nothing, so a rename whose old file cannot be removed has not
             // happened. The new file is ours (save_atomic_no_replace just created it), so removing it
@@ -1330,7 +1330,7 @@ impl OpenMap {
                 };
             }
         } else {
-            bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)?;
+            bevy_grimoire_core::save::save_atomic(&path, &text)?;
         }
         self.map_path = path;
         self.saved = self.map.clone();

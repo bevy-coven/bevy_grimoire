@@ -1,0 +1,19 @@
+[package]
+name = "bevy_grimoire_migrate"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "Moves a project's files from RON to YAML, losslessly: every file is converted in memory and read back before anything is written, comments travel with their keys, and the old files are archived rather than deleted."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bevy-coven/bevy_grimoire"
+publish = false
+
+# **The only crate in the workspace that reads RON** (GD-03, #365). The cutover's last step is that
+# nothing reads RON any more, and the migration is the one thing that must: it reads the projects
+# that were written before the cutover. Keeping it beside `bevy_grimoire_core` would have kept `ron`
+# in the core crate's dependency graph, which is the thing the issue's acceptance measures.
+[dependencies]
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.1" }
+# The reader of the files this converts, and nothing else here needs it.
+ron.workspace = true
+serde.workspace = true

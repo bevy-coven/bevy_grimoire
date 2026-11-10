@@ -26,7 +26,6 @@ bevy_grimoire_rng = { path = "../bevy_grimoire_rng", version = "0.1.0" }
 # boundary is policed on that side rather than taken on trust here.
 bevy_grimoire_solver = { path = "../bevy_grimoire_solver", version = "0.1.0" }
 serde.workspace = true
-ron.workspace = true
 # On a refused reload, the field the file is wrong at (`reload_check.rs`); never on the happy path.
 serde_path_to_error.workspace = true
 # Reading a `.glb`'s JSON chunk (`glb.rs`). Data only — no engine, no renderer. The reader is
