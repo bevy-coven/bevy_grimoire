@@ -42,7 +42,7 @@ pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
 fn load_marks(root: &Path) -> Result<Marks, Refusal> {
     match std::fs::read_to_string(marks_path(root)) {
         Ok(t) => {
-            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t)?;
+            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t, Marks::parse)?;
             if marks.version != VERSION {
                 return Err(Refusal::new(format!(
                     "{MARKS_FILE} (version): version {} is not the {VERSION} this program reads. The file is left as it is: it comes from another build, so use that build or remove the file, then try again. Nothing was changed.",
@@ -105,7 +105,7 @@ fn read_bake(root: &Path, piece: &str) -> Result<Option<Bake>, Refusal> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(Refusal::new(format!("{name} cannot be read: {e}. The file is left as it is: fix it or remove it, then try again. Nothing was changed."))),
     };
-    read_named("destructible_bake", &name, &text).map(Some)
+    read_named("destructible_bake", &name, &text, Bake::parse).map(Some)
 }
 
 /// The cached bake for `piece` when it matches `key`; otherwise bake, write and return it. The flag is

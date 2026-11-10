@@ -225,7 +225,7 @@ pub fn sync_forest_view(
             }
             Forest::default()
         }
-        Ok(text) => match reload_check::read::<Forest>("forest", &file, &text) {
+        Ok(text) => match reload_check::read::<Forest>("forest", &file, &text, |t| bevy_grimoire_core::yaml::from_str(t, "forest").map_err(|p| p.line())) {
             Ok(forest) => {
                 if edited {
                     verdicts.forget.push("forest");
