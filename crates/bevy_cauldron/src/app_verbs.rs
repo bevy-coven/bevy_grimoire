@@ -246,13 +246,25 @@ fn open_recent(world: &mut World, path: &Path) {
 
 /// Open an address in the browser, or record it when this run opens none ([`LinksOff`]).
 pub fn open_link(world: &mut World, url: &str) {
-    if let Some(mut off) = world.get_resource_mut::<LinksOff>() {
-        off.0.push(url.to_owned());
-        return;
-    }
-    if let Err(e) = launcher::open_in_os(url) {
+    if let Err(e) = open_in_this_run(world, url) {
         world.spawn(toast_alert(e).sticky());
     }
+}
+
+/// **Open an address, and say whether it opened** — the answer rather than the toast, for a caller
+/// that has to know (#354).
+///
+/// **One opener**: this is the whole body of [`open_link`], and a run that opens no browser
+/// ([`LinksOff`]) records the address and answers `Ok`. A caller that needs the address recorded
+/// *and* the answer — a wish's Open on GitHub, which leaves the wish waiting when the page did not
+/// open — asks here instead of launching a second `open_in_os` and losing the seam a headless run
+/// needs.
+pub fn open_in_this_run(world: &mut World, url: &str) -> Result<(), String> {
+    if let Some(mut off) = world.get_resource_mut::<LinksOff>() {
+        off.0.push(url.to_owned());
+        return Ok(());
+    }
+    launcher::open_in_os(url)
 }
 
 /// The address "Report a problem" opens: a new issue whose text already says which build and system it came from.

@@ -184,11 +184,82 @@ impl Plugin for PresentPlugin {
 /// screen.
 #[derive(Resource, Default)]
 pub struct Wishes {
-    /// **The wishes waiting to be read**, oldest first. A wish leaves the queue when it is opened or
-    /// discarded, which is the review that follows this one.
+    /// **Every wish this session made**, oldest first, with the answer the person gave it (#354).
+    ///
+    /// **A wish is kept after it is answered** (AW-02, #354): the person reads `opened` or
+    /// `discarded` back from `grimoire_state.wishes`, and a row the person has read is still worth
+    /// reading again. `waiting` is what a wish is until one of those two answers arrives.
     pub queued: Vec<QueuedWish>,
     /// The next wish's number. Monotonic for the life of the process, so ids are never reused.
     next: u32,
+}
+
+/// **What the person did with a wish** (#354).
+///
+/// `Opened` means the issue page was opened, **not that an issue exists**: the person submits on
+/// GitHub, and the editor never posts, so it cannot know more than this.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WishState {
+    /// Nobody has answered it yet. A wish waits for the person until the session ends.
+    #[default]
+    Waiting,
+    /// The person opened its issue page.
+    Opened,
+    /// The person dropped it.
+    Discarded,
+}
+
+impl WishState {
+    /// The word `grimoire_state.wishes` reports.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WishState::Waiting => "waiting",
+            WishState::Opened => "opened",
+            WishState::Discarded => "discarded",
+        }
+    }
+}
+
+/// **What GitHub's public search found for a wish** (#354): the issues a person should see before
+/// filing a fourth copy of one, or why the search could not be asked.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum WishSearch {
+    /// Not asked yet: the row is folded, so no one has needed the answer.
+    #[default]
+    NotAsked,
+    /// Asked, and the answer is not back.
+    Asking,
+    /// The issues that match, up to `wish_view::SEARCH_SHOWN`.
+    Found(Vec<crate::wish_view::WishMatch>),
+    /// GitHub did not answer, and this is why. The row says it in one line.
+    Failed(String),
+}
+
+impl WishSearch {
+    /// **The row's one line about the search**, or nothing while it has not been asked.
+    ///
+    /// A found list is links, so the line carries each issue's address: a person who wants to read
+    /// one can, and the wish is still theirs to file.
+    pub fn sentence(&self) -> String {
+        match self {
+            WishSearch::NotAsked => String::new(),
+            WishSearch::Asking => "asking GitHub for wishes like this one...".to_owned(),
+            WishSearch::Found(matches) if matches.is_empty() => {
+                "GitHub knows no open wish like this one. Filing it adds something.".to_owned()
+            }
+            WishSearch::Found(matches) => {
+                let mut line = format!("{} open wish(es) like this one: ", matches.len());
+                for (i, m) in matches.iter().enumerate() {
+                    if i > 0 {
+                        line.push_str(", ");
+                    }
+                    line.push_str(&format!("#{} {} {}", m.number, m.title, m.url));
+                }
+                line
+            }
+            WishSearch::Failed(reason) => format!("GitHub could not be asked ({reason}); opening still works."),
+        }
+    }
 }
 
 /// **One wish, with the address it will be filed at.**
@@ -201,6 +272,23 @@ pub struct QueuedWish {
     /// **The issue address, built when the wish was made**, so an address GitHub would not take is
     /// refused while the agent is still there to shorten what it wrote.
     pub url: String,
+    /// **What the person has done with it** (#354). `Waiting` until they answer.
+    pub state: WishState,
+    /// **What GitHub's search said**, asked when the row is unfolded.
+    pub search: WishSearch,
+    /// **The last search asked, as the tool words it was asked with**: an answer to a question the
+    /// row no longer asks is dropped rather than shown against a different wish.
+    pub asked: String,
+    /// **Why the issue page did not open**, when an open failed. The wish stays `waiting`, because a
+    /// page that did not open is not an answer.
+    pub note: Option<String>,
+}
+
+impl QueuedWish {
+    /// The word the row shows for its kind, so a lesson of AG-06's can name its own.
+    pub fn kind_label(&self) -> &'static str {
+        crate::wish_view::RowKind::Wish.label()
+    }
 }
 
 /// **Every hand-back this session has put in front of the person**, oldest first (#353).
@@ -351,10 +439,11 @@ impl HandBacks {
 
 
 impl Wishes {
-    /// **The wishes waiting**, as `grimoire_state` reports them: `{id, after, state}` each.
+    /// **The wishes as `grimoire_state` reports them**: `{id, after, state}` each, oldest first.
     ///
-    /// `state` is `"waiting"` for every one of them, because a wish leaves this list the moment it is
-    /// opened or discarded: there is one queue, and a wish is in it or it is not.
+    /// **`state` is the person's answer** (AW-02, #354): `"waiting"` until they open the issue page or
+    /// discard the wish, then `"opened"` or `"discarded"`. `opened` means the page was opened — the
+    /// editor never posts, so it does not claim an issue exists.
     pub fn state_json(&self) -> serde_json::Value {
         serde_json::Value::Array(
             self.queued
@@ -363,17 +452,28 @@ impl Wishes {
                     serde_json::json!({
                         "id": q.wish.id,
                         "after": q.wish.after,
-                        "state": "waiting",
+                        "state": q.state.as_str(),
                     })
                 })
                 .collect(),
         )
     }
 
+    /// **How many wishes are waiting for the person**: the count the status band's chip shows.
+    pub fn waiting(&self) -> usize {
+        self.queued.iter().filter(|q| q.state == WishState::Waiting).count()
+    }
+
+    /// **The first wish still waiting**, which is the row the chip opens the block on.
+    pub fn first_waiting(&self) -> Option<&str> {
+        self.queued.iter().find(|q| q.state == WishState::Waiting).map(|q| q.wish.id.as_str())
+    }
+
     /// **Whether this hand-back has a wish already** — the rule that keeps wishes worth reading.
     ///
     /// Asked with [`HandBack::key`] rather than with the words the agent sent, so two hand-backs that
-    /// a door change once made share an id are still two hand-backs.
+    /// a door change once made share an id are still two hand-backs. **An answered wish still counts**:
+    /// the person has read that hand-back's wish, so a second one would be the same wish twice.
     pub fn has_wish_for(&self, key: &str) -> bool {
         self.queued.iter().any(|q| q.key == key)
     }
@@ -386,7 +486,15 @@ impl Wishes {
         self.next += 1;
         let id = format!("wish-{}", self.next);
         wish.id = id.clone();
-        self.queued.push(QueuedWish { wish, key, url });
+        self.queued.push(QueuedWish {
+            wish,
+            key,
+            url,
+            state: WishState::Waiting,
+            search: WishSearch::NotAsked,
+            asked: String::new(),
+            note: None,
+        });
         id
     }
 }

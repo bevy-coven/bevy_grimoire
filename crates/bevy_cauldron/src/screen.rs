@@ -596,6 +596,14 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // map it is on, so the one-wish rule cannot read two hand-backs as one.
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
+    // **`Session`, for the queue's own reason**: which rows the person has unfolded, and what GitHub
+    // said about the wishes in them, are facts about this sitting's wishes — the queue outlives a door
+    // change, so the rows that read it must too or a wish would be folded again on every crossing.
+    ("bevy_cauldron::wish_view::WishOpenRows", Ownership::Session),
+    ("bevy_cauldron::wish_view::WishSearches", Ownership::Session),
+    // **`Session`**: whether this run asks GitHub nothing is the run's own fact, true for as long as
+    // the app runs (a test inserts it once and every row reads it).
+    ("bevy_cauldron::wish_view::WishSearchOff", Ownership::Session),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),
