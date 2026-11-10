@@ -9781,6 +9781,75 @@ pub fn click_palette_row_for_test(world: &mut World, descriptor: &str) {
     world.flush();
 }
 
+/// **Set one person through `person_set`**, the operation a person's entry in the PEOPLE panel dispatches: the
+/// file is written and the map does not change, which is exactly the case the outliner's fingerprint has to see.
+pub fn set_a_person_for_test(world: &mut World, name: &str) {
+    let map = map_name(world);
+    set_a_row_of_a_map_file_for_test(world, "person_set", serde_json::json!({"map": map, "name": name, "at": [3.0, 3.0]}));
+}
+
+/// **Set one trigger through `trigger_set`**, the operation the TRIGGERS panel dispatches.
+pub fn set_a_trigger_for_test(world: &mut World, id: &str) {
+    let map = map_name(world);
+    set_a_row_of_a_map_file_for_test(
+        world,
+        "trigger_set",
+        serde_json::json!({"map": map, "id": id, "on": "Activity(\"work\")", "then": "let x = 1;"}),
+    );
+}
+
+/// The open map's name, for an operation that names a file by it.
+fn map_name(world: &mut World) -> String {
+    world.get_resource::<OpenMap>().map(|open| open.map.name.clone()).unwrap_or_default()
+}
+
+/// **Dispatch one operation that writes a map's side file**, as the panel that offers it does, and carry what it
+/// changed back into the running editor's `Project`.
+fn set_a_row_of_a_map_file_for_test(world: &mut World, operation: &str, params: serde_json::Value) {
+    use bevy::ecs::system::RunSystemOnce;
+    let operation = operation.to_owned();
+    let named = operation.clone();
+    world
+        .run_system_once(
+            move |mut project: ResMut<Project>,
+                  mut open: Option<ResMut<OpenMap>>,
+                  mut state: Option<ResMut<EditorState>>| {
+                let Some(ref mut open) = open else { return };
+                let mut ctx = crate::ops::Ctx {
+                    view: None,
+                    trust_file: None,
+                    project: Some(project.clone()),
+                    open: Some(std::mem::replace(
+                        &mut **open,
+                        OpenMap::new(bevy_grimoire_core::map::Map::default(), std::path::PathBuf::new()),
+                    )),
+                    source: crate::ops::Source::Human,
+                    root: None,
+                    session: crate::ops::session_id(),
+                    proposal: None,
+                };
+                let outcome = crate::ops::dispatch(&mut ctx, &operation, &params);
+                if let Some(fresh) = ctx.open.take() {
+                    **open = fresh;
+                }
+                carry_changes(&mut project, &mut ctx);
+                match outcome {
+                    Ok(crate::ops::Applied::Done { outcome, .. }) => {
+                        if let Some(state) = state.as_deref_mut() {
+                            state.status.note(outcome.summary);
+                        }
+                    }
+                    Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                        if let Some(state) = state.as_deref_mut() {
+                            state.status.problem(e.0);
+                        }
+                    }
+                }
+            },
+        )
+        .unwrap_or_else(|e| panic!("{named} could not be dispatched: {e}"));
+}
+
 /// **A run of `descriptor` between two points**, reachable from `tests/headless.rs`.
 ///
 /// The release path of the run tool, without the mouse — the same split `fill_for_test` makes. The
@@ -19528,7 +19597,9 @@ pub fn type_the_pin_reason_for_test(world: &mut World, reason: &str) {
             repeat: false,
             window,
         });
-        world.run_system_once(pin_reason_keys).unwrap_or_else(|e| panic!("the pin field could not read the keys: {e}"));
+        // **A system that cannot run is no keys read**, not a panic: the helper's job is to type, and the caller's
+        // assertion is what says whether the field took them.
+        let _ = world.run_system_once(pin_reason_keys);
         // **One key, read once.** A `run_system_once` builds a fresh reader, so a message left in the queue
         // would be read again by every later run; the queue is emptied after the one key it carried.
         world.resource_mut::<Messages<KeyboardInput>>().clear();

@@ -54,6 +54,8 @@ pub struct LibraryBrowser {
     /// A fingerprint of what the cards were last drawn from (the search, the tags and every descriptor's
     /// id and kinds), so a settled frame draws nothing and an edit that changes no piece is no redraw.
     built_from: u64,
+    /// The `kind`s the tag row was last built from, so a redraw does not replace the toggle a person just pressed.
+    drawn_tags: Vec<String>,
     /// How many times the cards have been drawn, for the UI budget (#259): a settled frame costs none.
     draws: u32,
 }
@@ -138,13 +140,6 @@ impl Plugin for LibraryBrowserPlugin {
     }
 }
 
-/// FNV-1a over `text`, which is stable across runs and platforms (a `HashMap`'s hasher is not).
-fn fnv(text: &str) -> u64 {
-    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0100_0000_01b3;
-    text.bytes().fold(BASIS, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(PRIME))
-}
-
 /// **View ▸ Show library puts the section into the Map door's INSPECTOR, first among its rows, and takes it
 /// out again.** Not there until it is asked for, for the reason the module docs give.
 pub fn toggle_the_library(
@@ -224,22 +219,35 @@ fn tick_the_menu_row(
     }
 }
 
-/// The fingerprint of everything the cards are drawn from: the search, the kept tags and every piece's
+/// **Whether the cards need drawing again**, as a fingerprint of the search, the kept tags and every descriptor's
 /// identity and kinds.
+///
+/// **Hashed as it is read, with no string built** (the rule `outliner::fingerprint` records): the first version
+/// built a `String` of about 24 bytes per descriptor plus a `join` per descriptor on every frame, which for a
+/// library of hundreds is kilobytes allocated per frame to decide nothing.
 fn fingerprint(browser: &LibraryBrowser, project: &Project) -> u64 {
-    let mut text = String::with_capacity(browser.query.len() + project.library.descriptors.len() * 24);
-    text.push_str(&browser.query);
+    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0100_0000_01b3;
+    fn fold(mut hash: u64, bytes: &[u8]) -> u64 {
+        for byte in bytes {
+            hash = (hash ^ u64::from(*byte)).wrapping_mul(PRIME);
+        }
+        hash
+    }
+    let mut hash = fold(BASIS, browser.query.as_bytes());
     for tag in &browser.kept {
-        text.push('\u{1e}');
-        text.push_str(tag);
+        hash = fold(hash, b"\x1e");
+        hash = fold(hash, tag.as_bytes());
     }
     for descriptor in &project.library.descriptors {
-        text.push('\u{1f}');
-        text.push_str(&descriptor.id);
-        text.push('\u{1d}');
-        text.push_str(&descriptor.kind.join(" "));
+        hash = fold(hash, b"\x1f");
+        hash = fold(hash, descriptor.id.as_bytes());
+        for kind in &descriptor.kind {
+            hash = fold(hash, b"\x1d");
+            hash = fold(hash, kind.as_bytes());
+        }
     }
-    fnv(&text)
+    hash
 }
 
 /// **Every `kind` the library uses**, in name order: the tags the row offers.
@@ -251,11 +259,15 @@ fn kinds_of(project: &Project) -> Vec<String> {
     kinds.into_iter().collect()
 }
 
-/// **The cards and the tags are drawn when the library, the search or the tags moved.**
+/// **The cards and the tags are drawn when the library, the search or the tags moved** (UI-52, #238).
 ///
-/// gooey's rule is that a `card_grid`'s cards are spawned once and the grid is respawned to change them, so
-/// a redraw is a despawn of the old grid and a new one where it stood — never a pool written in place.
-#[allow(clippy::type_complexity)]
+/// gooey's rule is that a `card_grid`'s cards are spawned once and the grid is respawned to change them, so a
+/// redraw despawns the grid it drew last time and spawns a new one **in the same place** — hence `LibraryGrid` on
+/// the grid itself: a redraw that only despawned what carried the marker would leave every earlier grid standing.
+///
+/// **The tag toggles are rebuilt only when the vocabulary changes**, not on every redraw: a toggle is the control
+/// the person just pressed, so replacing it on the press that narrowed the grid would take the keyboard off it.
+#[allow(clippy::too_many_arguments)]
 fn draw_the_cards(
     project: Option<Res<Project>>,
     mut browsers: Query<&mut LibraryBrowser>,
@@ -263,38 +275,45 @@ fn draw_the_cards(
     markers: Query<Entity, With<LibraryGridMarker>>,
     tags: Query<(Entity, Option<&Children>), With<LibraryTags>>,
     thumbs: Option<Res<crate::thumbs::Thumbnails>>,
+    mut budget: ResMut<crate::ui_budget::UiFrame>,
     mut commands: Commands,
 ) {
+    // **This system's cost, into the frame's total** (UI-93, #259): a library of hundreds of cards is content, and
+    // the budget's whole point is that a settled frame pays nothing for it.
+    let spent = crate::ui_budget::measure(&mut budget);
     let Some(project) = project else { return };
     let Ok(mut browser) = browsers.single_mut() else { return };
+    // **A settled frame does nothing**: a fingerprint of what the cards depend on decides, and it is taken only
+    // when the thing it describes could have moved.
     let now = fingerprint(&browser, &project);
     if browser.built_from == now {
         return;
     }
+    let _rebuild = spent.rebuilding();
     browser.built_from = now;
     browser.draws += 1;
 
-    // **The tags**: one gooey toggle per `kind`, on when it narrows the grid. A toggle keeps its own state
-    // in `StartsOn`, and the observer below reads the change back into the browser.
+    // **The tags**, one gooey toggle per `kind`, on when it narrows the grid. Rebuilt only when the vocabulary
+    // itself changed, so the toggle a person pressed keeps its focus and its own state.
     let kinds = kinds_of(&project);
     for (row, children) in &tags {
-        for child in children.into_iter().flat_map(|kids| kids.iter()) {
-            commands.entity(child).despawn();
-        }
-        commands.entity(row).with_children(|row| {
-            for kind in &kinds {
-                row.spawn((bevy_gooey::toggle(kind.clone(), browser.kept.contains(kind)), LibraryTag(kind.clone())));
+        if browser.drawn_tags != kinds {
+            for child in children.into_iter().flat_map(|kids| kids.iter()) {
+                commands.entity(child).despawn();
             }
-        });
+            let kept = browser.kept.clone();
+            commands.entity(row).with_children(|row| {
+                for kind in &kinds {
+                    row.spawn((bevy_gooey::toggle(kind.clone(), kept.contains(kind)), LibraryTag(kind.clone())));
+                }
+            });
+            browser.drawn_tags = kinds.clone();
+        }
     }
 
     // **The cards.**
-    let kept: Vec<&bevy_grimoire_core::descriptor::Descriptor> = project
-        .library
-        .descriptors
-        .iter()
-        .filter(|d| browser.keeps(&d.id, &d.kind))
-        .collect();
+    let kept: Vec<&bevy_grimoire_core::descriptor::Descriptor> =
+        project.library.descriptors.iter().filter(|d| browser.keeps(&d.id, &d.kind)).collect();
     browser.cards = kept.iter().map(|d| d.id.clone()).collect();
     let cards: Vec<Card> = kept
         .iter()
@@ -306,30 +325,35 @@ fn draw_the_cards(
             card
         })
         .collect();
+    // **The grid this drew last time goes**, by its own marker: a grid names `LibraryGrid`, so exactly one is ever
+    // in the section however many redraws have happened.
     for grid in &grids {
         commands.entity(grid).despawn();
     }
-    // **A redrawn grid goes where the one before it stood**; the first draw, in `toggle_the_library`, has
-    // already put it there.
     for marker in &markers {
         commands.entity(marker).with_children(|marker| {
-            marker.spawn(bevy_gooey::card_grid(cards.clone()));
+            marker.spawn((bevy_gooey::card_grid(cards.clone()), LibraryGrid));
         });
     }
 }
 
-/// **Each card carries its piece**, as the payload a drop on the map reads: the same `PieceDrag` the
-/// palette's rows carry, so the drop is the palette's drop with nothing added.
+/// **Each card of the library's grid carries its piece**, as the payload a drop on the map reads: the same
+/// `PieceDrag` the palette's rows carry, so the drop is the palette's drop with nothing added.
 ///
-/// gooey's card bundle has no room for a payload the crate knows nothing about, so this puts one on the
-/// cards that do not have it yet. The filter is an archetype test: it costs nothing once every card has one.
+/// **Only this grid's cards.** Every `CardRef` in the editor belongs to some `card_grid` (the launcher's project
+/// list has cards), and a payload on one of those would let a project card be dropped on the map as a piece.
 fn name_the_payloads_on_cards(
     browsers: Query<&LibraryBrowser>,
+    grids: Query<Entity, With<LibraryGrid>>,
     unmarked: Query<(Entity, &CardRef), Without<bevy_gooey::DragPayload<PieceDrag>>>,
     mut commands: Commands,
 ) {
     let Ok(browser) = browsers.single() else { return };
+    let Ok(grid) = grids.single() else { return };
     for (card, at) in &unmarked {
+        if at.grid != grid {
+            continue;
+        }
         if let Some(id) = browser.descriptor(at.index) {
             commands.entity(card).try_insert(bevy_gooey::DragPayload(PieceDrag(id.to_owned())));
         }
@@ -352,12 +376,17 @@ fn toggle_a_tag(
 /// dispatches — so the card and the row hold the same piece and write the same log line.
 fn choose_from_a_card(
     chosen: On<bevy_gooey::ValueChange<usize>>,
+    grids: Query<(), With<LibraryGrid>>,
     browsers: Query<&LibraryBrowser>,
     project: Option<Res<Project>>,
     open: Option<Res<crate::project::OpenMap>>,
     state: Option<ResMut<crate::editor::EditorState>>,
 ) {
-    if !chosen.is_final {
+    // **Only the library's own grid.** This is a global observer, so it hears every `ValueChange<usize>` in the
+    // editor — a toolbar's toggle group, a settings choice, the keymap — and none of those is a card.
+    // **Only the library's own grid.** This is a global observer, so it hears every `ValueChange<usize>` in the
+    // editor — a toolbar's toggle group, a settings choice, the keymap — and none of those is a card.
+    if !chosen.is_final || grids.get(chosen.source).is_err() {
         return;
     }
     // The event is on the grid, so a grid with no card chosen (`None`) is not a choice.
@@ -365,12 +394,4 @@ fn choose_from_a_card(
     let (Some(project), Some(mut state)) = (project, state) else { return };
     let Some(id) = browser.descriptor(chosen.value) else { return };
     crate::editor::arm_piece(&mut state, &project, open.as_deref(), id);
-}
-
-/// **Keep the tag `kind` for a test**, through the same state a toggle writes.
-pub fn keep_tag_for_test(world: &mut World, kind: &str, kept: bool) {
-    let mut browsers = world.query::<&mut LibraryBrowser>();
-    for mut browser in browsers.iter_mut(world) {
-        browser.keep(kind, kept);
-    }
 }

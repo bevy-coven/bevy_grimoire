@@ -74,6 +74,9 @@ pub struct Outliner {
     /// The notes' generation the tree was last built from. `NotesView` marks itself changed every frame (it
     /// keeps its own clock), so `is_changed` says nothing about whether the notes moved.
     built_notes: u64,
+    /// The stat of the two side files the tree was last built from, so a write to `people/` or `scripts/` is
+    /// noticed even though no resource in the editor changed.
+    built_files: Vec<FileStat>,
     /// A fingerprint of what the tree was last built from (the query and every piece's id and
     /// descriptor), so a map edit that changes no piece's identity (a turn, a nudge) is not a rebuild.
     built_from: u64,
@@ -371,18 +374,20 @@ pub fn nodes_for(
     (nodes, rows, children)
 }
 
-/// Whether the tree needs building again: a fingerprint of the query, every piece's identity, the map's stamps
-/// and the notes' generation — **every one of them already in memory**.
+/// Whether the tree needs building again: a fingerprint of the query, every piece's identity, the map's stamps, the
+/// notes' generation, and **the stat of each side file** the map's other contents live in.
 ///
 /// **Hashed as it is read, with no string built.** It used to append every piece's id and descriptor to a `String` — a few
 /// hundred kilobytes for ten thousand pieces, allocated and filled on the frame a change lands on — and hash that. The hash
 /// is the same one ([`fnv`]), taken over the pieces' own bytes as they are walked, so a build allocates nothing. The two
 /// separator bytes are the ones the old text used, so a piece that gained or lost a character still moves the fingerprint.
 ///
-/// **Nothing here opens a file.** The map's people and triggers live in two files, and reading them on every
-/// `OpenMap` change would be disk work on a frame that turns out to need no rebuild; they are read by
-/// [`contents_of`] once this has said a rebuild is due.
-fn fingerprint(map: &Map, notes: u64, query: &str) -> u64 {
+/// **Two stats, and no file's contents.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts the map cannot
+/// show: `person_set` and `trigger_set` write them and change no pixel of the map, and a hand edit is the same. Each
+/// contributes its path, its modification time and its length — one `metadata` call each — so a write is a rebuild
+/// while a settled frame still opens nothing. Parsing them is [`contents_of`]'s work, after this has said a rebuild
+/// is due.
+fn fingerprint(map: &Map, notes: u64, files: &[FileStat], query: &str) -> u64 {
     const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
     fn fold(mut hash: u64, bytes: &[u8]) -> u64 {
@@ -406,7 +411,54 @@ fn fingerprint(map: &Map, notes: u64, query: &str) -> u64 {
     }
     // **The notes' generation**, because the notes view marks itself changed every frame and its own count of
     // replacements is what says they moved.
-    fold(hash, &notes.to_le_bytes())
+    hash = fold(hash, &notes.to_le_bytes());
+    // **Each side file's identity**, so a write to `people/` or `scripts/` is a rebuild even though the map did not
+    // move. The path is folded too, so opening another map is a different fingerprint whatever its stats are.
+    for FileStat { path, modified, len } in files {
+        hash = fold(hash, b"\x19");
+        hash = fold(hash, path.as_bytes());
+        hash = fold(hash, &modified.unwrap_or(0).to_le_bytes());
+        hash = fold(hash, &len.unwrap_or(0).to_le_bytes());
+    }
+    hash
+}
+
+/// **A side file as cheaply as it can be told apart**: its path, and its modification time and length (both `None`
+/// when it is not there). One `metadata` call, no read.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct FileStat {
+    path: String,
+    modified: Option<u64>,
+    len: Option<u64>,
+}
+
+impl FileStat {
+    /// The stat of `path`, with the modification time in whole seconds since the epoch.
+    fn of(path: &std::path::Path) -> FileStat {
+        let shown = path.to_string_lossy().into_owned();
+        let Ok(meta) = std::fs::metadata(path) else {
+            return FileStat { path: shown, modified: None, len: None };
+        };
+        let modified = meta
+            .modified()
+            .ok()
+            .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|since| since.as_secs());
+        let len = meta.len();
+        FileStat { path: shown, modified, len: Some(len) }
+    }
+}
+
+/// **The two side files a map's other contents live in**: its people and its triggers. Statted on every look,
+/// because a write to either is a change the map itself cannot show.
+fn side_files(project: &Project, map: &Map) -> Vec<FileStat> {
+    [
+        project.grimoire_dir.join("people").join(format!("{}.ron", map.name)),
+        project.grimoire_dir.join("scripts").join(format!("{}.ron", map.name)),
+    ]
+    .iter()
+    .map(|path| FileStat::of(path))
+    .collect()
 }
 
 /// **The contents the tree draws that are not placements**, each read from where it already lives: the map's
@@ -452,17 +504,27 @@ fn rebuild_the_tree(
     let spent = crate::ui_budget::measure(&mut budget);
     let (Some(open), Some(project)) = (open, project) else { return };
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
+    // **Two stats, not two parses.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts no resource in the
+    // editor can show: `person_set` writes one and a hand edit the other, and the map does not change at all. A
+    // `metadata` call each is the whole cost of noticing, and they are taken **before** the gate below, because a
+    // change in either is precisely a reason the gate has to open.
+    let files = side_files(&project, &open.map);
     // **A settled frame does no work that grows with the map.** The fingerprint reads every piece, so it is taken
-    // only when the map, the library, the notes, or the search moved, or the tree has not been built yet: ten
-    // thousand pieces at sixty frames a second was a second of string building for a tree nobody touched.
+    // only when the map, the library, the notes, the search or one of those two files moved, or the tree has not
+    // been built yet: ten thousand pieces at sixty frames a second was a second of string building for a tree
+    // nobody touched.
     let notes_now = notes.as_ref().map(|n| n.generation()).unwrap_or(0);
-    let moved =
-        outliner.built_from == 0 || open.is_changed() || project.is_changed() || outliner.built_for != outliner.query || outliner.built_notes != notes_now;
+    let moved = outliner.built_from == 0
+        || open.is_changed()
+        || project.is_changed()
+        || outliner.built_for != outliner.query
+        || outliner.built_notes != notes_now
+        || outliner.built_files != files;
     if !moved {
         return;
     }
     outliner.looks += 1;
-    let now = fingerprint(&open.map, notes_now, &outliner.query);
+    let now = fingerprint(&open.map, notes_now, &files, &outliner.query);
     if outliner.built_from == now && outliner.built_notes == notes_now {
         let query = outliner.query.clone();
         outliner.built_for = query;
@@ -480,6 +542,7 @@ fn rebuild_the_tree(
     outliner.children = children;
     outliner.built_from = now;
     outliner.built_notes = notes_now;
+    outliner.built_files = files;
     let query = outliner.query.clone();
     outliner.built_for = query;
     outliner.rebuilds += 1;
@@ -551,24 +614,25 @@ impl Eyes {
 #[derive(Component)]
 pub struct OutlinerRowMenu;
 
-/// What one item of a row's menu does.
-#[derive(Clone, Copy, PartialEq)]
-enum RowVerb {
+/// **What one item of a row's menu does.** Public because [`ROW_ITEMS`] is: a table of labels decoded by an index
+/// would be two lists that can drift, and the menu and a test both read this one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RowVerb {
     /// The piece's lock: `placement_set_pin`, through the `O` key's own [`crate::editor::pin_or_unpin`].
     Pin,
     /// The piece out of the viewport for this session.
     Hide,
 }
 
-/// What the menu holds, top to bottom. One table, so the menu and its test read the same list.
-pub const ROW_ITEMS: [(&str, u8); 2] = [("Pin", 0), ("Hide", 1)];
+/// What the menu holds, top to bottom: the words and what each one does. One table, so the menu and its test read
+/// the same list, and there is no index to decode.
+pub const ROW_ITEMS: [(&str, RowVerb); 2] = [("Pin", RowVerb::Pin), ("Hide", RowVerb::Hide)];
 
 /// **The row's menu, spawned once with the screen.** gooey's `context_menu`; the items are gooey's
 /// `menu_item`s, and the row they were opened for is gooey's `ContextTarget`.
 fn spawn_row_menu(mut commands: Commands) {
     let menu = commands.spawn((bevy_gooey::context_menu(()), OutlinerRowMenu)).id();
-    for (label, which) in ROW_ITEMS {
-        let verb = if which == 0 { RowVerb::Pin } else { RowVerb::Hide };
+    for (label, verb) in ROW_ITEMS {
         commands
             .spawn((bevy_gooey::menu_item(label), ChildOf(menu)))
             .observe(move |activate: On<bevy::ui_widgets::Activate>,

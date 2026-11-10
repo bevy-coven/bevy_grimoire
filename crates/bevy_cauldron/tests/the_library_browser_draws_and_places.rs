@@ -80,6 +80,18 @@ fn browser(app: &mut App) -> &LibraryBrowser {
     world.query::<&LibraryBrowser>().single(world).expect("the browser is open")
 }
 
+/// **Press a tag's toggle**, the way gooey's own control does: the `ValueChange<bool>` its press sends, on the
+/// toggle entity the browser drew for that `kind`.
+fn toggle_a_tag(app: &mut App, kind: &str, on: bool) {
+    let toggle = {
+        let world = app.world_mut();
+        let mut tags = world.query::<(Entity, &bevy_cauldron::library_browser::LibraryTag)>();
+        tags.iter(world).find(|(_, tag)| tag.0 == kind).map(|(entity, _)| entity).unwrap_or_else(|| panic!("the browser drew no toggle for `{kind}`"))
+    };
+    app.world_mut().commands().trigger(ValueChange { source: toggle, value: on, is_final: true });
+    updates(app, 4);
+}
+
 fn search_for(app: &mut App, words: &str) {
     let search = {
         let world = app.world_mut();
@@ -171,15 +183,13 @@ fn the_search_narrows_the_grid_and_clearing_it_brings_every_card_back() {
 #[test]
 fn a_tag_narrows_the_grid_and_folds_with_the_search() {
     let mut app = rig("library_tags");
-    bevy_cauldron::library_browser::keep_tag_for_test(app.world_mut(), "light-source", true);
-    updates(&mut app, 4);
+    toggle_a_tag(&mut app, "light-source", true);
     assert_eq!(browser(&mut app).len(), 2, "only the lights");
 
     search_for(&mut app, "tall");
     assert_eq!(browser(&mut app).len(), 1, "the tall lamp: a light, and its id says tall");
 
-    bevy_cauldron::library_browser::keep_tag_for_test(app.world_mut(), "light-source", false);
-    updates(&mut app, 4);
+    toggle_a_tag(&mut app, "light-source", false);
     assert_eq!(browser(&mut app).len(), 1, "with no tag kept, the search alone decides");
 }
 
@@ -241,3 +251,85 @@ fn the_browser_is_not_there_until_the_view_menu_asks_and_goes_when_it_is_asked_a
     show_the_library(&mut app, false);
     assert_eq!(count(&mut app), (0, 0), "and asked away it goes");
 }
+
+/// **One grid, however many times the cards are redrawn.** A redraw replaces the grid, so a second search must not
+/// leave the previous one standing: two `CardGrid`s in one section means two sets of cards and a drop that can find
+/// the stale one first.
+#[test]
+fn a_redraw_leaves_exactly_one_grid_of_cards() {
+    let mut app = rig("library_one_grid");
+    let count = |app: &mut App| {
+        let world = app.world_mut();
+        let grids = world.query_filtered::<(), With<CardGrid>>().iter(world).count();
+        let cards = world.query_filtered::<(), With<CardRef>>().iter(world).count();
+        (grids, cards)
+    };
+    assert_eq!(count(&mut app), (1, 3), "one grid of three cards to start with");
+
+    search_for(&mut app, "lamp");
+    assert_eq!(count(&mut app), (1, 2), "a search replaces the grid rather than adding one");
+
+    search_for(&mut app, "");
+    assert_eq!(count(&mut app), (1, 3), "and clearing it replaces the grid again");
+
+    toggle_a_tag(&mut app, "light-source", true);
+    assert_eq!(count(&mut app), (1, 2), "a tag press replaces the grid too");
+    assert_eq!(browser(&mut app).len(), 2, "and the browser agrees with what is drawn");
+}
+
+/// **A tag is pressed through gooey's own control**: the `ValueChange<bool>` the toggle sends, on the toggle
+/// itself. The browser reads it back, so pressing a tag narrows the grid and pressing it again widens it.
+#[test]
+fn a_tag_toggle_narrows_the_grid_and_turning_it_off_widens_it_again() {
+    let mut app = rig("library_tag_press");
+    toggle_a_tag(&mut app, "light-source", true);
+    assert_eq!(browser(&mut app).len(), 2, "the lights only");
+    let on = browser(&mut app).kept();
+    assert_eq!(on, vec!["light-source".to_owned()], "and the browser knows which tag is kept");
+
+    toggle_a_tag(&mut app, "light-source", false);
+    assert_eq!(browser(&mut app).len(), 3, "pressing it off is the whole library again");
+    assert!(browser(&mut app).kept().is_empty(), "and no tag is kept");
+}
+
+/// **Another card grid's choice is not the library's.** `choose_from_a_card` is a global observer, so it hears
+/// every `ValueChange<usize>` in the editor, and the editor has other card grids (the launcher's projects). A card
+/// chosen in one of those must arm nothing: the guard is `grids.contains(chosen.source)`.
+///
+/// The choice travels the framework's own path — `Activate` on a card of a grid that is not the library's, which
+/// gooey turns into that grid's `ValueChange<usize>` — so this is exactly the event the observer sees for a press.
+#[test]
+fn a_choice_in_another_card_grid_arms_no_piece() {
+    let mut app = rig("library_other_choice");
+    let brush_before = app.world().resource::<EditorState>().brush;
+    let piece_of_card_one = browser(&mut app).descriptor(1).expect("the grid draws a second card").to_owned();
+    let elsewhere = another_card_grid(&mut app);
+    let card = {
+        let world = app.world_mut();
+        let mut cards = world.query::<(Entity, &CardRef)>();
+        cards.iter(world).find(|(_, at)| at.grid == elsewhere).map(|(entity, _)| entity).expect("the other grid draws a card")
+    };
+    app.world_mut().commands().trigger(bevy::ui_widgets::Activate { entity: card });
+    updates(&mut app, 4);
+
+    let armed = {
+        let state = app.world().resource::<EditorState>();
+        let project = app.world().resource::<bevy_cauldron::project::Project>();
+        state.brush.and_then(|ix| project.library.descriptors.get(ix).map(|d| d.id.clone()))
+    };
+    let said = app.world().resource::<EditorState>().status.line().to_owned();
+    assert_ne!(
+        armed.as_deref(),
+        Some(piece_of_card_one.as_str()),
+        "a card of another grid is card one's index, and it did not arm `{piece_of_card_one}` (the editor said `{said}`)"
+    );
+    assert_eq!(app.world().resource::<EditorState>().brush, brush_before, "and the brush did not move (the editor said `{said}`)");
+}
+
+/// A card grid that is not the library's — the launcher's project list is one — with two cards.
+fn another_card_grid(app: &mut App) -> Entity {
+    app.world_mut()
+        .spawn(bevy_gooey::card_grid([bevy_gooey::Card::new("One"), bevy_gooey::Card::new("Two")]))
+        .id()
+}
+

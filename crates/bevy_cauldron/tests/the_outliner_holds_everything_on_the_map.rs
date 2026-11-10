@@ -44,11 +44,11 @@ const GROUP_KINDS: [&str; 4] = [COMPOSITIONS, PEOPLE, TRIGGERS, NOTES];
 
 /// A project with a piece, a stamp, a person, a trigger and a note.
 ///
-/// **The notes file is written before the editor opens** (its name follows the map's), so the view reads it on
-/// its first look; **the two files the operations own** (`people/`, `scripts/`) go in the directory the project
+/// **The notes file is written before the editor opens** (its name follows the map's), so the notes view reads it
+/// on its first look. **The two files the operations own** (`people/`, `scripts/`) go in the directory the project
 /// itself names, because a test that guessed `assets/grimoire/` would be right only until a project bound its
-/// library somewhere else. The project is marked changed after they are written, which is what a person editing
-/// a file on disk does, so the tree looks again.
+/// library somewhere else; they are written while the editor is already running, and the tree finds them because
+/// **their stat is part of its fingerprint** (a `person_set` writes the file and changes no pixel of the map).
 fn rig(tag: &str) -> App {
     let root: PathBuf = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
@@ -124,6 +124,12 @@ fn search_for(app: &mut App, words: &str) {
     };
     app.world_mut().commands().trigger(ValueChange { source: search, value: words.to_owned(), is_final: false });
     updates(app, 3);
+}
+
+/// **The labels of the rows drawn under the group `kind`**, in the order they are drawn.
+fn group_rows(app: &mut App, kind: &str) -> Vec<String> {
+    let keys: Vec<u64> = outliner(app).rows_under(group_key(kind)).to_vec();
+    labels(app, &keys).into_iter().map(|(_, label)| label).collect()
 }
 
 fn outliner(app: &mut App) -> &Outliner {
@@ -312,4 +318,46 @@ fn the_eye_does_not_outlive_the_map() {
     assert!(app.world().resource::<Eyes>().is_hidden(&id), "the piece is behind the eye");
     bevy_cauldron::screen::reset_door_state_for_test(app.world_mut());
     assert!(app.world().resource::<Eyes>().is_empty(), "and a door puts every eye back");
+}
+
+/// **A person added while the section is open appears in the PEOPLE group.**
+///
+/// The two groups that come from files (`people/`, `scripts/`) are read at a rebuild, so what tells the tree to
+/// rebuild again is the fingerprint — and a fingerprint over the map alone cannot see a file change. Before this,
+/// adding a person after the section opened left the group as it was until something else moved: the operation
+/// writes `people/<map>.ron` and the map itself does not change at all.
+#[test]
+fn a_person_added_while_the_section_is_open_appears_in_the_people_group() {
+    let mut app = rig("outliner_person_arrives");
+    let before = outliner(&mut app).rows_under(group_key(PEOPLE)).len();
+    assert_eq!(before, 1, "the fixture's one person is there to start with");
+
+    // **The operation a person's entry in the PEOPLE panel is**: it writes the file and nothing else.
+    bevy_cauldron::editor::set_a_person_for_test(app.world_mut(), "Tobin");
+    updates(&mut app, 4);
+
+    let rows = outliner(&mut app).rows_under(group_key(PEOPLE)).len();
+    assert_eq!(rows, 2, "the person the operation wrote is a row of the tree");
+    let labels: Vec<String> = group_rows(&mut app, PEOPLE);
+    assert!(labels.iter().any(|label| label == "Tobin"), "and the row is named for them: {labels:?}");
+}
+
+/// **A trigger written while the section is open appears in the TRIGGERS group**, on the same terms.
+///
+/// A hand edit rather than `trigger_set`: that operation refuses in a build without `bevy_society` ("a script cannot
+/// be checked and nothing was saved"), and what is being held here is the fingerprint, not the operation — the file
+/// changes and the map does not, which is the same fact either way.
+#[test]
+fn a_trigger_written_while_the_section_is_open_appears_in_the_triggers_group() {
+    let mut app = rig("outliner_trigger_arrives");
+    assert_eq!(outliner(&mut app).rows_under(group_key(TRIGGERS)).len(), 1, "the fixture's one trigger");
+    let grimoire = app.world().resource::<bevy_cauldron::project::Project>().grimoire_dir.clone();
+    write_file(
+        &grimoire.join("scripts/m.ron"),
+        "(version: 1, triggers: [(id: \"greet\", on: \"Activity(\\\"work\\\")\", then: \"()\"), (id: \"wave\", on: \"Activity(\\\"work\\\")\", then: \"()\")])",
+    );
+    updates(&mut app, 4);
+    let labels: Vec<String> = group_rows(&mut app, TRIGGERS);
+    assert_eq!(labels.len(), 2, "the trigger written to the file is a row of the tree: {labels:?}");
+    assert!(labels.iter().any(|label| label == "wave"), "named by its id: {labels:?}");
 }
