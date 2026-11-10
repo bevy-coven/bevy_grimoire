@@ -1626,7 +1626,13 @@ struct NotesFilterButton;
 struct NotesSendAll;
 
 /// What the Notes list last drew: the filter and `(id, status, text, waiting, review, auto)` per row.
-type NotesShown = (Option<&'static str>, Vec<(String, &'static str, String, bool, NoteReview, bool)>);
+/// What the Notes list last drew: the filter, the rows, and **which note was selected** — the
+/// selection is in the key so a reveal that moves it redraws the rows it colours (review of #359).
+type NotesShown = (
+    Option<&'static str>,
+    Vec<(String, &'static str, String, bool, NoteReview, bool)>,
+    Option<String>,
+);
 
 /// What a done note shows for review (#93): its summary, assumptions, the before and after captures
 /// and the operations it ran. Empty for every other status.
@@ -6980,11 +6986,22 @@ fn refresh_plan_list(
 
 /// Keep [`NotesList`] equal to the open map's notes under the current filter: newest first, every
 /// status, resolved notes included. Read twice a second; rebuilt only when what it says changed.
+/// **What the Notes list is built from besides its rows**: the open map's notes and the note a reveal
+/// selected. One bundle because the system is at clippy's argument cap, and these two are the same
+/// subject — what the list draws, and which of it is the person's cursor.
+#[derive(bevy::ecs::system::SystemParam)]
+struct NoteSelection<'w, 's> {
+    view: Res<'w, crate::notes_view::NotesView>,
+    selected: Option<Res<'w, SelectedNote>>,
+    /// Read so the bundle's lifetime parameters are used; nothing walks it.
+    _marker: std::marker::PhantomData<&'s ()>,
+}
+
 fn refresh_notes_list(
     mut commands: Commands,
     time: Res<Time>,
-    view: Res<crate::notes_view::NotesView>,
     filter: Res<NotesFilter>,
+    inputs: NoteSelection<'_, '_>,
     lists: Query<Entity, With<NotesList>>,
     mut local: Local<(Option<NotesShown>, f32)>,
     mut images: ResMut<Assets<Image>>,
@@ -6995,7 +7012,7 @@ fn refresh_notes_list(
         return;
     }
     *since = 0.0;
-    let all = view.notes();
+    let all = inputs.view.notes();
     let rows: Vec<(String, &'static str, String, bool, NoteReview, bool)> = all
         .listing(filter.0)
         .iter()
@@ -7022,11 +7039,12 @@ fn refresh_notes_list(
             (n.id.clone(), n.status(), text, waiting.is_some(), review, n.auto)
         })
         .collect();
-    let key = (filter.0, rows);
+    let revealed = inputs.selected.as_deref().and_then(|s| s.0.clone());
+    let key = (filter.0, rows, revealed.clone());
     if shown.as_ref() == Some(&key) {
         return;
     }
-    let (_, rows) = &key;
+    let (_, rows, _) = &key;
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
@@ -7047,7 +7065,13 @@ fn refresh_notes_list(
                 ));
             }
             for (id, status, text, waiting, review, auto) in rows {
-                crate::chrome::list_row(p, false, NoteRow { id: id.clone() }).with_children(|row| {
+                // **The revealed note is drawn selected** (review of #359, M3/M2): `SelectedNote` is
+                // what a reveal writes, and the row it names is the row a person's eye lands on. The
+                // list is rebuilt when its rows change and the selection is repainted in place by
+                // `arm_note_rows`, the shape `tiles::arm_list_rows` uses — so a selection set by a
+                // reveal does not respawn the list to show itself.
+                let chosen = revealed.as_deref() == Some(id.as_str());
+                crate::chrome::list_row(p, chosen, NoteRow { id: id.clone() }).with_children(|row| {
                     row.spawn((
                         Text::new(format!("{id} [{status}] {text}")),
                         TextColor(TEXT),

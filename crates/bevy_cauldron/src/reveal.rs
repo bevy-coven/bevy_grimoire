@@ -177,6 +177,11 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
     Ok(page)
 }
 
+/// **The settings screen's tabs are one-based on its categories**: tab `0` is *All*, and the category
+/// at `CATEGORIES[i]` is tab `i + CATEGORY_TAB_BASE`. Named rather than a bare `+ 1`, because a reader
+/// meeting the expression has no way to tell a one-based tab from an off-by-one.
+pub const CATEGORY_TAB_BASE: usize = 1;
+
 /// **Where a section of the editor's settings is shown.**
 ///
 /// The sections an operation names are of three kinds, and each has its own page:
@@ -197,7 +202,7 @@ fn settings_page(section: &str) -> Result<Page, String> {
         .iter()
         .position(|c| c.eq_ignore_ascii_case(&lower))
     {
-        return Ok(Page::Settings { tab: at + 1 });
+        return Ok(Page::Settings { tab: at + CATEGORY_TAB_BASE });
     }
     let heading = match lower.as_str() {
         "notes" => Some(InspectorSection::Notes),
@@ -325,6 +330,7 @@ impl Plugin for RevealPlugin {
                     // **Before the camera is written** and after the crossing: `apply_pending_door`
                     // runs in `PreUpdate` and the transition between the schedules, so by `Update` the
                     // new door's panels exist and the selection lands in state nothing will reset.
+                    clear_the_reveal_when_the_project_changes.before(take_the_reveal),
                     take_the_reveal.before(crate::view::drive),
                     scroll_the_inspector_to_the_section,
                     scroll_the_selected_note_on_screen,
@@ -332,6 +338,25 @@ impl Plugin for RevealPlugin {
                     .run_if(in_state(crate::screen::Screen::Editor)),
             );
     }
+}
+
+/// **Another project ends the reveals of this one.**
+///
+/// A page is a door and a row, and both belong to the project that has them: a queued reveal carried
+/// across would cross a door for a piece, a group or a file the new project does not hold. The map is
+/// **not** in this test — a page is not a place in metres, so a reveal survives a map change, and only
+/// a project change makes it meaningless.
+fn clear_the_reveal_when_the_project_changes(
+    project: Option<Res<Project>>,
+    mut revealing: ResMut<Revealing>,
+    mut seen: Local<Option<std::path::PathBuf>>,
+) {
+    let root = project.as_deref().map(|p| p.root.clone());
+    if *seen == root {
+        return;
+    }
+    *seen = root;
+    revealing.clear();
 }
 
 /// **Carry out one reveal a frame**: ask for the crossing, wait for it, then select.
@@ -361,7 +386,9 @@ fn take_the_reveal(
     mut open_config: MessageWriter<crate::project_config::OpenProjectConfig>,
     mut tables: Table<'_, '_>,
 ) {
-    let Some(in_flight) = revealing.in_flight.clone() else {
+    // **Taken, not cloned**: the reveal is put back at the end of the branch that continues it, so a
+    // frame that finishes one costs no copy of the `Shown` the page was decided from.
+    let Some(in_flight) = revealing.in_flight.take() else {
         let Some(request) = revealing.queue.pop_front() else {
             return;
         };
@@ -625,12 +652,15 @@ fn reveal_the_data_row(
     // the crossing; a listing with rows and no table is a wait.
     let mut selected = false;
     for (table_entity, mut cursor, mut sort, table) in tables.iter_mut() {
+        // **The DATA table first, and only it.** A sort cleared on every table in the world would
+        // reorder a person's table the reveal never looked at — and the panel is not the only table
+        // an editor may be drawing.
+        let Some(rows) = table.source::<crate::editor::DataRows>() else { continue };
         if sort.column.is_some() {
             *sort = bevy_gooey::TableSort::default();
         }
         // **The key gooey derives for a row**, asked of the table's own source: `RowSource::key` is the
         // one function that says how a row is named, so this cannot disagree with a click on that row.
-        let Some(rows) = table.source::<crate::editor::DataRows>() else { continue };
         let key = bevy_gooey::RowSource::key(rows, row);
         if cursor.0 != Some(key) {
             cursor.0 = Some(key);
@@ -651,13 +681,24 @@ fn reveal_the_data_row(
         // (`chrome::scroll_bounds`): Bevy writes the clamped value into `ComputedNode::scroll_position`
         // and leaves the `ScrollPosition` component alone, so a follower that fed the component back
         // would compute every later reveal from a place the list never went.
+        // **The two numbers `scroll_to_reveal` wants are both ON SCREEN, and both physical.** It
+        // compares the row's edges with the list's, so a row's offset from the top of the list's
+        // *content* has to be moved to where it would be drawn: the viewport's own screen top, plus
+        // the row's offset, minus how far the list has scrolled (physical: a scroll position is
+        // logical, `ComputedNode` geometry is not, and `inverse_scale_factor` is the conversion).
+        //
+        // Measured before this was written: the row was given a bare content offset and the list its
+        // screen centre, so the reveal saw a row "above the fold" for every table whose content
+        // started at zero and scrolled the list to a place the leaf was not.
         let (scroll_y, max) = crate::chrome::scroll_bounds(node);
         let inv = node.inverse_scale_factor();
         // One row's pitch, from the viewport's own height over the rows `ListView` says it shows —
         // the only public answer to a gooey table's row height.
         let pitch = node.size().y / view.rows;
+        let scrolled = (scroll_y / inv).max(0.0) * inv;
+        let row_mid = at.translation.y - node.size().y * 0.5 + row as f32 * pitch + pitch * 0.5 - scrolled;
         let Some(want) = crate::chrome::scroll_to_reveal(
-            (row as f32 * pitch + pitch * 0.5, pitch * 0.5),
+            (row_mid, pitch * 0.5),
             (at.translation.y, node.size().y * 0.5),
             scroll_y,
             max,

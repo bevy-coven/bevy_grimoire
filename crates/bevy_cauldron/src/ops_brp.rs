@@ -598,10 +598,10 @@ impl Gates<'_> {
     /// map and the camera takes it; [`crate::reveal::page_of`] answers for everything else and the
     /// reveal opens its door, panel and row (AF-03, #359). A `Shown` neither takes — `Nowhere` — is
     /// nothing anybody can look at, and is left alone rather than being refused as a page.
-    fn follow(&mut self, operation: &str, shown: &crate::ops::Shown) {
+    fn follow(&mut self, operation: &str, shown: &crate::ops::Shown, summary: &str) {
         if let Some(request) = crate::follow::request_of(shown) {
             if let Some(following) = self.following.as_mut() {
-                following.request(request);
+                following.request_named(request, crate::follow::as_the_familiar(summary));
             }
             return;
         }
@@ -1939,7 +1939,7 @@ fn operation_apply(
             // **The editor follows the change** (AF-02, #358): the request is raised here, at the door
             // an agent comes through, and never inside `dispatch` — a person's key goes through the
             // same dispatch and must not move the camera under their hands.
-            gates.follow(&p.operation, &shown);
+            gates.follow(&p.operation, &shown, &outcome.summary);
             // **A door the editor will ask about is not yet open (cycle 8, gap 4).** The outcome is a
             // stable word, `waiting`, and `waiting_on` names what it waits for, so nobody reads "applied"
             // as "the door is open" and a caller can branch on the word.
@@ -2232,7 +2232,10 @@ fn operation_undo(
             // **The editor follows an undo too** (AF-02, #358): an undo of a removal is where the piece
             // stands again, and an undo of a placement is where it was — both are places the person
             // must be shown, from the same answer the apply's follow reads.
-            gates.follow("undo", &shown);
+            // **Named by the operation the line was for**, not the word `undo`: a page the editor has
+            // no view for is reported by name, and `undo` names nothing a person can find in the
+            // operation list (review of #359, NIT).
+            gates.follow(&entry.op, &shown, &outcome.summary);
             json!({
                 "operation": entry.op,
                 "outcome": "applied",
@@ -2880,6 +2883,8 @@ fn editor_present(
     if let (Some(first), Some(following)) = (p.check.first(), following.as_mut())
         && !first.placements.is_empty()
     {
+        // **A hand-back is not a change of its own**, so it is the unnamed form: the chip says the
+        // Familiar changed something and names the first place to check (AF-04, #360).
         following.request(crate::follow::FollowRequest {
             target: crate::editor::FrameTarget::Placements(first.placements.clone()),
             ids: first.placements.clone(),
