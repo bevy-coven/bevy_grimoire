@@ -382,6 +382,7 @@ mod the_benchs_labels_and_the_journal_take_the_skins_ink;
 mod the_wheel_scrolls_a_panel;
 mod the_window_fits_the_screen_and_is_remembered;
 mod the_status_line_draws_in_the_skins_ink;
+mod the_panel_headers_link_their_guide_page;
 mod the_panes_inks_come_from_the_skin;
 mod the_next_undo_is_named;
 mod the_note_box_is_on_screen_while_typed;

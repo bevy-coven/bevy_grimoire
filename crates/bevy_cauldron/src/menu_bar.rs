@@ -184,6 +184,9 @@ fn read_the_titles_as_controls(
 enum Slot {
     Command(Action),
     Verb(AppVerb),
+    /// **Every page of the written guide, in the guide's own order** (UI-91, #257): one row each, so
+    /// Help finds every page and no page is named twice.
+    Guide,
     Recent(Vec<PathBuf>),
     Separator,
     Statistics,
@@ -263,6 +266,10 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
             Slot::Verb(AppVerb::KeyboardShortcuts),
             Slot::Command(Action::Shortcuts),
             Slot::Separator,
+            // The written guide, page by page (UI-91, #257). The rows are the catalog's, so a page
+            // added to `docs/guide` appears here the frame it is listed, and one removed goes.
+            Slot::Guide,
+            Slot::Separator,
             Slot::Verb(AppVerb::GettingStarted),
             Slot::Verb(AppVerb::WhatsNew),
             Slot::Separator,
@@ -330,6 +337,11 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
         Slot::Command(action) => {
             let command = commands::command(action);
             menu.spawn((MenuCommand(action), bevy_gooey::menu_item(command.title).with_shortcut(command.shortcut_in(live))));
+        }
+        Slot::Guide => {
+            for page in crate::help::PAGES {
+                menu.spawn((AppVerb::GuidePage(page.id), bevy_gooey::menu_item(page.title)));
+            }
         }
         Slot::Verb(verb) => {
             let mut item = bevy_gooey::menu_item(verb.title());

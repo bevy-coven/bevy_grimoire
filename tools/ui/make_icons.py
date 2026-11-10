@@ -301,6 +301,17 @@ def place():
     return c
 
 
+def help():
+    """A question mark: the bowl, its stem, and the dot — the glyph every program puts on the one
+    control that explains itself."""
+    c = Canvas()
+    c.ring(8, 5, 3.2)
+    c.fill(8, 1, 11, 8, False)
+    c.line(8, 8, 8, 10, 2)
+    c.fill(7, 12, 8, 13)
+    return c
+
+
 UNDO = undo()
 ART = {
     "edit.undo": UNDO,
@@ -326,6 +337,7 @@ ART = {
     "panel.reload": reload(),
     "panel.log": log(),
     "map.place_mode": place(),
+    "panel.help": help(),
 }
 
 

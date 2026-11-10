@@ -49,6 +49,7 @@ pub const ICONS: &[&str] = &[
     "panel.reload",
     "panel.log",
     "map.place_mode",
+    "panel.help",
 ];
 // icons:end
 

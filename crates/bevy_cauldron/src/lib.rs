@@ -90,6 +90,7 @@ pub mod guided;
 #[cfg(feature = "debugger")]
 pub mod tour;
 pub mod harness;
+pub mod help;
 pub mod icons;
 pub mod keys;
 pub mod launcher;
