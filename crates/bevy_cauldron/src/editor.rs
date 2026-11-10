@@ -262,6 +262,10 @@ pub struct EditorState {
     /// **A door an operation asked for, waiting to be crossed to.** `door_open` sets it, from the keys
     /// and from an agent alike. It is taken by the switching, or held while the leaving question is up.
     pub door_request: Option<DoorRequest>,
+    /// **A map a document tab asked for, waiting for the person's answer about the open one**
+    /// (NV-04, #381). Held while the leaving question is up, taken by [`answer_the_switch_prompt`]:
+    /// a decline drops it, and an agreed save opens it, as choosing it from the project page does.
+    pub map_request: Option<String>,
     /// **A command of the project's waiting for the person to allow it** (Send, Play), and where their
     /// trust store is. See [`crate::trusted`].
     pub trust: crate::trusted::TrustState,
@@ -1394,6 +1398,7 @@ impl Default for EditorState {
             tool: Tool::default(),
             leaving: false,
             door_request: None,
+            map_request: None,
             trust: crate::trusted::TrustState::default(),
             guide: crate::agent_guide::GuideTrust::default(),
         }
@@ -2611,6 +2616,8 @@ impl Plugin for EditorPlugin {
         // relaunch a successful build makes.
         app.add_plugins(crate::build_view::BuildPlugin);
         app.add_plugins(crate::shell_view::ShellViewPlugin);
+        // **The documents each workspace has open** (NV-04, #381): tabs, restored with the project.
+        app.add_plugins(crate::session::SessionPlugin);
         app.add_observer(drop_a_piece_on_the_map);
         app.add_plugins(crate::selection::SelectionPlugin);
         #[cfg(feature = "bevy_siren")]
@@ -3338,6 +3345,7 @@ fn answer_the_switch_prompt(world: &mut World) {
     // **The request waits in `door_request` while the question is up**, so it is taken here whatever
     // the answer: a decline drops it, and an agreed save crosses to it.
     let request = world.resource_mut::<EditorState>().door_request.take();
+    let map_request = world.resource_mut::<EditorState>().map_request.take();
     world.resource_mut::<EditorState>().leaving = false;
     if !agreed {
         world
@@ -3387,6 +3395,11 @@ fn answer_the_switch_prompt(world: &mut World) {
     }
     if let Some(request) = request {
         enter_door(world, request);
+    }
+    if let Some(name) = map_request
+        && let Err(e) = crate::session::open_map_now(world, &name)
+    {
+        world.resource_mut::<EditorState>().status.problem(format!("NOT OPENED: {e}"));
     }
 }
 

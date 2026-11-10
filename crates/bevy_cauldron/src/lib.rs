@@ -189,6 +189,7 @@ pub mod setting_catalogue;
 pub mod settings;
 pub mod settings_screen;
 pub mod sequencer;
+pub mod session;
 pub mod snip;
 pub mod stage_panels;
 pub mod after_edit;

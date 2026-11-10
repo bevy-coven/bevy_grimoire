@@ -140,6 +140,11 @@ fn main() -> AppExit {
     if let Some(file) = bevy_cauldron::settings::user_file() {
         app.insert_resource(bevy_cauldron::settings::UserSettingsFile(file));
     }
+    // **The open tabs are the person's, not the project's** (`session.rs`, NV-04): they are kept under the
+    // user's data directory, and only the binary names it, as with the recent list.
+    if let Some(dir) = bevy_grimoire_core::user_dirs::data_dir() {
+        app.insert_resource(bevy_cauldron::session::SessionStore(dir));
+    }
     // **What this machine has** (#341): the terminal starts with the agent chosen on a machine whose
     // login shell finds `omp`, and with a plain shell on one whose does not — the shell the `Invoke
     // Agent` press types into, not this process's `PATH`, which a Finder-launched app is not given. A
