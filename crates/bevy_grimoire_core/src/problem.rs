@@ -235,8 +235,8 @@ mod tests {
 
     #[test]
     fn a_location_names_only_what_it_has() {
-        assert_eq!(Location::file("a.ron").to_string(), "a.ron");
-        assert_eq!(Location::file("a.ron").field(Some("version".into())).to_string(), "a.ron (version)");
+        assert_eq!(Location::file("a.yaml").to_string(), "a.yaml");
+        assert_eq!(Location::file("a.yaml").field(Some("version".into())).to_string(), "a.yaml (version)");
         assert_eq!(Location::entity("crate_b").to_string(), "`crate_b`");
         let both = Location { entity: Some("crate_b".into()), ..Location::file("maps/y.map.yaml") };
         assert_eq!(both.to_string(), "maps/y.map.yaml `crate_b`");

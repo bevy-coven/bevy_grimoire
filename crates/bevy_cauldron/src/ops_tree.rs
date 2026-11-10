@@ -1,6 +1,6 @@
 //! **The tree editor, as one registered operation** (#102): `tree_edit`.
 //!
-//! A tree's parameters are `bevy_flora`'s own `TreeParams`, written as `<grimoire_dir>/trees/<name>.tree.ron`,
+//! A tree's parameters are `bevy_flora`'s own `TreeParams`, written as `<grimoire_dir>/trees/<name>.tree.yaml`,
 //! the format the crate's asset loader reads. `preset` starts the file from one of the crate's presets;
 //! `set` changes fields by dotted path (`trunk.radius`), and a path the crate does not know is refused
 //! with the crate's own message, so a typo is never written. The game and the editor's preview load the
@@ -18,7 +18,7 @@ use crate::project::Project;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
-    /// The tree file's name, without `.tree.ron`.
+    /// The tree file's name, without `.tree.yaml`.
     pub name: String,
     /// Start (or restart) the file from this preset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -44,7 +44,7 @@ impl Params {
             "additionalProperties": false,
             "required": ["name"],
             "properties": {
-                "name": {"type": "string", "description": "The tree file's name: trees/<name>.tree.ron in the project."},
+                "name": {"type": "string", "description": "The tree file's name: trees/<name>.tree.yaml in the project."},
                 "preset": {"type": "string", "description": "Start the file from one of bevy_flora's presets (oak, pine, maple, ...). Without it the file must already exist."},
                 "set": {"type": "object", "description": "Dotted field path to value, e.g. {\"trunk.radius\": 0.6, \"seed\": 9}. An unknown field is refused."},
                 "put_back": {"type": "object", "description": "An undo's put-back. Only an undo sends this."}
@@ -98,15 +98,15 @@ fn edited(project: &Project, path: &std::path::Path, existing: Option<&str>, p: 
                 Refusal::new(format!("`{name}` is not a preset. They are {}. Nothing was written.", all.join(", ")))
             })?
             .params(),
-        (None, Some(text)) => crate::map_files::read_text::<TreeParams>("trees", project, path, text)?,
-        (None, None) => return Err(Refusal::new(format!("trees/{}.tree.ron does not exist: name a `preset` to start it.", p.name))),
+        (None, Some(text)) => crate::map_files::read_text::<TreeParams>("trees", project, path, text, |t| bevy_grimoire_core::yaml::from_str(t, "tree").map_err(|p| p.line()))?,
+        (None, None) => return Err(Refusal::new(format!("trees/{}.tree.yaml does not exist: name a `preset` to start it.", p.name))),
     };
     let mut value = serde_json::to_value(&base).map_err(|e| Refusal::new(format!("the tree could not be read: {e}")))?;
     for (path, v) in &p.set {
         set_path(&mut value, path, v.clone())?;
     }
     let tree: TreeParams = serde_json::from_value(value).map_err(|e| Refusal::new(format!("that is not a tree: {e}. Nothing was written.")))?;
-    Ok(tree.to_yaml())
+    bevy_grimoire_core::yaml::to_string(&tree).map_err(|p| Refusal::new(p.line()))
 }
 
 /// **Write or edit a tree file.**
@@ -158,7 +158,7 @@ impl Operation for TreeEdit {
     }
     fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
         // **The file the write goes to**, by [`tree_path`] itself: the trees live in the authoring
-        // kit's own folder, `<grimoire_dir>/trees/<name>.tree.ron`, not beside `assets/grimoire`.
+        // kit's own folder, `<grimoire_dir>/trees/<name>.tree.yaml`, not beside `assets/grimoire`.
         match Params::parse(params).map(|p| tree_path(ctx, &p.name)) {
             Ok(Ok((_, path))) => shown_file(ctx, &path, None),
             _ => Shown::MapWhole,

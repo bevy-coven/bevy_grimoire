@@ -370,7 +370,7 @@ mod tests {
     fn stats(stamp: u64) -> BTreeMap<PathBuf, SystemTime> {
         let mut m = BTreeMap::new();
         m.insert(
-            PathBuf::from("a.ron"),
+            PathBuf::from("a.yaml"),
             SystemTime::UNIX_EPOCH + Duration::from_secs(stamp),
         );
         m
@@ -474,7 +474,7 @@ mod tests {
         let dir = Scratch::new("extension");
         dir.write("town.map.yaml", 1);
         let mut watch = FileWatch::new(&dir.0, &["yaml"]);
-        dir.write("pieces.ron", 2);
+        dir.write("pieces.json", 2);
         dir.write("town.map.yaml.tmp", 2);
         for step in 0..8 {
             assert!(!watch.poll(step as f64 * POLL_SECS));

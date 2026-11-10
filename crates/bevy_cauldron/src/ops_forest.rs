@@ -22,7 +22,7 @@ use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, enclose, point_b
 #[serde(deny_unknown_fields)]
 pub struct Tree {
     pub id: u32,
-    /// A preset name or a `.tree.ron` path: whatever the game's pools are keyed by.
+    /// A preset name or a `.tree.yaml` path: whatever the game's pools are keyed by.
     pub species: String,
     /// World `(x, z)` of the trunk.
     pub at: (f32, f32),
@@ -87,7 +87,7 @@ pub struct Plant {
     pub scale: Option<(f32, f32)>,
 }
 
-/// One tree placed by hand: a preset name or `.tree.ron` path, at `(x, z)`, with an age and a seed.
+/// One tree placed by hand: a preset name or `.tree.yaml` path, at `(x, z)`, with an age and a seed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Place {
@@ -144,7 +144,7 @@ impl Params {
         }
         if let Some(pl) = &p.place {
             if pl.species.trim().is_empty() {
-                return Err(Refusal::new("a placed tree needs a species (a preset name or a .tree.ron path). Nothing was changed."));
+                return Err(Refusal::new("a placed tree needs a species (a preset name or a .tree.yaml path). Nothing was changed."));
             }
             if !(pl.age_years.is_finite() && pl.age_years >= 0.0) {
                 return Err(Refusal::new("`age_years` must be 0 or more. Nothing was changed."));

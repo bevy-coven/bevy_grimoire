@@ -147,9 +147,9 @@ fn a_file_that_is_not_the_crates_type_is_refused_naming_the_field_once_and_the_l
             let raised = (app.world().resource::<EditorState>().status.raised() - raised_before) as usize;
             let said: Vec<String> = app.world().resource::<EditorState>().status.problems().iter().rev().take(raised).map(|p| p.text.clone()).collect();
             assert_eq!(raised, 1, "{}: {what}: the refusal is said once: {said:?}", case.krate);
-            if bevy_grimoire_core::yaml::from_str::<ron::Value>(bad, "test").is_err() {
-                // Not RON at all: the host's own sentence, which the gooey test pins by its words.
-                assert!(said[0].contains(case.krate) && said[0].contains("not valid RON"), "{}: {what}: {said:?}", case.krate);
+            if bevy_grimoire_core::yaml::to_json(bad, "test").is_err() {
+                // Not YAML at all: the host's own sentence, which the gooey test pins by its words.
+                assert!(said[0].contains(case.krate) && said[0].contains("not valid YAML"), "{}: {what}: {said:?}", case.krate);
             } else {
                 assert!(said[0].contains(&name) && said[0].contains(named) && said[0].contains(case.stays), "{}: {what}: {said:?}", case.krate);
             }

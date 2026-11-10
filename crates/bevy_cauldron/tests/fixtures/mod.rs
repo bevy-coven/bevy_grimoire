@@ -28,11 +28,10 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Once;
 
-use bevy_grimoire_core::agent_guide;
 use bevy_grimoire_core::composition::{Body, Compositions, Envelope, Member};
 use bevy_grimoire_core::descriptor::{
     Align, AxisOrigin, By, Confidence, Descriptor, Extent, LabelOrigin, Mount, Offers,
-    Placement as DescriptorPlacement, SubCell, Subgrid,
+    SubCell, Subgrid,
 };
 use bevy_grimoire_core::kits::{Bash, Bind, Kits};
 use bevy_grimoire_core::library::Library;

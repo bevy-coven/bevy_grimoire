@@ -65,7 +65,7 @@ fn a_file_of_another_version_refuses_the_operation_and_stays_as_it_was() {
             let (mut ctx, grimoire) = open(&format!("another_version_{dir}_{version}"));
             let file = grimoire.join(dir).join("m.ron");
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            let text = format!("(version: {version}, {rest})");
+            let text = format!("version: {version}\n{rest}\n");
             std::fs::write(&file, &text).unwrap();
 
             let said = refusal(&mut ctx, op, &params);
@@ -82,8 +82,8 @@ fn a_file_of_another_version_refuses_the_operation_and_stays_as_it_was() {
 fn the_types_themselves_refuse_another_version_and_name_the_field() {
     fn refused<T: serde::de::DeserializeOwned>(kind: &'static str, rest: &str) {
         for version in [2u32, 0, 7] {
-            let text = format!("(version: {version}, {rest})");
-            let r = match reload_check::read_ron::<T>(kind, "x.yaml", &text) {
+            let text = format!("version: {version}\n{rest}\n");
+            let r = match reload_check::read::<T>(kind, "x.yaml", &text, |t| bevy_grimoire_core::yaml::from_str(t, "x.yaml").map_err(|p| p.line())) {
                 Err(r) => r,
                 Ok(_) => panic!("`{kind}` at version {version} was taken as this build's"),
             };
