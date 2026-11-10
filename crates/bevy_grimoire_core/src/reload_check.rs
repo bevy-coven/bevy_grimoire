@@ -118,9 +118,10 @@ pub fn read<T: DeserializeOwned>(
     parse(text).map_err(|reason| Refusal {
         kind,
         file: file.to_owned(),
-        // **A RON document's field is found by RON's own reader**, not the YAML one: `(version: 2)` has no
-        // top-level `version:` key for the YAML walk to see, so asking it would name `(version` instead.
-        field: field_of_ron::<T>(text),
+        // **The field is found by the YAML walk**, which is the spelling every project file has now: the
+        // kind's own `parse` answers a sentence and not a path, so without this a refusal would name no field
+        // and the author would hunt the file for the one key that is wrong.
+        field: field_of_yaml::<T>(text),
         reason,
     })
 }
