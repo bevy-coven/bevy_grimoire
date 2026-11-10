@@ -5066,7 +5066,7 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     ("play_stop", "stop_game("),
     // **The Build button** (GD-09, #371) dispatches `game_build` through `build_game`, the same
     // watched rebuild an agent's `apply` makes.
-    ("game_build", "build_game("),
+    ("game_build", "build_game(&mut ctx, params)"),
     // **The Data field (#86)** — Enter on `<file> <path> <value>` dispatches `data_set` through
     // `set_data_leaf`, the same write an agent's `apply` makes.
     ("data_set", "set_data_leaf("),

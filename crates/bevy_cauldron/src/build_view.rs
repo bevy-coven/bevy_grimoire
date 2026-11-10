@@ -49,7 +49,18 @@ pub const BUILD_JOB: &str = "game_build";
 
 /// **The flag cargo is given for machine-readable messages**, when `play.ron`'s own build command does
 /// not name one. A command that names its own `--message-format` is run as written.
-pub const CARGO_JSON_FLAG: &str = "--message-format=json-render-diagnostics";
+///
+/// # Why not the issue's `json-render-diagnostics`
+///
+/// **Assumed decision** (#371's review, must-fix 1): the issue names
+/// `--message-format=json-render-diagnostics`, and that mode does not do what its own acceptance
+/// criteria need — measured on cargo 1.99.1 against a file with one type error, its stdout carries
+/// `compiler-artifact` and `build-finished` and **no `compiler-message` at all**, while the
+/// diagnostics go to stderr as rendered text (`error[E0308]: mismatched types`). An editor reading that
+/// stream would show a progress bar and never a compiler error. The two modes that do put the
+/// diagnostics on stdout as `compiler-message` JSON are `json` and `json-diagnostic-rendered-ansi`;
+/// this build asks for the second, because it also carries the `rendered` text a person reads whole.
+pub const CARGO_JSON_FLAG: &str = "--message-format=json-diagnostic-rendered-ansi";
 
 /// **What a build has done so far**, as the band says it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -68,6 +79,12 @@ impl Progress {
         }
     }
 }
+
+/// **How many compiler errors become problems**, which is the status log's own cap
+/// ([`crate::chrome::MAX_PROBLEMS`]): a build with two hundred errors is one broken file, and a log
+/// that held all of them would bury every other thing the editor had to say. The count is still the
+/// build's own, so the sentence says how many there were.
+pub const ERRORS_SHOWN: usize = crate::chrome::MAX_PROBLEMS;
 
 /// **One compiler error**, as a person reads it and as the problem carries it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,8 +105,8 @@ impl BuildError {
             self.message.clone(),
             Detail::default()
                 .at(Location::file(self.file.clone()))
-                .because(format!("line {}", self.line))
-                .fix(format!("open {}, line {}", self.file, self.line)),
+                .because(if self.line == 0 { "no line named".to_owned() } else { format!("line {}", self.line) })
+                .fix(format!("open {}", self.link())),
         )
     }
 
@@ -136,9 +153,22 @@ pub fn read_line(line: &str) -> Option<BuildEvent> {
                 .and_then(Value::as_array)?
                 .iter()
                 .find(|span| span.get("is_primary").and_then(Value::as_bool) == Some(true))?;
+            // **A span with no file is a message about the build, not a line in it** (a linker error
+            // naming a crate). It is still the compiler's sentence, and saying so is better than
+            // naming a file the person would open and find nothing wrong in.
+            let Some(file) = span.get("file_name").and_then(Value::as_str).filter(|f| !f.is_empty()) else {
+                return Some(BuildEvent::Error(BuildError {
+                    file: String::new(),
+                    line: 0,
+                    message: text,
+                }));
+            };
+            // **No line is `0`, which `BuildError::link` and `problem` both read as "no line"**, rather
+            // than a `1` a person would go to and find nothing at.
+            let line = span.get("line_start").and_then(Value::as_u64).unwrap_or(0) as u32;
             Some(BuildEvent::Error(BuildError {
-                file: span.get("file_name").and_then(Value::as_str).unwrap_or("").to_owned(),
-                line: span.get("line_start").and_then(Value::as_u64).unwrap_or(0) as u32,
+                file: file.to_owned(),
+                line,
                 message: text,
             }))
         }
@@ -149,20 +179,55 @@ pub fn read_line(line: &str) -> Option<BuildEvent> {
     }
 }
 
-/// **What the reader thread and the editor both hold.** Shared rather than moved, because the thread
-/// writes it while the editor draws it, and a child's output arrives on nobody's frame.
+/// **What cargo said the build did**, as its own `build-finished` message worded it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Verdict {
+    /// `build-finished` has not been read yet.
+    #[default]
+    Unsaid,
+    /// Cargo said the build succeeded.
+    Succeeded,
+    /// Cargo said the build failed.
+    Failed,
+}
+
+/// **How many of a build's two output pipes have been read to the end.**
+///
+/// **The build is over when both are drained, not when the child exits.** Cargo's compiler is a child
+/// process that inherits the pipe, so its last lines — and `build-finished` itself — can arrive after
+/// `cargo` has exited; a poll that trusted `try_wait` alone read an empty error list and reported a
+/// failed build as a success.
+const PIPES: u8 = 2;
+
+/// **What the reader threads and the editor both hold.** Shared rather than moved, because the threads
+/// write it while the editor draws it, and a child's output arrives on nobody's frame.
 #[derive(Default)]
 struct Shared {
     progress: Mutex<Progress>,
     errors: Mutex<Vec<BuildError>>,
-    /// `1` when cargo's `build-finished` said success, `2` when it said failure, `0` while it runs.
-    finished: AtomicU32,
+    /// What cargo's `build-finished` said.
+    verdict: Mutex<Verdict>,
     /// **The last line cargo wrote to stderr**, which is what a build that never reached a compiler
     /// says instead of a span (`error: no such command: build`). Bounded: a failing build can say
     /// megabytes, and one line is what a person reads.
     refusal: Mutex<Option<String>>,
+    /// **The pipes read to the end**, of [`PIPES`]. The build is over at `PIPES`, whatever `try_wait`
+    /// said.
+    drained: AtomicU32,
     /// **The build was stopped by the person**, so its exit is not reported as a compiler failure.
     stopped: AtomicBool,
+}
+
+impl Shared {
+    /// **Whether both pipes have been read to the end**, which is when a build's result is complete.
+    fn fully_read(&self) -> bool {
+        self.drained.load(Ordering::Acquire) == u32::from(PIPES)
+    }
+
+    /// **One pipe is finished**, said by the reader that had it.
+    fn a_pipe_finished(&self) {
+        self.drained.fetch_add(1, Ordering::AcqRel);
+    }
 }
 
 /// **One build this editor started**, by project root.
@@ -172,6 +237,8 @@ struct Running {
     /// The map and camera the game is relaunched on, read when the build started.
     map: String,
     camera: Option<[f32; 3]>,
+    /// **Who asked for the build**, so the relaunch is logged as theirs.
+    source: crate::ops::Source,
 }
 
 static RUNNING: Mutex<Option<std::collections::HashMap<PathBuf, Running>>> = Mutex::new(None);
@@ -290,7 +357,7 @@ impl Operation for GameBuild {
             .get("camera")
             .and_then(|c| serde_json::from_value::<[f32; 3]>(c.clone()).ok());
         let ready = Self::prepare(ctx)?;
-        let started = start(&ready.root, &ready.config, &ready.map, camera).map_err(Refusal::new)?;
+        let started = start(&ready.root, &ready.config, &ready.map, camera, ctx.source).map_err(Refusal::new)?;
         Ok(Outcome {
             summary: format!("building {}: {}", ready.map, started.iter().skip(1).map(String::as_str).collect::<Vec<_>>().join(" ").trim()),
             affected: 0,
@@ -303,7 +370,7 @@ impl Operation for GameBuild {
 
 /// **Start the project's build**, and answer with the command at once: it is a job, not a call that
 /// blocks, and the child's output is read on a thread so no frame waits on a compiler.
-pub fn start(root: &Path, config: &PlayConfig, map: &str, camera: Option<[f32; 3]>) -> Result<Vec<String>, String> {
+pub fn start(root: &Path, config: &PlayConfig, map: &str, camera: Option<[f32; 3]>, source: crate::ops::Source) -> Result<Vec<String>, String> {
     if is_building(root) {
         return Err(format!("a build of {} is already running.", root.display()));
     }
@@ -316,7 +383,6 @@ pub fn start(root: &Path, config: &PlayConfig, map: &str, camera: Option<[f32; 3
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..])
         .current_dir(config.dir(root))
-        .env("CARGO_MANIFEST_DIR", root)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         // **No stdin.** A build that decided to ask a question would hold its own pipe open and the
@@ -330,36 +396,43 @@ pub fn start(root: &Path, config: &PlayConfig, map: &str, camera: Option<[f32; 3
         return Err(format!("`{}` gave no pipes to read, so its build could not be watched.", argv[0]));
     };
     let shared = Arc::new(Shared::default());
-    let reader = Arc::clone(&shared);
+    // **Two threads, one pipe each.** Reading stdout to its end and only then starting on stderr is a
+    // deadlock waiting for a big build: once stderr passes the pipe's buffer (~64 KB) cargo blocks on
+    // its own write, so stdout never closes and neither reader ever finishes.
+    let (out, err) = (Arc::clone(&shared), Arc::clone(&shared));
     std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             match read_line(&line) {
                 Some(BuildEvent::Compiled(_)) => {
-                    let mut progress = reader.progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                    progress.compiled += 1;
+                    out.progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner).compiled += 1;
                 }
                 Some(BuildEvent::Error(error)) => {
-                    reader.errors.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(error);
+                    out.errors.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(error);
                 }
                 Some(BuildEvent::Finished { success }) => {
-                    reader.finished.store(if success { 1 } else { 2 }, Ordering::Release);
+                    *out.verdict.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+                        if success { Verdict::Succeeded } else { Verdict::Failed };
                 }
                 None => {}
             }
         }
-        // **What cargo said when it refused before compiling anything.** The output is drained so the
-        // child can never block on a full pipe; only the last line is kept.
+        out.a_pipe_finished();
+    });
+    std::thread::spawn(move || {
+        // **Drained to the end, even though only the last line is kept**: a reader that stopped early
+        // would leave cargo blocked on a full stderr and the build would never end.
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
-                *reader.refusal.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(trimmed.to_owned());
+                *err.refusal.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(trimmed.to_owned());
             }
         }
+        err.a_pipe_finished();
     });
     with_table(|t| {
         t.insert(
             root.to_path_buf(),
-            Running { child, shared: Arc::clone(&shared), map: map.to_owned(), camera },
+            Running { child, shared: Arc::clone(&shared), map: map.to_owned(), camera, source },
         );
     });
     Ok(argv)
@@ -410,6 +483,7 @@ fn poll_the_build(
     mut editor: Option<ResMut<crate::editor::EditorState>>,
     // **Where the person is looking**, which is the camera the relaunch keeps when the build named none.
     camera: Query<&Transform, With<crate::view::MainCamera>>,
+    mut commands: Commands,
 ) {
     let Some(state) = state.as_mut() else { return };
     let Some(root) = project.as_ref().map(|p| p.root.clone()) else {
@@ -423,9 +497,15 @@ fn poll_the_build(
     }
     // **Where the build stands**, in one look under the lock: still running (with what it has said so
     // far), or over with everything it said.
+    //
+    // **Over means both pipes have been read to the end, not that the child has exited.** Cargo's
+    // compiler is a child of cargo that inherits the pipe, so its last lines — and `build-finished`
+    // itself — arrive after `cargo` exits. Stopping at `try_wait` read an empty error list and called a
+    // failed build a success (measured: a build whose last line comes after its process, which is
+    // `build_late` in the test).
     enum Where {
         Running(BuildView),
-        Over { shared: Arc<Shared>, status_ok: bool, map: String, camera: Option<[f32; 3]> },
+        Over { shared: Arc<Shared>, status_ok: bool, map: String, camera: Option<[f32; 3]>, source: crate::ops::Source },
         Gone,
     }
     let where_ = with_table(|t| {
@@ -435,18 +515,17 @@ fn poll_the_build(
             progress: running.shared.progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone(),
             errors: running.shared.errors.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone(),
         };
-        match running.child.try_wait() {
-            Ok(None) => Where::Running(view),
-            // **Exited**, and its own last words are what decide: `build-finished`, or the status a
-            // command that is not cargo leaves.
-            other => {
-                let status_ok = matches!(other, Ok(Some(status)) if status.success());
-                let shared = Arc::clone(&running.shared);
-                let (map, camera) = (running.map.clone(), running.camera);
-                t.remove(&root);
-                Where::Over { shared, status_ok, map, camera }
-            }
+        let exited = running.child.try_wait();
+        // **A child that has exited with its pipes still open is still building**, as far as what a
+        // person is told goes: the lines it has not finished writing are the ones that matter.
+        if !matches!(exited, Ok(Some(_))) || !running.shared.fully_read() {
+            return Where::Running(view);
         }
+        let status_ok = matches!(exited, Ok(Some(status)) if status.success());
+        let shared = Arc::clone(&running.shared);
+        let (map, camera, source) = (running.map.clone(), running.camera, running.source);
+        t.remove(&root);
+        Where::Over { shared, status_ok, map, camera, source }
     });
     match where_ {
         Where::Gone => {
@@ -472,13 +551,13 @@ fn poll_the_build(
                 state.running = Some(view);
             }
         }
-        Where::Over { shared, status_ok, map, camera: camera_now } => {
+        Where::Over { shared, status_ok, map, camera: camera_now, source } => {
             if let Some(jobs) = jobs.as_deref() {
                 jobs.finish(BUILD_JOB);
             }
             state.running = None;
             let stopped = shared.stopped.load(Ordering::Acquire);
-            let finished = shared.finished.load(Ordering::Acquire);
+            let verdict = *shared.verdict.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let errors = shared.errors.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
             let refusal = shared.refusal.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
             state.errors.clone_from(&errors);
@@ -489,33 +568,52 @@ fn poll_the_build(
             }
             // **`build-finished` is cargo's own answer**; a command that never said it (one that is not
             // cargo at all) is judged by its status, which is the only word it gave.
-            let success = match finished {
-                1 => true,
-                2 => false,
-                _ => status_ok,
+            let success = match verdict {
+                Verdict::Succeeded => true,
+                Verdict::Failed => false,
+                Verdict::Unsaid => status_ok,
             };
             if success {
                 // **The game that was running keeps running until here**, and only now is it replaced:
                 // the same map at the same camera, the two `play` already substitutes.
-                let trust_file = editor.as_deref().and_then(|editor| editor.trust.file.clone());
-                // **The camera the build was started at, else the one the person is looking through
-                // now**: a relaunch lands where the game was, and a build that named no camera is
-                // still relaunched where the editor is.
-                let camera = camera_now.or_else(|| camera.iter().next().map(|t| t.translation.to_array()));
-                match relaunch(&root, &map, camera, trust_file) {
-                    Ok(said) => {
-                        state.said = format!("built, and {said}");
-                        if let Some(editor) = editor.as_mut() {
-                            editor.status.note(state.said.clone());
+                //
+                // **Written out first, and that is the reload** (GD-09's acceptance). The restarted game
+                // reads the project's files as it starts, so a map the editor held unsaved would be
+                // replaced by the one the disk has — the build would then show less than the person had
+                // been looking at. Saving here is the same write Cmd+S makes, and the same one a restart
+                // after a save reads, so the game comes up on what the editor holds.
+                // **Queued on the world, because saving is the open map's own write** and this system
+                // holds it only to read. The relaunch is queued after it, so a save that fails stops
+                // the restart rather than replacing a game with the state the disk had.
+                let (map_to_play, camera_to_play, trust_file, of_the_build) = (
+                    map.clone(),
+                    camera_now.or_else(|| camera.iter().next().map(|t| t.translation.to_array())),
+                    editor.as_deref().and_then(|editor| editor.trust.file.clone()),
+                    source,
+                );
+                commands.queue(move |world: &mut World| {
+                    // **Nothing to write is the same as written**: a map already saved is exactly what
+                    // the game reads when it starts, so `save_the_open_map`'s `Ok` covers both.
+                    let said = match crate::app_verbs::save_the_open_map(world) {
+                        Ok(()) => relaunch(&root, &map_to_play, camera_to_play, trust_file, of_the_build)
+                            .map_err(|e| format!("the game did not restart: {e}")),
+                        Err(why) => Err(format!("{why}, so nothing was replaced")),
+                    };
+                    let (line, failed) = match said {
+                        Ok(said) => (format!("built, and {said}"), false),
+                        Err(e) => (format!("built, but {e}"), true),
+                    };
+                    if let Some(mut state) = world.get_resource_mut::<BuildState>() {
+                        state.said.clone_from(&line);
+                    }
+                    if let Some(mut editor) = world.get_resource_mut::<crate::editor::EditorState>() {
+                        if failed {
+                            editor.status.problem(line);
+                        } else {
+                            editor.status.note(line);
                         }
                     }
-                    Err(e) => {
-                        state.said = format!("built, but the game did not restart: {e}");
-                        if let Some(editor) = editor.as_mut() {
-                            editor.status.problem(state.said.clone());
-                        }
-                    }
-                }
+                });
                 return;
             }
             // **A failure: the game that was running is left running.** Each error becomes a problem
@@ -527,27 +625,49 @@ fn poll_the_build(
             };
             state.said = said.clone();
             if let Some(editor) = editor.as_mut() {
-                for error in &errors {
+                for error in errors.iter().take(ERRORS_SHOWN) {
                     editor.status.raise("the build failed: ", error.problem());
                 }
                 if errors.is_empty() {
                     editor.status.problem(format!("the build failed: {said}"));
+                } else if errors.len() > ERRORS_SHOWN {
+                    editor.status.problem(format!(
+                        "the build failed: {} more error(s) than the {ERRORS_SHOWN} listed here",
+                        errors.len() - ERRORS_SHOWN
+                    ));
                 }
             }
         }
     }
 }
 
+/// **Run `game_build` in a context**, and answer with its summary — [`crate::editor::play_game`]'s
+/// shape, so the Build button, a key and an agent reach one implementation of "build this project".
+pub fn build_game(ctx: &mut Ctx, params: serde_json::Value) -> Result<String, String> {
+    match crate::ops::dispatch(ctx, "game_build", &params) {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
+}
+
 /// **Stop the editor's game for `root` and start it again on `map`, at `camera`**, through the two
 /// operations a person's Stop and Play press dispatch. The stop is best-effort: with no game running
 /// there is nothing to stop, which is not a failure of the relaunch.
-fn relaunch(root: &Path, map: &str, camera: Option<[f32; 3]>, trust_file: Option<PathBuf>) -> Result<String, String> {
+fn relaunch(root: &Path, map: &str, camera: Option<[f32; 3]>, trust_file: Option<PathBuf>, source: crate::ops::Source) -> Result<String, String> {
+    // **Nothing was running**, which the sentence says: a build that succeeds over a game the person
+    // had already stopped *starts* one, and a receipt that read "playing m" without saying so would
+    // look like a relaunch of a game that was not there.
+    let was_running = crate::ops_play::running_pid(root).is_some();
     // **The person's own store**, so a relaunch runs the command they allowed a moment ago and not a
     // command nobody has allowed. `play` and `play_stop` are behind that gate, and they should be.
+    //
+    // **And the source the build was started with**: a rebuild an agent asked for relaunches the game
+    // as the agent's, so the log and the history say who did it rather than crediting the person.
     let mut ctx = Ctx {
         root: Some(root.to_path_buf()),
         session: crate::ops::session_id(),
         trust_file,
+        source,
         ..Ctx::default()
     };
     let _ = crate::ops::dispatch(&mut ctx, "play_stop", &json!({}));
@@ -556,7 +676,11 @@ fn relaunch(root: &Path, map: &str, camera: Option<[f32; 3]>, trust_file: Option
         params["camera"] = json!(camera);
     }
     match crate::ops::dispatch(&mut ctx, "play", &params) {
-        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(if was_running {
+            outcome.summary
+        } else {
+            format!("started the game, which was not running: {}", outcome.summary)
+        }),
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
     }
 }
@@ -639,9 +763,9 @@ fn on_build_click(
         params["camera"] = json!(camera);
     }
     let _ = open;
-    match crate::ops::dispatch(&mut ctx, "game_build", &params) {
-        Ok(crate::ops::Applied::Done { outcome, .. }) => state.status.note(outcome.summary),
-        Ok(crate::ops::Applied::Refused(e)) | Err(e) => state.status.problem(e.0),
+    match build_game(&mut ctx, params) {
+        Ok(summary) => state.status.note(summary),
+        Err(e) => state.status.problem(e),
     }
 }
 

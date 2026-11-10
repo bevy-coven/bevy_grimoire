@@ -651,7 +651,10 @@ impl Gates<'_> {
             }
             return;
         }
-        if matches!(shown, crate::ops::Shown::Nowhere) {
+        // **A job is watched in the status band** (GD-09, #371): it has no page, and the band is on
+        // every screen already. Revealing one would raise "changed something the editor has no page
+        // for" on every build an agent applies, which is a problem about a thing that is working.
+        if matches!(shown, crate::ops::Shown::Nowhere | crate::ops::Shown::Job { .. }) {
             return;
         }
         if let Some(revealing) = self.revealing.as_mut() {

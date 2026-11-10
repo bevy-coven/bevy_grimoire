@@ -31,8 +31,11 @@ use crate::fixtures;
 /// It is a stub rather than a real build because the point under test is the editor's reading of
 /// cargo's messages — a real build would take minutes and would prove rustc works.
 const STUB_BUILD: &str = r#"
-import json, os, sys, time
-root = os.environ["CARGO_MANIFEST_DIR"]
+import json, os, subprocess, sys, time
+# **The directory the build was started in**, which is what `play.ron`'s `cwd` means: the editor runs
+# the command there, so a stub reads its project from its own working directory and never from an
+# environment variable the test process happens to carry.
+root = os.getcwd()
 def say(**kw): print(json.dumps(kw), flush=True)
 for name in ["bevy_ecs", "bevy_app", "the_game"]:
     say(reason="compiler-artifact", target={"name": name, "kind": ["lib"]}, fresh=False,
@@ -40,14 +43,31 @@ for name in ["bevy_ecs", "bevy_app", "the_game"]:
     # **A compiler takes time**, so the bar a person watches has frames to move on. The stub waits the
     # same way a real rustc does between one crate and the next.
     time.sleep(0.12)
-if os.path.exists(os.path.join(root, "build_fail")):
-    say(reason="compiler-message", message={
+late_error = {
+    "reason": "compiler-message",
+    "message": {
         "level": "error",
         "message": "cannot find type `Wander` in this scope",
         "spans": [{"file_name": "src/people.rs", "line_start": 42, "line_end": 42, "is_primary": True,
                    "text": [{"text": "    let wander: Wander = Wander::new();"}]}],
         "rendered": "error[E0412]: cannot find type `Wander` in this scope\n  --> src/people.rs:42:17",
-    })
+    },
+}
+if os.path.exists(os.path.join(root, "build_late")):
+    # **The last words arrive after this process has exited**, which is what a real build does: its
+    # compiler is a child that keeps the inherited pipe open a moment longer than `cargo` itself. A
+    # reader that stops at the first `try_wait` that answers loses every line after it.
+    subprocess.Popen([sys.executable, "-c", (
+        "import json,sys,time\n"
+        "time.sleep(0.5)\n"
+        "print(json.dumps(" + repr(late_error) + "), flush=True)\n"
+        "print(json.dumps({'reason': 'build-finished', 'success': False}), flush=True)\n"
+    )])
+    # **This process is gone before those lines exist**, which is the race: `try_wait` answers "exited"
+    # while the pipe is still open and the reader still has lines to come.
+    sys.exit(0)
+if os.path.exists(os.path.join(root, "build_fail")):
+    say(**late_error)
     say(reason="build-finished", success=False)
     sys.exit(101)
 say(reason="build-finished", success=True)
@@ -58,8 +78,15 @@ say(reason="build-finished", success=True)
 const STUB_GAME: &str = r#"
 import os, sys, time
 root = os.environ["GRIMOIRE_PLAY_ROOT"]
+map_name = os.environ["GRIMOIRE_PLAY_MAP"]
+# **What the game reads when it starts**, and the editor's own test reads the same thing to compare
+# against: the bytes of the map file at the moment the game came up. A relaunch that did not write the
+# editor's unsaved map starts on the older bytes, which is the difference under test.
+path = os.path.join(root, "assets/grimoire/maps", map_name + ".map.ron")
+text = open(path).read() if os.path.exists(path) else ""
 open(os.path.join(root, "launches.txt"), "a").write(
-    os.environ["GRIMOIRE_PLAY_MAP"] + " " + os.environ.get("GRIMOIRE_PLAY_CAMERA", "") + "\n")
+    os.environ["GRIMOIRE_PLAY_MAP"] + " " + os.environ.get("GRIMOIRE_PLAY_CAMERA", "")
+    + " " + str(len(text)) + "\n")
 time.sleep(60)
 "#;
 
@@ -86,7 +113,7 @@ fn fixtures_python() -> &'static str {
 fn project(tag: &str) -> std::path::PathBuf {
     let root = fixtures::Fixture::new(tag)
         .descriptor("site/wall", "alpha")
-        .place("site/wall", (0.0, 0.0))
+        .place_as("wall@0", "site/wall", (0.0, 0.0))
         .build("m");
     std::fs::write(root.join("build_stub.py"), STUB_BUILD).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(root.join("game_stub.py"), STUB_GAME).unwrap_or_else(|e| panic!("{e}"));
@@ -239,7 +266,14 @@ fn a_failing_build_shows_its_progress_and_its_errors_and_leaves_the_game_running
     assert_eq!(counted, 3, "the job did not count every crate cargo said it compiled: said {app_seen:?}");
 
     // **The build ends**, and the poll that reads its last words is the frame after it.
-    assert!(until(&mut app, 800, |app| !problems(app).is_empty()), "the failed build reported no problem");
+    let ended = until(&mut app, 800, |app| !problems(app).is_empty());
+    assert!(
+        ended,
+        "the failed build reported no problem. still building={} said={:?} problems={:?}",
+        bevy_cauldron::build_view::is_building(&root),
+        app.world().get_resource::<bevy_cauldron::build_view::BuildState>().map(|s| (s.said.clone(), s.progress.clone(), s.errors.clone())),
+        problems(&app),
+    );
     let said = problems(&app);
     let error = said
         .iter()
@@ -289,12 +323,120 @@ fn a_build_that_succeeds_relaunches_the_game_on_the_same_map() {
         launches(&root)
     );
 
+    // **The replacement's own group is ended as well**: the first game's guard covers only the pid it
+    // was made from, and a relaunched game would otherwise outlive a failing test for its 60 seconds.
+    let _replacement = bevy_cauldron::ops_play::running_pid(&root).map(KillGroupOnDrop);
     let after = launches(&root);
     assert_eq!(after.len(), 2, "a successful build did not relaunch the game: {after:?}");
-    assert_eq!(after[1], "m 4,5,6", "the relaunch is not the same map at the same camera: {after:?}");
+    // **The map, the camera and the bytes the game read**: the first two are the same as the launch
+    // before it, and the third is what the reload test below compares.
+    assert_eq!(
+        after[1].rsplit_once(' ').map(|(before, bytes)| (before, bytes.parse::<usize>().unwrap_or(0) > 0)),
+        after[0].rsplit_once(' ').map(|(before, bytes)| (before, bytes.parse::<usize>().unwrap_or(0) > 0)),
+        "the relaunch is not the same map at the same camera: {after:?}"
+    );
+    assert!(after[1].starts_with("m 4,5,6 "), "the relaunch is not the same map at the same camera: {after:?}");
     assert!(
         bevy_cauldron::ops_play::running_pid(&root).is_some(),
         "the relaunched game is not running"
+    );
+    let _ = dispatch(&app, "play_stop", json!({}));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **3. A build is over only once its output has been read**, even when the last lines arrive after
+/// the process itself has exited: cargo's own compiler is a child that keeps the pipe open a moment
+/// longer, so a poll that trusts `try_wait` alone loses the errors and `build-finished` — and reports
+/// a failed build as a success.
+#[test]
+fn a_build_waits_for_the_last_line_before_it_says_what_happened() {
+    let root = project(&format!("build_late_{}", std::process::id()));
+    // **The last words come after the process has exited**, and they say it failed.
+    std::fs::write(root.join("build_late"), "").unwrap_or_else(|e| panic!("{e}"));
+    let mut app = editor(&root);
+    dispatch(&app, "play", json!({"map": "m"})).unwrap_or_else(|e| panic!("play must start the fixture game: {e}"));
+    let first = bevy_cauldron::ops_play::running_pid(&root).expect("the game the test started");
+    let _game = KillGroupOnDrop(first);
+    assert!(
+        until(&mut app, 100, |_| !launches(&root).is_empty()),
+        "the game the test started recorded no launch: {:?}",
+        launches(&root)
+    );
+
+    dispatch(&app, "game_build", json!({"camera": [4.0, 5.0, 6.0]})).unwrap_or_else(|e| panic!("a build must start: {e}"));
+    assert!(build_ends(&mut app, &root), "the build never finished");
+
+    let said = problems(&app);
+    let error = said
+        .iter()
+        .find(|p| p.contains("Wander"))
+        .unwrap_or_else(|| panic!("the error that arrived after the process exited is lost: {said:?}"));
+    assert!(error.contains("src/people.rs") && error.contains("42"), "{error:?}");
+    assert_eq!(
+        bevy_cauldron::ops_play::running_pid(&root),
+        Some(first),
+        "a build read before its last line reported a failure as a success and replaced the running game"
+    );
+    assert_eq!(launches(&root).len(), 1, "a build that failed relaunched the game: {:?}", launches(&root));
+    let _ = dispatch(&app, "play_stop", json!({}));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **The relaunch's own acceptance: the game comes up on what the editor held, not on what the disk had
+/// before.** A person changes the map and rebuilds without pressing Cmd+S; the restart has to read the
+/// change, which is what "the game's state reloads as it would on a save" means.
+#[test]
+fn a_relaunch_reads_the_map_the_editor_holds_even_unsaved() {
+    let root = project(&format!("build_unsaved_{}", std::process::id()));
+    let mut app = editor(&root);
+    dispatch(&app, "play", json!({"map": "m"})).unwrap_or_else(|e| panic!("play must start the fixture game: {e}"));
+    let first = bevy_cauldron::ops_play::running_pid(&root).expect("the game the test started");
+    let _game = KillGroupOnDrop(first);
+    assert!(
+        until(&mut app, 100, |_| !launches(&root).is_empty()),
+        "the game the test started recorded no launch"
+    );
+
+    // **A change the person made and has not saved.** An operation writes through as it commits, so the
+    // unsaved case is the one the keys make — the map in memory moved and `Cmd+S` never pressed, which
+    // is what `live`'s write-through exists for and what a build without `--live` has to survive.
+    {
+        let mut open = app.world_mut().resource_mut::<bevy_cauldron::project::OpenMap>();
+        for placement in &mut open.map.placements {
+            if placement.id == "wall@0" {
+                placement.yaw = 1.25;
+            }
+        }
+    }
+    assert!(
+        app.world().resource::<bevy_cauldron::project::OpenMap>().dirty(),
+        "the test's change did not leave the map unsaved, so the reload is not being tested"
+    );
+    let held = bevy_cauldron::project::OpenMap::open(&app.world().resource::<bevy_cauldron::project::Project>().clone(), "m")
+        .map(|on_disk| on_disk.map.placements.iter().find(|p| p.id == "wall@0").map(|p| p.yaw))
+        .ok()
+        .flatten();
+    assert_ne!(held, Some(1.25), "the change reached disk before the build, so nothing is under test");
+
+    dispatch(&app, "game_build", json!({"camera": [4.0, 5.0, 6.0]})).unwrap_or_else(|e| panic!("a build must start: {e}"));
+    assert!(build_ends(&mut app, &root), "the build never finished");
+    // **The save and the relaunch are queued together**, so they happen within a frame or two.
+    assert!(
+        until(&mut app, 200, |_| launches(&root).len() == 2),
+        "the build that succeeded did not relaunch the game: {:?}",
+        launches(&root)
+    );
+
+    // **The game read the map the editor held**, which is the yaw the person set and never saved.
+    let on_disk = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap_or_default();
+    assert!(
+        on_disk.contains("1.25"),
+        "the unsaved yaw was not written before the game restarted, so it came up on the old map"
+    );
+    let _replacement = bevy_cauldron::ops_play::running_pid(&root).map(KillGroupOnDrop);
+    assert!(
+        !app.world().resource::<bevy_cauldron::project::OpenMap>().dirty(),
+        "the save did not mark the map as what the disk holds, so the editor would ask for a save it made"
     );
     let _ = dispatch(&app, "play_stop", json!({}));
     let _ = std::fs::remove_dir_all(&root);

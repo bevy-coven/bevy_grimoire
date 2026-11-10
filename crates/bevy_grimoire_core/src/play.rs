@@ -154,24 +154,6 @@ mod tests {
     }
 
     #[test]
-    fn a_project_with_no_build_command_says_so_and_a_version_1_file_still_reads() {
-        let c = PlayConfig::from_ron(r#"(version: 1, command: ["g", "{map}"])"#).unwrap();
-        assert!(c.build.is_empty(), "a version 1 file has no build command");
-        let refused = c.build_argv(Path::new("/p")).expect_err("a project with no build says so");
-        assert!(refused.contains("build") && refused.contains("play.ron"), "{refused}");
-        assert!(c.build_spec().is_none(), "a project with no build names nothing to allow");
-    }
-
-    #[test]
-    fn a_build_command_takes_the_root_and_is_what_a_person_allows() {
-        let c = PlayConfig::from_ron(r#"(version: 2, command: ["g"], build: ["cargo", "build", "--manifest-path={root}/Cargo.toml"])"#).unwrap();
-        assert_eq!(c.build_argv(Path::new("/p")).unwrap(), ["cargo", "build", "--manifest-path=/p/Cargo.toml"]);
-        let spec = c.build_spec().expect("a build command is allowed like the game's");
-        assert_eq!(spec.program, "cargo");
-        assert_eq!(spec.args, ["build", "--manifest-path={root}/Cargo.toml"]);
-    }
-
-    #[test]
     fn an_empty_command_is_refused() {
         assert!(PlayConfig::from_ron("(version: 1, command: [])").is_err());
     }

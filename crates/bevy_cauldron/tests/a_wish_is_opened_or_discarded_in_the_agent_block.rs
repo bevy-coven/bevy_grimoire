@@ -254,6 +254,31 @@ fn a_wish_row_is_opened_on_github_and_the_agent_reads_opened() {
     assert!(!shows::<WishOpen>(&mut app, &id), "an opened wish still offers the button that opened it");
 }
 
+/// **A row spawned before the agent said who it is names it afterwards**, which is the order a real
+/// sitting arrives in: the wish is made, the block is opened, and `grimoire/agent_hello` lands later.
+#[test]
+fn a_row_names_the_agent_that_introduces_itself_after_it_was_spawned() {
+    let mut app = ready(&format!("wish_late_name_{}", std::process::id()));
+    let id = queue_a_wish(&mut app);
+    show_the_block(&mut app, true);
+    let before = words::<WishTitle>(&mut app, &id, "title");
+    assert!(before.starts_with("an agent:"), "no client has introduced itself yet: {before:?}");
+
+    // **The agent says who it is after the row exists**, which is what the MCP server does once.
+    call(
+        &mut app,
+        "grimoire/agent_hello",
+        serde_json::json!({"token": null, "client": {"name": "omp", "version": "18.16.0"}, "tools": 23}),
+    )
+    .unwrap_or_else(|e| panic!("the hello answers: {e}"));
+
+    let after = words::<WishTitle>(&mut app, &id, "title");
+    assert!(
+        after.starts_with("omp 18.16.0:"),
+        "the row still names nobody after the agent introduced itself: {after:?}"
+    );
+}
+
 /// **2. Discard opens nothing, and the agent reads `discarded`.**
 #[test]
 fn discard_opens_nothing_and_the_agent_reads_discarded() {
