@@ -1,10 +1,10 @@
 //! **A running game re-reads a data file of its own when it changes, and says what became of the edit**
 //! (#263, H5b: `game_data` leaves the restart list).
 //!
-//! A game keeps tuning numbers in RON files of its own types, and lists them in `data.ron`. The game
+//! A game keeps tuning numbers in YAML files of its own types, and lists them in `data.yaml`. The game
 //! registers a reader for one with [`GrimoireLiveApp::reload_data_file`]: when the file changes and
 //! reads, the reader runs and the game's value is replaced; when it does not read, or a leaf is out of
-//! its registered bounds, the old value stays and the game's verdict (`.live/game.ron`) names the file
+//! its registered bounds, the old value stays and the game's verdict (`.live/game.yaml`) names the file
 //! and the leaf. The verdict keeps what the project's own reload said, and the project's reload keeps
 //! what the data said. Headless, like `live_verdicts.rs`.
 
@@ -27,15 +27,15 @@ use bevy_grimoire_core::rules::RULES_VERSION;
 
 /// The game's data lives beside the project's directory, not in it (a game's `assets/data` next to its
 /// `assets/grimoire`), so the project's own watch does not also reload the project when it changes.
-const FILE: &str = "../data/mob.ron";
-const REGISTRY: &str = "(version: 1, files: [(id: \"tuning/mob\", path: \"../data/mob.ron\", bounds: {\"speed\": (min: 0.0, max: 10.0)})])";
+const FILE: &str = "../data/mob.yaml";
+const REGISTRY: &str = "version: 1\nfiles:\n- id: tuning/mob\n  path: ../data/mob.yaml\n  bounds:\n    speed:\n      min: 0.0\n      max: 10.0\n";
 
 /// The game's own value, read from its own file.
 #[derive(Resource, Debug, PartialEq)]
 struct Speed(f32);
 
 fn mob(speed: &str) -> String {
-    format!("(speed: {speed}, name: \"orc\")")
+    format!("speed: {speed}\nname: orc\n")
 }
 
 /// **The game's reader**: its own parse of its own file, `Err` when it does not read. It needs a `name`
@@ -87,15 +87,18 @@ impl Project {
             authoring: Some("kit".to_owned()),
         };
         p.write("kits.yaml", &kits.to_yaml().unwrap());
-        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), p.grimoire.join("vocab.ron"))
-            .unwrap();
-        p.write("kit/project.yaml", "(\n    version: 2,\n    note: None,\n    patches: [],\n)");
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.yaml"),
+            p.grimoire.join("vocab.yaml"),
+        )
+        .unwrap();
+        p.write("kit/project.yaml", &bevy_grimoire_core::policy::Policy::default().to_yaml().unwrap());
         let library = Library { version: LIBRARY_VERSION, note: None, descriptors: vec![piece("kit/crate")] };
         p.write("kit/library.yaml", &library.to_yaml().unwrap());
-        p.write("rules.yaml", &format!("(\n    version: {RULES_VERSION},\n    blocks: [],\n)"));
+        p.write("rules.yaml", &format!("version: {RULES_VERSION}\nblocks: []\n"));
         p.write("compositions.yaml", &Compositions { version: COMPOSITIONS_VERSION, ..Compositions::default() }.to_yaml().unwrap());
         p.write_map(&map(vec![row("crate_a", (1.0, 1.0))]));
-        p.write("data.ron", REGISTRY);
+        p.write("data.yaml", REGISTRY);
         p.write(FILE, &mob("1.0"));
         p
     }
@@ -199,7 +202,7 @@ fn a_data_file_that_does_not_read_keeps_the_last_good_value_and_names_the_leaf()
     assert!(k.reason.contains("10"), "the refusal says the range: {k:?}");
 
     // A file cut off: refused, and still the last good value.
-    project.write(FILE, "(speed: 3.0, na");
+    project.write(FILE, "speed: 3.0\nna");
     settle(&mut app, 8);
     assert_eq!(speed(&app), 1.0);
     let v = project.verdict();
@@ -207,7 +210,7 @@ fn a_data_file_that_does_not_read_keeps_the_last_good_value_and_names_the_leaf()
     assert_eq!(v.seq, 2, "each distinct bad edit is one decision");
 
     // An extra leaf is not a refusal: the registry bounds only what it names, and the reader takes it.
-    project.write(FILE, "(speed: 3.0, name: \"orc\", extra: 1)");
+    project.write(FILE, "speed: 3.0\nname: orc\nextra: 1\n");
     settle(&mut app, 8);
     assert_eq!(speed(&app), 3.0, "a file the registry and the reader both take is applied");
 
@@ -225,7 +228,7 @@ fn a_reader_that_refuses_a_file_the_registry_accepts_keeps_the_value_and_says_wh
     let project = Project::new("reader_refuses");
     let mut app = app(&project);
     // The registry bounds `speed` only, so a file with no `name` reads; the game's own reader refuses it.
-    project.write(FILE, "(speed: 2.0)");
+    project.write(FILE, "speed: 2.0\n");
     settle(&mut app, 8);
     assert_eq!(speed(&app), 1.0, "the reader refused, so the value is the last good one");
     let v = project.verdict();
@@ -235,7 +238,7 @@ fn a_reader_that_refuses_a_file_the_registry_accepts_keeps_the_value_and_says_wh
     assert!(k.reason.contains("no name"), "the reader's reason is the verdict's: {k:?}");
 
     // A leaf that is not a number is the registry's refusal, at its path.
-    project.write(FILE, "(speed: \"fast\", name: \"orc\")");
+    project.write(FILE, "speed: fast\nname: orc\n");
     settle(&mut app, 8);
     assert_eq!(speed(&app), 1.0);
     let v = project.verdict();

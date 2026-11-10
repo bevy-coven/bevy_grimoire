@@ -62,12 +62,15 @@ impl Project {
             authoring: Some("kit".to_owned()),
         };
         p.write("kits.yaml", &kits.to_yaml().unwrap());
-        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), p.grimoire.join("vocab.ron"))
-            .unwrap();
-        p.write("kit/project.yaml", "(\n    version: 2,\n    note: None,\n    patches: [],\n)");
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.yaml"),
+            p.grimoire.join("vocab.yaml"),
+        )
+        .unwrap();
+        p.write("kit/project.yaml", &bevy_grimoire_core::policy::Policy::default().to_yaml().unwrap());
         let library = Library { version: LIBRARY_VERSION, note: None, descriptors: vec![piece("kit/crate")] };
         p.write("kit/library.yaml", &library.to_yaml().unwrap());
-        p.write("rules.yaml", &format!("(\n    version: {RULES_VERSION},\n    blocks: [],\n)"));
+        p.write("rules.yaml", &format!("version: {RULES_VERSION}\nblocks: []\n"));
         p.write("compositions.yaml", &Compositions { version: COMPOSITIONS_VERSION, ..Compositions::default() }.to_yaml().unwrap());
         p.write_map(&map(vec![row("crate_a", "kit/crate", (1.0, 1.0))]));
         p
@@ -148,7 +151,7 @@ const FILES: &[(&str, &str, &str)] = &[
     ("kits.yaml", "kits", "version"),
     ("kit/library.yaml", "library", "version"),
     ("kit/project.yaml", "policy", "version"),
-    ("vocab.ron", "vocab", "kind"),
+    ("vocab.yaml", "vocab", "kind"),
     ("rules.yaml", "rules", "version"),
     ("compositions.yaml", "compositions", "version"),
     ("maps/yard.map.yaml", "map", "version"),
@@ -157,11 +160,38 @@ const FILES: &[(&str, &str, &str)] = &[
 fn bad(project: &Project, rel: &str, field: &str, case: &str) -> String {
     let good = project.read(rel);
     match (case, field) {
-        ("corrupt", _) => good[..good.len() / 2].to_owned(),
+        // **A root key with no separator**, `version` for `version:`. Cutting a YAML document at a line
+        // boundary damages nothing — a document that stops after a complete line is still a mapping — so the
+        // damage is a syntax fault the reader must refuse.
+        ("corrupt", _) => {
+            let at = good.find("version:").unwrap_or(0);
+            format!("{}{}", &good[..at], &good[at + "version:".len()..])
+        }
         ("wrong type", "version") => good.replacen("version:", "version: \"wrong\", was:", 1),
         ("missing field", "version") => good.lines().filter(|l| !l.trim_start().starts_with("version:")).collect::<Vec<_>>().join("\n"),
-        ("wrong type", _) => format!("({field}: 7)"),
-        ("missing field", _) => "()".to_owned(),
+        // **A YAML file's field edited two ways**: the key given a value the type refuses (`kind: 7` where a
+        // mapping belongs), and the key and its block removed.
+        ("wrong type", _) => good
+            .lines()
+            .map(|l| if l.starts_with(&format!("{field}:")) { format!("{field}: 7") } else { l.to_owned() })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        ("missing field", _) => {
+            let mut out = Vec::new();
+            let mut skipping = false;
+            for line in good.lines() {
+                if line.starts_with(&format!("{field}:")) {
+                    skipping = true;
+                    continue;
+                }
+                if skipping && (line.starts_with(' ') || line.starts_with('-') || line.trim().is_empty()) {
+                    continue;
+                }
+                skipping = false;
+                out.push(line);
+            }
+            out.join("\n")
+        }
         _ => unreachable!(),
     }
 }

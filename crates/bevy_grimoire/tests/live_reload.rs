@@ -66,9 +66,9 @@ impl Project {
             authoring: Some("kit".to_owned()),
         };
         std::fs::write(grimoire.join("kits.yaml"), kits.to_yaml().unwrap()).unwrap();
-        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), grimoire.join("vocab.ron"))
+        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.yaml"), grimoire.join("vocab.yaml"))
             .unwrap();
-        std::fs::write(grimoire.join("kit/project.yaml"), "(\n    version: 2,\n    note: None,\n    patches: [],\n)").unwrap();
+        std::fs::write(grimoire.join("kit/project.yaml"), bevy_grimoire_core::policy::Policy::default().to_yaml().unwrap()).unwrap();
         let p = Project { grimoire };
         p.write_library(library((2.0, 1.0)));
         p
