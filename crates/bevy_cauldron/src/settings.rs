@@ -120,6 +120,16 @@ pub struct EditorSettings {
     pub interface_scale: f32,
     /// Reduced motion (gooey's `MotionSettings::reduced`): what travels lands at once, fades and colours still ease.
     pub reduced_motion: bool,
+    /// **Whether the view follows the agent's changes** (AF-04, #360): View ▸ Follow the agent.
+    ///
+    /// On by default, because the follow is the point of the AGENT series: an agent works faster than a
+    /// person reads, and a view that stayed put would mean the person never saw the work at all. Off, the
+    /// camera never moves for an agent's change and the look chip still offers *Look*, so a person who
+    /// turned it off has not lost the ability to see — they have taken away only the moving.
+    ///
+    /// A settings key rather than a session switch for `reduced_motion`'s reason: it is how a person
+    /// wants to watch an agent, not a fact about one project.
+    pub follow_agent: bool,
     /// The map's grid is drawn in the viewport.
     pub show_grid: bool,
     /// How strongly the map's grid is drawn: 1.0 is the skin's grid colour, less is fainter.
@@ -168,6 +178,7 @@ impl Default for EditorSettings {
             text_scale: 1.0,
             interface_scale: 1.0,
             reduced_motion: false,
+            follow_agent: true,
             show_grid: true,
             grid_strength: 1.0,
             show_statistics: false,
@@ -206,6 +217,10 @@ pub struct SettingsLayer {
     pub interface_scale: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reduced_motion: Option<bool>,
+    /// **View ▸ Follow the agent** (AF-04, #360). `None` means the layer leaves it alone, so an
+    /// `editor.ron` written before this key existed reads as on — the default, not a stored `false`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow_agent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_grid: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -246,6 +261,7 @@ impl Default for SettingsLayer {
             text_scale: None,
             interface_scale: None,
             reduced_motion: None,
+            follow_agent: None,
             show_grid: None,
             grid_strength: None,
             show_statistics: None,
@@ -331,6 +347,7 @@ impl EditorSettings {
             out.text_scale = layer.text_scale.unwrap_or(out.text_scale);
             out.interface_scale = layer.interface_scale.unwrap_or(out.interface_scale);
             out.reduced_motion = layer.reduced_motion.unwrap_or(out.reduced_motion);
+            out.follow_agent = layer.follow_agent.unwrap_or(out.follow_agent);
             out.show_grid = layer.show_grid.unwrap_or(out.show_grid);
             out.grid_strength = layer.grid_strength.unwrap_or(out.grid_strength);
             out.show_statistics = layer.show_statistics.unwrap_or(out.show_statistics);
