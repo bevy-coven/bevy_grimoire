@@ -1,7 +1,7 @@
 //! **A game's data file that no longer reads is refused naming the file and the leaf, once per edit, and
 //! one that does read is applied** (#200, H3; the `game_data` re-pin of #263).
 //!
-//! `<grimoire dir>/data.ron` registers the tuning files a game owns and bounds the leaves the editor
+//! `<grimoire dir>/data.yaml` registers the tuning files a game owns and bounds the leaves the editor
 //! tunes. A game follows them with `GrimoireLiveApp::reload_data_file` (the registry classes them
 //! `Live`), so a hand edit that stopped reading used to cost the Data panel its rows with no word. One
 //! look at the registry and its files now decides into `grimoire_state.reloads`: `game_data` per file
@@ -18,8 +18,8 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
-const REGISTRY: &str = "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0), \"mob.hp\": (min: 1.0)})])";
-const GOOD: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+const REGISTRY: &str = "version: 1\nfiles:\n- id: tuning/mob\n  path: mob.yaml\n  bounds:\n    mob.speed:\n      min: 0.0\n      max: 9.0\n    mob.hp:\n      min: 1.0\n";
+const GOOD: &str = "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\nfast: false\n";
 
 fn editor(tag: &str) -> (App, Ctx) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");
@@ -94,8 +94,8 @@ fn pump(app: &mut App, secs: f64) {
 /// A project whose registry and file read, looked at once so that is the baseline.
 fn project(tag: &str) -> (App, Ctx) {
     let (mut app, ctx) = editor(tag);
-    write(&ctx, "mob.ron", GOOD);
-    write(&ctx, "data.ron", REGISTRY);
+    write(&ctx, "mob.yaml", GOOD);
+    write(&ctx, "data.yaml", REGISTRY);
     pump(&mut app, 0.4);
     (app, ctx)
 }
@@ -103,22 +103,24 @@ fn project(tag: &str) -> (App, Ctx) {
 /// The ways to break the file, and the leaf the verdict must name: a file cut off, where reading stopped;
 /// a bounded leaf that became a word; a bounded leaf that went missing.
 const BAD: [(&str, &str, &str); 3] = [
-    ("corrupt: a save cut off mid-line", "// tuning\n(mob: (speed: 1.50, name: ", "mob.name"),
-    ("wrong type: the speed is a word", "(mob: (speed: \"fast\", name: \"orc\", hp: 7), fast: false)\n", "mob.speed"),
-    ("missing field: no hit points", "(mob: (speed: 1.50, name: \"orc\"), fast: false)\n", "mob.hp"),
+    // **A file cut off inside a value**, not after a key: `name: ` alone is a null YAML reads happily, so it
+    // would be a *missing* leaf at the next one rather than the syntax fault this case is about.
+    ("corrupt: a save cut off mid-value", "# tuning\nmob:\n  speed: 1.50\n  name: \"orc", "mob.name"),
+    ("wrong type: the speed is a word", "mob:\n  speed: fast\n  name: orc\n  hp: 7\nfast: false\n", "mob.speed"),
+    ("missing field: no hit points", "mob:\n  speed: 1.50\n  name: orc\nfast: false\n", "mob.hp"),
 ];
 
 #[test]
 fn a_file_that_does_not_read_is_named_once_per_edit_and_the_bytes_stay() {
     let (mut app, mut ctx) = project("data_view_bad");
-    let file = named(&ctx, "mob.ron");
-    assert!(file.ends_with("mob.ron"), "{file}");
+    let file = named(&ctx, "mob.yaml");
+    assert!(file.ends_with("mob.yaml"), "{file}");
     assert_eq!(verdict(&mut app, "game_data"), Value::Null, "a file seen reading for the first time is not news");
 
     for (what, bad, field) in BAD {
         let before = seq(&mut app);
         let raised_before = app.world().resource::<EditorState>().status.raised();
-        write(&ctx, "mob.ron", bad);
+        write(&ctx, "mob.yaml", bad);
         pump(&mut app, 0.4);
 
         let v = verdict(&mut app, "game_data");
@@ -139,34 +141,34 @@ fn a_file_that_does_not_read_is_named_once_per_edit_and_the_bytes_stay() {
         assert_eq!(seq(&mut app), refused_at, "{what}: no new decision without an edit");
 
         // Mended to the text it was first seen with: nothing is waiting for a restart.
-        write(&ctx, "mob.ron", GOOD);
+        write(&ctx, "mob.yaml", GOOD);
         until(&mut app, "the mended file reads", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
         assert_eq!(seq(&mut app), refused_at + 1, "{what}: a repair is one decision");
         assert_eq!(reloads(&mut app)["ok"], json!(true), "{what}");
     }
 
     // Mended to other text: it reads, and a running game has not got it.
-    write(&ctx, "mob.ron", BAD[0].1);
+    write(&ctx, "mob.yaml", BAD[0].1);
     until(&mut app, "the file refused again", |a| verdict(a, "game_data")["outcome"] == json!("refused"));
-    write(&ctx, "mob.ron", &GOOD.replace("1.50", "2.50"));
+    write(&ctx, "mob.yaml", &GOOD.replace("1.50", "2.50"));
     until(&mut app, "the mended file reads as other text", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 
     // A data edit over a file that does not scan names the file and the leaf and leaves the bytes.
-    write(&ctx, "mob.ron", BAD[0].1);
-    let bytes = std::fs::read(dir(&ctx).join("mob.ron")).unwrap();
+    write(&ctx, "mob.yaml", BAD[0].1);
+    let bytes = std::fs::read(dir(&ctx).join("mob.yaml")).unwrap();
     let refusal = match ops::dispatch(&mut ctx, "data_set", &json!({"file": "tuning/mob", "path": "mob.speed", "value": 2.0})) {
         Err(e) | Ok(ops::Applied::Refused(e)) => e.0,
         Ok(done) => panic!("the edit of a file that does not read was applied: {done:?}"),
     };
     assert!(refusal.contains(&file) && refusal.contains("mob.name"), "the refusal names the file and the leaf: {refusal}");
     assert!(refusal.contains("Nothing was changed"), "{refusal}");
-    assert_eq!(std::fs::read(dir(&ctx).join("mob.ron")).unwrap(), bytes, "the refused edit wrote to the file");
+    assert_eq!(std::fs::read(dir(&ctx).join("mob.yaml")).unwrap(), bytes, "the refused edit wrote to the file");
 }
 
 #[test]
 fn a_leaf_outside_its_bounds_is_refused_by_its_path_and_the_range() {
     let (mut app, ctx) = project("data_view_bounds");
-    write(&ctx, "mob.ron", "(mob: (speed: 99.0, name: \"orc\", hp: 7), fast: false)\n");
+    write(&ctx, "mob.yaml", "mob:\n  speed: 99.0\n  name: orc\n  hp: 7\nfast: false\n");
     until(&mut app, "the file refused", |a| verdict(a, "game_data")["outcome"] == json!("refused"));
     let v = verdict(&mut app, "game_data");
     assert_eq!(v["field"], json!("mob.speed"), "{v}");
@@ -178,7 +180,7 @@ fn a_leaf_outside_its_bounds_is_refused_by_its_path_and_the_range() {
 #[test]
 fn an_edit_of_a_file_that_reads_is_one_applied_decision_and_the_registry_one_applied() {
     let (mut app, mut ctx) = project("data_view_edit");
-    let file = named(&ctx, "mob.ron");
+    let file = named(&ctx, "mob.yaml");
     // The first logged operation creates the log, and the log's own verdict is one decision of its own:
     // make it before the count starts.
     match ops::dispatch(&mut ctx, "map_create", &json!({"name": "east", "bounds": [8.0, 4.0, 8.0]})) {
@@ -189,7 +191,7 @@ fn an_edit_of_a_file_that_reads_is_one_applied_decision_and_the_registry_one_app
     pump(&mut app, 0.4);
     let before = seq(&mut app);
 
-    write(&ctx, "mob.ron", "// tuning\n(mob: (speed: 2.50, name: \"orc\", hp: 7), fast: false)\n");
+    write(&ctx, "mob.yaml", "# tuning\nmob:\n  speed: 2.50\n  name: orc\n  hp: 7\nfast: false\n");
     until(&mut app, "the hand edit decided", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
     let v = verdict(&mut app, "game_data");
     assert_eq!(v["file"], json!(file), "{v}");
@@ -208,14 +210,14 @@ fn an_edit_of_a_file_that_reads_is_one_applied_decision_and_the_registry_one_app
     assert_eq!(seq(&mut app), before + 2, "one operation, one decision");
 
     // The registry has its own kind: a change that reads is `applied`, with the files kept.
-    write(&ctx, "data.ron", &REGISTRY.replace("max: 9.0", "max: 20.0"));
+    write(&ctx, "data.yaml", &REGISTRY.replace("max: 9.0", "max: 20.0"));
     until(&mut app, "the registry edit decided", |a| verdict(a, "data_registry")["outcome"] == json!("applied"));
-    assert_eq!(verdict(&mut app, "data_registry")["file"], json!(named(&ctx, "data.ron")));
+    assert_eq!(verdict(&mut app, "data_registry")["file"], json!(named(&ctx, "data.yaml")));
     assert_eq!(verdict(&mut app, "game_data")["outcome"], json!("applied"), "the file's own verdict stands");
 
     // Back to the text it was first seen with: that is one more edit, taken the same way.
     let before_back = seq(&mut app);
-    write(&ctx, "mob.ron", GOOD);
+    write(&ctx, "mob.yaml", GOOD);
     until(&mut app, "the file back to its first text decided", |a| seq(a) > before_back);
     assert_eq!(verdict(&mut app, "game_data")["outcome"], json!("applied"));
     assert_eq!(reloads(&mut app)["ok"], json!(true));
@@ -226,29 +228,31 @@ fn an_edit_of_a_file_that_reads_is_one_applied_decision_and_the_registry_one_app
 #[test]
 fn a_registry_that_does_not_read_and_a_file_that_is_not_there_are_refused() {
     let (mut app, ctx) = project("data_view_registry");
-    let registry = named(&ctx, "data.ron");
+    let registry = named(&ctx, "data.yaml");
 
-    write(&ctx, "data.ron", "(version: 1, files: [(id: \"tuning/mob\", path: 7)])");
+    // **A registry whose `path` is a list**, which the type refuses: a number is a scalar YAML reads, and would
+    // be a *registered* file named `7` rather than a file that does not read.
+    write(&ctx, "data.yaml", "version: 1\nfiles:\n- id: tuning/mob\n  path: [7]\n");
     until(&mut app, "the registry refused", |a| verdict(a, "data_registry")["outcome"] == json!("refused"));
     let v = verdict(&mut app, "data_registry");
     assert_eq!((v["file"].clone(), v["field"].clone()), (json!(registry), json!("files[0].path")), "{v}");
     assert_eq!(verdict(&mut app, "game_data"), Value::Null, "a file the registry no longer lists has no verdict");
 
-    write(&ctx, "data.ron", REGISTRY);
+    write(&ctx, "data.yaml", REGISTRY);
     until(&mut app, "the registry mended", |a| verdict(a, "data_registry")["outcome"] == json!("applied"));
     assert_eq!(verdict(&mut app, "game_data"), Value::Null, "a file the registry lists again, unchanged, is no news");
 
-    std::fs::remove_file(dir(&ctx).join("mob.ron")).unwrap();
+    std::fs::remove_file(dir(&ctx).join("mob.yaml")).unwrap();
     until(&mut app, "the missing file refused", |a| verdict(a, "game_data")["outcome"] == json!("refused"));
     let v = verdict(&mut app, "game_data");
-    assert_eq!(v["file"], json!(named(&ctx, "mob.ron")), "{v}");
+    assert_eq!(v["file"], json!(named(&ctx, "mob.yaml")), "{v}");
     assert!(v["reason"].as_str().unwrap().contains("not there"), "{v}");
     assert_eq!(v["field"], Value::Null, "a file that is not there has no leaf: {v}");
 
-    write(&ctx, "mob.ron", GOOD);
+    write(&ctx, "mob.yaml", GOOD);
     until(&mut app, "the file back", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 
-    std::fs::remove_file(dir(&ctx).join("data.ron")).unwrap();
+    std::fs::remove_file(dir(&ctx).join("data.yaml")).unwrap();
     until(&mut app, "the verdicts of a registry that is gone cleared", |a| verdict(a, "data_registry") == Value::Null && verdict(a, "game_data") == Value::Null);
     assert_eq!(reloads(&mut app)["ok"], json!(true));
 }
@@ -258,11 +262,11 @@ fn a_registry_that_does_not_read_and_a_file_that_is_not_there_are_refused() {
 #[test]
 fn an_edit_made_while_the_registry_was_broken_is_said_when_it_reads_again() {
     let (mut app, ctx) = project("data_view_while_broken");
-    write(&ctx, "data.ron", "(version: 1, files: [");
+    write(&ctx, "data.yaml", "version: 1\nfiles: [");
     until(&mut app, "the registry refused", |a| verdict(a, "data_registry")["outcome"] == json!("refused"));
-    write(&ctx, "mob.ron", "// tuning\n(mob: (speed: 2.50, name: \"orc\", hp: 7), fast: false)\n");
+    write(&ctx, "mob.yaml", "# tuning\nmob:\n  speed: 2.50\n  name: orc\n  hp: 7\nfast: false\n");
     pump(&mut app, 0.4);
-    write(&ctx, "data.ron", REGISTRY);
+    write(&ctx, "data.yaml", REGISTRY);
     until(&mut app, "the edit made meanwhile said", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 }
 
@@ -270,9 +274,9 @@ fn an_edit_made_while_the_registry_was_broken_is_said_when_it_reads_again() {
 #[test]
 fn a_file_first_seen_refused_is_said_when_it_is_mended() {
     let (mut app, ctx) = editor("data_view_first_refused");
-    write(&ctx, "mob.ron", BAD[1].1);
-    write(&ctx, "data.ron", REGISTRY);
+    write(&ctx, "mob.yaml", BAD[1].1);
+    write(&ctx, "data.yaml", REGISTRY);
     until(&mut app, "refused at open", |a| verdict(a, "game_data")["outcome"] == json!("refused"));
-    write(&ctx, "mob.ron", GOOD);
+    write(&ctx, "mob.yaml", GOOD);
     until(&mut app, "mended", |a| verdict(a, "game_data")["outcome"] == json!("applied"));
 }

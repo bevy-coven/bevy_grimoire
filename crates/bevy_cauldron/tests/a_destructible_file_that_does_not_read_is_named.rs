@@ -54,17 +54,17 @@ fn bake(root: &Path) -> PathBuf {
 
 /// The three bad marks files: `(what is wrong, the text, the field the refusal must name)`.
 const BAD_MARKS: [(&str, &str, Option<&str>); 3] = [
-    ("corrupt", "(version: 1, pieces: [\"site/cart\"", None),
-    ("wrong type", "(version: \"one\", pieces: [\"site/cart\"])", Some("version")),
-    ("missing field", "(version: 1)", Some("pieces")),
+    ("corrupt", "version: 1\npieces: [site/cart", None),
+    ("wrong type", "version: one\npieces: [site/cart]\n", Some("version")),
+    ("missing field", "version: 1\n", Some("pieces")),
 ];
 
 /// The three bad bakes, and a damaged chunk where a hand edit lands.
 const BAD_BAKES: [(&str, &str, Option<&str>); 4] = [
-    ("corrupt", "(version: 1, key: 5, chunks: [(points: [(0.0, 0.0, 0.0)]", None),
-    ("wrong type", "(version: 1, key: \"k\", chunks: [])", Some("key")),
-    ("missing field", "(version: 1, chunks: [])", Some("key")),
-    ("damaged chunk", "(version: 1, key: 5, chunks: [(points: [], faces: []), (points: 7, faces: [])])", Some("chunks[1].points")),
+    ("corrupt", "version: 1\nkey: 5\nchunks:\n- points: [[0.0, 0.0, 0.0]", None),
+    ("wrong type", "version: 1\nkey: k\nchunks: []\n", Some("key")),
+    ("missing field", "version: 1\nchunks: []\n", Some("key")),
+    ("damaged chunk", "version: 1\nkey: 5\nchunks:\n- points: []\n  faces: []\n- points: 7\n  faces: []\n", Some("chunks[1].points")),
 ];
 
 fn names(refusal: &str, file: &str, field: Option<&str>, what: &str) {
@@ -97,7 +97,7 @@ fn once_the_marks_are_fixed_the_same_call_applies_and_keeps_the_pieces_that_were
     let (mut ctx, root) = open("marks_fixed");
     std::fs::write(marks(&root), BAD_MARKS[1].1).unwrap();
     set(&mut ctx, true).expect_err("refused while the file is bad");
-    std::fs::write(marks(&root), "(version: 1, pieces: [\"site/other\"])").unwrap();
+    std::fs::write(marks(&root), "version: 1\npieces: [site/other]\n").unwrap();
     let done = set(&mut ctx, true).expect("the fixed file applies");
     assert_eq!(done.after.as_ref().unwrap()["baked"], true, "{done:?}");
     let text = std::fs::read_to_string(marks(&root)).unwrap();
@@ -129,7 +129,7 @@ fn a_removed_bake_is_baked_again_and_a_stale_one_too() {
     let (mut ctx, root) = open("bake_stale");
     set(&mut ctx, true).expect("a first mark bakes");
     let good = std::fs::read(bake(&root)).unwrap();
-    std::fs::write(bake(&root), "(version: 1, key: 5, chunks: [])").unwrap();
+    std::fs::write(bake(&root), "version: 1\nkey: 5\nchunks: []\n").unwrap();
     // Reads, but was made from something else: stale, so baked again, to the same bytes as the first time.
     let again = set(&mut ctx, true).expect("a stale bake is baked again");
     assert_eq!(again.after.as_ref().unwrap()["baked"], true, "{again:?}");

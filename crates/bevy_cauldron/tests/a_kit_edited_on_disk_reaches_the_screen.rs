@@ -61,10 +61,10 @@ fn stretch_the_piece_on_disk(root: &std::path::Path, factor: f32) {
         .join(fixtures::DEFAULT_KIT)
         .join("library.yaml");
     let text = std::fs::read_to_string(&path).expect("the kit's library is there");
-    let edited = text.replace("stretch_y: None", &format!("stretch_y: Some({factor})"));
+    let edited = text.replace("stretch_y: null", &format!("stretch_y: {factor}"));
     assert_ne!(
         edited, text,
-        "the library has no `stretch_y: None` to edit: {text}"
+        "the library has no `stretch_y: null` to edit: {text}"
     );
     std::fs::write(&path, edited).expect("the library is written");
 }

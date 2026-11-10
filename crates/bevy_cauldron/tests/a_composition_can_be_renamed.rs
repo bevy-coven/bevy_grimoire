@@ -28,28 +28,27 @@ fn project(name: &str) -> std::path::PathBuf {
     // built to be tested.
     let map = root.join("assets/grimoire/maps/m.map.yaml");
     let text = std::fs::read_to_string(&map).expect("the map is there");
-    // **The fixture's map already carries an empty `stamps:`**, so the stamp goes *inside* it —
-    // a second `stamps` key would be a duplicate field, and the map would not parse.
+    // **A map that stamps nothing writes no `stamps:` key at all** (it is `skip_serializing_if` empty), so the
+    // stamp is added as a new field under `placements: []` — which is where the writer puts it.
     let stamped = text.replace(
-        "stamps: [],",
-        r#"stamps: [
-        (
-            id: "room@1",
-            of: "site/room",
-            at: (0.0, 0.0),
-            yaw: 0.0,
-            overrides: [],
-            of_fingerprint: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-        ),
-    ],"#,
+        "placements: []\n",
+        r#"placements: []
+stamps:
+- id: room@1
+  of: site/room
+  at: [0.0, 0.0]
+  yaw: 0.0
+  overrides: []
+  of_fingerprint: null
+  owned: false
+  owned_because: null
+  note: null
+"#,
     );
     assert_ne!(
         stamped, text,
-        "the fixture's map has no `stamps: [],` to fill. The map's shape changed and this test \
-         would be stamping nothing."
+        "the fixture's map gained no stamps. The map's shape changed and this test would be \
+         stamping nothing."
     );
     std::fs::write(&map, stamped).expect("the map is writable");
     root
@@ -82,11 +81,11 @@ fn the_rename_reaches_the_door_and_the_map_follows() {
     let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml"))
         .expect("the compositions file is there");
     assert!(
-        comps.contains(r#"id: "site/room_v2""#),
+        comps.contains("id: site/room_v2"),
         "the composition is not under its new name"
     );
     assert!(
-        !comps.contains(r#"id: "site/room""#),
+        !comps.contains("id: site/room\n"),
         "the composition is still under its old name"
     );
 

@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
-const BAD_NOTES: &str = "(version: \"one\", notes: [], lease_secs: 300)";
+const BAD_NOTES: &str = "version: one\nnotes: []\nlease_secs: 300\n";
 
 fn editor(tag: &str, live: bool) -> App {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");

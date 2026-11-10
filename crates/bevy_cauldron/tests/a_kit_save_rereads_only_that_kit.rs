@@ -77,10 +77,10 @@ fn pump_until(app: &mut App, mut done: impl FnMut(&mut App) -> bool) -> bool {
 fn stretch_on_disk(dir: &std::path::Path, factor: f32) {
     let path = dir.join("library.yaml");
     let text = std::fs::read_to_string(&path).expect("the kit's library is there");
-    let edited = text.replace("stretch_y: None", &format!("stretch_y: Some({factor})"));
+    let edited = text.replace("stretch_y: null", &format!("stretch_y: {factor}"));
     assert_ne!(
         edited, text,
-        "the library has no `stretch_y: None` to edit: {text}"
+        "the library has no `stretch_y: null` to edit: {text}"
     );
     std::fs::write(&path, edited).expect("the library is written");
 }
@@ -249,7 +249,7 @@ fn a_kit_edit_that_breaks_a_composition_is_refused_and_keeps_the_last_good_proje
     // **And now the kit loses its only piece**, which the composition names.
     std::fs::write(
         site_dir.join("library.yaml"),
-        "(version: 1, note: None, descriptors: [])",
+        "version: 1\nnote: null\ndescriptors: []\n",
     )
     .expect("the library is written");
 

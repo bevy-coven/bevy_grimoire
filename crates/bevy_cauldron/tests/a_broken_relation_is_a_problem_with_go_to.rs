@@ -26,7 +26,7 @@ fn editor(name: &str, relations: &str) -> App {
         .place_as("crate", "site/crate", (8.0, 8.5))
         .build("m");
     let file = root.join("assets/grimoire/maps/m.relations.yaml");
-    std::fs::write(&file, format!("(version: 1, relations: [{relations}])")).unwrap_or_else(|e| panic!("{file:?}: {e}"));
+    std::fs::write(&file, format!("version: 1\nrelations: [{relations}]\n")).unwrap_or_else(|e| panic!("{file:?}: {e}"));
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..6 {
         std::thread::sleep(std::time::Duration::from_millis(150));
@@ -59,12 +59,12 @@ fn go_to_buttons(app: &mut App) -> Vec<(Entity, Vec<String>)> {
     world.query::<(Entity, &ProblemGoTo)>().iter(world).map(|(e, g)| (e, g.pieces.clone())).collect()
 }
 
-const BROKEN: &str = r#"
-    (of: "chair", kind: Faces("table")),
-    (of: "chair", kind: Near(to: "table", within: 3.0)),
-    (of: "door", kind: ClearInFront(depth: 2.0, width: 1.0)),
-    (of: "lamp", kind: Near(to: "door", within: 2.0)),
-"#;
+/// **Four relations, in the file's own shape**: `kind` is a tagged value, and each variant's fields sit under
+/// the tag. The list is written bare, so `format!` puts it inside `relations: [ … ]`.
+const BROKEN: &str = r#"{ of: chair, kind: !Faces table },
+  { of: chair, kind: !Near { to: table, within: 3.0 } },
+  { of: door, kind: !ClearInFront { depth: 2.0, width: 1.0 } },
+  { of: lamp, kind: !Near { to: door, within: 2.0 } }"#;
 
 #[test]
 fn each_broken_relation_is_a_row_in_the_words_of_the_relations_row() {
@@ -93,7 +93,7 @@ fn go_to_selects_the_pieces_the_relation_names_the_one_it_is_about_first() {
 
 #[test]
 fn a_map_whose_relations_all_hold_has_no_problems_and_no_go_to() {
-    let mut app = editor(&format!("problems_none_{}", std::process::id()), r#"(of: "chair", kind: Near(to: "table", within: 3.0))"#);
+    let mut app = editor(&format!("problems_none_{}", std::process::id()), "{ of: chair, kind: !Near { to: table, within: 3.0 } }");
     assert_eq!(problem_texts(&mut app), ["no problems"]);
     assert!(go_to_buttons(&mut app).is_empty());
 }

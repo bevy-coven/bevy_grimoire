@@ -35,7 +35,7 @@ fn call(ctx: &mut Ctx, op: &str, params: serde_json::Value) -> Result<(), String
 
 #[test]
 fn a_marks_file_of_another_version_refuses_both_calls_and_stays_as_it_was() {
-    for (what, text) in [("a newer build's", "(version: 2, pieces: [\"site/other\"])"), ("version zero", "(version: 0, pieces: [\"site/other\"])")] {
+    for (what, text) in [("a newer build's", "version: 2\npieces: [site/other]\n"), ("version zero", "version: 0\npieces: [site/other]\n")] {
         let (mut ctx, root) = open(&format!("marks_version_{}", what.replace([' ', '\''], "_")));
         let marks = root.join("destructible.yaml");
         std::fs::write(&marks, text).unwrap();

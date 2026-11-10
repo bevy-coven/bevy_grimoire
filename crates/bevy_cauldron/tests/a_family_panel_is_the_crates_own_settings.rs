@@ -61,7 +61,7 @@ fn editor(tag: &str, hour: f64) -> (App, std::path::PathBuf) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "version: 1\ncrates: [bevy_elements]\n").unwrap();
     let mut settings = bevy_cauldron::environment::ElementsSettings::defaults();
     settings.clock.hour = hour;
     let file = root.join("family/bevy_elements.ron");
@@ -83,7 +83,7 @@ fn editor_with_a_file_block(tag: &str) -> (App, std::path::PathBuf) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), format!("(version: 1, crates: [\"bevy_elements\", \"{SKIN_CRATE}\"])")).unwrap();
+    std::fs::write(root.join("family.yaml"), format!("version: 1\ncrates: [bevy_elements, {SKIN_CRATE}]\n")).unwrap();
     std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml()).unwrap();
     let skin = root.join(format!("family/{SKIN_CRATE}.yaml"));
     std::fs::write(&skin, SKIN_BLUE).unwrap();
@@ -353,7 +353,7 @@ fn a_crate_this_build_does_not_have_gets_no_panel() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "version: 1\ncrates: [bevy_carnage]\n").unwrap();
     std::fs::write(root.join("family/bevy_carnage.ron"), "(hitstop_seconds: 0.05)").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);
