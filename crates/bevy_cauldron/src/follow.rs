@@ -210,6 +210,10 @@ pub struct Following {
     working: bool,
     /// The pieces to ring while [`Self::outline_until`] has not passed.
     outline: Vec<String>,
+    /// **The box to ring instead of placements** (AF-05, #361): a preview names a footprint and no id,
+    /// because a placement's id is minted at commit. Ringing whatever happens to stand inside that box
+    /// would attribute the proposal to a piece it is not about.
+    outline_box: Option<[f32; 4]>,
     /// The `Time<Real>` second the ring comes down at.
     outline_until: f64,
     /// **Whether the Map has been asked for on this request's behalf.** A `Door::Map` that does not
@@ -303,6 +307,11 @@ impl Following {
     /// **The pieces currently ringed**, in the order the request named them.
     pub fn outlined(&self) -> &[String] {
         &self.outline
+    }
+
+    /// **The box currently ringed**, when the change was a proposal: its footprint, in map metres.
+    pub fn outlined_box(&self) -> Option<[f32; 4]> {
+        self.outline_box
     }
 
     /// **Whether the person is using the view** (round 2 of the review, M3): input within
@@ -409,6 +418,33 @@ fn a_persons_input_takes_the_camera_back(
     if let Some(revealing) = revealing.as_mut() {
         revealing.clear();
     }
+}
+
+/// **Another project ends the follow of the previous one** (review round 3).
+///
+/// A queued request names a place in **map metres**, and a height is measured against the map it was
+/// made on — so carried into another project it names a spot that project does not have, and the chip
+/// would keep naming a change the person can no longer be shown. Nothing cleared either before this.
+///
+/// **The map is not in this test**: `clear_the_follow_when_the_map_changes` keeps the queue on purpose
+/// (each request is re-resolved against whatever map is open when its turn comes), and that is a
+/// different question from one the request cannot mean anything in.
+fn clear_the_follow_when_the_project_changes(
+    project: Option<Res<Project>>,
+    mut following: ResMut<Following>,
+    mut seen: Local<Option<std::path::PathBuf>>,
+) {
+    let root = project.as_deref().map(|p| p.root.clone());
+    if *seen == root {
+        return;
+    }
+    *seen = root;
+    following.queue.clear();
+    following.waiting = None;
+
+    following.ease = None;
+    following.outline.clear();
+    following.look_now = false;
 }
 
 /// **A new map ends the follow of the old one.**
@@ -525,6 +561,7 @@ impl Plugin for FollowPlugin {
                 // then overwritten by the whole map a frame later.
                 // **Before the request is taken**, so a follow never carries the last map's ease or
                 // ring onto the new map.
+                clear_the_follow_when_the_project_changes.before(take_the_follow_request),
                 clear_the_follow_when_the_map_changes.before(take_the_follow_request),
                 // **And before it too**, so the frame a person presses a key on is a frame the
                 // camera does not move on: the press and the follow would otherwise land together
@@ -535,7 +572,9 @@ impl Plugin for FollowPlugin {
                     .before(crate::editor::frame_map_on_open),
                 // **The chip is read off the queue after the frame's request was taken**, so it says
                 // what is still waiting rather than what has just been shown.
-                follow_the_chip.after(take_the_follow_request),
+                follow_the_chip
+                    .after(take_the_follow_request)
+                    .after(clear_the_follow_when_the_project_changes),
                 // **The chip's words are drawn beside the change that is waiting**, so its button and
                 // the sentence it sits on are one picture.
                 draw_the_look_chip.after(follow_the_chip),
@@ -594,8 +633,11 @@ fn take_the_follow_request(
         following.busy = false;
     }
     // **The ring comes down on its own clock**, whether or not another follow is queued.
-    if !following.outline.is_empty() && now >= following.outline_until {
+    if (!following.outline.is_empty() || following.outline_box.is_some())
+        && now >= following.outline_until
+    {
         following.outline.clear();
+        following.outline_box = None;
     }
     // **A person who asked for no travel gets none**: the camera lands in the frame it was asked,
     // so there is no ease to advance. One answer for the whole editor
@@ -653,7 +695,20 @@ fn take_the_follow_request(
         FrameTarget::Rect(rect) => following.shown_rect.is_some_and(|(was, _)| same_box(was, *rect)),
         _ => false,
     });
+    // **(b) The exemption is #361's case and only that: a PREVIEW was framed, and the APPLY of the same
+    // change has arrived.** Anything else at the same box is a real second view — measured, an agent's
+    // undo of the placement it made 0.35 s earlier named the same box and was dropped here, so
+    // `an_agents_undo_frames_where_the_change_was` saw a camera that never moved. A general "same place"
+    // exemption also took away the camera whenever something else had pointed it elsewhere between the
+    // two (`point_away`), which turned a proposal into a camera that silently stayed put.
+    let showing_a_preview = following.shown == Manner::Preview;
+    let arriving_as_applied = following
+        .queue
+        .front()
+        .is_some_and(|(_, _, manner)| *manner == Manner::Applied);
     let same_while_shown = at_the_place_already_shown
+        && showing_a_preview
+        && arriving_as_applied
         && following
             .shown_at
             .is_some_and(|at| now < at + f64::from(FOLLOW_DWELL_S));
@@ -732,6 +787,9 @@ fn take_the_follow_request(
         following.queue.clear();
         return;
     };
+    // **Whether a burst is running**, read *before* this request leaves the queue: more than one
+    // change waiting means the pace exists to separate them.
+    let burst = following.queue.len() > 1;
     let Some((request, _, manner)) = following.queue.pop_front() else {
         return;
     };
@@ -804,12 +862,24 @@ fn take_the_follow_request(
     // ring is whatever the map now holds inside the box that was just framed. Read after the change,
     // which is why this is here rather than in `request_of`: the answer describes a map that did not
     // exist when the request was raised.
-    let ids = if request.ids.is_empty() {
-        inside_the_framed_box(project, open, &settled)
+    // **A preview rings its own footprint; a change rings the pieces it names.**
+    //
+    // A proposal names a rectangle and no ids — the id is minted at commit — so reading
+    // `inside_the_framed_box` would ring whatever already stands there and attribute the proposal to
+    // a piece it is not about (review round 3). The box *is* the thing being proposed, and the issue
+    // asks for exactly that: "for a piece that does not exist yet, the outline is its footprint rect".
+    let (ids, ring) = if manner == Manner::Preview {
+        (Vec::new(), Some(rect))
     } else {
-        request.ids
+        let ids = if request.ids.is_empty() {
+            inside_the_framed_box(project, open, &settled)
+        } else {
+            request.ids
+        };
+        (ids, None)
     };
-    if ids.is_empty() {
+    following.outline_box = ring;
+    if ids.is_empty() && ring.is_none() {
         following.outline.clear();
     } else {
         following.outline = ids;
@@ -818,9 +888,16 @@ fn take_the_follow_request(
     // **The dwell starts now if a burst is waiting behind this one**, so the next change waits
     // [`FOLLOW_DWELL_S`] — and a lone change arms nothing.
     following.shown_at = Some(now);
-    // **A burst is two views closer together than the dwell**, whether they arrived in one frame or
-    // one after another: the next change is what the pace exists to separate from this one.
-    following.dwell_from = Some(now);
+    // **Only a burst arms the pace, and a burst is another change already waiting behind this one.**
+    // The comment above said that and the code said the opposite — `Some(now)` after *every* framing —
+    // so a lone change was followed 0.6 s later by a lone undo that the pace then held, and
+    // `an_agents_undo_frames_where_the_change_was` (budgeted at one ease) never saw the camera move.
+    // Measured on `five_changes_in_one_frame_are_held_apart_by_the_dwell`: with `Some(now)` the first
+    // two changes of a five-change burst were framed 0.02 s apart, so the pace was not even doing its
+    // own job — the queue was empty by then and the second frame came straight through.
+    // **`burst` was read before this request left the queue**: it is true exactly when another change
+    // was already waiting behind this one, which is what a burst is.
+    following.dwell_from = burst.then_some(now);
     following.shown = manner;
     following.shown_rect = Some((rect, now));
     following.note_what_waits();
@@ -870,8 +947,21 @@ fn draw_the_follow_outline(
         Manner::Applied => crate::chrome::ACCENT,
         Manner::Preview => crate::chrome::SUGGEST,
     };
-    if following.outline.is_empty() {
+    if following.outline.is_empty() && following.outline_box.is_none() {
         return;
+    }
+    // **A proposal's ring is its footprint**, drawn in the proposal ink with nothing to resolve.
+    if let Some(rect) = following.outline_box {
+        let centre = Vec3::new((rect[0] + rect[2]) * 0.5, 0.0, (rect[1] + rect[3]) * 0.5);
+        let size = Vec2::new((rect[2] - rect[0]).abs(), (rect[3] - rect[1]).abs());
+        gizmos.rect(
+            Isometry3d::new(
+                centre + Vec3::Y * OUTLINE_LIFT_M,
+                Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+            ),
+            size.max(Vec2::splat(OUTLINE_MIN_M)),
+            ink,
+        );
     }
     let (Some(project), Some(open)) = (project.as_deref(), open.as_deref()) else {
         return;

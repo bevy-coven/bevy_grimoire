@@ -1528,11 +1528,7 @@ fn operation_preview(
             // **Previews are followed while agent writes are paused**, which is the one place in this
             // file where the pause does not refuse: planning is exactly what a person watching an
             // agent may want to see, and nothing is written to refuse.
-            gates.follow_a_preview(
-                &shown,
-                &crate::ops::preview_summary(&ctx, op.as_ref(), &p.parameters),
-                state.as_deref_mut(),
-            );
+            gates.follow_a_preview(&shown, &crate::ops::preview_summary(op.as_ref(), &plan), state.as_deref_mut());
             Ok(json!({
                 "operation": p.operation,
                 "outcome": "previewed",
@@ -1734,11 +1730,7 @@ fn operation_apply(
                 let shown = ops::preview_shows(&ctx, op.as_ref(), &p.parameters);
                 // **`dry_run` is a preview and is followed as one** (AF-05, #361): an agent that asks
                 // what would change is showing the person the same proposal the preview tool shows.
-                gates.follow_a_preview(
-                    &shown,
-                    &crate::ops::preview_summary(&ctx, op.as_ref(), &p.parameters),
-                    state.as_deref_mut(),
-                );
+                gates.follow_a_preview(&shown, &crate::ops::preview_summary(op.as_ref(), &plan), state.as_deref_mut());
                 Ok(json!({
                     "operation": p.operation,
                     "outcome": "previewed",

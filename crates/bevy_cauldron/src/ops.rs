@@ -5190,32 +5190,28 @@ pub fn preview(
 /// **Infallible, because [`preview`] already refused what it would refuse.** `shows` is pure and
 /// answers for parameters a commit would reject — that is what lets a person see *where* a change
 /// that will be refused would have landed.
-/// **What a proposal would do, in the receipt's words** (AF-05, #361): the plan's own summary, which
-/// is what an apply's receipt says too — with `would` in front of it, so the sentence a person reads
-/// while nothing has been written cannot be read as something that happened.
-///
-/// **Not a second wording.** The plan already says *"place bed@02"*; this says *"would place bed@02"*,
-/// so a preview and its apply cannot describe one change two ways, which is the rule
-/// `crate::follow::as_the_familiar` exists for one screen over.
-pub fn preview_summary(ctx: &Ctx, op: &dyn Operation, params: &serde_json::Value) -> String {
-    match op.plan(ctx, params) {
-        Ok(plan) => match plan.get("summary").and_then(serde_json::Value::as_str) {
-            Some(said) => said.to_owned(),
-            // **A plan that names no summary is a plan whose answer is the change itself** — a
-            // `placement_add`'s box, an undo's restore. The operation's own name is then the most
-            // honest thing to say, and it is what an agent reads on the receipt anyway.
-            None => format!("do `{}`", op.name()),
-        },
-        // **A refused plan cannot reach here** — the caller's `preview` already returned its refusal —
-        // so this arm is the "the plan changed between two calls" case, and naming the operation is
-        // the answer that cannot be wrong.
-        Err(_) => format!("do `{}`", op.name()),
-    }
-}
-
 pub fn preview_shows(ctx: &Ctx, op: &dyn Operation, params: &serde_json::Value) -> Shown {
     op.shows(ctx, params)
 }
+
+/// **What a proposal would do, in the receipt's words** (AF-05, #361).
+///
+/// **The caller's own plan**, not a second `plan` call: `preview` already ran it, and running it again
+/// would be a second answer to what the change would be (and, for an operation with a side effect in
+/// `plan`, a second side effect).
+///
+/// **`would` is in front of the plan's own summary**, so the sentence a person reads while nothing has
+/// been written cannot be read as something that happened — and a preview and its apply cannot
+/// describe one change two ways.
+pub fn preview_summary(op: &dyn Operation, plan: &serde_json::Value) -> String {
+    match plan.get("summary").and_then(serde_json::Value::as_str) {
+        Some(said) => format!("would {said}"),
+        // **A plan that names no summary is one whose answer is the change itself** — a
+        // `placement_add`'s box, an undo's restore. Naming the operation is then the honest sentence.
+        None => format!("would do `{}`", op.name()),
+    }
+}
+
 
 /// **[`dispatch`], with the line it undoes named** — the one path for a change and for its undo,
 /// so an undo is validated, written and logged exactly as the change was.
