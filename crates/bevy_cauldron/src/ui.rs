@@ -7,14 +7,14 @@
 use bevy::prelude::*;
 use bevy_gooey::{GooeyNavPlugin, GooeySkin, GooeyStylePlugin};
 
-/// The editor's own skin, as data: `src/editor_skin.ron`.
-const EDITOR_SKIN: &str = include_str!("editor_skin.ron");
+/// The editor's own skin, as data: `src/editor_skin.yaml`.
+const EDITOR_SKIN: &str = include_str!("editor_skin.yaml");
 
 /// **The editor's look as `bevy_gooey`'s own type** (UI-02, #210): the colours and measures
 /// `chrome.rs` draws with, the elevation ladder in `surfaces` and the sizes a compact tool wants.
 /// `GooeySkin::problems()` is the check that the ladder is a ladder and the ink is readable.
 pub fn editor_skin() -> GooeySkin {
-    crate::ui_skin::from_ron(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.ron does not read: {e}"))
+    crate::ui_skin::from_yaml(EDITOR_SKIN).unwrap_or_else(|e| panic!("src/editor_skin.yaml does not read: {e}"))
 }
 
 /// The least contrast the editor's own ink may have against a theme's ground: WCAG 2.2, success
@@ -24,7 +24,7 @@ const LEAST_TEXT_CONTRAST: f32 = bevy_gooey::TEXT_CONTRAST;
 /// **The editor's skin for a theme** (UI-73, #251): its own measured colours for [`Theme::ToolDark`],
 /// and `bevy_gooey`'s preset for the two the editor does not ship.
 ///
-/// Tool dark is the editor's own `editor_skin.ron` because the editor's darks are *measured*
+/// Tool dark is the editor's own `editor_skin.yaml` because the editor's darks are *measured*
 /// (`chrome.rs`'s elevation ladder and the ink contracts its census holds), and gooey's `tool()` is a
 /// different set of them. Parchment and High contrast are the library's presets whole: they are the
 /// accessibility answer, and a host that re-derived one would be a second, unchecked palette.
@@ -78,7 +78,7 @@ pub fn editor_inks() -> Vec<(&'static str, Color)> {
         ("accent", skin.accent),
         ("danger", skin.danger),
     ];
-    // The named tones `chrome.rs` draws labels with, in the order `editor_skin.ron` lists them.
+    // The named tones `chrome.rs` draws labels with, in the order `editor_skin.yaml` lists them.
     for tone in ["key", "label", "labeled", "muted", "suggest"] {
         if let Some(colour) = skin.tone(tone) {
             inks.push((tone, colour));
@@ -165,7 +165,7 @@ pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
 ///
 /// **A settled editor costs one comparison.** The theme, the size and the refusal last decided are
 /// kept in `Local`s, and a pass whose three inputs are the ones already answered returns before
-/// [`skin_for`] is called: parsing `editor_skin.ron` and measuring nine inks against two grounds sixty
+/// [`skin_for`] is called: parsing `editor_skin.yaml` and measuring nine inks against two grounds sixty
 /// times a second, to write what is already there, is work with no answer at the end of it.
 ///
 /// **The colours and the scale are written separately, and that is not tidiness.** [`skin_for`] builds

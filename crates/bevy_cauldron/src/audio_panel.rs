@@ -1,7 +1,7 @@
 //! **The audio panel** (S-01): a project's sound as the crate's own data, with its mix drawn live and every cue
 //! auditionable.
 //!
-//! The file is `<project>/family/bevy_siren.ron` — `bevy_siren`'s own `SirenSettings`, `CueTable` and `MusicScore`,
+//! The file is `<project>/family/bevy_siren.yaml` — `bevy_siren`'s own `SirenSettings`, `CueTable` and `MusicScore`,
 //! read and written through their own `serde` derives. There is no second schema: the editor writes the crate's
 //! types, so the file a person edits here is the file a game ships.
 //!
@@ -28,7 +28,7 @@ use crate::editor::EditorState;
 use crate::project::Project;
 
 /// The crate's settings file, under the project's `family/`.
-pub const FILE: &str = "bevy_siren.ron";
+pub const FILE: &str = "bevy_siren.yaml";
 
 /// The panel's own state: what was read, what is selected, and whether it is open.
 #[derive(Resource, Clone, Debug, Default, PartialEq)]

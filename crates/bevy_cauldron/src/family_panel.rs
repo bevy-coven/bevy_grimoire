@@ -434,7 +434,7 @@ fn read_the_files(
             continue;
         };
         if krate == CRATE
-            && let Ok(settings) = ElementsSettings::from_ron(&settings_text)
+            && let Ok(settings) = ElementsSettings::from_yaml(&settings_text)
         {
             parsed.push((krate.clone(), settings));
             fields.push(krate.clone());

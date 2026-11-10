@@ -136,7 +136,7 @@ pub fn people_of(project: &crate::project::Project, map: &str) -> People {
     path_of(project, map)
         .ok()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| ron::from_str(&t).ok())
+        .and_then(|t| bevy_grimoire_core::yaml::from_str(&t, "people").ok())
         .unwrap_or_default()
 }
 
@@ -161,7 +161,7 @@ pub fn tenant_of(project: &crate::project::Project, map: &str, ids: &[String]) -
 fn check_faction(ctx: &Ctx, faction: &str) -> Result<(), Refusal> {
     let Ok(path) = crate::ops_family::settings_path(ctx, "bevy_society") else { return Ok(()) };
     let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
-    let Ok(file) = ron::from_str::<bevy_society::DefsFile>(&text) else { return Ok(()) };
+    let Ok(file) = bevy_grimoire_core::yaml::from_str::<bevy_society::DefsFile>(&text, "family/bevy_society.yaml") else { return Ok(()) };
     if file.factions.iter().any(|f| f.id == faction) {
         return Ok(());
     }
@@ -183,7 +183,7 @@ fn check_conversation(ctx: &Ctx, name: &str) -> Result<(), Refusal> {
     let text = std::fs::read_to_string(&path)
         .map_err(|e| Refusal::new(format!("{} cannot be read, so no conversation can be attached: {e}. Nothing was changed.", path.display())))?;
     let script: bevy_speech_bubbles::DialogueScript =
-        ron::from_str(&text).map_err(|e| Refusal::new(format!("the project's dialogue script is not readable: {e}. Nothing was changed.")))?;
+        bevy_grimoire_core::yaml::from_str(&text, "family/bevy_speech_bubbles.yaml").map_err(|p| Refusal::new(format!("the project's dialogue script is not readable: {}. Nothing was changed.", p.line())))?;
     if script.conversations.contains_key(name) {
         return Ok(());
     }
@@ -313,8 +313,7 @@ impl PersonSet {
                 }
                 summary
             };
-            let text = ron::ser::to_string_pretty(&people, ron::ser::PrettyConfig::default())
-                .map_err(|e| Refusal::new(format!("the people could not be written: {e}")))?;
+            let text = bevy_grimoire_core::yaml::to_string(&people).map_err(|p| Refusal::new(format!("the people could not be written: {}", p.line())))?;
             (Some(text), summary)
         };
 

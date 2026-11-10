@@ -1,6 +1,6 @@
 //! **A map's environment: climate, date, clock, place and forced weather** (#98).
 //!
-//! The data is `bevy_elements`' own serde types, written as RON in `<project>/family/bevy_elements.ron`
+//! The data is `bevy_elements`' own serde types, written as YAML in `<project>/family/bevy_elements.yaml`
 //! (the file `family_set` edits and the game's copy of the plugin reads). [`ElementsSettings`] only
 //! lists which of the crate's resources the file holds; it defines no field of its own except which
 //! weather preset is forced, because the crate keeps that inside a private director.
@@ -57,8 +57,8 @@ pub struct ElementsSettings {
 }
 
 impl ElementsSettings {
-    pub fn from_ron(text: &str) -> Result<Self, String> {
-        ron::from_str(text).map_err(|e| format!("bevy_elements settings: {e}"))
+    pub fn from_yaml(text: &str) -> Result<Self, String> {
+        bevy_grimoire_core::yaml::from_str(text, "family/bevy_elements.yaml").map_err(|p| format!("bevy_elements settings: {}", p.line()))
     }
 
     /// The settings a new map starts with: the crate's own defaults.
@@ -76,8 +76,8 @@ impl ElementsSettings {
         }
     }
 
-    pub fn to_ron(&self) -> String {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()).expect("settings serialise")
+    pub fn to_yaml(&self) -> String {
+        bevy_grimoire_core::yaml::to_string(self).expect("settings serialise")
     }
 }
 
@@ -146,7 +146,7 @@ pub struct Preview<'w> {
     dust: Option<ResMut<'w, DustSettings>>,
 }
 
-/// Reads a reloaded `family/bevy_elements.ron` into the preview's resources. A file that does not
+/// Reads a reloaded `family/bevy_elements.yaml` into the preview's resources. A file that does not
 /// fit the crate's types is a problem on the status line and the previous values stay.
 pub fn apply_environment(
     settings: Res<FamilySettings>,
@@ -164,7 +164,7 @@ pub fn apply_environment(
         return;
     }
     *seen = Some(text.clone());
-    let parsed = match ElementsSettings::from_ron(text) {
+    let parsed = match ElementsSettings::from_yaml(text) {
         Ok(p) => p,
         Err(e) => {
             state.status.problem(format!("{e}; the previous environment stays"));
@@ -197,7 +197,7 @@ pub struct Dressing {
 }
 
 /// **The carved ground wears the game's weathered material** (#101). While the project has a
-/// `family/bevy_elements.ron` and `bevy_elements`' plugins are in the app, every chunk of the carved
+/// `family/bevy_elements.yaml` and `bevy_elements`' plugins are in the app, every chunk of the carved
 /// ground ([`TerrainView::Volume`](crate::terrain_view::TerrainView::Volume)) is drawn with one
 /// `WeatheredMaterial`, so the preview's snow and wetness are what the game draws. The file's
 /// [`ElementsSettings::volume_cover`] is put on that material with `set_cover` when the file changes,
@@ -231,7 +231,7 @@ pub fn dress_volume(
     if seen.as_ref() != Some(text) {
         *seen = Some(text.clone());
         // Only a changed cover touches the material: `get_mut` re-prepares it, and a clock edit should not.
-        if let Ok(parsed) = ElementsSettings::from_ron(text)
+        if let Ok(parsed) = ElementsSettings::from_yaml(text)
             && parsed.volume_cover != *worn
             && let Some(mut material) = weathered.get_mut(&handle)
         {
@@ -248,7 +248,7 @@ pub fn dress_volume(
 
 /// **Keep the weathered carved-ground pipeline compiled** (#268), as
 /// [`crate::terrain_view::warm_volume_pipeline`] does the plain one: the first carve of a project with
-/// a `family/bevy_elements.ron` drew nothing for 0.5 s while `WeatheredMaterial`'s pipeline compiled.
+/// a `family/bevy_elements.yaml` drew nothing for 0.5 s while `WeatheredMaterial`'s pipeline compiled.
 /// Does nothing without `bevy_elements`' material store.
 pub fn warm_weathered_pipeline(
     mut commands: Commands,
@@ -266,7 +266,7 @@ pub fn warm_weathered_pipeline(
 }
 
 /// **The clock scrubber** (#98): camera-style state, not an operation. `Some(hour)` holds the
-/// preview's clock at that hour of day without touching `family/bevy_elements.ron`, so scrubbing
+/// preview's clock at that hour of day without touching `family/bevy_elements.yaml`, so scrubbing
 /// writes no file and leaves no undo step; `None` lets the file's clock run.
 #[derive(Resource, Default, Clone, Copy, Debug, PartialEq)]
 pub struct ClockScrub(pub Option<f64>);
@@ -440,12 +440,12 @@ impl EnvAction {
     /// The `family_set` params this action writes, or `None` for the camera-style clock buttons.
     pub fn family_params(self) -> Option<serde_json::Value> {
         let (field, value) = match self {
-            EnvAction::Force(p) => ("forced_weather", format!("Some({p:?})")),
-            EnvAction::ReleaseWeather => ("forced_weather", "None".to_owned()),
+            EnvAction::Force(p) => ("forced_weather", format!("{p:?}")),
+            EnvAction::ReleaseWeather => ("forced_weather", "null".to_owned()),
             EnvAction::Month(m) => ("clock.date.month", m.to_string()),
             EnvAction::Climate(c) => (
                 "climate",
-                ron::ser::to_string(&c.climate()).expect("climate serialises"),
+                bevy_grimoire_core::yaml::to_string(&c.climate()).expect("climate serialises"),
             ),
             EnvAction::Scrub(_) | EnvAction::ReleaseClock => return None,
         };
@@ -487,7 +487,7 @@ pub fn spawn_section(s: &mut ChildSpawnerCommands) {
 
 type WorldCamera = (Entity, Has<bevy_elements::ElementsCamera>, &'static mut Camera);
 
-/// **The preview's look** (#98): a project with a `family/bevy_elements.ron` gets `bevy_elements'`
+/// **The preview's look** (#98): a project with a `family/bevy_elements.yaml` gets `bevy_elements'`
 /// atmosphere, fog, clouds and sun on the editor camera, which is what the game draws; a project
 /// without one keeps the editor's own light. Follows the file's presence, so adding or deleting it
 /// switches the preview without a restart.

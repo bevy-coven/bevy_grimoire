@@ -1,8 +1,8 @@
 //! **`grimoire_decide`'s logic, apart from the transport and the editor**, so a test drives it with a
 //! recorded response and no model, no editor and no network.
 //!
-//! Two forms: a **named check** from `checks.ron` (the editor's built-ins, merged with the project's own
-//! `assets/grimoire/checks.ron`, read on every call so an edit takes effect at once), and **ad-hoc typed
+//! Two forms: a **named check** from `checks.yaml` (the editor's built-ins, merged with the project's own
+//! `assets/grimoire/checks.yaml`, read on every call so an edit takes effect at once), and **ad-hoc typed
 //! questions**. Images are files under the project; the one picture the server can take itself is `view`,
 //! the editor's current picture. A third, `game`, is a frame of the **running game** taken through its own
 //! `bevy_fairy` (the port in the project's `play.yaml`), with one BRP call's answer as the facts, so the same

@@ -69,7 +69,7 @@ impl NotesView {
 
 /// **Read the open map's notes file when it changed, and decide it once.**
 ///
-/// A file that reads replaces the held notes; one that is refused ([`Notes::from_ron`]: not RON, the
+/// A file that reads replaces the held notes; one that is refused ([`Notes::parse`]: not YAML, the
 /// wrong type, a field missing, a version this build does not read, an id twice) leaves them; a file
 /// that is gone empties them and clears its verdict. A refusal names the file as the project's
 /// directory sees it and the field it is wrong at.

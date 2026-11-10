@@ -27,7 +27,7 @@ fn an_unknown_name_and_a_repeat_are_refused_or_reported() {
     assert!(Family::parse("version: 2\ncrates: []\n").is_err());
 }
 
-const SETTINGS: &str = "Settings(\n    // sun\n    sun: (hour: 6.5, tilt: 0.4),\n    label: \"a, (b)\",\n    wind: 3,\n)\n";
+const SETTINGS: &str = "# sun\nsun:\n  hour: 6.5  # morning\n  tilt: 0.4\nlabel: 'a, (b)'\nwind: 3\nat: [1.0, 2.0]\n";
 
 #[test]
 fn set_field_rewrites_only_the_named_value_and_returns_the_old_one() {
@@ -39,13 +39,22 @@ fn set_field_rewrites_only_the_named_value_and_returns_the_old_one() {
     let (back, _) = set_field(&text, "sun.hour", &old).unwrap();
     assert_eq!(back, SETTINGS);
     // A value holding commas and brackets inside a string is one value.
-    let (t, old) = set_field(SETTINGS, "label", "\"x\"").unwrap();
-    assert_eq!(old, "\"a, (b)\"");
-    assert!(t.contains("label: \"x\",") && t.contains("wind: 3"));
-    // A whole struct is a value too.
-    let (t, old) = set_field(SETTINGS, "sun", "(hour: 1.0, tilt: 0.0)").unwrap();
-    assert_eq!(old, "(hour: 6.5, tilt: 0.4)");
-    assert!(t.contains("sun: (hour: 1.0, tilt: 0.0),"));
+    let (t, old) = set_field(SETTINGS, "label", "'x'").unwrap();
+    assert_eq!(old, "'a, (b)'");
+    assert!(t.contains("label: 'x'\n") && t.contains("wind: 3"));
+    // A flow collection is a value too, and so is a whole struct, written on one line.
+    let (t, old) = set_field(SETTINGS, "at", "[3.0, 4.0]").unwrap();
+    assert_eq!(old, "[1.0, 2.0]");
+    assert!(t.contains("at: [3.0, 4.0]\n"));
+    let (t, old) = set_field(SETTINGS, "sun", "{hour: 1.0, tilt: 0.0}").unwrap();
+    assert_eq!(old, "hour: 6.5  # morning\ntilt: 0.4");
+    assert!(t.contains("sun: {hour: 1.0, tilt: 0.0}\n"), "{t}");
+    // **A struct written on one line undoes through its old block text**, which is the other spelling.
+    let (back, _) = set_field(&t, "sun", &old).unwrap();
+    assert_eq!(back, SETTINGS);
+    // A value of lines goes in under its key.
+    let (t, _) = set_field(SETTINGS, "wind", "speed: 3\ngust: 5").unwrap();
+    assert!(t.contains("wind:\n  speed: 3\n  gust: 5\nat:"), "{t}");
 }
 
 #[test]
@@ -53,6 +62,7 @@ fn set_field_names_what_is_missing_and_refuses_a_value_that_is_not_one() {
     use bevy_grimoire_core::family::set_field;
     assert!(set_field(SETTINGS, "sun.nope", "1").unwrap_err().contains("nope"));
     assert!(set_field(SETTINGS, "wind.deep", "1").is_err());
-    assert!(set_field(SETTINGS, "wind", "(1, 2").is_err());
-    assert!(set_field(SETTINGS, "wind", "1, other: 2").is_err());
+    assert!(set_field(SETTINGS, "wind", "[1, 2").is_err());
+    assert!(set_field(SETTINGS, "wind", "{a: 1, a: 2}").is_err());
+    assert!(set_field(SETTINGS, "wind", "   ").is_err());
 }

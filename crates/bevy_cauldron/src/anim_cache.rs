@@ -28,7 +28,7 @@ use crate::project::Project;
 pub const CACHE_VERSION: u32 = 1;
 
 /// The cache file, relative to the project root.
-pub const CACHE_PATH: &str = "target/anim_bench_cache.ron";
+pub const CACHE_PATH: &str = "target/anim_bench_cache.yaml";
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CacheFile {

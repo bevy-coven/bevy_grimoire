@@ -127,7 +127,6 @@ bevy = { workspace = true, features = ["jpeg", "bevy_feathers"] }
 accesskit = "0.24"
 # The screenshot rig, shared with the game so there is one capture path rather than two copies of it.
 bevy_devshot = { path = "../bevy_devshot" }
-ron.workspace = true
 # **The RON-to-YAML migration** (GD-03, #365): `cauldron migrate` and the refusal an open raises for a
 # project still holding `.ron` files. A crate of its own because it is the one thing that must still read
 # RON, and `bevy_grimoire_core` must not.
@@ -195,3 +194,7 @@ path = "tests/all.rs"
 [[example]]
 name = "asset_spike_measure"
 required-features = ["asset_spike"]
+
+[[example]]
+name = "fixtures_to_yaml"
+required-features = ["bevy_elements"]

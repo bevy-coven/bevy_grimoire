@@ -580,7 +580,7 @@ pub fn plan_resuming(
             Some(command) => format!("{command}\r"),
             None => {
                 post.checks[STARTED] =
-                    CheckStatus::Failed("Custom command is not set: add terminal_agent_command to settings.ron".to_owned());
+                    CheckStatus::Failed("Custom command is not set: add terminal_agent_command to settings.yaml".to_owned());
                 post.skip_from(CONNECTED, "nothing was started");
                 String::new()
             }

@@ -57,7 +57,7 @@ fn load_marks(root: &Path) -> Result<Marks, Refusal> {
 }
 
 fn write_marks(root: &Path, marks: &Marks) -> Result<(), Refusal> {
-    let text = ron::ser::to_string_pretty(marks, ron::ser::PrettyConfig::default()).map_err(|e| Refusal::new(e.to_string()))?;
+    let text = bevy_grimoire_core::yaml::to_string(marks).map_err(|p| Refusal::new(p.line()))?;
     bevy_grimoire_core::atomic_file::write(&marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.yaml refused the write, so nothing changed: {e}")))
 }
 
@@ -90,7 +90,7 @@ fn subject(ctx: &Ctx, piece: &str) -> Result<(Mesh, ProxyCell, u64), Refusal> {
     let mut m = Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default());
     m.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     let proxy = ProxyCell::from_box((lo + hi) * 0.5, ((hi - lo) * 0.5).max(Vec3::splat(1.0e-4)));
-    let key = hash ^ bevy_grimoire_core::glb::fnv1a(ron::to_string(&cut_for(piece)).unwrap_or_default().as_bytes()).rotate_left(17);
+    let key = hash ^ bevy_grimoire_core::glb::fnv1a(format!("{:?}", cut_for(piece)).as_bytes()).rotate_left(17);
     Ok((m, proxy, key))
 }
 
@@ -127,7 +127,7 @@ fn baked(ctx: &Ctx, piece: &str) -> Result<(Bake, bool), Refusal> {
     let bake = Bake { version: VERSION, key, chunks };
     let path = bake_path(&root, piece);
     std::fs::create_dir_all(path.parent().expect("a bake path has a directory")).map_err(|e| Refusal::new(e.to_string()))?;
-    let text = ron::ser::to_string(&bake).map_err(|e| Refusal::new(e.to_string()))?;
+    let text = bevy_grimoire_core::yaml::to_string(&bake).map_err(|p| Refusal::new(p.line()))?;
     bevy_grimoire_core::atomic_file::write(&path, text).map_err(|e| Refusal::new(format!("{} refused the bake, so nothing changed: {e}", path.display())))?;
     Ok((bake, true))
 }

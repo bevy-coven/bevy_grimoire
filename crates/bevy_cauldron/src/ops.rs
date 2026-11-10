@@ -4408,7 +4408,7 @@ pub mod vocab_add_token {
         let text = std::fs::read_to_string(&path)
             .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was added.", path.display())))?;
         let copy = std::env::temp_dir().join(format!(
-            "grimoire-vocab-plan-{}-{}.ron",
+            "grimoire-vocab-plan-{}-{}.yaml",
             std::process::id(),
             COPIES.fetch_add(1, Ordering::Relaxed)
         ));

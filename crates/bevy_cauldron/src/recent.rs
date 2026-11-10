@@ -6,7 +6,7 @@
 //! share, and where one author opened it from is no business of its files.
 //!
 //! The list is data like every other file here: versioned, and a file of another version is refused
-//! by name rather than read as this one's ([`Recent::from_ron`]). A path whose folder has gone is
+//! by name rather than read as this one's ([`Recent::parse`]). A path whose folder has gone is
 //! listed as [`Listed::missing`], never dropped: the author moved it, and [`Recent::locate`] points
 //! the entry at where it went.
 //!

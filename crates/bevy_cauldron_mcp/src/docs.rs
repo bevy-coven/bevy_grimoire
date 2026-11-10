@@ -301,7 +301,7 @@ pub const TOOLS: &[ToolDoc] = &[
         description: "Ask a decision model a typed question about the editor's pictures and facts, and get a \
                       probability for every allowed answer, with nothing to parse. Two forms. check: a \
                       named check such as floating, clipping, outside_area, blank_frame or toast_visible \
-                      (the editor's own, with the project's assets/grimoire/checks.ron over them, read on every \
+                      (the editor's own, with the project's assets/grimoire/checks.yaml over them, read on every \
                       call); it answers a finding with the check's P(yes), its threshold and whether it was \
                       found, and takes the editor's current picture itself when it needs view. questions: \
                       ad-hoc typed questions by id, each noul (yes or no, P(yes)), choice (named options, \
@@ -311,7 +311,7 @@ pub const TOOLS: &[ToolDoc] = &[
                       less. game: also look at the running game that play started: a frame from its \
                       bevy_fairy, named game, on the port in play.yaml or game.port, and one BRP call's \
                       answer (game.state) as facts.game; a check that asks for the image game takes it \
-                      itself, and a game's own checks live in the project's assets/grimoire/checks.ron. \
+                      itself, and a game's own checks live in the project's assets/grimoire/checks.yaml. \
                       Advisory: it changes no map data and a finding never blocks or undoes an \
                       operation. The endpoint is one per run, local by default; a Cloudflare endpoint sends \
                       pictures off the LAN and is opt-in.",

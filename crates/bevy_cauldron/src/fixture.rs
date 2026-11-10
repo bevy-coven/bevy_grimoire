@@ -25,16 +25,14 @@ pub enum Fixture {
 impl Fixture {
     /// Read `text` as the crate's own type for the value it names. The error says which type it read it as.
     pub fn read(text: &str) -> Result<Fixture, String> {
-        let names_a_fire = match ron::from_str::<ron::Value>(text) {
-            Ok(ron::Value::Map(fields)) => {
-                fields.iter().any(|(k, _)| matches!(k, ron::Value::String(s) if FIRE_FIELDS.contains(&s.as_str())))
-            }
+        let names_a_fire = match bevy_grimoire_core::yaml::to_json(text, "bevy_lights") {
+            Ok(serde_json::Value::Object(fields)) => fields.keys().any(|k| FIRE_FIELDS.contains(&k.as_str())),
             _ => false,
         };
         if names_a_fire {
-            ron::from_str::<Fire>(text).map(Fixture::Fire).map_err(|e| format!("`{text}` is not a bevy_lights Fire (kind: Candle, Lantern, Torch, Brazier, Campfire or Bonfire): {e}"))
+            bevy_grimoire_core::yaml::from_str::<Fire>(text, "bevy_lights").map(Fixture::Fire).map_err(|p| format!("`{text}` is not a bevy_lights Fire (kind: Candle, Lantern, Torch, Brazier, Campfire or Bonfire): {}", p.line()))
         } else {
-            ron::from_str::<Flicker>(text).map(Fixture::Flicker).map_err(|e| format!("`{text}` is not a bevy_lights Flicker (and names no field only a Fire has, such as `kind`): {e}"))
+            bevy_grimoire_core::yaml::from_str::<Flicker>(text, "bevy_lights").map(Fixture::Flicker).map_err(|p| format!("`{text}` is not a bevy_lights Flicker (and names no field only a Fire has, such as `kind`): {}", p.line()))
         }
     }
 

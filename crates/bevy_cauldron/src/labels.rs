@@ -783,7 +783,7 @@ impl OpenGlb for std::path::PathBuf {
 /// Where flagged vocabulary ideas wait for a human. Under `slop/` because that is dev-time prose
 /// territory — **nothing loads this file**, which is the whole point: the LLM never touches
 /// `vocab.yaml`, and adopting a token is a person's two-file edit.
-pub const PROPOSALS_PATH: &str = "slop/llm/vocab_proposals.ron";
+pub const PROPOSALS_PATH: &str = "slop/llm/vocab_proposals.yaml";
 
 /// A `readme` FIELD rather than a comment, because comments do not survive re-serialization.
 const PROPOSALS_README: &str = "PROPOSALS ONLY - nothing loads this file. Adopting a token is a \
@@ -824,8 +824,8 @@ fn merge_proposals(
         return Ok(None);
     }
     let mut file = match existing {
-        Some(text) => ron::from_str::<ProposalsFile>(text)
-            .map_err(|e| format!("{PROPOSALS_PATH} no longer parses ({e}); not overwriting it"))?,
+        Some(text) => bevy_grimoire_core::yaml::from_str::<ProposalsFile>(text, PROPOSALS_PATH)
+            .map_err(|p| format!("{PROPOSALS_PATH} no longer parses ({}); not overwriting it", p.line()))?,
         None => ProposalsFile {
             readme: PROPOSALS_README.to_owned(),
             proposals: Vec::new(),
@@ -860,8 +860,7 @@ fn merge_proposals(
     if !changed {
         return Ok(None);
     }
-    let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-        .map_err(|e| format!("cannot serialize {PROPOSALS_PATH}: {e}"))?;
+    let text = bevy_grimoire_core::yaml::to_string(&file).map_err(|p| format!("cannot serialize {PROPOSALS_PATH}: {}", p.line()))?;
     Ok(Some(text))
 }
 
@@ -1841,10 +1840,10 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let text = std::fs::read_to_string(root.join("assets/grimoire/vocab.yaml"))
             .unwrap_or_else(|e| panic!("the shipped vocabulary must be readable: {e}"));
-        // **Loading the file IS the audit now.** This used to `ron::from_str` straight into
+        // **Loading the file IS the audit now.** This used to read the text straight into
         // `Vocabularies` — around the door — and then leaned on `implied_effects` returning a
         // `Result` to catch an implication naming a token the `effects` axis does not hold. That
-        // check moved to `Vocabularies::validate_tables`, which `parse` runs and `ron::from_str`
+        // check moved to `Vocabularies::validate_tables`, which `parse` runs and a plain read
         // does not, so going around `parse` was the one thing making this test unable to fail.
         let v = bevy_grimoire_core::vocab::Vocabularies::parse(&text).unwrap_or_else(|e| {
             panic!("the shipped vocabulary must load, and every `implies` in it must resolve: {e}")
@@ -2019,7 +2018,7 @@ mod tests {
         )
         .unwrap_or_else(|e| panic!("{e}"))
         .unwrap_or_else(|| panic!("nothing written"));
-        let parsed: ProposalsFile = ron::from_str(&text2).unwrap_or_else(|e| panic!("{e}"));
+        let parsed: ProposalsFile = bevy_grimoire_core::yaml::from_str(&text2, PROPOSALS_PATH).unwrap_or_else(|p| panic!("{}", p.line()));
         assert_eq!(parsed.proposals.len(), 1);
         assert_eq!(
             parsed.proposals[0].assets,

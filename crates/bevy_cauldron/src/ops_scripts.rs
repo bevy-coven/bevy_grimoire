@@ -133,7 +133,7 @@ pub fn scripts_of(project: &crate::project::Project, map: &str) -> Scripts {
     path_of(project, map)
         .ok()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| ron::from_str(&t).ok())
+        .and_then(|t| bevy_grimoire_core::yaml::from_str(&t, "scripts").ok())
         .unwrap_or_default()
 }
 
@@ -205,8 +205,8 @@ pub const FIRED: &str = "grimoire_fired";
 
 #[cfg(feature = "bevy_society")]
 fn def_of(t: &Trigger, people: &People, watch: bool) -> Result<bevy_society::TriggerDef, Refusal> {
-    let on: bevy_society::TriggerOn = ron::from_str(&t.on).map_err(|e| {
-        Refusal::new(format!("trigger `{}`: `on` is not a bevy_society event ({e}). Write it as RON, for example `Activity(\"work\")`. Nothing was saved.", t.id))
+    let on: bevy_society::TriggerOn = bevy_grimoire_core::yaml::from_str(&t.on, "on").map_err(|p| {
+        Refusal::new(format!("trigger `{}`: `on` is not a bevy_society event ({}). Write it as YAML, for example `!Activity work`. Nothing was saved.", t.id, p.line()))
     })?;
     let then = if watch {
         format!("fx.emit({}, #{{trigger: {}}});\n{}", serde_json::to_string(FIRED).expect("str"), serde_json::to_string(&t.id).expect("str"), t.then)
@@ -227,7 +227,7 @@ fn def_of(t: &Trigger, people: &People, watch: bool) -> Result<bevy_society::Tri
 #[cfg(feature = "bevy_society")]
 fn base_file(ctx: &Ctx) -> Result<bevy_society::DefsFile, Refusal> {
     match crate::ops_family::settings_path(ctx, "bevy_society").ok().and_then(|f| std::fs::read_to_string(f).ok()) {
-        Some(text) => bevy_society::DefsFile::from_ron(&text).map_err(|e| Refusal::new(format!("the society definitions do not parse: {e}"))),
+        Some(text) => bevy_grimoire_core::yaml::from_str(&text, "family/bevy_society.yaml").map_err(|p| Refusal::new(format!("the society definitions do not parse: {}", p.line()))),
         None => bevy_society::DefsFile::starter().map_err(|e| Refusal::new(format!("the starter pack does not parse: {e}"))),
     }
 }
@@ -349,10 +349,7 @@ impl TriggerSet {
             let text = if scripts.triggers.is_empty() {
                 None
             } else {
-                Some(
-                    ron::ser::to_string_pretty(&scripts, ron::ser::PrettyConfig::default())
-                        .map_err(|e| Refusal::new(format!("the triggers could not be written: {e}")))?,
-                )
+                Some(bevy_grimoire_core::yaml::to_string(&scripts).map_err(|p| Refusal::new(format!("the triggers could not be written: {}", p.line())))?)
             };
             (text, summary)
         };

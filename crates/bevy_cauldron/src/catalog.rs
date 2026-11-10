@@ -1626,10 +1626,10 @@ mod tests {
         root.kit(None, 1);
         root.skin("site", "site", &["floor"]);
         // Deliberately nothing under `assets/grimoire` refers to it. The editor's own world is clean.
-        root.game_kit("kit_ozea.ron", &["site/floor"]);
+        root.game_kit("kit_ozea.yaml", &["site/floor"]);
         let catalog = Catalog::scan(&root.0).unwrap_or_else(|e| panic!("{e}"));
         let e = ask_delete_kit(&root.0, &catalog, "site").err().unwrap_or_else(|| panic!("the game is a dependent like any other"));
-        assert!(e.contains("assets/site/kit_ozea.ron"), "{e}");
+        assert!(e.contains("assets/site/kit_ozea.yaml"), "{e}");
     }
 
     #[test]

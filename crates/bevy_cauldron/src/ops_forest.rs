@@ -183,7 +183,7 @@ fn forest_path(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
 pub fn forest_of(project: &crate::project::Project, map: &str) -> Forest {
     std::fs::read_to_string(project.grimoire_dir.join("forest").join(format!("{map}.yaml")))
         .ok()
-        .and_then(|t| ron::from_str(&t).ok())
+        .and_then(|t| bevy_grimoire_core::yaml::from_str(&t, "forest").ok())
         .unwrap_or_default()
 }
 
@@ -307,8 +307,7 @@ impl ForestScatter {
             };
             let n = added.len();
             forest.trees.extend(added);
-            let text = ron::ser::to_string_pretty(&forest, ron::ser::PrettyConfig::default())
-                .map_err(|e| Refusal::new(format!("the forest could not be written: {e}")))?;
+            let text = bevy_grimoire_core::yaml::to_string(&forest).map_err(|p| Refusal::new(format!("the forest could not be written: {}", p.line())))?;
             (Some(text), n)
         };
         if write {

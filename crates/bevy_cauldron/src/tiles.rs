@@ -10075,7 +10075,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     p.spawn((
                         Text::new(format!(
                             "wants `{}` on {} ({}) - needs a human vocab edit; see \
-                             slop/llm/vocab_proposals.ron",
+                             slop/llm/vocab_proposals.yaml",
                             t.token, t.axis, t.why
                         )),
                         TextColor(suggest_ink),

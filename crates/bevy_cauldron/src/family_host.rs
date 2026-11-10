@@ -113,18 +113,18 @@ fn settings_file(krate: &str) -> String {
 /// **What the crate's own type makes of a settings file** (#200): for the crates this build has the type
 /// of (`bevy_elements`' [`ElementsSettings`](crate::environment::ElementsSettings), `bevy_gooey`'s skin)
 /// the file is read as that type with [`reload_check::read`], so a refusal names the file and the field
-/// it is wrong at (`family/bevy_elements.ron (clock)`), and the words returned with it say what stays.
+/// it is wrong at (`family/bevy_elements.yaml (clock)`), and the words returned with it say what stays.
 /// The editor holds no schema of its own: the type is the crate's. Any other crate's file is held to
-/// being RON, which [`FamilyWatch`] has already seen.
+/// being YAML, which [`FamilyWatch`] has already seen.
 fn read_as(krate: &str, text: &str) -> Result<(), (Refusal, &'static str)> {
     #[cfg(feature = "bevy_elements")]
     if krate == crate::environment::CRATE {
         let file = settings_file(krate);
-        return reload_check::read_ron::<crate::environment::ElementsSettings>("family", &file, text).map(drop).map_err(|r| (r, "the previous environment stays"));
+        return reload_check::read::<crate::environment::ElementsSettings>("family", &file, text, crate::environment::ElementsSettings::from_yaml).map(drop).map_err(|r| (r, "the previous environment stays"));
     }
     if krate == crate::ui_skin::CRATE {
         let file = settings_file(krate);
-        return reload_check::read_ron::<bevy_gooey::GooeySkin>("family", &file, text).map(drop).map_err(|r| (r, "the previous skin stays"));
+        return reload_check::read::<bevy_gooey::GooeySkin>("family", &file, text, crate::ui_skin::from_yaml).map(drop).map_err(|r| (r, "the previous skin stays"));
     }
     let _ = (krate, text);
     Ok(())
@@ -149,7 +149,7 @@ pub struct Held {
     bad: std::collections::BTreeMap<String, String>,
 }
 
-/// **The settings files that were not valid RON when the project opened**, with their text and why.
+/// **The settings files that were not valid YAML when the project opened**, with their text and why.
 /// [`FamilyWatch`] keeps only the ones that were, and says nothing about the rest until one of them
 /// changes, so a file broken before the editor started would go unnamed.
 fn unread_at_launch(root: &std::path::Path, good: &std::collections::BTreeMap<String, String>) -> Vec<(String, String, String)> {
@@ -159,12 +159,12 @@ fn unread_at_launch(root: &std::path::Path, good: &std::collections::BTreeMap<St
         let path = entry.path();
         let (Some(stem), Some(ext), Some(name)) = (path.file_stem(), path.extension(), path.file_name()) else { continue };
         let krate = stem.to_string_lossy().into_owned();
-        if ext != "ron" || name.to_string_lossy().starts_with('.') || good.contains_key(&krate) {
+        if ext != "yaml" || name.to_string_lossy().starts_with('.') || good.contains_key(&krate) {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(&path) else { continue };
-        if let Err(e) = ron::from_str::<ron::Value>(&text) {
-            out.push((krate, text, e.to_string()));
+        if let Err(p) = bevy_grimoire_core::yaml::to_json(&text, &krate) {
+            out.push((krate, text, p.line()));
         }
     }
     out.sort();
@@ -176,7 +176,7 @@ fn unread_at_launch(root: &std::path::Path, good: &std::collections::BTreeMap<St
 /// to it, and a file that never read and is then deleted was never in force to be removed. Neither
 /// would ever leave the verdicts, so a refused file is looked at twice a second: back to the settings
 /// in force it is `applied` again, gone it is forgotten, and anything else is the watch's to report.
-/// A crate whose type refused a file is the watch's too: it holds the text it took (valid RON) and the
+/// A crate whose type refused a file is the watch's too: it holds the text it took (valid YAML) and the
 /// settings in force are the last the type read, so the file's next edit is a change to it; the one thing
 /// it cannot say is a return to that text after an unreadable edit in between, which is said here.
 fn settle_refused(
@@ -226,8 +226,8 @@ fn settle_refused(
 
 /// **Follow the settings files, and say what became of each edit** (#96, #200).
 ///
-/// A file that reads replaces the crate's settings; one that is not valid RON is refused and the last
-/// good ones stay ([`FamilyWatch`] holds them). A file that is RON but is not the crate's own type
+/// A file that reads replaces the crate's settings; one that is not valid YAML is refused and the last
+/// good ones stay ([`FamilyWatch`] holds them). A file that is YAML but is not the crate's own type
 /// (`read_as`: the elements settings, the gooey skin) is refused the same way, naming the file and the
 /// field, and never reaches [`FamilySettings`], so what a crate applies is always a text its type reads.
 /// Each poll's changes are one decision in [`crate::live::EditorReloads`], kind `family`, so
@@ -274,7 +274,7 @@ pub fn reload_settings(
             }
         }
         for (krate, text, error) in unread_at_launch(&project.root, fresh.current()) {
-            state.status.problem(format!("{krate} settings are not valid RON, so its defaults apply: {error}"));
+            state.status.problem(format!("{krate} settings are not valid YAML, so its defaults apply: {error}"));
             let field = read_as(&krate, &text).err().and_then(|(r, _)| r.field);
             verdicts.push(KindVerdict::refused("family", settings_file(&krate), field, error));
             bad.insert(krate, text);
@@ -321,7 +321,7 @@ pub fn reload_settings(
                 if text.is_some() && held.bad.get(&krate) == text.as_ref() {
                     continue;
                 }
-                state.status.problem(format!("{krate} settings are not valid RON, so the previous ones stay: {error}"));
+                state.status.problem(format!("{krate} settings are not valid YAML, so the previous ones stay: {error}"));
                 // Where the crate's own type stopped reading, when this build has it.
                 let field = text.as_deref().and_then(|t| read_as(&krate, t).err()).and_then(|(r, _)| r.field);
                 decided.push(KindVerdict::refused("family", settings_file(&krate), field, error));
