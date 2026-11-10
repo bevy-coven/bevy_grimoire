@@ -89,3 +89,60 @@ fn a_persons_own_schema_file_is_kept_and_the_project_still_opens() {
         "a file the editor did not generate is byte-identical after an open"
     );
 }
+
+/// **A hand edit to a generated schema is overwritten when the project is opened again**, which is what the
+/// `$comment` inside it warns about — while a person's own file at a schema path never is. Both on the open
+/// path, because that is the seam the editor owns; the core test beside this pins the write itself.
+#[test]
+fn opening_again_overwrites_a_hand_edit_and_never_a_persons_own_file() {
+    let root = fixtures::Fixture::new("schemas_hand_edit_on_open").descriptor("site/wall", "alpha").build("m");
+    let argv = [root.to_string_lossy().into_owned(), "m".to_owned()];
+    bevy_cauldron::args::open(&argv).unwrap_or_else(|e| panic!("the fixture project opens: {e}"));
+
+    // A person edits a generated file, removing the warning comment as they do it.
+    let generated = kind_file(&root, "map");
+    assert!(std::fs::read_to_string(&generated).expect("readable").contains("placements"), "the first write is the type's own");
+    std::fs::write(&generated, "{\"hand\": \"edit\"}").expect("the edit is written");
+
+    // And puts a file of their own where another kind's schema goes, in a folder that has never been written.
+    let theirs_root = fixtures::Fixture::new("schemas_theirs_on_open").descriptor("site/wall", "alpha").build("m");
+    let theirs_argv = [theirs_root.to_string_lossy().into_owned(), "m".to_owned()];
+    std::fs::create_dir_all(theirs_root.join(schema::SCHEMA_DIR)).expect("the folder is made");
+    let mine = "{\"title\": \"a schema a person maintains\"}";
+    let theirs = kind_file(&theirs_root, "map");
+    std::fs::write(&theirs, mine).expect("the person's file is written");
+
+    bevy_cauldron::args::open(&argv).unwrap_or_else(|e| panic!("reopening still opens: {e}"));
+    bevy_cauldron::args::open(&theirs_argv).unwrap_or_else(|e| panic!("a refused schema write must not refuse the open: {e}"));
+
+    let after = std::fs::read_to_string(&generated).expect("readable");
+    assert_ne!(after, "{\"hand\": \"edit\"}", "a hand edit to a generated schema is overwritten on the next open");
+    assert!(after.contains("placements"), "and the type's own schema is back: {after}");
+    assert_eq!(std::fs::read_to_string(&theirs).expect("readable"), mine, "a person's own file is kept byte-identical");
+}
+
+/// **A new project does not commit the generated folder.** The schemas are rewritten at every open and every
+/// game start, so one committed would diff a file nobody edited each time a type moved. The guide and the
+/// journal under `.dark_factory/` are the project's own, so the ignore names the one folder and not the parent.
+#[test]
+fn a_new_project_ignores_the_generated_folder() {
+    let place = std::env::temp_dir().join(format!("schemas_gitignore_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&place);
+    std::fs::create_dir_all(&place).expect("the folder the project goes in is made");
+    let form = bevy_cauldron::new_project::NewProject {
+        name: "ignored".to_owned(),
+        location: place.to_string_lossy().into_owned(),
+        template: bevy_cauldron::new_project::Template::Empty,
+    };
+    let root = bevy_cauldron::new_project::create(&form).unwrap_or_else(|e| panic!("{e}"));
+
+    let path = root.join(bevy_cauldron::new_project::GITIGNORE);
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    assert!(
+        text.lines().any(|line| line.trim() == ".dark_factory/schema/"),
+        "the generated folder is ignored, and only it: {text}"
+    );
+    assert!(!text.lines().any(|line| line.trim() == ".dark_factory/" ), "the guide and journal are the project's own: {text}");
+
+    let _ = std::fs::remove_dir_all(&place);
+}

@@ -202,6 +202,13 @@ fn fill(dir: &Path, template: Template) -> Result<(), String> {
     // person's trust file — the form's Create button and the project page — because the store is the
     // person's and not the project's.
     crate::guide_template::write_file(dir)?;
+    // **The derived folder is not the project's work** (#366): `.dark_factory/schema/` holds JSON Schema
+    // files generated from the types at every open and from the game's registry at every start, so a project
+    // that committed them would diff a file nobody edited every time a type changed. The guide and the
+    // journal under `.dark_factory/` ARE the project's, so the ignore names the one folder and not the parent.
+    let ignore = dir.join(GITIGNORE);
+    bevy_grimoire_core::atomic_file::write_new(&ignore, SCHEMA_IGNORE)
+        .map_err(|e| format!("{}: {e}", ignore.display()))?;
     let [width, depth, height] = FIRST_MAP_METRES;
     let origin = bevy_grimoire_core::map::Map::default().origin;
     crate::project_page::from_the_page(
@@ -226,6 +233,14 @@ fn copy_prototype_kit(dir: &Path) -> Result<(), String> {
     let into = dir.join(crate::catalog::GRIMOIRE_DIR).join(STARTER_KIT).join(bevy_grimoire_core::policy::LIBRARY_FILE);
     bevy_grimoire_core::ron_surgery::save_atomic(&into, &library.to_ron()?)
 }
+
+/// **The file a new project is given so the generated folder is not committed**, and what it says.
+///
+/// Named rather than a literal at the call site: a test asserts a new project carries it and what it ignores.
+pub const GITIGNORE: &str = ".gitignore";
+
+/// **The one line a new project's `.gitignore` holds** — the folder the editor rewrites.
+pub const SCHEMA_IGNORE: &str = "# Generated from the Rust types and the game's registry on every open; never edited by hand.\n.dark_factory/schema/\n";
 
 /// The form on screen, while there is one.
 #[derive(Resource, Debug, Default)]

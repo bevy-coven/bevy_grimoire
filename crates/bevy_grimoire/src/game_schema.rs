@@ -1,95 +1,90 @@
 //! **A game's own reflected types, written where an outside editor looks** (GD-04, #366).
 //!
 //! `<root>/.dark_factory/schema/game.schema.json` describes what the game's own files accept, and only the
-//! game knows that: its components are the types it registered. An outside editor's extension reads the file
-//! to complete a component's fields, so it has to be **the game's registry's own answer** and not a second
-//! description of the same types.
+//! game's registry knows that. So the file is **Bevy's own answer**, not a second description of the same
+//! types: [`bevy_remote::builtin_methods::export_registry_types`] is the function behind the
+//! `registry.schema` remote method, and this calls it directly over the running `World`. That means the file
+//! lists exactly the types the game registered, with their fields and their reflect data.
 //!
-//! # Where the answer comes from
+//! # Why `bevy_remote` is a dependency, and why that adds no server
 //!
-//! Bevy's `registry.schema` remote method is that answer, and it is the game's to make: a game that runs
-//! `RemotePlugin` (a debugger, a `bevy_fairy` session) can ask its own registry for the document, and this
-//! module puts it where an outside editor looks. **`bevy_grimoire` does not depend on `bevy_remote`**: it is
-//! not in Bevy's default features, and a game that ships would gain a listening server for a file it writes
-//! once at start. The text arrives through [`GameSchema`], exactly as
-//! [`bevy_grimoire_core::schema::write_game`] takes it, and a game with no remote at all writes nothing and
-//! says so once.
+//! The schema export needs `bevy_remote`, and `bevy_remote`'s default features include an HTTP transport. A
+//! game that ships must not gain a listening socket for one file written at start. `bevy_internal` takes it
+//! with `default-features = false, features = ["bevy_asset", "bevy_render"]` — no `http`, no port, no
+//! runtime — so this crate does the same and gets only the pure functions. `RemotePlugin` is not added here,
+//! so the game binds nothing.
 //!
-//! # What a game does
+//! # What it writes
 //!
-//! ```ignore
-//! app.add_plugins(bevy_grimoire::game_schema::GameSchemaPlugin {
-//!     root: project_root.clone(),
-//!     // Whatever the game's own registry answers: `registry.schema`'s result, or a document of the same
-//!     // shape. A game whose components are the point of the file hands over the real one.
-//!     schema: Box::new(|| bevy::remote::schemas::…),
-//! });
-//! ```
+//! One entry per registered type path, each carrying the type's reflect information and which of them are
+//! `Component`, `Resource`, `Event` and so on — the shape `registry.schema` answers. A type registered lazily
+//! after the first frame is in the file on the next start, because the registry is the game's and this crate
+//! cannot see when it changes.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use bevy::prelude::*;
+use bevy_remote::builtin_methods::export_registry_types;
+use bevy_remote::schemas::SchemaTypesMetadata;
 
 /// **The document a game's registry answers**, as the JSON text `registry.schema` produces.
 ///
-/// A boxed closure rather than a string because the registry is complete only once the game is: a document
-/// taken at construction would describe whatever had been registered before the plugin was added.
-pub type RegistrySchema = Arc<dyn Fn(&World) -> Option<String> + Send + Sync>;
+/// **The metadata resource is inserted if the game has none.** `export_registry_types` reads
+/// `SchemaTypesMetadata` to name each type's reflect data, and only `RemotePlugin` inserts it, so a game that
+/// runs no remote would panic there. Bevy's own defaults say what `Component`, `Resource` and the rest are, so
+/// inserting them is the same answer the remote method gives.
+///
+/// **Infallible to ask**: the export is a pure function over the `World`, so the only failure is the write.
+pub fn registry_schema(world: &mut World) -> String {
+    if world.get_resource::<SchemaTypesMetadata>().is_none() {
+        world.insert_resource(SchemaTypesMetadata::default());
+    }
+    // The request that asks for every type, unfiltered: an empty set of filters means all crates, all types.
+    let answer = export_registry_types(In(None), world).unwrap_or_else(|e| {
+        // The export cannot fail on a world with a registry; a world without one has nothing to say, and an
+        // empty document is the honest answer rather than a refusal that stops a game starting.
+        warn!("the game's registry answered no schema: {e:?}");
+        serde_json::Value::Object(Default::default())
+    });
+    serde_json::to_string(&answer).unwrap_or_else(|e| {
+        warn!("the game's schema did not serialise: {e}");
+        "{}".to_owned()
+    })
+}
 
-/// **The name a game's schema file carries**, without the folder: `game.schema.json`.
-pub const GAME_SCHEMA_KIND: &str = "game";
+/// **Write a game's schema into the project at `root` right now**, from the running world's registry.
+///
+/// The same write [`GameSchemaPlugin`] makes at start, for a game that wants it at another moment — after a
+/// mod registered a type, say. A file that cannot be written, or a person's own file at that path, is the
+/// [`bevy_grimoire_core::problem::Problem`] `bevy_grimoire_core::schema::write_game` answers.
+#[allow(clippy::result_large_err)] // `Problem` is the workspace's one refusal shape; boxing a copy of it
+                                     // would make this crate's refusals a different type from the editor's.
+pub fn write_now(root: &Path, world: &mut World) -> Result<PathBuf, bevy_grimoire_core::problem::Problem> {
+    bevy_grimoire_core::schema::write_game(root, &registry_schema(world))
+}
 
 /// **Writes a game's reflected schema into its project when the game starts.**
 ///
 /// `root` is the game's project root — the folder holding `assets/`, the one `.dark_factory/` sits under —
-/// because that is where an outside editor looks for every kind. A game that names no root writes nothing.
+/// because that is where an outside editor looks for every kind.
 ///
-/// **When**: `Startup`, so every type the game registered is in the document. A type registered after the
-/// first frame is in the file on the next start; the file records nothing about that, because the registry
-/// is the game's and this crate cannot see when it changes.
-///
-/// **A failure never stops the game.** An unwritable folder and an unreadable document are both a warning:
-/// the schema is what completion is built from, not what the game is. A person's own `game.schema.json` is
-/// refused by [`bevy_grimoire_core::schema::write_game`] and reported the same way.
+/// **When**: `Startup`, so every type the game registered is in the document. **A failure never stops the
+/// game**: an unwritable folder is a warning, because the schema is what completion is built from, not what
+/// the game is. A person's own `game.schema.json` is refused by
+/// [`bevy_grimoire_core::schema::write_game`] and reported the same way.
 pub struct GameSchemaPlugin {
     /// The project root, the folder holding `assets/`.
     pub root: PathBuf,
-    /// **What the game's registry answers.** `None` for a game that runs no remote: nothing is written, and
-    /// the plugin says so once at start.
-    pub schema: Option<RegistrySchema>,
 }
 
 impl Plugin for GameSchemaPlugin {
     fn build(&self, app: &mut App) {
         let root = self.root.clone();
-        let schema = self.schema.clone();
         app.add_systems(Startup, move |world: &mut World| {
-            let Some(schema) = &schema else {
-                debug!(
-                    "no game schema is written: this game runs no remote, so its registry was never asked \
-                     for one. Add a `schema` to GameSchemaPlugin to have one at .dark_factory/schema/{}",
-                    bevy_grimoire_core::schema::SCHEMA_EXT
-                );
-                return;
-            };
-            let Some(text) = schema(world) else {
-                warn!("the game's registry answered no schema, so .dark_factory/schema/ has none for it");
-                return;
-            };
-            match bevy_grimoire_core::schema::write_game(&root, &text) {
+            match write_now(&root, world) {
                 Ok(path) => trace!("the game's schema is at {}", path.display()),
                 Err(e) => warn!("{}", e.line()),
             }
         });
     }
-}
-
-/// **Write a game's schema into the project at `root` right now**, from the document the registry answered.
-///
-/// The same write [`GameSchemaPlugin`] makes at start, for a game that wants it at another moment — after a
-/// mod registered a type, say. A file that cannot be written, or a person's own file at that path, is the
-/// [`bevy_grimoire_core::problem::Problem`] `write_game` answers.
-pub fn write_now(root: &Path, text: &str) -> Result<PathBuf, bevy_grimoire_core::problem::Problem> {
-    bevy_grimoire_core::schema::write_game(root, text)
 }

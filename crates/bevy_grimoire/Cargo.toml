@@ -15,3 +15,13 @@ repository = "https://github.com/bevy-coven/bevy_grimoire"
 [dependencies]
 bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.8.0" }
 bevy = { workspace = true, features = ["jpeg"] }
+# **The schema export, and nothing else of `bevy_remote`.** `registry.schema` is the only function that can say
+# what a game's own components are, so `game.schema.json` cannot be written without it — and a game that ships
+# must not gain a listening socket for one file written at start. `bevy_internal` takes this crate with
+# `default-features = false` (its `http` feature is off), so this declares the same dependency and gets the
+# pure export; `RemotePlugin` is never added. A game cannot have two versions of one crate in its graph, so
+# this is the same `bevy_remote` a game with a debugger already links (#366).
+bevy_remote = { version = "0.20.0", default-features = false, features = ["bevy_asset", "bevy_render"] }
+# The registry's answer is a JSON value this writes as text, so this is the module's own dependency and not a
+# test's.
+serde_json.workspace = true

@@ -189,19 +189,27 @@ fn has_a_tag(value: &serde_yaml_ng::Value) -> bool {
     }
 }
 
-/// **A field wrong inside a variant is refused at its own path**, which is the half that makes a schema worth
-/// having: a document whose `within` is text where the schema says a number must not pass with a completion
-/// that offers it.
+/// **A field wrong in every tagged kind is refused at its own path**, which is the half that makes a schema
+/// worth having: a document whose `within` is text where the schema says a number must not pass with a
+/// completion that offers it.
+///
+/// **Every one of the seven**, at a field its own fixture carries, and each field is one the schema genuinely
+/// refuses a string at (a number, a bool or an `f32`) rather than a string field that would accept it.
 #[test]
-fn a_field_wrong_inside_a_variant_is_refused_at_its_own_path() {
-    // Three kinds, each wrong in a different place: a number inside a struct variant, a number inside another,
-    // and a top-level field of a tagged document (the control, where the path is the error's own).
+fn a_field_wrong_in_any_tagged_kind_is_refused_at_its_own_path() {
+    // (kind, the field to put a string in) — each is a leaf the schema says is not a string, so a string
+    // there is a fault and not a value.
     let cases = [
-        ("relations", "relations[0].kind.Near.within"),
-        ("volume", "edits[0].shape.Sphere.radius_m"),
+        ("library", "descriptors[0].align.pivot"),
+        ("policy", "patches[0].patch.align.pivot"),
+        ("compositions", "compositions[0].members[0].at[0]"),
+        ("rigs", "version"),
         ("notes", "lease_secs"),
+        ("relations", "relations[0].hard"),
+        ("volume", "edits[0].smooth_m"),
     ];
     let fixtures = tagged_kinds();
+    assert_eq!(cases.len(), TAGGED.len(), "every tagged kind has a wrong-field case");
     for (kind, path) in cases {
         let (_, text) = fixtures
             .iter()
@@ -233,9 +241,14 @@ fn a_field_wrong_inside_a_variant_is_refused_at_its_own_path() {
 #[test]
 fn the_reader_names_the_same_path_the_schema_refuses() {
     type Read = fn(&str) -> Option<String>;
-    let cases: [(&str, &str, Read); 2] = [
-        ("relations", "relations[0].kind.Near.within", reader_field::<bevy_grimoire_core::relations::Relations>),
-        ("volume", "edits[0].shape.Sphere.radius_m", reader_field::<bevy_grimoire_core::volume::Volume>),
+    let cases: [(&str, &str, Read); 7] = [
+        ("library", "descriptors[0].align.pivot", reader_field::<bevy_grimoire_core::library::Library>),
+        ("policy", "patches[0].patch.align.pivot", reader_field::<bevy_grimoire_core::policy::Policy>),
+        ("compositions", "compositions[0].members[0].at[0]", reader_field::<bevy_grimoire_core::composition::Compositions>),
+        ("rigs", "version", reader_field::<bevy_grimoire_core::rigs::Rigs>),
+        ("notes", "lease_secs", reader_field::<bevy_grimoire_core::notes::Notes>),
+        ("relations", "relations[0].hard", reader_field::<bevy_grimoire_core::relations::Relations>),
+        ("volume", "edits[0].smooth_m", reader_field::<bevy_grimoire_core::volume::Volume>),
     ];
     let fixtures = tagged_kinds();
     for (kind, path, read) in cases {

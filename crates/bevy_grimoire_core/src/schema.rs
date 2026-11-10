@@ -49,11 +49,12 @@ pub const SCHEMA_EXT: &str = ".schema.json";
 /// YAML language server reads it, and every editor built on it (VS Code, Neovim, Zed) follows.
 pub const SCHEMA_HINT: &str = "yaml-language-server: $schema=";
 
-/// **The `$comment` every generated schema carries**: it is what tells a person the file is derived, and
-/// what [`write_all`] and [`write_game`] read to know a file at a schema path is this crate's to replace.
+/// **The `$comment` every generated schema carries**, which tells a person reading the file that it is derived
+/// and that their edit will be overwritten.
 ///
-/// One string, in the file and in the test that compares: a second spelling would make a generated file
-/// read as a person's and refuse every later write.
+/// **It is not what decides ownership** — [`GENERATED_LIST`] is. A comment is a claim the file makes about
+/// itself, and a hand edit can remove it; who wrote a file is a fact about the write. This string is here so
+/// the warning a person sees is one spelling everywhere.
 pub const GENERATED: &str = "generated from the Rust type by bevy_grimoire_core::schema — a hand edit is overwritten the next time the editor opens this project";
 
 /// **Every kind whose schema this crate generates**, each with the JSON of its type.
@@ -165,9 +166,10 @@ fn root<T: schemars::JsonSchema>() -> Value {
 /// a person who copied the comment into their own file lose it to the next open. Neither is what "a hand
 /// edit is overwritten" means.
 ///
-/// It ends in `.schema.json` so it is a file the reload contract can classify (`schema`, `Live`) rather than
-/// one the editor notices and cannot name, and it is stamped like the schemas so it cannot itself be lost.
-pub const GENERATED_LIST: &str = "generated.schema.json";
+/// **It is not itself a schema file**, so no JSON language service checks it against a meta-schema: a name
+/// ending `.schema.json` is a schema, and this file is bookkeeping — a list of names — which such a service
+/// would report as invalid at every open.
+pub const GENERATED_LIST: &str = "generated.json";
 
 /// **Mark a schema as this crate's and this kind's**, and say it is generated.
 fn stamp(schema: &mut Value, kind: &str) {
@@ -200,15 +202,25 @@ pub fn write_all(root: &Path) -> Result<Vec<PathBuf>, Problem> {
             return Err(hand_written_ours(&dir.join(&name)));
         }
     }
+    // **The record of ownership is written BEFORE the files it claims.** A write that fails halfway then
+    // leaves a list naming files it did not reach — harmless, because a named file that is absent is simply
+    // rewritten next time — rather than a file on disk that the list does not name, which would read as a
+    // person's and be refused forever. That is the one failure mode that cannot be undone by trying again.
     let mut written = Vec::new();
+    for (kind, _) in &schemas {
+        names.insert(format!("{kind}{SCHEMA_EXT}"));
+    }
+    if write_names(&dir, &names).is_err() {
+        // A list that cannot be written means no file may be written: without it every file this batch
+        // touches would be unowned the moment it landed.
+        return Err(write_problem(&dir.join(GENERATED_LIST), "the record of which schemas are generated could not be written, so none were"));
+    }
     for (kind, schema) in schemas {
         let name = format!("{kind}{SCHEMA_EXT}");
         let path = dir.join(&name);
         write_json(&path, &schema)?;
-        names.insert(name);
         written.push(path);
     }
-    write_names(&dir, &names)?;
     Ok(written)
 }
 
@@ -277,9 +289,11 @@ pub fn write_game(root: &Path, schema: &str) -> Result<PathBuf, Problem> {
         return Err(hand_written_ours(&path));
     }
     stamp(&mut value, "game");
-    write_json(&path, &value)?;
+    // The record first, for the reason `write_all` states: a named file that is absent is rewritten next
+    // time, while an unnamed file on disk would read as a person's and never be replaced again.
     names.insert(name);
     write_names(&dir, &names)?;
+    write_json(&path, &value)?;
     Ok(path)
 }
 
