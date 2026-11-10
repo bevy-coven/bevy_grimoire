@@ -18,6 +18,10 @@
 //! 3. **The rail is the keyboard's, not a second selection**: the card with input focus wears
 //!    `Selected`, and no other card does — a rail that outlived the focus would be the invisible
 //!    state the two-press step was built on.
+//! 4. **A second press does not open it twice.** The two-press step's second half is gone, and the
+//!    guard it used to carry went with it, so this pins the thing that guard was hiding: pressing a
+//!    card twice quickly queues **one** open, not two, and the home does not carry the second press
+//!    into a second crossing.
 
 use std::path::{Path, PathBuf};
 
@@ -169,4 +173,62 @@ fn the_rail_wears_the_card_with_the_keyboard() {
         app.update();
     }
     assert_eq!(marked(&mut app), vec![alpha_card], "and the rail moves with it, leaving nothing behind");
+}
+
+/// **4. Pressing a card twice opens the project once**, in one frame and across two.
+///
+/// Before #344 a first press chose and a second opened, so a repeat could only reach "chosen again".
+/// Now both presses name an open, and the guard the old step carried went with it — so what a repeat
+/// does has to be pinned rather than assumed. Counted at the crossing itself, not at the request:
+/// `open_requested` reads `.last()`, so two `OpenRequest`s in one frame would still be one crossing
+/// and a count of messages would say otherwise about the same picture.
+#[test]
+fn a_second_press_on_the_same_card_opens_it_once() {
+    let scratch = Scratch::new("twice");
+    let (alpha, beta) = (project(&scratch.0, "alpha"), project(&scratch.0, "beta"));
+    let mut app = on_the_home("twice", &scratch, &[&alpha, &beta]);
+    let card = card_of(&mut app, &beta);
+
+    // **Every time the editor crosses into a project**, read off the state machine rather than
+    // inferred: a second crossing is invisible in `PointedAt`, which would be set to the same folder.
+    #[derive(Resource, Default)]
+    struct Crossings(Vec<PathBuf>);
+    app.init_resource::<Crossings>();
+    app.add_systems(
+        Update,
+        |mut crossings: ResMut<Crossings>, screen: Res<State<Screen>>, at: Option<Res<PointedAt>>| {
+            if screen.is_changed() && *screen.get() == Screen::Project
+                && let Some(at) = at
+            {
+                crossings.0.push(at.root.clone());
+            }
+        },
+    );
+
+    // **Both presses before a frame runs**, which is what a person clicking twice quickly does.
+    app.world_mut().commands().trigger(Activate { entity: card });
+    app.world_mut().commands().trigger(Activate { entity: card });
+    for _ in 0..6 {
+        app.update();
+    }
+    assert_eq!(
+        app.world().resource::<Crossings>().0,
+        vec![beta.clone()],
+        "the card was pressed twice and the editor crossed {:?}, so it opened the project more than once",
+        app.world().resource::<Crossings>().0
+    );
+
+    // **And a press that lands after the crossing** is on a card the home no longer draws: the entity
+    // is despawned with it, so the trigger reaches nothing and the editor stays where it is.
+    app.world_mut().commands().trigger(Activate { entity: card });
+    for _ in 0..6 {
+        app.update();
+    }
+    assert_eq!(
+        app.world().resource::<Crossings>().0,
+        vec![beta.clone()],
+        "a press after the crossing opened the project again"
+    );
+    assert_eq!(pointed_at(&app), Some(beta), "and the folder is the one the card named");
+    assert_eq!(screen_of(&app), Screen::Project, "the editor is on it");
 }
