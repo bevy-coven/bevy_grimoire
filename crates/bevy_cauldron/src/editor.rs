@@ -1592,10 +1592,26 @@ struct NotesList;
 #[derive(Component, Clone, Copy)]
 struct ReloadList;
 
+/// **One row of the Notes list**, by the id the map's `.notes.ron` names it.
+///
+/// `pub` since AF-03 (#359): a reveal selects a note, and the follower that scrolls the inspector to
+/// its row has to find the row by `id`. A private marker would leave the follow unable to say *which*
+/// row it is looking for.
 #[derive(Component, Clone)]
-struct NoteRow {
-    id: String,
+pub struct NoteRow {
+    pub id: String,
 }
+
+/// **The note a reveal selected**, so the Notes list can show it and the inspector scroll to it.
+///
+/// **Editor state, not map state.** A selection is where a person is looking (the argument
+/// `selection::Selection` makes for the Map's own), so a reveal writes this and nothing else: no file
+/// is touched, no operation is recorded and no undo step is taken.
+///
+/// `Option<String>` rather than an index for `CursorMark`'s reason: a row's place moves when a note is
+/// added, removed or a filter changes, and an index would then name a different note.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct SelectedNote(pub Option<String>);
 
 /// A lease button on a note row: which note, and which of `note_claim`, `note_renew`, `note_release`.
 #[derive(Component, Clone)]
@@ -1612,8 +1628,13 @@ struct NotesFilterButton;
 #[derive(Component, Clone, Copy)]
 struct NotesSendAll;
 
-/// What the Notes list last drew: the filter and `(id, status, text, waiting, review, auto)` per row.
-type NotesShown = (Option<&'static str>, Vec<(String, &'static str, String, bool, NoteReview, bool)>);
+/// What the Notes list last drew: the filter, the rows, and **which note was selected** — the
+/// selection is in the key so a reveal that moves it redraws the rows it colours (review of #359).
+type NotesShown = (
+    Option<&'static str>,
+    Vec<(String, &'static str, String, bool, NoteReview, bool)>,
+    Option<String>,
+);
 
 /// What a done note shows for review (#93): its summary, assumptions, the before and after captures
 /// and the operations it ran. Empty for every other status.
@@ -2563,7 +2584,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::ui::EditorUiPlugin);
         // **The editor follows the Familiar** (AF-02, #358): a request the agent's two BRP
         // handlers raise, the ease, and the ring round the changed pieces.
-        app.add_plugins(crate::follow::FollowPlugin);
+        app.add_plugins((crate::follow::FollowPlugin, crate::reveal::RevealPlugin));
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
@@ -2625,6 +2646,7 @@ impl Plugin for EditorPlugin {
             // it, idempotently — happens to be absent from the app.
             .init_resource::<SizeEdit>()
             .init_resource::<FamilyEdit>()
+            .init_resource::<SelectedNote>()
             .init_resource::<DataEdit>()
             .init_resource::<TerrainEdit>()
             .init_resource::<CrowdEdit>()
@@ -3768,7 +3790,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "FAMILY SETTINGS");
+                crate::chrome::section(s, "FAMILY SETTINGS")
+                    .insert(crate::reveal::Section(crate::reveal::InspectorSection::Family));
                 crate::chrome::text_field(
                     s,
                     Val::Percent(100.0),
@@ -3870,7 +3893,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "DATA");
+                crate::chrome::section(s, "DATA")
+                    .insert(crate::reveal::Section(crate::reveal::InspectorSection::Data));
                 crate::chrome::text_field(
                     s,
                     Val::Percent(100.0),
@@ -3915,7 +3939,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "NOTES");
+                crate::chrome::section(s, "NOTES")
+                    .insert(crate::reveal::Section(crate::reveal::InspectorSection::Notes));
                 s.spawn((
                     NotesList,
                     Node {
@@ -6977,13 +7002,24 @@ fn refresh_plan_list(
     *shown = Some(now);
 }
 
+/// **What the Notes list is built from besides its rows**: the open map's notes and the note a reveal
+/// selected. One bundle because the system is at clippy's argument cap, and these two are the same
+/// subject — what the list draws, and which of it is the person's cursor.
+#[derive(bevy::ecs::system::SystemParam)]
+struct NoteSelection<'w, 's> {
+    view: Res<'w, crate::notes_view::NotesView>,
+    selected: Option<Res<'w, SelectedNote>>,
+    /// Read so the bundle's lifetime parameters are used; nothing walks it.
+    _marker: std::marker::PhantomData<&'s ()>,
+}
+
 /// Keep [`NotesList`] equal to the open map's notes under the current filter: newest first, every
 /// status, resolved notes included. Read twice a second; rebuilt only when what it says changed.
 fn refresh_notes_list(
     mut commands: Commands,
     time: Res<Time>,
-    view: Res<crate::notes_view::NotesView>,
     filter: Res<NotesFilter>,
+    inputs: NoteSelection<'_, '_>,
     lists: Query<Entity, With<NotesList>>,
     mut local: Local<(Option<NotesShown>, f32)>,
     mut images: ResMut<Assets<Image>>,
@@ -6994,7 +7030,7 @@ fn refresh_notes_list(
         return;
     }
     *since = 0.0;
-    let all = view.notes();
+    let all = inputs.view.notes();
     let rows: Vec<(String, &'static str, String, bool, NoteReview, bool)> = all
         .listing(filter.0)
         .iter()
@@ -7021,11 +7057,12 @@ fn refresh_notes_list(
             (n.id.clone(), n.status(), text, waiting.is_some(), review, n.auto)
         })
         .collect();
-    let key = (filter.0, rows);
+    let revealed = inputs.selected.as_deref().and_then(|s| s.0.clone());
+    let key = (filter.0, rows, revealed.clone());
     if shown.as_ref() == Some(&key) {
         return;
     }
-    let (_, rows) = &key;
+    let (_, rows, _) = &key;
     for list in &lists {
         commands.entity(list).despawn_related::<Children>();
         commands.entity(list).with_children(|p| {
@@ -7046,7 +7083,13 @@ fn refresh_notes_list(
                 ));
             }
             for (id, status, text, waiting, review, auto) in rows {
-                crate::chrome::list_row(p, false, NoteRow { id: id.clone() }).with_children(|row| {
+                // **The revealed note is drawn selected** (review of #359, M3/M2): `SelectedNote` is
+                // what a reveal writes, and the row it names is the row a person's eye lands on. The
+                // selection is part of the list's own rebuild key, so a reveal that moves it rebuilds
+                // the rows it colours — the list is rebuilt twice a second anyway, and a selection
+                // arriving alone is one more reason to.
+                let chosen = revealed.as_deref() == Some(id.as_str());
+                crate::chrome::list_row(p, chosen, NoteRow { id: id.clone() }).with_children(|row| {
                     row.spawn((
                         Text::new(format!("{id} [{status}] {text}")),
                         TextColor(TEXT),

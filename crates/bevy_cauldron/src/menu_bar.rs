@@ -193,6 +193,8 @@ enum Slot {
     Familiar,
     /// View ▸ Pause agent writes (UI-60, #246).
     PauseAgent,
+    /// View ▸ Follow the agent (AF-04, #360).
+    FollowAgent,
     /// View ▸ Show left panel (feedback-1794146831022): the tick is the panel shown.
     LeftPanel,
     /// View ▸ Zen mode (feedback-1794146831022).
@@ -288,6 +290,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::LightMap);
         slots.push(Slot::Familiar);
         slots.push(Slot::PauseAgent);
+        slots.push(Slot::FollowAgent);
         slots.push(Slot::Separator);
         slots.push(Slot::ResetLayout);
     }
@@ -367,6 +370,13 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::familiar::PauseItem,
                 bevy_gooey::check_item("Pause agent writes", false),
                 bevy_gooey::observe(crate::familiar::toggle_the_pause),
+            ));
+        }
+        Slot::FollowAgent => {
+            menu.spawn((
+                crate::familiar::FollowItem,
+                bevy_gooey::check_item("Follow the agent", true),
+                bevy_gooey::observe(crate::familiar::toggle_the_follow),
             ));
         }
         Slot::LeftPanel => {
