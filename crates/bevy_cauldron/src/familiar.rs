@@ -52,6 +52,11 @@ pub struct AgentPause(pub bool);
 #[derive(Component)]
 pub struct PauseItem;
 
+/// **View ▸ Follow the agent** (AF-04, #360). The tick is `EditorSettings::follow_agent`, so the row
+/// and the settings file cannot say different things.
+#[derive(Component)]
+pub struct FollowItem;
+
 /// **Whether hand-backs are answered in the AGENT block** (UI-60b, #340). Off, `grimoire/present` asks in the modal as it
 /// always did; on, and with the block open, it asks in the block, beside what the agent did. A person's choice for the
 /// sitting, never saved.
@@ -112,6 +117,7 @@ impl Plugin for FamiliarPlugin {
             Update,
             (
                 tick_the_menu_row,
+                tick_the_follow_row,
                 tick_the_familiar_row,
                 follow_the_agent,
                 follow_the_plan,
@@ -417,6 +423,62 @@ pub fn refusal(operation: &str) -> String {
 pub fn toggle_the_pause(change: On<ValueChange<bool>>, mut pause: ResMut<AgentPause>) {
     if pause.0 != change.value {
         pause.0 = change.value;
+    }
+}
+
+/// **The View ▸ Follow the agent row is ticked while the view follows**, read from the running
+/// settings so a settings-screen change and a menu click cannot disagree.
+fn tick_the_follow_row(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    items: Query<(Entity, Has<Checked>), With<FollowItem>>,
+    mut commands: Commands,
+) {
+    let on = settings.is_none_or(|s| s.follow_agent);
+    for (item, ticked) in &items {
+        match (on, ticked) {
+            (true, false) => {
+                commands.entity(item).insert(Checked);
+            }
+            (false, true) => {
+                commands.entity(item).remove::<Checked>();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// **The row was chosen: the setting follows the tick.** Written through the settings screen's own
+/// `write_key`, so the file, the running editor and the row are one change rather than three.
+///
+/// **The project's layer**, because the follow is about *this project's* agent: a person working on
+/// two projects with different agents has a different answer in each. The user's file would make the
+/// choice global, which is the wider change than the issue asked for.
+pub fn toggle_the_follow(
+    change: On<ValueChange<bool>>,
+    file: Option<Res<crate::settings::UserSettingsFile>>,
+    project: Option<Res<crate::project::Project>>,
+    mut state: Option<ResMut<EditorState>>,
+) {
+    let Some(project) = project else {
+        if let Some(state) = state.as_deref_mut() {
+            state.status.problem("no project is open, so the follow setting was not saved".to_owned());
+        }
+        return;
+    };
+    let path = project.project_dir.join(crate::settings::PROJECT_FILE);
+    let wrote = crate::setting_catalogue::write_key(
+        &path,
+        "follow_agent",
+        Some(crate::setting_catalogue::Value::On(change.value)),
+    );
+    // **The user's file is not a fallback.** A missing `UserSettingsFile` is not a reason to write
+    // the project's — the project's is where this key belongs, and the file is read back by
+    // `settings::sync_settings` whichever layer wrote it.
+    let _ = file;
+    if let Err(why) = wrote
+        && let Some(state) = state.as_deref_mut()
+    {
+        state.status.problem(format!("could not save Follow the agent: {why}"));
     }
 }
 

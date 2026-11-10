@@ -740,6 +740,10 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Session`**: which inspector heading was last brought into view is where the person's eye
     // was sent, not a fact about this door's documents.
     ("bevy_cauldron::reveal::InspectorReveal", Ownership::Session),
+    // **`Session`**, derived from `Following` every frame: a chip's sentence is about the sitting's
+    // agents, not about this door's documents, and it is rebuilt on the next frame from a queue that
+    // is itself `Session` — a `Door` classification would blank it for one frame for no reason.
+    ("bevy_cauldron::follow::LookChip", Ownership::Session),
     // **`Session`**: what the person has hidden of the shell (the left panel, Zen mode) is their call for the sitting, not a door's;
     // the next door's frame is folded the same way the frame of this one was.
     ("bevy_cauldron::shell_view::ShellView", Ownership::Session),

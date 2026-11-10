@@ -53,6 +53,21 @@ pub const FOLLOW_EASE_S: f32 = 0.35;
 /// piece framed edge to edge says nothing about the room it went into.
 pub const FOLLOW_MARGIN_FRAC: f32 = 1.25;
 
+/// **How long a person's own use of the view holds the follow back**, seconds (AF-04, #360).
+///
+/// A person who orbited, panned, dragged, clicked in the viewport or typed is *reading the view*, and
+/// moving the camera under them is the yank the whole series exists to prevent. Two seconds is long
+/// enough to cover a gesture and the look that follows it, and short enough that a person who stopped
+/// is not left wondering why nothing happened.
+pub const FOLLOW_IDLE_S: f32 = 2.0;
+
+/// **How long one change is shown before the next**, seconds (AF-04, #360).
+///
+/// Twenty changes in one second are twenty views rather than a blur: the queue is what makes them
+/// separate arrivals, and this is what makes each one readable. It is the *floor*, so a longer ease
+/// (a change far across the map) is never cut short.
+pub const FOLLOW_DWELL_S: f32 = 0.6;
+
 /// **How long the changed pieces stay ringed**, seconds. Long enough to catch the eye once the camera
 /// has arrived, short enough not to become decoration.
 pub const FOLLOW_OUTLINE_S: f32 = 1.5;
@@ -92,6 +107,23 @@ pub fn request_of(shown: &crate::ops::Shown) -> Option<FollowRequest> {
     Some(FollowRequest { target, ids })
 }
 
+impl FollowRequest {
+    /// **What the request is for, in words** — what the look chip says when the caller gave no
+    /// sentence of its own. `a place on the map with 1 piece` reads as what a person will see, not as
+    /// the name of a field.
+    pub fn words(&self) -> String {
+        match &self.target {
+            FrameTarget::Map => "the whole map".to_owned(),
+            FrameTarget::Selection => "the selected piece".to_owned(),
+            FrameTarget::Placements(ids) => match ids.len() {
+                1 => format!("`{}`", ids[0]),
+                n => format!("{n} pieces"),
+            },
+            FrameTarget::Rect(_) => "a place on the map".to_owned(),
+        }
+    }
+}
+
 /// **Where the camera is going, and how far it has come.** Taken by the ease a frame at a time.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Ease {
@@ -110,8 +142,27 @@ struct Ease {
 /// be erased by the very crossing it asked for.
 #[derive(Resource, Default)]
 pub struct Following {
-    queue: VecDeque<FollowRequest>,
+    /// Each request with the words the chip says it in, or `None` for one raised without a sentence.
+    queue: VecDeque<(FollowRequest, Option<String>)>,
     ease: Option<Ease>,
+    /// **Whether the person is using the view** (AF-04, #360): input within [`FOLLOW_IDLE_S`].
+    ///
+    /// **Input, not motion.** The ease writes `Rig` itself, so "did the camera move" would see the
+    /// follow's own travel and hold it back for ever; this is set by the two buttons the person
+    /// presses and by nothing else.
+    busy: bool,
+    /// **The `Time<Real>` second the person last touched the view**, for [`FOLLOW_IDLE_S`].
+    busy_until: f64,
+    /// **The `Time<Real>` second the change on screen was framed.** A follow waits until
+    /// [`FOLLOW_DWELL_S`] has passed since it, so a burst is a series of views rather than a blur.
+    shown_at: f64,
+    /// **The change being waited on**, as the look chip says it: the one in flight, else the oldest
+    /// queued. `None` when there is nothing to show.
+    waiting: Option<String>,
+    /// **Whether the person was working last frame**, so a gesture's *start* is told from a held
+    /// button. See [`a_persons_input_takes_the_camera_back`]: a new gesture drops what was queued, and
+    /// a held one only keeps the follow waiting (AF-04, #360).
+    working: bool,
     /// The pieces to ring while [`Self::outline_until`] has not passed.
     outline: Vec<String>,
     /// The `Time<Real>` second the ring comes down at.
@@ -123,8 +174,60 @@ pub struct Following {
 
 impl Following {
     /// **Ask the camera to go somewhere.** Queued, so three changes in one frame are three follows.
+    ///
+    /// A request with no sentence is still a request: the chip says what it can, that the Familiar
+    /// changed something. [`Self::request_named`] is the form an operation's own receipt fills in.
     pub fn request(&mut self, request: FollowRequest) {
-        self.queue.push_back(request);
+        self.queue.push_back((request, None));
+        self.note_what_waits();
+    }
+
+    /// **Ask the camera to go somewhere, and say what changed** — `the Familiar placed bed@1`, the
+    /// receipt's own words (AF-04, #360).
+    ///
+    /// **A method rather than a field on [`FollowRequest`]**, because the field would be one a caller
+    /// must fill in even when there is nothing to say, and the struct is built by a test that has no
+    /// sentence to give it.
+    pub fn request_named(&mut self, request: FollowRequest, summary: impl Into<String>) {
+        self.queue.push_back((request, Some(summary.into())));
+        self.note_what_waits();
+    }
+
+    /// **What the look chip says**, or `None` when nothing is waiting to be shown (AF-04, #360).
+    ///
+    /// The change in flight, else the oldest queued: a person reading a chip wants the next thing they
+    /// will see, not the last. Empty until a request names a change, so a chip is never drawn for a
+    /// follow with nothing to say.
+    pub fn waiting(&self) -> Option<&str> {
+        self.waiting.as_deref()
+    }
+
+    /// **Record that the person is using the view**, which holds every follow back for
+    /// [`FOLLOW_IDLE_S`]. Called by the input system and by nothing else.
+    fn note_a_person_at_work(&mut self, now: f64) {
+        self.busy = true;
+        self.busy_until = now + f64::from(FOLLOW_IDLE_S);
+    }
+
+    /// **Look now**: stop waiting on the person and on the dwell, so the next frame shows the oldest
+    /// change waiting (AF-04, #360).
+    ///
+    /// **It moves the camera; it does not clear the queue.** The remaining changes are still what the
+    /// person asked to see, so they follow one after another as they would have — the chip's count is
+    /// the number left, not a number that a Look throws away.
+    pub fn look_now(&mut self) {
+        self.busy = false;
+        self.busy_until = 0.0;
+        self.shown_at = 0.0;
+    }
+
+    /// **Carry the chip's words from whatever is next**: the change in flight, else the queue's head.
+    fn note_what_waits(&mut self) {
+        self.waiting = self.queue.front().map(|(request, said)| {
+            said.clone()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| format!("{FAMILIAR} changed {}", request.words()))
+        });
     }
 
     /// **How many follows are waiting for their frame.** The ease in flight is not one of them: the
@@ -164,7 +267,13 @@ impl Following {
 fn a_persons_input_takes_the_camera_back(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mouse: Option<Res<ButtonInput<MouseButton>>>,
+    time: Res<Time<Real>>,
     mut following: ResMut<Following>,
+    // **A reveal is the same kindness**, so it stops on the same press (review of #359, M3): a queued
+    // reveal still crossed a door while the person was working, which is the yank one screen over.
+    // One rule, one system, two subjects — a second input system would be a second answer to "is the
+    // person working", and the two would disagree the first time one of them changed.
+    mut revealing: Option<ResMut<crate::reveal::Revealing>>,
 ) {
     // **`pressed`, not `just_pressed`**: the press state is what survives the frame it was made on,
     // and a person holding a key is working just as much as one who tapped it. It is also the only
@@ -176,9 +285,30 @@ fn a_persons_input_takes_the_camera_back(
     let clicking = mouse.as_deref().is_some_and(|mouse| {
         mouse.get_pressed().next().is_some() || mouse.get_just_released().next().is_some()
     });
-    if !working && !clicking {
+    let at_work = working || clicking;
+    if !at_work {
+        following.working = false;
         return;
     }
+    // **The person is using the view** (AF-04, #360): the follow waits [`FOLLOW_IDLE_S`] after they
+    // stop, so a gesture and the look that follows it are not interrupted. This is the one writer of
+    // that clock — `busy` is about input, never about motion, because the ease writes `Rig` itself and
+    // a "did the camera move" test would hold the follow back for ever.
+    following.note_a_person_at_work(time.elapsed_secs_f64());
+    // **A gesture's FIRST frame takes the camera back; the ones after it only hold the follow.**
+    //
+    // The distinction is what makes two rules into one. #358's rule is that a person's press is
+    // theirs *from that moment*, so what was queued when they reached for the view is dropped rather
+    // than moved out from under the gesture (`the_follow_never_moves_a_persons_camera` measures
+    // exactly that, with `pending() == 0`). #360's rule is that a person *working* is shown what the
+    // agent did once they are done, so a change that arrives mid-drag must wait rather than be thrown
+    // away. Dropping on every held frame would be the first rule applied to the second case, and it
+    // would make the idle wait a no-op for any gesture longer than one frame — measured: a drag held
+    // across the agent's change left the queue empty and the chip silent.
+    if following.working {
+        return;
+    }
+    following.working = true;
     // **The camera stays where it is**: `rig` already holds the ease's latest step, so clearing the
     // ease leaves the view exactly where the person's eyes left it — no snap to the ease's end,
     // which would be the yank this exists to prevent.
@@ -186,6 +316,10 @@ fn a_persons_input_takes_the_camera_back(
     following.outline.clear();
     following.queue.clear();
     following.asked_for_the_map = false;
+    following.waiting = None;
+    if let Some(revealing) = revealing.as_mut() {
+        revealing.clear();
+    }
 }
 
 /// **A new map ends the follow of the old one.**
@@ -210,13 +344,83 @@ fn clear_the_follow_when_the_map_changes(
     following.outline.clear();
 }
 
+/// **The look chip's words** (AF-04, #360): what the Familiar changed and has not shown yet.
+///
+/// **A resource rather than a spawned node's text**, for `chrome::Follow`'s reason: a test can ask what
+/// the chip says without a window, and the system that draws it compares before writing. The two
+/// cannot disagree, because the drawing is one read of this.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct LookChip {
+    /// The sentence, or `None` when nothing is waiting.
+    pub sentence: Option<String>,
+    /// How many changes are still queued behind the one the sentence names.
+    pub queued: usize,
+}
+
+impl LookChip {
+    /// **The line a person reads**, or `None` when there is nothing to show.
+    pub fn sentence(&self) -> Option<&str> {
+        self.sentence.as_deref()
+    }
+
+    /// **What the chip says for `following`**, as one value: the drawing system and a test both read
+    /// this, so the picture and the assertion cannot drift.
+    pub fn of(following: &Following) -> LookChip {
+        match following.waiting() {
+            Some(what) => LookChip {
+                sentence: Some(format!(
+                    "{what}{} · Look",
+                    match following.pending().saturating_sub(1) {
+                        0 => String::new(),
+                        n => format!(" (+{n} more)"),
+                    }
+                )),
+                queued: following.pending(),
+            },
+            None => LookChip {
+                sentence: None,
+                queued: following.pending(),
+            },
+        }
+    }
+}
+
+/// **The look chip itself**, the node its sentence is drawn in.
+#[derive(Component)]
+pub struct LookChipNode;
+
+/// **The look chip's Look button** (AF-04, #360), so a person can look now and a test can press it.
+#[derive(Component)]
+pub struct LookButton;
+
+/// **Look now, from the chip's button.**
+///
+/// **One answer to "show it"**: this and the AGENT block's Look both call
+/// [`Following::look_now`], so a click and a button cannot wait on different things.
+pub fn look_at_the_change(
+    activate: On<bevy_gooey::Activate>,
+    buttons: Query<(), With<LookButton>>,
+    mut following: ResMut<Following>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
+) {
+    if !buttons.contains(activate.entity) {
+        return;
+    }
+    following.look_now();
+    if let Some(state) = state.as_mut() {
+        state.status.note(format!("looking at what {FAMILIAR} changed"));
+    }
+}
+
 /// **The plugin that owns the follow**: the resource, the system that carries one request a frame,
 /// and the ring drawn round the changed pieces.
 pub struct FollowPlugin;
 
 impl Plugin for FollowPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Following>().add_systems(
+        app.init_resource::<Following>()
+            .init_resource::<LookChip>()
+            .add_systems(
             Update,
             (
                 // **Before the camera is written**, so the frame a follow moves on is the frame it is
@@ -235,6 +439,12 @@ impl Plugin for FollowPlugin {
                 take_the_follow_request
                     .before(crate::view::drive)
                     .before(crate::editor::frame_map_on_open),
+                // **The chip is read off the queue after the frame's request was taken**, so it says
+                // what is still waiting rather than what has just been shown.
+                follow_the_chip.after(take_the_follow_request),
+                // **The chip's words are drawn beside the change that is waiting**, so its button and
+                // the sentence it sits on are one picture.
+                draw_the_look_chip.after(follow_the_chip),
                 draw_the_follow_outline,
             )
                 .run_if(in_state(crate::screen::Screen::Editor)),
@@ -277,8 +487,18 @@ fn take_the_follow_request(
     cameras: Query<&Camera, With<MainCamera>>,
     time: Res<Time<Real>>,
     motion: Option<Res<bevy_gooey::MotionSettings>>,
+    // **View ▸ Follow the agent** (AF-04, #360). Off, the camera never moves for an agent's change and
+    // the queue is kept rather than dropped: the look chip still offers Look, and that is the whole
+    // point of the switch being a *pause* of the moving rather than a mute of the following.
+    settings: Option<Res<crate::settings::EditorSettings>>,
 ) {
     let now = time.elapsed_secs_f64();
+    // **The person's hands off the view for `FOLLOW_IDLE_S`**: the follow may move again. Cleared
+    // here rather than by a timer so the clock has one writer per direction — `busy_until` is set by
+    // the input system and read here, and nothing else touches either.
+    if following.busy && now >= following.busy_until {
+        following.busy = false;
+    }
     // **The ring comes down on its own clock**, whether or not another follow is queued.
     if !following.outline.is_empty() && now >= following.outline_until {
         following.outline.clear();
@@ -304,6 +524,28 @@ fn take_the_follow_request(
         return;
     }
     if following.queue.is_empty() {
+        following.waiting = None;
+        return;
+    }
+    // **A person using the view holds every follow back** (AF-04, #360). The queue is untouched while
+    // they are, so the change is shown once they stop rather than dropped — which is the difference
+    // between a considerate follow and one that skips what it happened to miss.
+    if following.busy {
+        following.note_what_waits();
+        return;
+    }
+    // **The dwell is what separates two changes, and nothing before the first.** A single change is
+    // shown the frame it arrives — the ordinary case, and what an editor with one agent change to
+    // show must not pay 0.6 s to see. A burst is where the pacing matters: each change is held for
+    // `FOLLOW_DWELL_S` *after* it is shown, so five changes are five views rather than a blur.
+    if following.shown_at != 0.0 && now < following.shown_at + f64::from(FOLLOW_DWELL_S) {
+        following.note_what_waits();
+        return;
+    }
+    // **The toggle is off: nothing moves, and nothing is lost.** The chip keeps naming the oldest
+    // change and `Following::look_now` is what shows it.
+    if settings.as_deref().is_some_and(|s| !s.follow_agent) {
+        following.note_what_waits();
         return;
     }
     // **The camera is the Map door's.** A crossing is the editor's own request mechanism, so a
@@ -345,7 +587,7 @@ fn take_the_follow_request(
         following.queue.clear();
         return;
     };
-    let Some(request) = following.queue.pop_front() else {
+    let Some((request, _)) = following.queue.pop_front() else {
         return;
     };
     let settled = match resolve_frame(&request.target, project, open, None) {
@@ -418,6 +660,9 @@ fn take_the_follow_request(
         following.outline = ids;
         following.outline_until = now + f64::from(FOLLOW_OUTLINE_S);
     }
+    // **The dwell starts now**, so the next change waits [`FOLLOW_DWELL_S`] behind this one.
+    following.shown_at = now;
+    following.note_what_waits();
 }
 
 /// **The pieces the framed box holds**, by id, in the map's own row order.
@@ -487,6 +732,103 @@ fn draw_the_follow_outline(
         );
     }
 }
+
+/// **Keep the look chip's words equal to what is waiting.** Compared before writing, which is the
+/// whole reason this is a resource: a chip rewritten every frame dirties whatever draws it.
+fn follow_the_chip(following: Res<Following>, mut chip: ResMut<LookChip>) {
+    let want = LookChip::of(&following);
+    if *chip != want {
+        *chip = want;
+    }
+}
+
+/// **Draw the look chip over the Map viewport** while a change waits (AF-04, #360).
+///
+/// **Spawned once and shown or hidden**, not respawned: a node rebuilt sixty times a second is sixty
+/// times the work for one sentence, and the chip is on screen for far longer than a frame. The words
+/// come from [`LookChip`], which is the one place they are decided, so what is drawn and what a test
+/// asserts cannot drift.
+///
+/// `Display` is compared before writing — the rule `no_system_writes_every_frame` enforces.
+fn draw_the_look_chip(
+    mut commands: Commands,
+    chip: Res<LookChip>,
+    open: Option<Res<OpenMap>>,
+    // **Where the map is drawn**, from the node the camera renders into — the same rect
+    // `view::drive` asks of a wheel, read the other way round.
+    viewport: Option<Single<(&ComputedNode, &UiGlobalTransform), With<crate::chrome::ViewportSlot>>>,
+    mut nodes: Query<(Entity, &mut Node, &Children), With<LookChipNode>>,
+    mut words: Query<&mut Text>,
+) {
+    if let Some(mut node) = nodes.iter_mut().next() {
+        let (_, style, children) = (&node.0, &mut node.1, node.2);
+        let want = if chip.sentence.is_some() { Display::Flex } else { Display::None };
+        if style.display != want {
+            style.display = want;
+        }
+        let said = chip.sentence.clone().unwrap_or_default();
+        for kid in children.iter() {
+            if let Ok(mut text) = words.get_mut(kid)
+                && text.0 != said
+            {
+                text.0.clone_from(&said);
+            }
+        }
+        return;
+    }
+    // **Only while there is a map to say it about**, and only in a frame that knows where the viewport
+    // is: a chip for a change on a map nobody has open is a chip with nothing behind it.
+    let (Some(_open), Some(viewport)) = (open, viewport) else {
+        return;
+    };
+    let (node, transform) = viewport.into_inner();
+    let at = (transform.translation - node.size() * 0.5) * node.inverse_scale_factor;
+    let root = commands
+        .spawn((
+            LookChipNode,
+            Node {
+                // PLACES-ITSELF-OK: the chip stands over the viewport rather than in a flow, which is
+                // what "over the viewport" means — the same placement `compass` makes for its gizmo.
+                position_type: PositionType::Absolute,
+                left: Val::Px(at.x + CHIP_INSET),
+                top: Val::Px(at.y + CHIP_INSET),
+                display: if chip.sentence.is_some() { Display::Flex } else { Display::None },
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(crate::chrome::GAP_ROW),
+                padding: crate::chrome::CHIP_PAD,
+                border_radius: BorderRadius::all(Val::Px(crate::chrome::RADIUS_ROW)),
+                ..default()
+            },
+            BackgroundColor(crate::chrome::PANEL_BG),
+            GlobalZIndex(crate::chrome::COMPASS_Z),
+            // A readout that eats clicks is a readout that steals the map underneath it.
+            bevy::picking::Pickable::IGNORE,
+        ))
+        .with_children(|chip_node| {
+            chip_node.spawn((
+                Text::new(chip.sentence.clone().unwrap_or_default()),
+                TextColor(crate::chrome::TEXT),
+                crate::chrome::font(crate::chrome::text::BODY),
+                bevy::picking::Pickable::IGNORE,
+            ));
+            // **Look**, the button the issue names: it shows the oldest change now rather than waiting
+            // out the person's gesture. `chrome::button` puts it on the `Activate` bus the handler
+            // reads.
+            let mut look = crate::chrome::button(
+                chip_node,
+                LookButton,
+                "Look",
+                crate::chrome::Severity::Primary,
+            );
+            look.entry::<bevy::picking::Pickable>();
+        })
+        .id();
+    let _ = root;
+}
+
+/// How far in from the viewport's top-left corner the chip stands, pixels.
+const CHIP_INSET: f32 = 12.0;
 
 /// **How far above the piece's centre the ring is drawn**, metres: enough to clear a flat piece's
 /// surface, so the line is not buried inside the mesh it surrounds.
