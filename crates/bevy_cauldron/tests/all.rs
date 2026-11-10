@@ -96,6 +96,7 @@ mod a_palette_click_leaves_the_rows_standing;
 mod a_person_finds_and_runs_a_command_in_the_palette;
 mod a_person_removes_a_box_and_undoes_it;
 mod a_person_removes_a_piece_and_undoes_it;
+mod a_fixture_projects_ron_files_become_yaml;
 mod a_project_command_needs_the_persons_trust;
 mod a_project_opens_in_the_same_process;
 mod a_projects_own_font_applies_when_it_is_opened_in_the_same_process;
