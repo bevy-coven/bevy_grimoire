@@ -176,10 +176,13 @@ const STILL_UNCHECKED: &[&str] = &[
     // extension; no reader in this project opens one, so nothing here can name a field of it. Joined
     // with the owner's exception recorded in the fleet wave-2 report.
     "schema",
+    // **A script is Rhai, and the game that runs it compiles it** (GD-06, #368): this layer has no Rhai parser and
+    // opens no script, so there is no refusal for it here. The host that compiles one names the file and the line.
+    "scripts_rhai",
 ];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 1;
+const STILL_UNCHECKED_MAX: usize = 2;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {
