@@ -117,7 +117,7 @@ fn the_prompt_is_centred_and_blocks_what_is_behind_it() {
         .map(|(_, rest)| rest)
         .unwrap_or_else(|| panic!("`chrome::modal_card` is the shell every question is asked in"));
     for (needle, why) in [
-        ("SCRIM", "the backdrop dims the application, so the question is the only lit thing"),
+        ("ink().scrim", "the backdrop dims the application, so the question is the only lit thing"),
         (
             "justify_content: JustifyContent::Center",
             "centred — the whole point of the move off the status band",
