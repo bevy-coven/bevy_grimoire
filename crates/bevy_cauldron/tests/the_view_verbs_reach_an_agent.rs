@@ -212,7 +212,6 @@ fn shift_b_arms_the_clone_tool_and_is_logged_once_without_a_refusal() {
 /// does not skip a verb: the five view verbs are exactly the operations that name `changes_view`.
 #[test]
 fn an_operation_that_needs_a_view_says_so() {
-    use bevy_cauldron::ops::Operation;
     let ctx = bevy_cauldron::ops::Ctx::default();
     let mut says: Vec<&'static str> = Vec::new();
     for op in bevy_cauldron::ops::registry() {
