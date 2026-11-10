@@ -1,6 +1,6 @@
 //! **When a change needs Rust, the rebuild is a step the person can watch** (#371, GD-09).
 //!
-//! A project's `play.ron` names how the game runs. When the change a person wants needs a new type or
+//! A project's `play.yaml` names how the game runs. When the change a person wants needs a new type or
 //! a new system, that command has to be rebuilt before the game can show it — so `game_build` runs
 //! the project's **build** command, as a background job (UI-22) whose progress comes from cargo's own
 //! JSON messages, and turns every compiler error into a problem with its file and its line.
@@ -32,7 +32,7 @@ use crate::fixtures;
 /// cargo's messages — a real build would take minutes and would prove rustc works.
 const STUB_BUILD: &str = r#"
 import json, os, subprocess, sys, time
-# **The directory the build was started in**, which is what `play.ron`'s `cwd` means: the editor runs
+# **The directory the build was started in**, which is what `play.yaml`'s `cwd` means: the editor runs
 # the command there, so a stub reads its project from its own working directory and never from an
 # environment variable the test process happens to carry.
 root = os.getcwd()
@@ -119,9 +119,9 @@ fn project(tag: &str) -> std::path::PathBuf {
     std::fs::write(root.join("game_stub.py"), STUB_GAME).unwrap_or_else(|e| panic!("{e}"));
     let py = fixtures_python();
     std::fs::write(
-        root.join("play.ron"),
+        root.join("play.yaml"),
         format!(
-            r#"(version: 2, command: ["{py}", "game_stub.py"], build: ["{py}", "build_stub.py"])"#,
+            "version: 2\ncommand: [\"{py}\", \"game_stub.py\"]\nbuild: [\"{py}\", \"build_stub.py\"]\n",
         ),
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -132,7 +132,7 @@ fn editor(root: &std::path::Path) -> App {
     let mut app = harness::build_headless(root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
-    // **The person has trusted this project**, which the fixture's store writes: `play.ron` names two
+    // **The person has trusted this project**, which the fixture's store writes: `play.yaml` names two
     // programs now — the game and its build — and both are behind the same gate. The editor holds the
     // store, which is where the relaunch reads it when the build succeeds.
     let store = fixtures::trusted_store(root);
@@ -442,7 +442,7 @@ fn a_relaunch_reads_the_map_the_editor_holds_even_unsaved() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// **4. A project whose `play.ron` names no build command says so**, rather than building nothing and
+/// **4. A project whose `play.yaml` names no build command says so**, rather than building nothing and
 /// reporting success.
 #[test]
 fn a_project_with_no_build_command_says_how_to_write_one() {
@@ -451,13 +451,13 @@ fn a_project_with_no_build_command_says_how_to_write_one() {
         .build("m");
     // **A project that runs its game and names no build**: the case a version 1 file is.
     std::fs::write(
-        root.join("play.ron"),
-        format!(r#"(version: 1, command: ["{py}", "game.py"])"#, py = fixtures_python()),
+        root.join("play.yaml"),
+        format!("version: 1\ncommand: [\"{py}\", \"game.py\"]\n", py = fixtures_python()),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let app = editor(&root);
     let refused = dispatch(&app, "game_build", json!({})).expect_err("a project with no build command has nothing to build");
     assert!(refused.contains("build"), "the refusal does not name what is missing: {refused:?}");
-    assert!(refused.contains("play.ron"), "the refusal does not name the file: {refused:?}");
+    assert!(refused.contains("play.yaml"), "the refusal does not name the file: {refused:?}");
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -71,6 +71,44 @@ fn run<T: DeserializeOwned>(
     }
 }
 
+/// **The same, for a kind whose reader parses YAML now** (GD-03, #365): the field a refusal names is found
+/// by the YAML deserialiser, which knows the field path, rather than by the RON one, which cannot read the
+/// text at all. One function per spelling and no branch inside either, so the two readers cannot come to
+/// disagree about a file by accident.
+fn run_yaml<T: DeserializeOwned>(
+    text: &str,
+    parse: fn(&str) -> Result<T, String>,
+) -> Result<(), (Option<String>, String)> {
+    match parse(text) {
+        Ok(_) => Ok(()),
+        Err(reason) => Err((field_of_yaml::<T>(text), reason)),
+    }
+}
+
+/// **The path to the field a YAML document is wrong at as a `T`**, or `None` when it reads.
+///
+/// [`field_of`]'s counterpart for the kinds the cutover moved, and the same shape: the deserialiser is run
+/// again with `serde_path_to_error` only to name the path, because the kind's own `parse` answers a
+/// sentence and not a path. A missing field is named by itself (serde reports it at the document's root,
+/// which is no field at all); an unknown or wrongly typed one already has it in the path.
+fn field_of_yaml<T: DeserializeOwned>(text: &str) -> Option<String> {
+    let deserializer = serde_yaml_ng::Deserializer::from_str(text);
+    let err = serde_path_to_error::deserialize::<_, T>(deserializer).err()?;
+    let path = err.path().to_string();
+    let path = path.trim_start_matches('.');
+    let message = err.inner().to_string();
+    let missing = message
+        .strip_prefix("missing field `")
+        .and_then(|rest| rest.split_once('`'))
+        .map(|(field, _)| field.to_owned());
+    match (path.is_empty(), missing) {
+        (true, None) => None,
+        (true, Some(field)) => Some(field),
+        (false, None) => Some(path.to_owned()),
+        (false, Some(field)) => Some(format!("{path}.{field}")),
+    }
+}
+
 /// **The path to the field `text` is wrong at as a `T`**, or `None` when it reads as one.
 fn field_of<T: DeserializeOwned>(text: &str) -> Option<String> {
     let mut de = ron::de::Deserializer::from_str(text).ok()?;
@@ -206,8 +244,8 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "volume" => run(text, Volume::parse),
         "data_registry" => run(text, DataFiles::parse),
         "family_list" => run(text, Family::from_ron),
-        "agent" => run(text, AgentSettings::from_ron),
-        "play" => run(text, PlayConfig::from_ron),
+        "agent" => run_yaml(text, AgentSettings::parse),
+        "play" => run_yaml(text, PlayConfig::parse),
         "destructible_marks" => run(text, Marks::parse),
         "destructible_bake" => run(text, Bake::parse),
         _ => return Check::Unchecked,

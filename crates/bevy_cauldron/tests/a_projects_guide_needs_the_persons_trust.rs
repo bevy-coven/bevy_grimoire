@@ -229,7 +229,7 @@ fn the_session_remembers_what_was_refused() {
 ///
 /// The long-guide question has **no affirmative grant**. A two-answer modal's `Y` would have to mean one of
 /// them, and the only grants available are the text's (unread — the question cannot show it) and
-/// `Scope::Project`, **which is the same list `TrustStore::decision` reads for `agent.ron` and `play.ron`**:
+/// `Scope::Project`, **which is the same list `TrustStore::decision` reads for `agent.yaml` and `play.yaml`**:
 /// a long guide plus a habitual `Y` would trust the project's program launches, which is a decision nobody
 /// made about a program. So the question is a note with one answer, and `Y` does nothing at all.
 #[test]

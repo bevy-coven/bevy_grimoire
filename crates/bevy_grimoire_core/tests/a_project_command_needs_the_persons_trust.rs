@@ -151,8 +151,8 @@ fn the_sentence_for_an_untrusted_command_shows_it_and_says_who_can_trust_it() {
 // ---- the launch itself ----
 
 fn agent_in(marker: &Path) -> AgentSettings {
-    AgentSettings::from_ron(&format!(
-        "(version: 1, command: Some(\"/usr/bin/touch\"), args: [\"{}\"])",
+    AgentSettings::parse(&format!(
+        "version: 1\ncommand: /usr/bin/touch\nargs: [\"{}\"]\n",
         marker.display()
     ))
     .unwrap()

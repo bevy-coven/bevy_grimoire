@@ -2363,7 +2363,7 @@ fn edit_note(project: Option<&mut Project>, open: &mut OpenMap, state: &mut Edit
 
 /// **Send every draft through the registry**, as `note_send` does for an agent.
 ///
-/// **Then start the project's notes agent** (#94), once per Send, when `agent.ron` names one. A launch
+/// **Then start the project's notes agent** (#94), once per Send, when `agent.yaml` names one. A launch
 /// that fails is a problem on the status line; the notes stay sent either way.
 pub fn send_notes(project: Option<&mut Project>, open: &mut OpenMap, state: &mut EditorState) {
     let root = project.as_deref().map(|p| p.root.clone());

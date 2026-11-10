@@ -167,7 +167,7 @@ pub struct GuideRequest {
     pub text: String,
     /// **Whether the question offered "Allow this guide".** A guide too long to show is raised as a *note*,
     /// which has no affirmative at all — not the text (unread) and not `Scope::Project`, whose list is the
-    /// one `TrustStore::decision` reads for `agent.ron` and `play.ron`. So a `Yes` can never reach a grant
+    /// one `TrustStore::decision` reads for `agent.yaml` and `play.yaml`. So a `Yes` can never reach a grant
     /// about a file the question did not show.
     pub offer_allow: bool,
 }
@@ -259,7 +259,7 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
     //
     // The grants a question could offer are the text's (which the person has not been shown) and
     // `Scope::Project` — and `Scope::Project` is **the same list `TrustStore::decision` reads for
-    // `agent.ron` and `play.ron`**, so a padded guide plus a habitual `Y` would trust the project's program
+    // `agent.yaml` and `play.yaml`**, so a padded guide plus a habitual `Y` would trust the project's program
     // launches, which is a decision about a program nobody made. So there is no affirmative answer to give:
     // a note says what the file is and where to read it, and its one answer dismisses it.
     if !fully_shown(&request.text) {

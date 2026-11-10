@@ -253,6 +253,16 @@ impl Project {
     /// [`crate::args::open_staged`], which opens the map after).
     pub fn open_staged(root: &Path, kit: Option<&str>, at: &mut dyn FnMut(Stage)) -> Result<Project, String> {
         at(Stage::ReadProject);
+        // **A project still holding the old spelling is refused here, by name** (GD-03, #365). Nothing reads
+        // RON after the cutover, so an unmigrated project opened quietly would open empty and the next save
+        // would write fresh YAML beside files a person still has — the one state nobody can read off the disk.
+        // The migration library's own walk decides what "still RON" means (`migrate::leftover`), so the editor,
+        // the command line and an agent cannot disagree about it.
+        if let Some(problem) = bevy_grimoire_core::migrate::leftover(root)
+            .map_err(|p| format!("{}: {}", root.display(), p.line()))?
+        {
+            return Err(problem.line());
+        }
         // **The binding is the project's, not a kit's.** `kits.ron` says which directory provides
         // which namespace — `site/` and `site_greybox/` both provide `site/*`, so this is a question
         // no directory can answer about itself. See `bevy_grimoire_core::kits`.

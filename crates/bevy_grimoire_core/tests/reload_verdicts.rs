@@ -58,8 +58,8 @@ fn samples() -> Vec<Sample> {
         s("relations", "maps/yard.relations.ron", Relations::default().to_ron().unwrap(), "version", true),
         s("terrain", "site/terrain/yard.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])".to_owned(), "cell_m", true),
         s("family_list", "family.ron", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),
-        s("agent", "agent.ron", format!("(version: {})", bevy_grimoire_core::note_agent::AGENT_VERSION), "version", true),
-        s("play", "play.ron", format!("(version: {}, command: [\"game\"])", bevy_grimoire_core::play::PLAY_VERSION), "version", true),
+        s("agent", "agent.yaml", format!("version: {}\n", bevy_grimoire_core::note_agent::AGENT_VERSION), "version", true),
+        s("play", "play.yaml", format!("version: {}\ncommand: [\"game\"]\n", bevy_grimoire_core::play::PLAY_VERSION), "version", true),
         s("water_plan", "site/water/yard.ron", "(springs: [], sinks: [], lakes: [])".to_owned(), "springs", false),
         s("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "steps", true),
         s("volume", "site/volume/yard.ron", "(edits: [])".to_owned(), "edits", false),
@@ -69,9 +69,27 @@ fn samples() -> Vec<Sample> {
     ]
 }
 
-/// The byte range of `field: value` (and its trailing comma) in the root struct of `text`. Skips
+/// The byte range of `field: value` (and its trailing comma) in the root value of `text`. Skips
 /// comments and strings, and only matches at the root's own depth, so a nested `version` is not it.
+///
+/// **Two spellings**, because a project file is YAML now and its sample may be either: a RON struct
+/// member (`(version: 1, …`) at the struct's own depth, or a YAML key at the document's left margin
+/// (`version: 1`), whose value runs to the end of its line. A YAML value is never followed by a comma, so
+/// the third element is 0 there and the callers' trimming of one is a no-op.
 fn field_span(text: &str, field: &str) -> (usize, usize, usize) {
+    if !is_ron(text) {
+        let mut at = 0usize;
+        for line in text.split_inclusive('\n') {
+            let opening = format!("{field}:");
+            if let Some(rest) = line.strip_prefix(&opening) {
+                let value = at + opening.len() + (rest.len() - rest.trim_start().len());
+                let end = at + line.trim_end_matches('\n').len();
+                return (at, value, end);
+            }
+            at += line.len();
+        }
+        panic!("no root field `{field}` in the sample");
+    }
     let b = text.as_bytes();
     let (mut depth, mut i) = (0usize, 0usize);
     while i < b.len() {
@@ -124,6 +142,30 @@ fn field_span(text: &str, field: &str) -> (usize, usize, usize) {
     panic!("no root field `{field}` in the sample");
 }
 
+/// **Whether a sample is RON**, which is what decides which way its root field is found. A project file
+/// may open with comments and an optional `#![enable(...)]` attribute, so the answer is what the first
+/// line that is neither says: `(` is a RON struct, a `key:` or `---` is YAML. Every sample here is one or
+/// the other, and a kind moves from RON to YAML in one commit.
+fn is_ron(text: &str) -> bool {
+    let mut in_block = false;
+    for line in text.lines() {
+        let line = line.trim_start();
+        if in_block {
+            in_block = !line.contains("*/");
+            continue;
+        }
+        if line.starts_with("/*") {
+            in_block = !line.contains("*/");
+            continue;
+        }
+        if line.is_empty() || line.starts_with("//") || line.starts_with("#!") {
+            continue;
+        }
+        return line.starts_with('(');
+    }
+    false
+}
+
 fn corrupt(text: &str) -> String {
     let half = (0..=text.len() / 2).rev().find(|&i| text.is_char_boundary(i)).unwrap();
     text[..half].to_owned()
@@ -134,11 +176,18 @@ fn wrong_type(text: &str, field: &str) -> String {
     let was = text[value..end].trim_end_matches(',').trim();
     // A number becomes a string; anything else becomes a number, which no struct, list or string takes.
     let wrong = if was.starts_with(|c: char| c.is_ascii_digit() || c == '-') { "\"wrong\"" } else { "7" };
-    format!("{}{wrong}{}", &text[..value], &text[end - usize::from(text[..end].ends_with(',')) ..])
+    format!("{}{wrong}{}", &text[..value], &text[end..])
 }
 
 fn missing(text: &str, field: &str) -> String {
     let (start, _, end) = field_span(text, field);
+    // A YAML line's removal takes its own newline with it, or the document keeps a blank line where the
+    // field was and a reader sees a trailing empty line rather than an absent field.
+    let start = match text[..start].rfind('\n') {
+        Some(at) if text[at + 1..start].trim().is_empty() => at + 1,
+        _ => start,
+    };
+    let end = if text[end..].starts_with('\n') { end + 1 } else { end };
     format!("{}{}", &text[..start], &text[end..])
 }
 

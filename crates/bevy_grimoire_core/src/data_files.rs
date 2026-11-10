@@ -74,7 +74,7 @@ impl DataFiles {
             }
             // **Not a file that names a program.** A game's own data legitimately lives outside this folder
             // (`../data/mob.ron`), so where a path points is not the question; what it is. `data_set`
-            // edits a registered file's values, and `agent.ron` or `play.ron` registered here would let
+            // edits a registered file's values, and `agent.yaml` or `play.yaml` registered here would let
             // it edit a command a person had not read (the review of 2026-11-02).
             if let Some(name) = std::path::Path::new(&f.path).file_name().and_then(|n| n.to_str())
                 && crate::trust::COMMAND_FILES.contains(&name)

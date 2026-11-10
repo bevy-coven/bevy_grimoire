@@ -87,7 +87,7 @@ pub enum Asked {
     /// rule the leave question follows, because a turn's worth of changes must not be discarded by
     /// reflex.
     Presentation,
-    /// **A project's `agent.ron` or `play.ron` wants to start a program no person has allowed.**
+    /// **A project's `agent.yaml` or `play.yaml` wants to start a program no person has allowed.**
     ///
     /// The one question with three answers: **allow this command** (the exact program, arguments and
     /// directory; an edit to any of them asks again), **trust the whole project**, or **not now**. The

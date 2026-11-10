@@ -60,7 +60,7 @@
 
 ## Working a note
 
-A person leaves notes on the map (a rectangle or picked pieces, with an instruction) and presses Send. Any agent connected to this server can work a sent note; the editor holds no agent logic. If the project's `agent.ron` names a command, Send also starts it once per Send (`(version: 1, command: Some("omp"), model: "claude-sonnet-5-5")`; `args` may use `{model}`, `{prompt}`, `{project}`; the default arguments are `-p --model {model} {prompt}`). With no `agent.ron`, or no `command` in it, Send only queues the notes, and a hand-started agent works them the same way.
+A person leaves notes on the map (a rectangle or picked pieces, with an instruction) and presses Send. Any agent connected to this server can work a sent note; the editor holds no agent logic. If the project's `agent.yaml` names a command, Send also starts it once per Send (`version: 1`, `command: omp`, `model: claude-sonnet-5-5`, one field a line; `args` may use `{model}`, `{prompt}`, `{project}`; the default arguments are `-p --model {model} {prompt}`). With no `agent.yaml`, or no `command` in it, Send only queues the notes, and a hand-started agent works them the same way.
 
 1. **List.** `grimoire_state` has a notes section: the sent and claimed notes with `id`, `holder` and `lease_until`. Pass `note=<id>` for a note's bundle: text, area and margin, nearby pieces, the palette, the camera and earlier notes.
 2. **Claim.** `note_claim` with your name as `agent` holds the note for a lease. `note_renew` keeps it while you work, `note_release` gives it back. A note another agent holds is refused.

@@ -56,7 +56,7 @@ impl Rig {
     }
 }
 
-/// Writes a script that appends one line per start, and `agent.ron` naming it.
+/// Writes a script that appends one line per start, and `agent.yaml` naming it.
 fn agent(root: &Path, script_body: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let script = root.join("fake-agent.sh");
@@ -64,8 +64,8 @@ fn agent(root: &Path, script_body: &str) -> PathBuf {
     std::fs::write(&script, format!("#!/bin/sh\necho \"$@\" >> '{}'\n{script_body}\n", log.display())).unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::write(
-        root.join("agent.ron"),
-        format!("(version: 1, command: Some(\"{}\"), args: [\"--model\", \"{{model}}\"], model: \"test-model\")", script.display()),
+        root.join("agent.yaml"),
+        format!("version: 1\ncommand: \"{}\"\nargs: [\"--model\", \"{{model}}\"]\nmodel: test-model\n", script.display()),
     )
     .unwrap();
     log
@@ -89,11 +89,11 @@ fn with_no_agent_set_send_starts_nothing() {
     let mut r = rig("agent_unset");
     let log = r.root.join("starts.log");
     r.draft("one");
-    assert_eq!(r.send(), "", "no agent.ron is not a problem");
+    assert_eq!(r.send(), "", "no agent.yaml is not a problem");
     std::thread::sleep(std::time::Duration::from_millis(300));
     assert!(!log.exists());
 
-    std::fs::write(r.root.join("agent.ron"), "(version: 1)").unwrap();
+    std::fs::write(r.root.join("agent.yaml"), "version: 1\n").unwrap();
     r.draft("two");
     assert_eq!(r.send(), "", "a file without a command is the same");
 }
@@ -130,14 +130,14 @@ fn a_send_with_nothing_to_send_starts_nothing() {
 #[test]
 fn an_agent_that_cannot_start_is_a_problem_and_the_notes_stay_sent() {
     let mut r = rig("agent_broken");
-    std::fs::write(r.root.join("agent.ron"), "(version: 1, command: Some(\"/nonexistent/agent\"))").unwrap();
+    std::fs::write(r.root.join("agent.yaml"), "version: 1\ncommand: /nonexistent/agent\n").unwrap();
     r.draft("one");
     let problem = r.send();
     assert!(problem.contains("could not start the notes agent") && problem.contains("/nonexistent/agent"), "{problem}");
     let notes = bevy_grimoire_core::notes::Notes::load(&bevy_grimoire_core::notes::path_for_map(&r.app.world().resource::<OpenMap>().map_path)).unwrap();
     assert!(notes.notes.iter().all(|n| !n.is_draft()));
 
-    std::fs::write(r.root.join("agent.ron"), "(version: 9)").unwrap();
+    std::fs::write(r.root.join("agent.yaml"), "(version: 9)").unwrap();
     r.draft("two");
     assert!(r.send().contains("version 9"), "an unreadable setting is reported too");
 }

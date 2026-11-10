@@ -5,7 +5,7 @@
 //! `assets/grimoire/checks.ron`, read on every call so an edit takes effect at once), and **ad-hoc typed
 //! questions**. Images are files under the project; the one picture the server can take itself is `view`,
 //! the editor's current picture. A third, `game`, is a frame of the **running game** taken through its own
-//! `bevy_fairy` (the port in the project's `play.ron`), with one BRP call's answer as the facts, so the same
+//! `bevy_fairy` (the port in the project's `play.yaml`), with one BRP call's answer as the facts, so the same
 //! checks and questions work on the game as on the editor (#114).
 
 use std::collections::BTreeMap;
@@ -58,7 +58,7 @@ pub struct DecideParams {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GameParams {
-    /// The port the game's `bevy_fairy` answers on. Default: `port` in the project's `play.ron`, else 15702.
+    /// The port the game's `bevy_fairy` answers on. Default: `port` in the project's `play.yaml`, else 15702.
     #[serde(default)]
     pub port: Option<u16>,
     /// One BRP call to the game, whose answer becomes `facts.game`: `{"method": "world.query", "params": ...}`.
@@ -98,8 +98,8 @@ pub fn needs_game(params: &DecideParams, checks: &Checks) -> bool {
         || params.check.as_deref().and_then(|n| checks.get(n)).is_some_and(|c| c.images.iter().any(|i| i == GAME))
 }
 
-/// **The port the game answers on**: the one asked for, else the project's `play.ron`, else fairy's default.
-/// A `play.ron` that exists and does not read is an error, not a silent default.
+/// **The port the game answers on**: the one asked for, else the project's `play.yaml`, else fairy's default.
+/// A `play.yaml` that exists and does not read is an error, not a silent default.
 pub fn game_port(project: &Path, asked: Option<u16>) -> Result<u16, String> {
     if let Some(p) = asked {
         return Ok(p);
@@ -115,7 +115,7 @@ pub fn game_port(project: &Path, asked: Option<u16>) -> Result<u16, String> {
 pub async fn fetch_game(project: &Path, game: &GameParams) -> Result<GameEvidence, String> {
     let port = game_port(project, game.port)?;
     let brp = crate::brp::Brp::new(format!("http://127.0.0.1:{port}/"));
-    let said = |e: String| format!("the running game on port {port} (play.ron's port, or `game.port`): {e}");
+    let said = |e: String| format!("the running game on port {port} (play.yaml's port, or `game.port`): {e}");
     let png = brp.screenshot(json!({})).await.map_err(said)?;
     let state = match &game.state {
         Some(s) => Some(brp.call(&s.method, s.params.clone().unwrap_or(Value::Null)).await.map_err(said)?),

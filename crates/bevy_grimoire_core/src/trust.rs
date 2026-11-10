@@ -1,6 +1,6 @@
 //! **What a person has allowed a project to run.**
 //!
-//! `agent.ron` and `play.ron` name programs, and the editor used to start whatever they named the moment
+//! `agent.yaml` and `play.yaml` name programs, and the editor used to start whatever they named the moment
 //! a person pressed Send or Play. A project cloned from somewhere else could therefore run its author's
 //! command on a single key press (the review of 2026-11-02, risk 1; the same hole as an editor opening an
 //! untrusted workspace). Nothing here starts a program. This module only answers one question, "has a
@@ -13,7 +13,7 @@
 //!   which is what stops a command planted *after* the person looked, by an agent that can write files
 //!   or by a hot-reloaded edit.
 //! - **The whole project** ([`Scope::Project`]): every command of that directory. For a person iterating
-//!   on their own game, who would otherwise be asked after every edit of `play.ron`.
+//!   on their own game, who would otherwise be asked after every edit of `play.yaml`.
 //!
 //! # The rules
 //!
@@ -46,7 +46,7 @@ pub const TRUST_VERSION_READS_FROM: u32 = 1;
 ///
 /// `AGENTS.md` is here because `data_set` edits a registered file's values: a guide registered as a data
 /// file would let an agent edit the very rules it is being asked to follow.
-pub const COMMAND_FILES: [&str; 3] = ["agent.ron", "play.ron", "AGENTS.md"];
+pub const COMMAND_FILES: [&str; 3] = ["agent.yaml", "play.yaml", "AGENTS.md"];
 
 /// The store's file name, inside the editor's own folder of the user's data directory.
 pub const STORE_FILE: &str = "trusted.ron";
@@ -54,11 +54,11 @@ pub const STORE_FILE: &str = "trusted.ron";
 /// **Which command of a project.** The same words in two kinds are two commands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommandKind {
-    /// The notes agent `agent.ron` names, started by Send.
+    /// The notes agent `agent.yaml` names, started by Send.
     Notes,
-    /// The game `play.ron` names, started by Play.
+    /// The game `play.yaml` names, started by Play.
     Play,
-    /// **The build `play.ron` names** (GD-09, #371), run by Build before a change that needs Rust can
+    /// **The build `play.yaml` names** (GD-09, #371), run by Build before a change that needs Rust can
     /// be seen. A kind of its own, because a person allows the game and the rebuild separately: the
     /// game is what they watch, and the rebuild is a compiler.
     Build,

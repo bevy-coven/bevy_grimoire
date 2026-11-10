@@ -1357,7 +1357,7 @@ impl Grimoire {
                        images (project files, at most four) and facts (JSON). A check that needs a picture or \
                        facts it was not given is refused and names what is missing; it never answers from \
                        less. game: also look at the running game that play started: a frame from its \
-                       bevy_fairy, named game, on the port in play.ron or game.port, and one BRP call's \
+                       bevy_fairy, named game, on the port in play.yaml or game.port, and one BRP call's \
                        answer (game.state) as facts.game; a check that asks for the image game takes it \
                        itself, and a game's own checks live in the project's assets/grimoire/checks.ron. \
                        Advisory: it changes no map data and a finding never blocks or undoes an \

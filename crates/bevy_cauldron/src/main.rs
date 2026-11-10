@@ -29,6 +29,13 @@ fn main() -> AppExit {
         println!("{}", args::USAGE);
         return AppExit::Success;
     }
+    // **`migrate` runs and exits** (GD-03, #365): a project's files are moved from RON to YAML, and the
+    // editor is never started, so the command works with no window, on a machine with no GPU, over ssh.
+    // It is a *subcommand* rather than a flag because it changes a project on disk and never opens one —
+    // the same reason `cauldron migrate` is what every refusal names (`migrate::COMMAND`).
+    if args::subcommand(&argv) == Some("migrate") {
+        return migrate_and_exit(&argv);
+    }
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
@@ -247,3 +254,40 @@ fn name_the_window(
     }
 }
 
+
+/// **`cauldron migrate <project folder>`**: move a project's files from RON to YAML, and say what
+/// happened (GD-03, #365).
+///
+/// The work is the library's (`bevy_grimoire_core::migrate`), which computes every conversion before it
+/// writes one — so a project this refuses is byte for byte what it was. This function only prints:
+///
+/// - one line per converted file, then every comment that had no place, then where the old files went;
+/// - on a refusal, the `Problem`'s own line, which names the file and the fix, and a non-zero exit.
+///
+/// **The folder is required and is the first positional.** A missing one is a refusal rather than a guess
+/// at the current folder: `migrate` moves a person's files, and `cauldron migrate` in the wrong
+/// directory is a run they did not mean.
+fn migrate_and_exit(argv: &[String]) -> AppExit {
+    let Some(root) = args::subcommand_argument(argv) else {
+        eprintln!(
+            "usage: cauldron migrate <project folder>\n\n\
+             Moves a project's files from RON to YAML. Every file is converted in memory and read back \
+             before anything is written, so a project this refuses is left exactly as it was, and the \
+             old files are moved to .dark_factory/migrated-ron/ rather than deleted."
+        );
+        return AppExit::error();
+    };
+    let root = std::path::Path::new(root);
+    match bevy_grimoire_core::migrate::migrate(root) {
+        Ok(report) => {
+            for line in report.lines() {
+                println!("{line}");
+            }
+            AppExit::Success
+        }
+        Err(problem) => {
+            eprintln!("{}", problem.line());
+            AppExit::error()
+        }
+    }
+}

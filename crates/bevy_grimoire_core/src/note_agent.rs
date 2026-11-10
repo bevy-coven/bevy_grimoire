@@ -1,4 +1,4 @@
-//! `agent.ron`: the command Send starts for the notes (#94).
+//! `agent.yaml`: the command Send starts for the notes (#94).
 //!
 //! A project names a coding agent here, and pressing Send in the editor starts it once, so a person
 //! with no agent running still gets their notes worked. The editor holds no agent logic: it starts a
@@ -57,14 +57,18 @@ impl Default for AgentSettings {
     }
 }
 
-/// `<project>/agent.ron`.
+/// **The file this kind lives in**, at the project root: `agent.yaml`.
+pub const FILE: &str = "agent.yaml";
+
+/// `<project>/agent.yaml`.
 pub fn path_for_project(root: &Path) -> PathBuf {
-    root.join("agent.ron")
+    root.join(FILE)
 }
 
 impl AgentSettings {
-    pub fn from_ron(text: &str) -> Result<AgentSettings, String> {
-        let s: AgentSettings = ron::from_str(text).map_err(|e| format!("agent: parse: {e}"))?;
+    pub fn parse(text: &str) -> Result<AgentSettings, String> {
+        let s: AgentSettings =
+            crate::yaml::from_str(text, FILE).map_err(|p| format!("agent: {}", p.line()))?;
         if s.version != AGENT_VERSION {
             return Err(format!("agent: version {} is not the {AGENT_VERSION} this build reads", s.version));
         }
@@ -74,11 +78,16 @@ impl AgentSettings {
         Ok(s)
     }
 
-    /// Reads the project's `agent.ron`; a project without one launches nothing.
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("agent: {}", p.line()))
+    }
+
+    /// Reads the project's `agent.yaml`; a project without one launches nothing.
     pub fn load(root: &Path) -> Result<AgentSettings, String> {
         let path = path_for_project(root);
         match std::fs::read_to_string(&path) {
-            Ok(text) => AgentSettings::from_ron(&text).map_err(|e| format!("{}: {e}", path.display())),
+            Ok(text) => AgentSettings::parse(&text).map_err(|e| format!("{}: {e}", path.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(AgentSettings::default()),
             Err(e) => Err(format!("agent: {}: {e}", path.display())),
         }
@@ -164,19 +173,19 @@ mod tests {
 
     #[test]
     fn a_file_with_no_command_is_the_default_and_a_blank_command_is_refused() {
-        let s = AgentSettings::from_ron("(version: 1)").unwrap();
+        let s = AgentSettings::parse("version: 1\n").unwrap();
         assert_eq!(s, AgentSettings::default());
-        assert!(AgentSettings::from_ron("(version: 1, command: Some(\" \"))").is_err());
-        assert!(AgentSettings::from_ron("(version: 2)").is_err());
+        assert!(AgentSettings::parse("version: 1\ncommand: \" \"\n").is_err());
+        assert!(AgentSettings::parse("version: 2\n").is_err());
     }
 
     #[test]
     fn placeholders_are_filled_and_the_default_form_is_omps() {
-        let s = AgentSettings::from_ron("(version: 1, command: Some(\"omp\"), model: \"m1\")").unwrap();
+        let s = AgentSettings::parse("version: 1\ncommand: omp\nmodel: m1\n").unwrap();
         let argv = s.argv(Path::new("/p"));
         assert_eq!(&argv[..3], ["-p", "--model", "m1"]);
         assert!(argv[3].contains("note_resolve"));
-        let s = AgentSettings::from_ron("(version: 1, command: Some(\"x\"), args: [\"{project}\"])").unwrap();
+        let s = AgentSettings::parse("version: 1\ncommand: x\nargs: [\"{project}\"]\n").unwrap();
         assert_eq!(s.argv(Path::new("/p")), ["/p"]);
     }
 }

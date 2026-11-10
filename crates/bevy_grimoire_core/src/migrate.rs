@@ -67,13 +67,14 @@ pub const RON_EXT: &str = "ron";
 /// **Where the old files go**, under the project root: `<root>/.dark_factory/migrated-ron/`.
 pub const ARCHIVE_DIR: &str = ".dark_factory/migrated-ron";
 
-/// **The command that fixes a project still holding RON files**, as every refusal names it. It is the
-/// binary's own name, because the binary is what a person runs.
+/// **The command that fixes a project still holding RON files**, as every refusal names it: the binary's
+/// own subcommand, run on the project's folder.
 ///
-/// **No such subcommand exists yet** (this slice ships the library only), so the refusal is a statement
-/// about what the next slice adds rather than a line that works today; it is named here so the sentence
-/// and the binary cannot drift apart when the subcommand lands.
-pub const COMMAND: &str = "the editor's migrate command, run on the project's folder";
+/// It is one constant so the sentence a refusal prints and the line a person types cannot drift apart.
+/// The command's own name is `cauldron` — the app's, not the crate's — which is also why this crate can
+/// spell it: this file must not name an engine crate (`tests/engine_free.rs`), and a word a person reads
+/// in a refusal is not a dependency.
+pub const COMMAND: &str = "cauldron migrate <project folder>";
 
 /// The page of the guide that explains the move: "Moving a project to YAML" in it.
 const DOCS: &str = "docs/guide/your-game.md";
@@ -188,15 +189,73 @@ pub fn plan(root: &Path) -> Result<Vec<(PathBuf, String, &'static FileKind)>, Pr
 }
 
 /// The kind of a project file named relative to the project root, which is where both bases hang from.
+///
+/// **A kind matches its old spelling too** (GD-03, #365). The table states a kind's path as it is today
+/// (`play.yaml`), so a file still written the way it was before the cutover (`play.ron`) matches nothing
+/// by its pattern alone — and the refusal an open raises, and the migration that converts it, both have
+/// to find exactly those files. So a second spelling is tried: the pattern with its `.yaml` ending put
+/// back to `.ron`, which is the only extension the cutover moved.
 fn kind_of_rel(rel: &str) -> Option<&'static FileKind> {
     // `Base::Grimoire` paths are relative to `assets/grimoire`; a root file to the root itself.
-    KINDS.iter().find(|k| match k.base {
-        Base::Grimoire => rel
-            .strip_prefix(GRIMOIRE_DIR)
-            .and_then(|rest| rest.strip_prefix('/'))
-            .is_some_and(|rest| k.matches(rest)),
-        Base::Root => k.matches(rel),
+    KINDS.iter().find(|k| {
+        let under = match k.base {
+            Base::Grimoire => rel.strip_prefix(GRIMOIRE_DIR).and_then(|rest| rest.strip_prefix('/')),
+            Base::Root => Some(rel),
+        };
+        let before = ron_spelling_of(k.pattern);
+        under.is_some_and(|rest| k.matches(rest) || matches_pattern(&before, rest))
     })
+}
+
+/// **Whether `path` (relative to its base, with `/`) is a file of the pattern `pattern`.** A free copy of
+/// [`FileKind::matches`]' walk, because the pattern here is the cutover's old spelling rather than the
+/// kind's own: the same `<name>`/`<file>` placeholders, one segment each.
+fn matches_pattern(pattern: &str, path: &str) -> bool {
+    if pattern.is_empty() {
+        return false;
+    }
+    let mut want = pattern.split('/');
+    let mut have = path.split('/');
+    loop {
+        match (want.next(), have.next()) {
+            (None, None) => return true,
+            (Some(w), Some(h)) => {
+                let any = w.contains("<file>");
+                let literal = !w.contains('<');
+                let one = if literal {
+                    w == h
+                } else {
+                    // `<name>`/`<file>` stand for one segment: this build's files never nest a name, and
+                    // the pattern's own extension must still be at the end.
+                    let (head, tail) = match w.split_once('<') {
+                        Some((head, rest)) => (head, rest.split_once('>').map(|(_, t)| t).unwrap_or("")),
+                        None => (w, ""),
+                    };
+                    h.len() > head.len() + tail.len()
+                        && h.starts_with(head)
+                        && h.ends_with(tail)
+                        && (any || h[head.len()..h.len() - tail.len()].chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+                };
+                if !one {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+}
+
+/// **A kind's path pattern as the cutover left it**: `play.yaml` → `play.ron`, `maps/<name>.map.yaml` →
+/// `maps/<name>.map.ron`.
+///
+/// A file the cutover has not converted yet is named the way it always was, so a pattern that only says
+/// `.yaml` matches nothing on that project. A pattern holding no `.yaml` (an `oplog.jsonl`, a
+/// `references/<file>`) is answered unchanged, so it still matches only what it says.
+fn ron_spelling_of(pattern: &str) -> String {
+    match pattern.rsplit_once('.') {
+        Some((stem, YAML_EXT)) => format!("{stem}.{RON_EXT}"),
+        _ => pattern.to_owned(),
+    }
 }
 
 /// **Every file under `dir`, as a path relative to `root` with `/`**, depth-first, skipping [`SKIP_DIRS`].
@@ -775,6 +834,60 @@ fn item_name_from(all: &[&str], at: usize) -> Option<String> {
     None
 }
 
+/// **The kinds whose reader parses YAML now** (GD-03, #365): the cutover is one kind at a time, and this
+/// is the one list that says how far it has got.
+///
+/// It exists because a file on disk is read in exactly one spelling, and which one is a property of the
+/// kind, not of the file: a frozen fixture a release wrote (`tests/old_data.rs`) is checked as the type
+/// reads it *today*, so a kind on this list goes through [`written_as_yaml`] first and a kind off it is
+/// read as the RON it is. A second reader that took either spelling would be the two paths the cutover
+/// exists to remove.
+///
+/// **It can only grow, and a kind leaves `tests/old_data.rs`'s RON reading in the same commit** that adds
+/// its id here.
+pub const READS_YAML: &[&str] = &["agent", "play"];
+
+/// **Whether `kind`'s reader parses YAML now**, per [`READS_YAML`].
+pub fn reads_yaml(kind: &str) -> bool {
+    READS_YAML.contains(&kind)
+}
+
+/// **One project file's text, as YAML, from the RON it was written in** — the conversion [`migrate`] runs,
+/// for one file a caller already holds in memory.
+///
+/// Answers the text and the name it would be written at (`kits.ron` → `kits.yaml`), or a refusal naming
+/// the file. This exists for the two callers that are not a folder walk: the frozen fixtures a release
+/// wrote (`tests/old_data.rs`), which are checked as the type reads them *today*, and a game's own data
+/// file, whose type lives above this crate and which is therefore refused by name rather than guessed at.
+///
+/// **A file whose kind this crate cannot read is refused, not passed through.** The conversion is the
+/// same one [`migrate`] runs, so a value that would change here is a value that would change there.
+#[allow(clippy::result_large_err)]
+pub fn written_as_yaml(rel: &str, text: &str) -> Result<(String, String), Problem> {
+    // **The name a frozen fixture carries is the project-relative one** (`kits.ron`, `site/library.ron`),
+    // and a [`Base::Grimoire`] pattern hangs from `assets/grimoire`, so both spellings are tried. The root
+    // itself is the other base, whose patterns are already project-relative.
+    let kind = kind_of_rel(rel)
+        .or_else(|| kind_of_rel(&format!("{GRIMOIRE_DIR}/{rel}")))
+        .or_else(|| kind_of_rel(rel.trim_start_matches(&format!("{GRIMOIRE_DIR}/"))))
+        .ok_or_else(|| {
+        Problem::with(
+            format!("{rel} is not a project file this build names"),
+            Detail::default()
+                .at(Location::file(rel.to_owned()))
+                .because("no kind's path pattern matches it, so its type is unknown".to_owned())
+                .fix(format!("run `{COMMAND}`, which converts what it knows and names what it does not"))
+                .docs(DOCS),
+        )
+    })?;
+    let done = write_kind(kind, text, rel)?;
+    let yaml = rel
+        .strip_suffix(&format!(".{RON_EXT}"))
+        .map(|stem| format!("{stem}.{YAML_EXT}"))
+        .unwrap_or_else(|| rel.to_owned());
+    Ok((yaml, done.text))
+}
+
 /// **The refusal an open raises when `root` still holds a RON project file**: the file, and the command
 /// that fixes it. `None` for a project that is already YAML.
 ///
@@ -783,7 +896,13 @@ fn item_name_from(all: &[&str], at: usize) -> Option<String> {
 #[allow(clippy::result_large_err)]
 pub fn leftover(root: &Path) -> Result<Option<Problem>, Problem> {
     let plan = plan(root)?;
-    let Some((_, rel, _)) = plan.first() else { return Ok(None) };
+    // **Only a kind whose reader has moved to YAML refuses an open.** The cutover is one kind at a time
+    // ([`READS_YAML`]), and a kind it has not reached still reads its RON: refusing a project for a
+    // `kits.ron` would refuse every project in the world until the last kind moves, and the file it names
+    // would be one this build can still read. A project is refused once it holds a file of the spelling
+    // nothing reads any more, which is exactly what this answers.
+    let Some((_, rel, _)) = plan.iter().find(|(_, _, kind)| reads_yaml(kind.id)) else { return Ok(None) };
+    let rel = rel.clone();
     Ok(Some(Problem::with(
         format!("{rel} is still RON, so this project has not been migrated"),
         Detail::default()

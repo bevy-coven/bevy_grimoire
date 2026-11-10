@@ -92,8 +92,8 @@ fn versioned() -> Vec<(&'static str, &'static str, String)> {
         s("relations", "maps/yard.relations.ron", Relations::default().to_ron().unwrap()),
         s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION)),
         s("family_list", "family.ron", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION)),
-        s("agent", "agent.ron", format!("(version: {})", bevy_grimoire_core::note_agent::AGENT_VERSION)),
-        s("play", "play.ron", format!("(version: {}, command: [\"game\"])", bevy_grimoire_core::play::PLAY_VERSION)),
+        s("agent", "agent.yaml", format!("version: {}\n", bevy_grimoire_core::note_agent::AGENT_VERSION)),
+        s("play", "play.yaml", format!("version: {}\ncommand: [\"game\"]\n", bevy_grimoire_core::play::PLAY_VERSION)),
         s("destructible_marks", "destructible.ron", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap()),
         s(
             "destructible_bake",
@@ -115,14 +115,17 @@ fn versioned() -> Vec<(&'static str, &'static str, String)> {
     ]
 }
 
-/// The span of the digits of the root struct's `version: N`, found as the first `version:` whose
-/// previous token is the root's opening parenthesis (so a comment that says "version" is not it, and
-/// neither is a nested struct's own).
+/// The span of the digits of the root value's `version: N`, in either spelling a project file has had:
+/// a RON struct (`(version: 1, …`), where it is the first `version:` whose previous token is the root's
+/// opening parenthesis, or a YAML document (`version: 1`), where it is the first line that opens at the
+/// left margin with `version:`. A nested struct's own, and a comment that says "version", are neither.
 fn version_span(text: &str) -> Option<(usize, usize)> {
     let mut from = 0;
     while let Some(found) = text[from..].find("version:") {
         let at = from + found;
-        if text[..at].trim_end().ends_with('(') {
+        let opens_the_root = text[..at].trim_end().ends_with('(')
+            || (text[..at].trim().is_empty() && !text[..at].contains(' '));
+        if opens_the_root {
             let digits = at + "version:".len();
             let start = digits + text[digits..].len() - text[digits..].trim_start().len();
             let end = start + text[start..].chars().take_while(char::is_ascii_digit).count();

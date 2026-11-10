@@ -178,17 +178,52 @@ pub const USAGE: &str = "\
 Cauldron: the editor that writes a grimoire, the book your game loads.
 
 usage: bevy_cauldron [ROOT] [MAP] [--door kit|map|rigs] [--kit NAME] [--live]
+       cauldron migrate <project folder>
 
   ROOT          the project's root, the folder holding assets/grimoire (default: the current folder)
   MAP           the map to open on the Map door; naming one, or a --door, skips the launcher
   --door DOOR   open a door directly: kit (reusable content), map (the level) or rigs (the rig bench)
   --kit NAME    the kit to author in, when the project binds more than one
   --live        write every committed change to disk at once, for a game that watches the project
-  -h, --help    print this and exit";
+  -h, --help    print this and exit
+
+  migrate       move a project's files from RON to YAML and exit (does not open the editor)";
 
 /// Whether the arguments ask for [`USAGE`] rather than a window.
 pub fn asks_for_help(args: &[String]) -> bool {
     args.iter().any(|a| a == "--help" || a == "-h")
+}
+
+/// **The subcommand these arguments name**, or `None` for an ordinary open.
+///
+/// One function, so a subcommand is recognised in exactly one place and `main` cannot disagree with the
+/// usage text about what one is called. A subcommand is the first argument and is never a flag: an argv
+/// that opens a project starts with its root, which cannot be a bare word this list knows (a project
+/// folder literally named `migrate` is opened with an explicit path, `./migrate`).
+pub fn subcommand(args: &[String]) -> Option<&str> {
+    match args.first().map(String::as_str) {
+        Some(name) if SUBCOMMANDS.contains(&name) => Some(name),
+        _ => None,
+    }
+}
+
+/// **Every subcommand this binary takes**, so [`subcommand`] and [`USAGE`] state one list.
+pub const SUBCOMMANDS: [&str; 1] = ["migrate"];
+
+/// **The argument a subcommand was given**: the one positional after its name, if there is exactly one.
+/// `None` for none and for more than one, because both are a line to correct rather than a folder to
+/// guess at.
+pub fn subcommand_argument(args: &[String]) -> Option<&str> {
+    let rest: Vec<&str> = args
+        .iter()
+        .skip(1)
+        .map(String::as_str)
+        .filter(|a| !a.starts_with('-'))
+        .collect();
+    match rest.as_slice() {
+        [one] => Some(one),
+        _ => None,
+    }
 }
 
 /// Where the project is, for the asset root. `main` needs this before anything is opened.

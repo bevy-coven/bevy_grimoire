@@ -1,6 +1,6 @@
 //! **The editor's half of project-command trust: the store's place, the question, and the answer.**
 //!
-//! `bevy_grimoire_core::trust` decides whether a person has allowed a project's `agent.ron` or `play.ron`
+//! `bevy_grimoire_core::trust` decides whether a person has allowed a project's `agent.yaml` or `play.yaml`
 //! command; this module is where the editor asks that person and writes down what they said. The rules
 //! are in the core module's docs. The two that shape this one:
 //!

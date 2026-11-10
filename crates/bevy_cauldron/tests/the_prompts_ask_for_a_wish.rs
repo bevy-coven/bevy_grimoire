@@ -30,7 +30,7 @@ fn the_notes_agents_prompt_asks_for_a_wish_after_the_handback() {
     // **The prompt a launch carries**, not the constant on its own: `argv` is what the editor hands
     // the program, and the wish is only asked for if it is in that argument.
     let root = fixtures::Fixture::new(&format!("a_wish_is_asked_for_{}", std::process::id())).build("wish");
-    std::fs::write(root.join("agent.ron"), "(version: 1, command: Some(\"omp\"))")
+    std::fs::write(root.join("agent.yaml"), "version: 1\ncommand: omp\n")
         .unwrap_or_else(|e| panic!("{e}"));
     let settings = AgentSettings::load(&root).unwrap_or_else(|e| panic!("{e}"));
     let argv = settings.argv(&root);
