@@ -1369,13 +1369,17 @@ pub const BINDINGS: &[Binding] = &[
     // **The keys do not move with what is built.** `Cmd`+`1` is Project in this release, when
     // Project is not registered, and it is still Project when NV-08 lands — a chord that walked to
     // whatever happened to be built would renumber a person's fingers on every release.
+    //
+    // **One `does` for all nine**, so the census collapses them into one badge on the strip, the
+    // way the three panel slots are one (`badges` joins neighbours that share a home and a `does`).
+    // Nine separate badges on one control would break `no_home_carries_more_than_it_can_show`.
     b(
         Action::WorkspaceProject,
         KeyCode::Digit1,
         true,
         Context::Global,
         "Digit1",
-        "the Project workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1384,7 +1388,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit2",
-        "the Map workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1393,7 +1397,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit3",
-        "the World workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1402,7 +1406,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit4",
-        "the Kit workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1411,7 +1415,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit5",
-        "the Animation workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1420,7 +1424,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit6",
-        "the Sound workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1429,7 +1433,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit7",
-        "the Files workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1438,7 +1442,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit8",
-        "the Game workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
@@ -1447,7 +1451,7 @@ pub const BINDINGS: &[Binding] = &[
         true,
         Context::Global,
         "Digit9",
-        "the Agent workspace",
+        "workspace 1 to 9",
     )
     .at(Home::Control(ControlId::WorkspaceStrip)),
     // **One row for three keys**, because jumping to a panel is one idea — the same collapse
