@@ -658,3 +658,43 @@ fn a_yaml_file_already_beside_the_ron_refuses_the_migration() {
     assert!(grimoire.join("kits.ron").is_file(), "and the RON is left where it was");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn every_comment_in_the_shipped_rigs_file_finds_its_field() {
+    // **The shipped `rigs.ron` is the fixture this needs**, and it is the reason the cursor is not the
+    // whole rule. Each rig holds a `slots:` list, so a comment above that list moves the walk *into* the
+    // rig's body; the next rig's key then opens **before** where that search reached. A single monotonic
+    // cursor reports the next rig's comment as having no field — measured on this file: two comments
+    // ("SCP-1048-A, the ear bear" and its sibling) were dropped from the report's carried count and
+    // listed as unplaceable. A key that occurs once is placed at its one occurrence; only a repeated key
+    // (`slots:`, `mesh:`) walks in field order.
+    let root = scratch("shipped_rigs");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    let text = std::fs::read_to_string(shipped_grimoire().join("rigs.ron"))
+        .unwrap_or_else(|e| panic!("the shipped rigs.ron: {e}"));
+    std::fs::write(grimoire.join("rigs.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+
+    assert_eq!(
+        report.unplaced.len(),
+        0,
+        "every comment in the shipped file has a field to sit above: {:?}",
+        report.lines()
+    );
+    let written = std::fs::read_to_string(grimoire.join("rigs.yaml")).unwrap_or_else(|e| panic!("{e}"));
+    // And the two that a cursor alone loses are above the rigs they describe.
+    for (comment, rig) in [
+        ("SCP-1048-A, the ear bear", "scp1048_ear:"),
+        ("SCP-1048-B, the infant-arm bear", "scp1048_infant:"),
+    ] {
+        let at_comment = written.lines().position(|l| l.contains(comment));
+        let at_rig = written.lines().position(|l| l.trim_start() == rig);
+        let (Some(comment_at), Some(rig_at)) = (at_comment, at_rig) else {
+            panic!("`{comment}` and `{rig}` are both in the file:\n{written}");
+        };
+        assert_eq!(comment_at + 1, rig_at, "`{comment}` stands directly above `{rig}`");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

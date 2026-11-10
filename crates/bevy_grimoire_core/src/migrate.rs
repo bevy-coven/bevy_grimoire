@@ -611,21 +611,31 @@ fn item_line(lines: &[String], openable: &[usize], name: &str) -> Option<usize> 
     })
 }
 
-/// **The index of the first line in `openable` at or after `from` that opens the field `key`**, or `None`
-/// when the writer emitted no such field after that point.
+/// **The index of the line that opens the field `key`**, or `None` when the writer emitted no such field.
 ///
-/// A field is opened by a line whose text before its first `:` is the key — `- name: x` (a sequence
-/// item's field) and `  name: x` (a mapping's) alike. Only a line [`content_lines`] kept is considered, so
-/// a `status:` inside a block scalar's body is never mistaken for a field.
+/// Two cases, because a project file nests:
+///
+/// - **`key` occurs once** — `scp1048_ear` names one rig — so the line is that one, whatever the cursor
+///   says. A single monotonic cursor would otherwise fail here: a comment above a `slots:` list moves the
+///   cursor into that rig's body, and the next sibling rig opens *before* where the search had reached.
+/// - **`key` occurs more than once** — `slots:` under every rig — so the walk is in field order: the first
+///   occurrence at or after `from`, which is what makes a repeated field name land on the next one and
+///   never on an earlier one.
+///
+/// Only a line [`content_lines`] kept is considered, so a `status:` inside a block scalar's body is never
+/// mistaken for a field.
 fn opening_line(lines: &[String], openable: &[usize], key: &str, from: usize) -> Option<usize> {
     let opening = format!("{key}:");
-    openable.iter().copied().find(|at| {
-        if *at < from {
-            return false;
-        }
-        let trimmed = lines[*at].trim_start();
+    let opens = |at: usize| {
+        let trimmed = lines[at].trim_start();
         trimmed.strip_prefix("- ").unwrap_or(trimmed).starts_with(&opening)
-    })
+    };
+    let all: Vec<usize> = openable.iter().copied().filter(|at| opens(*at)).collect();
+    match all.len() {
+        0 => None,
+        1 => all.first().copied(),
+        _ => all.iter().copied().find(|at| *at >= from),
+    }
 }
 
 /// **One RON comment, and where it stands relative to the file's fields.**
