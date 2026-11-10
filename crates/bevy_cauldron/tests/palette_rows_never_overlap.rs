@@ -94,11 +94,11 @@ fn the_list_opens_at_its_top_with_its_first_row_armed() {
     }
     let root = fixture.build("m");
     let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
-    let text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    let first_kind = r#"kind: ["prop"]"#;
-    assert!(text.contains(first_kind), "the fixture's first row carries the shipped kind");
-    std::fs::write(&library, text.replacen(first_kind, r#"kind: ["wall"]"#, 1))
-        .unwrap_or_else(|e| panic!("{library:?}: {e}"));
+    fixtures::edit_library(&library, |lib| {
+        let first = &mut lib.descriptors[0];
+        assert_eq!(first.kind, vec!["prop".to_owned()], "the fixture's first row carries the shipped kind");
+        first.kind = vec!["wall".to_owned()];
+    });
 
     let mut app = harness::build_headless(&root, "m", None)
         .unwrap_or_else(|e| panic!("the fixture project must open: {e}"));

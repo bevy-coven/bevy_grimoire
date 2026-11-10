@@ -41,13 +41,12 @@ fn rig(tag: &str) -> App {
         .build("m");
     // The fixture gives every descriptor the kind `prop`; the lamps are lights.
     let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
-    let mut text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
-    for lamp in ["lamp_tall", "lamp_short"] {
-        let at = text.find(&format!("id: \"{lamp}\"")).unwrap_or_else(|| panic!("no `{lamp}` in the library"));
-        let kind = text[at..].find("kind: [\"prop\"]").expect("the lamp has a kind") + at;
-        text.replace_range(kind..kind + "kind: [\"prop\"]".len(), "kind: [\"light-source\"]");
-    }
-    std::fs::write(&library, text).unwrap_or_else(|e| panic!("{library:?}: {e}"));
+    fixtures::edit_library(&library, |lib| {
+        for lamp in ["lamp_tall", "lamp_short"] {
+            let row = lib.descriptors.iter_mut().find(|d| d.id == lamp).unwrap_or_else(|| panic!("no `{lamp}` in the library"));
+            row.kind = vec!["light-source".to_owned()];
+        }
+    });
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // A window, so the camera has a surface to project the pointer onto.

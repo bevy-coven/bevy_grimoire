@@ -131,8 +131,8 @@ fn an_agent_removes_a_piece_and_one_undo_puts_it_back_where_it_stood() {
         "the editor's library still holds the piece"
     );
     assert!(!ids(&app).contains(&"site/b".to_owned()), "the measured layer still holds the piece");
-    assert!(!file(&app).contains("\"site/b\""), "the library file still holds the piece: {}", file(&app));
-    assert!(file(&app).contains("\"site/a\""), "the removal took more than the one piece");
+    assert!(!file(&app).contains("id: site/b"), "the library file still holds the piece: {}", file(&app));
+    assert!(file(&app).contains("id: site/a"), "the removal took more than the one piece");
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "a removal is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("piece_remove"));
@@ -173,7 +173,7 @@ fn an_agent_removes_a_piece_and_one_undo_puts_it_back_where_it_stood() {
         Some(&before),
         "the descriptor must come back exactly as it was, judgements and all"
     );
-    assert!(file(&app).contains("\"site/b\""), "undo must put the file back: {}", file(&app));
+    assert!(file(&app).contains("id: site/b"), "undo must put the file back: {}", file(&app));
     assert_eq!(
         candidate_at(&app, &mesh),
         None,
@@ -328,7 +328,7 @@ fn a_persons_delete_removes_through_the_operation_and_cmd_z_and_redo_follow_it()
         app.update();
     }
     assert!(app.world().resource::<Project>().library.get("site/b").is_none(), "Delete did not remove the piece");
-    assert!(!file(&app).contains("\"site/b\""), "Delete did not reach the library file: {}", file(&app));
+    assert!(!file(&app).contains("id: site/b"), "Delete did not reach the library file: {}", file(&app));
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "one press of Delete is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("piece_remove"));
@@ -348,7 +348,7 @@ fn a_persons_delete_removes_through_the_operation_and_cmd_z_and_redo_follow_it()
         app.world().resource::<Project>().library.get("site/b").is_some(),
         "one Cmd+Z must put the piece back"
     );
-    assert!(file(&app).contains("\"site/b\""), "Cmd+Z must put the file back: {}", file(&app));
+    assert!(file(&app).contains("id: site/b"), "Cmd+Z must put the file back: {}", file(&app));
     assert_eq!(candidate_at(&app, &mesh), None, "a restored piece is not also a candidate");
     assert_eq!(
         app.world().resource::<ImportState>().selected_library_id.as_deref(),

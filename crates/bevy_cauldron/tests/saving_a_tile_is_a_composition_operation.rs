@@ -87,7 +87,7 @@ fn an_agent_writes_a_whole_tile_and_one_undo_takes_it_back() {
     let made = define(&mut app, serde_json::json!({"id": "bay_two", "composition": tile}));
     assert_eq!(made["outcome"], "applied", "{made}");
     let after = comps(&root);
-    assert!(after.contains("id: \"bay_two\""), "the tile is written: {after}");
+    assert!(after.contains("id: bay_two"), "the tile is written: {after}");
     assert!(after.contains("a tile an agent wrote whole"), "the note rides along: {after}");
     assert_eq!(log(&app).len(), lines + 1, "one tile is one log line");
 
@@ -95,7 +95,7 @@ fn an_agent_writes_a_whole_tile_and_one_undo_takes_it_back() {
     let undone = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
     assert_eq!(undone["outcome"], "applied", "{undone}");
     assert!(!comps(&root).contains("bay_two"), "one undo takes the tile out: {}", comps(&root));
-    assert!(comps(&root).contains("id: \"bay\""), "and leaves the others");
+    assert!(comps(&root).contains("id: bay"), "and leaves the others");
 
     // And redefining one that exists asks for `replace`, and its undo puts the old body back.
     let tile = whole(&app, "bay");
@@ -171,7 +171,7 @@ fn a_persons_cmd_s_on_the_tiles_tab_saves_through_the_operation() {
     app.update();
 
     press_with_mod(&mut app, bevy_cauldron::keys::binding(bevy_cauldron::keys::Action::Save).key);
-    assert!(comps(&root).contains("id: \"hall\""), "Cmd+S did not reach compositions.yaml: {}", comps(&root));
+    assert!(comps(&root).contains("id: hall"), "Cmd+S did not reach compositions.yaml: {}", comps(&root));
     let entries = log(&app);
     assert_eq!(entries.len(), lines + 1, "one save is one log line");
     let last = entries.last().expect("a line");

@@ -135,7 +135,7 @@ fn a_record_a_person_confirmed_in_full_is_not_drawn_unchecked() {
             "fence",
             "alpha",
             "{kind: Human, effects: Human, look: Human}",
-            r#"model: Some("gemma-x"), at: "2026-10-21", confidence: Some(High)"#,
+            r#"{model: "gemma-x", at: "2026-10-21", confidence: High}"#,
         ),
     );
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
@@ -158,7 +158,7 @@ fn an_open_model_axis_keeps_the_models_date_and_names_who_wrote_the_rest() {
         "fence",
         "alpha",
         "{kind: Model, look: Human}",
-        r#"model: Some("gemma-x"), model_at: Some("2026-10-20"), at: "2026-10-21", confidence: Some(High)"#,
+        r#"{model: "gemma-x", model_at: "2026-10-20", at: "2026-10-21", confidence: High}"#,
     ));
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "confidence high · gemma-x · 2026-10-20 · by hand set look");
@@ -173,7 +173,7 @@ fn the_labels_row_shows_the_models_file_stem_not_its_path() {
         "fence",
         "alpha",
         "{kind: Model, effects: Model, look: Model}",
-        r#"model: Some("/Users/me/models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf"), at: "2026-10-20", confidence: Some(High)"#,
+        r#"{model: "/Users/me/models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf", at: "2026-10-20", confidence: High}"#,
     ));
     let (text, _) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "confidence high · Qwen3-VL-8B-Instruct-Q4_K_M · 2026-10-20");
@@ -182,7 +182,7 @@ fn the_labels_row_shows_the_models_file_stem_not_its_path() {
 /// **An entity's ancestors, nearest first.**
 fn ancestors(world: &World, mut e: Entity) -> Vec<Entity> {
     let mut out = Vec::new();
-    while let Some(parent) = world.get::<ChildOf>(e).map(|c| c.parent()) {
+    while let parent = world.get::<ChildOf>(e).map(|c| c.parent()) {
         out.push(parent);
         e = parent;
     }
@@ -278,7 +278,7 @@ fn an_agent_write_on_a_legacy_model_record_keeps_the_models_date() {
             "fence",
             "alpha",
             "{kind: Model, look: Model}",
-            r#"model: Some("gemma-x"), at: "2026-10-11", confidence: Some(High)"#,
+            r#"{model: "gemma-x", at: "2026-10-11", confidence: High}"#,
         ),
     );
     let answer = call(
@@ -304,7 +304,7 @@ fn an_agent_write_that_leaves_no_model_axis_names_no_model() {
             "fence",
             "alpha",
             "{look: Model}",
-            r#"model: Some("gemma-x"), at: "2026-10-11", confidence: Some(High)"#,
+            r#"{model: "gemma-x", at: "2026-10-11", confidence: High}"#,
         ),
     );
     let answer = call(
@@ -327,7 +327,7 @@ fn an_agent_write_on_a_hand_labelled_record_is_not_called_by_hand() {
             "fence",
             "alpha",
             "{look: Human}",
-            r#"at: "2026-10-11""#,
+            r#"{at: "2026-10-11"}"#,
         ),
     );
     let answer = call(

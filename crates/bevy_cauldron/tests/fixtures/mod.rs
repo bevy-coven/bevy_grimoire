@@ -267,38 +267,17 @@ fn parse_fragment<T: serde::de::DeserializeOwned>(fragment: &str, what: &str) ->
 /// **A `LabelOrigin` from its two fragments**: the per-axis author (a value) and the record's remaining
 /// fields (a project file's lines).
 fn parse_record(by: AxisOrigin, rest: &str) -> LabelOrigin {
-    let text = format!("by: {by:?}\n{rest}\n");
-    let _ = &text;
-    // The fields are read one at a time, because the fragments are the reader's spelling and a record built
-    // from a `format!` is a file that has to pass the reader twice.
-    let model = field_of(rest, "model").map(|v| v.to_owned());
-    let model_at = field_of(rest, "model_at").map(|v| v.to_owned());
-    let confidence = field_of(rest, "confidence").map(confidence_of);
-    let at = field_of(rest, "at").unwrap_or_default().to_owned();
-    LabelOrigin { by, model, model_at, at, confidence }
-}
-
-/// **A quoted string field out of a fragment**, or `None` for a field that is absent or `None`.
-fn field_of<'a>(rest: &'a str, name: &str) -> Option<&'a str> {
-    let at = rest.find(&format!("{name}: "))? + name.len() + 2;
-    let tail = rest[at..].trim_start();
-    if tail.starts_with("None") {
-        return None;
+    // The record's own fields as a YAML flow mapping, read by the same reader a project file goes through.
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default, deny_unknown_fields)]
+    struct Rest {
+        model: Option<String>,
+        model_at: Option<String>,
+        at: String,
+        confidence: Option<Confidence>,
     }
-    let inner = tail.strip_prefix("Some(")?;
-    let body = inner.split(')').next()?;
-    let quoted = body.trim();
-    Some(quoted.strip_prefix('"')?.split('"').next()?)
-}
-
-/// **A `Confidence` from the variant name a test writes**: `High`, `Medium` or `Low`.
-fn confidence_of(name: &str) -> Confidence {
-    match name.trim() {
-        "High" => Confidence::High,
-        "Medium" => Confidence::Medium,
-        "Low" => Confidence::Low,
-        other => panic!("`{other}` is not a confidence (High, Medium or Low)"),
-    }
+    let rest: Rest = parse_fragment(rest, "the label record");
+    LabelOrigin { by, model: rest.model, model_at: rest.model_at, at: rest.at, confidence: rest.confidence }
 }
 
 /// **Write a fixture file through the one YAML writer**, which is the writer the editor itself uses. A

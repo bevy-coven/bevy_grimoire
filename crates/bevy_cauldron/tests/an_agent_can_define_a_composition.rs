@@ -74,7 +74,7 @@ fn placements_become_a_group_and_undo_takes_it_back() {
 
     let made = id_of(&apply(&mut app, "composition_define", serde_json::json!({"id": "Corner", "from": [a, b]})));
     let after = comps(&root);
-    assert!(after.contains("id: \"corner\""), "the id is forced to snake_case and written: {after}");
+    assert!(after.contains("id: corner"), "the id is forced to snake_case and written: {after}");
     let project = app.world().resource::<Project>();
     let c = project.compositions.compositions.iter().find(|c| c.id == "corner").expect("the project holds it");
     assert_eq!(c.members.len(), 2);

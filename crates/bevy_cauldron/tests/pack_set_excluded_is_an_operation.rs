@@ -99,7 +99,7 @@ fn an_agent_excludes_a_pack_the_file_follows_and_one_undo_brings_it_back() {
         app.world().resource::<Project>().policy.excludes("bbb/b1.glb"),
         "the pack's meshes are still offered"
     );
-    assert!(file(&app).contains("\"bbb\""), "the policy file does not hold the exclusion: {}", file(&app));
+    assert!(file(&app).contains("bbb"), "the policy file does not hold the exclusion: {}", file(&app));
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "an exclusion is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("pack_set_excluded"));
@@ -120,7 +120,7 @@ fn an_agent_excludes_a_pack_the_file_follows_and_one_undo_brings_it_back() {
     );
     assert_eq!(excluded(&app), vec!["ccc/inner".to_owned()], "one undo must bring `bbb` back and only it");
     assert!(
-        !file(&app).contains("\"bbb\"") && file(&app).contains("\"ccc/inner\""),
+        !file(&app).contains("bbb") && file(&app).contains("ccc/inner"),
         "undo must put the policy file back: {}",
         file(&app)
     );
@@ -223,7 +223,7 @@ fn a_restore_is_undone_even_when_its_folder_is_gone() {
     let back = call(&mut app, "grimoire/operation_undo", serde_json::json!({"operation_id": id, "dry_run": false}));
     assert_eq!(back["outcome"], "applied", "the undo of a restore was refused because the folder is gone: {back}");
     assert_eq!(excluded(&app), vec!["bbb".to_owned()], "the undo did not list the pack again");
-    assert!(file(&app).contains("\"bbb\""), "the policy file does not list the pack again: {}", file(&app));
+    assert!(file(&app).contains("bbb"), "the policy file does not list the pack again: {}", file(&app));
 }
 
 /// **A bare undo takes back the open map's newest change, never a pack's exclusion.** An exclusion is
@@ -296,7 +296,7 @@ fn a_persons_shift_r_excludes_through_the_operation_and_cmd_z_takes_it_back() {
     app.world_mut().resource_mut::<ButtonInput<KeyCode>>().release(KeyCode::ShiftLeft);
     app.update();
     assert_eq!(excluded(&app), vec!["bbb".to_owned()], "Shift+R must exclude the pack under the cursor");
-    assert!(file(&app).contains("\"bbb\""), "Shift+R did not reach the policy file: {}", file(&app));
+    assert!(file(&app).contains("bbb"), "Shift+R did not reach the policy file: {}", file(&app));
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "one press of Shift+R is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("pack_set_excluded"));
@@ -317,7 +317,7 @@ fn a_persons_shift_r_excludes_through_the_operation_and_cmd_z_takes_it_back() {
     app.update();
     assert!(excluded(&app).is_empty(), "one Cmd+Z must bring the pack back");
     assert!(
-        !file(&app).contains("\"bbb\""),
+        !file(&app).contains("bbb"),
         "Cmd+Z must put the policy file back: {}",
         file(&app)
     );

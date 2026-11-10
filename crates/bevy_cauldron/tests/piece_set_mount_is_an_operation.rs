@@ -132,7 +132,7 @@ fn an_agent_mounts_a_piece_the_file_follows_and_one_undo_puts_it_back() {
     assert_eq!(mount_of(&app, "site/wall"), Some(Mount::OnFloor), "one undo must put the mount back");
     let reread = file(&app);
     assert!(
-        !reread.contains("OnWall") && reread.contains("mount: Some(OnFloor)"),
+        !reread.contains("OnWall") && reread.contains("mount: OnFloor"),
         "undo must put the library file back: {reread}"
     );
     let labels_after = app
@@ -253,7 +253,7 @@ fn tap(app: &mut App, logical: Key, code: KeyCode) {
 #[test]
 fn a_persons_m_steps_the_mount_through_the_operation_and_cmd_z_takes_it_back() {
     let mut app = editor("mount-person");
-    assert!(file(&app).contains("mount: Some(OnFloor)"), "the fixture's mount changed");
+    assert!(file(&app).contains("mount: OnFloor"), "the fixture's mount changed");
     // **A click on the shelf row**, which is `piece_select` and puts the pane on the piece.
     app.world_mut()
         .resource_scope(|world, mut import: Mut<ImportState>| {
@@ -312,7 +312,7 @@ fn a_persons_m_steps_the_mount_through_the_operation_and_cmd_z_takes_it_back() {
     app.update();
     assert_eq!(mount_of(&app, "site/wall"), Some(Mount::OnFloor), "one Cmd+Z must take the mount back");
     assert!(
-        file(&app).contains("mount: Some(OnFloor)") && !file(&app).contains("OnWall"),
+        file(&app).contains("mount: OnFloor") && !file(&app).contains("OnWall"),
         "Cmd+Z must put the library file back"
     );
 }

@@ -72,37 +72,17 @@ fn a_measured_doorway(name: &str) -> std::path::PathBuf {
         .build("m");
 
     let at = root.join("assets/grimoire/furniture/library.yaml");
-    let was = std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-    let wrote = was
-        .replace(
-            // The fixture's door row, given the shipped doorway shape: 0.2 m through the wall, 1.0 m
-            // of frame along it, framing a 0.6 m hole 1.9 m tall.
-            r#"id: "door",
-            mesh: Some("alpha/door.glb"),
-            align: ( scale: None, stretch_y: None, y_offset: Some(0.0000), pivot: None, front: None ),
-            extent: ( footprint: Some((1.0, 1.0)), height: Some(0.5) ),
-            mount: Some(OnFloor),"#,
-            r#"id: "door",
-            mesh: Some("alpha/door.glb"),
-            align: ( scale: None, stretch_y: None, y_offset: None, pivot: None, front: None ),
-            extent: ( footprint: Some((0.2, 1.0)), height: Some(2.0) ),
-            mount: Some(InOpening( clear: Some((0.6, 1.9)) )),"#,
-        )
-        .replace(
-            r#"id: "crate",
-            mesh: Some("alpha/crate.glb"),
-            align: ( scale: None, stretch_y: None, y_offset: Some(0.0000), pivot: None, front: None ),
-            extent: ( footprint: Some((0.5, 0.5)), height: Some(0.5) ),"#,
-            r#"id: "crate",
-            mesh: Some("alpha/crate.glb"),
-            align: ( scale: None, stretch_y: None, y_offset: None, pivot: None, front: None ),
-            extent: ( footprint: Some((0.5, 0.5)), height: Some(0.5) ),"#,
-        );
-    assert!(
-        wrote.contains("!InOpening {clear: "),
-        "the rewrite missed the door row — the fixture's descriptor shape changed under this test:\n{was}"
-    );
-    std::fs::write(&at, wrote).unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
+    fixtures::edit_library(&at, |library| {
+        for d in library.descriptors.iter_mut() {
+            d.align.y_offset = None;
+        }
+        // The fixture's door row, given the shipped doorway shape: 0.2 m through the wall, 1.0 m of
+        // frame along it, framing a 0.6 m hole 1.9 m tall.
+        let door = library.descriptors.iter_mut().find(|d| d.id == "door").unwrap_or_else(|| panic!("the fixture has no door row"));
+        door.extent.footprint = Some((0.2, 1.0));
+        door.extent.height = Some(2.0);
+        door.mount = Some(bevy_grimoire_core::descriptor::Mount::InOpening { clear: Some((0.6, 1.9)) });
+    });
     root
 }
 
