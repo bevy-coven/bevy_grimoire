@@ -211,6 +211,8 @@ pub const KINDS: &[FileKind] = &[
         "The project layer of the editor's settings, laid over the user's `<config_dir>/Grimoire/settings.ron` key by key. The editor looks at it while it runs and applies it in place; a file that does not read keeps the last good one and is refused in `grimoire_state.reloads`. The game has no reader."),
     kind("agent", Root, "agent.ron", "AgentSettings", Live, Global, "by hand",
         "The note agent's model and prompt, read each time a note is sent; nothing holds it."),
+    kind("guide", Root, crate::agent_guide::PROJECT_PATH, "Markdown for an agent", Live, Global, "by hand",
+        "**The project's layer of the agent's guide** (#347): read again on each `grimoire/agent_guide` call, so an edit reaches the next agent that asks, and nothing holds it. A file the guide refuses (not UTF-8, over `GUIDE_MAX_BYTES`, not a regular file) is left out whole and is `refused` in `grimoire_state.reloads`, naming the file and why. The project page saves it atomically; no operation writes it."),
     kind("play", Root, "play.ron", "PlayConfig", Live, Global, "by hand",
         "How the editor launches the game, read each time `play` runs; nothing holds it."),
     kind("destructible_marks", Root, "destructible.ron", "Marks", Live, Global,
