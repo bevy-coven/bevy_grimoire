@@ -644,7 +644,27 @@ impl Gates<'_> {
     /// map and the camera takes it; [`crate::reveal::page_of`] answers for everything else and the
     /// reveal opens its door, panel and row (AF-03, #359). A `Shown` neither takes — `Nowhere` — is
     /// nothing anybody can look at, and is left alone rather than being refused as a page.
+    ///
+    /// **A proposal is followed as one** (AF-05, #361): `layout_propose` is the third way an agent
+    /// proposes a change, and it is drawn in the preview colour rather than the applied one.
     fn follow(&mut self, operation: &str, shown: &crate::ops::Shown, summary: &str) {
+        // **A standing proposal is a preview, not a change** (AF-05, #361): `layout_propose` writes
+        // nothing — its own `writes()` is empty and its `undo()` is `Undo::None` — and the layout
+        // stands on screen as a *proposal* until `layout_accept` keeps it. Followed as a change it wore
+        // the applied colour and was ringed as a fact, which is the one difference AF-05 exists to
+        // make visible. Same queue, same idle wait, same dwell: a preview is not a second mechanism.
+        //
+        // **The words are the operation's own** — its `Outcome::summary` is `proposed: 12 piece(s)
+        // … — Enter keeps it, Esc throws it away` — so the chip and the receipt cannot describe one
+        // proposal two ways, and no second sentence is written for the follow to overwrite them.
+        if operation == "layout_propose" {
+            if let Some(request) = crate::follow::request_of(shown)
+                && let Some(following) = self.following.as_mut()
+            {
+                following.request_a_preview(request, crate::follow::as_the_familiar(summary));
+            }
+            return;
+        }
         if let Some(request) = crate::follow::request_of(shown) {
             if let Some(following) = self.following.as_mut() {
                 following.request_named(request, crate::follow::as_the_familiar(summary));
