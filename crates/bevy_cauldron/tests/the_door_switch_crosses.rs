@@ -148,6 +148,9 @@ fn a_crossing_that_cannot_complete_stays_put() {
     {
         let world = app.world_mut();
         world.resource_mut::<Project>().open_map_name = None;
+        // The Kit crossing used to take the map away by itself; it keeps it now (NV-02, #379), so
+        // the premise this test states — no map open — is set here.
+        world.remove_resource::<bevy_cauldron::project::OpenMap>();
     }
     app.update();
 

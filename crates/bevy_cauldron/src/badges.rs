@@ -97,7 +97,7 @@ const REACH: f32 = chrome::GAP_GROUP;
 ///
 /// So every leader gets a **lane of its own**, and the rail steps out far enough to clear the widest
 /// band a side can need. Bekos et al. call this a multi-track boundary labeling; the tracks are what
-/// buy the separation, and [`lanes_for`] is what keeps them from buying switchings with it.
+/// buy the separation, and [`lanes_for`] is what keeps them from buying crossings with it.
 const LANE: f32 = chrome::GAP_ROW;
 
 /// **How far one badge sits from the badge above it**, in a column that shares a corridor.
@@ -944,7 +944,7 @@ fn paint_order(home: Home) -> usize {
 ///
 /// Banded boxes hold their bands, the rails pack next, and the legend — which has a whole stage to
 /// stand in — yields to all of them. Within a rail the primary key is the **anchor's own y** (see
-/// [`place_badges`]: order preservation is what makes right-angle leaders switching-free); this
+/// [`place_badges`]: order preservation is what makes right-angle leaders crossing-free); this
 /// index is the tie-break, stated because `Query` iteration order is **not stable across `App`
 /// instances** — without a stated key the overlay would lay itself out differently on two runs of
 /// the same test.
@@ -996,7 +996,7 @@ fn elbow_of(a: Vec2, lane_x: f32, edge: f32, mid: f32, thick: f32) -> [Option<Re
     ]
 }
 
-/// **Do two leaders touch anywhere?** Any shared ground at all — a perpendicular switching, or two
+/// **Do two leaders touch anywhere?** Any shared ground at all — a perpendicular crossing, or two
 /// runs lying along each other, which is the same failure seen from the side.
 fn leaders_meet(a: &[Option<Rect>; 3], b: &[Option<Rect>; 3]) -> bool {
     a.iter().flatten().any(|p| {
@@ -1010,7 +1010,7 @@ fn leaders_meet(a: &[Option<Rect>; 3], b: &[Option<Rect>; 3]) -> bool {
 /// **Where one badge goes, and the leader that points at it.**
 ///
 /// **A plan, not a drawing.** A layout is *chosen* before anything is drawn, so the measure that
-/// chooses it has to read the plan — see [`switching_pairs`].
+/// chooses it has to read the plan — see [`crossing_pairs`].
 #[derive(Clone, Copy)]
 struct Plan {
     /// The box's top-left corner, or `None` when this badge is not drawn at all.
@@ -1023,7 +1023,7 @@ struct Plan {
 /// **How many pairs of leaders cross** — the measure the layout is judged on, and the one the
 /// score was blind to.
 ///
-/// **A pair, not a switching event.** Two leaders that cross twice are still **one** unreadable
+/// **A pair, not a crossing event.** Two leaders that cross twice are still **one** unreadable
 /// pair, and counting them twice would make the score count a symptom rather than the fault.
 /// The count is over *pairs*, so a layout with five leaders all tangled is five faults and not
 /// twenty.
@@ -1036,7 +1036,7 @@ struct Plan {
 /// **A box that is not drawn is not counted.** It has no leader, and a leader whose segments are
 /// all `None` is a box level with its anchor — one horizontal hairline, which cannot cross
 /// anything at a different height.
-fn switching_pairs(plans: &[Plan]) -> usize {
+fn crossing_pairs(plans: &[Plan]) -> usize {
     let leaders: Vec<&[Option<Rect>; 3]> = plans
         .iter()
         .filter(|p| p.pos.is_some())
@@ -1057,7 +1057,7 @@ fn switching_pairs(plans: &[Plan]) -> usize {
 /// nothing a lane choice may change.
 #[derive(Clone, Copy)]
 struct Tie {
-    /// As deep inside the control as a hairline can reach without switching anything readable, at
+    /// As deep inside the control as a hairline can reach without crossing anything readable, at
     /// the height it leaves from.
     at: Vec2,
     /// The box edge the landing meets, and the height it arrives at.
@@ -1083,7 +1083,7 @@ impl Tie {
 /// Two right-angle leaders sharing one corridor cannot cross *provided* their boxes keep their
 /// anchors' order — that is the whole reason [`place_badges`] sorts a rail by anchor `y`. What one
 /// corridor cannot do is let a reader tell them apart, so every leader gets a lane
-/// ([`LANE`]) — and lanes reintroduce the switching the single corridor had ruled out, because a
+/// ([`LANE`]) — and lanes reintroduce the crossing the single corridor had ruled out, because a
 /// reach now has to pass every lane inside its own.
 ///
 /// **The order lanes are tried in** is the one that makes the assignment safe analytically: the
@@ -1106,17 +1106,17 @@ impl Tie {
 ///
 /// Bounded twice over: by the lane count per position, and by a node budget — a rail of eight with
 /// ten lanes has more assignments than is worth exploring, and an overlay that thought about its
-/// leaders for a frame would be a worse failure than a switching.
+/// leaders for a frame would be a worse failure than a crossing.
 ///
-/// **When the walk does not finish, the fewest-switchings assignment stands** — found by a small
+/// **When the walk does not finish, the fewest-crossings assignment stands** — found by a small
 /// search of its own, moving one leader at a time. The analytic preference is where that search
 /// starts, so a layout that was already clean keeps the shape the argument gives it, and a
 /// layout with no clean assignment at all gets the least tangled one rather than a blind guess.
 ///
 /// **It is not the same answer as the old fallback**, and the difference was measured: on MESHES
-/// at 1680 x 1050 the compact pass's six leaders have **no** switching-free assignment (an
+/// at 1680 x 1050 the compact pass's six leaders have **no** crossing-free assignment (an
 /// exhaustive search of all 8^6 lane assignments, 299,592 nodes, found none), and the analytic
-/// preference produced **eleven** switching pairs on its own.
+/// preference produced **eleven** crossing pairs on its own.
 fn lanes_for(ties: &[Tie], lanes: usize, thick: f32) -> Vec<usize> {
     let n = ties.len();
     if n == 0 {
@@ -1209,18 +1209,18 @@ fn lanes_for(ties: &[Tie], lanes: usize, thick: f32) -> Vec<usize> {
     if walk(0, search, &mut chosen, &mut drawn, &mut budget) {
         return chosen;
     }
-    // **No clean assignment inside the budget: the fewest switchings, not the blind preference.**
+    // **No clean assignment inside the budget: the fewest crossings, not the blind preference.**
     //
     // The fallback used to be the analytic preference — the shape the argument gives and the walk
     // began from. **It is not the same answer as the best one available.** Measured on MESHES at
-    // 1680 x 1050: the compact pass's six leaders have **no** switching-free assignment at all
+    // 1680 x 1050: the compact pass's six leaders have **no** crossing-free assignment at all
     // (an exhaustive search of all 8^6 lane assignments, 299,592 nodes, found none), and the
-    // preference it fell back on produced **eleven** switching pairs.
+    // preference it fell back on produced **eleven** crossing pairs.
     //
     // So the fallback is now a search of its own, and a small one: **every leader in the analytic
     // preference, moved one lane at a time.** That is `n * lanes` candidate layouts, each scored
-    // by the same [`switching_pairs`] the layout is judged on, and the best one wins. It cannot
-    // find a switching-free assignment where none exists — nothing can — but it finds the
+    // by the same [`crossing_pairs`] the layout is judged on, and the best one wins. It cannot
+    // find a crossing-free assignment where none exists — nothing can — but it finds the
     // *least tangled* one, and that is a strictly better answer than a blind preference.
     //
     // **The tie is broken towards the preference**, so a layout that was already clean keeps the
@@ -1232,14 +1232,14 @@ fn lanes_for(ties: &[Tie], lanes: usize, thick: f32) -> Vec<usize> {
         })
         .collect();
     let mut best = preference.clone();
-    let mut best_switchings = switching_count(&best, ties, thick);
+    let mut best_crossings = crossing_count(&best, ties, thick);
     for moved in 0..n {
         for k in 0..lanes {
             let mut candidate = preference.clone();
             candidate[moved] = k;
-            let switchings = switching_count(&candidate, ties, thick);
-            if switchings < best_switchings {
-                best_switchings = switchings;
+            let crossings = crossing_count(&candidate, ties, thick);
+            if crossings < best_crossings {
+                best_crossings = crossings;
                 best = candidate;
             }
         }
@@ -1252,7 +1252,7 @@ fn lanes_for(ties: &[Tie], lanes: usize, thick: f32) -> Vec<usize> {
 ///
 /// **Counted over the leaders the assignment draws**, and a leader that is not drawn (all three
 /// segments `None`) cannot cross anything, so it is left out of the count.
-fn switching_count(lanes: &[usize], ties: &[Tie], thick: f32) -> usize {
+fn crossing_count(lanes: &[usize], ties: &[Tie], thick: f32) -> usize {
     let drawn: Vec<[Option<Rect>; 3]> = ties
         .iter()
         .enumerate()
@@ -1441,9 +1441,9 @@ type LeadSegs<'w, 's> =
 /// leaders cannot cross one another. Fekete & Plaisant's excentric labels
 /// (`10.1145/302979.303148`) are the other parent: a callout on free ground, tied by a line, beats
 /// a box squeezed onto ground it does not fit. Two vertical runs may coincide on the corridor —
-/// two lines becoming one line is legible; two lines switching is not, and the sort is what forbids
+/// two lines becoming one line is legible; two lines crossing is not, and the sort is what forbids
 /// the second. (Marschner & Shirley's chapter on diagram aesthetics says the same two words this
-/// paragraph keeps using: minimize switchings and bends.)
+/// paragraph keeps using: minimize crossings and bends.)
 ///
 /// A leader is three hairline segments in the badge-border ink: the **reach** out of the anchor's
 /// stage-facing edge, the **run** down the corridor between dock and rail — ground no box can
@@ -1660,14 +1660,14 @@ fn place_badges(
             .collect();
         // **Ordered by the edge a leader will leave from, not by the anchor's centre.**
         //
-        // Order preservation is the whole switching-free argument, and it has to be the order of the
+        // Order preservation is the whole crossing-free argument, and it has to be the order of the
         // thing that actually varies: a leader departs from the point on its anchor nearest its box,
         // and `settle_free` only ever puts a box at or below the anchor's top, so that point is the
         // anchor's **bottom** edge. For a row the two keys agree to within half a line. For a tall
         // pane they do not, and on the Map they disagreed by fifty pixels — the detail pane (bottom
         // 242) sorted *above* the UNDER row (bottom 222) on centres, so its box was packed higher
         // than the row's while its leader left lower. That put the pane's whole run inside the row's,
-        // and two nested runs switching one strip must cross: `lanes_for` searched every assignment
+        // and two nested runs crossing one strip must cross: `lanes_for` searched every assignment
         // and there was none.
         rail.sort_by(|x, y| {
             let (ax, ay) = (
@@ -1703,19 +1703,19 @@ fn place_badges(
             // It was one floor per column, on the argument that a shared floor would have a box in
             // the dock push the rail's next box down for no reason. That is true, and it is the
             // wrong trade. Two floors let a dock box and a rail box invert against their anchors,
-            // and that inversion is a switching **no lane assignment can undo**: a rail leader's
+            // and that inversion is a crossing **no lane assignment can undo**: a rail leader's
             // reach crosses the whole gutter a dock leader runs down, at whatever height it leaves
             // at, so there is no lane either can take to miss the other. `lanes_for` searched every
             // assignment, found none, and returned its preference — the packer was choosing which
-            // switching to have.
+            // crossing to have.
             //
             // Bekos, Cornelsen, Fink, Hong, Kaufmann, Nollenburg, Rutter & Symvonis 2015,
             // *Many-to-One Boundary Labeling with Backbones* (`10.7155/jgaa.00379`), is why this is
-            // a fix rather than a preference: minimising leader switchings is efficient **in the
+            // a fix rather than a preference: minimising leader crossings is efficient **in the
             // case of fixed label order** and **NP-hard in the case of flexible label order**. Two
             // floors made the order flexible, which is how a bounded search over lanes ended up
             // standing in for a problem no bounded search can settle. One floor fixes the order,
-            // and buys the sentence the switching-free argument actually needs: one non-decreasing
+            // and buys the sentence the crossing-free argument actually needs: one non-decreasing
             // `mid` per side.
             //
             // The cost is density, and it is the cost that was chosen: a badge may sit further down
@@ -1803,13 +1803,13 @@ fn place_badges(
                 // 2. **the column** — the anchor's own dock before the rail, because a box beside
                 //    the rows it names needs no reading at all.
                 //
-                // **There used to be a third, and it is what put the switchings on screen.** Between
+                // **There used to be a third, and it is what put the crossings on screen.** Between
                 // those two sat *the start*: this column's floor first, then the top of the stage.
                 // The second arm let a box that could not fit below the floor jump above it and
                 // stand on the free ground up there — which is precisely an order inversion, and
                 // the comment admitted as much ("which does not, and is precisely what the leader
                 // was bought for"). A leader can carry a box a long way from its anchor; what it
-                // cannot do is carry it *past another box* without the two lines switching. So every
+                // cannot do is carry it *past another box* without the two lines crossing. So every
                 // rung now starts at the side's floor, and a box that will not fit below it goes
                 // further down rather than back up.
                 //
@@ -1994,11 +1994,11 @@ fn place_badges(
                 //
                 // Nearest-point was tried, on the symmetry with the anchor end (`f46db80`) and
                 // because a shorter run gives another leader's reach less height to cross — it was
-                // worth one real switching on the Map. It reads wrong: a line arriving at a box's top
+                // worth one real crossing on the Map. It reads wrong: a line arriving at a box's top
                 // or bottom corner looks like it has clipped the box on its way past, and a badge is
                 // a label with two lines of text in it, not a point. Reported from the keyboard:
                 // *"make sure the line connects in the center of the text box as opposed to the
-                // bottom."* The switching it cost is `lanes_for`'s problem, which is what `lanes_for`
+                // bottom."* The crossing it cost is `lanes_for`'s problem, which is what `lanes_for`
                 // is for.
                 let mid = y + size.y * 0.5;
                 // **Where this leader leaves, and where its lanes run.**
@@ -2013,7 +2013,7 @@ fn place_badges(
                 // yours" to every leader whose run spans my departure, and its landing says "put my
                 // lane inside yours" to every leader whose run spans my arrival — and on the Map's
                 // three rows both demands land on the same pair. There is no assignment; the
-                // packer just picks which switching to have.
+                // packer just picks which crossing to have.
                 //
                 // So a dock box is **inset by the band's width** and lanes in the gutter that
                 // leaves, between its own edge and its anchor's. Reach, run and landing then all go
@@ -2065,7 +2065,7 @@ fn place_badges(
                     taken.push(r);
                 }
                 // **Forward only, and now for the whole side.** `taken` is what stops boxes
-                // overlapping; the floor is only the order — and the order is the switching-free
+                // overlapping; the floor is only the order — and the order is the crossing-free
                 // argument, so this is the line that carries it. A box standing in the dock moves
                 // the floor the next rail box starts from, and vice versa: that is the point, not
                 // an inefficiency to be optimised away.
@@ -2163,7 +2163,7 @@ fn place_badges(
         let legend = placed
             .iter()
             .any(|(i, me)| items[*i].0.0 == Home::Legend && taken.iter().any(|t| covers(*t, *me)));
-        // **A switching counts, and it counts more than a box overlap.**
+        // **A crossing counts, and it counts more than a box overlap.**
         //
         // The score used to count box overlaps and the legend's collision, and nothing else. **So
         // a layout whose leaders crossed scored zero**, and the compact pass — which packs every
@@ -2171,29 +2171,29 @@ fn place_badges(
         // the very screen this module's own ratchet measures.
         //
         // Measured on MESHES at 1680 x 1050: the comfort pass scored **1** (one pair of boxes
-        // overlapping) and the compact pass scored **0** — with **three** switching pairs of
+        // overlapping) and the compact pass scored **0** — with **three** crossing pairs of
         // leaders. The compact pass won, and `no_two_leaders_cross` went red, which is how it has
         // been red since 2026-09-03.
         //
         // **And the two failures are not the same failure.** Two boxes overlapping is a badge
         // covering a badge: both are still legible, and the author can read past it. Two leaders
-        // switching is a line pointing at the wrong control, which is the one thing a leader is
-        // for. **So a switching is worth more than an overlap** — one switching outranks any number
-        // of overlaps, because a layout with a switching is the one that cannot be read.
+        // crossing is a line pointing at the wrong control, which is the one thing a leader is
+        // for. **So a crossing is worth more than an overlap** — one crossing outranks any number
+        // of overlaps, because a layout with a crossing is the one that cannot be read.
         //
         // **The multiplier is the number of pairs a layout can have, plus two.** With `n` boxes
-        // there are `n(n-1)/2` pairs, and the legend's collision is one more, so a switching has
-        // to cost more than *all* of them to make the comparison the score states: **a switching
+        // there are `n(n-1)/2` pairs, and the legend's collision is one more, so a crossing has
+        // to cost more than *all* of them to make the comparison the score states: **a crossing
         // loses, whatever the overlaps are.**
         //
         // **The first version used `n + 1`**, which is smaller than the number of pairs for any
         // `n` past three — so a layout with nineteen overlapping pairs would have beaten a layout
-        // with one switching, **and the claim the comment made was not the claim the arithmetic
+        // with one crossing, **and the claim the comment made was not the claim the arithmetic
         // kept.** A reviewer caught it, and it was right to.
         let n = items.len();
         let all_pairs = n.saturating_mul(n.saturating_sub(1)) / 2;
-        let switchings = switching_pairs(plans);
-        pairs + usize::from(legend) + switchings * (all_pairs + 2)
+        let crossings = crossing_pairs(plans);
+        pairs + usize::from(legend) + crossings * (all_pairs + 2)
     };
 
     let (mut plans, taken) = attempt(false);

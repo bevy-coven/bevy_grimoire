@@ -171,7 +171,15 @@ pub fn close_the_door(world: &mut World) {
         let receipt = world
             .get_resource::<crate::editor::EditorState>()
             .map(|state| state.status.note_text().to_owned());
+        // **The lock crosses with the map it points into.** `TargetLock` is `Ownership::Workspace`
+        // for a *leave*, which empties it with the rest; a *switch* keeps the map open (NV-02,
+        // #379), and the selection follows the lock (`selection::follow_the_lock`), so emptying it
+        // here would drop the selection the decision says a switch never drops.
+        let lock = world.remove_resource::<crate::editor::TargetLock>();
         reset_door_state(world);
+        if let Some(lock) = lock {
+            world.insert_resource(lock);
+        }
         if let Some(receipt) = receipt.filter(|r| !r.is_empty())
             && let Some(mut state) = world.get_resource_mut::<crate::editor::EditorState>()
         {
@@ -238,6 +246,19 @@ pub fn cross(world: &mut World, to: crate::workspace::Workspace) -> Result<(), S
     };
     if workspace == to {
         return Ok(());
+    }
+    // **The Map workspace needs a map**: the one already open, or the one the project last had.
+    // A switch that has neither would show an empty level and say nothing, so it is refused here
+    // and the screen stays where it was.
+    if to == crate::workspace::Workspace::Map && world.get_resource::<crate::project::OpenMap>().is_none() {
+        let Some(project) = world.get_resource::<crate::project::Project>() else {
+            return Err("there is no project open to carry across".to_owned());
+        };
+        let Some(name) = project.open_map_name.clone() else {
+            return Err("the Map workspace needs a map, and none has been open".to_owned());
+        };
+        let open = crate::project::OpenMap::open(project, &name)?;
+        world.insert_resource(open);
     }
     // **The map stays open in every workspace that shows the world** (NV-02, #379,
     // `docs/ui/vision.md` §4). It used to be taken away when the Kit door was entered, because a

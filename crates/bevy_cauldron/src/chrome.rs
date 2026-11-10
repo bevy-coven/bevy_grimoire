@@ -242,7 +242,7 @@ pub const GROUND_HELD: f32 = 0.55;
 /// **How far the world's own wireframe steps back while the shortcut key is held.**
 ///
 /// Deeper than [`GROUND_HELD`], because a panel's fill is a flat wash a badge sits on and the
-/// world's envelope is a *line* switching the same ground a badge stands on. On the Tiles tab a
+/// world's envelope is a *line* crossing the same ground a badge stands on. On the Tiles tab a
 /// 1 x 4 x 1 m tile projects to three near-full-height verticals that run straight through the
 /// badge stack, and at full strength they read as leaders — which is the one thing on this screen a
 /// hairline is supposed to mean. Reported from the keyboard: *"the tiles tab is super muddy."*

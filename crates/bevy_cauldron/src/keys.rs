@@ -963,7 +963,11 @@ impl Action {
             Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
                 (0..panels).filter_map(Action::tab_slot).any(|a| a == self)
             }
-            _ => true,
+            // **A workspace that is not built is refused, so its chord is not advertised**: the
+            // overlay drawing `Cmd+6` against a screen that answers "arrives with NV-09" is the
+            // overlay claiming a key the editor refuses, the same fault the slot keys had. The
+            // command and the palette still list it, and say why it does nothing.
+            _ => self.workspace().is_none_or(|w| w.is_built()),
         }
     }
 

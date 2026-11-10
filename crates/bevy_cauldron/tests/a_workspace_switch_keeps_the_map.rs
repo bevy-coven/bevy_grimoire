@@ -317,11 +317,14 @@ fn every_panel_has_one_workspace_and_the_strip_lists_that_workspace_s_panels() {
     let mut app = editor("strip");
     let kit = Action::ALL.into_iter().find(|a| a.workspace() == Some(Workspace::Kit)).expect("Kit's chord");
     press(&mut app, kit);
-    let strip: Vec<String> = {
+    let mut strip: Vec<String> = {
         let world = app.world_mut();
         let mut q = world.query::<(&bevy_cauldron::tiles::TabLabel, &Text)>();
         q.iter(world).map(|(_, t)| t.0.clone()).collect()
     };
-    let want: Vec<String> = Workspace::Kit.panels().iter().map(|m| m.label().to_owned()).collect();
-    assert_eq!(strip, want, "the strip lists the Kit workspace's panels, in its order");
+    let mut want: Vec<String> = Workspace::Kit.panels().iter().map(|m| m.label().to_owned()).collect();
+    // A query visits entities in archetype order, not strip order; the claim is *which* panels.
+    strip.sort();
+    want.sort();
+    assert_eq!(strip, want, "the strip lists exactly the Kit workspace's panels");
 }
