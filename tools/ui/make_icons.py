@@ -302,13 +302,20 @@ def place():
 
 
 def help():
-    """A question mark: the bowl, its stem, and the dot — the glyph every program puts on the one
-    control that explains itself."""
+    """A question mark: the bowl, its stem and its dot — the glyph every program puts on the one
+    control that explains itself.
+
+    The bowl is a ring with its lower half taken out and the stem drawn from the waist down, so the
+    mark reads at 16 px; a full ring plus a stem reads as a keyhole, and the first cut of this drew
+    only the ring's left arc because the clearing rectangle reached past the bowl's waist."""
     c = Canvas()
-    c.ring(8, 5, 3.2)
-    c.fill(8, 1, 11, 8, False)
-    c.line(8, 8, 8, 10, 2)
-    c.fill(7, 12, 8, 13)
+    c.ring(8, 5, 3.0)
+    # The bowl's lower half: rows 7 and below belong to the stem.
+    c.clear(3, 8, 12, 10)
+    c.clear(6, 7, 10, 7)
+    # The stem, from the bowl's waist down, and the dot below it.
+    c.fill(7, 6, 8, 9)
+    c.fill(7, 11, 8, 12)
     return c
 
 

@@ -1431,25 +1431,28 @@ fn capture_sequence_status(
 /// **A refusal, and not a note**: a name the shell has not got, or a workbench panel asked for from the launcher, is
 /// answered with what is available rather than by leaving the editor where it was and letting the capture show the
 /// wrong panel.
-fn stage_panel(In(params): In<Value>, mut commands: Commands) -> Result<Value, String> {
-    let wanted = params
+fn stage_panel(In(params): In<Value>, world: &mut World) -> Result<Value, String> {
+    let wanted = panel_named(&params)?;
+    let staged = crate::stage_panels::arrange(world, &wanted)?;
+    Ok(staged_answer(&staged))
+}
+
+/// **The panel a request names**, or the refusal naming the ones the shell has.
+fn panel_named(params: &Value) -> Result<String, String> {
+    Ok(params
         .get("panel")
         .and_then(Value::as_str)
         .ok_or_else(|| format!("pass panel: one of {}.", crate::stage_panels::names()))?
-        .to_owned();
-    // **Checked before the queue**, so the refusal reaches the caller in this frame's answer rather than being
-    // discovered by a later status read.
-    let known = crate::stage_panels::stage(&wanted).is_some();
-    if !known {
-        return Err(format!("`{wanted}` is not a panel a capture can start on. The panels are: {}.", crate::stage_panels::names()));
-    }
-    let answer = json!({"panel": wanted.clone(), "staged": true});
-    commands.queue(move |world: &mut World| {
-        if let Err(why) = crate::stage_panels::arrange(world, &wanted) {
-            bevy::log::warn!("{why}");
-        }
-    });
-    Ok(answer)
+        .to_owned())
+}
+
+/// **What a staged panel answers**: the panel, the screen it is on now, and that it was arranged.
+fn staged_answer(staged: &crate::stage_panels::Staged) -> Value {
+    json!({
+        "panel": staged.id,
+        "screen": format!("{:?}", staged.screen),
+        "staged": true,
+    })
 }
 
 /// **`grimoire/stage_panel`'s answer, read back**: what the shell is on now, so a caller can confirm the arrangement

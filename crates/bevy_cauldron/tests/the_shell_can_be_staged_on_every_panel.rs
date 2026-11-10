@@ -161,3 +161,24 @@ fn staging_the_workbench_leaves_the_project_open() {
     assert_eq!(app.world().resource::<bevy_cauldron::project::Project>().root, root);
     assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Editor);
 }
+
+/// **The answer a caller gets is the arrangement, not a promise.** `grimoire/stage_panel` answers with what the shell is now
+/// on; a queued arrangement could only report a refusal in a log line, and the live editor measured on 2026-11-09 answered
+/// `staged: true` for an `inspector` the loading screen had no workbench to show — the warning sat in the editor's own log
+/// while the caller read success. So the arrangement runs in the request, and a refusal is what the caller gets.
+#[test]
+fn the_staging_command_answers_with_the_arrangement_or_the_refusal() {
+    let mut app = editor(&format!("stage_op_{}", std::process::id()));
+    // The workbench's own panel: arranged, and the answer names the screen it is on.
+    let staged = stage_panels::arrange(app.world_mut(), "viewport").expect("the viewport stages");
+    assert_eq!(staged.id, "viewport");
+    assert_eq!(staged.screen, Screen::Editor);
+    // A name nobody has is a refusal in words, which is what the command returns as its error.
+    let refused = stage_panels::arrange(app.world_mut(), "nowhere").expect_err("a name the shell has not got");
+    assert!(refused.contains("nowhere") && refused.contains("inspector"), "{refused}");
+    // And a workbench panel with the workbench closed refuses rather than arranging a tab nobody can see.
+    app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
+    updates(&mut app, 6);
+    let refused = stage_panels::arrange(app.world_mut(), "place").expect_err("the workbench is closed");
+    assert!(refused.contains("place") && refused.contains("Launcher"), "{refused}");
+}
