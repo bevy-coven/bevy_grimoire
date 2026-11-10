@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **gd-09-build-fixes** `4eb5862` The build reads cargo's real error stream, drains both its pipes so a large build cannot hang, waits for a build's last line before reporting it, saves the open map before relaunching so the game comes up on what the editor holds, and a build an agent starts is watched in the status band rather than raising a no-page problem *No clip: a fix to the watched rebuild, whose one visible change was already recorded under gd-09-build-relaunch; proved by a_build_is_watched_in_the_band_not_a_page and a_build_waits_for_the_last_line_before_it_says_what_happened and a_relaunch_reads_the_map_the_editor_holds_even_unsaved*
 - **gd-09-build-relaunch** `a262da7` A change that needs Rust is a watched rebuild: BUILD in the PLAY area runs the project's build command as a background job with cargo's own count, each compiler error is a problem with its file and line, and a build that succeeds relaunches the game on the same map at the same camera while one that fails leaves the running game up *No clip: visible, not yet recorded: fleet worker*
 
 ## 2026-11-09
