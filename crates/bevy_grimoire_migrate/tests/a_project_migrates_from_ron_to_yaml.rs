@@ -5,7 +5,7 @@
 //! migration, names the file, and writes nothing: a half-migrated project is the one outcome a person
 //! cannot repair by hand. The RON originals are moved into `<root>/.dark_factory/migrated-ron/`.
 //!
-//! **The fixture projects are the shipped project and the release files `tests/old_data.rs` freezes** —
+//! **The fixture projects are the shipped project and the release files `bevy_grimoire_core/tests/old_data.rs` freezes** —
 //! no synthetic text. A conversion proved on `(version: 1)` alone proves only that an integer
 //! round-trips; these hold an enum in a tagged position (`dim: Width`), an `Option` inside a sequence
 //! (`min: Some(0.9)`) and a nested tuple, which is where a format move actually loses a field.
@@ -120,7 +120,7 @@ fn a_kind_holding_an_enum_and_an_option_reads_back_to_the_same_value() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     let text = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.ron"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../bevy_grimoire_core/tests/old_data/core-0.3.0/standards.ron"),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     // **A frozen file keeps its own name**: it is what a release wrote, so it is `standards.ron` on disk
@@ -143,7 +143,7 @@ fn the_old_files_are_moved_into_the_archive_and_not_deleted() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     let text = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.ron"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../bevy_grimoire_core/tests/old_data/core-0.3.0/standards.ron"),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(grimoire.join("standards.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
@@ -318,15 +318,15 @@ fn a_project_file_is_named_dot_yaml_where_it_was_named_dot_ron() {
     assert_eq!(migrate::yaml_path(Path::new("kits.ron.tmp")), None, "a temp file is not one");
 }
 
-/// **Every file a release wrote, frozen under `tests/old_data/`**, as `(kind, path in the project, the
-/// file's text)`: the same inventory `tests/old_data.rs` reads, restated here rather than reached for,
+/// **Every file a release wrote, frozen under `bevy_grimoire_core/tests/old_data/`**, as `(kind, path in the project, the
+/// file's text)`: the same inventory `bevy_grimoire_core/tests/old_data.rs` reads, restated here rather than reached for,
 /// because that test's list is a private `const` in another binary.
 ///
 /// This is the strongest fixture the migration can be proved on: 26 real files from two releases and
 /// one editor commit, holding an enum in a tagged position, `Option`s inside sequences, nested tuples
 /// and a baked fracture's chunk tables — every shape a format move loses a field in.
 fn frozen_files() -> Vec<(&'static str, &'static str, &'static str)> {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bevy_grimoire_core/tests/old_data");
     let read = |rel: &str| {
         let path = dir.join(rel);
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))

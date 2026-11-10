@@ -23,7 +23,7 @@ fn open(tag: &str) -> (Ctx, Project) {
 
 fn read(project: &Project, name: &str) -> Option<TreeParams> {
     let text = std::fs::read_to_string(project.grimoire_dir.join("trees").join(format!("{name}.tree.yaml"))).ok()?;
-    Some(TreeParams::from_yaml(&text).unwrap_or_else(|e| panic!("{e}")))
+    Some(bevy_grimoire_core::yaml::from_str::<TreeParams>(&text, "tree").unwrap_or_else(|e| panic!("{e}")))
 }
 
 #[test]
