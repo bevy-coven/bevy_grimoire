@@ -7652,6 +7652,7 @@ fn draw_map_grid(
     keyboard: Res<ButtonInput<KeyCode>>,
     rung: Res<Rung>,
     settings: Option<Res<crate::settings::EditorSettings>>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut gizmos: Gizmos,
 ) {
     // **The settings screen's two grid keys** (UI-71): `show_grid` turns the lines off and
@@ -7660,6 +7661,7 @@ fn draw_map_grid(
     if !show {
         return;
     }
+    let grid = crate::chrome::grid_ink(skin.as_deref());
     let (min_x, min_z, max_x, max_z) = open.map.floor_rect();
     let (w, _h, d) = open.map.bounds;
     // **The grid IS the lattice you will land on. There is no longer a second answer.**
@@ -7711,7 +7713,10 @@ fn draw_map_grid(
             ((d / step).round() as u32).max(1),
         ),
         Vec2::splat(step),
-        crate::chrome::ink().grid_line.with_alpha(crate::chrome::ink().grid_line.alpha() * strength),
+        // **The running skin's grid ink** (UI-80, #254): the shipped `grid_line` tone where the skin
+        // carries none, so the editor's look is unchanged by construction and a theme or a project
+        // that names `grid_line` moves the lattice an author reads the map by.
+        grid.with_alpha(grid.alpha() * strength),
     );
 }
 

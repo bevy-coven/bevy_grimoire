@@ -312,6 +312,18 @@ pub const RADIUS_PANEL: f32 = 4.0;
 /// A row, a chip, a field, a button.
 pub const RADIUS_ROW: f32 = 3.0;
 
+/// **The lattice an author reads a map by, as the running skin colours it** (UI-80, #254).
+///
+/// The map's grid and the kit door's seating lattice are the editor's two grids, and both used to
+/// read `chrome::ink().grid_line` whatever skin was running. This is the one expression they share:
+/// the skin's own `grid_line` tone where it carries one, the shipped tone where it does not, so the
+/// editor's look is unchanged by construction and a theme or a project that names `grid_line` moves
+/// both lattices together. A test reads it, which is why it is a function and not a line inside a
+/// `Gizmos` call — a headless app renders no gizmos, so nothing else can ask what colour they are.
+pub fn grid_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
+    skin.and_then(|skin| skin.tone("grid_line")).unwrap_or_else(|| ink().grid_line)
+}
+
 /// **The rail that says "this one"** — `Ink::accent` down the leading edge of the selected row.
 ///
 /// Selection used to be carried by fill and by amber *text*, and both were problems: the fill had to

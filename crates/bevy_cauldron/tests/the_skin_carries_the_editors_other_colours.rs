@@ -11,6 +11,17 @@
 //! (`tests/no_colour_lives_in_chrome.rs`) is the other end of this pin: that one says the ink is those
 //! same values, and this one says the skin carries them, so the two together say the ink and the skin
 //! are one palette without either comparing a value to itself.
+//!
+//! **Fourteen since UI-80 (#254).** The editor skin also carries the light map's two inks —
+//! `overlay_dark` and `overlay_lit` — so a theme or a project can move the overlay. They are not
+//! `chrome::Ink` fields (no chrome label draws with them), which is why the count below is the skin's
+//! tone set and not the ink's twelve; `the_view_menu_toggles_the_overlays` holds them to the shipped
+//! pair `light_overlay::SHIPPED` draws with.
+//!
+//! **Owner exception (2026-11-10, #254): this test's tone set grows from twelve to fourteen.** #254's
+//! remaining item is "the shipped skins carry `overlay_dark`/`overlay_lit`", so the exact-set assertion
+//! is raised by exactly the two tones that item names, and the new pair is checked against a literal in
+//! `the_light_maps_two_inks_are_the_shipped_pair` below rather than left unpinned.
 
 use bevy::prelude::*;
 use bevy_cauldron::ui::editor_skin;
@@ -45,7 +56,33 @@ fn each_tone_is_the_colour_chrome_draws_with() {
         let tone = skin.tone(name).unwrap_or_else(|| panic!("the editor skin has no tone `{name}`"));
         assert_eq!(tone.to_srgba(), constant.to_srgba(), "tone `{name}` is not the constant of that name in chrome.rs");
     }
-    assert_eq!(skin.tones.len(), colours().len(), "the skin carries these tones and no others: {:?}", skin.tones.keys().collect::<Vec<_>>());
+    // **Fourteen, not twelve** (UI-80, #254): the light map's two inks are the skin's too, and the
+    // exact-set check says so rather than letting an unnamed tone arrive.
+    assert_eq!(
+        skin.tones.len(),
+        colours().len() + LIGHT_MAP_TONES.len(),
+        "the skin carries the twelve chrome tones and the light map's two, and no others: {:?}",
+        skin.tones.keys().collect::<Vec<_>>()
+    );
+}
+
+/// **The light map's two inks, as `light_overlay::SHIPPED` holds them** (UI-80, #254), written as
+/// literals so the skin is pinned to what the overlay draws with and not to itself.
+///
+/// The skin file states sRGB (every tone in it does), and `light_overlay::SHIPPED` names the same two
+/// colours linearly; these are its `Srgba` values, so the two are one colour stated in two spaces.
+const LIGHT_MAP_TONES: [(&str, Color); 2] = [
+    ("overlay_dark", Color::srgba(0.24780053, 0.38109186, 0.7014107, 0.35)),
+    ("overlay_lit", Color::srgba(1.0, 0.80946815, 0.38109186, 0.85)),
+];
+
+#[test]
+fn the_light_maps_two_inks_are_the_shipped_pair() {
+    let skin = editor_skin();
+    for (name, want) in LIGHT_MAP_TONES {
+        let got = skin.tone(name).unwrap_or_else(|| panic!("the editor skin has no tone `{name}`"));
+        assert_eq!(got, want, "the skin's `{name}` is the pair the overlay falls back to, in sRGB");
+    }
 }
 
 /// The text tones read on the panel's ground. The ratios are what the constants measure today, so a retuned

@@ -2620,6 +2620,7 @@ pub fn draw_build_grid(
     mode: Res<crate::tiles::Mode>,
     build: Res<Build>,
     project: Res<crate::project::Project>,
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut gizmos: Gizmos,
 ) {
     if *mode != crate::tiles::Mode::Tiles {
@@ -2732,7 +2733,7 @@ pub fn draw_build_grid(
             Isometry3d::new(stage, Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             UVec2::new(nx, nz),
             Vec2::splat(unit),
-            crate::chrome::ink().grid_line,
+            crate::chrome::grid_ink(skin.as_deref()),
         );
     }
 }
