@@ -411,41 +411,77 @@ fn unique_path(path: &Path) -> PathBuf {
 /// carried only when the field it names is one the writer actually wrote, and every other comment is
 /// answered as unplaced rather than moved somewhere it might be wrong.
 fn carry_comments(text: &str, written: &str, file: &str) -> (String, usize, Vec<Unplaced>) {
-    let mut lines: Vec<String> = written.lines().map(str::to_owned).collect();
-    // **Insert from the bottom up**, so an earlier insertion cannot move the line a later one names.
-    let mut placements: Vec<(usize, String)> = Vec::new();
+    let lines: Vec<String> = written.lines().map(str::to_owned).collect();
+    // **Insert from the bottom up**, so an insertion cannot move the line a later one names.
+    let mut placements: Vec<(usize, Vec<String>)> = Vec::new();
+    // **Headers go above everything**, gathered separately: an insertion at index 0 is displaced by any
+    // other insertion at 0, which is how a file's own header ended up second behind a field's.
+    let mut headers: Vec<String> = Vec::new();
     let mut unplaced = Vec::new();
     for comment in ron_comments(text) {
         let Some(key) = comment.key else {
-            unplaced.push(Unplaced {
-                file: file.to_owned(),
-                comment: comment.text,
-                why: "nothing follows it but the end of the file, so there is no field to hang it above"
-                    .to_owned(),
-            });
+            // **A header describes the whole file**, so it goes above the file's first line — the one
+            // place in YAML that means the same thing.
+            if comment.header {
+                headers.extend(comment.lines.iter().map(|l| format!("# {}", l.trim_end())));
+            } else if let Some(name) = comment.item_name.as_deref().and_then(|n| item_line(&lines, n)) {
+                // **A list item that names itself is found by its name**, so a comment written above a
+                // token goes above that token's row and not above the list.
+                let indent: String = lines[name].chars().take_while(|c| *c == ' ').collect();
+                placements.push((name, comment.lines.iter().map(|l| format!("{indent}# {}", l.trim_end())).collect()));
+            } else if comment.above_an_element {
+                unplaced.push(Unplaced {
+                    file: file.to_owned(),
+                    comment: comment.lines.join(" "),
+                    why: "it stands above a list item or a closing bracket rather than a field, and YAML \
+                          has no field at that place to put it above"
+                        .to_owned(),
+                });
+            } else {
+                unplaced.push(Unplaced {
+                    file: file.to_owned(),
+                    comment: comment.lines.join(" "),
+                    why: "it stands after the file's last field, so there is nothing to hang it above"
+                        .to_owned(),
+                });
+            }
             continue;
         };
         match opening_line(&lines, &key) {
             Some(at) => {
                 let indent: String = lines[at].chars().take_while(|c| *c == ' ').collect();
-                placements.push((at, format!("{indent}# {}", comment.text)));
+                placements.push((at, comment.lines.iter().map(|l| format!("{indent}# {}", l.trim_end())).collect()));
             }
             None => unplaced.push(Unplaced {
                 file: file.to_owned(),
-                comment: comment.text,
+                comment: comment.lines.join(" "),
                 why: format!("the YAML the writer emits has no `{key}` field to put it above"),
             }),
         }
     }
-    let carried = placements.len();
+    // **Every comment that found a place**: a header is one, so it counts here and not only above a field.
+    let carried = placements.len() + usize::from(!headers.is_empty());
     placements.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
-    let mut lines: Vec<String> = std::mem::take(&mut lines);
-    for (at, line) in placements {
-        lines.insert(at, line);
+    let mut lines: Vec<String> = lines;
+    for (at, block) in placements {
+        for (n, line) in block.into_iter().enumerate() {
+            lines.insert(at + n, line);
+        }
+    }
+    // The header is the file's first block, in the order the RON wrote it.
+    for (n, line) in headers.into_iter().enumerate() {
+        lines.insert(n, line);
     }
     let mut out = lines.join("\n");
     out.push('\n');
     (out, carried, unplaced)
+}
+
+/// **The YAML line that is the list item named `name`**: `  - name: marking`. `None` when the writer
+/// emitted no item by that name, which a list of scalars does.
+fn item_line(lines: &[String], name: &str) -> Option<usize> {
+    let opening = format!("- name: {name}");
+    lines.iter().position(|line| line.trim_start().starts_with(&opening))
 }
 
 /// **The YAML line that opens the field `key`**, or `None` when the writer emitted no such field.
@@ -463,22 +499,63 @@ fn opening_line(lines: &[String], key: &str) -> Option<usize> {
     })
 }
 
-/// **One RON comment, and the field it sits above**, when a field follows before the file ends.
+/// **One RON comment, and where it stands relative to the file's fields.**
+///
+/// RON puts a comment in only four positions, and the YAML writer can carry the first two:
+///
+/// - **above a field** (`// the lattice` over `patches:`) — carried above that field;
+/// - **before the file's first field** (a header describing the whole file) — carried at the top;
+/// - **above a list item or a closer** — YAML has no field there, so it is listed as unplaced;
+/// - **after the file's last field** — nothing to hang it from, so it is listed as unplaced.
 pub struct Comment {
-    /// What stood after the `//` on each line of one run, joined by a space.
-    pub text: String,
-    /// The field name the next line opens (`patches`), or `None` when no field follows.
+    /// The comment's lines, each already trimmed of its `//`. A blank `//` line stays as an empty
+    /// string, so a paragraph break survives into the YAML exactly where the author put it.
+    pub lines: Vec<String>,
+    /// The field name the next line opens (`patches`), or `None` when the next line opens no field.
     pub key: Option<String>,
+    /// **Whether it describes the whole file**: it stands before the file's first field, above the
+    /// struct's `(`. That is a header, and it goes at the top of the YAML, which means the same thing.
+    pub header: bool,
+    /// **Whether it stands above a list item or a closer** (`( …` inside `patches: [`, or `]`). An item
+    /// that names itself (`( name: "marking", … )`) can still be found in the YAML, by that name; a
+    /// closer, and an item with no name, cannot, and is listed instead of being guessed at.
+    pub above_an_element: bool,
+    /// **The `name` of the list item it stands above**, when the item declares one: `marking` for
+    /// `( name: "marking", note: … )`. This is what lets a comment above a list item find its item in
+    /// the YAML, where the item is `- name: marking`.
+    pub item_name: Option<String>,
 }
 
-/// **Every comment in `text`, in file order.** A run of `//` lines is one comment; a blank `//` line
-/// inside a run starts a new one, so a paragraph break survives. A `/* */` comment is not carried (it
-/// has no place above a key by the same arithmetic) and is answered as unplaced.
 fn ron_comments(text: &str) -> Vec<Comment> {
+    let all: Vec<&str> = text.lines().collect();
     let mut out: Vec<Comment> = Vec::new();
-    let mut run: Option<String> = None;
+    // **The comment run being read**, as its lines. A run ends at the first line that is not a comment.
+    let mut run: Option<Vec<String>> = None;
     let mut pending_block = false;
-    for line in text.lines() {
+    // **Whether a field has been opened yet**, which is what tells a header from a footer.
+    let mut seen_field = false;
+
+    // One run, standing above `all[at]` (or above nothing, at the file's end).
+    let flush = |run: &mut Option<Vec<String>>, at: Option<usize>, seen_field: bool, out: &mut Vec<Comment>| {
+        let Some(lines) = run.take() else { return };
+        if lines.iter().all(|l| l.is_empty()) {
+            return;
+        }
+        let (key, header, above_an_element, item_name) = match at {
+            Some(at) => {
+                let line = all[at].trim_start();
+                match field_name(line) {
+                    Some(key) => (Some(key), false, false, None),
+                    None if !seen_field && line.starts_with('(') => (None, true, false, None),
+                    None => (None, false, true, item_name_from(&all, at)),
+                }
+            }
+            None => (None, !seen_field, false, None),
+        };
+        out.push(Comment { lines, key, header, above_an_element, item_name });
+    };
+
+    for (at, line) in all.iter().enumerate() {
         let trimmed = line.trim_start();
         if trimmed.starts_with("/*") {
             pending_block = true;
@@ -491,33 +568,20 @@ fn ron_comments(text: &str) -> Vec<Comment> {
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("//") {
-            let rest = rest.trim().to_owned();
-            match run.take() {
-                Some(mut had) if !rest.is_empty() => {
-                    had.push(' ');
-                    had.push_str(&rest);
-                    run = Some(had);
-                }
-                Some(had) => {
-                    out.push(Comment { text: had, key: None });
-                    run = Some(rest);
-                }
-                None => run = Some(rest),
-            }
+            run.get_or_insert_with(Vec::new).push(rest.trim().to_owned());
             continue;
         }
-        let Some(had) = run.take() else { continue };
-        if had.is_empty() {
+        // **A blank line does not end a run.** A comment separated from its field by a blank line is an
+        // ordinary style, and treating it as the end is what reported a field's own comment as a footer.
+        if trimmed.is_empty() {
             continue;
         }
-        let key = field_name(trimmed);
-        out.push(Comment { text: had, key });
+        if field_name(trimmed).is_some() {
+            seen_field = true;
+        }
+        flush(&mut run, Some(at), seen_field, &mut out);
     }
-    if let Some(had) = run
-        && !had.is_empty()
-    {
-        out.push(Comment { text: had, key: None });
-    }
+    flush(&mut run, None, seen_field, &mut out);
     out
 }
 
@@ -529,10 +593,42 @@ fn ron_comments(text: &str) -> Vec<Comment> {
 fn field_name(trimmed: &str) -> Option<String> {
     let (name, _) = trimmed.split_once(':')?;
     let name = name.trim();
+    // **A map key is quoted in RON and plain in YAML**: `"researcher": (` becomes `researcher:`. Both
+    // spellings name the same field, so both are read here or a rig's own comment is taken for a
+    // comment above a list item.
+    let name = match name.strip_prefix('"').and_then(|rest| rest.strip_suffix('"')) {
+        Some(inner) => inner,
+        None => name,
+    };
     let ok = !name.is_empty()
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
         && !matches!(name, "true" | "false");
     ok.then(|| name.to_owned())
+}
+
+/// **The `name` the list item opening at `all[at]` declares**, or `None` for an item that names nothing.
+///
+/// A RON item's name may be on the line that opens it (`( name: "marking", … )`) or the next one
+/// (`(`, then `name: "marking",`), which is how a long token is written. So the item's own lines —
+/// those before its `)` — are searched for the first `name:`.
+fn item_name_from(all: &[&str], at: usize) -> Option<String> {
+    let opening = all.get(at)?.trim_start();
+    if !opening.starts_with('(') {
+        return None;
+    }
+    // The name is in the item's own lines: those before the line that closes it.
+    for line in &all[at..] {
+        let line = line.trim_start();
+        if line != opening && line.starts_with(')') {
+            break;
+        }
+        if let Some(value) = line.strip_prefix("( name:").or_else(|| line.strip_prefix("name:")) {
+            let quoted = value.trim_start().strip_prefix('"')?;
+            let (text, _) = quoted.split_once('"')?;
+            return (!text.is_empty()).then(|| text.to_owned());
+        }
+    }
+    None
 }
 
 /// **The refusal an open raises when `root` still holds a RON project file**: the file, and the command

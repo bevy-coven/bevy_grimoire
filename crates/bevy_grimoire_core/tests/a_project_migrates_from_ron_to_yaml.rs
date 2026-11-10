@@ -230,11 +230,12 @@ fn a_comment_is_carried_above_the_field_it_was_written_about() {
 }
 
 #[test]
-fn a_comment_with_no_field_to_sit_above_is_listed_and_never_dropped() {
-    let root = scratch("unplaced");
+fn a_header_comment_goes_at_the_top_of_the_file() {
+    let root = scratch("header");
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
-    // A file header: nothing above it, so nothing in the YAML to hang it from.
+    // A header describes the whole file, so it belongs above the first line — and it must survive, not
+    // be reported as unplaceable. This is the shape every shipped project file carries.
     std::fs::write(
         grimoire.join("standards.ron"),
         "// this project follows the site kit's module\n(\n    version: 1,\n    rules: [],\n)\n",
@@ -242,9 +243,35 @@ fn a_comment_with_no_field_to_sit_above_is_listed_and_never_dropped() {
     .unwrap_or_else(|e| panic!("{e}"));
 
     let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(report.unplaced.is_empty(), "a header has a place, so nothing is unplaced: {:?}", report.lines());
+    assert_eq!(report.converted[0].comments_carried, 1, "{:?}", report.lines());
+    assert!(
+        written.starts_with("# this project follows the site kit's module\n"),
+        "the header is the file's first line:\n{written}"
+    );
+    let _: Standards = yaml::from_str(&written, "standards.yaml").unwrap_or_else(|p| panic!("{}", p.line()));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_comment_after_the_last_field_is_listed_and_never_dropped() {
+    let root = scratch("footer");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    // A footer stands after the last field: YAML has no node after the last one to hang it from, so it
+    // is listed rather than moved somewhere it might not mean what it said.
+    std::fs::write(
+        grimoire.join("standards.ron"),
+        "(\n    version: 1,\n    rules: [],\n)\n// measured against the shipped kits, 2026-08\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 
     assert_eq!(report.unplaced.len(), 1, "{:?}", report.lines());
-    assert!(report.unplaced[0].comment.contains("follows the site kit's module"));
+    assert!(report.unplaced[0].comment.contains("measured against the shipped kits"));
     assert!(report.unplaced[0].file.ends_with("standards.ron"));
     let said = report.lines().join("\n");
     assert!(said.contains("comment not placed"), "the report says it: {said}");
@@ -380,4 +407,38 @@ fn every_file_a_release_wrote_converts_losslessly() {
         let _ = std::fs::remove_dir_all(&root);
     }
     assert!(broken.is_empty(), "these files would change value if written as YAML:\n{}", broken.join("\n"));
+}
+
+#[test]
+fn a_comment_above_a_named_list_item_goes_above_that_item() {
+    // A vocabulary's tokens are a list, and its comments sit above individual tokens (`// marking is
+    // what the height heuristic stood in for`, over `( name: "marking", … )`). The token names itself,
+    // so the comment is carried above that token's row rather than listed as unplaceable — which is the
+    // shape `assets/grimoire/vocab.ron` is written in.
+    let root = scratch("named_item");
+    let grimoire = root.join(migrate::GRIMOIRE_DIR);
+    std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(
+        grimoire.join("standards.ron"),
+        "(\n    version: 1,\n    rules: [\n        (\n            name: \"door_width\",\n            \
+         kind: Some(\"door\"),\n            dim: Width,\n            min: Some(0.9),\n        ),\n        \
+         // the wall module is a decimetre, and `min` is the only dimension this rule bounds\n        (\n            \
+         name: \"wall_module\",\n            kind: None,\n            dim: Depth,\n            multiple_of: Some(0.1),\n        ),\n    ],\n)\n",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let written = std::fs::read_to_string(grimoire.join("standards.yaml")).unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(report.unplaced.is_empty(), "the token names itself, so its comment has a place: {:?}", report.lines());
+    let at_item = written
+        .lines()
+        .position(|l| l.trim_start().starts_with("- name: wall_module"));
+    let at_comment = written.lines().position(|l| l.contains("the wall module is a decimetre"));
+    let (Some(item), Some(comment)) = (at_item, at_comment) else {
+        panic!("both the item and its comment are in the file:\n{written}");
+    };
+    assert!(comment < item, "the comment stands above the item it describes:\n{written}");
+    let _: Standards = yaml::from_str(&written, "standards.yaml").unwrap_or_else(|p| panic!("{}", p.line()));
+    let _ = std::fs::remove_dir_all(&root);
 }
