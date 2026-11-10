@@ -148,20 +148,14 @@ fn the_overlay_colours_come_from_the_skin() {
 /// **The editor's own skin draws the overlay the colours it always did**, so this changes where the
 /// colours come from and not what a person sees today.
 ///
-/// **Owner exception (2026-11-10, #254): the two colours are compared at 8-bit precision.** The overlay
-/// states its pair linearly and the skin file states every tone in sRGB, so the tones are the same two
-/// colours *encoded*; a float round trip through the two spaces lands within 1e-7 of each other but
-/// never exactly on each other (measured: 0.05000001 against 0.05). Comparing the RGBA8 a display
-/// produces is the property that matters — a person cannot see the seventh decimal of a channel — and
-/// the bound is not loosened anywhere else: `the_light_maps_two_inks_are_the_shipped_pair` in
-/// `the_skin_carries_the_editors_other_colours.rs` still pins the skin's values to the shipped pair's
-/// own sRGB, exactly.
+/// **Exact, not approximate.** The skin states its two overlay tones in `LinearRgba` — the only tones in
+/// `src/editor_skin.ron` that are linear — because `light_overlay::SHIPPED` is linear, so the two are
+/// the same numbers in the same space and a change to either fails here on the value itself.
 #[test]
 fn the_editor_skin_draws_the_shipped_overlay() {
     let ink = LightOverlayInk::of(Some(&bevy_cauldron::ui::editor_skin()));
-    let eight_bit = |colour: Color| bevy::color::Srgba::from(colour).to_u8_array();
-    assert_eq!(eight_bit(ink.colour(0.0)), eight_bit(Drawn::colour_for(0.0)), "a dark cell is unchanged");
-    assert_eq!(eight_bit(ink.colour(1.0)), eight_bit(Drawn::colour_for(1.0)), "and a lit one");
+    assert_eq!(ink.colour(0.0), Drawn::colour_for(0.0), "a dark cell is unchanged");
+    assert_eq!(ink.colour(1.0), Drawn::colour_for(1.0), "and a lit one");
 }
 
 /// **With no skin it is the shipped palette**, which is what a harness that never ran

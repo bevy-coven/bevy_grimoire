@@ -69,11 +69,11 @@ fn each_tone_is_the_colour_chrome_draws_with() {
 /// **The light map's two inks, as `light_overlay::SHIPPED` holds them** (UI-80, #254), written as
 /// literals so the skin is pinned to what the overlay draws with and not to itself.
 ///
-/// The skin file states sRGB (every tone in it does), and `light_overlay::SHIPPED` names the same two
-/// colours linearly; these are its `Srgba` values, so the two are one colour stated in two spaces.
+/// `light_overlay::SHIPPED` states its pair linearly and so does the skin file, in `LinearRgba`, so
+/// these are the very numbers and the comparison below is exact.
 const LIGHT_MAP_TONES: [(&str, Color); 2] = [
-    ("overlay_dark", Color::srgba(0.24780053, 0.38109186, 0.7014107, 0.35)),
-    ("overlay_lit", Color::srgba(1.0, 0.80946815, 0.38109186, 0.85)),
+    ("overlay_dark", Color::linear_rgba(0.05, 0.12, 0.45, 0.35)),
+    ("overlay_lit", Color::linear_rgba(1.0, 0.62, 0.12, 0.85)),
 ];
 
 #[test]

@@ -1786,9 +1786,13 @@ fn draw_stage(
     state: Res<ComposeState>,
     project: Res<Project>,
     carousel: Res<StagedCarousel>,
+    // **The running skin** (UI-80, #254): the seating lattice is the same grid the Map draws, so it
+    // reads the same `grid_line` tone rather than the editor's own constant.
+    skin: Option<Res<bevy_gooey::GooeySkin>>,
     mut gizmos: Gizmos,
 ) {
     let step = bevy_grimoire_core::grid::SNAP;
+    let grid = crate::chrome::grid_ink(skin.as_deref());
     for slot in &carousel.0.slots {
         let Some(c) = project.compositions.compositions.get(slot.index) else {
             continue;
@@ -1821,7 +1825,7 @@ fn draw_stage(
                         ),
                         UVec2::new(cells.0, cells.1),
                         Vec2::splat(step),
-                        crate::chrome::ink().grid_line,
+                        grid,
                     )
                     .outer_edges();
             }

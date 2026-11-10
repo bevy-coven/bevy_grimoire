@@ -90,10 +90,15 @@ fn the_scale_a_label_is_drawn_at_is_the_range_a_file_may_hold() {
     assert!((low - bevy_cauldron::settings::SCALE_RANGE.0).abs() < 1e-3, "clamped low: {low}");
 }
 
-/// **A settings file's text size reaches `chrome::font` through the running editor**, not only through
-/// the accessor: the system is what a person's edit actually goes through.
+/// **A settings file's text size reaches the stored scale through the running editor.**
+///
+/// **What this proves, and what it does not.** `follow_the_text_size` copies the setting into the atomic
+/// `chrome::font` reads, and this is that copy, made by the running editor from a file. It does **not**
+/// prove a label already on screen resized: gooey and this crate write a `TextFont` once, when a widget
+/// is spawned, so a label built in `OnEnter(Editor)` keeps the size it was made at. Live resize needs a
+/// marker on every label and a system that rewrites its `TextFont`, which is owed (see #251).
 #[test]
-fn the_settings_files_text_size_reaches_the_chromes_labels() {
+fn the_settings_files_text_size_reaches_the_stored_scale() {
     let root = fixtures::Fixture::new(&format!("text_scale_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
         .build("m");

@@ -79,14 +79,14 @@
         "label": Srgba((red: 0.615, green: 0.6, blue: 0.575, alpha: 1.0)),
         "labeled": Srgba((red: 0.55, green: 0.83, blue: 0.5, alpha: 1.0)),
         "muted": Srgba((red: 0.575, green: 0.56, blue: 0.54, alpha: 1.0)),
-        // **The light map's two inks** (UI-80, #254): a cell with no light on it and one lit to
-        // intensity 1. They are the shipped pair `light_overlay::SHIPPED` draws with, stated here in
-        // sRGB because every tone in this file is: that pair is linear, and these are the same two
-        // colours encoded. A skin that
-        // carries them lets a theme or a project move the overlay, and a skin that does not falls back
-        // to that pair, so the editor's look is unchanged by construction.
-        "overlay_dark": Srgba((red: 0.24780053, green: 0.38109186, blue: 0.7014107, alpha: 0.35)),
-        "overlay_lit": Srgba((red: 1.0, green: 0.80946815, blue: 0.38109186, alpha: 0.85)),
+        // **The light map's two inks** (UI-80, #254): a cell with no light on it, and one lit to
+        // intensity 1. They are `light_overlay::SHIPPED`'s own pair, written in **linear** because that
+        // pair is linear — the only tones in this file that are, and said so by their syntax rather
+        // than encoded into sRGB and compared approximately. A skin that carries them lets a theme or
+        // a project move the overlay, and a skin that does not falls back to that pair, so the editor's
+        // look is unchanged by construction.
+        "overlay_dark": LinearRgba((red: 0.05, green: 0.12, blue: 0.45, alpha: 0.35)),
+        "overlay_lit": LinearRgba((red: 1.0, green: 0.62, blue: 0.12, alpha: 0.85)),
         "overlay_bg": Srgba((red: 0.195, green: 0.181, blue: 0.158, alpha: 1.0)),
         "row_pressed": Srgba((red: 0.11, green: 0.102, blue: 0.089, alpha: 1.0)),
         "snip_wash": Srgba((red: 0.95, green: 0.71, blue: 0.3, alpha: 0.28)),
