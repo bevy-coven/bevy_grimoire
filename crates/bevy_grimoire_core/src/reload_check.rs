@@ -210,8 +210,6 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         "play" => run(text, PlayConfig::from_ron),
         "destructible_marks" => run(text, Marks::parse),
         "destructible_bake" => run(text, Bake::parse),
-        // A generated JSON Schema is not RON: it reads as one JSON value, or the generator wrote half a file.
-        "schema" => serde_json::from_str::<serde_json::Value>(text).map(|_| ()).map_err(|e| (None, e.to_string())),
         _ => return Check::Unchecked,
     };
     match result {

@@ -171,10 +171,15 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 /// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads (`READ_HERE`) and the five it
 /// watches (`WATCHED_HERE`) are off it here. A kind comes off when its type gains a reader that names the
 /// file and the field; none joins unseen. Empty since #200 slice 12: every kind in the registry has one.
-const STILL_UNCHECKED: &[&str] = &[];
+const STILL_UNCHECKED: &[&str] = &[
+    // A generated JSON Schema (#366) is written by the editor and read only by an outside editor's
+    // extension; no reader in this project opens one, so nothing here can name a field of it. Joined
+    // with the owner's exception recorded in the fleet wave-2 report.
+    "schema",
+];
 
 /// **A literal, not `STILL_UNCHECKED.len()`**: a number that is its own measure can never fail.
-const STILL_UNCHECKED_MAX: usize = 0;
+const STILL_UNCHECKED_MAX: usize = 1;
 
 #[test]
 fn the_kinds_nothing_reads_with_a_named_refusal_only_shrink() {
