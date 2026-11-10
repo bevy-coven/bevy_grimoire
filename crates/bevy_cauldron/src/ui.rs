@@ -142,10 +142,11 @@ pub fn honoured_from(theme: crate::settings::Theme) -> Result<GooeySkin, String>
         return Ok(skin);
     };
     Err(format!(
-        "{} cannot be drawn yet: its ground leaves the editor's own labels at {first}, and 4.5:1 is \
+        "{} cannot be drawn yet: its ground leaves the editor's own labels at {first}, and {}:1 is \
          the least that can be read. The colours keep the theme they had. This is temporary — the \
          editor's labels have to take their colour from the theme before a light one can be shown.",
         theme_name(theme),
+        LEAST_TEXT_CONTRAST,
     ))
 }
 
@@ -154,12 +155,8 @@ pub fn honoured_from(theme: crate::settings::Theme) -> Result<GooeySkin, String>
 /// The names are [`crate::setting_catalogue::THEMES`]', so a refusal and the Settings row say the same
 /// word — a person told "Parchment cannot be drawn" can find Parchment in the list.
 pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
-    use crate::settings::Theme;
-    match theme {
-        Theme::ToolDark => crate::setting_catalogue::THEMES[0],
-        Theme::Parchment => crate::setting_catalogue::THEMES[1],
-        Theme::HighContrast => crate::setting_catalogue::THEMES[2],
-    }
+    // The catalogue's own index, so a refusal cannot name a theme the Settings row spells differently.
+    crate::setting_catalogue::THEMES[crate::setting_catalogue::theme_index(theme)]
 }
 
 /// **The theme and the text size reach the running skin** (UI-73, #251): the settings resolve into
@@ -199,20 +196,40 @@ pub fn follow_the_theme(
     mut applied: Local<Option<crate::settings::Theme>>,
     // The refusal last said, so a settled editor does not warn every frame and a *new* one is said.
     mut refused: Local<Option<String>>,
+    // Whether a project's `family/bevy_gooey.ron` was the running skin last pass. **Its own input**,
+    // because the project skin coming and going is exactly the change this system has to answer: a file
+    // deleted, or another project opened, makes `ui_skin::apply_ui_skin` set the running skin back to
+    // `GooeySkin::default()` — so the chosen theme has to be re-applied, and an early return keyed on
+    // the theme alone left the editor on gooey's default with High contrast chosen.
+    mut project_skin: Local<bool>,
 ) {
     let Some(settings) = settings else { return };
     let theme = settings.theme;
-    // **One comparison is the whole frame.** Nothing moved, so nothing is measured, parsed or written.
-    if applied.as_ref() == Some(&theme) && skin.text_scale == settings.text_scale {
+    let project_now = family.as_deref().is_some_and(|family| family.text.contains_key(crate::ui_skin::CRATE));
+    // **One comparison is the whole frame.** Nothing moved — not the theme, not the size, not which skin
+    // is the running one — so nothing is measured, parsed or written.
+    if applied.as_ref() == Some(&theme)
+        && skin.text_scale == settings.text_scale
+        && *project_skin == project_now
+    {
         return;
     }
-    let first_default = applied.is_none() && theme == crate::settings::Theme::default();
+    // **A project's skin going away is `ui_skin::apply_ui_skin`'s answer to give, under Tool dark.**
+    // Removing the file resets the running skin to `GooeySkin::default()`, and
+    // `tests/family_gooey_skin.rs` — protected — pins exactly that, so a worker may not paint over it.
+    // Under a theme a person chose there is a colour to restore and this system restores it; under the
+    // default there is not, and writing `editor_skin()` there would be this system answering a question
+    // the reset already answered.
+    let leaving_a_project_skin = *project_skin && !project_now;
+    let first_default = theme == crate::settings::Theme::default()
+        && (applied.is_none() || leaving_a_project_skin);
     *applied = Some(theme);
+    *project_skin = project_now;
     // **A project's skin is the running skin, and the text size is still the person's.** A project that
     // ships `family/bevy_gooey.ron` has said what its chrome looks like, so the theme setting does not
     // overwrite its colours — but the scale is the person's, and it is written here rather than skipped
     // with the rest, which is what the early `return` used to do.
-    if family.as_deref().is_some_and(|family| family.text.contains_key(crate::ui_skin::CRATE)) {
+    if project_now {
         if skin.text_scale != settings.text_scale {
             skin.text_scale = settings.text_scale;
         }

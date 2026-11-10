@@ -33,11 +33,16 @@
 //!   that clips it — **on either axis**. A scroll area is not a clip: what it holds is reachable by the
 //!   wheel, which is the point of one, so the walk skips it and stops at the panel behind it.
 //!
-//! # One frame's cost, as a test
+//! # One frame's cost
 //!
-//! `follow_the_theme` used to call `ui::skin_for` every frame, which parses `editor_skin.ron` and
-//! builds a whole `GooeySkin` to write what was already running. `the_theme_is_read_once_per_change`
-//! pins the fix: the theme is applied on the frame the setting changes and on no other.
+//! `follow_the_theme` used to call `ui::skin_for` every frame, which parses `editor_skin.ron` and builds
+//! a whole `GooeySkin` to write what was already running. Three `Local`s make a settled editor one
+//! comparison, and `a_settled_editor_does_not_rewrite_the_running_skin` is the half that can be asserted
+//! from outside — an unconditional write. The parse itself is **not** asserted, because counting it would
+//! need a counter in product code; the system's own doc comment says why the `Local`s are there.
+//!
+//! `a_refused_theme_is_said_once` is the other half of that shape: a refusal raised per frame would climb
+//! to `(x30)` on the status line in a second, so the sentence last said is kept too.
 
 use bevy::prelude::*;
 use bevy_cauldron::settings::{Theme, UserSettingsFile};
@@ -158,25 +163,117 @@ fn choosing_a_theme_that_cannot_be_painted_keeps_the_editor_it_had() {
     );
 }
 
-/// **The theme is read once per change, not once per frame** (UI-73, #251).
+/// **A settled editor never rewrites the running skin** (UI-73, #251).
 ///
-/// `follow_the_theme` used to call `skin_for` on every pass, which parses `editor_skin.ron` into a whole
-/// `GooeySkin` (28 colours, a ladder of 8, three shadow stacks, a map of tones) and measures nine inks
-/// against two grounds — to write a value that was already there. The `Local`s it keeps make a settled
-/// editor one comparison. **Measured as the count of changes**: `is_changed` on the resource is true for
-/// the frames that wrote it, and it must be a handful rather than one per frame.
+/// **What this does and does not pin.** It fails for an *unconditional* write — a `*skin = want` with no
+/// equality check, which marks the resource changed every frame and re-styles the whole interface — and
+/// that is the regression it now guards. It does **not** catch the waste it was written for: the version
+/// that called `ui::skin_for` on every pass still only assigned when the value differed, so the resource
+/// was never marked and this test was green over a per-frame `editor_skin.ron` parse. That waste is
+/// answered by the `Local`s in `follow_the_theme` and stated in its doc comment; it is not asserted here,
+/// because a `GooeySkin` is built inside a system and counting builds would need a counter in product
+/// code. Said plainly rather than claimed.
 #[test]
-fn the_theme_is_read_once_per_change() {
+fn a_settled_editor_does_not_rewrite_the_running_skin() {
     let mut app = editor("theme_once", Theme::HighContrast, 1.0);
-    // Settle: twelve frames went by in `editor`, and every one of them after the first is a no-op.
-    let quiet = app.world().is_resource_changed::<GooeySkin>();
     for _ in 0..30 {
         app.update();
     }
     assert!(
         !app.world().is_resource_changed::<GooeySkin>(),
-        "the running skin is unchanged over thirty settled frames: {quiet:?} on the frame before them"
+        "the running skin is not rewritten over thirty settled frames"
     );
+    // And it is still the theme a person chose, not a default that a rewrite put back.
+    assert_eq!(
+        app.world().resource::<GooeySkin>().surface,
+        GooeySkin::high_contrast().surface,
+        "thirty settled frames leave High contrast as the running skin"
+    );
+}
+
+/// **A refused theme is said once, not once a frame** (UI-73, #251).
+///
+/// The status line is what a person reads, and `Status` collapses *consecutive repeats* into a tally. A
+/// refusal raised on every pass would therefore climb to `(x30)` in a second — a line that says the
+/// editor is shouting. `follow_the_theme` keeps the sentence it last said (`refused`) for exactly this,
+/// so the count is **one**, however many frames go by. This fails on a version with no such guard.
+#[test]
+fn a_refused_theme_is_said_once() {
+    let mut app = editor("theme_said_once", Theme::Parchment, 1.0);
+    for _ in 0..30 {
+        app.update();
+    }
+    let refusal = app
+        .world()
+        .resource::<bevy_cauldron::editor::EditorState>()
+        .status
+        .problems()
+        .iter()
+        .find(|p| p.text.contains("Parchment"))
+        .map(|p| (p.text.clone(), p.count))
+        .expect("choosing a theme the editor cannot paint says so");
+    assert_eq!(
+        refusal.1, 1,
+        "the refusal is raised once over thirty frames, not every frame: {:?}",
+        refusal.0
+    );
+}
+
+/// **A project skin coming or going re-applies the chosen theme** (UI-73, #251).
+///
+/// The regression: `follow_the_theme` returned early whenever the *theme* had not changed, so a project
+/// that deleted its `family/bevy_gooey.ron` — or another project opened in its place — left the editor on
+/// `GooeySkin::default()`, which is what `ui_skin::apply_ui_skin` resets the running skin to when the file
+/// goes. High contrast was chosen, the file was removed, and the editor was neither. The project-skin
+/// state is now one of the three inputs the early return compares.
+///
+/// The protected `tests/family_gooey_skin.rs` still pins `GooeySkin::default()` as what removing a skin
+/// file leaves: this system runs *after* `apply_ui_skin`, so the default is what it starts from and the
+/// person's theme is what it puts back.
+#[test]
+fn removing_a_projects_skin_brings_the_chosen_theme_back() {
+    let root = fixtures::Fixture::new(&format!("theme_skin_gone_{}", std::process::id()))
+        .descriptor("site/wall", "alpha")
+        .build("m");
+    std::fs::create_dir_all(root.join("family")).expect("a family folder");
+    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
+    let file = root.join("family/bevy_gooey.ron");
+    std::fs::write(&file, "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))").expect("a project skin");
+    let settings_file = root.join(format!("user_config_skin_gone_{}/settings.ron", std::process::id()));
+    std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
+    std::fs::write(&settings_file, "(version: 1, theme: Some(HighContrast))").expect("a settings file");
+
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.insert_resource(UserSettingsFile(settings_file));
+    for _ in 0..12 {
+        app.update();
+    }
+    assert_eq!(
+        app.world().resource::<GooeySkin>().accent,
+        Color::srgba(0.2, 0.6, 0.9, 1.0),
+        "while the project ships a skin, its accent is the running skin's"
+    );
+
+    // **The file goes**, which is what resets the running skin to gooey's default.
+    std::fs::remove_file(&file).expect("the project skin is removed");
+    let mut back = None;
+    for _ in 0..60 {
+        app.update();
+        let running = app.world().resource::<GooeySkin>().surface;
+        if running == GooeySkin::high_contrast().surface {
+            back = Some(running);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let running = back.unwrap_or_else(|| {
+        panic!(
+            "High contrast is the running skin again after the project's skin is removed, not \
+             GooeySkin::default(): {:?}",
+            app.world().resource::<GooeySkin>().surface
+        )
+    });
+    assert_eq!(running, GooeySkin::high_contrast().surface, "the person's chosen theme is back");
 }
 
 /// **A project's `family/bevy_gooey.ron` keeps its colours and still gets the person's text size**
