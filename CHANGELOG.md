@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **ui-53-history-list** `8230892` The history panel scrolls: 5,000 log lines in a virtualized list, with the agent's lines marked *No clip: visible, not yet recorded: fleet worker*
 - **ui-80-overlay-ink** `c2a7773` The editor's skin carries the light map's two inks, and the map's grid and the seating lattice are drawn in the running skin's grid tone instead of the editor's own *For you: The light map and the grid now take their colours from the theme you choose, so a high-contrast or a project skin reaches the overlays you read the map by.* *No clip: visible, not yet recorded: fleet worker*
 - **ui-73-accessibility-reaches-chrome** `50a5c9c` Theme, text size and interface size reach the editor's own labels: chrome::font scales with the text size, UiScale with the interface size, so all three settings move the whole window *For you: Changing the text size or the interface size now enlarges the editor's own labels and panels, not only the buttons it draws with the library.* *No clip: visible, not yet recorded: fleet worker*
 - **ui-03-game-ui-preview** `13d4d9c` The Game UI preview panel: a project's family/bevy_gooey.ron is drawn under a SkinScope in its own View panel, and the editor's chrome never takes it *For you: Your game's own look now has a panel of its own, so you can see it while you edit without it repainting the editor around you.* *No clip: visible, not yet recorded: fleet worker*

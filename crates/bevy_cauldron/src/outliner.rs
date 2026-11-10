@@ -61,6 +61,52 @@ const GROUP_BIT: u64 = 1 << 63;
 /// The group a piece with no `kind` tag stands under.
 const OTHER_GROUP: &str = "other";
 
+/// **The layer a piece stands in, as a person reads it** (UI-51, #237), from the one field that already answers it:
+/// the descriptor's [`Mount`](bevy_grimoire_core::descriptor::Mount).
+///
+/// **No new map field, and this is the smallest data change there is.** A `Placed` has no layer because it does not
+/// need one: what decides where a piece sits is its descriptor's mount — the map's own note on [`Placed::at`]
+/// says the height "comes from the descriptor's Mount, never from the author" — and the one case a mount cannot
+/// settle alone, [`Mount::OnSurfaceOrFloor`](bevy_grimoire_core::descriptor::Mount::OnSurfaceOrFloor), is recorded
+/// on the placement by [`Placed::on`], which is `Some(host)` when it took the surface. Adding a `layer` field would
+/// be a second statement of a fact the file already holds, and the day the two disagreed the map would be wrong in
+/// a way no reader could see.
+///
+/// The names are the six things a person would say: floor, wall, ceiling, surface (on another piece), opening (a
+/// doorway) and decal.
+pub fn layer_of(library: &bevy_grimoire_core::library::Library, placed: &bevy_grimoire_core::map::Placed) -> &'static str {
+    use bevy_grimoire_core::descriptor::Mount;
+    match descriptor_of(library, placed).as_deref().and_then(|d| d.mount.as_ref()) {
+        // **The two-way mount is settled by the placement's own record**: `on` is `Some` when it took a surface.
+        Some(Mount::OnSurfaceOrFloor { .. }) => {
+            if placed.on.is_some() {
+                LAYER_SURFACE
+            } else {
+                LAYER_FLOOR
+            }
+        }
+        Some(Mount::OnWall { .. }) | Some(Mount::OnFace { .. }) => LAYER_WALL,
+        Some(Mount::OnCeiling) => LAYER_CEILING,
+        Some(Mount::OnSurface { .. }) => LAYER_SURFACE,
+        Some(Mount::InOpening { .. }) => LAYER_OPENING,
+        Some(Mount::Decal { .. }) => LAYER_DECAL,
+        Some(Mount::OnFloor) | Some(Mount::Tiled) | None => LAYER_FLOOR,
+    }
+}
+
+/// A piece standing on the floor.
+pub const LAYER_FLOOR: &str = "floor";
+/// A piece on a wall: a sconce, a shelf, a sign.
+pub const LAYER_WALL: &str = "wall";
+/// A piece hanging from the ceiling.
+pub const LAYER_CEILING: &str = "ceiling";
+/// A piece resting on another piece.
+pub const LAYER_SURFACE: &str = "surface";
+/// A piece filling a doorway.
+pub const LAYER_OPENING: &str = "opening";
+/// A piece painted onto a surface.
+pub const LAYER_DECAL: &str = "decal";
+
 /// The outliner's state, on its section: what is typed, what the tree was last built from, and which
 /// piece each row means.
 #[derive(Component, Default)]
@@ -140,6 +186,15 @@ pub fn placement_key(id: &str) -> u64 {
 /// The key of the row for the group `kind`.
 pub fn group_key(kind: &str) -> u64 {
     fnv(kind) | GROUP_BIT
+}
+
+/// **The key of the row for `kind` under `layer`** (UI-51, #237).
+///
+/// A kind is not unique in the tree any more: `prop` stands under `floor` and under `ceiling`, and a tree drops a
+/// second node that repeats a key. So the kind's key is scoped by its layer — `floor/prop` — and the layer's own
+/// row keeps [`group_key`]'s plain name, which is what a person reads.
+pub fn layer_kind_key(layer: &str, kind: &str) -> u64 {
+    group_key(&format!("{layer}/{kind}"))
 }
 
 /// **The key of the row for something that is not a placement**, hashed from its section and its id so a
@@ -314,17 +369,29 @@ pub fn nodes_for(
         let haystack = format!("{haystack} {group}").to_lowercase();
         words.iter().all(|word| haystack.contains(word.as_str()))
     };
-    // **A piece's group**: a `BTreeMap`, so the groups of pieces are in name order.
-    let mut piece_groups: std::collections::BTreeMap<String, Vec<(u64, String)>> = std::collections::BTreeMap::new();
+    // **A piece's group is its layer first, then what it is** (UI-51, #237): a `BTreeMap` of layers, each holding a
+    // `BTreeMap` of kinds, so both levels are in name order and a rebuild never shuffles a row under the pointer.
+    // **The layer comes from the piece's own mount**, [`layer_of`]'s rule, so a wall sconce and the floor it hangs
+    // above are never in the same group.
+    let mut piece_groups: std::collections::BTreeMap<&'static str, std::collections::BTreeMap<String, Vec<(u64, String)>>> =
+        std::collections::BTreeMap::new();
     let mut rows = HashMap::new();
     for placed in &map.placements {
+        let layer = layer_of(library, placed);
         let kind = descriptor_of(library, placed).and_then(|d| d.kind.first().cloned()).unwrap_or_else(|| OTHER_GROUP.to_owned());
-        if !kept(&format!("{} {}", placed.id, placed.descriptor), &kind) {
+        // **A search may name the layer**, so `wall` finds what hangs on a wall, which is the same rule the kinds and
+        // the map's other sections follow.
+        if !kept(&format!("{} {} {layer}", placed.id, placed.descriptor), &kind) {
             continue;
         }
         let key = placement_key(&placed.id);
         rows.insert(key, placed.id.clone());
-        piece_groups.entry(kind).or_default().push((key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
+        piece_groups
+            .entry(layer)
+            .or_default()
+            .entry(kind)
+            .or_default()
+            .push((key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
     }
     // **The map's other contents, four groups of their own** (UI-51, #237), after the pieces' groups.
     let notes: Vec<(u64, String)> = contents
@@ -355,20 +422,49 @@ pub fn nodes_for(
     ];
     let mut nodes = Vec::with_capacity(piece_groups.len() + others.len());
     let mut children = HashMap::new();
-    let group_of = |kind: &str, rows_here: Vec<(u64, String)>, children: &mut HashMap<u64, Vec<u64>>| -> TreeNode {
-        let key = group_key(kind);
+    let leaf_group = |key: u64, kind: &str, rows_here: Vec<(u64, String)>, children: &mut HashMap<u64, Vec<u64>>| -> TreeNode {
         children.insert(key, rows_here.iter().map(|(k, _)| *k).collect::<Vec<u64>>());
         let node = TreeNode::new(key, kind.to_owned()).children(rows_here.into_iter().map(|(k, label)| TreeNode::new(k, label)));
         if searching || group_open(key).unwrap_or(true) { node.expanded() } else { node }
     };
-    for (kind, rows_here) in piece_groups {
-        if !rows_here.is_empty() {
-            nodes.push(group_of(&kind, rows_here, &mut children));
+    // **A layer is a group whose children are its kinds** (UI-51, #237): `floor` holds `light-source` and `prop`, so a
+    // person reads what is on the ground separately from what hangs on a wall.
+    //
+    // **A map with one layer's pieces grows no level**, because there is nothing to tell apart: the kind rows stand
+    // at the top as they did, and the tree a reader already knew is the tree they get. A second layer arriving is
+    // the one thing that adds the level, and it adds it for every layer at once so the reader never sees the shape
+    // change under them twice.
+    let layers: Vec<(&'static str, std::collections::BTreeMap<String, Vec<(u64, String)>>)> =
+        piece_groups.into_iter().filter(|(_, kinds)| !kinds.is_empty()).collect();
+    // **Decided from the whole map, not from what a search left**, so typing does not re-shape the tree under the
+    // reader's hand: a search narrows the rows and leaves the levels where they were.
+    let nested = map.placements.iter().map(|placed| layer_of(library, placed)).collect::<std::collections::BTreeSet<_>>().len() > 1;
+    for (layer, kinds) in layers {
+        let mut kind_keys: Vec<u64> = Vec::new();
+        let mut kind_nodes: Vec<TreeNode> = Vec::new();
+        for (kind, rows_here) in kinds {
+            if rows_here.is_empty() {
+                continue;
+            }
+            let key = if nested { layer_kind_key(layer, &kind) } else { group_key(&kind) };
+            kind_keys.push(key);
+            kind_nodes.push(leaf_group(key, &kind, rows_here, &mut children));
         }
+        if kind_nodes.is_empty() {
+            continue;
+        }
+        if !nested {
+            nodes.extend(kind_nodes);
+            continue;
+        }
+        let layer_key = group_key(layer);
+        children.insert(layer_key, kind_keys);
+        let node = TreeNode::new(layer_key, layer.to_owned()).children(kind_nodes);
+        nodes.push(if searching || group_open(layer_key).unwrap_or(true) { node.expanded() } else { node });
     }
     for (kind, rows_here) in others {
         if !rows_here.is_empty() {
-            nodes.push(group_of(&kind, rows_here, &mut children));
+            nodes.push(leaf_group(group_key(&kind), &kind, rows_here, &mut children));
         }
     }
     (nodes, rows, children)
@@ -387,7 +483,13 @@ pub fn nodes_for(
 /// contributes its path, its modification time and its length — one `metadata` call each — so a write is a rebuild
 /// while a settled frame still opens nothing. Parsing them is [`contents_of`]'s work, after this has said a rebuild
 /// is due.
-fn fingerprint(map: &Map, notes: u64, files: &[FileStat], query: &str) -> u64 {
+fn fingerprint(
+    map: &Map,
+    library: &bevy_grimoire_core::library::Library,
+    notes: u64,
+    files: &[FileStat],
+    query: &str,
+) -> u64 {
     const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
     fn fold(mut hash: u64, bytes: &[u8]) -> u64 {
@@ -402,6 +504,18 @@ fn fingerprint(map: &Map, notes: u64, files: &[FileStat], query: &str) -> u64 {
         hash = fold(hash, placed.id.as_bytes());
         hash = fold(hash, b"\x1e");
         hash = fold(hash, placed.descriptor.as_bytes());
+        // **The mount too, and the `on` that settles a two-way one** (UI-51, #237): the layer a row is drawn under
+        // is a fact about the descriptor, so a mount edited in the library or a piece moved onto a table is a
+        // rebuild. `\x1c` is a byte the other fields never carry, so the two cannot be read into one another.
+        hash = fold(hash, b"\x1c");
+        hash = fold(
+            hash,
+            bevy_grimoire_core::descriptor::mount_label(
+                descriptor_of(library, placed).as_deref().and_then(|d| d.mount.as_ref()),
+            )
+            .as_bytes(),
+        );
+        hash = fold(hash, if placed.on.is_some() { b"1" } else { b"0" });
     }
     // **The map's own stamps**, which are rows of the tree too.
     for stamped in &map.stamps {
@@ -428,12 +542,17 @@ fn fingerprint(map: &Map, notes: u64, files: &[FileStat], query: &str) -> u64 {
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct FileStat {
     path: String,
-    modified: Option<u64>,
+    modified: Option<u128>,
     len: Option<u64>,
 }
 
 impl FileStat {
-    /// The stat of `path`, with the modification time in whole seconds since the epoch.
+    /// **The stat of `path`, in NANOSECONDS since the epoch.**
+    ///
+    /// Whole seconds were the first version and they lost a write: two saves inside one second are the same stat,
+    /// so `person_set` followed by a hand edit in the same tick rebuilt nothing and the tree showed the first. A
+    /// filesystem that keeps only seconds still answers in seconds here, which is no worse than it was; the one
+    /// that keeps nanoseconds — every Mac and Linux — now tells the two writes apart.
     fn of(path: &std::path::Path) -> FileStat {
         let shown = path.to_string_lossy().into_owned();
         let Ok(meta) = std::fs::metadata(path) else {
@@ -443,7 +562,7 @@ impl FileStat {
             .modified()
             .ok()
             .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|since| since.as_secs());
+            .map(|since| since.as_nanos());
         let len = meta.len();
         FileStat { path: shown, modified, len: Some(len) }
     }
@@ -451,13 +570,18 @@ impl FileStat {
 
 /// **The two side files a map's other contents live in**: its people and its triggers. Statted on every look,
 /// because a write to either is a change the map itself cannot show.
+///
+/// **The paths come from the operations that own them** ([`crate::ops_people::path_of`] and
+/// [`crate::ops_scripts::path_of`]), not from a second copy of `people/<map>.ron` written here: a stat of a path
+/// nothing writes is a rebuild nothing asks for, and the two spellings would drift the first time either moved. A
+/// map name the operations refuse is no side file at all, which is the same answer as a missing one.
 fn side_files(project: &Project, map: &Map) -> Vec<FileStat> {
     [
-        project.grimoire_dir.join("people").join(format!("{}.ron", map.name)),
-        project.grimoire_dir.join("scripts").join(format!("{}.ron", map.name)),
+        crate::ops_people::path_of(project, &map.name).ok(),
+        crate::ops_scripts::path_of(project, &map.name).ok(),
     ]
     .iter()
-    .map(|path| FileStat::of(path))
+    .map(|path| path.as_deref().map(FileStat::of).unwrap_or_default())
     .collect()
 }
 
@@ -524,7 +648,7 @@ fn rebuild_the_tree(
         return;
     }
     outliner.looks += 1;
-    let now = fingerprint(&open.map, notes_now, &files, &outliner.query);
+    let now = fingerprint(&open.map, &project.library, notes_now, &files, &outliner.query);
     if outliner.built_from == now && outliner.built_notes == notes_now {
         let query = outliner.query.clone();
         outliner.built_for = query;
