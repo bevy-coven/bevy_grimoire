@@ -191,11 +191,10 @@ fn a_layout_proposal_is_followed_as_a_preview() {
         "`layout_propose` wrote to the map. Its own `writes()` is empty and its `undo()` is \
          `Undo::None`: the layout stands on screen as a proposal and nothing more"
     );
-    // **And the receipt says it is a proposal**, in the operation's own words rather than a second
-    // sentence written for the follow. The assertion is the `the Familiar is about to` prefix a
-    // preview's receipt carries — `Gates::follow_a_preview` writes it and a change's receipt does not
-    // — because every `layout_propose` answer already contains "proposed" in its own summary, so that
-    // word would pass whether the follow were a preview or not.
+    // **And the receipt tells the person what to do with a proposal**, in the operation's own words
+    // rather than a second sentence written for the follow: a proposal waits on Enter or Esc, and an
+    // applied change's receipt has nothing to keep or throw away. (The word "proposed" alone proves
+    // nothing: every `layout_propose` answer carries it whether the follow drew a preview or not.)
     let note = app
         .world()
         .resource::<bevy_cauldron::editor::EditorState>()
@@ -203,8 +202,8 @@ fn a_layout_proposal_is_followed_as_a_preview() {
         .note_text()
         .to_string();
     assert!(
-        note.contains(&format!("{} is about to", bevy_cauldron::follow::FAMILIAR)),
-        "the receipt does not say this is only about to happen: {note:?}"
+        note.contains("Enter keeps it") && note.contains("Esc throws it away"),
+        "the receipt does not tell the person a proposal can be kept or thrown away: {note:?}"
     );
 
     // **And the ring is the proposal's footprint**, which is the preview path's own drawing: an
