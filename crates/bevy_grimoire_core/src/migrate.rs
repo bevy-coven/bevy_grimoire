@@ -19,8 +19,8 @@
 //!   a person cannot repair by hand.
 //! - **Loud.** A RON comment is carried over as a YAML comment above the same key wherever its place
 //!   can be found. One that cannot be placed is listed in the [`Report`], never dropped quietly. A file
-//!   whose kind this crate has no type for — `checks.ron` (`bevy_oracle`), `editor.ron`, `family/*.ron`
-//!   and a kit's `forest/people/scripts/trees` files (`bevy_cauldron`) — **stops the whole migration**
+//!   whose kind this crate has no type for — `checks.ron` (the checks crate), `editor.ron`, `family/*.ron`
+//!   and a kit's `forest/people/scripts/trees` files (the editor) — **stops the whole migration**
 //!   and is named: guessing at a value it cannot read is how a file loses a field.
 //!
 //! **A file no kind's pattern names is not walked at all.** `game_data` states no pattern (it is "the
@@ -73,7 +73,7 @@ pub const ARCHIVE_DIR: &str = ".dark_factory/migrated-ron";
 /// **No such subcommand exists yet** (this slice ships the library only), so the refusal is a statement
 /// about what the next slice adds rather than a line that works today; it is named here so the sentence
 /// and the binary cannot drift apart when the subcommand lands.
-pub const COMMAND: &str = "bevy_cauldron migrate <root>";
+pub const COMMAND: &str = "the editor's migrate command, run on the project's folder";
 
 /// The page of the guide that explains the move: "Moving a project to YAML" in it.
 const DOCS: &str = "docs/guide/your-game.md";
@@ -379,10 +379,10 @@ fn write_kind(kind: &FileKind, text: &str, file: &str) -> Result<Converted, Prob
 /// **Which crate declares the type a kind this crate cannot read is**, for a refusal that says who can.
 fn unowned_by(kind: &str) -> Option<&'static str> {
     match kind {
-        "forest" | "people" | "scripts" | "trees" => Some("`bevy_cauldron`, the editor"),
-        "checks" => Some("`bevy_oracle`"),
-        "family" => Some("`bevy_cauldron`'s family host"),
-        "editor_settings" => Some("`bevy_cauldron`'s settings"),
+        "forest" | "people" | "scripts" | "trees" => Some("the editor"),
+        "checks" => Some("the checks crate"),
+        "family" => Some("the editor's family host"),
+        "editor_settings" => Some("the editor's settings"),
         "game_data" => Some("the game that registers it in `data.yaml`"),
         _ => None,
     }
@@ -448,7 +448,12 @@ pub fn migrate(root: &Path) -> Result<Report, Problem> {
         // A second migration of a project that already has an archive keeps the newer copy beside the
         // older one rather than replacing what a person may still want to diff.
         let into = unique_path(&into)?;
-        std::fs::rename(path, &into).map_err(|e| io_problem(path, e))?;
+        // **Copied whole, then removed**, never renamed: the archive copy is a complete file (written beside
+        // its final name and renamed into it by `atomic_file`) before the original is touched, so a failure
+        // at any point leaves the original in place.
+        let bytes = std::fs::read(path).map_err(|e| io_problem(path, e))?;
+        crate::atomic_file::write_new(&into, bytes).map_err(|e| io_problem(&into, e))?;
+        std::fs::remove_file(path).map_err(|e| io_problem(path, e))?;
     }
     Ok(Report { converted, unplaced, archived_at: ARCHIVE_DIR.to_owned() })
 }
