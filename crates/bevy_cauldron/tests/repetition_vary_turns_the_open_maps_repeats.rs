@@ -2,7 +2,7 @@
 //!
 //! `grimoire_state.repetition` names the repeats a player notices; an agent reaches the editor only
 //! through the registry. So the operation turns each clutter copy out of its repeat under the
-//! project's `repetition.ron`, writes the turned rows, and one undo puts every one back. A preview
+//! project's `repetition.yaml`, writes the turned rows, and one undo puts every one back. A preview
 //! writes nothing, a project whose rules call the pieces structure turns nothing, and a rules file
 //! that does not read is refused rather than replaced by the defaults.
 
@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use crate::fixtures;
 
 /// Three fixture barrels (kind `prop`, clutter by default) a metre apart, all at yaw 0, and one
-/// crate far off. Returns the app and the project's `repetition.ron` path.
+/// crate far off. Returns the app and the project's `repetition.yaml` path.
 fn editor(name: &str) -> (App, PathBuf) {
     let root = fixtures::Fixture::new(name)
         .descriptor("site/barrel", "alpha")
@@ -113,12 +113,12 @@ fn structure_is_never_turned_and_a_bad_rules_file_is_refused() {
     let (mut app, file) = editor(&format!("rep_vary_rules_{}", std::process::id()));
     let before_file = saved(&app);
     // The project says `prop` is structure: the row of barrels is the design.
-    std::fs::write(&file, r#"(structure: ["prop"])"#).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&file, r#"{structure: ["prop"]}"#).unwrap_or_else(|e| panic!("{e}"));
     let kept = run(&mut app, false);
     assert_eq!(kept["outcome"], "applied", "{kept}");
     assert_eq!(saved(&app), before_file, "nothing to turn writes nothing");
 
-    std::fs::write(&file, "(radius_m: -1.0)").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&file, "{radius_m: -1.0}").unwrap_or_else(|e| panic!("{e}"));
     let bad = run(&mut app, false);
     assert_eq!(bad["outcome"], "refused", "{bad}");
     assert!(bad.to_string().contains(bevy_grimoire_core::repetition::FILE), "the refusal names the file: {bad}");

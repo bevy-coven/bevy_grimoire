@@ -28,13 +28,13 @@ const MAX_STEPS: u32 = 100;
 /// fixture the crate throws away (#152). The base is `ElementsSettings::defaults().to_yaml()` with
 /// `clock.hour` set; **exactly one line differs** between the two, which is what makes the edit an
 /// edit rather than a second file.
-const SETTINGS: &str = include_str!("fixtures/bevy_elements.ron");
-const SETTINGS_LATER: &str = include_str!("fixtures/bevy_elements_18.5.ron");
+const SETTINGS: &str = include_str!("fixtures/bevy_elements.yaml");
+const SETTINGS_LATER: &str = include_str!("fixtures/bevy_elements_18.5.yaml");
 
 #[test]
 fn an_edited_settings_file_reaches_the_editor_and_a_bad_one_is_a_problem() {
     let root = fixtures::Fixture::new("family_reload").descriptor("site/wall", "alpha").build("m");
-    let file = root.join("family").join("bevy_elements.ron");
+    let file = root.join("family").join("bevy_elements.yaml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, SETTINGS).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -66,7 +66,7 @@ fn an_edited_settings_file_reaches_the_editor_and_a_bad_one_is_a_problem() {
     );
 
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(sun: (hour: ").unwrap();
+    std::fs::write(&file, "{sun: {hour: ").unwrap();
     let mut steps = 0;
     while steps < MAX_STEPS && app.world().resource::<EditorState>().status.problems().is_empty() {
         app.update();

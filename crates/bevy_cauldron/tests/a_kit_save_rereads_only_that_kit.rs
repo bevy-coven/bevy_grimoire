@@ -2,8 +2,8 @@
 //!
 //! # What was wrong
 //!
-//! `watch::adopt` answered a save to a kit's `library.ron` or `project.ron` by calling
-//! `Project::open` again: `kits.ron`, the vocabulary, every bound kit's library and policy, and a
+//! `watch::adopt` answered a save to a kit's `library.yaml` or `project.yaml` by calling
+//! `Project::open` again: `kits.yaml`, the vocabulary, every bound kit's library and policy, and a
 //! triangle count for every `.glb` in the merge. Measured on the shipped project (90 descriptors,
 //! 2 kits) one open took 100–315 ms, and the triangle pass alone 22–255 ms — on the file an author
 //! edits most, per save.
@@ -142,7 +142,7 @@ fn a_kit_save_relayers_only_that_kit() {
         layers.len(),
         1,
         "a save to one kit's library re-layered {layers:?}. A kit's own file can only change that \
-         kit — which directory answers for which namespace is `kits.ron`'s business and a different \
+         kit — which directory answers for which namespace is `kits.yaml`'s business and a different \
          file — so re-reading the others is work that cannot produce a different answer. The \
          whole-project open re-layers every kit, and that is the cost E-003 is about."
     );

@@ -104,7 +104,7 @@ fn an_agent_renames_a_composition_its_stamps_follow_and_undo_puts_it_back() {
     assert_eq!(ids(&app), ["hall", "pair"], "the project still holds the old name");
     assert_eq!(stamped(&app), ["hall"], "the open map's stamp still names the old composition");
     let (comps, map) = files(&root, &app);
-    assert!(comps.contains("\"hall\"") && !comps.contains("\"corner\""), "compositions.ron: {comps}");
+    assert!(comps.contains("\"hall\"") && !comps.contains("\"corner\""), "compositions.yaml: {comps}");
     assert!(map.contains("\"hall\""), "the map file's stamp does not follow: {map}");
 
     let id = a["operation_id"].as_str().expect("an apply returns its id").to_owned();

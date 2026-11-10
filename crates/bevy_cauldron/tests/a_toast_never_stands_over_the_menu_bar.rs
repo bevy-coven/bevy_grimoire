@@ -36,7 +36,7 @@ fn open(name: &str) -> App {
 /// **A new person**: the editor with a recent-projects file that has never offered the tour, which is
 /// what raises the offer toast this issue is about. The file is per-test, so it races with nothing.
 fn a_new_person(name: &str) -> App {
-    let file = std::env::temp_dir().join(format!("grimoire-toast-{name}-{}.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("grimoire-toast-{name}-{}.yaml", std::process::id()));
     let _ = std::fs::remove_file(&file);
     let root = fixtures::Fixture::new(&format!("{name}_{}", std::process::id()))
         .descriptor("alpha/floor", "alpha")

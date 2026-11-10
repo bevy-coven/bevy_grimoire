@@ -1,6 +1,6 @@
 //! **The Meshes pane names the sub-kit modules that do not nest** (#168 slice 3).
 //!
-//! Slices 1 and 2 found the pairs of `standards.ron` rules whose modules do not nest and told an
+//! Slices 1 and 2 found the pairs of `standards.yaml` rules whose modules do not nest and told an
 //! agent (`grimoire_state.standards.unnested`); a person on the Meshes shelf saw nothing, because
 //! every piece can meet its own rule while two sub-kits still drift off each other's grid. So the
 //! piece in focus shows, in its `standards` row, each such pair one of whose rules covers it, in
@@ -15,21 +15,13 @@ use crate::fixtures;
 
 /// The fixture `crate` is a `prop`, 1 m by 1 m: it meets `fine module` and is not covered by
 /// `odd module`, whose 0.4 m does not nest with 0.5 m (they meet every 2 m).
-const ONE_COVERS_IT: &str = r#"(version: 1, rules: [
-    (name: "fine module", dim: Width, multiple_of: Some(0.5)),
-    (name: "odd module", kind: Some("fence"), dim: Depth, multiple_of: Some(0.4)),
-])"#;
+const ONE_COVERS_IT: &str = r#"{version: 1, rules: [{name: "fine module", dim: Width, multiple_of: 0.5}, {name: "odd module", kind: "fence", dim: Depth, multiple_of: 0.4}]}"#;
 
 /// `wall module` and `fence module` do not nest, but neither covers a `prop`; `fine module` and
 /// `base module` cover it, and their 0.5 m nests with every module in the file. It meets both.
-const NONE_FOR_IT: &str = r#"(version: 1, rules: [
-    (name: "wall module", kind: Some("wall"), dim: Width, multiple_of: Some(2.0)),
-    (name: "fence module", kind: Some("fence"), dim: Width, multiple_of: Some(1.5)),
-    (name: "fine module", dim: Width, multiple_of: Some(0.5)),
-    (name: "base module", dim: Depth, multiple_of: Some(0.5)),
-])"#;
+const NONE_FOR_IT: &str = r#"{version: 1, rules: [{name: "wall module", kind: "wall", dim: Width, multiple_of: 2.0}, {name: "fence module", kind: "fence", dim: Width, multiple_of: 1.5}, {name: "fine module", dim: Width, multiple_of: 0.5}, {name: "base module", dim: Depth, multiple_of: 0.5}]}"#;
 
-/// The editor on the Meshes tab with `crate` selected, `standards.ron` written before it opens.
+/// The editor on the Meshes tab with `crate` selected, `standards.yaml` written before it opens.
 fn editor(name: &str, standards: &str) -> (App, PathBuf) {
     let root = fixtures::Fixture::new(name)
         .descriptor("crate", "alpha")

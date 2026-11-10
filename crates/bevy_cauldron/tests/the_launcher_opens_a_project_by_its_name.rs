@@ -278,7 +278,7 @@ fn a_chosen_folder_that_is_not_a_project_offers_to_make_it_one_and_keeps_what_it
         app.update();
     }
     assert_eq!(std::fs::read_to_string(plain.join("notes.txt")).unwrap(), "mine", "the folder's own files stay");
-    assert!(plain.join("assets/grimoire/kits.yaml").is_file() && plain.join("assets/grimoire/vocab.ron").is_file());
+    assert!(plain.join("assets/grimoire/kits.yaml").is_file() && plain.join("assets/grimoire/vocab.yaml").is_file());
     assert_eq!(pointed_at(&app).0, Some(plain.canonicalize().unwrap()), "and it opens");
 }
 

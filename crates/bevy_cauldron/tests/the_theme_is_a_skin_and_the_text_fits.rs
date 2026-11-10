@@ -35,7 +35,7 @@
 //!
 //! # One frame's cost
 //!
-//! `follow_the_theme` used to call `ui::skin_for` every frame, which parses `editor_skin.ron` and builds
+//! `follow_the_theme` used to call `ui::skin_for` every frame, which parses `editor_skin.yaml` and builds
 //! a whole `GooeySkin` to write what was already running. Three `Local`s make a settled editor one
 //! comparison, and `a_settled_editor_does_not_rewrite_the_running_skin` is the half that can be asserted
 //! from outside — an unconditional write. The parse itself is **not** asserted, because counting it would
@@ -60,7 +60,7 @@ fn editor(tag: &str, theme: Theme, text_scale: f32) -> App {
         .descriptor("site/wall", "alpha")
         .place("site/wall", (1.5, 1.5))
         .build("m");
-    let settings_file = root.join(format!("user_config_{tag}_{}/settings.ron", std::process::id()));
+    let settings_file = root.join(format!("user_config_{tag}_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
     let named = match theme {
         Theme::ToolDark => "ToolDark",
@@ -69,7 +69,7 @@ fn editor(tag: &str, theme: Theme, text_scale: f32) -> App {
     };
     std::fs::write(
         &settings_file,
-        format!("(version: 1, theme: Some({named}), text_scale: Some({text_scale}))"),
+        format!("{{version: 1, theme: {named}, text_scale: {text_scale}}}"),
     )
     .expect("a settings file");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -169,7 +169,7 @@ fn choosing_a_theme_that_cannot_be_painted_keeps_the_editor_it_had() {
 /// equality check, which marks the resource changed every frame and re-styles the whole interface — and
 /// that is the regression it now guards. It does **not** catch the waste it was written for: the version
 /// that called `ui::skin_for` on every pass still only assigned when the value differed, so the resource
-/// was never marked and this test was green over a per-frame `editor_skin.ron` parse. That waste is
+/// was never marked and this test was green over a per-frame `editor_skin.yaml` parse. That waste is
 /// answered by the `Local`s in `follow_the_theme` and stated in its doc comment; it is not asserted here,
 /// because a `GooeySkin` is built inside a system and counting builds would need a counter in product
 /// code. Said plainly rather than claimed.
@@ -222,7 +222,7 @@ fn a_refused_theme_is_said_once() {
 /// **A project skin coming or going re-applies the chosen theme** (UI-73, #251).
 ///
 /// The regression: `follow_the_theme` returned early whenever the *theme* had not changed, so a project
-/// that deleted its `family/bevy_gooey.ron` — or another project opened in its place — left the editor on
+/// that deleted its `family/bevy_gooey.yaml` — or another project opened in its place — left the editor on
 /// `GooeySkin::default()`, which is what `ui_skin::apply_ui_skin` resets the running skin to when the file
 /// goes. High contrast was chosen, the file was removed, and the editor was neither. The project-skin
 /// state is now one of the three inputs the early return compares.
@@ -236,12 +236,12 @@ fn removing_a_projects_skin_brings_the_chosen_theme_back() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.yaml");
-    let file = root.join("family/bevy_gooey.ron");
-    std::fs::write(&file, "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))").expect("a project skin");
-    let settings_file = root.join(format!("user_config_skin_gone_{}/settings.ron", std::process::id()));
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").expect("a family.yaml");
+    let file = root.join("family/bevy_gooey.yaml");
+    std::fs::write(&file, "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}").expect("a project skin");
+    let settings_file = root.join(format!("user_config_skin_gone_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
-    std::fs::write(&settings_file, "(version: 1, theme: Some(HighContrast))").expect("a settings file");
+    std::fs::write(&settings_file, "{version: 1, theme: HighContrast}").expect("a settings file");
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(UserSettingsFile(settings_file));
@@ -276,7 +276,7 @@ fn removing_a_projects_skin_brings_the_chosen_theme_back() {
     assert_eq!(running, GooeySkin::high_contrast().surface, "the person's chosen theme is back");
 }
 
-/// **A project's `family/bevy_gooey.ron` keeps its colours and still gets the person's text size**
+/// **A project's `family/bevy_gooey.yaml` keeps its colours and still gets the person's text size**
 /// (UI-73, #251). The early `return` that left a project's skin alone also skipped the `text_scale`
 /// write, though the comment beside it said the size still applied — so a person on a project with its
 /// own skin set 200% and nothing happened. This is that half, as an assertion.
@@ -286,14 +286,14 @@ fn a_projects_skin_keeps_its_colours_and_takes_the_persons_text_size() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.yaml");
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").expect("a family.yaml");
     // The project's own accent, so "the project wins" is visible and not a coincidence of defaults.
-    std::fs::write(root.join("family/bevy_gooey.ron"), "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))")
+    std::fs::write(root.join("family/bevy_gooey.yaml"), "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}")
         .expect("a project skin");
-    let settings_file = root.join(format!("user_config_project_skin_{}/settings.ron", std::process::id()));
+    let settings_file = root.join(format!("user_config_project_skin_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
     // A theme *and* a size, so a system that returned early would be seen to drop both.
-    std::fs::write(&settings_file, "(version: 1, theme: Some(HighContrast), text_scale: Some(2.0))")
+    std::fs::write(&settings_file, "{version: 1, theme: HighContrast, text_scale: 2.0}")
         .expect("a settings file");
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

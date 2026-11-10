@@ -127,7 +127,7 @@ fn every_control_the_census_names_is_attached_to_something() {
 #[test]
 fn the_scan_actually_finds_attachments() {
     let src = panel_source();
-    let n = src.matches("chrome::Control(").count() + src.matches("Control(keys::ControlId::").count();
+    let n = src.matches("chrome::Control(").count() + src.matches("!Control {keys: :, ControlId: :").count();
     assert!(
         n >= bevy_cauldron::keys::ControlId::ALL.len(),
         "the scan found {n} `chrome::Control(..)` attachment(s) across the panels, fewer than the \

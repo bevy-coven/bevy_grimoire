@@ -8,8 +8,8 @@ use crate::fixtures;
 fn project(tag: &str, listed: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), format!("(version: 1, crates: [\"{listed}\"])")).unwrap();
-    let file = root.join("family/bevy_elements.ron");
+    std::fs::write(root.join("family.yaml"), format!("{{version: 1, crates: [\"{listed}\"]}}")).unwrap();
+    let file = root.join("family/bevy_elements.yaml");
     std::fs::write(&file, "// the sun\n(sun: (hour: 12.0, tilt: 0.4), wind: 3)\n").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {

@@ -127,7 +127,7 @@ fn on_disk(app: &App) -> bevy_grimoire_core::rules::Rules {
     let path = app.world().resource::<Project>().project_dir.join("rules.yaml");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     bevy_grimoire_core::rules::Rules::parse(&text)
-        .unwrap_or_else(|e| panic!("rules.ron no longer parses: {e}\n{text}"))
+        .unwrap_or_else(|e| panic!("rules.yaml no longer parses: {e}\n{text}"))
 }
 
 /// **The preview says a prefix tunes nothing, before anything is written.**

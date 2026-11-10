@@ -3,7 +3,7 @@
 //! Slice 2 put the breaches in `grimoire_state`, but an agent importing a golem `.glb` reads the
 //! import's own answer, and a piece off the module is cheapest to catch the moment it is admitted.
 //! So the applied answer's `after.standards` names the imported piece's breaches (only its own: the
-//! rest of the kit is `grimoire_state`'s), read from `standards.ron` at that moment, and the summary
+//! rest of the kit is `grimoire_state`'s), read from `standards.yaml` at that moment, and the summary
 //! says so. A breach is reported, not refused (the issue's assumed decision): the piece is in the
 //! library either way, and a file that does not parse is named, never read as "no rules".
 
@@ -62,10 +62,7 @@ fn the_imported_piece_names_the_rule_it_breaks_and_only_its_own() {
     // "huge"; nothing is over 1000 m, so "sane" is met.
     std::fs::write(
         &file,
-        r#"(version: 1, rules: [
-            (name: "huge", dim: Width, min: Some(100.0)),
-            (name: "sane", dim: Width, max: Some(1000.0)),
-        ])"#,
+        r#"{version: 1, rules: [{name: "huge", dim: Width, min: 100.0}, {name: "sane", dim: Width, max: 1000.0}]}"#,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let applied = import(&mut app);
@@ -94,7 +91,7 @@ fn no_file_is_no_breaches_and_a_bad_file_is_named() {
     );
 
     let (mut app, file) = editor(&format!("import_standards_bad_{}", std::process::id()));
-    std::fs::write(&file, r#"(version: 1, rules: [(name: "x", dim: Width)])"#)
+    std::fs::write(&file, r#"{version: 1, rules: [{name: "x", dim: Width}]}"#)
         .unwrap_or_else(|e| panic!("{e}"));
     let applied = import(&mut app);
     assert_eq!(applied["outcome"], "applied", "{applied}");

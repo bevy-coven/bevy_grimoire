@@ -48,7 +48,7 @@ fn machine(tag: &str) -> Machine {
     let tag = format!("{tag}_{}", std::process::id());
     let root = fixtures::Fixture::new(&tag).descriptor("site/wall", "alpha").build("m");
     let file = root.join("assets/grimoire/editor.yaml");
-    std::fs::write(&file, "(version: 1, terminal_agent: Some(OhMyPi))").unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+    std::fs::write(&file, "{version: 1, terminal_agent: OhMyPi}").unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let files = std::env::temp_dir().join(format!("{tag}_agents"));
     let _ = std::fs::remove_dir_all(&files);
     let server = std::env::temp_dir().join(format!("{tag}_server"));

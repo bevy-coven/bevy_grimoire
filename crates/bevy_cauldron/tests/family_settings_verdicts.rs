@@ -3,7 +3,7 @@
 //! A settings file that is valid RON replaces the crate's settings and a file that is not is refused
 //! with the last good ones kept; both used to be said only on the status line, so an agent driving the
 //! editor over BRP could not ask whether its edit had landed. The verdict names the file under the
-//! game's root (`family/bevy_elements.ron`), says why a refusal is one, and goes when the file does.
+//! game's root (`family/bevy_elements.yaml`), says why a refusal is one, and goes when the file does.
 
 use std::time::{Duration, Instant};
 
@@ -22,7 +22,7 @@ use crate::fixtures;
 /// `clock.hour` set; `hour` names the hour by rewriting **that one line**, so every call is a whole,
 /// valid settings file and the edit between any two is exactly the clock.
 fn settings_at(hour: &str) -> String {
-    let base = include_str!("fixtures/bevy_elements.ron");
+    let base = include_str!("fixtures/bevy_elements.yaml");
     let line = "        hour: 6.0,";
     assert!(
         base.contains(line),
@@ -31,7 +31,7 @@ fn settings_at(hour: &str) -> String {
     base.replace(line, &format!("        hour: {hour},"))
 }
 
-const FILE: &str = "family/bevy_elements.ron";
+const FILE: &str = "family/bevy_elements.yaml";
 
 fn kinds(app: &App) -> Vec<Value> {
     app.world().resource::<EditorReloads>().state_json()["kinds"].as_array().cloned().unwrap_or_default().into_iter().filter(|k| k["kind"] == "family").collect()
@@ -64,7 +64,7 @@ fn pump(app: &mut App, secs: f64) {
 #[test]
 fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_removed_one_is_gone() {
     let root = fixtures::Fixture::new("family_verdicts").descriptor("site/wall", "alpha").build("m");
-    let file = root.join("family").join("bevy_elements.ron");
+    let file = root.join("family").join("bevy_elements.yaml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, settings_at("6.0")).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -85,7 +85,7 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
 
     // A bad one: refused, named, the good settings stay, said once however many frames pass.
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(&file, "(sun: (hour: ").unwrap();
+    std::fs::write(&file, "{sun: {hour: ").unwrap();
     until(&mut app, "the refusal", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "refused"));
     let v = kinds(&app)[0].clone();
     assert_eq!(v["file"], FILE, "{v}");
@@ -110,7 +110,7 @@ fn a_settings_edit_is_one_verdict_a_bad_one_is_refused_naming_the_file_and_a_rem
 
     // A fix to other settings applies, and a removed file is no longer listed.
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(&file, "(sun: (hour: ").unwrap();
+    std::fs::write(&file, "{sun: {hour: ").unwrap();
     until(&mut app, "the second refusal", |a| kinds(a).first().is_some_and(|k| k["outcome"] == "refused"));
     std::thread::sleep(Duration::from_millis(50));
     std::fs::write(&file, settings_at("7.0")).unwrap();
@@ -134,13 +134,13 @@ fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_d
     let root = fixtures::Fixture::new("family_verdicts_launch").descriptor("site/wall", "alpha").build("m");
     let dir = root.join("family");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("bevy_elements.ron"), settings_at("6.0")).unwrap();
-    std::fs::write(dir.join("bevy_lights.yaml"), "(budget: (").unwrap();
+    std::fs::write(dir.join("bevy_elements.yaml"), settings_at("6.0")).unwrap();
+    std::fs::write(dir.join("bevy_lights.yaml"), "{budget: ").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.update();
     assert_eq!(kinds(&app).len(), 2, "{:?}", kinds(&app));
-    assert_eq!(verdict(&app, "family/bevy_elements.ron")["outcome"], "applied");
-    let broken = verdict(&app, "family/bevy_lights.ron");
+    assert_eq!(verdict(&app, "family/bevy_elements.yaml")["outcome"], "applied");
+    let broken = verdict(&app, "family/bevy_lights.yaml");
     assert_eq!(broken["outcome"], "refused", "a file that never read is named from the start: {broken}");
     assert!(!broken["reason"].as_str().unwrap().is_empty(), "{broken}");
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], false);
@@ -148,15 +148,15 @@ fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_d
     // Another file's edit makes the watch say the broken one is invalid again; it is not decided twice.
     let before = seq(&app);
     std::thread::sleep(Duration::from_millis(50));
-    std::fs::write(dir.join("bevy_elements.ron"), settings_at("9.0")).unwrap();
+    std::fs::write(dir.join("bevy_elements.yaml"), settings_at("9.0")).unwrap();
     until(&mut app, "the other file applied", |a| a.world().resource::<FamilySettings>().text["bevy_elements"] == settings_at("9.0"));
     pump(&mut app, 0.6);
     assert_eq!(seq(&app), before + 1, "one edit, one decision: the broken file was not re-decided");
     assert_eq!(kinds(&app).len(), 2);
-    assert_eq!(verdict(&app, "family/bevy_lights.ron")["outcome"], "refused");
+    assert_eq!(verdict(&app, "family/bevy_lights.yaml")["outcome"], "refused");
 
     // Deleting a file that never read: nothing was in force to be removed, and the refusal still goes.
     std::fs::remove_file(dir.join("bevy_lights.yaml")).unwrap();
-    until(&mut app, "the refusal gone", |a| verdict(a, "family/bevy_lights.ron") == Value::Null);
+    until(&mut app, "the refusal gone", |a| verdict(a, "family/bevy_lights.yaml") == Value::Null);
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
 }

@@ -3,7 +3,7 @@
 //! Slice 1 put `standards::unnested` in core: two rules whose modules are not whole multiples of
 //! each other, so their pieces drift off each other's grid lines although every piece meets its own
 //! rule. An agent laying out a kit reads `grimoire_state`, so the `standards` section carries them,
-//! read from `standards.ron` on each call like the breaches beside them.
+//! read from `standards.yaml` on each call like the breaches beside them.
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
@@ -39,7 +39,7 @@ fn state(app: &mut App) -> serde_json::Value {
 }
 
 fn write(path: &Path, rules: &str) {
-    std::fs::write(path, format!("(version: 1, rules: [{rules}])"))
+    std::fs::write(path, format!("{{version: 1, rules: [{rules}]}}"))
         .unwrap_or_else(|e| panic!("{path:?}: {e}"));
 }
 
@@ -48,11 +48,7 @@ fn a_fence_module_off_the_wall_module_is_named_with_where_they_meet() {
     let (mut app, file) = editor(&format!("unnested_named_{}", std::process::id()));
     write(
         &file,
-        r#"
-        (name: "wall module", dim: Width, multiple_of: Some(2.0)),
-        (name: "fence module", kind: Some("fence"), dim: Depth, multiple_of: Some(1.5)),
-        (name: "storey", kind: Some("storey"), dim: Height, multiple_of: Some(2.4)),
-        "#,
+        r#"{name: "wall module", dim: Width, multiple_of: 2.0}, {name: "fence module", kind: "fence", dim: Depth, multiple_of: 1.5}, {name: "storey", kind: "storey", dim: Height, multiple_of: 2.4}"#,
     );
     let st = &state(&mut app)["standards"];
     assert_eq!(st["error"], serde_json::Value::Null, "{st}");
@@ -80,20 +76,14 @@ fn an_edit_that_makes_them_nest_is_seen_by_the_next_call() {
     let (mut app, file) = editor(&format!("unnested_reload_{}", std::process::id()));
     write(
         &file,
-        r#"
-        (name: "wall module", dim: Width, multiple_of: Some(2.0)),
-        (name: "odd module", dim: Width, multiple_of: Some(1.215)),
-        "#,
+        r#"{name: "wall module", dim: Width, multiple_of: 2.0}, {name: "odd module", dim: Width, multiple_of: 1.215}"#,
     );
     let pairs = state(&mut app)["standards"]["unnested"].clone();
     assert_eq!(pairs.as_array().map(Vec::len), Some(1), "{pairs}");
     assert_eq!(pairs[0]["meet"], serde_json::Value::Null, "2 and 1.215 never meet close by: {pairs}");
     write(
         &file,
-        r#"
-        (name: "wall module", dim: Width, multiple_of: Some(2.0)),
-        (name: "trim module", dim: Width, multiple_of: Some(0.5)),
-        "#,
+        r#"{name: "wall module", dim: Width, multiple_of: 2.0}, {name: "trim module", dim: Width, multiple_of: 0.5}"#,
     );
     assert_eq!(state(&mut app)["standards"]["unnested"], serde_json::json!([]));
 }

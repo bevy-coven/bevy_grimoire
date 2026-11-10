@@ -8,7 +8,7 @@
 //! Two claims, and each can fail:
 //!
 //! 1. **A hovered row takes the skin's `hover` colour**, not `ROW_HOVER`. This is what a person sees
-//!    change when they edit `editor_skin.ron`: the row under their pointer.
+//!    change when they edit `editor_skin.yaml`: the row under their pointer.
 //! 2. **A pressed row takes the skin's `pressed` colour.** The pair gooey's `problems()` refuses to let
 //!    collapse (ΔL\* under 4) is exactly this one against hover, so a theme that moves one and not the
 //!    other would be a theme the crate already calls broken.

@@ -31,7 +31,7 @@ fn type_line(app: &mut App, raw: &str) {
 }
 
 fn terrain_file(app: &App) -> std::path::PathBuf {
-    app.world().resource::<Project>().grimoire_dir.join("terrain").join("m.ron")
+    app.world().resource::<Project>().grimoire_dir.join("terrain").join("m.yaml")
 }
 
 fn log(app: &App) -> Vec<Entry> {

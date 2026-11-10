@@ -65,18 +65,18 @@ fn relations(app: &mut App) -> serde_json::Value {
 }
 
 fn write(path: &std::path::Path, relations: &str) {
-    std::fs::write(path, format!("(version: 1, relations: [{relations}])"))
+    std::fs::write(path, format!("{{version: 1, relations: [{relations}]}}"))
         .unwrap_or_else(|e| panic!("{path:?}: {e}"));
 }
 
 #[test]
 fn a_lamp_in_front_of_a_door_turned_180_degrees_is_in_front_of_it() {
     let (mut app, file) = editor(&format!("relations_degrees_front_{}", std::process::id()));
-    write(&file, r#"(of: "lamp", kind: InFrontOf(of: "door", within: 3.0))"#);
+    write(&file, r#"{of: "lamp", kind: !InFrontOf {of: "door", within: 3.0}}"#);
     let r = relations(&mut app);
     assert_eq!(r["unmet"], 0, "the door faces -z, so the lamp at -z is in front: {r}");
     // Behind the same door is +z.
-    write(&file, r#"(of: "lamp", kind: Behind(of: "door", within: 3.0))"#);
+    write(&file, r#"{of: "lamp", kind: !Behind {of: "door", within: 3.0}}"#);
     let r = relations(&mut app);
     assert_eq!(r["unmet"], 1, "the lamp is not behind a door that faces it: {r}");
 }
@@ -85,7 +85,7 @@ fn a_lamp_in_front_of_a_door_turned_180_degrees_is_in_front_of_it() {
 fn solving_faces_writes_degrees_and_leaves_other_turned_rows_alone() {
     let (mut app, file) = editor(&format!("relations_degrees_solve_{}", std::process::id()));
     turn(&mut app, "lamp", 33.3);
-    write(&file, r#"(of: "chair", kind: Faces("table"))"#);
+    write(&file, r#"{of: "chair", kind: !Faces "table"}"#);
     assert_eq!(relations(&mut app)["unmet"], 1);
     let solved = call(
         &mut app,

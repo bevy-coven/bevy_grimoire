@@ -6,7 +6,7 @@
 //!
 //! **The file watcher read the map file and put the new map into `OpenMap`** — and the placed
 //! pieces were spawned **once, when the editor opened** (`editor.rs::spawn_existing`, on
-//! `OnEnter(Screen::Editor)`). So a person editing `town.map.ron` in a text editor got:
+//! `OnEnter(Screen::Editor)`). So a person editing `town.map.yaml` in a text editor got:
 //!
 //! - **the inspector's numbers updated** — the bounds, the placement count, the note, all read
 //!   from `OpenMap` every frame;

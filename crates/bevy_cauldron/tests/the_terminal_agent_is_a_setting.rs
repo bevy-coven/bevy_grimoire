@@ -10,7 +10,7 @@ const COMMAND: &str = "claude --mcp-config $CAULDRON_MCP_CONFIG";
 fn a_file_chooses_the_agent_and_its_command() {
     let layer = SettingsLayer::read(
         "t",
-        &format!("(version: 1, terminal_agent: Some(OhMyPi), terminal_agent_command: Some(\"{COMMAND}\"))"),
+        &format!("{{version: 1, terminal_agent: OhMyPi, terminal_agent_command: \"{COMMAND}\"}}"),
     )
     .unwrap_or_else(|r| panic!("{r:?}"));
     let settings = EditorSettings::resolve(None, Some(&layer));
@@ -21,7 +21,7 @@ fn a_file_chooses_the_agent_and_its_command() {
 
 #[test]
 fn a_blank_command_is_refused_with_its_field() {
-    let refusal = SettingsLayer::read("t", "(version: 1, terminal_agent_command: Some(\"  \"))")
+    let refusal = SettingsLayer::read("t", "{version: 1, terminal_agent_command: \"  \"}")
         .expect_err("a command of spaces runs nothing, so the file is refused");
     assert_eq!(refusal.field.as_deref(), Some("terminal_agent_command"));
 }

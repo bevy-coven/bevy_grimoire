@@ -106,12 +106,12 @@ fn a_refused_file_names_its_file_field_reason_and_what_the_editor_kept() {
     assert_eq!(
         p.to_json(),
         serde_json::json!({
-            "what": "rigs.ron was refused, so the rigs already loaded stay",
+            "what": "rigs.yaml was refused, so the rigs already loaded stay",
             "where": {"file": "rigs.yaml", "field": "rigs[2]"},
             "why": "1:47: Expected float",
-            "fix": "correct rigs.ron and save it; the editor reads it again at once",
+            "fix": "correct rigs.yaml and save it; the editor reads it again at once",
         })
     );
     // The journal's old sentence is still in the line, so anyone searching it for the field finds it.
-    assert!(p.line().contains("rigs.ron (rigs[2]): 1:47: Expected float"), "{}", p.line());
+    assert!(p.line().contains("rigs.yaml (rigs[2]): 1:47: Expected float"), "{}", p.line());
 }

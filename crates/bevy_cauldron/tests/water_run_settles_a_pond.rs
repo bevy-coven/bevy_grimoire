@@ -44,7 +44,7 @@ fn done(r: Result<Applied, ops::Refusal>) -> String {
 fn setup(tag: &str) -> (Ctx, std::path::PathBuf) {
     let (mut ctx, dir) = project(tag);
     std::fs::create_dir_all(dir.join("terrain")).unwrap();
-    std::fs::write(dir.join("terrain/m.ron"), bevy_grimoire_core::yaml::to_string(&valley()).unwrap()).unwrap();
+    std::fs::write(dir.join("terrain/m.yaml"), bevy_grimoire_core::yaml::to_string(&valley()).unwrap()).unwrap();
     // A spring inside the bowl, so the pond has to hold it.
     done(ops::dispatch(&mut ctx, "water_place", &json!({"map": "m", "place": {"Spring": {"x": 11.5, "z": 16.5, "rate_m3_s": 2.0, "radius_m": 1.0}}})));
     (ctx, dir)

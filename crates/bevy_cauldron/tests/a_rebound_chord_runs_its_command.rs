@@ -1,6 +1,6 @@
 //! **The key dispatcher follows the keymap** (UI-72b, #265).
 //!
-//! Rebinding Save to Ctrl+Shift+Y in `settings.ron` makes Ctrl+Shift+Y save and takes Ctrl+S's save
+//! Rebinding Save to Ctrl+Shift+Y in `settings.yaml` makes Ctrl+Shift+Y save and takes Ctrl+S's save
 //! away, in the running editor; a command the file leaves out keeps its default chord; and deleting the
 //! entry gives the default chord back. The chord travels with the app (`keys::Live`), not in a static,
 //! so two apps in one process can disagree.
@@ -19,7 +19,7 @@ use crate::fixtures;
 fn rig(tag: &str, rebound: &[(&str, Shortcut)]) -> (App, PathBuf, PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let user = root.join(format!("user_config_{tag}_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("user_config_{tag}_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
     write_keymap(&user, rebound);
     app.insert_resource(UserSettingsFile(user.clone()));

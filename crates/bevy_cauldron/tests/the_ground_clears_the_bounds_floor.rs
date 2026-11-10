@@ -27,7 +27,7 @@ fn a_flat_ground_at_height_zero_is_drawn_clear_of_the_bounds_floor() {
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
     std::fs::create_dir_all(project.grimoire_dir.join("terrain")).unwrap();
     let flat = Heightfield::flat((0.0, 0.0), 1.0, 33, 33, 0.0);
-    std::fs::write(project.grimoire_dir.join("terrain/m.ron"), bevy_grimoire_core::yaml::to_string(&flat).unwrap()).unwrap();
+    std::fs::write(project.grimoire_dir.join("terrain/m.yaml"), bevy_grimoire_core::yaml::to_string(&flat).unwrap()).unwrap();
 
     let start = std::time::Instant::now();
     let (ground_y, floor_y) = loop {

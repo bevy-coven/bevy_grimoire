@@ -22,12 +22,12 @@ fn a_16_bit_png_round_trips_and_undo_removes_it() {
     let mut ctx = Ctx { project: Some(project.clone()), open: Some(open), session: "test".to_owned(), ..Ctx::default() };
     let p = json!({"map": "m", "file": "hills.png", "cell_m": 2.0, "range_m": [0.0, 100.0], "origin": [1.0, 1.0]});
     let Applied::Done { operation_id, .. } = ops::dispatch(&mut ctx, "terrain_import", &p).unwrap() else { panic!("refused") };
-    let text = std::fs::read_to_string(project.grimoire_dir.join("terrain").join("m.ron")).unwrap();
+    let text = std::fs::read_to_string(project.grimoire_dir.join("terrain").join("m.yaml")).unwrap();
     let field: bevy_grimoire_core::heightfield::Heightfield = bevy_grimoire_core::yaml::from_str(&text, "test").unwrap();
     assert_eq!((field.width, field.depth, field.cell_m, field.origin), (3, 2, 2.0, (1.0, 1.0)));
     assert_eq!(field.to_u16((0.0, 100.0)).unwrap(), samples, "the saved field reads back as the same 16-bit samples");
     ops::undo(&mut ctx, Some(&operation_id)).unwrap();
-    assert!(!project.grimoire_dir.join("terrain").join("m.ron").exists(), "undo of a first import leaves no terrain");
+    assert!(!project.grimoire_dir.join("terrain").join("m.yaml").exists(), "undo of a first import leaves no terrain");
 }
 
 #[test]
@@ -42,5 +42,5 @@ fn an_8_bit_image_is_refused_untouched() {
     let mut ctx = Ctx { project: Some(project.clone()), open: None, session: "test".to_owned(), ..Ctx::default() };
     let p = json!({"map": "m", "file": "flat8.png", "cell_m": 1.0, "range_m": [0.0, 10.0]});
     assert!(ops::dispatch(&mut ctx, "terrain_import", &p).is_err());
-    assert!(!project.grimoire_dir.join("terrain").join("m.ron").exists());
+    assert!(!project.grimoire_dir.join("terrain").join("m.yaml").exists());
 }

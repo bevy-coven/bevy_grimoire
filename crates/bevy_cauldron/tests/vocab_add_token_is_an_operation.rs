@@ -1,7 +1,7 @@
 //! **An agent can add a token to the project's vocabulary, and Enter in the vocabulary prompt is the same
 //! operation (E-002, #129 slice 11).**
 //!
-//! `Shift+T` and the `+` chip opened a prompt whose Enter spliced `vocab.ron` with a write of its own, named
+//! `Shift+T` and the `+` chip opened a prompt whose Enter spliced `vocab.yaml` with a write of its own, named
 //! by no operation, so an agent could use the vocabulary and never grow it, no log line named the addition,
 //! and the registry's two-front-end rule listed the key as unmigrated. It is now the registered operation
 //! `vocab_add_token`. The first three tests go through the registered BRP methods, the way an agent's
@@ -23,7 +23,7 @@ fn editor(name: &str) -> App {
     // **The shipped file's shape**: one token a line and comments between, which is what the splice
     // edits. The fixture writes each axis on a single line, which no real project's file is.
     std::fs::write(
-        root.join("assets/grimoire/vocab.ron"),
+        root.join("assets/grimoire/vocab.yaml"),
         r#"(
     // what a thing is
     kind: (
@@ -94,8 +94,8 @@ fn add(app: &mut App, axis: &str, name: &str, note: &str) -> serde_json::Value {
 }
 
 fn vocab_file(app: &App) -> String {
-    std::fs::read_to_string(app.world().resource::<Project>().root.join("assets/grimoire/vocab.ron"))
-        .expect("vocab.ron")
+    std::fs::read_to_string(app.world().resource::<Project>().root.join("assets/grimoire/vocab.yaml"))
+        .expect("vocab.yaml")
 }
 
 fn kinds(app: &App) -> Vec<String> {
@@ -166,7 +166,7 @@ fn a_bad_request_is_refused_and_writes_nothing() {
         held["refusal"].as_str().is_some_and(|r| r.contains("already")),
         "the refusal must say the axis holds it: {held}"
     );
-    assert_eq!(vocab_file(&app), file_before, "a refusal wrote vocab.ron");
+    assert_eq!(vocab_file(&app), file_before, "a refusal wrote vocab.yaml");
     assert_eq!(kinds(&app), vec!["prop".to_owned()], "a refusal changed the vocabulary the editor holds");
     assert_eq!(log(&app).len(), lines_before, "a refusal logged a line");
 }
@@ -189,7 +189,7 @@ fn a_preview_writes_nothing_and_tokens_keep_their_order() {
         serde_json::json!({"operation": "vocab_add_token", "parameters": {"axis": "look", "name": "plain", "note": "again"}}),
     );
     assert!(refused.to_string().contains("already"), "a preview must refuse what the commit would: {refused}");
-    assert_eq!(vocab_file(&app), file_before, "a preview wrote vocab.ron");
+    assert_eq!(vocab_file(&app), file_before, "a preview wrote vocab.yaml");
     assert_eq!(log(&app).len(), lines_before, "a preview logged a line");
 
     // A token's bit is its position: the second goes after the first, never before.
@@ -217,7 +217,7 @@ fn tap(app: &mut App, logical: Key, code: KeyCode) {
 }
 
 /// **A person's Enter in the prompt is one `vocab_add_token` line stamped as a person's, the chip appears,
-/// and a refused name leaves the prompt open with its text.** Before slice 11 the prompt wrote `vocab.ron`
+/// and a refused name leaves the prompt open with its text.** Before slice 11 the prompt wrote `vocab.yaml`
 /// itself and logged nothing.
 #[test]
 fn a_persons_enter_in_the_prompt_adds_through_the_operation() {
@@ -257,7 +257,7 @@ fn a_persons_enter_in_the_prompt_adds_through_the_operation() {
     }
     assert!(app.world().resource::<TokenPrompt>().open.is_none(), "an accepted token closes the prompt");
     assert!(kinds(&app).contains(&"lantern".to_owned()), "the editor's vocabulary never took it");
-    assert!(vocab_file(&app).contains("lantern"), "Enter did not reach vocab.ron");
+    assert!(vocab_file(&app).contains("lantern"), "Enter did not reach vocab.yaml");
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "one Enter is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("vocab_add_token"));

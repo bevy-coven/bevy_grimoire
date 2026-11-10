@@ -15,7 +15,7 @@
 //!    pane has a share and the panes beside it are inside the layout's own room. A hand-built
 //!    `position: absolute` split could satisfy "there is a viewport" while covering it.
 //!
-//! The dock's own frame and titles come from the running `GooeySkin` (`editor_skin.ron`); the panels'
+//! The dock's own frame and titles come from the running `GooeySkin` (`editor_skin.yaml`); the panels'
 //! *contents* keep the editor's own colours, which is what UI-02 (#210) later moves onto the skin.
 
 use bevy::prelude::*;

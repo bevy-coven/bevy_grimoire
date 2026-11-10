@@ -2,7 +2,7 @@
 //!
 //! The registered files' leaves were one text row each; they are a gooey table now (file, path, value), so a column sorts and a row
 //! opens. Opening a row puts a text field over its value; its final change writes through `data_set`, so the file shows the value,
-//! the oplog holds one line for it and one undo takes it back. With no `data.ron` there is no table, only the line that says so.
+//! the oplog holds one line for it and one undo takes it back. With no `data.yaml` there is no table, only the line that says so.
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -25,10 +25,10 @@ fn editor(tag: &str, registry: bool) -> (App, std::path::PathBuf) {
         app.update();
     }
     let dir = app.world().resource::<Project>().grimoire_dir.clone();
-    let file = dir.join("mob.ron");
+    let file = dir.join("mob.yaml");
     std::fs::write(&file, TEXT).unwrap();
     if registry {
-        std::fs::write(dir.join("data.ron"), "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])").unwrap();
+        std::fs::write(dir.join("data.yaml"), "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}").unwrap();
     }
     settle(&mut app);
     (app, file)
@@ -67,7 +67,7 @@ fn the_registered_leaves_are_one_table_with_a_row_each() {
 fn a_project_with_no_data_file_has_no_table_and_says_so() {
     let (mut app, _) = editor(&format!("data_table_none_{}", std::process::id()), false);
     assert!(tables(&mut app).is_empty());
-    assert!(texts(&mut app).iter().any(|t| t == "no data files registered (data.ron)"));
+    assert!(texts(&mut app).iter().any(|t| t == "no data files registered (data.yaml)"));
 }
 
 #[test]

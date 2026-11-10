@@ -231,7 +231,7 @@ fn undo_chord(app: &mut App, redo: bool) {
 
 /// **A person's `N` on a library piece is one `piece_turn` line stamped as a person's, it turns that
 /// piece and no other, Cmd+Z takes it back and Cmd+Shift+Z turns it again.** Before slice 9 the key
-/// wrote `library.ron` itself and logged nothing.
+/// wrote `library.yaml` itself and logged nothing.
 #[test]
 fn a_persons_n_turns_through_the_operation_and_cmd_z_and_redo_follow_it() {
     let mut app = editor("piece-turn-person");

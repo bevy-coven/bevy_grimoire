@@ -43,7 +43,7 @@ fn plain(tag: &str) -> App {
 }
 
 fn recents(tag: &str) -> (PathBuf, impl FnOnce(&mut App)) {
-    let file = std::env::temp_dir().join(format!("grimoire-tour-{tag}-{}.ron", std::process::id()));
+    let file = std::env::temp_dir().join(format!("grimoire-tour-{tag}-{}.yaml", std::process::id()));
     let _ = std::fs::remove_file(&file);
     (file.clone(), move |app: &mut App| {
         app.insert_resource(RecentProjects(file));

@@ -102,7 +102,7 @@ fn an_agent_defines_a_group_from_a_literal_set_and_one_undo_takes_it_back() {
     assert_eq!(undone["outcome"], "applied", "{undone}");
     assert!(
         !comps(&root).contains("corner_pile"),
-        "undo takes the group out of compositions.ron: {}",
+        "undo takes the group out of compositions.yaml: {}",
         comps(&root)
     );
     assert!(app.world().resource::<Project>().compositions.compositions.is_empty(), "and out of the project");
@@ -209,7 +209,7 @@ fn a_persons_m_name_enter_keeps_the_set_through_the_operation() {
     }
 
     let after = comps(&root);
-    assert!(after.contains("id: \"abc\""), "Enter did not reach compositions.ron: {after}");
+    assert!(after.contains("id: \"abc\""), "Enter did not reach compositions.yaml: {after}");
     let entries = log(&app);
     assert_eq!(entries.len(), lines + 1, "one Enter is one log line");
     let last = entries.last().expect("a line");

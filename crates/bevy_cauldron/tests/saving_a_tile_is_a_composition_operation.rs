@@ -1,9 +1,9 @@
 //! **Saving a tile is the operation an agent calls (E-002, #129 slice 15).**
 //!
-//! `Cmd+S` on the Tiles tab wrote the tile in hand to `compositions.ron` with a write of its own
+//! `Cmd+S` on the Tiles tab wrote the tile in hand to `compositions.yaml` with a write of its own
 //! (`build::save`): no log line, no undo, and no way for an agent to author a tile with slots, nested
 //! groups and an envelope of its own, because `composition_define` could only make a group out of pieces.
-//! `composition_define` now takes `composition`, a whole definition as `compositions.ron` holds it, and
+//! `composition_define` now takes `composition`, a whole definition as `compositions.yaml` holds it, and
 //! the tab's save dispatches it. The first two tests go through the registered BRP methods, as an
 //! agent's request goes; the last presses the real keys, as a person does.
 
@@ -171,7 +171,7 @@ fn a_persons_cmd_s_on_the_tiles_tab_saves_through_the_operation() {
     app.update();
 
     press_with_mod(&mut app, bevy_cauldron::keys::binding(bevy_cauldron::keys::Action::Save).key);
-    assert!(comps(&root).contains("id: \"hall\""), "Cmd+S did not reach compositions.ron: {}", comps(&root));
+    assert!(comps(&root).contains("id: \"hall\""), "Cmd+S did not reach compositions.yaml: {}", comps(&root));
     let entries = log(&app);
     assert_eq!(entries.len(), lines + 1, "one save is one log line");
     let last = entries.last().expect("a line");

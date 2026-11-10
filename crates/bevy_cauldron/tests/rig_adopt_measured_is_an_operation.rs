@@ -1,7 +1,7 @@
-//! **An agent can adopt a rig's measured gait values into `rigs.ron`, and Enter on the Anim tab is the
+//! **An agent can adopt a rig's measured gait values into `rigs.yaml`, and Enter on the Anim tab is the
 //! same operation (E-002, #129 slice 13).**
 //!
-//! Enter on the animation tab measured the selected rig and rewrote `rigs.ron` with a write of its own,
+//! Enter on the animation tab measured the selected rig and rewrote `rigs.yaml` with a write of its own,
 //! named by no operation: an agent could read a rig's measured values and never adopt them, no log line
 //! named the adoption, and the registry's two-front-end rule listed the key (`AdoptMeasured`) as
 //! unmigrated. It is now the registered operation `rig_adopt_measured`. The first three tests go through
@@ -153,7 +153,7 @@ fn a_bad_request_is_refused_and_writes_nothing() {
         ("a slot the rig lacks", serde_json::json!({"rig": "valkyrie", "skip_slots": [9999]})),
         ("a typo'd field", serde_json::json!({"rig": "valkyrie", "skipp_slots": [1]})),
         ("no rig named", serde_json::json!({})),
-        ("a put-back from an agent", serde_json::json!({"rig": "valkyrie", "restore": "(version: 3, rigs: {})"})),
+        ("a put-back from an agent", serde_json::json!({"rig": "valkyrie", "restore": "{version: 3, rigs: {}}"})),
     ] {
         let r = apply(&mut app, params, false);
         assert_eq!(r["outcome"], "refused", "{what} was accepted: {r}");
@@ -177,7 +177,7 @@ fn tap(app: &mut App, logical: Key, code: KeyCode) {
 }
 
 /// **A person's Enter on the Anim tab is one `rig_adopt_measured` line stamped as a person's, and the tab
-/// holds what the file holds.** Before slice 13 the key wrote `rigs.ron` itself and logged nothing.
+/// holds what the file holds.** Before slice 13 the key wrote `rigs.yaml` itself and logged nothing.
 #[test]
 fn a_persons_enter_on_the_anim_tab_adopts_through_the_operation() {
     let mut app = editor("rig-adopt-person");
@@ -210,7 +210,7 @@ fn a_persons_enter_on_the_anim_tab_adopts_through_the_operation() {
 
 /// **A bare `operation_undo` takes back the open map's newest change, never a rig adoption.** The adoption
 /// is a kit-level write scoped to its own rig, so with no change to the map in effect the bare undo has
-/// nothing to take back, and `rigs.ron` stays as the adoption left it until its own id is named.
+/// nothing to take back, and `rigs.yaml` stays as the adoption left it until its own id is named.
 #[test]
 fn a_bare_undo_does_not_revert_a_rig_adoption() {
     let mut app = editor("rig-adopt-bare-undo");

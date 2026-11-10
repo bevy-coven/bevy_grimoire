@@ -221,8 +221,8 @@ fn the_question_names_the_command_and_the_project() {
 fn a_damaged_store_is_a_problem_on_the_status_line_and_grants_nothing() {
     let (mut app, root) = editor(&format!("trust_q_bad_{}", std::process::id()));
     let (store, _request) = raise(&mut app, &root);
-    std::fs::write(&store, "(version: 1, projects: [").unwrap();
+    std::fs::write(&store, "{version: 1, projects: [").unwrap();
     tap(&mut app, Key::Character("y".into()), KeyCode::KeyY);
     assert!(app.world().resource::<EditorState>().status.problem_text().contains("trusted") || app.world().resource::<EditorState>().status.problem_text().contains("nothing-trusted"));
-    assert_eq!(std::fs::read_to_string(&store).unwrap(), "(version: 1, projects: [", "a damaged store is left as it is");
+    assert_eq!(std::fs::read_to_string(&store).unwrap(), "{version: 1, projects: [", "a damaged store is left as it is");
 }

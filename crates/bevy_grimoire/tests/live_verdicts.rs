@@ -2,8 +2,8 @@
 //! which field** (#200, H3). Headless, like `live_reload.rs`: footprint-only descriptors draw as marker
 //! slabs.
 //!
-//! For each file the game reads (`kits.ron`, a kit's `library.ron` and `project.ron`, `vocab.ron`,
-//! `rules.ron`, `compositions.ron`, a map) three bad edits: corrupt, a field of the wrong type, a
+//! For each file the game reads (`kits.yaml`, a kit's `library.yaml` and `project.yaml`, `vocab.yaml`,
+//! `rules.yaml`, `compositions.yaml`, a map) three bad edits: corrupt, a field of the wrong type, a
 //! required field missing. Each leaves every entity and the `GrimoireWorld` as they were and writes one
 //! verdict whose per-file entry for that file is refused, with the kind, the path, the field and a
 //! reason, while every other file's entry stays applied. The next good write recovers.

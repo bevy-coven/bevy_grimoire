@@ -1,7 +1,7 @@
 //! **The terminal takes the person's settings, and takes an edit of them while it runs** (#324).
 //!
 //! VS Code's terminal has a font size, a cursor style and a cursor blink in its settings. Cauldron's
-//! settings are files (`settings.ron` for the person, `<project>/assets/grimoire/editor.ron` for the
+//! settings are files (`settings.yaml` for the person, `<project>/assets/grimoire/editor.yaml` for the
 //! project) read while the editor runs, and the terminal's three keys are `terminal_text_scale`,
 //! `terminal_cursor` and `terminal_cursor_blink`.
 
@@ -25,7 +25,7 @@ static SHELL_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct PosixShell(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
 
-/// The editor on a project whose `editor.ron` says `settings`.
+/// The editor on a project whose `editor.yaml` says `settings`.
 fn editor_with_settings(tag: &str, settings: &str) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("floor", "alpha").build("m");
     let file = root.join("assets/grimoire/editor.yaml");
@@ -68,7 +68,7 @@ fn until(app: &mut App, why: &str, test: impl Fn(&mut App) -> bool) {
 fn the_projects_terminal_settings_give_the_caret_its_shape_its_blink_and_the_text_its_size() {
     let (mut app, _) = editor_with_settings(
         "terminal_settings",
-        &format!("(version: 1, terminal_cursor: Some(Bar), terminal_cursor_blink: Some(false), terminal_text_scale: Some({SCALE}))"),
+        &format!("{{version: 1, terminal_cursor: Bar, terminal_cursor_blink: false, terminal_text_scale: {SCALE}}}"),
     );
     until(&mut app, "the shell's caret never took the `terminal_cursor: Bar` setting", |app| {
         caret_shape(app) == CaretShape::Bar
@@ -100,9 +100,9 @@ fn the_projects_terminal_settings_give_the_caret_its_shape_its_blink_and_the_tex
 
 #[test]
 fn an_edit_of_the_settings_file_reaches_a_running_terminal() {
-    let (mut app, file) = editor_with_settings("terminal_settings_live", "(version: 1)");
+    let (mut app, file) = editor_with_settings("terminal_settings_live", "{version: 1}");
     until(&mut app, "a terminal with no setting has a block caret", |app| caret_shape(app) == CaretShape::Block);
-    std::fs::write(&file, "(version: 1, terminal_cursor: Some(Underline))").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&file, "{version: 1, terminal_cursor: Underline}").unwrap_or_else(|e| panic!("{e}"));
     until(&mut app, "the running terminal never took the edited `terminal_cursor: Underline`", |app| {
         caret_shape(app) == CaretShape::Underline
     });

@@ -2,7 +2,7 @@
 //!
 //! `chrome.rs` draws with `KEY`, `LABEL`, `MUTED`, `SUGGEST`, `LABELED`, `GRID_LINE`, `BOUNDS_LINE`, `VEIL`,
 //! `FOCUS_BG`, `ROW_PRESSED`, `SNIP_WASH` and `OVERLAY_BG`, none of which is a field of `GooeySkin`. They are
-//! the skin's `tones` now (`src/editor_skin.ron`), so a project's skin file can change them and gooey can check
+//! the skin's `tones` now (`src/editor_skin.yaml`), so a project's skin file can change them and gooey can check
 //! the text pairs among them. Each constant is still what `chrome.rs` draws with until UI-99 moves its readers to
 //! `skin.tone(..)`, so this says the two are one colour: a tone edited without its constant (or the reverse) fails here.
 

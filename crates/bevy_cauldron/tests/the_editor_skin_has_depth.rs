@@ -1,6 +1,6 @@
 //! **The editor's skin carries depth, and what stands above the screen casts it** (UI-R02, #332).
 //!
-//! `editor_skin.ron` keeps the editor's measured colours and sizes (the tests beside it pin them) and
+//! `editor_skin.yaml` keeps the editor's measured colours and sizes (the tests beside it pin them) and
 //! adds bevy_gooey's elevation stacks, so a panel, a popover and a dialog stand at three heights.
 
 use bevy::prelude::*;

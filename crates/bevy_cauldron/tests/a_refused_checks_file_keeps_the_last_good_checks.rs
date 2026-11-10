@@ -1,7 +1,7 @@
-//! **A `checks.ron` that is refused keeps the last good checks, and the editor says which file and
+//! **A `checks.yaml` that is refused keeps the last good checks, and the editor says which file and
 //! field** (#200, H3).
 //!
-//! `Checks::for_project` read `assets/grimoire/checks.ron` fresh on every run, so one bad edit (a hand
+//! `Checks::for_project` read `assets/grimoire/checks.yaml` fresh on every run, so one bad edit (a hand
 //! edit, a truncated write, an agent's mistake) stopped every after-edit check: the journal said "not
 //! run" with the parser's position and no field, and the second reader dropped the error altogether.
 //! Now one view holds the last good checks and decides each edit once: `grimoire_state.reloads` says
@@ -19,20 +19,20 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
-const FILE: &str = "checks.ron";
+const FILE: &str = "checks.yaml";
 
 fn good(threshold: f64) -> String {
-    format!("(checks: [(name: \"mine\", question: \"Is it floating?\", threshold: {threshold})])")
+    format!("{{checks: [{{name: \"mine\", question: \"Is it floating?\", threshold: {threshold}}}]}}")
 }
 
 /// The ways to break it, and the field the verdict must name: for a file cut off, where reading stopped;
 /// `None` for a file that read and broke a rule, so the reason is all there is.
 const BAD: [(&str, &str, Option<&str>); 5] = [
-    ("corrupt", "(checks: [(name: \"mine\", question: ", Some("checks[0].question")),
-    ("wrong type", "(checks: [(name: \"mine\", question: \"q\", threshold: \"high\")])", Some("checks[0].threshold")),
-    ("missing field", "(checks: [(name: \"mine\", threshold: 0.5)])", Some("checks[0].question")),
-    ("a threshold outside 0..=1", "(checks: [(name: \"mine\", question: \"q\", threshold: 1.5)])", None),
-    ("two checks of one name", "(checks: [(name: \"a\", question: \"q\", threshold: 0.5), (name: \"a\", question: \"q\", threshold: 0.5)])", None),
+    ("corrupt", "{checks: [{name: \"mine\", question: ", Some("checks[0].question")),
+    ("wrong type", "{checks: [{name: \"mine\", question: \"q\", threshold: \"high\"}]}", Some("checks[0].threshold")),
+    ("missing field", "{checks: [{name: \"mine\", threshold: 0.5}]}", Some("checks[0].question")),
+    ("a threshold outside 0..=1", "{checks: [{name: \"mine\", question: \"q\", threshold: 1.5}]}", None),
+    ("two checks of one name", "{checks: [{name: \"a\", question: \"q\", threshold: 0.5}, {name: \"a\", question: \"q\", threshold: 0.5}]}", None),
 ];
 
 fn editor(tag: &str) -> App {
@@ -154,7 +154,7 @@ fn a_fixed_file_replaces_the_checks_and_a_removed_one_leaves_the_editors_own() {
     let mut app = editor("checks_view_fixed");
     write(&app, &good(0.5));
     until(&mut app, "the good file applied", |a| verdict(a)["outcome"] == json!("applied"));
-    write(&app, "(checks: 7)");
+    write(&app, "{checks: 7}");
     pump(&mut app, 1.6);
     assert_eq!(mine(&app), 0.5, "a refused edit leaves the check as it was");
     assert_eq!(verdict(&mut app)["outcome"], json!("refused"));
@@ -176,7 +176,7 @@ fn a_fixed_file_replaces_the_checks_and_a_removed_one_leaves_the_editors_own() {
 #[test]
 fn a_file_broken_when_the_project_opens_is_named_and_there_is_nothing_to_keep() {
     let root = fixtures::Fixture::new("checks_view_broken_at_open").descriptor("site/wall", "alpha").place("site/wall", (1.5, 1.5)).build("m");
-    std::fs::write(root.join("assets/grimoire").join(FILE), "(checks: [(name: \"mine\", question: \"q\", threshold: \"high\")])").unwrap();
+    std::fs::write(root.join("assets/grimoire").join(FILE), "{checks: [{name: \"mine\", question: \"q\", threshold: \"high\"}]}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(bevy_cauldron::ops_brp::OpsBridgePlugin);
@@ -209,7 +209,7 @@ fn an_edit_is_decided_in_every_door() {
     until(&mut app, "the good file applied", |a| verdict(a)["outcome"] == json!("applied"));
     for door in [bevy_cauldron::tiles::Door::Kit, bevy_cauldron::tiles::Door::Rigs] {
         app.world_mut().insert_resource(door);
-        write(&app, "(checks: 7)");
+        write(&app, "{checks: 7}");
         until(&mut app, &format!("{door:?}: the bad edit refused"), |a| verdict(a)["outcome"] == json!("refused"));
         assert_eq!(mine(&app), 0.5, "{door:?}: the checks stay the last good ones");
         write(&app, &good(0.7));

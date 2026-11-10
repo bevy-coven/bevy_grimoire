@@ -128,7 +128,7 @@ fn the_decision_path_suggests_every_token_the_recorded_judgement_names() {
     assert_eq!(suggestion.look, vec!["brown"]);
 
     // **The provenance names the model and the day**, exactly as the chat path's does, so a
-    // reviewer reading `library.ron` can tell which judgements came from a model and when — the
+    // reviewer reading `library.yaml` can tell which judgements came from a model and when — the
     // reason `vlm::Provenance` carries `model` rather than the requested `VlmConfig::model`.
     assert_eq!(provenance.model, "recorded", "the model that answered is the one recorded");
     assert_eq!(provenance.date, "2026-11-03");

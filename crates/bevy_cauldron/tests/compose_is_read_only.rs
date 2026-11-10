@@ -1,4 +1,4 @@
-//! **One module opens `compositions.ron`, and every author-facing verb comes through it.**
+//! **One module opens `compositions.yaml`, and every author-facing verb comes through it.**
 //!
 //! # What this used to say, and why it changed
 //!
@@ -14,7 +14,7 @@
 //!
 //! So the rule moved to what it was always aiming at. **`project.rs` is the only module that names the
 //! file**, through `Project::commit_composition`, and every tab reaches it there. That is the same
-//! shape `tiles::commit_measured` has for `library.ron`, and it is checkable directly rather than by
+//! shape `tiles::commit_measured` has for `library.yaml`, and it is checkable directly rather than by
 //! enumerating which tabs are allowed to be trusted this week.
 //!
 //! # What is forbidden, precisely
@@ -31,7 +31,7 @@ use std::path::Path;
 /// **Naming the compositions file.** The one token that means *this* file and no other.
 ///
 /// `save_atomic` and `to_ron()` are deliberately not here: they are how every RON file in the project
-/// is written, so a rule built on them cannot tell a tab saving `library.ron` — which `tiles.rs`
+/// is written, so a rule built on them cannot tell a tab saving `library.yaml` — which `tiles.rs`
 /// legitimately does — from a tab saving this one. The first draft of this rewrite did exactly that
 /// and failed on `tiles.rs:2251`, which is correct code. The file's *name* is the unambiguous thing.
 const NAMES_THE_FILE: &str = "Compositions::FILE";
@@ -103,7 +103,7 @@ fn only_the_project_module_opens_the_compositions_file() {
 
     assert!(
         offences.is_empty(),
-        "a tab writes `compositions.ron` itself instead of asking \
+        "a tab writes `compositions.yaml` itself instead of asking \
          `Project::commit_composition`. One module opens that file — {DOOR} — because insert, sort, \
          validate-the-whole-set and write-atomically have to happen together, and a second copy of \
          that sequence is a second chance to skip the validation. If a genuinely new reason to write \
@@ -132,7 +132,7 @@ fn the_door_is_where_the_write_actually_is() {
         .collect();
     assert!(
         !found.is_empty(),
-        "{DOOR} does not write `compositions.ron`, so the scan above is looking for something that \
+        "{DOOR} does not write `compositions.yaml`, so the scan above is looking for something that \
          never appears and would pass over any code at all"
     );
 }

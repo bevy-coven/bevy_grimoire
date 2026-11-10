@@ -20,7 +20,7 @@
 //! # Why the writes are checked by parsing, not by string match
 //!
 //! A test that asserts `times: 50.0` appears in the file proves the write happened and not that the
-//! file still means what it did plus that one number. Every assertion here re-parses `rules.ron`
+//! file still means what it did plus that one number. Every assertion here re-parses `rules.yaml`
 //! through `bevy_grimoire_core::rules::Rules` and compares the parsed field, so a rewrite that broke
 //! the file fails even when it left the expected characters behind.
 
@@ -104,7 +104,7 @@ fn rules_text(app: &App) -> String {
 /// **The file, parsed**, so a broken rewrite cannot pass by containing the right characters.
 fn on_disk(app: &App) -> bevy_grimoire_core::rules::Rules {
     bevy_grimoire_core::rules::Rules::parse(&rules_text(app))
-        .unwrap_or_else(|e| panic!("rules.ron no longer parses: {e}\n{}", rules_text(app)))
+        .unwrap_or_else(|e| panic!("rules.yaml no longer parses: {e}\n{}", rules_text(app)))
 }
 
 fn in_memory(app: &App) -> bevy_grimoire_core::rules::Rules {
@@ -158,7 +158,7 @@ fn undoing_a_rule_change_puts_the_number_back() {
     assert_eq!(
         on_disk(&app).blocks[0].weights[0].times,
         2.0,
-        "undo left rules.ron with the agent's weight"
+        "undo left rules.yaml with the agent's weight"
     );
     assert_eq!(
         in_memory(&app).blocks[0].weights[0].times,

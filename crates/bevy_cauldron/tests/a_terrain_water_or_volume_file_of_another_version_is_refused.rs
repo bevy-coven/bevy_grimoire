@@ -60,9 +60,9 @@ fn a_file_of_another_version_refuses_the_operation_and_stays_as_it_was() {
     for (op, dir, rest, params) in cases {
         for version in [2u32, 0] {
             let (mut ctx, grimoire) = open(&format!("another_version_{dir}_{version}"));
-            let file = grimoire.join(dir).join("m.ron");
+            let file = grimoire.join(dir).join("m.yaml");
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            let text = format!("(version: {version}, {rest})");
+            let text = format!("{{version: {version}, {rest}}}");
             std::fs::write(&file, &text).unwrap();
 
             let said = refusal(&mut ctx, op, &params);
@@ -77,9 +77,9 @@ fn a_file_of_another_version_refuses_the_operation_and_stays_as_it_was() {
 #[test]
 fn a_file_with_no_version_is_taken_and_written_back_with_one() {
     let (mut ctx, grimoire) = open("no_version_water");
-    let file = grimoire.join("water").join("m.ron");
+    let file = grimoire.join("water").join("m.yaml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    std::fs::write(&file, "(springs: [])").unwrap();
+    std::fs::write(&file, "{springs: []}").unwrap();
 
     let spring = json!({"map": "m", "place": {"Spring": {"x": 3.0, "z": 4.0, "rate_m3_s": 0.5, "radius_m": 1.5}}});
     match ops::dispatch(&mut ctx, "water_place", &spring) {

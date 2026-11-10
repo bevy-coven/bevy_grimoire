@@ -57,12 +57,12 @@ fn project(tag: &str) -> std::path::PathBuf {
     // **Two leaves, so the cursor has a wrong answer to be caught on**: a reveal that selected the
     // table's first row rather than the file's would pass a `cursor.is_some()` check.
     let kit = root.join("assets/grimoire/furniture");
-    std::fs::write(kit.join("mob.ron"), "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7))\n").expect("mob.ron");
+    std::fs::write(kit.join("mob.yaml"), "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7))\n").expect("mob.yaml");
     std::fs::write(
-        kit.join("data.ron"),
-        "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])",
+        kit.join("data.yaml"),
+        "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}",
     )
-    .expect("data.ron");
+    .expect("data.yaml");
     let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.yaml"));
     let file = bevy_grimoire_core::notes::Notes {
         version: bevy_grimoire_core::notes::NOTES_VERSION,

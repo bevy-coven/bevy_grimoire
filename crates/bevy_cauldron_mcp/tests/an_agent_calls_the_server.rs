@@ -1087,10 +1087,10 @@ fn grimoire_present_is_listed_and_refuses_readably_with_no_editor() {
     );
 }
 
-/// **A project with a `rules.ron` in it, and the path that holds it.**
+/// **A project with a `rules.yaml` in it, and the path that holds it.**
 ///
-/// The rules a layout is generated from are project data at `<root>/assets/grimoire/rules.ron`, beside
-/// `kits.ron`. The editor is not needed to read them: they are a file, so the server answers with the
+/// The rules a layout is generated from are project data at `<root>/assets/grimoire/rules.yaml`, beside
+/// `kits.yaml`. The editor is not needed to read them: they are a file, so the server answers with the
 /// editor closed, as `grimoire_list_snips` does.
 fn project_with_rules(name: &str, rules: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     let nanos = std::time::SystemTime::now()

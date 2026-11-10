@@ -52,7 +52,7 @@ mod society {
             .frame_rect()
             .unwrap();
 
-        let set = json!({"map": "m", "id": "yard", "on": "Activity(\"work\")", "then": "fx.bark(actor, \"hi\");", "bind": {"note": "n1"}});
+        let set = json!({"map": "m", "id": "yard", "on": "!Activity work", "then": "fx.bark(actor, \"hi\");", "bind": {"note": "n1"}});
         ops::dispatch(&mut ctx, "trigger_set", &set).unwrap();
         assert_eq!(scripts_of(&project, "m").triggers[0].bind.area, Some(rect), "the note's rectangle is the trigger's area");
         assert_eq!(fired_for(&mut ctx), ["Mara", "Tobin"], "Iva stands outside the note");

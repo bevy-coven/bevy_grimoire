@@ -14,7 +14,7 @@ fn project(tag: &str) -> (Ctx, std::path::PathBuf) {
         app.update();
     }
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
-    let file = project.grimoire_dir.join("terrain").join("m.ron");
+    let file = project.grimoire_dir.join("terrain").join("m.yaml");
     let open = app.world().resource::<bevy_cauldron::project::OpenMap>().clone();
     (Ctx { project: Some(project), open: Some(open), session: "test".to_owned(), ..Ctx::default() }, file)
 }

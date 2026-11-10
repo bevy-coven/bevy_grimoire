@@ -11,9 +11,9 @@ use crate::fixtures;
 fn a_brazier_flicker_is_set_through_family_set_and_reads_back_as_the_crates_own_type() {
     let root = fixtures::Fixture::new("lights_flicker").descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
-    let file = root.join("family/bevy_lights.ron");
-    std::fs::write(&file, "(base: 900.0, phase: 1.3, depth: 0.15)").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_lights\"]}").unwrap();
+    let file = root.join("family/bevy_lights.yaml");
+    std::fs::write(&file, "{base: 900.0, phase: 1.3, depth: 0.15}").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();

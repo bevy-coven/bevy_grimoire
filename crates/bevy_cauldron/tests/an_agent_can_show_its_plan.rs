@@ -1,6 +1,6 @@
 //! **An agent shows its plan, and the person can read it before it acts** (E-069, `plan_set`).
 //!
-//! Through the registered BRP methods: set a plan (it lands in the `.plan.ron` beside the map and in
+//! Through the registered BRP methods: set a plan (it lands in the `.plan.yaml` beside the map and in
 //! `grimoire_state`), replace it, clear it, and undo each step; a plan with an empty item is refused and
 //! writes nothing, and the preview writes nothing.
 

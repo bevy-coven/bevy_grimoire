@@ -75,7 +75,7 @@ const SETTLE: usize = 40;
 /// one subject per off-map `Shown` variant, so each test can name the operation that changes it.
 ///
 /// The rigs manifest and the character it measures come from the workspace's own `assets`, the way
-/// `rig_adopt_measured_is_an_operation` gets them: a fixture rigs.ron would have to invent a GLB.
+/// `rig_adopt_measured_is_an_operation` gets them: a fixture rigs.yaml would have to invent a GLB.
 fn project(tag: &str) -> std::path::PathBuf {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
         .descriptor("lamp_tall", "alpha")
@@ -93,12 +93,12 @@ fn project(tag: &str) -> std::path::PathBuf {
         .expect("valkyrie.glb");
     // A registered data file with two leaves, so the DATA table has rows to select.
     let kit = root.join("assets/grimoire/furniture");
-    std::fs::write(kit.join("mob.ron"), "// tuning\n(mob: (speed: 1.50, name: \"orc\"))\n").expect("mob.ron");
+    std::fs::write(kit.join("mob.yaml"), "// tuning\n(mob: (speed: 1.50, name: \"orc\"))\n").expect("mob.yaml");
     std::fs::write(
-        kit.join("data.ron"),
-        "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])",
+        kit.join("data.yaml"),
+        "{version: 1, files: [{id: \"tuning/mob\", path: \"mob.yaml\", bounds: {\"mob.speed\": {min: 0.0, max: 9.0}}}]}",
     )
-    .expect("data.ron");
+    .expect("data.yaml");
     // A note on the open map, so `Note` has one to select.
     let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.yaml"));
     let note = bevy_grimoire_core::notes::Notes {
@@ -392,7 +392,7 @@ fn a_rigs_page_opens_on_the_rig_bench_with_that_rig_selected() {
             let (key, rest) = line.split_once(":")?;
             (rest.trim_start().starts_with('(') && key.starts_with('"')).then(|| key.trim_matches('"').to_owned())
         })
-        .expect("rigs.ron names one rig a line");
+        .expect("rigs.yaml names one rig a line");
     let rig = name;
     let answer = apply(
         &mut app,
@@ -496,7 +496,7 @@ fn a_notes_page_opens_on_the_notes_panel_with_that_note_selected() {
 
 /// **A `Shown` with no page raises a problem naming the operation and its shown.**
 ///
-/// `rules_set` rewrites `assets/grimoire/rules.ron`, and the editor has no page that shows a project
+/// `rules_set` rewrites `assets/grimoire/rules.yaml`, and the editor has no page that shows a project
 /// file yet — the Files workspace is GD-11 (#373). Doing nothing is the bug this closes: the person
 /// would read `the Familiar changed a rule` and have nowhere to look.
 #[test]

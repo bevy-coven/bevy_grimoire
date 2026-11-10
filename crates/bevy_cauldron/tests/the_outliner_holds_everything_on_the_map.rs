@@ -59,15 +59,15 @@ fn rig(tag: &str) -> App {
     add_a_stamp(&maps.join("m.map.yaml"));
     write_file(
         &maps.join("m.notes.yaml"),
-        "(version: 1, notes: [(id: \"lamp_note\", targets: [Cell(1, 1)], text: \"a lamp belongs here\", state: Open)])",
+        "{version: 1, notes: [{id: \"lamp_note\", targets: [!Cell [1, 1]], text: \"a lamp belongs here\", state: Open}]}",
     );
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     updates(&mut app, 8);
     let grimoire = app.world().resource::<bevy_cauldron::project::Project>().grimoire_dir.clone();
-    write_file(&grimoire.join("people/m.ron"), "(version: 1, people: [(name: \"Mara\", at: (2.0, 2.0))])");
+    write_file(&grimoire.join("people/m.yaml"), "{version: 1, people: [{name: \"Mara\", at: [2.0, 2.0]}]}");
     write_file(
-        &grimoire.join("scripts/m.ron"),
-        "(version: 1, triggers: [(id: \"greet\", on: \"Activity(\\\"work\\\")\", then: \"()\")])",
+        &grimoire.join("scripts/m.yaml"),
+        "{version: 1, triggers: [{id: \"greet\", on: \"!Activity work\", then: \"()\"}]}",
     );
     show_the_outliner(&mut app, true);
     app
@@ -83,7 +83,7 @@ fn write_file(path: &Path, text: &str) {
 /// **Put one stamp in the map file**, so the map the editor opens carries a composition.
 fn add_a_stamp(map: &Path) {
     let text = std::fs::read_to_string(map).unwrap_or_else(|e| panic!("{map:?}: {e}"));
-    let stamped = "(id: \"arch_here\", of: \"arch\", at: (3.0, 3.0), yaw: 0.0, overrides: [], of_fingerprint: None, note: None)";
+    let stamped = "{id: \"arch_here\", of: \"arch\", at: [3.0, 3.0], yaw: 0.0, overrides: [], of_fingerprint: null, note: null}";
     assert!(text.contains("stamps: []"), "the fixture's map has room for a stamp: {text}");
     write_file(map, &text.replacen("stamps: []", &format!("stamps: [{stamped}]"), 1));
 }
@@ -325,7 +325,7 @@ fn the_eye_does_not_outlive_the_map() {
 /// The two groups that come from files (`people/`, `scripts/`) are read at a rebuild, so what tells the tree to
 /// rebuild again is the fingerprint — and a fingerprint over the map alone cannot see a file change. Before this,
 /// adding a person after the section opened left the group as it was until something else moved: the operation
-/// writes `people/<map>.ron` and the map itself does not change at all.
+/// writes `people/<map>.yaml` and the map itself does not change at all.
 #[test]
 fn a_person_added_while_the_section_is_open_appears_in_the_people_group() {
     let mut app = rig("outliner_person_arrives");
@@ -353,8 +353,8 @@ fn a_trigger_written_while_the_section_is_open_appears_in_the_triggers_group() {
     assert_eq!(outliner(&mut app).rows_under(group_key(TRIGGERS)).len(), 1, "the fixture's one trigger");
     let grimoire = app.world().resource::<bevy_cauldron::project::Project>().grimoire_dir.clone();
     write_file(
-        &grimoire.join("scripts/m.ron"),
-        "(version: 1, triggers: [(id: \"greet\", on: \"Activity(\\\"work\\\")\", then: \"()\"), (id: \"wave\", on: \"Activity(\\\"work\\\")\", then: \"()\")])",
+        &grimoire.join("scripts/m.yaml"),
+        "{version: 1, triggers: [{id: \"greet\", on: \"!Activity work\", then: \"()\"}, {id: \"wave\", on: \"!Activity work\", then: \"()\"}]}",
     );
     updates(&mut app, 4);
     let labels: Vec<String> = group_rows(&mut app, TRIGGERS);

@@ -62,7 +62,7 @@ fn each_files_verdict_is_in_the_state_and_a_refusal_names_its_file_and_field() {
         KindVerdict::applied("kits", "kits.yaml"),
         KindVerdict::refused("map", "maps/m.map.yaml", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
     ];
-    Verdict::with_kinds(7, "maps/m.map.ron: refused", kinds).write(&dir).unwrap();
+    Verdict::with_kinds(7, "maps/m.map.yaml: refused", kinds).write(&dir).unwrap();
     settle(&mut app);
 
     let g = game(&mut app);
@@ -77,7 +77,7 @@ fn each_files_verdict_is_in_the_state_and_a_refusal_names_its_file_and_field() {
     );
     let problem = app.world().resource::<EditorState>().status.problem_text().to_owned();
     assert!(
-        problem.contains("maps/m.map.ron (placements[0].at[1])") && problem.contains("Expected float"),
+        problem.contains("maps/m.map.yaml (placements[0].at[1])") && problem.contains("Expected float"),
         "the journal says which file and field: {problem}"
     );
 }

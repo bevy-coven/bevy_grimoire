@@ -67,7 +67,7 @@ fn until(app: &mut App, why: &str, test: impl Fn(&App) -> bool) {
 
 #[test]
 fn a_terminal_holds_the_scrollback_its_setting_names() {
-    let (mut app, file) = editor_with_settings("scrollback_setting", "(version: 1, terminal_scrollback: Some(1000))");
+    let (mut app, file) = editor_with_settings("scrollback_setting", "{version: 1, terminal_scrollback: 1000}");
     until(&mut app, "the shell never took the setting", |app| {
         app.world().resource::<Terminal>().tab().is_some_and(|tab| tab.screen().scrollback() == 1000)
     });
@@ -75,7 +75,7 @@ fn a_terminal_holds_the_scrollback_its_setting_names() {
     assert_eq!(held(&app), 1000, "`terminal_scrollback: 1000` keeps a thousand lines of history, and no more");
 
     // An edit reaches the running terminal: more history from here on.
-    std::fs::write(&file, "(version: 1)").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&file, "{version: 1}").unwrap_or_else(|e| panic!("{e}"));
     until(&mut app, "the running terminal never went back to the default scrollback", |app| {
         app.world().resource::<Terminal>().tab().is_some_and(|tab| tab.screen().scrollback() == SCROLLBACK)
     });
@@ -85,7 +85,7 @@ fn a_terminal_holds_the_scrollback_its_setting_names() {
 
 #[test]
 fn a_scrollback_no_terminal_should_keep_is_refused() {
-    let layer = bevy_cauldron::settings::SettingsLayer::read("editor.yaml", "(version: 1, terminal_scrollback: Some(5))");
+    let layer = bevy_cauldron::settings::SettingsLayer::read("editor.yaml", "{version: 1, terminal_scrollback: 5}");
     let refusal = layer.expect_err("five lines of history is refused");
     assert_eq!(refusal.field.as_deref(), Some("terminal_scrollback"), "the refusal names the key: {}", refusal.reason);
 }

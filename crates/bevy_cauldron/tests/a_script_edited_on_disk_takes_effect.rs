@@ -1,5 +1,5 @@
 //! **Editing a script file while a project is open takes effect on the next run, with no restart** (#105): the
-//! triggers are read from `scripts/<map>.ron` each run, so what a live editor or a person writes there is what fires.
+//! triggers are read from `scripts/<map>.yaml` each run, so what a live editor or a person writes there is what fires.
 
 #[cfg(feature = "bevy_society")]
 mod society {
@@ -36,10 +36,10 @@ mod society {
             ids.push(ctx.open.as_ref().unwrap().map.placements.last().unwrap().id.clone());
         }
         ops::dispatch(&mut ctx, "person_set", &json!({"map": "m", "name": "Mara", "at": [0.0, 2.0], "home": ids[0], "work": ids[1]})).unwrap();
-        ops::dispatch(&mut ctx, "trigger_set", &json!({"map": "m", "id": "before", "on": "Activity(\"work\")", "then": "fx.bark(actor, \"hi\");"})).unwrap();
+        ops::dispatch(&mut ctx, "trigger_set", &json!({"map": "m", "id": "before", "on": "!Activity work", "then": "fx.bark(actor, \"hi\");"})).unwrap();
         assert_eq!(fired_triggers(&mut ctx), vec!["before".to_owned()]);
 
-        let file = project.grimoire_dir.join("scripts").join("m.ron");
+        let file = project.grimoire_dir.join("scripts").join("m.yaml");
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(text.contains("before"));
         std::fs::write(&file, text.replace("before", "after")).unwrap();

@@ -3,7 +3,7 @@
 //! Slices 2 and 3 told an agent (`grimoire_state.standards`, `piece_import`'s answer); a person
 //! walking the Meshes shelf saw nothing. So the detail pane gains a `standards` row for the piece in
 //! focus: one line per breach naming the rule, the dimension, the measured value and the bound. A
-//! piece that meets every rule has no row. The rules are read from `standards.ron`, and an edit to
+//! piece that meets every rule has no row. The rules are read from `standards.yaml`, and an edit to
 //! that file reaches the pane through the watcher, without reselecting the piece.
 
 use bevy::prelude::*;
@@ -13,14 +13,11 @@ use std::path::PathBuf;
 
 use crate::fixtures;
 
-const HUGE_AND_SANE: &str = r#"(version: 1, rules: [
-    (name: "huge", dim: Width, min: Some(100.0)),
-    (name: "sane", dim: Width, max: Some(1000.0)),
-])"#;
+const HUGE_AND_SANE: &str = r#"{version: 1, rules: [{name: "huge", dim: Width, min: 100.0}, {name: "sane", dim: Width, max: 1000.0}]}"#;
 
-const SANE: &str = r#"(version: 1, rules: [(name: "sane", dim: Width, max: Some(1000.0))])"#;
+const SANE: &str = r#"{version: 1, rules: [{name: "sane", dim: Width, max: 1000.0}]}"#;
 
-/// The editor on the Meshes tab with `crate` selected, `standards.ron` written before it opens.
+/// The editor on the Meshes tab with `crate` selected, `standards.yaml` written before it opens.
 fn editor(name: &str, standards: &str) -> (App, PathBuf) {
     let root = fixtures::Fixture::new(name)
         .descriptor("crate", "alpha")

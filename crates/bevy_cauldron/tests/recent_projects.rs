@@ -1,6 +1,6 @@
 //! **The editor remembers the projects it opened, most recent first** (UI-11, #217).
 //!
-//! `<data_dir>/Grimoire/recent.ron` lists them. Opening one moves it to the top, and a folder that
+//! `<data_dir>/Grimoire/recent.yaml` lists them. Opening one moves it to the top, and a folder that
 //! has since gone is listed as missing rather than dropped, so a moved project is one the author can
 //! find and point the list at again.
 
@@ -123,7 +123,7 @@ fn a_list_of_another_version_is_refused_by_name_and_left_as_it_is() {
     let a = s.folder("a");
     let file = s.file();
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    let newer = "(version: 2, projects: [])";
+    let newer = "{version: 2, projects: []}";
     std::fs::write(&file, newer).unwrap();
 
     let err = recent::record(&file, &a).unwrap_err();

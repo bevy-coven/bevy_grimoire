@@ -1,6 +1,6 @@
 //! **A project file written for the first time while the editor is open is read** (#158).
 //!
-//! `repetition.ron`, `standards.ron`, `rules.ron` and `compositions.ron` are optional, so the first
+//! `repetition.yaml`, `standards.yaml`, `rules.yaml` and `compositions.yaml` are optional, so the first
 //! edit an author makes to one is creating it. The watcher took a file with no earlier stamp for
 //! the editor's first sighting of what was already there and skipped it, so the REPEATS line kept
 //! the defaults until the file was edited a second time.
@@ -44,7 +44,7 @@ fn a_repetition_file_created_after_the_open_reaches_the_repeats_row() {
     );
 
     // A metre apart is out of sight once the radius is half a metre.
-    std::fs::write(&file, "(radius_m: 0.5)").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&file, "{radius_m: 0.5}").unwrap_or_else(|e| panic!("{e}"));
     // The watcher polls every 250 ms on the wall clock.
     let mut seen = false;
     for _ in 0..40 {
@@ -56,7 +56,7 @@ fn a_repetition_file_created_after_the_open_reaches_the_repeats_row() {
     }
     assert!(
         seen,
-        "a repetition.ron created while the editor was open never reached the REPEATS row: {:?}",
+        "a repetition.yaml created while the editor was open never reached the REPEATS row: {:?}",
         texts(&mut app)
     );
 }

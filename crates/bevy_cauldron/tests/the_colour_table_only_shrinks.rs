@@ -133,7 +133,7 @@ fn the_colour_table_only_shrinks() {
         names.len() <= CONSTANTS_CEILING,
         "chrome.rs declares {} colour constants, ceiling {CONSTANTS_CEILING}. #210's acceptance is \
          zero; a slice lowers the ceiling, it does not add a colour. If a *new* colour is genuinely \
-         needed, it belongs in `editor_skin.ron` (a `tones` entry) or a `GooeySkin` field — not as a \
+         needed, it belongs in `editor_skin.yaml` (a `tones` entry) or a `GooeySkin` field — not as a \
          second constant beside the table it is being migrated out of.",
         names.len()
     );

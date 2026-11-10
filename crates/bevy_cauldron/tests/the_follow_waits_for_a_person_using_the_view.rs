@@ -319,7 +319,7 @@ fn with_the_toggle_off_nothing_moves_and_look_still_frames_it() {
     let mut app = editor(&root);
     // **The person's setting**, written where the editor reads it, not the resource it resolves to.
     let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
-    std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.yaml");
+    std::fs::write(&settings, "{version: 1, follow_agent: false}").expect("editor.yaml");
     // The watcher looks at the file's size and modification time, and again once a second regardless.
     for _ in 0..frames_of(1.5) {
         app.update();
@@ -383,7 +383,7 @@ fn the_follow_setting_survives_a_restart() {
     {
         let mut app = editor(&root);
         let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
-        std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.yaml");
+        std::fs::write(&settings, "{version: 1, follow_agent: false}").expect("editor.yaml");
         for _ in 0..frames_of(1.5) {
             app.update();
         }
@@ -404,7 +404,7 @@ fn the_follow_setting_survives_a_restart() {
     );
 }
 
-/// **3c. An old `editor.ron` with no `follow_agent` reads as on**, which is the default rather than a
+/// **3c. An old `editor.yaml` with no `follow_agent` reads as on**, which is the default rather than a
 /// stored `false`: the layer carries `Option`, so an absent key falls through.
 #[test]
 fn an_old_settings_file_with_no_follow_agent_reads_as_on() {
@@ -413,7 +413,7 @@ fn an_old_settings_file_with_no_follow_agent_reads_as_on() {
     // could write, and `follow_agent` is not among them.
     let mut app = editor(&root);
     let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
-    std::fs::write(&settings, "(version: 1, show_grid: Some(false), reduced_motion: Some(true))")
+    std::fs::write(&settings, "{version: 1, show_grid: false, reduced_motion: true}")
         .expect("editor.yaml");
     for _ in 0..frames_of(1.5) {
         app.update();
@@ -422,7 +422,7 @@ fn an_old_settings_file_with_no_follow_agent_reads_as_on() {
     assert!(!settings.show_grid, "the old file's own keys still apply");
     assert!(
         settings.follow_agent,
-        "an editor.ron written before `follow_agent` existed turned the follow off, which would mean \
+        "an editor.yaml written before `follow_agent` existed turned the follow off, which would mean \
          the default was read as a stored false"
     );
 }

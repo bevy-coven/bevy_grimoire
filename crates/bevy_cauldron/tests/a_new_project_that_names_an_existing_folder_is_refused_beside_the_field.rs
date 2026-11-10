@@ -109,7 +109,7 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
 
     press(&mut app, "Create");
     let made = places.join("harbour");
-    assert!(made.join("assets/grimoire/kits.yaml").is_file() && made.join("assets/grimoire/vocab.ron").is_file(), "the project is written");
+    assert!(made.join("assets/grimoire/kits.yaml").is_file() && made.join("assets/grimoire/vocab.yaml").is_file(), "the project is written");
     assert_eq!(app.world().resource::<PointedAt>().root, made.canonicalize().unwrap(), "and opened the way a recent row is, in this process");
     assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Loading, "on its first map");
     assert!(bevy_cauldron::catalog::Catalog::scan(&made).unwrap().map("first_map").is_some(), "which Create made");

@@ -26,7 +26,7 @@ struct Rig {
 fn rig(tag: &str) -> Rig {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let user = root.join(format!("user_config_{tag}_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("user_config_{tag}_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
     app.insert_resource(UserSettingsFile(user.clone()));
     for _ in 0..3 {
@@ -77,7 +77,7 @@ fn updates(app: &mut App, n: usize) {
 #[test]
 fn searching_grid_lists_only_the_grid_settings_and_reset_takes_the_key_out_of_the_file() {
     let mut r = rig("settings_screen_search");
-    write(&r.user, "(version: 1, show_grid: Some(false), text_scale: Some(1.5))");
+    write(&r.user, "{version: 1, show_grid: false, text_scale: 1.5}");
     open(&mut r.app);
 
     for every in ["Theme", "Text size", "Interface size", "Reduced motion", "Grid lines", "Grid strength"] {
@@ -139,7 +139,7 @@ fn a_switch_writes_one_key_and_the_running_editor_follows_the_file() {
 #[test]
 fn the_project_scope_writes_the_projects_file_and_shows_what_it_inherits() {
     let mut r = rig("settings_screen_scope");
-    write(&r.user, "(version: 1, show_grid: Some(false))");
+    write(&r.user, "{version: 1, show_grid: false}");
     open(&mut r.app);
     {
         let world = r.app.world_mut();
@@ -155,14 +155,14 @@ fn the_project_scope_writes_the_projects_file_and_shows_what_it_inherits() {
     click(&mut r.app, grid);
     updates(&mut r.app, 3);
     let project = layer(&r.project);
-    assert_eq!(project.show_grid, Some(true), "a change in the project scope lands in editor.ron: the switch showed the user's Off and was turned On");
+    assert_eq!(project.show_grid, Some(true), "a change in the project scope lands in editor.yaml: the switch showed the user's Off and was turned On");
     assert_eq!(layer(&r.user).show_grid, Some(false), "and not in the user's file");
 }
 
 #[test]
 fn a_file_that_does_not_read_is_said_and_never_written_over() {
     let mut r = rig("settings_screen_unreadable");
-    let broken = "(version: 1, show_grid: Some(maybe";
+    let broken = "{version: 1, show_grid: maybe";
     write(&r.user, broken);
     open(&mut r.app);
     search_for(&mut r.app, "grid");
@@ -173,7 +173,7 @@ fn a_file_that_does_not_read_is_said_and_never_written_over() {
     assert_eq!(std::fs::read_to_string(&r.user).unwrap(), broken, "a file a person typed that does not read is left exactly as it is");
     let mut said = r.app.world_mut().query::<&Text>();
     let lines: Vec<String> = said.iter(r.app.world()).map(|t| t.0.clone()).collect();
-    assert!(lines.iter().any(|t| t.contains("does not read") && t.contains("settings.ron")), "the screen names the file: {lines:?}");
+    assert!(lines.iter().any(|t| t.contains("does not read") && t.contains("settings.yaml")), "the screen names the file: {lines:?}");
 }
 
 fn key(app: &mut App, code: KeyCode, state: bevy::input::ButtonState) {

@@ -1,4 +1,4 @@
-//! **A project's `family/bevy_gooey.ron` is the running UI skin, and edits reach it live** (#147).
+//! **A project's `family/bevy_gooey.yaml` is the running UI skin, and edits reach it live** (#147).
 
 use bevy::prelude::*;
 use bevy_cauldron::editor::EditorState;
@@ -6,7 +6,7 @@ use bevy_gooey::GooeySkin;
 
 use crate::fixtures;
 
-const BLUE: &str = "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))";
+const BLUE: &str = "{accent: !Srgba {red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0}}";
 
 fn run_until(app: &mut App, done: impl Fn(&World) -> bool) {
     let start = std::time::Instant::now();
@@ -24,8 +24,8 @@ fn problems(world: &World) -> Vec<String> {
 fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_last_good_skin() {
     let root = fixtures::Fixture::new(&format!("gooey_skin_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
-    let file = root.join("family/bevy_gooey.ron");
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").unwrap();
+    let file = root.join("family/bevy_gooey.yaml");
     std::fs::write(&file, BLUE).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     assert!(
@@ -42,7 +42,7 @@ fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_la
 
     // Valid RON, but not a skin: a problem, and the blue skin stays.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(accent: 5)").unwrap();
+    std::fs::write(&file, "{accent: 5}").unwrap();
     run_until(&mut app, |w| !problems(w).is_empty());
     let probs = problems(app.world());
     assert!(probs.iter().any(|p| p.contains("bevy_gooey") && p.contains("previous skin stays")), "{probs:?}");
@@ -50,7 +50,7 @@ fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_la
 
     // Not RON at all: the host's own problem, and still the blue skin.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(accent: Srgba((red: ").unwrap();
+    std::fs::write(&file, "{accent: !Srgba {red: ").unwrap();
     let before = problems(app.world()).len();
     run_until(&mut app, |w| problems(w).len() > before);
     let probs = problems(app.world());
@@ -59,7 +59,7 @@ fn a_partial_skin_file_changes_only_its_field_and_an_unreadable_one_keeps_the_la
 
     // A skin the crate's own rules refuse is applied, and each broken rule is a problem.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    std::fs::write(&file, "(min_target: 10.0)").unwrap();
+    std::fs::write(&file, "{min_target: 10.0}").unwrap();
     run_until(&mut app, |w| w.resource::<GooeySkin>().min_target == 10.0);
     assert_eq!(app.world().resource::<GooeySkin>().min_target, 10.0);
     let probs = problems(app.world());

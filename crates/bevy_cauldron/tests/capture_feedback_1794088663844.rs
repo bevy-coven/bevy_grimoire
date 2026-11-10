@@ -54,7 +54,7 @@ fn editor(tag: &str, settings: Option<&str>) -> App {
 fn editor_with_an_agent(tag: &str) -> App {
     editor(
         tag,
-        Some(r#"(version: 1, terminal_agent: Some(Custom), terminal_agent_command: Some("printf 'AGENT-%s\\n' UP"))"#),
+        Some(r#"{version: 1, terminal_agent: Custom, terminal_agent_command: "printf 'AGENT-%s\\n' UP"}"#),
     )
 }
 

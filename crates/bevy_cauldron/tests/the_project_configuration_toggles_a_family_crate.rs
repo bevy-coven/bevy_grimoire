@@ -1,9 +1,9 @@
-//! **The project configuration screen lists the family crates and a switch rewrites `family.ron`** (UI-74, #252).
+//! **The project configuration screen lists the family crates and a switch rewrites `family.yaml`** (UI-74, #252).
 //!
-//! A switch lists a crate in the project's `family.ron`, or takes it out, through an atomic write that
+//! A switch lists a crate in the project's `family.yaml`, or takes it out, through an atomic write that
 //! keeps every other crate where the file has it. The file is then read back through the reload contract's
 //! own check and the screen says what became of it: `applied`, or the refusal with the file and the field.
-//! A `family.ron` that does not read is shown and never written over.
+//! A `family.yaml` that does not read is shown and never written over.
 
 use std::path::PathBuf;
 
@@ -54,7 +54,7 @@ fn toggling_a_crate_writes_family_ron_atomically_and_the_verdict_row_reads_appli
     let leftovers: Vec<_> = std::fs::read_dir(&root).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.contains("family")).collect();
     assert_eq!(leftovers, ["family.yaml"], "an atomic write leaves no temporary file beside it");
     assert_eq!(verdict(&app), Some(("applied".to_owned(), "family.yaml".to_owned())), "the reload contract's verdict on the file it wrote is recorded");
-    assert!(find_by_label(&mut app, "family.ron: applied").is_ok(), "and the screen says so");
+    assert!(find_by_label(&mut app, "family.yaml: applied").is_ok(), "and the screen says so");
 
     let again = find_by_label(&mut app, "bevy_gooey").unwrap();
     click(&mut app, again);
@@ -66,7 +66,7 @@ fn toggling_a_crate_writes_family_ron_atomically_and_the_verdict_row_reads_appli
 fn a_crate_this_build_lacks_can_be_listed_and_the_line_says_how_to_host_it_and_the_others_keep_their_order() {
     let (mut app, root) = rig("project_config_unbuilt");
     // Written by hand before the next switch: the order a person chose is the order that stays.
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_gooey\"]}").unwrap();
     settle(&mut app);
     let missing = bevy_cauldron::family_host::KNOWN.iter().find(|k| !bevy_cauldron::family_host::built().contains(k)).expect("a default build lacks some family crate");
     let toggle = find_by_label(&mut app, &format!("{missing} (not built here)")).unwrap();
@@ -81,7 +81,7 @@ fn a_crate_this_build_lacks_can_be_listed_and_the_line_says_how_to_host_it_and_t
 #[test]
 fn a_family_ron_that_does_not_read_is_said_and_left_exactly_as_it_is() {
     let (mut app, root) = rig("project_config_unreadable");
-    let broken = "(version: 1, crates: [\"bevy_gooey\"";
+    let broken = "{version: 1, crates: [\"bevy_gooey\"";
     std::fs::write(root.join("family.yaml"), broken).unwrap();
     settle(&mut app);
     let mut texts = app.world_mut().query::<&Text>();

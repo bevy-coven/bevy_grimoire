@@ -11,8 +11,8 @@ use crate::fixtures;
 fn project(tag: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
-    let file = root.join("family/bevy_elements.ron");
+    std::fs::write(root.join("family.yaml"), "{version: 1, crates: [\"bevy_elements\"]}").unwrap();
+    let file = root.join("family/bevy_elements.yaml");
     std::fs::write(&file, ElementsSettings::defaults().to_yaml()).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {

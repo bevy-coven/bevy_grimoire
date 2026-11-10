@@ -2,7 +2,7 @@
 //! a project was opened from the home** (UI-14, #220; #300).
 //!
 //! An entry is a line of `CHANGELOG.md`; one carries ` *For you: <sentence>*` when it is worth telling a person who never reads the
-//! file, and only those are listed, each with the still of its clip. `recent.ron` remembers the id of the newest entry a person had
+//! file, and only those are listed, each with the still of its clip. `recent.yaml` remembers the id of the newest entry a person had
 //! been shown, and the sidebar's What's new counts the sentences above it.
 
 use std::path::PathBuf;

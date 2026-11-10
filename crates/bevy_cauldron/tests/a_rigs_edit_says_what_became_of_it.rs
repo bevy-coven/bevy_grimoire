@@ -1,4 +1,4 @@
-//! **An edit to `rigs.ron` says what became of it** (#200, H3; the `rigs` re-pin of #202).
+//! **An edit to `rigs.yaml` says what became of it** (#200, H3; the `rigs` re-pin of #202).
 //!
 //! The animation tab reads the rigs manifest when it is first entered and, since #202, takes every
 //! later edit of the file at once (the registry classes the kind `Live`): a good edit is `applied`, the
@@ -17,15 +17,15 @@ use serde_json::{Value, json};
 use crate::fixtures;
 
 const FILE: &str = "rigs.yaml";
-const GOOD: &str = "(version: 3, rigs: {})";
-const EDITED: &str = "(version: 3, note: Some(\"edited by hand\"), rigs: {})";
+const GOOD: &str = "{version: 3, rigs: {}}";
+const EDITED: &str = "{version: 3, note: \"edited by hand\", rigs: {}}";
 
 /// The three ways to break it, and the field the verdict must name (`None`: the file is cut off, so
 /// where reading stopped is all the position says).
 const BAD: [(&str, &str, Option<&str>); 3] = [
-    ("corrupt", "(version: 3, rigs: {", None),
-    ("wrong type", "(version: \"three\", rigs: {})", Some("version")),
-    ("missing field", "(version: 3)", Some("rigs")),
+    ("corrupt", "{version: 3, rigs: {", None),
+    ("wrong type", "{version: \"three\", rigs: {}}", Some("version")),
+    ("missing field", "{version: 3}", Some("rigs")),
 ];
 
 /// An editor whose animation tab has loaded the manifest `initial` (whatever it makes of it).
@@ -201,7 +201,7 @@ fn a_broken_edit_is_refused_naming_the_file_and_the_field_once() {
 
 #[test]
 fn a_manifest_that_did_not_read_when_the_tab_loaded_is_refused_and_its_fix_is_taken() {
-    let (mut app, path) = editor_with("rigs_edit_unread_at_load", "(version: \"three\", rigs: {})");
+    let (mut app, path) = editor_with("rigs_edit_unread_at_load", "{version: \"three\", rigs: {}}");
     assert_eq!(held(&app), None, "the tab loaded no rigs from a file that does not read");
     // Nobody edited anything since the tab loaded, and the file is still wrong: say so, once.
     until_outcome(&mut app, "refused");

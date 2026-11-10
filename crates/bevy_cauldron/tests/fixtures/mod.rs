@@ -18,7 +18,7 @@
 //!
 //! # Asset-contract tests are the deliberate exception
 //!
-//! A test whose *purpose* is "does the shipped valkyrie still measure the way `rigs.ron` claims"
+//! A test whose *purpose* is "does the shipped valkyrie still measure the way `rigs.yaml` claims"
 //! must read the shipped valkyrie; that is not corpus dependence, that is the assertion. Those say
 //! so in their own doc comment and stay on the real project. Everything else belongs here.
 
@@ -104,7 +104,7 @@ pub struct Fixture {
     /// `.descriptor("site/wall", ..)`, and binding that library as `furniture` is refused at load —
     /// correctly, since the directory says one thing and the ids say another.
     ids: Vec<(String, Vec<String>)>,
-    /// **Named combinations of kits**, as `(bash name, namespaces)` — `kits.ron`'s `bash`. Every
+    /// **Named combinations of kits**, as `(bash name, namespaces)` — `kits.yaml`'s `bash`. Every
     /// namespace named must be one this fixture binds, or the write is refused at load.
     bashes: Vec<(String, Vec<String>)>,
     /// **The project's rules**, written beside `kits.yaml` by [`Self::build`]. `None` writes no file,
@@ -345,8 +345,8 @@ impl Fixture {
         }
     }
 
-    /// **A kit beside the root one**, at `assets/grimoire/<name>/` — a `library.ron` providing `ids`
-    /// and the `project.ron` `policy::layered_library` requires of every kit.
+    /// **A kit beside the root one**, at `assets/grimoire/<name>/` — a `library.yaml` providing `ids`
+    /// and the `project.yaml` `policy::layered_library` requires of every kit.
     ///
     /// Every other helper here writes into the root kit, because until 2026-08-16 a fixture could
     /// only ever make one — so nothing in the suite had two, and multi-kit behaviour was pinned by
@@ -802,7 +802,7 @@ impl Fixture {
         self
     }
 
-    /// **The project's `rules.ron`**, as the text a project would hold — written verbatim by
+    /// **The project's `rules.yaml`**, as the text a project would hold — written verbatim by
     /// [`Self::build`], so a test can also hand it something the loader must refuse.
     /// **The project's `rules.yaml` from a value**, which is the ordinary case: a test that wants a rule
     /// states it, and the builder writes the file through the one YAML writer.
@@ -836,7 +836,7 @@ impl Fixture {
         self
     }
 
-    /// **Another map beside the one [`Self::build`] writes**, at `maps/<name>.map.ron` under `root` —
+    /// **Another map beside the one [`Self::build`] writes**, at `maps/<name>.map.yaml` under `root` —
     /// for the rule whose example is a different map from the one open. Rows are `(descriptor, at,
     /// owned)`, named `<descriptor>@<n>`. The map is not checked against the library, because the
     /// reader of an example (`rules::learn`) never asks.

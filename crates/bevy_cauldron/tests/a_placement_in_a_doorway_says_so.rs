@@ -8,7 +8,7 @@
 //! `tests/fixtures/mod.rs` has a helper for every mount the suite needed — floor, surface, two-way —
 //! and none for `InOpening`, because nothing had ever exercised the mount's `clear` field. This test
 //! is the first, so it rewrites the library the fixture wrote, exactly as `Fixture::bind` rewrites
-//! `kits.ron` for the tests that are about binding itself. Adding an `InOpening` helper to the shared
+//! `kits.yaml` for the tests that are about binding itself. Adding an `InOpening` helper to the shared
 //! fixture module would be the better home the day a second test wants one.
 //!
 //! # What is proved
@@ -99,7 +99,7 @@ fn a_measured_doorway(name: &str) -> std::path::PathBuf {
             extent: ( footprint: Some((0.5, 0.5)), height: Some(0.5) ),"#,
         );
     assert!(
-        wrote.contains("InOpening( clear:"),
+        wrote.contains("!InOpening {clear: "),
         "the rewrite missed the door row — the fixture's descriptor shape changed under this test:\n{was}"
     );
     std::fs::write(&at, wrote).unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));

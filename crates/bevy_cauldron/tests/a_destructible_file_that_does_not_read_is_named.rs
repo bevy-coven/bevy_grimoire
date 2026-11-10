@@ -1,7 +1,7 @@
 //! **A destructible marks file or a bake that does not read is refused naming the file and the field, and
 //! is never overwritten** (#200, H3).
 //!
-//! `destructible_set` reads `destructible.ron`, changes one piece and writes the whole file back, and
+//! `destructible_set` reads `destructible.yaml`, changes one piece and writes the whole file back, and
 //! `destructible_hit` reads it and the piece's cached bake. The marks file read with the parser's
 //! position and no field, and a bake that did not parse was baked again over the damaged bytes with no
 //! word. Now each of the three bad files (corrupt, a field of the wrong type, a required field missing)

@@ -3,7 +3,7 @@
 //!
 //! E-042: an agent could read a piece's labels but could not write one. `label_set` is the
 //! registered operation. It refuses an unknown token with the nearest ones, refuses a duplicate,
-//! refuses a piece the measured library does not hold, writes `library.ron` through the same path a
+//! refuses a piece the measured library does not hold, writes `library.yaml` through the same path a
 //! chip click uses, stamps the axis `Agent` (not `Model`, which is a VLM's word, and not `Human`,
 //! which is a person's confirmation), and undoes to the exact prior record. These tests go through the
 //! registered BRP methods, as an agent's request goes, and assert on the editor's own state and on

@@ -3,11 +3,11 @@
 //!
 //! `Operation::shows` is what sends a person's view to the change an agent made. So the answer has
 //! to be the *write's own* place: `trigger_set` keeps a map's triggers in
-//! `<grimoire_dir>/scripts/<map>.ron` and `tree_edit` keeps a tree in
-//! `<grimoire_dir>/trees/<name>.tree.ron` — the authoring kit's folder, which is
+//! `<grimoire_dir>/scripts/<map>.yaml` and `tree_edit` keeps a tree in
+//! `<grimoire_dir>/trees/<name>.tree.yaml` — the authoring kit's folder, which is
 //! `assets/grimoire/site` in a project whose kit is `site`, never `assets/grimoire` itself.
 //!
-//! A hard-coded `assets/grimoire/scripts/<map>.ron` sends the person — and the follow (#358) — to a
+//! A hard-coded `assets/grimoire/scripts/<map>.yaml` sends the person — and the follow (#358) — to a
 //! file nothing writes, and in the shipped project it is also the wrong folder: the kits sit in
 //! `assets/grimoire/<kit>/`.
 //!
@@ -89,9 +89,9 @@ fn a_trigger_set_names_the_file_it_writes() {
     let named = path_of(&shown(&app, "trigger_set", serde_json::json!({"map": "m"})), "a trigger");
     assert_eq!(
         named,
-        format!("{relative}/scripts/m.ron"),
+        format!("{relative}/scripts/m.yaml"),
         "`trigger_set` names where its change is seen and must name the file it writes: the \
-         authoring kit's own `scripts/m.ron`. It answered `{named}`."
+         authoring kit's own `scripts/m.yaml`. It answered `{named}`."
     );
     // **A file, never the folder** — and with no `map`, nothing a person can look at at all.
     assert!(
@@ -127,7 +127,7 @@ fn a_tree_edit_names_the_file_it_writes() {
         named,
         format!("{relative}/trees/oak.tree.yaml"),
         "`tree_edit` names where its change is seen and must name the file it writes: the \
-         authoring kit's own `trees/oak.tree.ron`. It answered `{named}`."
+         authoring kit's own `trees/oak.tree.yaml`. It answered `{named}`."
     );
     assert_eq!(
         shown(&app, "tree_edit", serde_json::json!({"name": "a/b"})),

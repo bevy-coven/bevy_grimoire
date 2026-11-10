@@ -35,7 +35,7 @@ fn editor_with_an_agent() -> App {
     let tag = format!("agent_tab_{}", std::process::id());
     let root = fixtures::Fixture::new(&tag).descriptor("floor", "alpha").build("m");
     let file = root.join("assets/grimoire/editor.yaml");
-    let settings = r#"(version: 1, terminal_agent: Some(Custom), terminal_agent_command: Some("printf 'AGENT-%s\\n' UP"))"#;
+    let settings = r#"{version: 1, terminal_agent: Custom, terminal_agent_command: "printf 'AGENT-%s\\n' UP"}"#;
     std::fs::write(&file, settings).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let files = std::env::temp_dir().join(format!("{tag}_agents"));
     let server = std::env::temp_dir().join(format!("{tag}_server"));

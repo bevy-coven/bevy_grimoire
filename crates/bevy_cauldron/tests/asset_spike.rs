@@ -1,5 +1,5 @@
 #![cfg(feature = "asset_spike")]
-//! **The #204 spike's tests: `standards.ron` through Bevy's asset system against the editor's own
+//! **The #204 spike's tests: `standards.yaml` through Bevy's asset system against the editor's own
 //! watcher** (hot-reload H7). They run only with `--features asset_spike`:
 //! `cargo test -p bevy_cauldron --features asset_spike --test editor asset_spike::`.
 //!
@@ -92,7 +92,7 @@ fn a_refused_reload_keeps_the_last_good_asset() {
     let (mut app, handles) = app_over(&dir.0, &["standards.yaml"]);
     assert!(pump(&mut app, Duration::from_secs(10), |a| saw(a, &standards(0.9))), "the first text never loaded");
 
-    std::fs::write(dir.file(), "(version: 1, rules: [(name: \"door\"").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.file(), "{version: 1, rules: [{name: \"door\"").unwrap_or_else(|e| panic!("{e}"));
     app.world().resource::<AssetServer>().reload("standards.yaml");
     let failed = |a: &App| heard(a).iter().any(|h| matches!(h, Heard1::Failed(_)));
     assert!(pump(&mut app, Duration::from_secs(10), failed), "the cut-off file was not refused");

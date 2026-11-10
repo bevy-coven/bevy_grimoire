@@ -2,7 +2,7 @@
 //!
 //! The relation vocabulary has been complete for weeks — eleven `relations::Kind` variants, from
 //! `Faces` to `ReachableFrom` — and `relations_solve` mends a map against them. **The step before was
-//! missing**: a relation could only be *added* by opening `.relations.ron` in a text editor, so the
+//! missing**: a relation could only be *added* by opening `.relations.yaml` in a text editor, so the
 //! constraint layer was authorable by a person with a text editor and by nobody else. It is now the
 //! registered operation `relations_add`.
 //!

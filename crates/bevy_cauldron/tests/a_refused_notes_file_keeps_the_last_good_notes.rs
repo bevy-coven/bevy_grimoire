@@ -1,7 +1,7 @@
 //! **A notes file that is refused keeps the last good notes, and the editor says which file and
 //! field** (#200, H3).
 //!
-//! The signs over the notes and the Notes panel both draw from the map's `.notes.ron`. Each used to read
+//! The signs over the notes and the Notes panel both draw from the map's `.notes.yaml`. Each used to read
 //! the file itself and take an empty list when it did not parse, so one bad edit (a hand edit, a
 //! truncated write, an agent's mistake) made every sign and every row vanish until the file was fixed.
 //! Now one view holds the last good notes and decides each edit once: `grimoire_state.reloads` says
@@ -22,9 +22,9 @@ const FILE: &str = "maps/m.notes.yaml";
 /// The three ways to break it, and the field the verdict must name (`None`: the file is cut off, so
 /// where reading stopped is all the position says).
 const BAD: [(&str, &str, Option<&str>); 3] = [
-    ("corrupt", "(version: 1, notes: [", None),
-    ("wrong type", "(version: \"one\", notes: [], lease_secs: 300)", Some("version")),
-    ("missing field", "(version: 1, lease_secs: 300)", Some("notes")),
+    ("corrupt", "{version: 1, notes: [", None),
+    ("wrong type", "{version: \"one\", notes: [], lease_secs: 300}", Some("version")),
+    ("missing field", "{version: 1, lease_secs: 300}", Some("notes")),
 ];
 
 fn editor(tag: &str) -> App {
@@ -155,7 +155,7 @@ fn a_fixed_file_replaces_the_notes_and_a_removed_one_empties_them() {
     let mut app = editor("notes_view_fixed");
     write(&app, &some_notes(&["only"]));
     until_rows(&mut app, &["n1 [sent] only"]);
-    write(&app, "(version: 1, notes: 7)");
+    write(&app, "{version: 1, notes: 7}");
     pump(&mut app, 1.6);
     assert_eq!(rows(&mut app), ["n1 [sent] only"], "a refused edit leaves the one note shown");
     assert_eq!(verdict(&mut app)["outcome"], json!("refused"));

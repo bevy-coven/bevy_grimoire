@@ -28,7 +28,7 @@ fn subgrid(faces: &str) -> String {
         .chars()
         .map(|f| {
             let (x, y, z) = cell(f);
-            format!(r#"( at: ({x}, {y}, {z}), edge: Some("hall") )"#)
+            format!(r#"{{at: [{x}, {y}, {z}], edge: "hall"}}"#)
         })
         .collect();
     format!("subgrid: Some(( cells: [{}] ))", cells.join(", "))

@@ -1,4 +1,4 @@
-//! **The tree editor writes a `.tree.ron` the crate's own loader reads, one undo per edit** (#102).
+//! **The tree editor writes a `.tree.yaml` the crate's own loader reads, one undo per edit** (#102).
 //! `cargo test -p bevy_cauldron --features bevy_flora --test editor tree_editor::`
 
 #![cfg(feature = "bevy_flora")]

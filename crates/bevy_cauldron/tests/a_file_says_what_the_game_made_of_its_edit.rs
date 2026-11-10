@@ -3,7 +3,7 @@
 //! the game has not answered an edit. The same rows are in `grimoire_state.reload_files` for an agent
 //! and in the Reload panel for a person.
 //!
-//! The game's answer is the verdict it writes to `<project>/.live/game.ron` (what a running game does,
+//! The game's answer is the verdict it writes to `<project>/.live/game.yaml` (what a running game does,
 //! `bevy_grimoire::live`), written here by hand: a game is not a thing this repository can run headless.
 
 use std::time::Duration;
@@ -100,7 +100,7 @@ fn a_game_that_answered_shows_each_file_applied_with_when_refused_with_why_or_pe
         KindVerdict::applied("kits", "kits.yaml"),
         KindVerdict::refused("map", "maps/m.map.yaml", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
     ];
-    Verdict::with_kinds(3, "maps/m.map.ron: refused", kinds).write(&project_dir).unwrap();
+    Verdict::with_kinds(3, "maps/m.map.yaml: refused", kinds).write(&project_dir).unwrap();
     settle(&mut app);
 
     let s = state(&mut app);

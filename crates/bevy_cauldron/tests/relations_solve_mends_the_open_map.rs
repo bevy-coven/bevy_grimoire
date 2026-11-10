@@ -1,7 +1,7 @@
 //! **`relations_solve` mends the open map's broken relations as one undoable operation** (#137 slice 4).
 //!
 //! Slice 3 put `relations::solve` in core; an agent reaches the editor only through the registry. So
-//! the operation runs the solver on the open map against its `<map>.relations.ron`, writes the moved
+//! the operation runs the solver on the open map against its `<map>.relations.yaml`, writes the moved
 //! rows to the map, and one undo puts every moved row back. A preview writes nothing, and a map with
 //! no relations file is refused, not "solved".
 
@@ -82,13 +82,11 @@ fn saved(app: &App) -> String {
 }
 
 fn write(path: &Path, relations: &str) {
-    std::fs::write(path, format!("(version: 1, relations: [{relations}])"))
+    std::fs::write(path, format!("{{version: 1, relations: [{relations}]}}"))
         .unwrap_or_else(|e| panic!("{path:?}: {e}"));
 }
 
-const BROKEN: &str = r#"
-    (of: "chair", kind: Faces("table")),
-    (of: "door", kind: ClearInFront(depth: 2.0, width: 1.0)),
+const BROKEN: &str = r#"{of: "chair", kind: !Faces "table"}, {of: "door", kind: !ClearInFront {depth: 2.0, width: 1.0}}
 "#;
 
 #[test]
@@ -147,7 +145,7 @@ fn no_relations_file_and_a_bad_one_are_refused() {
     assert_eq!(none["outcome"], "refused", "{none}");
     assert!(none.to_string().contains("m.relations.yaml"), "the refusal names the file it looked for: {none}");
 
-    write(&file, r#"(of: "door", kind: ClearInFront(depth: -2.0, width: 1.0)),"#);
+    write(&file, r#"{of: "door", kind: !ClearInFront {depth: -2.0, width: 1.0}}"#);
     let bad = run(&mut app, false);
     assert_eq!(bad["outcome"], "refused", "{bad}");
     assert!(bad.to_string().contains("-2"), "the refusal says what is wrong: {bad}");
@@ -157,7 +155,7 @@ fn no_relations_file_and_a_bad_one_are_refused() {
 #[test]
 fn a_map_that_keeps_its_relations_is_left_alone() {
     let (mut app, file) = editor(&format!("relations_solve_kept_{}", std::process::id()));
-    write(&file, r#"(of: "chair", kind: Near(to: "table", within: 3.0)),"#);
+    write(&file, r#"{of: "chair", kind: !Near {to: "table", within: 3.0}}"#);
     let before_file = saved(&app);
     let solved = run(&mut app, false);
     assert_eq!(solved["outcome"], "applied", "{solved}");

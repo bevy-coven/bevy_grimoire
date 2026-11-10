@@ -1,4 +1,4 @@
-//! **The animation tab takes an edit of `rigs.ron` at once: its rigs are measured again, and the rig the
+//! **The animation tab takes an edit of `rigs.yaml` at once: its rigs are measured again, and the rig the
 //! author was on stays selected by name** (#202, the `rigs` kind leaves the restart list).
 //!
 //! The tab used to hold the manifest it read and say `needs_restart` about every later edit. A rig added

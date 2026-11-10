@@ -101,7 +101,7 @@ fn every_tree_in_the_file_is_drawn_where_it_stands_and_follows_the_files() {
     until(&mut app, "the undone tree is gone", |w| drawn(w) == scattered && placed_radius(w).is_none());
 
     // A forest file broken by hand keeps the trees drawn rather than emptying the viewport.
-    std::fs::write(project.grimoire_dir.join("forest/m.ron"), "(trees: [(id: 0,").unwrap();
+    std::fs::write(project.grimoire_dir.join("forest/m.yaml"), "{trees: [{id: 0").unwrap();
     for _ in 0..20 {
         app.update();
         std::thread::sleep(std::time::Duration::from_millis(50));

@@ -1,9 +1,9 @@
 //! **A rename carries the rules' example with it (B-029).**
 //!
-//! `rules.ron` names the map a block's grammar is learned from (`example: "m"`, so
-//! `maps/m.map.ron`). `map_rename` moved the file and left that name behind, so generating the block
+//! `rules.yaml` names the map a block's grammar is learned from (`example: "m"`, so
+//! `maps/m.map.yaml`). `map_rename` moved the file and left that name behind, so generating the block
 //! failed with "the example map cannot be read" and the rename's receipt said nothing about it. The
-//! rename now rewrites each rule that names the old map, in memory and in `rules.ron`, and undo
+//! rename now rewrites each rule that names the old map, in memory and in `rules.yaml`, and undo
 //! takes both back the same way. These go through the registered BRP methods, as an agent's do.
 
 use bevy::prelude::*;
@@ -85,7 +85,7 @@ fn example_in_memory(app: &App) -> String {
 fn example_on_disk(app: &App) -> String {
     let text = std::fs::read_to_string(rules_path(app)).expect("rules.yaml is on disk");
     bevy_grimoire_core::rules::Rules::parse(&text)
-        .expect("rules.ron still parses")
+        .expect("rules.yaml still parses")
         .blocks[0]
         .example
         .clone()
@@ -128,6 +128,6 @@ fn undoing_a_rename_puts_the_rules_example_back() {
 
     undo(&mut app);
     assert_eq!(app.world().resource::<OpenMap>().map.name, "m");
-    assert_eq!(example_on_disk(&app), "m", "undo left rules.ron naming `n`");
+    assert_eq!(example_on_disk(&app), "m", "undo left rules.yaml naming `n`");
     assert_eq!(example_in_memory(&app), "m", "undo left the project naming `n`");
 }

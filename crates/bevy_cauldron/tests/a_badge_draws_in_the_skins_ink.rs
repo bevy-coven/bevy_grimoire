@@ -51,7 +51,7 @@ fn with_no_skin_a_badge_is_the_shipped_palette() {
 }
 
 /// **The shipped palette and the editor's own skin are one palette**, which is the claim that lets a
-/// harness and the running editor draw the same badge. If someone retunes `editor_skin.ron` without
+/// harness and the running editor draw the same badge. If someone retunes `editor_skin.yaml` without
 /// its constant (or the reverse) this fails, and it is the pair the tone test does not cover:
 /// `BadgeInk` maps `dim` to `text_muted`, not to a tone.
 #[test]

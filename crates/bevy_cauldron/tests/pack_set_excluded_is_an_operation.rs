@@ -1,7 +1,7 @@
 //! **An agent can leave a pack out of the kit, and `Shift+R` on the Meshes tab is the same operation
 //! (E-002, #129 slice 7).**
 //!
-//! `Shift+R` spliced the kit's `project.ron` with a write of its own, named by no operation, so an
+//! `Shift+R` spliced the kit's `project.yaml` with a write of its own, named by no operation, so an
 //! agent could label a piece and not say that a folder of art is not what the kit is built from, no log
 //! line named the change and Cmd+Z could not take it back. It is now the registered operation
 //! `pack_set_excluded`. The first three tests go through the registered BRP methods, the way an
@@ -281,7 +281,7 @@ fn tap(app: &mut App, logical: Key, code: KeyCode) {
 
 /// **A person's `Shift+R` on a pack is one `pack_set_excluded` line stamped as a person's, it reaches
 /// the file, a second press brings the pack back, and Cmd+Z takes the newest press back.** Before
-/// slice 7 the key wrote `project.ron` with its own splice, logged nothing and had no undo.
+/// slice 7 the key wrote `project.yaml` with its own splice, logged nothing and had no undo.
 #[test]
 fn a_persons_shift_r_excludes_through_the_operation_and_cmd_z_takes_it_back() {
     let mut app = editor("pack-person");

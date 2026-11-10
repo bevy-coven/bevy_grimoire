@@ -179,17 +179,7 @@ fn the_catalog_finds_a_map_an_agent_made() {
     let before = Catalog::scan(&root).unwrap_or_else(|e| panic!("{e}")).maps.len();
 
     // A caller that writes the file and never touches the page — which is exactly what the MCP path is.
-    let text = "(
-    version: 7,
-    name: \"annexe\",
-    origin: (0.0, 0.0, 0.0),
-    bounds: (10.0, 4.0, 10.0),
-    bash: None,
-    placements: [],
-    locations: [],
-    note: None,
-    enclosure: (wish: 0.25, weight: 200),
-)";
+    let text = "{version: 7, name: \"annexe\", origin: [0.0, 0.0, 0.0], bounds: [10.0, 4.0, 10.0], bash: null, placements: [], locations: [], note: null, enclosure: {wish: 0.25, weight: 200}}";
     std::fs::write(dir.join("annexe.map.yaml"), text).unwrap_or_else(|e| panic!("{e}"));
 
     let after = Catalog::scan(&root).unwrap_or_else(|e| panic!("{e}"));

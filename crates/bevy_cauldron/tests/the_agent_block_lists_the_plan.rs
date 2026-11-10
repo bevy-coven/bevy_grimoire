@@ -1,6 +1,6 @@
 //! **The AGENT block lists the agent's plan, each step ticked as the agent marks it done** (UI-60b, #340).
 //!
-//! The agent declares its steps with `plan_set` (`maps/<map>.plan.ron`), the one source the inspector's PLAN section and
+//! The agent declares its steps with `plan_set` (`maps/<map>.plan.yaml`), the one source the inspector's PLAN section and
 //! `grimoire_state.plan` already read. The block's PLAN row reads the same file, so the person looking at what the agent did
 //! also sees what it means to do, and which steps are done.
 

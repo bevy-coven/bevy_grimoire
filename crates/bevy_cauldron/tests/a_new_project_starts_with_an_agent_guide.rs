@@ -11,7 +11,7 @@
 //! grant fails it.
 //!
 //! **The store is left at its default.** A real editor's `trust.file` is `None`, which means the person's
-//! own `<data_dir>/Grimoire/trusted.ron` (`crate::trusted::resolve`); the test inserts a scratch
+//! own `<data_dir>/Grimoire/trusted.yaml` (`crate::trusted::resolve`); the test inserts a scratch
 //! `trusted::StoreRoot`, so the grant lands in a store of the test's making and not the developer's.
 //!
 //! **A project the wizard did not create gets no file.** Opening an existing game must write nothing into
@@ -75,7 +75,7 @@ fn project_text(answer: &serde_json::Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// **The person's own store**, where a `None` override resolves to: the `StoreRoot`'s `trusted.ron`.
+/// **The person's own store**, where a `None` override resolves to: the `StoreRoot`'s `trusted.yaml`.
 fn user_store(holder: &Path) -> PathBuf {
     holder.join(trust::STORE_FILE)
 }
@@ -91,13 +91,13 @@ fn run_the_wizard(tag: &str, holder: &Path) -> PathBuf {
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(OpsBridgePlugin);
     // **The store's folder is the test's**, as `settings::UserSettingsFile` is for settings: only the binary
-    // names the real one, so no test reads or writes the developer's `trusted.ron`.
+    // names the real one, so no test reads or writes the developer's `trusted.yaml`.
     app.insert_resource(bevy_cauldron::trusted::StoreRoot(holder.clone()));
     app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
     settle(&mut app);
 
     // **The person's store is the default one** — `trust.file` stays `None` — and the store's folder is a
-    // scratch folder of the test's (`trusted::StoreRoot`), so nothing here touches the real `trusted.ron`.
+    // scratch folder of the test's (`trusted::StoreRoot`), so nothing here touches the real `trusted.yaml`.
     assert!(
         app.world().resource::<EditorState>().trust.file.is_none(),
         "a real editor names no store: `None` is the person's own file"
@@ -207,7 +207,7 @@ fn the_writer_is_the_one_function_and_it_is_idempotent() {
 fn a_store_that_will_not_read_is_an_error_and_not_a_silent_ungranted_guide() {
     let dir = scratch(&format!("badstore_{}", std::process::id()));
     let store = dir.join("trusted.yaml");
-    std::fs::write(&store, "(version: 2, projects: [").expect("a damaged store");
+    std::fs::write(&store, "{version: 2, projects: [").expect("a damaged store");
     let store_root = bevy_cauldron::trusted::StoreRoot(dir.clone());
     let root = dir.join("project");
     std::fs::create_dir_all(&root).expect("the project folder");

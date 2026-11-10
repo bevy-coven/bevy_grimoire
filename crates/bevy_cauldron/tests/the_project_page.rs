@@ -288,7 +288,7 @@ fn a_kits_policy_lists_and_an_entry_is_removed_after_the_question() {
     let policy = root.join("assets/grimoire/furniture/project.yaml");
     std::fs::write(
         &policy,
-        "(\n    version: 2,\n    // A comment that must survive.\n    note: None,\n    exclude: [\"characters\"],\n    patches: [],\n)\n",
+        "version: 2\n# A comment that must survive.\nnote: null\nexclude: [\"characters\"]\npatches: []\n",
     )
     .unwrap();
 
@@ -304,7 +304,7 @@ fn a_kits_policy_lists_and_an_entry_is_removed_after_the_question() {
     settle(&mut app);
     let after = std::fs::read_to_string(&policy).unwrap();
     assert!(!after.contains("characters"), "agreeing removes the entry:\n{after}");
-    assert!(after.contains("// A comment that must survive."), "and keeps the file's comment:\n{after}");
+    assert!(after.contains("# A comment that must survive."), "and keeps the file's comment:\n{after}");
     assert_eq!(dialogs(&mut app), 1, "the policy dialog comes back with what is left");
     assert!(every_text(&mut app).iter().any(|t| t == "This kit leaves nothing out and changes nothing."));
 }

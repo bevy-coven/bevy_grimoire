@@ -23,7 +23,7 @@ use crate::fixtures;
 struct Case {
     kind: &'static str,
     dir: &'static str,
-    /// The file's name in `dir`: a per-map file is `m.ron`, a species is `m.tree.ron`.
+    /// The file's name in `dir`: a per-map file is `m.yaml`, a species is `m.tree.yaml`.
     file: &'static str,
     op: &'static str,
     call: Value,
@@ -40,29 +40,29 @@ fn cases() -> Vec<Case> {
         Case {
             kind: "people",
             dir: "people",
-            file: "m.ron",
+            file: "m.yaml",
             op: "person_set",
             call: json!({"map": "m", "name": "Ola", "at": [2.0, 2.0]}),
-            good: "(people: [(name: \"Mara\", at: (1.0, 2.0))])",
+            good: "{people: [{name: \"Mara\", at: [1.0, 2.0]}]}",
             marker: Some("Mara"),
             bad: [
-                ("corrupt", "(people: [(name: \"Mara\", at: (1.0, 2.0)", None),
-                ("wrong type", "(people: [(name: \"Mara\", at: \"here\")])", Some("people[0].at")),
-                ("missing field", "(people: [(at: (1.0, 2.0))])", Some("people[0].name")),
+                ("corrupt", "{people: [{name: \"Mara\", at: [1.0, 2.0]", None),
+                ("wrong type", "{people: [{name: \"Mara\", at: \"here\"}]}", Some("people[0].at")),
+                ("missing field", "{people: [{at: [1.0, 2.0]}]}", Some("people[0].name")),
             ],
         },
         Case {
             kind: "scripts",
             dir: "scripts",
-            file: "m.ron",
+            file: "m.yaml",
             op: "trigger_set",
-            call: json!({"map": "m", "id": "t", "on": "Activity(\"work\")", "then": "let x = 1;"}),
-            good: "(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\", then: \"let x = 1;\")])",
+            call: json!({"map": "m", "id": "t", "on": "!Activity work", "then": "let x = 1;"}),
+            good: "{triggers: [{id: \"first\", on: \"!Activity work\", then: \"let x = 1;\"}]}",
             marker: Some("first"),
             bad: [
-                ("corrupt", "(triggers: [(id: \"first\", on: \"Activity(\\\"work\\\")\"", None),
-                ("wrong type", "(triggers: [(id: 5, on: \"x\", then: \"y\")])", Some("triggers[0].id")),
-                ("missing field", "(triggers: [(id: \"first\", on: \"x\")])", Some("triggers[0].then")),
+                ("corrupt", "{triggers: [{id: \"first\", on: \"!Activity work\"", None),
+                ("wrong type", "{triggers: [{id: 5, on: \"x\", then: \"y\"}]}", Some("triggers[0].id")),
+                ("missing field", "{triggers: [{id: \"first\", on: \"x\"}]}", Some("triggers[0].then")),
             ],
         },
     ];
@@ -70,15 +70,15 @@ fn cases() -> Vec<Case> {
     cases.push(Case {
         kind: "forest",
         dir: "forest",
-        file: "m.ron",
+        file: "m.yaml",
         op: "forest_scatter",
         call: json!({"map": "m", "plant": {"points": [[0.0, 0.0], [12.0, 0.0]], "radius_m": 4.0, "spacing_m": 3.0, "seed": 3, "species": [{"name": "oak", "weight": 1.0}]}}),
-        good: "(trees: [])",
+        good: "{trees: []}",
         marker: None,
         bad: [
-            ("corrupt", "(trees: [(id: 1, species: \"oak\"", None),
-            ("wrong type", "(trees: \"none\")", Some("trees")),
-            ("missing field", "(trees: [(id: 1)])", Some("trees[0].")),
+            ("corrupt", "{trees: [{id: 1, species: \"oak\"", None),
+            ("wrong type", "{trees: \"none\"}", Some("trees")),
+            ("missing field", "{trees: [{id: 1}]}", Some("trees[0].")),
         ],
     });
     // Every field of a tree file has a default, so none can be missing: the third way to break it is
@@ -90,12 +90,12 @@ fn cases() -> Vec<Case> {
         file: "m.tree.yaml",
         op: "tree_edit",
         call: json!({"name": "m", "set": {"seed": 9}}),
-        good: "(seed: 5)",
+        good: "{seed: 5}",
         marker: None,
         bad: [
-            ("corrupt", "(seed: 5", None),
-            ("wrong type", "(seed: \"five\")", Some("seed")),
-            ("unknown field", "(sed: 5)", Some("sed")),
+            ("corrupt", "{seed: 5", None),
+            ("wrong type", "{seed: \"five\"}", Some("seed")),
+            ("unknown field", "{sed: 5}", Some("sed")),
         ],
     });
     cases
@@ -210,11 +210,11 @@ fn a_run_over_a_file_that_does_not_read_is_refused_naming_it() {
     let scripts = cases().remove(1);
     put(&project, &people, people.bad[1].1);
     let refusal = ops::dispatch(&mut ctx, "people_run", &json!({"map": "m"})).expect_err("a people file that does not read").0;
-    assert!(refusal.contains("people/m.ron") && refusal.contains("people[0].at"), "{refusal}");
+    assert!(refusal.contains("people/m.yaml") && refusal.contains("people[0].at"), "{refusal}");
     put(&project, &people, people.good);
     put(&project, &scripts, scripts.bad[1].1);
     let refusal = ops::dispatch(&mut ctx, "people_run", &json!({"map": "m"})).expect_err("a scripts file that does not read").0;
-    assert!(refusal.contains("scripts/m.ron") && refusal.contains("triggers[0].id"), "{refusal}");
+    assert!(refusal.contains("scripts/m.yaml") && refusal.contains("triggers[0].id"), "{refusal}");
 }
 
 /// The forest view decides its file once per edit: a refusal names the file and the field in
@@ -256,7 +256,7 @@ fn the_forest_view_decides_its_file_once_per_edit_and_keeps_the_trees() {
     let mut ctx = Ctx { project: Some(project.clone()), open: Some(open), session: "unread_forest_view".to_owned(), ..Ctx::default() };
     let case = cases().into_iter().find(|c| c.kind == "forest").expect("the forest case");
     ops::dispatch(&mut ctx, case.op, &case.call).unwrap();
-    let path = project.grimoire_dir.join("forest").join("m.ron");
+    let path = project.grimoire_dir.join("forest").join("m.yaml");
     let good = std::fs::read_to_string(&path).unwrap();
 
     until(&mut app, "the planted trees are drawn", |app| drawn(app) > 0);
@@ -268,7 +268,7 @@ fn the_forest_view_decides_its_file_once_per_edit_and_keeps_the_trees() {
     until(&mut app, "the bad file is refused", |app| forest(app)["outcome"] == "refused");
     let refused = forest(&app);
     assert_eq!(refused["field"], json!("trees"), "{refused}");
-    assert!(refused["file"].as_str().is_some_and(|f| f.ends_with("forest/m.ron")), "{refused}");
+    assert!(refused["file"].as_str().is_some_and(|f| f.ends_with("forest/m.yaml")), "{refused}");
     assert_eq!(drawn(&mut app), standing, "a refused file leaves the trees drawn");
     let seq = reloads(&app)["seq"].as_u64().unwrap();
     for _ in 0..20 {

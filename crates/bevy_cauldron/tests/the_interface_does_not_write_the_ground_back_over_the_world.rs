@@ -6,7 +6,7 @@
 //! `MsaaWriteback::Auto` copies what the lower camera wrote (the opaque ground colour) into the
 //! interface camera's sampled texture *instead of* honouring its `Custom(Color::NONE)` clear. The
 //! interface then wrote that opaque ground over the HDR world, so the viewport was one flat colour
-//! with `family/bevy_elements.ron` present. Found live on 2026-10-31: with the interface camera's
+//! with `family/bevy_elements.yaml` present. Found live on 2026-10-31: with the interface camera's
 //! `msaa_writeback` set to `Off` over BRP the viewport went from 1 colour to 456, the sky and the map's
 //! box and grid. No GPU is available to a test, so this asserts the setting the frame depends on.
 

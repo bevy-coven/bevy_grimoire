@@ -67,9 +67,9 @@ fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::V
 }
 
 fn example_on_disk(project: &std::path::Path) -> String {
-    let text = std::fs::read_to_string(project.join("rules.yaml")).expect("rules.ron is on disk");
+    let text = std::fs::read_to_string(project.join("rules.yaml")).expect("rules.yaml is on disk");
     bevy_grimoire_core::rules::Rules::parse(&text)
-        .expect("rules.ron still parses")
+        .expect("rules.yaml still parses")
         .blocks[0]
         .example
         .clone()
@@ -102,7 +102,7 @@ fn a_rename_whose_log_line_cannot_be_written_is_taken_back() {
     assert_eq!(
         example_on_disk(&project),
         "m",
-        "rules.ron names `n` although the rename was taken back"
+        "rules.yaml names `n` although the rename was taken back"
     );
     assert_eq!(
         app.world().resource::<Project>().rules.blocks[0].example,

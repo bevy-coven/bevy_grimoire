@@ -1,6 +1,6 @@
 //! **Undressing gives the editor's own camera back** (#193 step 3, #194).
 //!
-//! Deleting a project's `family/bevy_elements.ron` removes `ElementsCamera`, and the crate now undoes
+//! Deleting a project's `family/bevy_elements.yaml` removes `ElementsCamera`, and the crate now undoes
 //! its own dressing (`bevy_coven/bevy_elements@41407d6`, this repo's #55). One thing it deliberately
 //! cannot take back is `Hdr`: `ElementsCamera` arrives with `#[require(Hdr)]`, so the crate cannot know
 //! whether the host had it first. #55's conclusion says plainly that this is *"left to the caller
