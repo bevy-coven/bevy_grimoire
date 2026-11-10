@@ -765,7 +765,7 @@ fn act(
                     commands.spawn(toast_alert(format!("`{label}` is not a bound kit, so there is nothing to open it as.")).sticky());
                 }
                 Some(Some(flag)) => {
-                    let argv = vec![page.root.display().to_string(), "--door".to_owned(), crate::tiles::Door::Kit.label().to_lowercase(), "--kit".to_owned(), flag];
+                    let argv = vec![page.root.display().to_string(), "--door".to_owned(), crate::workspace::Workspace::Kit.label().to_lowercase(), "--kit".to_owned(), flag];
                     commands.queue(move |world: &mut World| {
                         if let Err(e) = project_assets::open_project_argv(world, &argv) {
                             world.spawn(toast_alert(e).sticky());

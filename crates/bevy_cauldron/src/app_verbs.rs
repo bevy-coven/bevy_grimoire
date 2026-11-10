@@ -182,13 +182,17 @@ pub fn run(world: &mut World, verb: AppVerb) {
 
 /// **Window ▸ Reset layout**: the default arrangement back, and the person's file made to agree with it.
 ///
-/// Two writes, one intent. The running `Dock` is set to `ui::shell_layout` so the change is on screen
-/// this frame; the user's file loses its `shell_layout` key, which is what the default *is* (a person
-/// who has never moved a panel has no key). Writing the file is what makes it survive a restart; the
+/// Two writes, one intent. The running `Dock` is set to the current workspace's default so the change
+/// is on screen this frame; the user's file loses that workspace's entry, which is what its default
+/// *is* (a person who has never moved a panel has no key). Writing the file is what makes it survive a restart; the
 /// key goes rather than being written out as the default's RON, because a saved copy of the default
 /// would stop tracking a change to it.
 fn reset_the_layout(world: &mut World) {
-    let default = crate::ui::shell_layout();
+    let workspace = world
+        .get_resource::<crate::workspace::Workspace>()
+        .copied()
+        .unwrap_or_default();
+    let default = crate::ui::shell_layout(workspace);
     let mut docks = world.query_filtered::<&mut bevy_gooey::Dock, ()>();
     for mut dock in docks.iter_mut(world) {
         if dock.0 != default {
@@ -196,11 +200,11 @@ fn reset_the_layout(world: &mut World) {
         }
     }
     if let Some(settings) = world.get_resource_mut::<crate::settings::EditorSettings>() {
-        settings.into_inner().shell_layout = None;
+        settings.into_inner().workspace_layout.remove(workspace.id());
     }
     let Some(file) = world.get_resource::<crate::settings::UserSettingsFile>().map(|f| f.0.clone()) else { return };
     if let Err(why) = crate::setting_catalogue::edit_layer(&file, |layer| {
-        layer.shell_layout = None;
+        layer.workspace_layout.remove(workspace.id());
         Ok(())
     }) {
         world.resource_mut::<EditorState>().status.problem(format!("cannot reset the layout: {why}"));

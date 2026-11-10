@@ -99,7 +99,7 @@ fn the_working_state_is_named_as_such() {
     use bevy_cauldron::screen::Ownership;
     let doors = OWNERSHIP
         .iter()
-        .filter(|(_, c)| *c == Ownership::Door)
+        .filter(|(_, c)| *c == Ownership::Workspace)
         .count();
     assert!(
         doors >= 30,
@@ -132,7 +132,7 @@ fn the_door_resets_what_it_says_it_owns() {
 
     let declared: Vec<&str> = OWNERSHIP
         .iter()
-        .filter(|(_, c)| *c == Ownership::Door)
+        .filter(|(_, c)| *c == Ownership::Workspace)
         .map(|(n, _)| *n)
         .filter(|n| !REPLACED_ON_ENTRY.contains(n))
         .collect();
@@ -151,14 +151,14 @@ fn the_door_resets_what_it_says_it_owns() {
         .collect();
     assert!(
         unclassified.is_empty(),
-        "reset when the door closes but not classified `Ownership::Door` — the table is what a \
+        "reset when the door closes but not classified `Ownership::Workspace` — the table is what a \
          reader consults, so a reset it does not mention is a reset nobody can find:\n{unclassified:#?}"
     );
 }
 
 /// **A global observer takes every resource as `Option`.**
 ///
-/// `reset_door_state` removes and re-inits every `Ownership::Door` resource in one exclusive
+/// `reset_door_state` removes and re-inits every `Ownership::Workspace` resource in one exclusive
 /// system, so the panic is closed today — but the crate's own rule, stated at `tiles::on_cell_verb`,
 /// is that a **global** observer fires for any `Activate` anywhere in the application and must
 /// therefore take `Option`: in Bevy 0.19 a missing resource panics at param validation rather than

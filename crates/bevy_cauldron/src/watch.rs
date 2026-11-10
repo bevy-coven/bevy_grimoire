@@ -521,7 +521,7 @@ fn adopt(path: &Path, project: &mut Project) -> Result<(), String> {
     // starts with `open_map_name: None`, which is right for a first open and wrong here: this
     // is the same project, re-read, and the name is the author's intent about which map they
     // are working on. Dropping it made a kit edit the same as never having opened a map, so
-    // the next crossing from the Kit door back to the Map door refused with "none has been
+    // the next switching from the Kit door back to the Map door refused with "none has been
     // open".
     let open_map_name = project.open_map_name.clone();
     let mut fresh = fresh;

@@ -360,7 +360,7 @@ pub(crate) struct SplashArt(pub(crate) Option<(Handle<Image>, Vec2)>);
 /// `PostUpdate` (`bevy_app-0.20.0/src/main_schedule.rs`). Captured on big under Xvfb at 15 fps
 /// against a 1 MiB portrait, the first frame of the page draws the picture correctly with no band —
 /// both with and without this cache. The frames that settle that are on big at
-/// `/tmp/pp-frames/big/`. What pins the crossing is
+/// `/tmp/pp-frames/big/`. What pins the switching is
 /// `tests/the_project_page.rs::the_first_frame_of_the_page_is_whole`.
 ///
 /// Keys on the file's modified time, so a freshly baked portrait is decoded again and the newest one

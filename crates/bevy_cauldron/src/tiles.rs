@@ -57,113 +57,27 @@ crate::keys::enumerated! {
     /// `checked >= TABS.len()` anti-vacuity floor in them got *easier* to clear in the same commit.
     /// A new panel made the suite weaker and nothing said so.
     ///
-    /// [`Door::tabs`] is the other list of `Mode`s and is deliberately not this: it answers *"which
-    /// panels does this door show"*, which is a different question with three different answers.
+    /// [`Workspace::panels`](crate::workspace::Workspace::panels) is the other list of `Mode`s and is
+    /// deliberately not this: it answers *"which panels does this workspace show"*, which is a
+    /// different question with five different answers.
     ALL;
 }
 
-/// **Which door the editor was entered by.**
+/// **Which panel of the current workspace is showing** — the second axis of the editor's
+/// navigation (NV-02, #379).
 ///
-/// A door is one *entity* you can work on, and it shows the panels that entity needs — no more.
-/// Reported at the keyboard, 2026-08-16: *"when I select a kit and I press enter, I'm still getting
-/// [map], meshes, tiles, compose, anim. we really need this to reflect just what's needed to put
-/// kits together."*
+/// `Mode` did not go when the doors did. A workspace is the *job* ([`crate::workspace::Workspace`]);
+/// a mode is *which panel of that job is on screen*, and the Kit workspace shows three of them at
+/// once. So the strip is still made of modes, `Mode::context` is still what the key census calls a
+/// tab, and the door that used to own them is now
+/// [`Workspace::showing`](crate::workspace::Workspace::showing).
 ///
-/// # Why two and not five
-///
-/// The first cut was one door per panel, and building it produced the measurement that ruled that
-/// out: **four shipped guides cross doors mid-flow**, `room_from_nothing.json` seven times. Meshes,
-/// Tiles and Compose are not three jobs — they are one job at three levels of assembly
-/// (`docs/research/2026-08-08-kitbashing-guidance.md`: *"parts -> sub-assemblies -> assemblies"*),
-/// and an author moves between them constantly while making one kit. Splitting them put a process
-/// boundary inside a single act.
-///
-/// So the boundary goes where the *entity* changes rather than where the panel does: **making
-/// reusable content** on one side, **using it to build a level** on the other. Chosen at the
-/// keyboard, 2026-08-16: *"Kit and Map, two doors."*
-///
-/// [`Door::Rigs`] is a third because it crosses with neither — no guide enters it, and a rig is a
-/// character asset rather than level content. It was already its own door by an earlier decision and
-/// nothing in the crossing measurement argued against it.
-#[derive(Resource, Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub enum Door {
-    /// Make reusable content: meshes → tiles → compositions.
-    Kit,
-    /// Build the level out of it.
-    #[default]
-    Map,
-    /// The rig bench.
-    Rigs,
-}
-
-impl Door {
-    /// The doors, in the order the menu lists them.
-    pub const ALL: [Door; 3] = [Door::Kit, Door::Map, Door::Rigs];
-
-    /// **The panels this door shows**, in hierarchy order.
-    ///
-    /// The Kit door shows three, and that is the point of the two-door shape: a mesh is a part, a
-    /// tile is a sub-assembly, a composition is an assembly, and an author walks up and down that
-    /// ladder while making one kit. What it does *not* show is the Map.
-    pub fn tabs(self) -> &'static [Mode] {
-        match self {
-            Door::Kit => &[Mode::Meshes, Mode::Tiles, Mode::Compose],
-            Door::Map => &[Mode::Map],
-            Door::Rigs => &[Mode::Anim],
-        }
-    }
-
-    /// Where this door opens. The first of [`Self::tabs`], which is never empty.
-    pub fn opens_on(self) -> Mode {
-        self.tabs().first().copied().unwrap_or_default()
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Door::Kit => "KIT",
-            Door::Map => "MAP",
-            Door::Rigs => "RIGS",
-        }
-    }
-
-    /// The `--door` spelling. Lowercase of [`Self::label`], so the flag and the title cannot drift.
-    pub fn from_flag(flag: &str) -> Option<Door> {
-        Door::ALL
-            .into_iter()
-            .find(|d| d.label().eq_ignore_ascii_case(flag))
-    }
-
-    /// **Run condition: is the Maps door open?**
-    ///
-    /// A condition rather than a check in `Plugin::build`, and that distinction cost a crash. The
-    /// door used to be known before the app ran — it was a process — so `EditorPlugin` could read it
-    /// at build time and simply not register the map-only half. With both screens in one application
-    /// the door is chosen at runtime, so at build time there is none: the check read
-    /// `unwrap_or_default()`, got `Map`, and registered `spawn_existing` on every door — which then
-    /// panicked on the Kit door for a `Res<OpenMap>` that does not exist there.
-    ///
-    /// `Option<Res<Door>>`, because **every run condition is evaluated** and this one is asked in the
-    /// menu too, where there is no door at all.
-    pub fn map_door_is_open(door: Option<Res<Door>>) -> bool {
-        door.is_some_and(|d| *d == Door::Map)
-    }
-
-    /// Does this door show that panel? The one place `Mode` and `Door` are compared.
-    pub fn shows(self, mode: Mode) -> bool {
-        self.tabs().contains(&mode)
-    }
-
-    /// **The door that shows this panel.** Every `Mode` belongs to exactly one, by construction of
-    /// [`Self::tabs`] — so a caller can name the panel it wants and let the door follow, rather than
-    /// stating both and risking a pair that disagree.
-    pub fn showing(mode: Mode) -> Door {
-        Door::ALL
-            .into_iter()
-            .find(|d| d.shows(mode))
-            .unwrap_or_default()
-    }
-}
-
+/// **The panels are one job at three levels of assembly.** Measured when the doors were built: four
+/// shipped guides cross between Meshes, Tiles and Compose mid-flow, `room_from_nothing.json` seven
+/// times, because a kit is *"parts -> sub-assemblies -> assemblies"*
+/// (`docs/research/2026-08-08-kitbashing-guidance.md`) and an author moves between the three
+/// constantly while making one. Splitting them across workspaces would put a boundary inside a
+/// single act; that is why they share the Kit workspace.
 impl Mode {
     pub fn label(self) -> &'static str {
         match self {
@@ -3865,7 +3779,7 @@ pub struct TilesPlugin;
 
 impl Plugin for TilesPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Door>()
+        app.init_resource::<crate::workspace::Workspace>()
             .init_resource::<Mode>()
             .init_resource::<ImportState>()
             .init_resource::<MapView>()
@@ -4099,26 +4013,28 @@ impl Plugin for TilesPlugin {
     }
 }
 
-/// **The strip of panels this door holds** — three on the Kit door, one on the others.
+/// **The strip of panels this workspace holds** — three on the Kit workspace, one on Map and
+/// Animation, and none on a workspace whose part is not built.
 ///
 /// The strip exists because a mode reachable only by a keypress is a mode you have to be told about,
 /// and an editor that has to be explained has a bug in its front page. What changed with the doors
-/// is its *scope*: it lists what this door shows rather than everything the binary can do, so the
-/// Kit door never offers the Map.
+/// is its *scope*: it lists what this workspace shows rather than everything the binary can do, so
+/// the Kit workspace never offers the Map.
 ///
-/// A one-tab door draws a one-entry strip, which reads as a title. That is deliberate rather than a
-/// special case — one loop, one shape, and a door that gains a panel is one arm in [`Door::tabs`].
+/// A one-panel workspace draws a one-entry strip, which reads as a title. That is deliberate rather than a
+/// special case — one loop, one shape, and a workspace that gains a panel is one arm in
+/// [`Workspace::panels`](crate::workspace::Workspace::panels).
 ///
-/// **`Option<Res<Door>>`, like every other `OnEnter(Editor)` spawner here**
-/// (`anim_cache::load_bench_cache`, `thumbs::setup`): the door is a door's resource, so a screen
-/// entered without one draws no strip rather than aborting the process. `screen::open_the_door`
-/// already says so on the log in the one case that reaches it.
+/// **`Option<Res<Workspace>>`, like every other `OnEnter(Editor)` spawner here**
+/// (`anim_cache::load_bench_cache`, `thumbs::setup`): the workspace is a workspace's resource, so a
+/// screen entered without one draws no strip rather than aborting the process.
+/// `screen::open_the_door` already says so on the log in the one case that reaches it.
 fn spawn_tab_strip(
     mut commands: Commands,
-    door: Option<Res<Door>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     frame: Res<crate::chrome::Frame>,
 ) {
-    let Some(door) = door else { return };
+    let Some(workspace) = workspace else { return };
     // **Into the frame's own band, not floating over the window.** It was absolute at
     // `left: MARGIN, top: MARGIN` with `GlobalZIndex(101)` to sit above the panels it overlapped —
     // a strip that had to out-rank the thing beneath it because both were competing for the same
@@ -4145,17 +4061,17 @@ fn spawn_tab_strip(
             // itself, permanently, so a badge per chip would state the same fact twice — and the
             // digits are one idea in the census (`panel: first / second / third of this door`), so
             // they are one badge here.
-            crate::chrome::Control(crate::keys::ControlId::DoorStrip),
+            crate::chrome::Control(crate::keys::ControlId::WorkspaceStrip),
         ))
         .id();
     commands.entity(frame.door_strip).add_child(strip);
     commands
         .entity(strip)
         .with_children(|p| {
-            for (i, &mode) in door.tabs().iter().enumerate() {
-                // **The key this door gives that slot**, which is why it is read off the index and
-                // not off the mode: `tab_shortcuts` walks `door.tabs()` and takes
-                // `Action::tab_slot(i)`, so `1` is the door's first panel whichever panel that is.
+            for (i, &mode) in workspace.panels().iter().enumerate() {
+                // **The key this workspace gives that slot**, which is why it is read off the index
+                // and not off the mode: `tab_shortcuts` walks `workspace.panels()` and takes
+                // `Action::tab_slot(i)`, so `1` is the workspace's first panel whichever that is.
                 let chord = Action::tab_slot(i).map(crate::keys::chord);
                 p.spawn((
                     // **Deliberately not a `UiButton`** — see [`click_tab`]. `Hovered` is what
@@ -4257,7 +4173,7 @@ fn spawn_tab_strip(
                     margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
                     ..default()
                 },
-                OtherDoorMark,
+                OtherWorkspaceMark,
             ))
             // **A click on the name is the key.** The mark says where `=` goes, and a name that names
             // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
@@ -4284,15 +4200,15 @@ fn spawn_tab_strip(
                         margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
                         ..default()
                     },
-                    OtherDoorLabel,
+                    OtherWorkspaceLabel,
                 ));
             });
         });
 }
 
-/// **A click on the other door's name crosses to it**, by the one path `=` takes. Deferred, because
-/// the crossing takes the whole `World`; the `EditorState` check is for the same reason `click_tab`
-/// has it: a global pointer observer fires on every screen.
+/// **A click on the other workspace's name switches to it**, by the one path `=` takes. Deferred,
+/// because the switch takes the whole `World`; the `EditorState` check is for the same reason
+/// `click_tab` has it: a global pointer observer fires on every screen.
 fn cross_on_click(_click: On<PointerClick>, mut commands: Commands) {
     commands.queue(|world: &mut World| {
         if world.contains_resource::<crate::editor::EditorState>() {
@@ -4301,43 +4217,47 @@ fn cross_on_click(_click: On<PointerClick>, mut commands: Commands) {
     });
 }
 
-/// **The mark that names the other door** — the cue the crossing hangs on.
+/// **The mark that names the other workspace** — the cue the switch hangs on.
 ///
 /// A component rather than plain text, because the *name* of the other door changes with the door
 /// that is open, and a text node that is written once cannot be written again without being
 /// rebuilt.
 #[derive(Component)]
-pub struct OtherDoorMark;
+pub struct OtherWorkspaceMark;
 
-/// The name, inside [`OtherDoorMark`].
+/// The name, inside [`OtherWorkspaceMark`].
 #[derive(Component)]
-pub struct OtherDoorLabel;
+pub struct OtherWorkspaceLabel;
 
 /// The verb the door cue opens with, in a node of its own so the destination keeps its exact name.
 const SWITCH_TO: &str = "Switch to";
 
-/// The door the cue leads to: the Map and Kit doors lead to each other, and the Rigs door leads nowhere.
-pub fn other_door(door: Door) -> Option<Door> {
-    match door {
-        Door::Map => Some(Door::Kit),
-        Door::Kit => Some(Door::Map),
-        Door::Rigs => None,
+/// **The workspace the cue leads to**: Map and Kit lead to each other, and every other one goes to
+/// Map — the level is the one place everything else is about.
+///
+/// It used to be Map and Kit and *nowhere* (the Rigs door had no other side), which was the price of
+/// the doors being places. With nine workspaces the cue is a short walk rather than the only road,
+/// so a workspace with no `=` partner would be a dead mark on the strip; the level is the answer for
+/// all of them, and the strip says which one it is leading to.
+pub fn the_other_workspace(workspace: crate::workspace::Workspace) -> Option<crate::workspace::Workspace> {
+    use crate::workspace::Workspace;
+    match workspace {
+        Workspace::Map => Some(Workspace::Kit),
+        Workspace::Kit => Some(Workspace::Map),
+        _ => Some(Workspace::Map),
     }
 }
 
 /// **Name the other door**, so the cue says which way is other.
 ///
-/// **The Rigs door is not a door the author crosses to.** It is the rig bench — a character asset
-/// rather than level content — and `screen.rs` says it *"crosses with neither"*. So the mark names
-/// the **Map** door from the Kit door and the **Kit** door from the Map door, and the Rigs door
-/// names nothing: there is nowhere for the author to go, and a cue that leads nowhere is a lie.
+/// **The mark names a workspace and its key crosses to it** — see [`the_other_workspace`] for which.
 fn name_the_other_door(
-    door: Option<Res<Door>>,
-    mut labels: Query<&mut Text, With<OtherDoorLabel>>,
-    mut marks: Query<&mut Node, With<OtherDoorMark>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
+    mut labels: Query<&mut Text, With<OtherWorkspaceLabel>>,
+    mut marks: Query<&mut Node, With<OtherWorkspaceMark>>,
 ) {
-    let Some(door) = door else { return };
-    let other = other_door(*door);
+    let Some(workspace) = workspace else { return };
+    let other = the_other_workspace(*workspace);
     for mut label in &mut labels {
         let text = match other {
             // **The workspace's own name** (#302): the tab says `Map` or `Kit`, as the title of the
@@ -4353,8 +4273,8 @@ fn name_the_other_door(
             label.0 = text;
         }
     }
-    // **And the whole mark goes when there is no other door**, rather than showing an empty name
-    // beside a key that does nothing.
+    // **And the whole mark goes when there is no other workspace**, rather than showing an empty
+    // name beside a key that does nothing.
     for mut node in &mut marks {
         let want = if other.is_some() {
             Display::Flex
@@ -4755,20 +4675,20 @@ fn spawn_tiles_panel(
 /// `1` is this door's first panel, not the binary's — so on the Kit door `1` is Meshes. Everything
 /// reachable by mouse is reachable by keyboard (`docs/ui.md` §4.2), and the strip is what both read.
 fn tab_shortcuts(world: &mut World) {
-    let Some(door) = world.get_resource::<Door>().copied() else {
+    let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;
     };
     // **The slot that was pressed**, read here and acted on below, so the `World` borrow ends first.
     let want = {
         let keyboard = world.resource::<ButtonInput<KeyCode>>();
         let live = *world.resource::<crate::keys::Live>();
-        door.tabs().iter().enumerate().find_map(|(i, &want)| {
+        workspace.panels().iter().enumerate().find_map(|(i, &want)| {
             let action = Action::tab_slot(i)?;
             keys::just_pressed(keyboard, live, action).then_some(want)
         })
     };
     if let Some(want) = want {
-        crate::editor::open_door(world, door, Some(want));
+        crate::editor::open_door(world, workspace, Some(want));
     }
 }
 
@@ -4860,13 +4780,13 @@ fn click_tab(click: On<PointerClick>, tabs: Query<&Tab>, mut commands: Commands)
     // Deferred, because `open_door` takes the whole `World`. A global `Pointer` observer fires on any
     // screen, so the door and the editor state are checked where the command runs, not assumed here.
     commands.queue(move |world: &mut World| {
-        let Some(door) = world.get_resource::<Door>().copied() else {
+        let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
             return;
         };
         if !world.contains_resource::<crate::editor::EditorState>() {
             return;
         }
-        crate::editor::open_door(world, door, Some(want));
+        crate::editor::open_door(world, workspace, Some(want));
     });
 }
 
@@ -4891,13 +4811,13 @@ fn rescan_key(
 /// switching removed rather than a new behaviour.
 fn scan_on_entering_the_kits_door(
     project: Option<Res<Project>>,
-    door: Option<Res<Door>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     mut state: ResMut<ImportState>,
 ) {
-    let (Some(project), Some(door)) = (project, door) else {
+    let (Some(project), Some(workspace)) = (project, workspace) else {
         return;
     };
-    if door.opens_on() == Mode::Meshes && !state.scanned {
+    if workspace.opens_on() == Mode::Meshes && !state.scanned {
         scan(&project, &mut state);
     }
 }
@@ -9479,7 +9399,7 @@ fn rebuild_candidates(
 /// map palette, and for the same measured reason.
 ///
 /// **Exactly one row is ever highlighted**, which is the audit's M4 held at the layer that
-/// draws: `Selected::now` ranks the headings above the mesh cursor, so crossing onto a heading
+/// draws: `Selected::now` ranks the headings above the mesh cursor, so switching onto a heading
 /// cannot leave the row you came from wearing a rail. Compares before writing: all three carriers
 /// are change-detected and this runs every frame over every row in the list.
 #[allow(clippy::type_complexity)]
@@ -11730,14 +11650,14 @@ mod write_library_tests {
 }
 
 #[cfg(test)]
-mod other_door_tests {
+mod the_other_workspace_tests {
     use super::*;
 
     /// The cue is a way across: Map and Kit lead to each other, never to themselves, and Rigs leads nowhere.
     #[test]
     fn the_cue_leads_across_and_never_to_itself() {
-        assert_eq!(other_door(Door::Map), Some(Door::Kit));
-        assert_eq!(other_door(Door::Kit), Some(Door::Map));
-        assert_eq!(other_door(Door::Rigs), None);
+        use crate::workspace::Workspace;
+        assert_eq!(the_other_workspace(Workspace::Map), Some(Workspace::Kit));
+        assert_eq!(the_other_workspace(Workspace::Kit), Some(Workspace::Map));
     }
 }

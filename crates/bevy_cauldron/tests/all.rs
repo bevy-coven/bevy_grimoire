@@ -16,6 +16,7 @@
 
 mod a_project_skin_previews_only_in_the_panel;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
+mod a_workspace_switch_keeps_the_map;
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;

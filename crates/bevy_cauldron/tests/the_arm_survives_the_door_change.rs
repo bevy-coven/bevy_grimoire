@@ -13,7 +13,7 @@
 //!
 //! Not *"does the arm survive?"* but *"**where does the arm live?**" — because that is the
 //! question the fix answered, and it is the question that decides everything else. The arm is a
-//! field of `ComposeState`, and `ComposeState` is `Ownership::Door`: the table in `screen.rs` says
+//! field of `ComposeState`, and `ComposeState` is `Ownership::Workspace`: the table in `screen.rs` says
 //! a door change resets it. So the arm is reset with it. **The table is the defect, stated in the
 //! table's own words.**
 
@@ -46,8 +46,8 @@ fn the_arm_does_not_live_in_something_a_door_change_resets() {
     // door's cursors.
     assert_ne!(
         compose,
-        Some(Ownership::Door),
-        "the armed composition is a field of `ComposeState`, and `ComposeState` is `Ownership::Door` \
+        Some(Ownership::Workspace),
+        "the armed composition is a field of `ComposeState`, and `ComposeState` is `Ownership::Workspace` \
          — so a door change resets it. The arm is the author's intent and it has to cross: the \
          composition was made on the Kit door and the map that stamps it is on the Map door. \
          Measured on 2026-10-21: the COMPOSE tab armed a house and said *\"the map tab stamps \
@@ -92,9 +92,9 @@ fn the_arms_home_is_the_table_and_the_table_is_the_defect() {
     // The baseline: the arm is a field of `ComposeState`, and `ComposeState` is the door's.
     assert_ne!(
         ownership("bevy_cauldron::compose::ComposeState"),
-        Some(Ownership::Door),
+        Some(Ownership::Workspace),
         "the armed composition is a field of `ComposeState`, and `ComposeState` is \
-         `Ownership::Door` - so a door change resets it. The arm is the author's intent and it \
+         `Ownership::Workspace` - so a door change resets it. The arm is the author's intent and it \
          has to cross: the composition was made on the Kit door and the map that stamps it is on \
          the Map door. Measured on 2026-10-21: the COMPOSE tab armed a house and said that the \
          map tab stamps it, and there was no map tab in that process, because the door is chosen \

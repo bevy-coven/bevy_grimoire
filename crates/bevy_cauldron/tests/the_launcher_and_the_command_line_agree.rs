@@ -80,7 +80,7 @@ fn the_copied_line_run_headless_opens_the_same_project_and_door() {
         let from_launcher = args::open(&launcher::argv_for(&odd, kit, door)).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(from_line.project.root, from_launcher.project.root, "the same project");
         assert_eq!(from_line.project.root, odd.canonicalize().unwrap());
-        assert_eq!(from_line.door, from_launcher.door, "the same door");
+        assert_eq!(from_line.workspace, from_launcher.workspace, "the same door");
         assert_eq!(from_line.project.namespace, from_launcher.project.namespace, "the same kit");
         assert!(!args::opens_the_launcher(&words[1..]), "and it skips the launcher");
     }

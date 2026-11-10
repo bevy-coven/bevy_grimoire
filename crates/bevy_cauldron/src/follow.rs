@@ -41,7 +41,7 @@ use bevy::prelude::*;
 
 use crate::editor::{FrameTarget, MapFraming, apply_frame, resolve_frame};
 use crate::project::{OpenMap, Project};
-use crate::tiles::Door;
+use crate::workspace::Workspace;
 use crate::view::{MainCamera, Rig};
 
 /// **How long the camera takes to reach a change**, seconds. Long enough to read as one movement,
@@ -156,7 +156,7 @@ struct Ease {
 ///
 /// **A `Session` resource** (`screen::OWNERSHIP`): a follow raised on another door opens the Map and
 /// is carried out there, and a door change resets the door's own state — a request kept there would
-/// be erased by the very crossing it asked for.
+/// be erased by the very switching it asked for.
 #[derive(Resource, Default)]
 pub struct Following {
     /// Each request with the words the chip says it in (`None` for one raised without a sentence) and
@@ -216,7 +216,7 @@ pub struct Following {
     outline_box: Option<[f32; 4]>,
     /// The `Time<Real>` second the ring comes down at.
     outline_until: f64,
-    /// **Whether the Map has been asked for on this request's behalf.** A `Door::Map` that does not
+    /// **Whether the Map has been asked for on this request's behalf.** A `Workspace::Map` that does not
     /// follow drops the request instead of asking again every frame.
     asked_for_the_map: bool,
 }
@@ -557,7 +557,7 @@ impl Plugin for FollowPlugin {
                 // drawn on: `view::drive` reads the rig every frame to build the transform.
                 //
                 // **And before the whole-map frame on entry**, which is one shot per door: a change
-                // that arrives just after a crossing would otherwise be framed by the follow and
+                // that arrives just after a switching would otherwise be framed by the follow and
                 // then overwritten by the whole map a frame later.
                 // **Before the request is taken**, so a follow never carries the last map's ease or
                 // ring onto the new map.
@@ -606,7 +606,7 @@ fn at(ease: &Ease) -> (Vec3, f32) {
 /// **A change made from another door opens the Map first.** The camera is the Map door's, so the
 /// request waits while the editor crosses — through [`crate::editor::DoorRequest`], the same
 /// mechanism `door_open` uses, so a question on screen holds both the same way. A question open, or a
-/// crossing already waiting, holds the request rather than stacking a second one.
+/// switching already waiting, holds the request rather than stacking a second one.
 #[allow(clippy::too_many_arguments)]
 fn take_the_follow_request(
     mut following: ResMut<Following>,
@@ -614,7 +614,7 @@ fn take_the_follow_request(
     mut framing: ResMut<MapFraming>,
     project: Option<Res<Project>>,
     open: Option<Res<OpenMap>>,
-    door: Option<Res<Door>>,
+    door: Option<Res<Workspace>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     confirm: Option<Res<crate::confirm::Confirm>>,
     cameras: Query<&Camera, With<MainCamera>>,
@@ -748,15 +748,15 @@ fn take_the_follow_request(
         following.note_what_waits();
         return;
     }
-    // **The camera is the Map door's.** A crossing is the editor's own request mechanism, so a
+    // **The camera is the Map door's.** A switching is the editor's own request mechanism, so a
     // follow from another door asks for it and waits.
     //
     // **Once per request, and never for ever** (review of #358, nit g). The request below is asked
     // for on the frame the queue first has something to carry, and marked asked; a frame that then
-    // finds the door still not the Map — the crossing was refused, or a question on screen held it —
-    // **drops the request** rather than asking again every frame. Asking again would be a crossing
+    // finds the door still not the Map — the switching was refused, or a question on screen held it —
+    // **drops the request** rather than asking again every frame. Asking again would be a switching
     // asked for by a camera move nobody is waiting on any more, and it would never end.
-    let on_the_map = door.as_deref().is_none_or(|door| *door == Door::Map);
+    let on_the_map = door.as_deref().is_none_or(|door| *door == Workspace::Map);
     if !on_the_map {
         if following.asked_for_the_map {
             following.queue.pop_front();
@@ -768,12 +768,12 @@ fn take_the_follow_request(
         });
         if asking {
             // **Held, not asked for**: a question is on screen, or the editor is already leaving, and
-            // this frame is not one that can start a crossing. The request waits for a frame that can.
+            // this frame is not one that can start a switching. The request waits for a frame that can.
             return;
         }
         if let Some(state) = state.as_mut() {
             state.door_request = Some(crate::editor::DoorRequest {
-                door: Door::Map,
+                workspace: Workspace::Map,
                 tab: Some(crate::tiles::Mode::Map),
             });
             following.asked_for_the_map = true;
@@ -828,7 +828,7 @@ fn take_the_follow_request(
     let from_height = rig.height;
     let (to_focus, to_height) = apply_frame(&mut rig, &settled, aspect, open, FOLLOW_MARGIN_FRAC);
     // **The map's own open-frame must not fight this one.** `frame_map_on_open` frames the whole map
-    // once per door entry; a change that arrives just after a crossing would be framed by the follow
+    // once per door entry; a change that arrives just after a switching would be framed by the follow
     // and then overwritten by the whole map.
     framing.settle();
     if lands {

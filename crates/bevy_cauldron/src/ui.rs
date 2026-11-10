@@ -497,15 +497,17 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
     }
 }
 
-/// **The shell's arrangement**, as a dock layout a divider can move (UI-30, #224).
+/// **The shell's arrangement for a workspace**, as a dock layout a divider can move (UI-30, #224;
+/// per workspace since NV-02, #379).
 ///
-/// A left dock, the viewport in the middle with the most room, and a right dock — the shape the
-/// hand-built frame has had since 2026-08-17, now data that gooey keeps and a person edits.
+/// Each workspace has its own — Map gives the inspector a column, Kit gives the library more room,
+/// World puts its panels under the view. The shape the hand-built frame has had since 2026-08-17 is
+/// Map's, because that is where a person lands.
 /// **A person moved a divider or a tab: their arrangement is saved** (UI-33, #227).
 ///
 /// `bevy_gooey` reports every change a person makes to a `Dock` with `DockLayoutChanged`, carrying the
 /// layout it now shows. Writing it to the user's file is what makes the arrangement survive a restart;
-/// the editor reads it back through `SettingsLayer::shell_layout` on the next start.
+/// the editor reads it back through `SettingsLayer::workspace_layout` on the next start.
 ///
 /// **Nothing is written to a test or to a run with no file**: no `UserSettingsFile` means no place the
 /// person asked the editor to keep anything, so the event is taken and dropped, and a headless test
@@ -513,6 +515,7 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
 pub fn save_the_layout(
     changed: On<bevy_gooey::DockLayoutChanged>,
     file: Option<Res<crate::settings::UserSettingsFile>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
 ) {
     let Some(file) = file else { return };
@@ -520,9 +523,12 @@ pub fn save_the_layout(
     // (a switch, a number, a named choice), and a layout is none of those; `edit_layer` is the same
     // primitive underneath it — the file is read as the editor reads it, refused if it does not
     // read, checked to read back, and written atomically — with the layer itself in hand.
+    // **Keyed by the workspace that is open**, so a drag in Map moves nothing in Kit.
+    let Some(workspace) = workspace.map(|w| *w) else { return };
     let layout = changed.layout.clone();
+    let key = workspace.id().to_owned();
     if let Err(why) = crate::setting_catalogue::edit_layer(&file.0, move |layer| {
-        layer.shell_layout = Some(layout);
+        layer.workspace_layout.insert(key, layout);
         Ok(())
     }) && let Some(state) = state.as_deref_mut()
     {
@@ -539,10 +545,18 @@ pub fn save_the_layout(
 /// editor costs one comparison.
 pub fn follow_the_saved_layout(
     settings: Option<Res<crate::settings::EditorSettings>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
     mut docks: Query<&mut bevy_gooey::Dock>,
 ) {
     let Some(settings) = settings else { return };
-    let want = settings.shell_layout.clone().unwrap_or_else(shell_layout);
+    let workspace = workspace.as_deref().copied().unwrap_or_default();
+    // **This workspace's arrangement, else its own default.** The `Dock` is rebuilt in the same
+    // frame a workspace is entered, so the layout on screen is the one the person left.
+    let want = settings
+        .workspace_layout
+        .get(workspace.id())
+        .cloned()
+        .unwrap_or_else(|| workspace.default_layout());
     for mut dock in &mut docks {
         if dock.0 != want {
             dock.0 = want.clone();
@@ -578,19 +592,8 @@ pub fn follow_the_motion_setting(settings: Option<Res<crate::settings::EditorSet
     }
 }
 
-pub fn shell_layout() -> bevy_gooey::DockLayout {
-    use bevy_gooey::{DockLayout, SplitAxis};
-    DockLayout::split(
-        SplitAxis::Horizontal,
-        0.22,
-        DockLayout::group(["inspector"]),
-        DockLayout::split(
-            SplitAxis::Horizontal,
-            0.78,
-            DockLayout::group(["viewport"]),
-            DockLayout::group(["place"]),
-        ),
-    )
+pub fn shell_layout(workspace: crate::workspace::Workspace) -> bevy_gooey::DockLayout {
+    workspace.default_layout()
 }
 
 #[cfg(test)]

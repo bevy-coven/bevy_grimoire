@@ -63,6 +63,15 @@ impl Command {
     /// Judged by the rules the dispatcher uses ([`keys::fires_in`], [`Stances::allows`]), so a menu
     /// never offers what the key would refuse.
     pub fn enabled(&self, live: Live) -> Result<(), &'static str> {
+        // **A workspace whose part is not built says which issue brings it.** Checked before the
+        // live-context rules, because *that* is the reason a person pressing `Cmd`+`1` learns
+        // nothing: the workspace does not exist yet, not that a field has the keys. Its own words
+        // are the issue's, so the refusal and the roadmap cannot disagree.
+        if let Some(workspace) = self.action.workspace()
+            && let Some(missing) = workspace.missing()
+        {
+            return Err(missing);
+        }
         if live.0 == Context::Typing {
             return Err("A text field is taking the keys");
         }
@@ -212,15 +221,27 @@ fn id_named(id: &str) -> &'static str {
 pub fn identity(action: Action) -> (&'static str, &'static str) {
     match action {
         // ── The frame around every tab ───────────────────────────────────────
-        Action::TabSlot1 => ("view.panel_1", "Open panel 1 of this door"),
-        Action::TabSlot2 => ("view.panel_2", "Open panel 2 of this door"),
-        Action::TabSlot3 => ("view.panel_3", "Open panel 3 of this door"),
+        Action::TabSlot1 => ("view.panel_1", "Open the first panel of this workspace"),
+        Action::TabSlot2 => ("view.panel_2", "Open the second panel of this workspace"),
+        Action::TabSlot3 => ("view.panel_3", "Open the third panel of this workspace"),
+        // **`workspace.<id>`, every one of them**, so the chord, the menu, the palette an agent
+        // names and the command's own refusal all spell the workspace the same way
+        // (`Workspace::id`).
+        Action::WorkspaceProject => ("workspace.project", "Go to the Project workspace"),
+        Action::WorkspaceMap => ("workspace.map", "Go to the Map workspace"),
+        Action::WorkspaceWorld => ("workspace.world", "Go to the World workspace"),
+        Action::WorkspaceKit => ("workspace.kit", "Go to the Kit workspace"),
+        Action::WorkspaceAnimation => ("workspace.animation", "Go to the Animation workspace"),
+        Action::WorkspaceSound => ("workspace.sound", "Go to the Sound workspace"),
+        Action::WorkspaceFiles => ("workspace.files", "Go to the Files workspace"),
+        Action::WorkspaceGame => ("workspace.game", "Go to the Game workspace"),
+        Action::WorkspaceAgent => ("workspace.agent", "Go to the Agent workspace"),
         Action::EditTile => ("meshes.define_piece", "Define this piece"),
         Action::Shortcuts => ("help.show_keys", "Show every key on what it does"),
         Action::Save => ("file.save", "Save"),
         Action::Snip => ("tools.snip", "Snip an area of the editor"),
         Action::MainMenu => ("file.main_menu", "Close project"),
-        Action::SwitchDoor => ("view.switch_door", "Switch to the other workspace"),
+        Action::SwitchDoor => ("view.switch_workspace", "Switch to the other workspace"),
         Action::ShowErrors => ("view.show_errors", "Show this session's errors"),
         Action::CopyInfo => ("edit.copy_tab_text", "Copy this tab's text"),
         Action::Cancel => ("edit.cancel", "Back out"),

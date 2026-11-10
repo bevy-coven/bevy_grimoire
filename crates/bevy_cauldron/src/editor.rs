@@ -260,7 +260,7 @@ pub struct EditorState {
     /// same rule the chooser's delete prompt follows, where `Y` agrees and `Enter` does not.
     pub leaving: bool,
     /// **A door an operation asked for, waiting to be crossed to.** `door_open` sets it, from the keys
-    /// and from an agent alike. It is taken by the crossing, or held while the leaving question is up.
+    /// and from an agent alike. It is taken by the switching, or held while the leaving question is up.
     pub door_request: Option<DoorRequest>,
     /// **A command of the project's waiting for the person to allow it** (Send, Play), and where their
     /// trust store is. See [`crate::trusted`].
@@ -2642,7 +2642,7 @@ impl Plugin for EditorPlugin {
             .init_resource::<Rung>()
             .init_resource::<Proposal>()
             // **A resource, not a field on `EditorState`.** `EditorState` is rebuilt on every door
-            // crossing and the sync's `Local` is not, so a counter living there disagreed with the
+            // switching and the sync's `Local` is not, so a counter living there disagreed with the
             // thing comparing against it — see [`ProposalClock`].
             .init_resource::<ProposalClock>()
             .init_resource::<FineAnchor>()
@@ -2715,7 +2715,7 @@ impl Plugin for EditorPlugin {
         );
 
         // **Resources always; systems only on the door that has a map** — as a run condition, not
-        // a check here. See `Door::map_door_is_open` for what reading the door at build time cost.
+        // a check here. See `Workspace::map_is_open` for what reading the door at build time cost.
         app.add_systems(
                 Update,
                 ((
@@ -2729,7 +2729,7 @@ impl Plugin for EditorPlugin {
                     sense_fine_anchor.in_set(keys::Phase::Sense),
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor))
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
             )
             .add_observer(crate::filter::on_click)
             // **The way back is not the Maps door's**, and gating it there was how the Kit and Rigs
@@ -2748,21 +2748,21 @@ impl Plugin for EditorPlugin {
                     .run_if(in_state(crate::screen::Screen::Editor)),
             )
             // **The door switch, and it is on every door.** The key says *"the other door"*, so it
-            // has to be live in both — and the crossing takes the project out of the world, which is
+            // has to be live in both — and the switching takes the project out of the world, which is
             // why it is an exclusive system.
             //
             // **In `PreUpdate`, and that is the whole design.**
             //
             // **The live test found why.** The editor's Map-door systems are gated by
-            // `Door::map_door_is_open` — a **run condition on the tuple**, and Bevy evaluates a
+            // `Workspace::map_is_open` — a **run condition on the tuple**, and Bevy evaluates a
             // *set's* conditions **once per schedule** (`schedule/executor/multi_threaded.rs`:
-            // `evaluated_sets`). So a crossing that ran inside `Update` left that condition
+            // `evaluated_sets`). So a switching that ran inside `Update` left that condition
             // evaluated against the *old* door, and four systems that take a `Res<OpenMap>` ran on
             // the Kit door — which has no map — and Bevy 0.19 **panics a system whose `Res<T>` is
             // missing** rather than skipping it.
             //
             // **`PreUpdate` runs before `StateTransition`, which runs before `Update`.** So the
-            // crossing reads the key in `PreUpdate`, sets the pending state, and the transition —
+            // switching reads the key in `PreUpdate`, sets the pending state, and the transition —
             // the teardown and the rebuild — happens before any `Update` system evaluates its
             // conditions against the new door.
             .add_systems(
@@ -2799,7 +2799,7 @@ impl Plugin for EditorPlugin {
                     // The Map door's own furniture: a palette bound to a map, the bounds floor, the
                     // rows already placed. `spawn_existing` takes `Res<OpenMap>`, which no other
                     // door has.
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
             )
             .add_systems(
                 Update,
@@ -2960,7 +2960,7 @@ impl Plugin for EditorPlugin {
                     (draw_edge_faults, draw_crowd_heat, crate::balloon::show_balloon).run_if(in_map_mode),
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor))
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
             )
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went
@@ -2969,7 +2969,7 @@ impl Plugin for EditorPlugin {
                 Update,
                 relevel_placements
                     .run_if(in_state(crate::screen::Screen::Editor))
-                    .run_if(crate::tiles::Door::map_door_is_open),
+                    .run_if(crate::workspace::Workspace::map_is_open),
             )
             // **The ghost pair is NOT map-door gated** — the map block above was swallowing it. A
             // tile's picked-but-not-dropped mesh (`StagedTile` + `Ghost`) is assembled on the Tiles
@@ -3074,7 +3074,7 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
 /// **`dirty`, not `&OpenMap`, because two of the three doors have no map.** The Kit and Rigs doors
 /// carry no `OpenMap` at all (`args::Opened::insert_into` removes it), so a signature naming one
 /// forced every caller — and therefore every route back to the menu — behind
-/// `Door::map_door_is_open`. That left the Kit door with a `‹ kits & maps` button that lit on hover
+/// `Workspace::map_is_open`. That left the Kit door with a `‹ kits & maps` button that lit on hover
 /// and did nothing, a `Cmd+O` the shortcut overlay advertised and no system handled, and no exit but
 /// closing the window. Nothing to lose is `false`, which is the clean-map question.
 pub fn leave_for_menu(dirty: bool, state: &mut EditorState, confirm: &mut crate::confirm::Confirm) {
@@ -3162,7 +3162,7 @@ pub fn save_and_leave(
 /// **`Cmd+O` leaves this door for the chooser**, from whichever door is open.
 ///
 /// Its own system rather than a branch in [`keys`], because `keys` is Maps-door furniture — it takes
-/// `ResMut<OpenMap>` and `ResMut<Project>` and is registered behind `Door::map_door_is_open` — while
+/// `ResMut<OpenMap>` and `ResMut<Project>` and is registered behind `Workspace::map_is_open` — while
 /// `Action::MainMenu` is `Context::Global` in the census and `chrome::shortcut_hint` prints it on
 /// every panel. A globally advertised chord handled on one door in three is the dead key `keys.rs`
 /// refuses to ship, and it was the only chord out of the Kit door.
@@ -3223,36 +3223,49 @@ fn discard_changes(open: &mut OpenMap, project: &Project) -> Result<(), String> 
 /// door leaves the map, and the map may hold unsaved edits — so the same question is raised, and
 /// the same answer path saves it.
 ///
-/// **A refusal is a refusal.** A crossing that cannot complete says so and **stays put**: the same
+/// **A refusal is a refusal.** A switching that cannot complete says so and **stays put**: the same
 /// door, the same project, the same map, the same arm. See [`crate::screen::cross`].
 fn switch_door(world: &mut World) {
-    // **The key first, and it is read the way every other verb reads it.**
-    let pressed = {
-        let keyboard = world.resource::<ButtonInput<KeyCode>>();
-        let live = *world.resource::<keys::Live>();
-        keys::just_pressed(keyboard, live, Action::SwitchDoor)
-    };
-    if !pressed {
-        return;
-    }
-    // **A prompt still owns the keyboard while it is up.**
+    // **A prompt still owns the keyboard while it is up**, and it owns it for the workspace chords
+    // too: a switch taken under the leaving question would change the screen a person is being
+    // asked about.
     if world.resource::<EditorState>().leaving {
         return;
     }
-    cross_to_the_other_door(world);
+    // **One read of the keyboard answers `=` and the nine workspace chords.** Each chord is one
+    // row of the census, so the search is over `Action::ALL` rather than a second list — and the
+    // order it searches is the order the bindings are declared in, which is the order the strip
+    // and the menus show.
+    let (other, workspace) = {
+        let keyboard = world.resource::<ButtonInput<KeyCode>>();
+        let live = *world.resource::<keys::Live>();
+        let other = keys::just_pressed(keyboard, live, Action::SwitchDoor);
+        let workspace = keys::Action::ALL
+            .into_iter()
+            .find_map(|action| {
+                let target = action.workspace()?;
+                keys::just_pressed(keyboard, live, action).then_some(target)
+            });
+        (other, workspace)
+    };
+    if let Some(workspace) = workspace {
+        open_door(world, workspace, None);
+    } else if other {
+        cross_to_the_other_door(world);
+    }
 }
 
 /// **Cross to the other door** — what `=` does and what a click on the strip's name of it does (#288),
 /// so the two cannot disagree about which door is the other.
 pub fn cross_to_the_other_door(world: &mut World) {
-    let Some(door) = world.get_resource::<crate::tiles::Door>().copied() else {
+    let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;
     };
-    let to = match door {
-        crate::tiles::Door::Map => crate::tiles::Door::Kit,
-        _ => crate::tiles::Door::Map,
+    let to = match workspace {
+        crate::workspace::Workspace::Map => crate::workspace::Workspace::Kit,
+        _ => crate::workspace::Workspace::Map,
     };
-    // **The crossing is the operation's**, so the key and the agent take one path. `open_door` runs
+    // **The switching is the operation's**, so the key and the agent take one path. `open_door` runs
     // `door_open`, asks the leaving question when the map is unsaved, and crosses.
     open_door(world, to, None);
 }
@@ -3310,11 +3323,11 @@ fn answer_the_leaving_prompt(
 /// **Answer the door switch's own question** — and it goes to the **other door**, not the menu.
 ///
 /// **A question of its own**, because the two answers go to different places: leaving goes to the
-/// menu and crossing goes to the other door, and one question with two destinations would need
+/// menu and switching goes to the other door, and one question with two destinations would need
 /// the answer to know which question it was answering.
 ///
 /// **Saving is the going**, exactly as it is on the menu's route — so a refused save keeps the
-/// author here with the reason, rather than crossing on a map that was never written.
+/// author here with the reason, rather than switching on a map that was never written.
 fn answer_the_switch_prompt(world: &mut World) {
     let Some(agreed) = world
         .resource_mut::<crate::confirm::Confirm>()
@@ -3379,12 +3392,12 @@ fn answer_the_switch_prompt(world: &mut World) {
 
 /// **A door an operation asked for, waiting to be crossed to.**
 ///
-/// `door_open` answers with a door and, optionally, a tab. The keys reach the crossing through
+/// `door_open` answers with a door and, optionally, a tab. The keys reach the switching through
 /// [`open_door`] at once; an agent's request over BRP is stored in [`EditorState::door_request`] and
 /// crossed in the next frame by [`apply_pending_door`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DoorRequest {
-    pub door: crate::tiles::Door,
+    pub workspace: crate::workspace::Workspace,
     pub tab: Option<crate::tiles::Mode>,
 }
 
@@ -3392,7 +3405,7 @@ pub struct DoorRequest {
 /// sentence, so a person and an agent read the same reason.
 pub const LEAVING_QUESTION_REFUSAL: &str = "the editor is asking the person a question first (\"Leave this map?\"). The person answers it, then the door can be asked for again.";
 /// **A door is already waiting.** The editor crosses to it first; a second request would replace it.
-pub const DOOR_ALREADY_WAITING_REFUSAL: &str = "another door is already waiting to be crossed to. The editor crosses to it first, then this door can be asked for.";
+pub const WORKSPACE_ALREADY_WAITING_REFUSAL: &str = "another door is already waiting to be crossed to. The editor crosses to it first, then this door can be asked for.";
 
 /// **Why a door may not be asked for right now, or `None` when it may.** `asking` is whether any
 /// question is on screen, the leaving question or another.
@@ -3400,7 +3413,7 @@ pub fn door_refusal(state: &EditorState, asking: bool) -> Option<&'static str> {
     if asking || state.leaving {
         Some(LEAVING_QUESTION_REFUSAL)
     } else if state.door_request.is_some() {
-        Some(DOOR_ALREADY_WAITING_REFUSAL)
+        Some(WORKSPACE_ALREADY_WAITING_REFUSAL)
     } else {
         None
     }
@@ -3416,14 +3429,11 @@ pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) 
     let Some(after) = after else {
         return;
     };
-    let door = after
-        .get("door")
+    let workspace = after
+        .get("workspace")
+        .or_else(|| after.get("door"))
         .and_then(serde_json::Value::as_str)
-        .and_then(|d| {
-            crate::tiles::Door::ALL
-                .into_iter()
-                .find(|x| x.label().eq_ignore_ascii_case(d))
-        });
+        .and_then(crate::workspace::Workspace::from_flag);
     let tab = after
         .get("tab")
         .and_then(serde_json::Value::as_str)
@@ -3433,16 +3443,17 @@ pub fn request_door(state: &mut EditorState, after: Option<&serde_json::Value>) 
                 .copied()
                 .find(|m| m.label().eq_ignore_ascii_case(t))
         });
-    if let Some(door) = door {
-        state.door_request = Some(DoorRequest { door, tab });
+    if let Some(workspace) = workspace {
+        state.door_request = Some(DoorRequest { workspace, tab });
     }
 }
 
 /// **Open a door through the registered `door_open` operation.** The keys and the tab shortcuts call
 /// this, so a key and an agent get the same answer about what may be opened.
-pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate::tiles::Mode>) {
+pub fn open_door(world: &mut World, workspace: crate::workspace::Workspace, tab: Option<crate::tiles::Mode>) {
     let params = serde_json::json!({
-        "door": door.label().to_lowercase(),
+        "workspace": workspace.id(),
+        "door": workspace.id(),
         "tab": tab.map(|m| m.label().to_lowercase()),
     });
     // **Copies, not the world's own.** A door press changes no document. Taking the resources out and
@@ -3475,7 +3486,7 @@ pub fn open_door(world: &mut World, door: crate::tiles::Door, tab: Option<crate:
 
 /// **Carry out the door an agent asked for**, when the editor is not asking a question.
 fn apply_pending_door(world: &mut World) {
-    // **A question on screen owns the frame (gap 6).** A crossing taken under any question acts on an
+    // **A question on screen owns the frame (gap 6).** A switching taken under any question acts on an
     // answer the person has not given, so the stored door waits until the question is answered.
     let asking = world
         .get_resource::<crate::confirm::Confirm>()
@@ -3493,11 +3504,11 @@ fn apply_door_request(world: &mut World) {
     let Some(request) = world.resource_mut::<EditorState>().door_request.take() else {
         return;
     };
-    let Some(current) = world.get_resource::<crate::tiles::Door>().copied() else {
+    let Some(current) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;
     };
     let dirty = world.get_resource::<OpenMap>().is_some_and(|o| o.dirty());
-    if request.door != current && dirty {
+    if request.workspace != current && dirty {
         // **The request waits for the answer**, and the leaving question owns the next frame.
         world.resource_mut::<EditorState>().door_request = Some(request);
         world.resource_mut::<EditorState>().leaving = true;
@@ -3513,24 +3524,24 @@ fn apply_door_request(world: &mut World) {
     enter_door(world, request);
 }
 
-/// **Cross to a door and enter the tab it was asked for.** A refused crossing stops here, so a tab is
+/// **Cross to a door and enter the tab it was asked for.** A refused switching stops here, so a tab is
 /// never entered on a door the author did not reach.
 fn enter_door(world: &mut World, request: DoorRequest) {
-    // **The receipt is carried across a crossing (cycle 8, gap 7).** The crossing resets
+    // **The receipt is carried across a switching (cycle 8, gap 7).** The switching resets
     // `EditorState`, which erased the receipt of whoever asked for the door: an agent's `door_open`
     // changed the window's door with no word of who did it. It is posted again once the tab is
     // entered, so it stays the last word the person reads. Problems are not carried: the journal holds
-    // them already. A tab switch with no crossing still clears the note, as it always has.
+    // them already. A tab switch with no switching still clears the note, as it always has.
     let receipt = world.resource::<EditorState>().status.note_text().to_owned();
     let mut crossed = false;
-    if world.get_resource::<crate::tiles::Door>().copied() != Some(request.door) {
-        match crate::screen::cross(world, request.door) {
+    if world.get_resource::<crate::workspace::Workspace>().copied() != Some(request.workspace) {
+        match crate::screen::cross(world, request.workspace) {
             Ok(()) => {
                 crossed = true;
                 world
                     .resource_mut::<EditorState>()
                     .status
-                    .note(format!("the {} door", request.door.label().to_lowercase()));
+                    .note(format!("the {} workspace", request.workspace.title().to_lowercase()));
             }
             Err(e) => {
                 world
@@ -7508,8 +7519,8 @@ pub struct Proposed {
     /// the second proposal of the same length go undrawn. See [`sync_proposal_ghosts`].
     ///
     /// **Not `state.seed`.** That is a door-scoped field (`EditorState` is rebuilt on every door
-    /// crossing, `seed: 1`), and the sync's `Local` survives the reset — so the two disagreed after
-    /// a crossing and a proposal could be mistaken for the one already drawn. [`ProposalClock`] is a
+    /// switching, `seed: 1`), and the sync's `Local` survives the reset — so the two disagreed after
+    /// a switching and a proposal could be mistaken for the one already drawn. [`ProposalClock`] is a
     /// resource, so it outlives the door exactly as the `Local` does.
     pub generation: u64,
     /// **The part of the map this layout was laid in** (#192), or `None` for the whole map. Keeping
@@ -7943,7 +7954,7 @@ pub fn apply_frame(
     (focus, height)
 }
 
-/// **Whether the Map has been framed for this door** (backlog E-022). A door resource, so a crossing
+/// **Whether the Map has been framed for this door** (backlog E-022). A door resource, so a switching
 /// or a leave resets it with the rest of the door's state (`screen::door_state!`) and the next Map
 /// opens framed. `done` makes the framing one-shot: after it, the person's own camera moves are never
 /// overwritten. `last_size` is the viewport size seen on the previous update.
@@ -7956,7 +7967,7 @@ pub struct MapFraming {
 impl MapFraming {
     /// **The map has already been framed for this door**, so the one-shot entry frame never runs.
     ///
-    /// **Called by the follow** (`crate::follow`): a change that arrives just after a crossing is framed
+    /// **Called by the follow** (`crate::follow`): a change that arrives just after a switching is framed
     /// by the follow, and the entry frame — which is one shot per door and runs on the same frames —
     /// would then put the camera back on the whole map and leave the person looking at a room instead of
     /// the piece the agent just placed.
@@ -9044,7 +9055,7 @@ pub fn sense_context(
 /// it on the way out of a door, and **every run condition is evaluated** — a bare `Res<Mode>` here
 /// panicked on the first `Update` after `Esc` took the author back to the menu, even though the
 /// `in_state(Editor)` condition beside it had already answered false. Same shape as
-/// `Door::map_door_is_open`, and for the same reason.
+/// `Workspace::map_is_open`, and for the same reason.
 pub(crate) fn in_map_mode(mode: Option<Res<crate::tiles::Mode>>) -> bool {
     mode.is_some_and(|m| *m == crate::tiles::Mode::Map)
 }

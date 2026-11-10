@@ -326,11 +326,16 @@ pub struct EditorSettings {
     pub terminal_shell: Option<String>,
     /// The arguments `terminal_shell` is started with (VS Code's profile `args`); empty when none.
     pub terminal_shell_args: Vec<String>,
-    /// **The shell's arrangement, as a person left it** (UI-33, #227): a `bevy_gooey` `DockLayout` of
-    /// this door's panels, written by the editor when a divider or a tab is moved and read back on
-    /// the next start. `None` is `ui::shell_layout` — the default, so a person who has never moved
-    /// anything has no key in their file.
-    pub shell_layout: Option<bevy_gooey::DockLayout>,
+    /// **Each workspace's arrangement, as a person left it** (UI-33, #227; per workspace since
+    /// NV-02, #379): the workspace's id and the `bevy_gooey` `DockLayout` it shows, written by the
+    /// editor when a divider or a tab is moved and read back on the next start.
+    ///
+    /// **A map, not one layout.** A door was one arrangement because a door was one place; with nine
+    /// workspaces a single layout would move Map's inspector when somebody dragged Kit's, which is
+    /// the thing per-workspace layouts exist to stop. A workspace with no entry is
+    /// [`Workspace::default_layout`](crate::workspace::Workspace::default_layout) — its own default,
+    /// so a person who has never moved anything has no key in their file.
+    pub workspace_layout: BTreeMap<String, bevy_gooey::DockLayout>,
 }
 
 impl Default for EditorSettings {
@@ -353,7 +358,7 @@ impl Default for EditorSettings {
             terminal_agent_command: None,
             terminal_shell: None,
             terminal_shell_args: Vec::new(),
-            shell_layout: None,
+            workspace_layout: BTreeMap::new(),
         }
     }
 }
@@ -409,10 +414,11 @@ pub struct SettingsLayer {
     pub terminal_shell: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_shell_args: Option<Vec<String>>,
-    /// The shell's arrangement (UI-33, #227). Not in the settings catalogue: it is a thing a person
-    /// drags, not one they type, and Window ▸ Reset layout is the way back to the default.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shell_layout: Option<bevy_gooey::DockLayout>,
+    /// Each workspace's arrangement (UI-33, #227; per workspace since NV-02, #379). Not in the
+    /// settings catalogue: it is a thing a person drags, not one they type, and Window ▸ Reset
+    /// layout is the way back to the current workspace's default.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub workspace_layout: BTreeMap<String, bevy_gooey::DockLayout>,
 }
 
 impl Default for SettingsLayer {
@@ -436,7 +442,7 @@ impl Default for SettingsLayer {
             terminal_agent_command: None,
             terminal_shell: None,
             terminal_shell_args: None,
-            shell_layout: None,
+            workspace_layout: BTreeMap::new(),
         }
     }
 }
@@ -552,8 +558,8 @@ impl EditorSettings {
             }
             // **The whole arrangement, not a key of it**: a layout is one value, and a later layer
             // that states one replaces the earlier's (the same rule as `theme`).
-            if let Some(layout) = &layer.shell_layout {
-                out.shell_layout = Some(layout.clone());
+            for (workspace, layout) in &layer.workspace_layout {
+                out.workspace_layout.insert(workspace.clone(), layout.clone());
             }
         }
         out

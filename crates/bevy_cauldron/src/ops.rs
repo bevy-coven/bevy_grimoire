@@ -2550,10 +2550,10 @@ pub mod map_save {
 ///
 /// It reads the file through `OpenMap::open` — the same door the Map tab uses, so the naming rule and
 /// the refusal for a file that calls itself something else are one implementation — puts it in the
-/// context, and asks for the Map door. The crossing itself is the editor's, in the next frame, for
+/// context, and asks for the Map door. The switching itself is the editor's, in the next frame, for
 /// the same reason `door_open` waits: a map with unsaved edits asks the person before it is replaced.
 ///
-/// **It is not `door_open` with a parameter.** Crossing doors and choosing a map are two questions,
+/// **It is not `door_open` with a parameter.** Switching doors and choosing a map are two questions,
 /// and folding them would make a caller state a door it has no opinion about.
 pub mod map_open {
     use super::*;
@@ -2621,7 +2621,7 @@ pub mod map_open {
             // **The menu's root is enough, and that is the whole point of this verb.** An agent makes
             // a map from the menu (where there is a root and no loaded `Project`) and then wants in —
             // so this loads the project from the root when nothing is loaded, exactly as the editor
-            // does on a door crossing. Measured: without this, `map_open` right after `map_create`
+            // does on a door switching. Measured: without this, `map_open` right after `map_create`
             // refused with *"no project is open"*, which is the same dead end E-067 described.
             let loaded;
             let project = match (ctx.project.as_ref(), ctx.root.as_ref()) {
@@ -2672,7 +2672,7 @@ pub mod map_open {
             // **The project is loaded here too, and KEPT.** The plan may have loaded it from the
             // menu's root; a commit that then refused because `ctx.project` was still `None` was the
             // same dead end one step later — measured: `map_create` applied, `map_open` refused with
-            // "no project is open". Loading it into the context is what a crossing needs anyway: the
+            // "no project is open". Loading it into the context is what a switching needs anyway: the
             // editor cannot show a map without the project it belongs to.
             if ctx.project.is_none()
                 && let Some(root) = ctx.root.clone()
@@ -4988,8 +4988,8 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // operation rather than calling `fill::flood` / `OpenMap::save` themselves.
     ("fill", "fill_at("),
     ("map_save", "save_map("),
-    // **The Map door's crossing** — `screen::cross` re-reads the map through `map_open`, so a person
-    // crossing to the Map door and an agent opening one by name are one operation.
+    // **The Map door's switching** — `screen::cross` re-reads the map through `map_open`, so a person
+    // switching to the Map door and an agent opening one by name are one operation.
     ("map_open", "map_open"),
     // **The placement click** — `place_one` calls `plan_placement` and dispatches
     // `placement_add`, so a click and an agent put a piece down the same way (S2.1).
@@ -8678,25 +8678,26 @@ pub mod composition_arm {
 
 /// **Open a door, or a panel of one (cycle 8, item 1).**
 ///
-/// **The answer is the target; the editor does the crossing.** The keys and an agent's request reach
+/// **The answer is the target; the editor does the switching.** The keys and an agent's request reach
 /// the same operation, so a door is crossed by one path whoever asks. `door` is `kit`, `map` or
 /// `rigs`, and `tab`, when given, is a panel that door shows. Nothing changes on disk: the answer is
-/// read by [`crate::editor::request_door`], and the crossing is run by `editor::apply_door_request`.
+/// read by [`crate::editor::request_door`], and the switching is run by `editor::apply_door_request`.
 ///
 /// **The kit is not a parameter.** A project opens with one kit, and no operation switches kits, so a
 /// request that named one would have nothing to switch to.
 pub mod door_open {
     use super::*;
-    use crate::tiles::{Door, Mode};
+    use crate::tiles::Mode;
+    use crate::workspace::Workspace;
     use serde_json::json;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Params {
-        /// `kit`, `map` or `rigs`.
-        pub door: String,
-        /// A panel that door shows, by its label (e.g. `meshes`). Absent opens the door on its first
-        /// panel.
+        /// The workspace's id: `map`, `kit`, `animation`, and the six that are not built yet.
+        pub workspace: String,
+        /// A panel that workspace shows, by its label (e.g. `meshes`). Absent opens the workspace on
+        /// its first panel.
         #[serde(default)]
         pub tab: Option<String>,
     }
@@ -8704,20 +8705,20 @@ pub mod door_open {
     impl Params {
         /// **The JSON schema**, which is what an agent reads.
         pub fn schema() -> serde_json::Value {
-            let doors: Vec<String> = Door::ALL.iter().map(|d| d.label().to_lowercase()).collect();
+            let workspaces: Vec<&str> = Workspace::ALL.iter().map(|w| w.id()).collect();
             json!({
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["door"],
+                "required": ["workspace"],
                 "properties": {
-                    "door": {
+                    "workspace": {
                         "type": "string",
-                        "enum": doors,
-                        "description": "The door to cross to. kit makes reusable content; map builds the level; rigs is the rig bench."
+                        "enum": workspaces,
+                        "description": "The workspace to switch to. map builds the level; kit makes reusable content; animation is the rig bench. The others are not built yet and say which issue brings them."
                     },
                     "tab": {
                         "type": "string",
-                        "description": "A panel that door shows, e.g. meshes. Absent opens the door on its first panel."
+                        "description": "A panel that workspace shows, e.g. meshes. Absent opens the workspace on its first panel."
                     }
                 }
             })
@@ -8727,7 +8728,7 @@ pub mod door_open {
         pub fn parse(raw: &serde_json::Value) -> Result<Params, Refusal> {
             serde_json::from_value(raw.clone()).map_err(|e| {
                 Refusal::new(format!(
-                    "this is not a door to open: {e}. The fields are `door` and `tab`, and nothing else."
+                    "this is not a workspace to open: {e}. The fields are `workspace` and `tab`, and nothing else."
                 ))
             })
         }
@@ -8739,7 +8740,7 @@ pub mod door_open {
     ///
     /// `read_map` is the Map door's read. `plan` does it, so a map that will not open is refused
     /// before the answer says "applied". `commit` does not read it again: `dispatch_as` has just
-    /// planned, and the crossing reads the map once more. The same file was parsed three times per
+    /// planned, and the switching reads the map once more. The same file was parsed three times per
     /// request before this (cycle 8, gap 12).
     fn door_answer(
         ctx: &Ctx,
@@ -8747,17 +8748,19 @@ pub mod door_open {
         read_map: bool,
     ) -> Result<serde_json::Value, Refusal> {
         let p = Params::parse(params)?;
-        let Some(door) = Door::ALL
-            .into_iter()
-            .find(|d| d.label().eq_ignore_ascii_case(&p.door))
-        else {
-            let names: Vec<String> = Door::ALL.iter().map(|d| d.label().to_lowercase()).collect();
+        let Some(workspace) = Workspace::from_flag(&p.workspace) else {
+            let names: Vec<&str> = Workspace::ALL.iter().map(|w| w.id()).collect();
             return Err(Refusal::new(format!(
-                "`{}` is not a door. The doors are {}.",
-                p.door,
+                "`{}` is not a workspace. The workspaces are {}.",
+                p.workspace,
                 names.join(", ")
             )));
         };
+        // **An unbuilt workspace is refused with the issue that brings it**, which is the same
+        // sentence its chord gives, so a person and an agent read the same reason.
+        if let Some(missing) = workspace.missing() {
+            return Err(Refusal::new(missing.to_owned()));
+        }
         let tab = match p.tab.as_deref() {
             None => None,
             Some(name) => {
@@ -8773,37 +8776,37 @@ pub mod door_open {
                         all.join(", ")
                     )));
                 };
-                if !door.tabs().contains(&mode) {
+                if !workspace.panels().contains(&mode) {
                     let shown: Vec<String> =
-                        door.tabs().iter().map(|m| m.label().to_lowercase()).collect();
+                        workspace.panels().iter().map(|m| m.label().to_lowercase()).collect();
                     return Err(Refusal::new(format!(
-                        "the {} door does not show `{name}`. It shows {}.",
-                        door.label().to_lowercase(),
+                        "the {} workspace does not show `{name}`. It shows {}.",
+                        workspace.title().to_lowercase(),
                         shown.join(", ")
                     )));
                 }
                 Some(mode)
             }
         };
-        // **The Map door needs a map to show:** with no map open it would have nothing to cross onto,
-        // and the crossing would be a silent no-op.
+        // **The Map workspace needs a map to show:** with no map open it would have nothing to show,
+        // and the switch would be a silent no-op.
         let map_open = ctx.open.is_some()
             || ctx
                 .project
                 .as_ref()
                 .and_then(|project| project.open_map_name.as_ref())
                 .is_some();
-        if door == Door::Map && !map_open {
+        if workspace == Workspace::Map && !map_open {
             return Err(Refusal::new(
-                "the Map door needs a map, and no map is open. Open a map first, then the Map door \
+                "the Map workspace needs a map, and no map is open. Open a map first, then the Map workspace \
                  has something to show.",
             ));
         }
-        // **The Map door crosses onto the map on disk, and a map that will not open cannot be crossed
-        // to.** The crossing reads it through this same `OpenMap::open`, so the read happens here, before
+        // **The Map workspace shows the map on disk, and a map that will not open cannot be opened
+        // onto.** The switching reads it through this same `OpenMap::open`, so the read happens here, before
         // the answer says "applied". It writes nothing.
         if read_map
-            && door == Door::Map
+            && workspace == Workspace::Map
             && ctx.open.is_none()
             && let Some(project) = ctx.project.as_ref()
             && let Some(name) = project.open_map_name.as_deref()
@@ -8813,9 +8816,13 @@ pub mod door_open {
         // **Leaving a map with unsaved edits is the person's question.** The request is accepted and
         // the answer names what it waits on: the editor asks the leaving question, and this operation
         // cannot answer it for them.
-        let waiting = door != Door::Map && ctx.open.as_ref().is_some_and(|open| open.dirty());
+        let waiting = workspace != Workspace::Map && ctx.open.as_ref().is_some_and(|open| open.dirty());
         let mut answer = json!({
-            "door": door.label().to_lowercase(),
+            "workspace": workspace.id(),
+            // **And the old key too**, because `editor::request_door` reads either and a
+            // recorded BRP run from before this issue names `door`. One answer, two spellings, for
+            // as long as an old script exists.
+            "door": workspace.id(),
             "tab": tab.map(|m| m.label().to_lowercase()),
         });
         if waiting {
@@ -8853,10 +8860,10 @@ pub mod door_open {
 
         fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
             let plan = door_answer(ctx, params, false)?;
-            let door = plan["door"].as_str().unwrap_or("");
+            let workspace = plan["workspace"].as_str().unwrap_or("");
             let target = match plan["tab"].as_str() {
-                Some(tab) => format!("the {door} door on {tab}"),
-                None => format!("the {door} door"),
+                Some(tab) => format!("the {workspace} workspace on {tab}"),
+                None => format!("the {workspace} workspace"),
             };
             let summary = if plan.get("waiting").is_some() {
                 format!(

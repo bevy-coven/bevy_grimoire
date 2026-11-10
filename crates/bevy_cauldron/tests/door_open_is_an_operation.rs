@@ -6,7 +6,8 @@
 //! with the exact target in its answer. Nothing here writes a map.
 
 use bevy_cauldron::editor::{DoorRequest, EditorState};
-use bevy_cauldron::tiles::{Door, Mode, Tab};
+use bevy_cauldron::tiles::{Mode, Tab};
+use bevy_cauldron::workspace::Workspace;
 use bevy_cauldron::harness;
 use bevy_cauldron::ops::{self, Applied, Ctx, Source};
 use bevy_cauldron::project::{OpenMap, Project};
@@ -120,16 +121,16 @@ fn a_stored_request_crosses_the_door_on_the_next_frame() {
         app.update();
     }
     assert_ne!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the test starts on another door, so a crossing to Kit is visible"
     );
     app.world_mut().resource_mut::<EditorState>().door_request =
-        Some(DoorRequest { door: Door::Kit, tab: Some(Mode::Tiles) });
+        Some(DoorRequest { workspace: Workspace::Kit, tab: Some(Mode::Tiles) });
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<Door>(), Door::Kit, "the request crossed to the Kit door");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "the request crossed to the Kit door");
     assert!(*app.world().resource::<Mode>() == Mode::Tiles, "and opened the Tiles panel");
     assert!(
         app.world().resource::<EditorState>().door_request.is_none(),
@@ -265,7 +266,7 @@ fn opening_the_door_you_are_on_marks_no_document_changed() {
         !quiet.project_changed && !quiet.open_changed,
         "a quiet frame reads unchanged before the press, so a changed read means the press did it"
     );
-    let door = *app.world().resource::<Door>();
+    let door = *app.world().resource::<Workspace>();
     let tab = *app.world().resource::<Mode>();
     bevy_cauldron::editor::open_door(app.world_mut(), door, Some(tab));
     app.update();
@@ -290,11 +291,11 @@ fn a_click_on_a_tab_chip_writes_the_same_log_line_a_key_press_does() {
         app.update();
     }
     app.world_mut().resource_mut::<EditorState>().door_request =
-        Some(DoorRequest { door: Door::Kit, tab: None });
+        Some(DoorRequest { workspace: Workspace::Kit, tab: None });
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<Door>(), Door::Kit, "the test stands on the Kit door");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "the test stands on the Kit door");
     let log = app.world().resource::<Project>().project_dir.join("oplog.jsonl");
     let door_lines = |path: &std::path::Path| {
         std::fs::read_to_string(path)
@@ -396,8 +397,8 @@ fn an_agents_receipt_survives_the_crossing_it_asked_for() {
         app.update();
     }
     assert_ne!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the test starts on another door, so a crossing to Kit is visible"
     );
     app.world_mut()
@@ -405,11 +406,11 @@ fn an_agents_receipt_survives_the_crossing_it_asked_for() {
         .status
         .note("agent: door_open: opened the Kit door");
     app.world_mut().resource_mut::<EditorState>().door_request =
-        Some(DoorRequest { door: Door::Kit, tab: Some(Mode::Tiles) });
+        Some(DoorRequest { workspace: Workspace::Kit, tab: Some(Mode::Tiles) });
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(*app.world().resource::<Door>(), Door::Kit, "the request crossed to the Kit door");
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "the request crossed to the Kit door");
     assert_eq!(
         app.world().resource::<EditorState>().status.note_text(),
         "agent: door_open: opened the Kit door",

@@ -14,7 +14,7 @@
 
 use bevy_cauldron::harness;
 use bevy_cauldron::sequencer::{SequenceParams, Sequencer};
-use bevy_cauldron::tiles::Door;
+use bevy_cauldron::workspace::Workspace;
 
 use crate::fixtures;
 
@@ -26,8 +26,8 @@ fn a_sequence_that_opens_the_kit_door_leaves_the_editor_on_the_kit_door() {
         app.update();
     }
     assert_ne!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the test starts on another door, so a crossing to Kit is visible"
     );
 
@@ -70,8 +70,8 @@ fn a_sequence_that_opens_the_kit_door_leaves_the_editor_on_the_kit_door() {
     }
 
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the sequence answered {} for door_open, but the editor is still on another door",
         status["operation_result"]
     );

@@ -35,7 +35,7 @@ impl Plugin for DrivePlugin {
             Update,
             watch_drive
                 .run_if(in_state(crate::screen::Screen::Editor))
-                .run_if(crate::tiles::Door::map_door_is_open),
+                .run_if(crate::workspace::Workspace::map_is_open),
         );
     }
 }

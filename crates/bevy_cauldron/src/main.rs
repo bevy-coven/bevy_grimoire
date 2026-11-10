@@ -218,7 +218,7 @@ fn main() -> AppExit {
 /// the Kit door, which is where an evening went on 2026-08-16 before the log said `— map — test`.
 fn name_the_window(
     screen: Res<State<Screen>>,
-    door: Option<Res<bevy_cauldron::tiles::Door>>,
+    door: Option<Res<bevy_cauldron::workspace::Workspace>>,
     open_map: Option<Res<bevy_cauldron::project::OpenMap>>,
     project: Option<Res<bevy_cauldron::project::Project>>,
     mut windows: Query<&mut Window>,

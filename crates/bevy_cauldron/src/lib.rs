@@ -211,6 +211,7 @@ pub mod toolbar;
 pub mod token_prompt;
 pub mod update;
 pub mod view;
+pub mod workspace;
 pub mod vlm;
 pub mod watch;
 pub mod window_frame;

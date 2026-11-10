@@ -31,7 +31,8 @@ use bevy_cauldron::editor::EditorState;
 use bevy_cauldron::follow::{FOLLOW_OUTLINE_S, Following};
 use bevy_cauldron::harness;
 use bevy_cauldron::project::{OpenMap, Project};
-use bevy_cauldron::tiles::{Door, Mode};
+use bevy_cauldron::tiles::Mode;
+use bevy_cauldron::workspace::Workspace;
 use bevy_cauldron::view::{MainCamera, Rig};
 
 use crate::fixtures;
@@ -523,8 +524,8 @@ fn a_change_from_another_door_opens_the_map_and_frames_it() {
         app.update();
     }
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the test starts on the Kit door, so a crossing to Map is visible"
     );
 
@@ -548,8 +549,8 @@ fn a_change_from_another_door_opens_the_map_and_frames_it() {
         app.update();
     }
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Map,
+        *app.world().resource::<Workspace>(),
+        Workspace::Map,
         "the editor stayed on the Kit door, so the person is looking at a panel and not the change"
     );
     if let Err(why) = seen(&mut app, &corners) {

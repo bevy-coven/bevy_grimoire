@@ -70,10 +70,10 @@ pub enum Asked {
     QuitApp,
     /// The editor is leaving a map with unsaved edits.
     LeaveMap,
-    /// **The editor is crossing to the other door with unsaved edits.**
+    /// **The editor is switching to the other door with unsaved edits.**
     ///
     /// A question of its own rather than a reuse of [`Asked::LeaveMap`], because the two answers
-    /// go to **different places**: leaving goes to the menu, and crossing goes to the other door.
+    /// go to **different places**: leaving goes to the menu, and switching goes to the other door.
     /// One question with two destinations would need the answer to know which question it was
     /// answering, and the panel does not know that.
     SwitchDoor,
@@ -135,7 +135,7 @@ impl Asked {
             // Quitting keeps everything saved; leaving a map saves it on the way out. Both are
             // ordinary, and the affirmative is simply the obvious thing to do.
             //
-            // **And crossing saves the map on the way out too** — the same rule, the same reason:
+            // **And switching saves the map on the way out too** — the same rule, the same reason:
             // nothing is thrown away, so the affirmative is not destructive and must not look it.
             Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor | Asked::TrustCommand | Asked::TrustGuide => false,
         }
