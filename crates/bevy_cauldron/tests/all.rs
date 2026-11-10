@@ -57,6 +57,7 @@ mod a_destructible_file_that_does_not_read_is_named;
 mod a_door_answer_says_whether_it_waits;
 mod a_dropped_image_becomes_a_reference;
 mod a_dressed_camera_leaves_the_world_on_the_surface;
+mod a_family_panel_is_the_crates_own_settings;
 mod a_file_says_what_the_game_made_of_its_edit;
 mod a_file_that_does_not_read_is_never_overwritten;
 mod a_fire_is_a_fixture;
