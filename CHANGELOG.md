@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **ui-52-library-browser** `42972da5` The library browser: the project's pieces as a grid of portraits in the Inspector, with its own search and a row of tag filters, where choosing a card arms its piece and dragging one onto the map places it *For you: You can now browse your pieces as pictures rather than a list: search them, filter by what they are, and drag one onto the map.* *No clip: visible, not yet recorded: fleet worker*
 - **ui-51-outliner-everything** `5a275e04` The outliner draws the map's compositions, people, triggers and notes as groups of their own beside the pieces, and a piece row's menu pins it (asking for the reason) or hides it for this session; pieces are still grouped by kind, and grouping by layer is not built because a placement has no layer field *For you: The Inspector's outliner now shows everything on your map, not just pieces, and right-clicking a piece's row lets you pin it or take it out of the way.* *No clip: visible, not yet recorded: fleet worker*
 
 ## 2026-11-09
