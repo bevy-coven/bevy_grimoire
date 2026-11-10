@@ -63,7 +63,9 @@ pub(crate) fn switched(
     mut switches: Query<&mut Switch>,
     mut doors: Query<&mut Door>,
 ) {
-    let pressed: Vec<String> = signals.read().map(|signal| signal.name.clone()).collect();
+    // **One name per signal in a frame**, the same reading the machine takes: two producers naming one signal is
+    // one press, not two, so the switch flips once and the door follows once.
+    let pressed = super::machine::deduped(signals.read().map(|signal| signal.name.clone()));
 
     for mut switch in &mut switches {
         // **A switch with no name answers nothing**, so a file that forgot `latch` cannot be pressed by
