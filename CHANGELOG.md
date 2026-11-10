@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **gd-03-editor-reads-yaml** `711cc582` The editor reads and writes every project file it owns as YAML, at the same .yaml paths the game does *No clip: the format cutover, not a screen; proved by bevy_cauldron_mcp/tests/an_agent_calls_the_server.rs and the core suite*
 - **gd-03-every-kind-is-yaml** `9961769b` Every project file kind reads and writes YAML through one reader and one writer, and a RON project is refused at open naming the migrate command *No clip: the format cutover, not a screen; proved by bevy_grimoire_core/tests/every_project_root_kind_is_yaml.rs and the whole core suite*
 - **gd-03-migrate-only-what-moved** `6d63ee4e` bevy_cauldron migrate converts only the file kinds that already read YAML, so an old project is never left with a file nothing reads *No clip: a command-line behaviour, not a screen; proved by bevy_grimoire_core/tests/the_migrate_command_moves_only_the_kinds_that_read_yaml.rs*
 - **gd-03-cutover-play-and-agent** A project's play.yaml and agent.yaml are read and written as YAML, and a project still holding either as RON is refused at open, naming the migrate command *No clip: visible, not yet recorded: fleet worker; proved by bevy_grimoire_core/tests/a_project_file_is_yaml.rs (2)*
