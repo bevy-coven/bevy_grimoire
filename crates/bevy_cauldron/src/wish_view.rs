@@ -342,6 +342,7 @@ fn spawn_a_row(
         row.spawn((
             WishUnfold,
             WishOf(id.clone()),
+            // CHROME-OK: the row is a fold, not a chip or a list row: its own header is the whole unfold target and wears no rest/hover/selected states of its own.
             bevy::ui_widgets::Button,
             Hovered::default(),
             Node {

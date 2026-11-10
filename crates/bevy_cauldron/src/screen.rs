@@ -608,6 +608,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
     ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
+    // **`Session`**: whether this run opens no addresses (it records them instead) is the run's own fact, true for as long as the app runs.
+    ("bevy_cauldron::app_verbs::LinksOff", Ownership::Session),
     // **`Session`, for the queue's own reason**: which rows the person has unfolded, and what GitHub
     // said about the wishes in them, are facts about this sitting's wishes — the queue outlives a door
     // change, so the rows that read it must too or a wish would be folded again on every crossing.

@@ -9842,9 +9842,9 @@ fn set_a_row_of_a_map_file_for_test(world: &mut World, operation: &str, params: 
                             state.status.note(outcome.summary);
                         }
                     }
-                    Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
+                    Ok(crate::ops::Applied::Refused(refusal)) | Err(refusal) => {
                         if let Some(state) = state.as_deref_mut() {
-                            state.status.problem(e.0);
+                            state.status.problem(refusal.0);
                         }
                     }
                 }
