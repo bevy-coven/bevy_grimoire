@@ -1506,6 +1506,55 @@ fn capture_sequence_status(
     Ok(sequencer.status(p.id))
 }
 
+/// **`grimoire/stage_panel` — put the shell on one panel, for a capture** (UI-92, #258).
+///
+/// The one door `tools/demo/record.py`'s `stage` step and an agent use: [`crate::stage_panels::arrange`] does the
+/// arranging, so a clip and an agent cannot disagree about what staging a panel means. Queued for the end of the
+/// frame, because a screen change and a dock's layout are both read by schedules after this one.
+///
+/// **A refusal, and not a note**: a name the shell has not got, or a workbench panel asked for from the launcher, is
+/// answered with what is available rather than by leaving the editor where it was and letting the capture show the
+/// wrong panel.
+fn stage_panel(In(params): In<Value>, world: &mut World) -> Result<Value, String> {
+    let wanted = panel_named(&params)?;
+    let staged = crate::stage_panels::arrange(world, &wanted)?;
+    Ok(staged_answer(&staged))
+}
+
+/// **The panel a request names**, or the refusal naming the ones the shell has.
+fn panel_named(params: &Value) -> Result<String, String> {
+    Ok(params
+        .get("panel")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("pass panel: one of {}.", crate::stage_panels::names()))?
+        .to_owned())
+}
+
+/// **What a staged panel answers**: the panel, the screen it is on now, and that it was arranged.
+fn staged_answer(staged: &crate::stage_panels::Staged) -> Value {
+    json!({
+        "panel": staged.id,
+        "screen": format!("{:?}", staged.screen),
+        "staged": true,
+    })
+}
+
+/// **`grimoire/stage_panel`'s answer, read back**: what the shell is on now, so a caller can confirm the arrangement
+/// before it starts a sequence.
+fn staged_panels(_: In<Value>, screen: Option<Res<State<crate::screen::Screen>>>) -> Result<Value, String> {
+    let panels: Vec<Value> = crate::stage_panels::STAGES
+        .iter()
+        .map(|stage| json!({"panel": stage.id, "screen": crate::stage_panels::is_screen(stage.id)}))
+        .collect();
+    Ok(json!({
+        "panels": panels,
+        "screen": match screen.as_deref() {
+            Some(state) => format!("{:?}", state.get()),
+            None => "none".to_owned(),
+        },
+    }))
+}
+
 /// **`grimoire/operation_list` — every operation, its schema, and how it is undone.**
 ///
 /// **A discovery tool, not a page of tools.** The MCP server exposes one tool per operation, but
@@ -2749,6 +2798,33 @@ impl Plugin for OpsBridgePlugin {
             .params("id: the run's id, as grimoire/capture_sequence_start returned it.")
             .example(json!({"id": 1})),
             capture_sequence_status,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/stage_panel",
+                "Put the shell on one panel, so a capture starts on it: the launcher, the loader, the \
+                 settings screen, or a dock panel by the id the shell registers it under. The one \
+                 arrangement a storyboard and an agent share; it refuses a name the shell has not \
+                 got, and a workbench panel asked for from another screen, saying what is available.",
+            )
+            // **The catalog's own names**, so this text cannot list a panel the command refuses (it said `status`,
+            // which is registered and deliberately unstaged) and a panel added to the catalog appears here.
+            .params(format!(
+                "panel: one of {}. A name that is not here is refused with this list.",
+                crate::stage_panels::names()
+            ))
+            .example(json!({"panel": "settings"})),
+            stage_panel,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/stage_panels",
+                "Every panel a capture can be staged on, and the screen the editor is on now. A read.",
+            )
+            .example(json!({})),
+            staged_panels,
         );
 
         app.add_debug_command(

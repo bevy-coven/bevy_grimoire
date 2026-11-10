@@ -2593,6 +2593,10 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
         app.add_plugins(crate::menu_bar::MenuBarPlugin);
         app.add_plugins(crate::app_verbs::AppVerbsPlugin);
+        // **Each panel header's "?"** (UI-91, #257): the guide page that covers what the panel holds.
+        app.add_plugins(crate::help::HelpPlugin);
+        // **The UI's own clock** (UI-93, #259): what the panels that read content cost in a frame.
+        app.add_plugins(crate::ui_budget::UiBudgetPlugin);
         app.add_plugins(crate::inspector_view::InspectorPlugin);
         app.add_plugins(crate::outliner::OutlinerPlugin);
         app.add_plugins(crate::problems_view::ProblemsViewPlugin);
@@ -8222,7 +8226,11 @@ fn refresh_history(
         &mut Visibility,
     )>,
     mut texts: Query<(&mut Text, &mut TextColor), With<HistoryText>>,
+    mut budget: ResMut<crate::ui_budget::UiFrame>,
 ) {
+    // **This system's cost, into the frame's total** (UI-93, #259). The guard writes on drop, so the early return below
+    // and every path after it are measured without the body having to remember to.
+    let _spent = crate::ui_budget::measure(&mut budget);
     if !state.is_changed() && !open.is_changed() {
         return;
     }
@@ -12080,6 +12088,20 @@ pub fn plant_stale_redo_for_test(world: &mut World, id: &str) {
     world.resource_mut::<EditorState>().redo.push(Undo::MovedStamp {
         id: id.to_owned(),
         from: (0.0, 0.0),
+    });
+}
+
+/// **Put one entry on the history stack, for a test that measures the history panel at depth (UI-93, #259).**
+///
+/// The entry is a real [`Undo::Logged`] pushed through [`EditorState::record`], the way every edit site
+/// records one, so the panel is looking at the stack an author's session would have rather than at a
+/// number written into a struct. It names a line no log holds; the panel never reads the log, which is
+/// the property being measured.
+pub fn plant_history_entry_for_test(state: &mut EditorState) {
+    state.record(Undo::Logged {
+        line: String::new(),
+        phrase: "a change no log holds".to_owned(),
+        agent: false,
     });
 }
 
