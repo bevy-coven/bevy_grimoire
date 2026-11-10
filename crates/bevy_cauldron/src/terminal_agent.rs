@@ -140,6 +140,53 @@ pub fn insert_for_the_running_binary(app: &mut App) {
     app.insert_resource(AgentSetup { port, server: exe_dir.join(MCP_BINARY), files: data.join(AGENTS_DIR) });
 }
 
+/// **The agent tab's ink, from the running skin** (UI-02, #210, slice 6a).
+///
+/// The self-test card and the bar's status chip drew four `chrome.rs` colours — the heading, a check
+/// that passed, one that failed, one still waiting — read straight from the constants. That made the
+/// tab the last panel a project's `family/bevy_gooey.ron` could not reach: a high-contrast theme or a
+/// parchment one left the card in the editor's darks and its greens.
+///
+/// The shape is [`crate::editor::StatusInk`]'s and [`crate::tiles::ListInk`]'s: one expression the
+/// spawners and the tests both read, so an assertion here is an assertion about what the card paints.
+///
+/// **The fallback is the shipped palette**, never a second one: a headless harness that never ran
+/// `EditorUiPlugin` has no `GooeySkin`, and it must get exactly the colours the editor has always had.
+/// `MUTED` and `LABELED` are the skin's own named tones (`bevy_gooey`'s `GooeySkin::tones`), because
+/// no field of the skin means "excluded" or "judged"; a skin that carries neither falls back to the
+/// constant, so the editor's own look is unchanged by construction.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AgentInk {
+    /// The card's heading — the harness's name and what the card is.
+    pub read: Color,
+    /// A check still waiting, or skipped on purpose.
+    pub muted: Color,
+    /// A check that passed.
+    pub good: Color,
+    /// A check that failed, and the chip that says the test failed.
+    pub danger: Color,
+}
+
+impl AgentInk {
+    /// From the running skin when there is one, the shipped palette when there is not.
+    pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> AgentInk {
+        let Some(skin) = skin else {
+            return AgentInk { read: chrome::TEXT, muted: chrome::MUTED, good: chrome::LABELED, danger: chrome::DANGER };
+        };
+        AgentInk {
+            read: skin.text,
+            muted: skin.tone(MUTED_TONE).unwrap_or(chrome::MUTED),
+            good: skin.tone(LABELED_TONE).unwrap_or(chrome::LABELED),
+            danger: skin.danger,
+        }
+    }
+}
+
+/// The skin's tone for "excluded on purpose", the role behind [`chrome::MUTED`].
+const MUTED_TONE: &str = "muted";
+/// The skin's tone for "judged and ready", the role behind [`chrome::LABELED`].
+const LABELED_TONE: &str = "labeled";
+
 /// One check's state.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CheckStatus {
@@ -161,12 +208,13 @@ impl CheckStatus {
         }
     }
 
-    /// The row's ink.
-    pub fn ink(&self) -> Color {
+    /// The row's ink, from the running skin's [`AgentInk`]. The no-skin fallback is the shipped palette,
+    /// so every caller that has no skin reads what it always read.
+    pub fn ink(&self, ink: &AgentInk) -> Color {
         match self {
-            CheckStatus::Passed(_) => chrome::LABELED,
-            CheckStatus::Failed(_) => chrome::DANGER,
-            CheckStatus::Pending | CheckStatus::Skipped(_) => chrome::MUTED,
+            CheckStatus::Passed(_) => ink.good,
+            CheckStatus::Failed(_) => ink.danger,
+            CheckStatus::Pending | CheckStatus::Skipped(_) => ink.muted,
         }
     }
 
@@ -341,13 +389,33 @@ impl AgentPost {
 
     /// **The bar's status chip**: its words and its ink.
     pub fn chip(&self) -> (String, Color) {
+        (self.chip_words(), self.chip_ink(&AgentInk::of(None)))
+    }
+
+    /// **The chip's ink from the running skin** (UI-02, #210, slice 6a): the same state the words say,
+    /// drawn in the skin's own role. [`AgentPost::chip`] is this with the shipped palette, so the
+    /// editor's own look is unchanged by construction and a project's skin reaches the bar.
+    pub fn chip_ink(&self, ink: &AgentInk) -> Color {
+        if self.failed() {
+            ink.danger
+        } else if self.pending() {
+            ink.muted
+        } else {
+            ink.good
+        }
+    }
+
+    /// The chip's words, one sentence per state. **The one writer**: the terminal pane's
+    /// `fill_the_bar` puts these on the chip and nothing rewrites them, so what a person reads and
+    /// what [`AgentPost::chip`] answers are one string rather than two that agree.
+    pub fn chip_words(&self) -> String {
         let name = self.harness.name();
         if self.failed() {
-            (format!("{name}: self test failed"), chrome::DANGER)
+            format!("{name}: self test failed")
         } else if self.pending() {
-            (format!("{name}: checking…"), chrome::MUTED)
+            format!("{name}: checking…")
         } else {
-            (format!("{name} connected · {} tools", self.tools.unwrap_or(0)), chrome::LABELED)
+            format!("{name} connected · {} tools", self.tools.unwrap_or(0))
         }
     }
 

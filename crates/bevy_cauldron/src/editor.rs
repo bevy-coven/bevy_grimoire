@@ -2534,6 +2534,8 @@ impl Plugin for EditorPlugin {
                 Update,
                 (
                     crate::light_overlay::refresh_light_overlay,
+                    // **The View row's tick is the overlay's state** (UI-80, #254), whichever door moved it.
+                    crate::light_overlay::follow_the_light_map_tick,
                     crate::light_overlay::draw_light_overlay
                         .after(crate::light_overlay::refresh_light_overlay)
                         .run_if(in_map_mode)

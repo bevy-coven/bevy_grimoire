@@ -186,7 +186,11 @@ pub fn search(query: &str, category: Option<&str>) -> Vec<&'static Setting> {
         .collect()
 }
 
-fn theme_index(theme: Theme) -> usize {
+/// Where `theme` sits in [`THEMES`], the order the Settings row offers.
+///
+/// `pub` because a message that has to name a theme must use the same word the row does — one table,
+/// so a refusal and the setting cannot call Parchment two things.
+pub fn theme_index(theme: Theme) -> usize {
     match theme {
         Theme::ToolDark => 0,
         Theme::Parchment => 1,
