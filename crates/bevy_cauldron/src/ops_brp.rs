@@ -579,6 +579,9 @@ struct Gates<'w> {
     /// raised where the agent comes in — never inside `dispatch`, where a person's key would raise one
     /// too and the camera would move under their hands.
     following: Option<ResMut<'w, crate::follow::Following>>,
+    /// **The page a change off the map is on** (AF-03, #359), asked for here for `following`'s
+    /// reason: the request is raised where the agent comes in, never inside `dispatch`.
+    revealing: Option<ResMut<'w, crate::reveal::Revealing>>,
 }
 
 impl Gates<'_> {
@@ -589,16 +592,24 @@ impl Gates<'_> {
         }
     }
 
-    /// **Ask the camera to go to the change**, or nothing when it is not on the map.
+    /// **Show the change**: the camera for one on the map, the page for one that is not.
     ///
-    /// A change to a library piece, a composition, a rig, a note or a file is a place on another
-    /// screen; those are AF-04's (#359), and this answers `None` for them rather than guessing.
-    fn follow(&mut self, shown: &crate::ops::Shown) {
-        let Some(request) = crate::follow::request_of(shown) else {
+    /// **Two mechanisms and one decision.** [`crate::follow::request_of`] answers for a change on the
+    /// map and the camera takes it; [`crate::reveal::page_of`] answers for everything else and the
+    /// reveal opens its door, panel and row (AF-03, #359). A `Shown` neither takes — `Nowhere` — is
+    /// nothing anybody can look at, and is left alone rather than being refused as a page.
+    fn follow(&mut self, operation: &str, shown: &crate::ops::Shown) {
+        if let Some(request) = crate::follow::request_of(shown) {
+            if let Some(following) = self.following.as_mut() {
+                following.request(request);
+            }
             return;
-        };
-        if let Some(following) = self.following.as_mut() {
-            following.request(request);
+        }
+        if matches!(shown, crate::ops::Shown::Nowhere) {
+            return;
+        }
+        if let Some(revealing) = self.revealing.as_mut() {
+            revealing.request(operation, shown);
         }
     }
 }
@@ -1928,7 +1939,7 @@ fn operation_apply(
             // **The editor follows the change** (AF-02, #358): the request is raised here, at the door
             // an agent comes through, and never inside `dispatch` — a person's key goes through the
             // same dispatch and must not move the camera under their hands.
-            gates.follow(&shown);
+            gates.follow(&p.operation, &shown);
             // **A door the editor will ask about is not yet open (cycle 8, gap 4).** The outcome is a
             // stable word, `waiting`, and `waiting_on` names what it waits for, so nobody reads "applied"
             // as "the door is open" and a caller can branch on the word.
@@ -2221,7 +2232,7 @@ fn operation_undo(
             // **The editor follows an undo too** (AF-02, #358): an undo of a removal is where the piece
             // stands again, and an undo of a placement is where it was — both are places the person
             // must be shown, from the same answer the apply's follow reads.
-            gates.follow(&shown);
+            gates.follow("undo", &shown);
             json!({
                 "operation": entry.op,
                 "outcome": "applied",

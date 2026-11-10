@@ -273,6 +273,32 @@ pub enum Shown {
     Nowhere,
 }
 
+impl Shown {
+    /// **The change in words a refusal can name**: `a library piece `lamp_tall``, ``the file
+    /// `assets/grimoire/vocab.ron` ``. Used where the editor cannot show it (AF-03, #359), so the
+    /// problem says which change it could not show rather than `Some(Shown { .. })`.
+    pub fn words(&self) -> String {
+        match self {
+            Shown::Map { rect, placements } => format!(
+                "a place on the map ({:.1}, {:.1})..({:.1}, {:.1}) with {} placement(s)",
+                rect[0], rect[1], rect[2], rect[3], placements.len()
+            ),
+            Shown::MapWhole => "the whole map".to_owned(),
+            Shown::Piece { id } => format!("the library piece `{id}`"),
+            Shown::Tile { id } => format!("the lattice of `{id}`"),
+            Shown::Composition { id } => format!("the composition `{id}`"),
+            Shown::Rig { id } => format!("the rig `{id}`"),
+            Shown::File { path, lines } => match lines {
+                Some([first, last]) => format!("the file `{path}` at lines {first}..{last}"),
+                _ => format!("the file `{path}`"),
+            },
+            Shown::Note { id } => format!("the note `{id}`"),
+            Shown::Settings { section } => format!("the `{section}` settings"),
+            Shown::Nowhere => "nothing to look at".to_owned(),
+        }
+    }
+}
+
 /// **How wide the box round a point is**, in metres, when the thing there has no measurement of its
 /// own — an unmeasured piece, a person's marker, a spring. **A rect of zero width is not a place**:
 /// the framing code refuses one, so an answer that could not be framed is not an answer.

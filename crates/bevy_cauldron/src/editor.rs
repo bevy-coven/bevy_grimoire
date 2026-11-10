@@ -1589,10 +1589,26 @@ struct NotesList;
 #[derive(Component, Clone, Copy)]
 struct ReloadList;
 
+/// **One row of the Notes list**, by the id the map's `.notes.ron` names it.
+///
+/// `pub` since AF-03 (#359): a reveal selects a note, and the follower that scrolls the inspector to
+/// its row has to find the row by `id`. A private marker would leave the follow unable to say *which*
+/// row it is looking for.
 #[derive(Component, Clone)]
-struct NoteRow {
-    id: String,
+pub struct NoteRow {
+    pub id: String,
 }
+
+/// **The note a reveal selected**, so the Notes list can show it and the inspector scroll to it.
+///
+/// **Editor state, not map state.** A selection is where a person is looking (the argument
+/// `selection::Selection` makes for the Map's own), so a reveal writes this and nothing else: no file
+/// is touched, no operation is recorded and no undo step is taken.
+///
+/// `Option<String>` rather than an index for `CursorMark`'s reason: a row's place moves when a note is
+/// added, removed or a filter changes, and an index would then name a different note.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct SelectedNote(pub Option<String>);
 
 /// A lease button on a note row: which note, and which of `note_claim`, `note_renew`, `note_release`.
 #[derive(Component, Clone)]
@@ -2544,7 +2560,7 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::ui::EditorUiPlugin);
         // **The editor follows the Familiar** (AF-02, #358): a request the agent's two BRP
         // handlers raise, the ease, and the ring round the changed pieces.
-        app.add_plugins(crate::follow::FollowPlugin);
+        app.add_plugins((crate::follow::FollowPlugin, crate::reveal::RevealPlugin));
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
@@ -2606,6 +2622,7 @@ impl Plugin for EditorPlugin {
             // it, idempotently — happens to be absent from the app.
             .init_resource::<SizeEdit>()
             .init_resource::<FamilyEdit>()
+            .init_resource::<SelectedNote>()
             .init_resource::<DataEdit>()
             .init_resource::<TerrainEdit>()
             .init_resource::<CrowdEdit>()
@@ -3749,7 +3766,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "FAMILY SETTINGS");
+                crate::chrome::section(s, "FAMILY SETTINGS")
+                    .insert(crate::reveal::Section(crate::reveal::InspectorSection::Family));
                 crate::chrome::text_field(
                     s,
                     Val::Percent(100.0),
@@ -3851,7 +3869,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "DATA");
+                crate::chrome::section(s, "DATA")
+                    .insert(crate::reveal::Section(crate::reveal::InspectorSection::Data));
                 crate::chrome::text_field(
                     s,
                     Val::Percent(100.0),
@@ -3896,7 +3915,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "NOTES");
+                crate::chrome::section(s, "NOTES")
+                    .insert(crate::reveal::Section(crate::reveal::InspectorSection::Notes));
                 s.spawn((
                     NotesList,
                     Node {
