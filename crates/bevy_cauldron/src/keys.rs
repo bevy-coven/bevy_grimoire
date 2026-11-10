@@ -4721,20 +4721,20 @@ mod tests {
             // crop of the Kit door is as much a snip as one of the Map door, so it is `Global`, like
             // Save. `Backslash` is bound in no context, so the chord is free everywhere it is live.
             //
-            // 19 -> 24: **the nine workspaces, NV-02 (#379)**, on `Cmd`/`Ctrl`+`1` to `9`.
+            // 19 -> 28: **the nine workspaces, NV-02 (#379)**, on `Cmd`/`Ctrl`+`1` to `9`.
             // `docs/ui/vision.md` §4 makes the workspace the navigation axis, so "go to Kit" and
             // "go to Map" are nine verbs rather than one `=` that walks between two doors. The
             // owner chose the chords on 2026-11-09 and that is the exception recorded on the issue.
             //
-            // **Five, not nine, because four keys went with the doors.** `view.switch_door` keeps
-            // its `=` (it still means "the other one" from anywhere); `view.panel_1`, `2` and `3`
-            // stay as the panel slots of the workspace that is open. What the doors had and this
-            // does not is the pair of *other* doors a strip used to name — nothing, in fact: the
-            // four `view.*` ids the issue removes are the three slots and the switch, and here they
-            // are the four bare-key rows this count never held. What it does hold is nine new
-            // `Global` rows, minus the four slots which are no longer `Global` because a slot means
-            // a panel of the workspace that is open rather than a panel of the process. Net five.
-            (Context::Global, 24),
+            // **This is +9, not the +5 the issue asks for, and the four it wanted removed stayed.**
+            // The issue says the four `view.*` bindings go (`view.switch_door`, `view.panel_1` to
+            // `view.panel_3`). They cannot: `tests/the_door_switch_crosses.rs::the_crossing_and_the_menu_are_different_verbs`
+            // asserts `binding(Action::SwitchDoor)` differs from `MainMenu` and homes on the strip,
+            // and `tests/headless.rs` walks `Action::tab_slot(i)` over the strip. Deleting the rows
+            // would delete those checks rather than follow a rename, which the re-pin exception
+            // forbids outright ("never delete a check"). So the four stay, the pin is the *measured*
+            // 28, and the acceptance item is recorded unmet on the issue.
+            (Context::Global, 28),
             // 16 -> 17: `FocusFilter`, on `Cmd+F`. **The filter box was mouse-only on every tab
             // but one.** `FocusFilter` was `Context::Tiles`, so the Map tab's PLACE palette and the
             // Rigs tab's rig list had no keyboard route to their own filter at all — and a box the

@@ -4670,10 +4670,11 @@ fn spawn_tiles_panel(
     });
 }
 
-/// **The number keys jump straight to a panel of this door**, in strip order.
+/// **The number keys jump straight to a panel of this workspace**, in strip order.
 ///
-/// `1` is this door's first panel, not the binary's — so on the Kit door `1` is Meshes. Everything
-/// reachable by mouse is reachable by keyboard (`docs/ui.md` §4.2), and the strip is what both read.
+/// `1` is this workspace's first panel, not the binary's — so in the Kit workspace `1` is Meshes.
+/// Everything reachable by mouse is reachable by keyboard (`docs/ui.md` §4.2), and the strip is what
+/// both read.
 fn tab_shortcuts(world: &mut World) {
     let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
         return;
@@ -4692,7 +4693,7 @@ fn tab_shortcuts(world: &mut World) {
     }
 }
 
-/// **Enter a tab for the operation that asked for it** (`door_open` with a tab). It is the same entry
+/// **Enter a panel for the operation that asked for it** (`door_open` with a tab). It is the same entry
 /// as the slot key and the chip click, so the scan-on-arrival and the receipt clearing happen once.
 pub fn go_to_tab(
     In(want): In<Mode>,
