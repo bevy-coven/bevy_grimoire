@@ -142,17 +142,17 @@ pub trait GrimoireLiveApp {
     ) -> &mut Self;
 
     /// **Re-read one of the game's own data files when it changes** (#263). A game keeps tuning numbers in
-    /// RON files of its own types and lists them in `data.yaml` (`bevy_grimoire_core::data_files`); `id` is
+    /// YAML files of its own types and lists them in `data.yaml` (`bevy_grimoire_core::data_files`); `id` is
     /// the entry's id there (`tuning/mob`). About a second after the file's last write, the file is checked
     /// against its entry (it must read, and every leaf the entry bounds must be there, a number and in
     /// range) and then handed to `apply(world, text)`, which is the game's own parse: it replaces the
     /// game's value and returns `Err(reason)` for a file its type does not take. Either refusal keeps the
-    /// value the game had and is the game's verdict for that file (`.live/game.ron`, kind `game_data`,
+    /// value the game had and is the game's verdict for that file (`.live/game.yaml`, kind `game_data`,
     /// the file as `data.yaml` names it, the leaf when there is one); a file that reads is `applied`.
     ///
     /// ```ignore
     /// app.reload_data_file("tuning/mob", |world, text| {
-    ///     let tuning: MobTuning = ron::from_str(text).map_err(|e| e.to_string())?;
+    ///     let tuning: MobTuning = bevy_grimoire_core::yaml::from_str(text, "tuning/mob.yaml").map_err(|p| p.line())?;
     ///     world.insert_resource(tuning);
     ///     Ok(())
     /// });

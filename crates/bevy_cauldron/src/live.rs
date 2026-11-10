@@ -39,7 +39,7 @@ impl Plugin for LivePlugin {
     }
 }
 
-/// **The game's newest verdict on a reload**, as last read from `.live/game.ron`. Empty without
+/// **The game's newest verdict on a reload**, as last read from `.live/game.yaml`. Empty without
 /// `--live` and while no game has answered.
 #[derive(Resource, Default)]
 pub struct LiveGame {

@@ -216,7 +216,7 @@ pub const KINDS: &[FileKind] = &[
         "`destructible_set` and `destructible_hit` (only in a build with the carnage feature)",
         "A cache the next hit rebuilds when it is absent or stale (another mesh or other cut settings). A file that does not read at all is refused, naming the file and the field, and is left as it is: remove it to bake afresh."),
     kind("game_data", Root, "", "the game's own RON", Live, Global, "",
-        "Written by `data_set` into files the game owns, and followed by a running game that registers a reader for one (`GrimoireLiveApp::reload_data_file`, in the runtime crate): about a second after the file's last write it is checked against its `data.yaml` entry and handed to the game's own parse, and the game's verdict (`.live/game.ron`) says `applied`, or `refused` with the file and the leaf and the old value kept. The editor looks at each file `data.yaml` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `applied` when it does."),
+        "Written by `data_set` into files the game owns, and followed by a running game that registers a reader for one (`GrimoireLiveApp::reload_data_file`, in the runtime crate): about a second after the file's last write it is checked against its `data.yaml` entry and handed to the game's own parse, and the game's verdict (`.live/game.yaml`) says `applied`, or `refused` with the file and the leaf and the old value kept. The editor looks at each file `data.yaml` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `applied` when it does."),
 ];
 
 /// **The kind with this id.**
@@ -245,7 +245,7 @@ fn segment_matches(pattern: &str, segment: &str) -> bool {
 /// **Whether `path`, relative to its base with `/`, is a file of `pattern`.**
 ///
 /// Free rather than only a method, because a caller can hold a pattern that is not a [`FileKind`]'s own: the
-/// migration matches a file against a kind's path as the cutover left it (`play.ron`), and it must answer
+/// migration matches a file against a kind's path as the cutover left it (`play.yaml`), and it must answer
 /// with exactly the walk the reload table answers with — a second copy is a second thing to keep in step,
 /// and the two disagreeing is how a file becomes a kind in one place and not in another.
 pub fn matches_pattern(pattern: &str, path: &str) -> bool {
