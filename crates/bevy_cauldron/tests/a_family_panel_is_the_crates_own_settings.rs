@@ -25,18 +25,34 @@
 //! state, no file, no undo step — turning the clock to look at dusk is not an edit to the project), and it
 //! is the field whose *file* edits are deliberately walked over a second (#271) so the camera's exposure
 //! follows the sky's. Both are asserted below, so the two paths cannot drift into one another.
+//!
+//! **Two things the panel has to get right beyond that, and both were wrong in its first cut** (`#243`
+//! review): a settled panel must not read its files every frame, and the read-only block of a crate this
+//! build has no fields for must follow its file rather than showing the text it was spawned with.
 
 #![cfg(feature = "bevy_elements")]
 
 use bevy::prelude::*;
 use bevy_cauldron::editor::EditorState;
-use bevy_cauldron::family_panel::{FamilyPanel, FamilyView};
+use bevy_cauldron::family_host::FamilySettings;
+use bevy_cauldron::family_panel::{FamilyBlock, FamilyPanel, FamilyView};
 use bevy_elements::WorldClock;
 
 use crate::fixtures;
 
 /// How many frames a headless editor is stepped before it is asked what it shows.
 const SETTLE_FRAMES: usize = 6;
+
+/// The crate the read-only half of the panel is exercised on: always built (`family_host::built` says
+/// so), always listed by a project that names it, and never a crate this build draws fields of — its
+/// settings type is `bevy_gooey`'s own skin, which the editor previews through `ui_skin` instead.
+const SKIN_CRATE: &str = "bevy_gooey";
+
+/// A partial skin file, which the crate's `#[serde(default)]` reads: the default skin with one field.
+const SKIN_BLUE: &str = "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))";
+
+/// The same skin with the accent moved, for the block to follow.
+const SKIN_VERMILION: &str = "(accent: Srgba((red: 0.9, green: 0.3, blue: 0.2, alpha: 1.0)))";
 
 /// **A project that uses `bevy_elements`**, with the settings an author's project carries, and the editor
 /// running `bevy_elements`' own plugins so the preview's sky is the crate's sky (what `main.rs` adds).
@@ -59,6 +75,24 @@ fn editor(tag: &str, hour: f64) -> (App, std::path::PathBuf) {
         app.update();
     }
     (app, file)
+}
+
+/// **A project that uses `bevy_elements` and `bevy_gooey`**, for the block the panel shows as its file.
+fn editor_with_a_file_block(tag: &str) -> (App, std::path::PathBuf) {
+    let root = fixtures::Fixture::new(&format!("family_panel_{tag}_{}", std::process::id()))
+        .descriptor("site/wall", "alpha")
+        .build("m");
+    std::fs::create_dir_all(root.join("family")).unwrap();
+    std::fs::write(root.join("family.ron"), format!("(version: 1, crates: [\"bevy_elements\", \"{SKIN_CRATE}\"])")).unwrap();
+    std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_ron()).unwrap();
+    let skin = root.join(format!("family/{SKIN_CRATE}.ron"));
+    std::fs::write(&skin, SKIN_BLUE).unwrap();
+    let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
+    app.add_plugins(bevy_elements::ElementsPlugins);
+    for _ in 0..SETTLE_FRAMES {
+        app.update();
+    }
+    (app, skin)
 }
 
 fn settle(app: &mut App) {
@@ -87,12 +121,34 @@ fn view_of(app: &mut App) -> Entity {
         .expect("the panel has a view for bevy_elements")
 }
 
-/// **What gooey does after a person edits a field**: it writes the view, then triggers the change.
+/// The view's fields, as the inspector's own state holds them.
+fn view(app: &mut App) -> FamilyView {
+    app.world_mut()
+        .query::<&FamilyView>()
+        .iter(app.world())
+        .find(|v| v.krate == "bevy_elements")
+        .cloned()
+        .expect("the panel has a view for bevy_elements")
+}
+
+/// **What gooey does after a person edits a field**: it writes the view, then triggers the change **on the
+/// inspector**, whose `target` is the view — `bevy_gooey::inspector::apply` sends
+/// `InspectorChange { entity: inspector, path }`, never the view's own entity, so a test that triggered it
+/// on the view would prove a path the person's click never takes.
 fn edit(app: &mut App, path: &str, change: impl FnOnce(&mut FamilyView)) {
-    let view = view_of(app);
-    let mut held = app.world_mut().get_mut::<FamilyView>(view).expect("the view");
-    change(&mut held);
-    app.world_mut().trigger(bevy_gooey::InspectorChange { entity: view, path: path.to_owned() });
+    let view_entity = view_of(app);
+    {
+        let mut held = app.world_mut().get_mut::<FamilyView>(view_entity).expect("the view");
+        change(&mut held);
+    }
+    let inspector = app
+        .world_mut()
+        .query::<(Entity, &bevy_gooey::Inspector)>()
+        .iter(app.world())
+        .find(|(_, i)| i.target == bevy_gooey::InspectTarget::component::<FamilyView>(view_entity))
+        .map(|(e, _)| e)
+        .expect("gooey's inspector over the view is in the panel");
+    app.world_mut().trigger(bevy_gooey::InspectorChange { entity: inspector, path: path.to_owned() });
 }
 
 /// **The panel exists for a crate the project lists, and its view carries that crate's file's fields.**
@@ -151,6 +207,112 @@ fn editing_the_hour_in_the_panel_moves_the_sky_in_one_frame() {
         std::fs::read_to_string(&file).expect("the settings file"),
         before,
         "the hour is camera-style state, as the Environment panel's hour buttons are: looking at dusk is not an edit to the project"
+    );
+}
+
+/// **The hour the panel shows is the hour it was edited to, and stays there.**
+///
+/// The hour is a scrub, so the file never learns it — and a panel that rebuilt its view from the file
+/// after the edit would put the file's noon back on the next frame, undoing the person's own edit with
+/// no word said. The view is read after a settle: the file still says 12, the preview is at midnight, and
+/// the field agrees with the preview.
+#[test]
+fn the_hour_a_person_set_stays_set_after_the_panel_settles() {
+    let (mut app, _file) = editor("hour-sticks", 12.0);
+    settle(&mut app);
+
+    edit(&mut app, "hour", |v| v.hour = 0.0);
+    app.update();
+    settle(&mut app);
+
+    assert_eq!(
+        view(&mut app).hour,
+        0.0,
+        "the panel shows the hour the person set, not the file's 12 — a field that snaps back is one the \
+         person cannot use (the file still says {}, the preview is at {})",
+        12.0,
+        clock_hour(&app)
+    );
+    assert!((clock_hour(&app) - 0.0).abs() < 1e-6, "and the preview is still at that hour: {}", clock_hour(&app));
+}
+
+/// **A settled panel reads nothing.**
+///
+/// The panel is derived from `family.ron`, `FamilySettings`, the preview's held hour and the project
+/// root; a frame in which none of them moved must not load `family.ron`, read a settings file or parse
+/// RON. The first cut did all three sixty times a second on a panel that was not looking at anything new.
+#[test]
+fn a_settled_panel_reads_its_files_once_and_then_not_again() {
+    let (mut app, _file) = editor("settled-reads", 9.0);
+    settle(&mut app);
+    let reads = app.world().resource::<FamilyPanel>().reads();
+    assert!(reads >= 1, "the panel read its files at least once while it was being built");
+
+    for _ in 0..20 {
+        app.update();
+    }
+    assert_eq!(
+        app.world().resource::<FamilyPanel>().reads(),
+        reads,
+        "twenty frames in which the project, `family.ron`, the settings text and the held hour all stayed \
+         put cost the panel no read at all; {reads} reads before, {} after",
+        app.world().resource::<FamilyPanel>().reads()
+    );
+
+    // **And it reads again the moment an input moves**, or the gate above would be satisfied by a panel
+    // that never reads at all.
+    app.world_mut().resource_mut::<FamilySettings>().text.insert("bevy_elements".to_owned(), bevy_cauldron::environment::ElementsSettings::defaults().to_ron());
+    app.update();
+    assert!(
+        app.world().resource::<FamilyPanel>().reads() > reads,
+        "a settings text that changed is a read: {} reads, and it was {reads}",
+        app.world().resource::<FamilyPanel>().reads()
+    );
+}
+
+/// **The text a person reads under a crate's heading**, found the way a person finds it: the block names
+/// the crate, and the text under that heading that is not the heading itself is the settings shown.
+///
+/// Not by a marker the implementation carries — the test is of what is on screen, so a block whose label
+/// the system failed to update has to fail it however the label is stored.
+fn shown(app: &mut App, krate: &str) -> String {
+    let block = app
+        .world_mut()
+        .query::<(Entity, &FamilyBlock)>()
+        .iter(app.world())
+        .find(|(_, b)| b.krate == krate)
+        .map(|(e, _)| e)
+        .unwrap_or_else(|| panic!("the panel draws {krate}'s settings as its file"));
+    let children: Vec<Entity> = app.world().get::<Children>(block).map(|c| c.iter().collect()).unwrap_or_default();
+    let heading = krate.to_uppercase();
+    children
+        .iter()
+        .filter_map(|child| app.world().get::<Text>(*child))
+        .map(|t| t.0.clone())
+        .find(|t| *t != heading)
+        .unwrap_or_else(|| panic!("{krate}'s block shows its settings under the heading"))
+}
+
+/// **A crate this build has no fields for shows its settings file, and that text follows the file.**
+///
+/// `bevy_gooey`'s skin is previewed through `ui_skin` rather than drawn as fields, so its block is its
+/// file as RON — the answer the panel gives for any crate whose settings type it does not hold. The
+/// block was spawned with the file's text once, so a `family_set` line left it showing the settings from
+/// before the edit; the text a person reads has to be the text a game would.
+#[test]
+fn the_read_only_block_follows_its_crates_file() {
+    let (mut app, skin) = editor_with_a_file_block("file-block");
+    settle(&mut app);
+    assert_eq!(shown(&mut app, SKIN_CRATE), SKIN_BLUE, "the block opens on the file as it is on disk");
+
+    // The edit arrives the way a `family_set` line's does: the text the watch took as good.
+    app.world_mut().resource_mut::<FamilySettings>().text.insert(SKIN_CRATE.to_owned(), SKIN_VERMILION.to_owned());
+    assert_eq!(std::fs::read_to_string(&skin).expect("the skin file"), SKIN_BLUE, "the file itself is untouched by the panel");
+    app.update();
+    assert_eq!(
+        shown(&mut app, SKIN_CRATE),
+        SKIN_VERMILION,
+        "the block shows the settings the editor now holds, not the ones it was spawned with"
     );
 }
 

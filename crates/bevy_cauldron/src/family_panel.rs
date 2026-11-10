@@ -41,6 +41,31 @@
 //! write and also set the scrub) would write the project when a person meant to look, and a third
 //! (an instant file write that skips the ramp) would undo #271 for every door onto the file.
 //!
+//! **And the held hour is the hour this panel shows**, not the file's: while a scrub holds one, that is
+//! the hour the sky is drawn at, so a field showing the file's noon beside a midnight sky would be the
+//! panel disagreeing with the thing it edits ([`FamilyView::at_hour`]). It also has to be, or the panel
+//! undoes its own edit: the hour is written by a scrub, the file never changes, and a rebuild that read
+//! the hour out of the file would put the file's hour back on the next frame.
+//!
+//! # Read when something changed, never once per frame
+//!
+//! The panel is derived from three facts — the open [`Project`] (which `family.ron` names, and the root
+//! its settings live under), [`FamilySettings`] (the text the watch last saw good), and the preview's
+//! held [`ClockScrub`] for the hour — so it re-reads on a change in one of those and on nothing else.
+//!
+//! **The first cut did not.** It loaded `family.ron`, read every `family/<crate>.ron` and parsed its RON
+//! every frame, and it read from disk even when [`FamilySettings`] already held the text: sixty file
+//! reads a second to be told what the panel was already showing (`#243` review). A settled panel now
+//! costs one comparison, and the disk is the *fallback* for the first frames before the watch has polled
+//! and for a file the crate's own type refused.
+//!
+//! # The read-only block follows its file
+//!
+//! A crate this build has no fields for is drawn as its settings text, which is one `Text` — and the
+//! first cut wrote it once, at spawn, so a `family_set` line left the block showing the settings it had
+//! before the edit. It carries its crate ([`FamilyFile`]) and is rewritten when the text changes, which
+//! is the same rule the fields follow, one widget over.
+//!
 //! # A crate this build has no type for
 //!
 //! It gets a block that shows its file as RON and no fields: the editor will not invent a schema for
@@ -97,6 +122,14 @@ pub struct FamilyPanel {
     root: Option<PathBuf>,
     /// Each crate's settings text as last read, so a settled panel costs one comparison.
     text: BTreeMap<String, String>,
+    /// **How many times this panel has gone to its files**: one per frame in which one of its inputs
+    /// moved, and none in the frames between.
+    ///
+    /// A count of reads rather than of frames, on purpose. The first cut read `family.ron` and every
+    /// `family/<crate>.ron` sixty times a second to be told what it already showed (`#243` review), and
+    /// a number that only goes up on a read is the cheapest thing that can hold it to *"a settled panel
+    /// reads nothing"* — `a_settled_panel_reads_nothing` is the test.
+    reads: u64,
 }
 
 impl FamilyPanel {
@@ -114,6 +147,11 @@ impl FamilyPanel {
     pub fn text_of(&self, krate: &str) -> Option<&str> {
         self.text.get(krate).map(String::as_str)
     }
+
+    /// How many times the panel has read its files (see the field's note).
+    pub fn reads(&self) -> u64 {
+        self.reads
+    }
 }
 
 /// **`bevy_elements`' settings as the reflect inspector edits them.**
@@ -127,45 +165,45 @@ pub struct FamilyView {
     /// The crate this view is of, as `family.ron` names it.
     pub krate: String,
     /// Time of day, hours in `[0, 24)`. The one field that is a scrub, not an operation.
-    #[reflect(@std::ops::RangeInclusive::<f64>::new(0.0, 24.0))]
-    #[reflect(@bevy_gooey::InspectStep(0.25))]
+    #[reflect(@HOURS)]
+    #[reflect(@bevy_gooey::InspectStep(STEP_HOURS))]
     pub hour: f64,
     /// Game seconds per real second.
     pub time_scale: f32,
     /// Whether the world clock stands still.
     pub paused: bool,
     /// Month of the file's date, 1–12.
-    #[reflect(@std::ops::RangeInclusive::<f32>::new(1.0, 12.0))]
+    #[reflect(@MONTHS)]
     pub month: u8,
     /// Day of the month, 1–31.
-    #[reflect(@std::ops::RangeInclusive::<f32>::new(1.0, 31.0))]
+    #[reflect(@DAYS)]
     pub day: u8,
     /// Year of the date.
     pub weather_year: i32,
     /// The observer's latitude, degrees north.
-    #[reflect(@std::ops::RangeInclusive::<f32>::new(-90.0, 90.0))]
-    #[reflect(@bevy_gooey::InspectStep(0.5))]
+    #[reflect(@LATITUDE)]
+    #[reflect(@bevy_gooey::InspectStep(STEP_DEGREES))]
     pub latitude_deg: f64,
     /// The observer's longitude, degrees east.
-    #[reflect(@std::ops::RangeInclusive::<f32>::new(-180.0, 180.0))]
-    #[reflect(@bevy_gooey::InspectStep(0.5))]
+    #[reflect(@LONGITUDE)]
+    #[reflect(@bevy_gooey::InspectStep(STEP_DEGREES))]
     pub longitude_deg: f64,
     /// Local civil time minus UTC, hours.
-    #[reflect(@std::ops::RangeInclusive::<f32>::new(-12.0, 14.0))]
-    #[reflect(@bevy_gooey::InspectStep(0.5))]
+    #[reflect(@UTC_OFFSET)]
+    #[reflect(@bevy_gooey::InspectStep(STEP_DEGREES))]
     pub utc_offset_hours: f64,
     /// The climate's annual mean air temperature, °C.
-    #[reflect(@bevy_gooey::InspectStep(0.5))]
+    #[reflect(@bevy_gooey::InspectStep(STEP_CLIMATE))]
     pub mean_temperature_c: f32,
     /// Half the warmest-to-coldest swing of daily means over a year, °C.
-    #[reflect(@bevy_gooey::InspectStep(0.5))]
+    #[reflect(@bevy_gooey::InspectStep(STEP_CLIMATE))]
     pub annual_amplitude_c: f32,
     /// Mean relative humidity, 0–1.
-    #[reflect(@std::ops::RangeInclusive::<f32>::new(0.0, 1.0))]
-    #[reflect(@bevy_gooey::InspectStep(0.01))]
+    #[reflect(@HUMIDITY)]
+    #[reflect(@bevy_gooey::InspectStep(STEP_HUMIDITY))]
     pub mean_humidity: f32,
     /// Mean wind speed at 10 m, m/s.
-    #[reflect(@bevy_gooey::InspectStep(0.5))]
+    #[reflect(@bevy_gooey::InspectStep(STEP_CLIMATE))]
     pub mean_wind_ms: f32,
 }
 
@@ -191,6 +229,18 @@ impl FamilyView {
             mean_humidity: settings.climate.mean_humidity,
             mean_wind_ms: settings.climate.mean_wind_ms,
         })
+    }
+
+    /// **This view with the hour a [`ClockScrub`] holds**, or unchanged when nothing is held.
+    ///
+    /// The panel's hour is the preview's, not the file's, for as long as a scrub holds one — see the
+    /// module note. A held hour that is not finite is not an hour, so it is left to the file.
+    #[must_use]
+    pub fn at_hour(mut self, held: Option<f64>) -> FamilyView {
+        if let Some(hour) = held.filter(|h| h.is_finite()) {
+            self.hour = hour.rem_euclid(24.0);
+        }
+        self
     }
 
     /// **The RON value `family_set` is given for a field of this view**, kept inside what the crate's own
@@ -225,6 +275,36 @@ const MONTHS: std::ops::RangeInclusive<f64> = 1.0..=12.0;
 /// The days a month may have.
 const DAYS: std::ops::RangeInclusive<f64> = 1.0..=31.0;
 
+/// **The ranges the inspector keeps a person inside**, as the numbers they are, so the reflected
+/// attributes below and [`FamilyView::ron_value`] cannot disagree about them.
+///
+/// A `#[reflect(@…)]` attribute is an expression in the crate's own source, so a constant is as usable
+/// there as a literal — and it is the only form that keeps the *range a person is shown* and the *range
+/// the file is written inside* one fact.
+const HOURS: std::ops::RangeInclusive<f64> = 0.0..=24.0;
+/// Degrees of latitude: the poles.
+const LATITUDE: std::ops::RangeInclusive<f64> = -90.0..=90.0;
+/// Degrees of longitude: the antimeridian.
+const LONGITUDE: std::ops::RangeInclusive<f64> = -180.0..=180.0;
+/// Hours of civil time offset from UTC, as a place on Earth can have (`+14:00` at Kiritimati).
+const UTC_OFFSET: std::ops::RangeInclusive<f64> = -12.0..=14.0;
+/// A relative humidity, as a fraction of saturation.
+const HUMIDITY: std::ops::RangeInclusive<f32> = 0.0..=1.0;
+
+/// **How far one press of an arrow moves a field**, in the field's own unit.
+///
+/// A quarter hour is a clock step a person recognises; half a degree of place is finer than anyone sets
+/// a location to; a hundredth is the resolution humidity is worth; and half a degree of temperature, wind
+/// or swing is the finest a setting of this kind is meaningful at. Named, because the reflected attribute
+/// and the doc comment above each field are the same number and drifted apart once already.
+const STEP_HOURS: f32 = 0.25;
+/// See [`STEP_HOURS`]: degrees of place.
+const STEP_DEGREES: f32 = 0.5;
+/// See [`STEP_HOURS`]: a fraction of saturation.
+const STEP_HUMIDITY: f32 = 0.01;
+/// See [`STEP_HOURS`]: degrees Celsius, and metres per second.
+const STEP_CLIMATE: f32 = 0.5;
+
 /// The entity each crate's view is on, so a system can find it without a second resource.
 #[derive(Resource, Default)]
 pub struct FamilyViews(pub BTreeMap<String, Entity>);
@@ -241,6 +321,14 @@ pub struct FamilyBlock {
 #[derive(Component)]
 pub struct FamilyWidget;
 
+/// **The settings file of a crate this build has no fields for, as it is shown**: one `Text` under that
+/// crate's heading, carrying the crate whose text it is so [`mirror_the_blocks`] can keep it current.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct FamilyFile {
+    /// The crate the text is read from.
+    pub krate: String,
+}
+
 pub struct FamilyPanelPlugin;
 
 impl Plugin for FamilyPanelPlugin {
@@ -253,19 +341,65 @@ impl Plugin for FamilyPanelPlugin {
     }
 }
 
+/// **`family.ron`'s size and modification time.**
+///
+/// **A `stat` a frame, not a parse a frame** — the shape `project_config::refresh` uses for this same
+/// file. A crate listed or taken out is a write to `family.ron`, and the project configuration's
+/// switches write it without touching [`Project`], so the panel has to watch the file itself or a crate
+/// switched on would have no block until the next restart.
+type Stamp = (std::time::SystemTime, u64);
+
+/// **What the panel last saw of `family.ron`.**
+///
+/// The inner `Option` is the file's own answer (`None` for a project that lists no crate at all, which is
+/// an ordinary project rather than an error); the outer one is *"the panel has not looked yet"*, which has
+/// to be a read even when the file is absent, or a project without the file would be read every frame.
+type SeenListed = Option<Option<Stamp>>;
+
+fn listed_stamp(root: &std::path::Path) -> Option<Stamp> {
+    let meta = std::fs::metadata(bevy_grimoire_core::family::path_for_project(root)).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
 /// **Which crates get a block, and what their views show**, read from the project's files.
 ///
-/// The settings text is taken from [`FamilySettings`] when the host already holds it — that is the
-/// watch's job, so the panel and the preview read one text — and from the file otherwise (the first
-/// frames, before the watch has polled). A view is written only when it differs, so a settled panel costs
-/// one comparison.
+/// # Read when an input moved, and never otherwise
+///
+/// The panel is derived from four facts: the [`Project`] (which `family.ron` names, and the root the
+/// settings live under), `family.ron` itself (the switches write it without touching the project),
+/// [`FamilySettings`] (the text the watch last took as good), and the preview's held [`ClockScrub`]
+/// (the hour). A frame in which none of them moved returns here on one `stat`, two change ticks and a
+/// look at the view entities — the first cut loaded `family.ron`, read every `family/<crate>.ron` and
+/// parsed its RON on **every** frame, sixty times a second, to be told what the panel already showed.
+///
+/// **The view entities are part of the gate** because a door change sweeps them without touching these
+/// resources: a slot naming an entity the world no longer has is exactly the frame the panel must read
+/// again, or the second door would draw no block at all.
+///
+/// # The text, and where it comes from
+///
+/// [`FamilySettings`] first — that is the watch's job, so the panel and the preview read one text — and
+/// the file **only when the host holds nothing for that crate** (`or_else`, which reads the disk lazily;
+/// the first cut was `or`, which read every file every frame whether the host had the text or not). The
+/// fallback is the first frames before the watch has polled, and a file the crate's own type refused at
+/// launch — and a refused file stays refused, so the last text the crate would read is what is shown,
+/// which is what a game would read too.
+///
+/// # The hour is the preview's, not the file's
+///
+/// While a [`ClockScrub`] holds an hour that is the hour the sky is drawn at, so it is the hour this
+/// field shows ([`FamilyView::at_hour`]) — and it has to be, or the panel would undo its own edit one
+/// frame later by rebuilding the view from a file the hour never reaches.
+#[allow(clippy::too_many_arguments)]
 fn read_the_files(
     project: Option<Res<Project>>,
     held: Option<Res<FamilySettings>>,
+    scrub: Option<Res<ClockScrub>>,
     mut panel: ResMut<FamilyPanel>,
     mut views: Query<&mut FamilyView>,
     mut slots: ResMut<FamilyViews>,
     mut commands: Commands,
+    mut seen: Local<SeenListed>,
 ) {
     let Some(project) = project else {
         if !panel.crates.is_empty() {
@@ -274,16 +408,31 @@ fn read_the_files(
         }
         return;
     };
+    let stamp = listed_stamp(&project.root);
+    let moved = seen.as_ref() != Some(&stamp)
+        || panel.root.as_deref() != Some(project.root.as_path())
+        || held.as_ref().is_some_and(|h| h.is_changed())
+        || scrub.as_ref().is_some_and(|s| s.is_changed())
+        || slots.0.values().any(|entity| views.get(*entity).is_err());
+    if !moved {
+        return;
+    }
+    *seen = Some(stamp);
+    panel.reads = panel.reads.saturating_add(1);
+
     let built = crate::family_host::built();
     let listed = bevy_grimoire_core::family::Family::load(&project.root)
         .map(|f| f.active(&built).into_iter().map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_default();
+    let settings_dir = bevy_grimoire_core::family::settings_dir(&project.root);
+    let hour = scrub.as_ref().and_then(|s| s.0);
     let (mut crates, mut fields, mut text) = (Vec::new(), Vec::new(), BTreeMap::new());
     let mut parsed = Vec::new();
     for krate in listed {
         let from_host = held.as_ref().and_then(|h| h.text.get(&krate).cloned());
-        let from_disk = std::fs::read_to_string(bevy_grimoire_core::family::settings_dir(&project.root).join(format!("{krate}.ron"))).ok();
-        let Some(settings_text) = from_host.or(from_disk) else { continue };
+        let Some(settings_text) = from_host.or_else(|| std::fs::read_to_string(settings_dir.join(format!("{krate}.ron"))).ok()) else {
+            continue;
+        };
         if krate == CRATE
             && let Ok(settings) = ElementsSettings::from_ron(&settings_text)
         {
@@ -296,7 +445,7 @@ fn read_the_files(
     // A view exists per crate this build can draw fields of; the others are listed, so a person sees the
     // crate is there and can read its file.
     for (krate, settings) in parsed {
-        let want = FamilyView::of(&krate, &settings);
+        let want = FamilyView::of(&krate, &settings).map(|view| view.at_hour(hour));
         match (slots.0.get(&krate).copied(), want) {
             (Some(entity), Some(want)) => {
                 if let Ok(mut view) = views.get_mut(entity)
@@ -336,11 +485,19 @@ fn read_the_files(
 /// Spawned on demand and never kept hidden: a gooey inspector is a set of entities, and its number rows
 /// carry `TextHint`, which is how this editor's screens find "the one search box" (`outliner.rs` says the
 /// same of its tree and its search field).
+///
+/// **A block whose crate has no fields shows the settings text, and is rewritten when that text moves.**
+/// It is one `Text` ([`FamilyFile`]) rather than a spawn-and-despawn, because the text under a heading
+/// that stays put is what a person is watching: the first cut wrote it once at spawn, so a `family_set`
+/// line left the block showing the settings from before the edit. The write is compared first, which is
+/// `no_system_writes_every_frame.rs`'s rule and the reason a settled panel costs nothing.
 fn mirror_the_blocks(
     panel: Res<FamilyPanel>,
     slots: Res<FamilyViews>,
     panes: Query<Entity, With<MapControlsPane>>,
     blocks: Query<(Entity, &FamilyBlock)>,
+    files: Query<(Entity, &FamilyFile)>,
+    mut texts: Query<&mut Text>,
     mut commands: Commands,
 ) {
     let Ok(pane) = panes.single() else { return };
@@ -356,11 +513,21 @@ fn mirror_the_blocks(
             commands.entity(block).despawn();
         }
     }
-    for (krate, view) in wanted {
-        if blocks.iter().any(|(_, b)| b.krate == krate) {
+    // **The text of a crate with no fields follows its file.** Its block stays where it is; only the
+    // settings under the heading change. Compared before written, so a settled panel writes nothing.
+    for (entity, file) in &files {
+        let Some(want) = panel.text_of(&file.krate) else { continue };
+        if let Ok(mut text) = texts.get_mut(entity)
+            && text.0 != want
+        {
+            text.0 = want.to_owned();
+        }
+    }
+    for (krate, view) in &wanted {
+        let name = (*krate).to_owned();
+        if blocks.iter().any(|(_, b)| b.krate == *krate) {
             continue;
         }
-        let name = krate.to_owned();
         let ron = if view.is_none() { panel.text_of(krate).map(str::to_owned) } else { None };
         let block = commands
             .spawn((
@@ -375,13 +542,14 @@ fn mirror_the_blocks(
                         block.spawn((
                             FamilyWidget,
                             Name::new(format!("family inspector {name}")),
-                            bevy_gooey::inspector(bevy_gooey::InspectTarget::component::<FamilyView>(view)),
+                            bevy_gooey::inspector(bevy_gooey::InspectTarget::component::<FamilyView>(*view)),
                         ));
                     }
                     // **A crate whose settings type is not this build's is read, not guessed at.** The text
                     // is its own file, so what a person sees is what a game will read.
                     None => {
                         block.spawn((
+                            FamilyFile { krate: name.clone() },
                             Name::new(format!("family file {name}")),
                             bevy_gooey::label(ron.unwrap_or_default()),
                         ));
