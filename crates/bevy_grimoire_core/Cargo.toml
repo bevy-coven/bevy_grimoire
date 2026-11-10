@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire_core"
-version = "0.8.2"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.97.1"
 description = "Engine-free world-building core: constraint IR, solvers, WFC, deterministic RNG."
