@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-10
+
+- **ui-51-outliner-everything** `5a275e04` The outliner lists everything on the map — pieces grouped by what they are, plus compositions, people, triggers and notes — and a row's menu pins its piece or hides it for this session *For you: The Inspector's outliner now shows everything on your map, not just pieces, and right-clicking a row lets you pin that piece or take it out of the way.* *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-09
 
 - **terminal-agent-omp-default** `c46a67bc` The terminal starts with the omp agent chosen on a machine that has it installed, and with a plain shell on one that does not; a terminal_agent in either settings file still wins (#341) *No clip: a resolved default asked of the login shell at start-up, with no picture of its own; proved by a_machine_with_the_agent_installed_starts_with_it_chosen (the_pane_offers_the_agent_on_a_machine_that_has_it_and_a_shell_on_one_that_does_not, the_settings_screen_shows_the_agent_this_machine_starts_with, the_agent_is_asked_of_the_login_shell_and_answered_there, ask_puts_the_question_to_the_shell_the_press_uses, a_path_holding_the_agent_chooses_it_and_a_path_without_it_does_not, resolving_on_this_machine_uses_what_is_installed_unless_a_file_says, the_built_in_default_is_still_the_shell)*
