@@ -11,7 +11,7 @@
 //!
 //! # Declared, then verified
 //!
-//! `kits.ron` states the binding; loading **checks it against what the directory actually defines**
+//! `kits.yaml` states the binding; loading **checks it against what the directory actually defines**
 //! (`Library::namespace`). Declared-only drifts the first time a kit is re-authored; derived-only
 //! cannot express the skin pair at all, because both directories answer `site`. Stating it and
 //! checking it is the discipline Mesa's symbol files put on separate compilation — Smits, Konat &
@@ -50,8 +50,8 @@ use crate::policy::Policy;
 /// which were an ad-hoc per-map list of namespaces until a second map wanted the same one.
 pub const KITS_VERSION: u32 = 3;
 
-/// The binding file, at the project root beside `vocab.ron`.
-pub const KITS_FILE: &str = "kits.ron";
+/// The binding file, at the project root beside `vocab.yaml`.
+pub const KITS_FILE: &str = "kits.yaml";
 
 /// **The ceiling on both divisions below.**
 ///
@@ -68,7 +68,7 @@ pub const MAX_DIVISIONS: u32 = 8;
 ///
 /// # It has been in three places, and this is the level that works
 ///
-/// It started in each kit's `project.ron`, while a kit *was* a project. That broke the moment a map
+/// It started in each kit's `project.yaml`, while a kit *was* a project. That broke the moment a map
 /// could draw on several kits: two kits disagreeing about how finely a face is read have faces that
 /// cannot be compared, so adjacency stops meaning anything, silently, with both values legal.
 ///
@@ -237,7 +237,7 @@ pub struct Bash {
     pub note: Option<String>,
 }
 
-/// **The project's kit bindings**, read from `kits.ron`.
+/// **The project's kit bindings**, read from `kits.yaml`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Kits {
@@ -279,14 +279,14 @@ pub struct Kits {
 
 impl Kits {
     pub fn parse(text: &str) -> Result<Kits, String> {
-        let k: Kits = ron::from_str(text).map_err(|e| format!("kits: {e}"))?;
+        let k: Kits = crate::yaml::from_str(text, KITS_FILE).map_err(|p| format!("kits: {}", p.line()))?;
         k.validate()?;
         Ok(k)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("kits: serialize: {e}"))
+    /// **The file as the one YAML writer writes it**, which is what the editor saves.
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("kits: {}", p.line()))
     }
 
     /// The bind whose `dir` is [`Self::authoring`]. Present by construction — [`Self::validate`]
@@ -435,7 +435,7 @@ pub struct KitLayer {
     pub dir: PathBuf,
     /// The namespace it provides, as bound **and** as verified against its own ids.
     pub namespace: String,
-    /// `library.ron` exactly as parsed — what an editor writes back for **this** kit.
+    /// `library.yaml` exactly as parsed — what an editor writes back for **this** kit.
     pub measured: Library,
     /// [`Self::measured`] with this kit's own policy applied.
     pub library: Library,
@@ -446,7 +446,7 @@ pub struct KitLayer {
 /// compositions authored over them.
 #[derive(Clone, Debug)]
 pub struct Bound {
-    /// In `kits.ron` order.
+    /// In `kits.yaml` order.
     pub kits: Vec<KitLayer>,
     /// **Every bound kit's layered library, concatenated.** What a map resolves against, what the
     /// palette shows, and what a composition may draw from regardless of which kit authored it.
@@ -458,7 +458,7 @@ pub struct Bound {
 
 /// **Read a project**: every bound kit, merged, with its compositions validated against the result.
 ///
-/// `project` is the directory holding `kits.ron` — `assets/grimoire`, not a kit inside it.
+/// `project` is the directory holding `kits.yaml` — `assets/grimoire`, not a kit inside it.
 pub fn bound_library(project: &Path, kits: &Kits) -> Result<Bound, String> {
     let mut layers = Vec::with_capacity(kits.bind.len());
     let mut descriptors = Vec::new();
@@ -502,7 +502,7 @@ pub fn bound_library(project: &Path, kits: &Kits) -> Result<Bound, String> {
     let library = Library {
         version: crate::library::LIBRARY_VERSION,
         note: Some(format!(
-            "Derived: {} bound kit(s) merged. Not a file — edit a kit's own library.ron.",
+            "Derived: {} bound kit(s) merged. Not a file — edit a kit's own library.yaml.",
             layers.len()
         )),
         descriptors,
@@ -567,7 +567,7 @@ mod tests {
     #[test]
     fn a_binding_round_trips() {
         let k = kits(&[("site", "site_greybox"), ("furniture", "furniture")], "furniture");
-        let text = k.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = k.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(Kits::parse(&text).unwrap_or_else(|e| panic!("{e}")), k);
     }
 
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn one_namespace_cannot_bind_to_two_directories() {
         let text = kits(&[("site", "site"), ("site", "site_greybox")], "site")
-            .to_ron()
+            .to_yaml()
             .unwrap_or_else(|e| panic!("{e}"));
         let e = Kits::parse(&text).err().unwrap_or_default();
         assert!(e.contains("bound twice"), "{e}");
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn one_directory_cannot_provide_two_namespaces() {
         let text = kits(&[("site", "muddle"), ("lab", "muddle")], "muddle")
-            .to_ron()
+            .to_yaml()
             .unwrap_or_else(|e| panic!("{e}"));
         let e = Kits::parse(&text).err().unwrap_or_default();
         assert!(e.contains("bound twice"), "{e}");
@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn authoring_must_name_a_bound_kit() {
         let text = kits(&[("site", "site")], "furniture")
-            .to_ron()
+            .to_yaml()
             .unwrap_or_else(|e| panic!("{e}"));
         let e = Kits::parse(&text).err().unwrap_or_default();
         assert!(e.contains("not a bound directory"), "{e}");
@@ -610,14 +610,14 @@ mod tests {
     /// the `+ new kit` row is the way out of it. What is refused is the pair disagreeing.
     #[test]
     fn a_project_with_no_kits_has_nowhere_for_work_to_land_and_says_so() {
-        let text = kits(&[], "").to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = kits(&[], "").to_yaml().unwrap_or_else(|e| panic!("{e}"));
         Kits::parse(&text).unwrap_or_else(|e| panic!("an empty project is openable: {e}"));
 
-        let text = kits(&[], "furniture").to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = kits(&[], "furniture").to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let e = Kits::parse(&text).err().unwrap_or_default();
         assert!(e.contains("nothing is bound"), "{e}");
 
-        let text = kits(&[("site", "site")], "").to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = kits(&[("site", "site")], "").to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let e = Kits::parse(&text).err().unwrap_or_default();
         assert!(e.contains("no `authoring`"), "{e}");
     }
@@ -628,7 +628,18 @@ mod tests {
     #[test]
     fn a_project_that_states_no_lattice_gets_the_authored_one() {
         let text =
-            r#"(version: 3, bind: [(namespace: "f", dir: "f")], authoring: Some("f"), bash: [])"#;
+            r"version: 3
+note: null
+lattice:
+  face_bands: 1
+  snap_divisor: 3
+  cell_height: 4.0
+bind:
+- namespace: f
+  dir: f
+bash: []
+authoring: f
+";
         let k = Kits::parse(text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(k.lattice, Lattice::default());
         assert_eq!(k.lattice.face_bands, 1, "the half-metre grid the kits use");
@@ -658,7 +669,7 @@ mod tests {
     fn a_binding_from_another_schema_is_refused() {
         let mut k = kits(&[("site", "site")], "site");
         k.version = KITS_VERSION + 1;
-        let text = k.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = k.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let e = Kits::parse(&text).err().unwrap_or_default();
         assert!(e.contains("this build reads"), "{e}");
     }
@@ -673,7 +684,7 @@ mod tests {
             kits: vec!["f".to_owned(), "g".to_owned()],
             note: Some("the two kits the atrium is built from".to_owned()),
         });
-        let text = k.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = k.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let back = Kits::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(back, k);
         assert_eq!(
@@ -691,7 +702,7 @@ mod tests {
     /// project declares no combinations" and "nobody has said" would otherwise be one file.
     #[test]
     fn a_binding_that_states_no_bash_at_all_is_refused_by_name() {
-        let silent = r#"(version: 3, bind: [(namespace: "f", dir: "f")], authoring: Some("f"))"#;
+        let silent = "version: 3\nbind:\n- namespace: f\n  dir: f\nauthoring: f\n";
         let e = Kits::parse(silent).err().unwrap_or_default();
         assert!(e.contains("bash"), "the refusal names the field: {e}");
     }
@@ -701,8 +712,23 @@ mod tests {
     /// down.
     #[test]
     fn a_bash_naming_an_unbound_kit_is_refused() {
-        let text = r#"(version: 3, bind: [(namespace: "f", dir: "f")], authoring: Some("f"),
-            bash: [(name: "hub", kits: ["f", "nope"])])"#;
+        let text = r"version: 3
+note: null
+lattice:
+  face_bands: 1
+  snap_divisor: 3
+  cell_height: 4.0
+bind:
+- namespace: f
+  dir: f
+bash:
+- name: hub
+  kits:
+  - f
+  - nope
+  note: null
+authoring: f
+";
         let e = Kits::parse(text).err().unwrap_or_default();
         assert!(e.contains("nope") && e.contains("does not bind"), "{e}");
     }
@@ -712,27 +738,35 @@ mod tests {
     #[test]
     fn a_bash_that_cannot_be_named_unambiguously_is_refused() {
         let bad = |bash: &str| {
+            // YAML, because a project file is: the two binds as a list, and the bash the closure writes.
             let text = format!(
-                r#"(version: 3, bind: [(namespace: "f", dir: "f"), (namespace: "g", dir: "g")],
-                    authoring: Some("f"), bash: [{bash}])"#
+                "version: 3\n\
+                 bind:\n\
+                 - namespace: f\n\
+                   dir: f\n\
+                 - namespace: g\n\
+                   dir: g\n\
+                 authoring: f\n\
+                 bash:\n\
+                 - {bash}\n"
             );
             Kits::parse(&text).err().unwrap_or_default()
         };
         assert!(
-            bad(r#"(name: "Hub Kit", kits: ["f"])"#).contains("not a usable bash name"),
+            bad("name: Hub Kit\n  kits: [f]").contains("not a usable bash name"),
             "a name that is not one snake_case segment"
         );
         assert!(
-            bad(r#"(name: "hub", kits: ["f"]), (name: "hub", kits: ["g"])"#)
-                .contains("declared twice"),
+            // Two bashes answering to one name: a second item, spelled as the next list entry.
+            bad("name: hub\n  kits: [f]\n- name: hub\n  kits: [g]").contains("declared twice"),
             "two bashes answering to one name"
         );
         assert!(
-            bad(r#"(name: "hub", kits: [])"#).contains("names no kits"),
+            bad("name: hub\n  kits: []").contains("names no kits"),
             "a bash that offers nothing"
         );
         assert!(
-            bad(r#"(name: "hub", kits: ["f", "f"])"#).contains("names `f` twice"),
+            bad("name: hub\n  kits: [f, f]").contains("names `f` twice"),
             "one kit named twice in one bash"
         );
     }

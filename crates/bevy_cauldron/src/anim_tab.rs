@@ -1,6 +1,6 @@
 //! **The animation bench** — what a rig's clips are, and whether the asset still agrees.
 //!
-//! The editor's third tab. `bevy_grimoire_core::clips` measures a GLB and `assets/grimoire/rigs.ron` records
+//! The editor's third tab. `bevy_grimoire_core::clips` measures a GLB and `assets/grimoire/rigs.yaml` records
 //! what the game plays; this is where an author sees both at once. `docs/animation.md` names the gap
 //! it closes: getting a gait's `(duration, phase_offset, cycle_distance)` was *"a manual offline step,
 //! not a repo tool"*, and `src/site/staff_anim.rs` calls that measuring *"the largest hidden cost in
@@ -58,7 +58,7 @@ pub struct BenchState {
     /// Whether the read has happened. Separate from `rigs.is_none()`, which is also true of a read
     /// that failed — and those two want different words on screen.
     pub loaded: bool,
-    /// See [`crate::chrome::Status`]. This tab used to colour its one line by whether `rigs.ron` had
+    /// See [`crate::chrome::Status`]. This tab used to colour its one line by whether `rigs.yaml` had
     /// loaded — a fact about a file, not about the sentence being shown — so `NOT WRITTEN:` rendered
     /// in the same grey as `adopted` on every session where the manifest had parsed.
     pub status: crate::chrome::Status,
@@ -120,7 +120,7 @@ struct JumpRow(usize);
 struct RigList;
 
 /// **Transient per-slot adopt exclusion** — "adopt everything except slot 3, this once". The
-/// durable opt-out is `keep:` in rigs.ron (a recorded decision with a why); this is the trial
+/// durable opt-out is `keep:` in rigs.yaml (a recorded decision with a why); this is the trial
 /// form, living only until the next manifest write. Its own resource, never a `BenchState` field:
 /// the adopt path holds `BenchState` mutably. Keyed by rig NAME so a selection change cannot leak
 /// one rig's excludes onto another.
@@ -279,7 +279,7 @@ impl Plugin for AnimTabPlugin {
                     crate::anim_watch::poll_mtimes,
                     crate::anim_watch::queue_selected,
                     crate::anim_watch::step_measure_queue,
-                    // Ungated by the tab: a fact about `rigs.ron` stays true while another tab is open.
+                    // Ungated by the tab: a fact about `rigs.yaml` stays true while another tab is open.
                     crate::anim_watch::sync_rigs_reload,
                     crate::anim_watch::paint_stale_badge
                         .run_if(resource_changed::<crate::anim_watch::BenchGeneration>),
@@ -429,7 +429,7 @@ fn load_on_entry(
         return;
     }
     bench.loaded = true;
-    let path = project.root.join("assets/grimoire/rigs.ron");
+    let path = project.root.join("assets/grimoire/rigs.yaml");
     match std::fs::read_to_string(&path) {
         Ok(text) => match Rigs::parse(&text) {
             Ok(rigs) => {
@@ -451,12 +451,12 @@ fn load_on_entry(
             }
             // The manifest is on disk and unreadable — the tab has nothing to show and the author
             // has a file to fix. Exactly what the block is for.
-            Err(e) => bench.status.problem(format!("rigs.ron: {e}")),
+            Err(e) => bench.status.problem(format!("rigs.yaml: {e}")),
         },
         // **A project with no rigs file has no rigs, which is not a fault** (#302): every new project
         // starts so, and the panel said `cannot read <a path inside the project>` on its first open.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => bench.status.note("no rigs in this project yet".to_owned()),
-        Err(e) => bench.status.problem(format!("cannot read rigs.ron: {e}")),
+        Err(e) => bench.status.problem(format!("cannot read rigs.yaml: {e}")),
     }
 }
 
@@ -469,7 +469,7 @@ fn commit_text(
     new_text: String,
 ) -> Result<(), String> {
     let parsed = Rigs::parse(&new_text)?;
-    let path = root.join("assets/grimoire/rigs.ron");
+    let path = root.join("assets/grimoire/rigs.yaml");
     bevy_grimoire_core::ron_surgery::save_atomic(&path, &new_text)?;
     bench.rigs = Some(parsed);
     bench.text = Some(new_text);
@@ -587,18 +587,18 @@ pub(crate) fn adopt_text(
             continue;
         };
         let mut adopted = (d0, p0, c0);
-        let dur = bevy_grimoire_core::ron_surgery::fmt_f32(m.duration);
+        let dur = bevy_grimoire_core::yaml_surgery::fmt_number(m.duration);
         doc.edit_slot_field(i, "duration", &dur)?;
         adopted.0 = m.duration;
         wrote += 1;
         if let Some(ph) = m.phase_offset {
-            doc.edit_slot_field(i, "phase_offset", &bevy_grimoire_core::ron_surgery::fmt_f32(ph))?;
+            doc.edit_slot_field(i, "phase_offset", &bevy_grimoire_core::yaml_surgery::fmt_number(ph))?;
             adopted.1 = ph;
             wrote += 1;
         }
         if let Some(raw) = m.cycle_distance {
             let world = raw * rig.scale;
-            doc.edit_slot_field(i, "cycle_distance", &bevy_grimoire_core::ron_surgery::fmt_f32(world))?;
+            doc.edit_slot_field(i, "cycle_distance", &bevy_grimoire_core::yaml_surgery::fmt_number(world))?;
             adopted.2 = world;
             wrote += 1;
         }
@@ -638,7 +638,7 @@ pub(crate) fn adopt_text(
     trial_rig.provenance = Some(stamp.clone());
     doc.set_rig_field(
         "provenance",
-        &bevy_grimoire_core::rigs_edit::provenance_value(&stamp),
+        &bevy_grimoire_core::rigs_edit::provenance_yaml(&stamp, 0),
     )?;
 
     let new_text = doc.render();
@@ -674,7 +674,7 @@ fn adopt_measured(
         bench.status.problem("NOT WRITTEN: no rig selected".to_owned());
         return;
     };
-    let path = project.root.join("assets/grimoire/rigs.ron");
+    let path = project.root.join("assets/grimoire/rigs.yaml");
     // **The text on disk now is what the operation replaces**, so it is what the tab's undo puts back:
     // the tab may hold older text than the file when the file was edited under it (by hand, or by an
     // agent's adoption), and undoing to the held text would discard that edit too.
@@ -702,7 +702,7 @@ fn adopt_measured(
                     }
                     bench.status.note(said);
                 }
-                Err(e) => bench.status.problem(format!("written, but the tab could not read rigs.ron back: {e}")),
+                Err(e) => bench.status.problem(format!("written, but the tab could not read rigs.yaml back: {e}")),
             }
         }
         Err(e) => bench.status.problem(format!("NOT WRITTEN: {e}")),
@@ -1479,7 +1479,7 @@ fn rebuild_slots(
 ///
 /// **The colour rule is gone rather than fixed.** It read `bench.rigs.is_none() && bench.loaded` —
 /// a fact about whether a *file* had parsed, standing in for whether the *sentence* was bad news. So
-/// `NOT WRITTEN:` from a failed adopt drew in the same grey as `adopted` whenever `rigs.ron` had
+/// `NOT WRITTEN:` from a failed adopt drew in the same grey as `adopted` whenever `rigs.yaml` had
 /// loaded, which is every session in which anyone gets far enough to adopt anything. The write site
 /// says which it is now (`crate::chrome::Status`), and this line is only ever the receipt.
 fn refresh_line(
@@ -1559,8 +1559,8 @@ mod write_back_tests {
         std::fs::create_dir_all(dir.join("assets/grimoire")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::create_dir_all(dir.join("assets/characters")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::copy(
-            ws.join("assets/grimoire/rigs.ron"),
-            dir.join("assets/grimoire/rigs.ron"),
+            ws.join("assets/grimoire/rigs.yaml"),
+            dir.join("assets/grimoire/rigs.yaml"),
         )
         .unwrap_or_else(|e| panic!("{e}"));
         std::fs::copy(
@@ -1572,7 +1572,7 @@ mod write_back_tests {
     }
 
     fn bench_for(dir: &std::path::Path) -> BenchState {
-        let text = std::fs::read_to_string(dir.join("assets/grimoire/rigs.ron"))
+        let text = std::fs::read_to_string(dir.join("assets/grimoire/rigs.yaml"))
             .unwrap_or_else(|e| panic!("{e}"));
         let rigs = Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         let selected = rigs
@@ -1592,7 +1592,7 @@ mod write_back_tests {
     #[test]
     fn adopting_writes_values_and_provenance_and_keeps_every_comment() {
         let dir = temp_project();
-        let manifest = dir.join("assets/grimoire/rigs.ron");
+        let manifest = dir.join("assets/grimoire/rigs.yaml");
         let before = std::fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("{e}"));
         let mut bench = bench_for(&dir);
 
@@ -1634,7 +1634,7 @@ mod write_back_tests {
     #[test]
     fn a_text_that_does_not_validate_is_refused_and_the_file_untouched() {
         let dir = temp_project();
-        let manifest = dir.join("assets/grimoire/rigs.ron");
+        let manifest = dir.join("assets/grimoire/rigs.yaml");
         let before = std::fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("{e}"));
         let mut bench = bench_for(&dir);
         let refused = commit_text(&dir, &mut bench, "(version: 99, rigs: {})".to_owned());
@@ -1649,7 +1649,7 @@ mod write_back_tests {
     #[test]
     fn an_excluded_slot_keeps_its_bytes_while_siblings_adopt() {
         let dir = temp_project();
-        let manifest = dir.join("assets/grimoire/rigs.ron");
+        let manifest = dir.join("assets/grimoire/rigs.yaml");
         let before = std::fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("{e}"));
         let mut bench = bench_for(&dir);
         // Slot 2 is the walk — the phase reference, and the line we hold still.
@@ -1700,7 +1700,7 @@ mod write_back_tests {
         // Adopt twice with nothing changing between: the second write must change only the
         // provenance date at most — measured values are deterministic, so the numbers hold still.
         let dir = temp_project();
-        let manifest = dir.join("assets/grimoire/rigs.ron");
+        let manifest = dir.join("assets/grimoire/rigs.yaml");
         let mut bench = bench_for(&dir);
         adopt(&dir, &mut bench, &AdoptExclude::default()).unwrap_or_else(|e| panic!("{e}"));
         let once = std::fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("{e}"));

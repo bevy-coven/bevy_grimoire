@@ -20,7 +20,7 @@ fn the_files_that_name_a_program_cannot_be_registered_wherever_they_are() {
 
 #[test]
 fn a_games_own_data_may_live_outside_the_folder() {
-    for path in ["mob.ron", "rooms/a.ron", "../data/mob.ron", "../../game/tuning.ron", "my_play.ron", "agent.yaml.bak"] {
+    for path in ["mob.ron", "rooms/a.ron", "../data/mob.ron", "../../game/tuning.yaml", "my_play.yaml", "agent.yaml.bak"] {
         DataFiles::parse(&registry(path)).unwrap_or_else(|e| panic!("{path}: {e}"));
     }
 }

@@ -1614,7 +1614,7 @@ fn a_map_naming_an_undeclared_bash_will_not_open() {
         .build("m");
     let maps = root.join("assets/grimoire/maps");
     std::fs::write(
-        maps.join("wrong.map.ron"),
+        maps.join("wrong.map.yaml"),
         "(version: 6, name: \"wrong\", origin: (0.0, 0.0, 0.0), bounds: (8.0, 3.0, 8.0), \
          bash: Some(\"nope\"), placements: [], stamps: [], locations: [])",
     )
@@ -1635,7 +1635,7 @@ fn a_map_naming_an_undeclared_bash_will_not_open() {
 
     // The map that names a declared one opens, so the refusal is about the name and nothing else.
     std::fs::write(
-        maps.join("right.map.ron"),
+        maps.join("right.map.yaml"),
         "(version: 6, name: \"right\", origin: (0.0, 0.0, 0.0), bounds: (8.0, 3.0, 8.0), \
          bash: Some(\"hub\"), placements: [], stamps: [], locations: [])",
     )
@@ -3576,7 +3576,7 @@ fn a_captured_group_is_written_and_reads_back() {
     // Cloned rather than held: `keep_as_group` wants both resources at once, and two live borrows
     // of one world is what `resource_scope` exists to avoid. The map is only read here.
     let open = world.resource::<bevy_cauldron::project::OpenMap>().map.clone();
-    let open = bevy_cauldron::project::OpenMap::new(open, std::path::PathBuf::from("m.map.ron"));
+    let open = bevy_cauldron::project::OpenMap::new(open, std::path::PathBuf::from("m.map.yaml"));
     let world = app.world_mut();
     let mut project = world.resource_mut::<bevy_cauldron::project::Project>();
     assert!(
@@ -3630,7 +3630,7 @@ fn a_captured_group_is_written_and_reads_back() {
     );
 
     // And it is on disk, parseable, with the members the set held.
-    let path = root.join("assets/grimoire/compositions.ron");
+    let path = root.join("assets/grimoire/compositions.yaml");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
     let reread = bevy_grimoire_core::composition::Compositions::parse(&text)
         .unwrap_or_else(|e| panic!("what was written must parse: {e}"));
@@ -10682,7 +10682,7 @@ fn the_menu_key_saves_and_goes() {
         "and having saved, it goes — in the same press"
     );
     // The write is real: the placement is on disk, not merely flagged clean.
-    let on_disk = root.join("assets/grimoire/maps/m.map.ron");
+    let on_disk = root.join("assets/grimoire/maps/m.map.yaml");
     let written = std::fs::read_to_string(&on_disk)
         .unwrap_or_else(|e| panic!("the saved map must be on disk at {on_disk:?}: {e}"));
     assert!(
@@ -16002,9 +16002,18 @@ mod block_rules {
     /// the only thing the layout has to satisfy is the border and the pins.
     fn rule(example: &str, regions: &str, border: &str) -> String {
         format!(
-            "(version: 1, blocks: [(example: \"{example}\", regions: [{regions}], cell: 2.0, \
-             size: (4, 4), border: Some(\"{border}\"), no_empty: true, weights: [], \
-             footprints: [], attempts: 8, seed: 7)])"
+            "version: 1\n\
+             blocks:\n\
+             - example: {example}\n\
+               regions: [{regions}]\n\
+               cell: 2.0\n\
+               size: [4, 4]\n\
+               border: {border}\n\
+               no_empty: true\n\
+               weights: []\n\
+               footprints: []\n\
+               attempts: 8\n\
+               seed: 7\n"
         )
     }
 
@@ -16042,7 +16051,7 @@ mod block_rules {
             .descriptor("lot", "alpha")
             .descriptor("garden", "alpha")
             .side(8.0)
-            .rules(&rule("m", "", "street"));
+            .rules_text(&rule("m", "", "street"));
         for (id, at, owned) in example_rows(true) {
             f = if owned { f.place_owned(id, at) } else { f.place(id, at) };
         }
@@ -16112,7 +16121,7 @@ mod block_rules {
             .descriptor("street", "alpha")
             .descriptor("lot", "alpha")
             .descriptor("region", "alpha")
-            .rules(&rule("block", "\"region\"", "street"))
+            .rules_text(&rule("block", "region", "street"))
             .place("region", (2.0, -3.0))
             .build("m");
         let mut rows = example_rows(false);
@@ -16180,7 +16189,7 @@ mod block_rules {
         let root = Fixture::new("rules-no-example")
             .descriptor("street", "alpha")
             .descriptor("region", "alpha")
-            .rules(&rule("block", "\"region\"", "street"))
+            .rules_text(&rule("block", "region", "street"))
             .place("region", (0.0, 0.0))
             .build("m");
         let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -16192,7 +16201,7 @@ mod block_rules {
         let state = app.world().resource::<EditorState>();
         assert!(state.status.has_problem(), "a missing example must be said");
         assert!(
-            state.status.problem_text().contains("block.map.ron"),
+            state.status.problem_text().contains("block.map.yaml"),
             "and must name the file: {}",
             state.status.problem_text()
         );
@@ -16229,7 +16238,7 @@ mod block_rules {
             .descriptor("street", "alpha")
             .descriptor("region", "alpha")
             .descriptor("floor", "alpha")
-            .rules(&rule("block", "\"region\"", "street"))
+            .rules_text(&rule("block", "region", "street"))
             .place("floor", (0.5, 0.5))
             .place("floor", (1.5, 0.5))
             .build("m");
@@ -16252,13 +16261,13 @@ mod block_rules {
     fn a_rules_file_naming_a_missing_descriptor_fails_the_open() {
         let root = Fixture::new("rules-missing")
             .descriptor("street", "alpha")
-            .rules(&rule("m", "", "nowhere"))
+            .rules_text(&rule("m", "", "nowhere"))
             .build("m");
         let e = match Project::open(&root, None) {
             Ok(_) => panic!("a rules file naming `nowhere` must not open"),
             Err(e) => e,
         };
-        assert!(e.contains("rules.ron"), "the error must name the file: {e}");
+        assert!(e.contains("rules.yaml"), "the error must name the file: {e}");
         assert!(e.contains("nowhere"), "and the descriptor: {e}");
     }
 
@@ -16266,13 +16275,13 @@ mod block_rules {
     fn a_rules_file_that_does_not_parse_fails_the_open() {
         let root = Fixture::new("rules-garbled")
             .descriptor("street", "alpha")
-            .rules("(version: 1, blocks: [")
+            .rules_text("version: 1\nblocks: [\n")
             .build("m");
         let e = match Project::open(&root, None) {
             Ok(_) => panic!("a rules file that does not parse must not open"),
             Err(e) => e,
         };
-        assert!(e.contains("rules.ron"), "the error must name the file: {e}");
+        assert!(e.contains("rules.yaml"), "the error must name the file: {e}");
     }
 }
 

@@ -3,7 +3,7 @@
 //!
 //! `grimoire_state.repetition` and the REPEATS line name the visible repeats of the open map (#136,
 //! #139); this ends the clutter ones a turn can end. `bevy_grimoire_core::repetition::vary` turns each
-//! clutter copy that looks like an earlier one in range, under the project's `repetition.ron`, and
+//! clutter copy that looks like an earlier one in range, under the project's `repetition.yaml`, and
 //! the turned rows are written as a [`RowDelta`], so one undo puts every one back. Structure is never
 //! turned, and neither is a round piece (#184), which looks the same at any yaw; a long piece (a
 //! bench, a cart) takes only the half turn, the one that keeps it on its cells (#186). A

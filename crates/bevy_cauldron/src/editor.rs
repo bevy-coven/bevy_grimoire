@@ -1525,7 +1525,7 @@ struct CrowdReadout;
 #[derive(Component, Clone, Copy)]
 struct DataList;
 
-/// **The DATA panel's table** (UI-56, #242): it exists only while a `data.ron` lists leaves, which keeps its header cells (gooey
+/// **The DATA panel's table** (UI-56, #242): it exists only while a `data.yaml` lists leaves, which keeps its header cells (gooey
 /// draws them as buttons) out of screens that count every button in the world.
 #[derive(Component, Clone, Copy)]
 struct DataTable;
@@ -1592,7 +1592,7 @@ struct NotesList;
 #[derive(Component, Clone, Copy)]
 struct ReloadList;
 
-/// **One row of the Notes list**, by the id the map's `.notes.ron` names it.
+/// **One row of the Notes list**, by the id the map's `.notes.yaml` names it.
 ///
 /// `pub` since AF-03 (#359): a reveal selects a note, and the follower that scrolls the inspector to
 /// its row has to find the row by `id`. A private marker would leave the follow unable to say *which*
@@ -1982,7 +1982,7 @@ enum Field {
     /// looks repeat. The same answer `grimoire_state.repetition` gives an agent, so a person reads it
     /// too. A standing readout, like [`Self::Edges`], because it is a state the map is in.
     Repeats,
-    /// **The intended relations the open map breaks** (#137), from `<map>.relations.ron` checked by
+    /// **The intended relations the open map breaks** (#137), from `<map>.relations.yaml` checked by
     /// `bevy_grimoire_core::relations::check`: how many are unmet and missing and the first broken one
     /// in words. The same answer `grimoire_state.relations` gives an agent, so a person reads it too.
     Relations,
@@ -3995,7 +3995,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
             });
 
             // **Plan (E-069).** What the agent means to do on this map and how far it has got: the
-            // `.plan.ron` that `plan_set` writes, read like the notes are.
+            // `.plan.yaml` that `plan_set` writes, read like the notes are.
             p.spawn(Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(crate::chrome::GAP_TIGHT),
@@ -4013,7 +4013,7 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ));
             });
 
-            // **Problems (UI-54).** Each relation the open map breaks, from `<map>.relations.ron`, with a Go to that selects the
+            // **Problems (UI-54).** Each relation the open map breaks, from `<map>.relations.yaml`, with a Go to that selects the
             // pieces it names.
             p.spawn(Node {
                 flex_direction: FlexDirection::Column,
@@ -4418,7 +4418,7 @@ pub fn palette_headings(project: &Project) -> Vec<String> {
 /// **The palette's groups, in drawn order.** Headed by kind alone while the project binds one kit,
 /// and by `kit · kind` once it binds two or more: a project that mixes a first-party kit with an
 /// abstract tile set would otherwise show `building-module` and `landmark` with both kits' pieces
-/// interleaved under them. Kits go in `kits.ron` bind order, and within one the vocabulary's own
+/// interleaved under them. Kits go in `kits.yaml` bind order, and within one the vocabulary's own
 /// kind order, then `unsorted` last. A piece no bound kit defines sorts under an `unsorted` kit,
 /// last of all.
 fn categories(project: &Project) -> Vec<(String, Vec<usize>)> {
@@ -6688,7 +6688,7 @@ fn refresh_data_list(
             commands.entity(list).despawn_related::<Children>();
             commands.entity(list).with_children(|p| {
                 p.spawn((
-                    Text::new("no data files registered (data.ron)"),
+                    Text::new("no data files registered (data.yaml)"),
                     TextColor(ink.quiet),
                     crate::chrome::font(crate::chrome::text::LABEL),
                 ));
@@ -8529,7 +8529,7 @@ fn refresh_status(
             Field::Last => (named_receipt(&plain_receipt(state.status.note_text()), &project.library), quiet),
             // **The worst repeat first, then how many other looks repeat**, short enough for one line.
             // Dim when nothing repeats, the EDGES rule: a standing line that is fine stays quiet.
-            // Under the project's `repetition.ron` (#139), the rules `grimoire_state` reports under; a
+            // Under the project's `repetition.yaml` (#139), the rules `grimoire_state` reports under; a
             // file that cannot be read says so in the refusal colour rather than falling back.
             Field::Repeats => {
                 use bevy_grimoire_core::repetition::{repeats, FILE};
@@ -8572,7 +8572,7 @@ fn refresh_status(
 /// - **A name in backticks** (a quoted id: ``added `bath` ``) loses its backticks and reads as the
 ///   palette spells it, because the quoting is how the code marks an id and the palette's name is what the
 ///   person sees on screen. Only a lone word is meant (letters, digits, `_`, `/` and `-`): a quoted file
-///   (`kits.ron`) or a chord (`Ctrl+Z`) is not a name and keeps its quotes.
+///   (`kits.yaml`) or a chord (`Ctrl+Z`) is not a name and keeps its quotes.
 /// - **A name run into a sentence** (`placed lamp_tall`) is spelled lower case and spaced. Only a name the
 ///   library knows is touched, so a word that merely has an underscore in it (a file or a key) stays as it
 ///   is, and a receipt with no underscore costs nothing.
@@ -8895,7 +8895,7 @@ pub fn note_takes_clicks(fields: Fields, filters: Res<crate::filter::Filters>) -
 /// Runs in [`keys::Phase::Sense`], which is ordered before both the action systems and the text
 /// fields. That ordering is not tidiness — see [`keys::Phase`] for the defect it fixes, in which a
 /// text field cleared its own flag mid-frame and the run condition guarding `Enter` re-evaluated to
-/// true behind it, importing six descriptors into `library.ron` by accident.
+/// true behind it, importing six descriptors into `library.yaml` by accident.
 ///
 /// This reads exactly the fields [`not_typing`] reads, and for the same reason: the buffers stay with
 /// their fields, so adding a field is adding a line *here* — the one list — rather than a new guard
@@ -9079,7 +9079,7 @@ fn rule_seed_keys(
                 .is_some_and(|p| p.rules.blocks.iter().any(|b| b.example == open.map.name));
             if !named {
                 state.status.problem(format!(
-                    "no rule is learned from `{}`, so there is no seed to set. rules.ron names the \
+                    "no rule is learned from `{}`, so there is no seed to set. rules.yaml names the \
                      maps that have one.",
                     open.map.name
                 ));
@@ -13675,7 +13675,7 @@ pub(crate) fn set_pin(
     }
 }
 
-/// **Carry an operation's changes back into the project.** A rename rewrites `rules.ron`'s examples,
+/// **Carry an operation's changes back into the project.** A rename rewrites `rules.yaml`'s examples,
 /// and generate reads them from the Project resource; a label write changes the measured library,
 /// which the Map draws from. Either must go back in, or the file and the screen disagree until the
 /// watcher re-opens the map. Each is compared first and written only when it changed, so a
@@ -14169,7 +14169,7 @@ fn relevel_placements(
 ///
 /// **This is E-007, and the shape of the bug is what makes it worth naming.** The file watcher
 /// read the map file and put the new map into [`OpenMap`] — and the pieces on screen are
-/// *entities*, spawned once, when the editor opened. So a person editing `town.map.ron` in a
+/// *entities*, spawned once, when the editor opened. So a person editing `town.map.yaml` in a
 /// text editor got:
 ///
 /// - **the inspector's numbers updated** — the bounds, the count, the note, all read from the
@@ -15937,7 +15937,7 @@ fn drop_piece(
 /// Two passes, and the first is the fix. It used to be distance-to-`at` alone, which reads as "the
 /// nearest centre" and is wrong the moment anything stands on anything: a lamp on a table has almost
 /// exactly the table's `at`, so pointing at the lamp could delete the table. That is not
-/// hypothetical — it happened while authoring `break_room.map.ron`.
+/// hypothetical — it happened while authoring `break_room.map.yaml`.
 ///
 /// 1. **Anything whose footprint contains the probe**, smallest first. The piece you can see least of
 ///    is the one you must have been aiming at.
@@ -19005,7 +19005,7 @@ mod tests {
             bashes: Vec::new(),
             // These descriptors carry no namespace, so the directory is what a tile is named after.
             namespace: "grimoire".to_owned(),
-            library_path: std::path::PathBuf::from("assets/grimoire/library.ron"),
+            library_path: std::path::PathBuf::from("assets/grimoire/library.yaml"),
             vocab: bevy_grimoire_core::vocab::Vocabularies::default(),
             // No policy, so the measurements and the layered library are the same set — which is
             // what these tests are about. `write_library`'s own tests are the ones that pull them
@@ -19036,14 +19036,14 @@ mod tests {
                 placements,
                 ..Map::default()
             },
-            std::path::PathBuf::from("test_map.map.ron"),
+            std::path::PathBuf::from("test_map.map.yaml"),
         );
         (project, open)
     }
 
     /// **The bug this rule was rewritten for.** A lamp on a table shares the table's `at`, so
     /// "nearest centre" could hand back the table when the cursor was squarely on the lamp — and did,
-    /// while authoring `break_room.map.ron`.
+    /// while authoring `break_room.map.yaml`.
     #[test]
     fn pointing_at_a_lamp_on_a_table_picks_the_lamp() {
         let (p, open) = project(

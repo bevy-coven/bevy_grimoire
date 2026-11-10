@@ -1,6 +1,6 @@
 //! **A game's data files, as the editor looks at them** (#200, H3).
 //!
-//! `<grimoire dir>/data.ron` registers the tuning files a game owns (`data_files`), and the Data panel
+//! `<grimoire dir>/data.yaml` registers the tuning files a game owns (`data_files`), and the Data panel
 //! and `data_set` read them. A game follows them with
 //! `bevy_grimoire::live::GrimoireLiveApp::reload_data_file` (#263), and the registry classes the kind
 //! `Live`. So the editor owes the author two things, and neither used to be said: that a hand edit which
@@ -134,7 +134,7 @@ pub fn sync_data_view(
                             let name = crate::map_files::file_name(&project, &path);
                             let look = match std::fs::read_to_string(&path) {
                                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                                    Look::Refused { field: None, reason: format!("`{}` is registered in data.ron and is not there", f.path) }
+                                    Look::Refused { field: None, reason: format!("`{}` is registered in data.yaml and is not there", f.path) }
                                 }
                                 Err(e) => Look::Refused { field: None, reason: e.to_string() },
                                 Ok(text) => match data_files::check(&name, f, &text) {

@@ -29,7 +29,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/standards.ron"))
+    (app, root.join("assets/grimoire/standards.yaml"))
 }
 
 fn import(app: &mut App) -> serde_json::Value {
@@ -101,5 +101,5 @@ fn no_file_is_no_breaches_and_a_bad_file_is_named() {
     let error = applied["log_entry"]["after"]["standards"]["error"]
         .as_str()
         .unwrap_or_else(|| panic!("a bad file is named, not read as no rules: {applied}"));
-    assert!(error.contains("standards.ron"), "{error}");
+    assert!(error.contains("standards.yaml"), "{error}");
 }

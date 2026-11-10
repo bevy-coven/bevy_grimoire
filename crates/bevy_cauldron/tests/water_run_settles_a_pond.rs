@@ -53,7 +53,7 @@ fn setup(tag: &str) -> (Ctx, std::path::PathBuf) {
 #[test]
 fn a_spring_in_a_bowl_settles_into_a_pond_that_reloads() {
     let (mut ctx, dir) = setup("pond");
-    let file = dir.join("water/m.field.ron");
+    let file = dir.join("water/m.field.yaml");
     assert!(!file.exists(), "placing never runs the simulation");
     let planned = ops::preview(&ctx, &bevy_cauldron::ops_water::WaterRun, &json!({"map": "m", "pour_s": 20.0})).unwrap();
     assert!(!file.exists(), "a preview keeps nothing: {planned}");
@@ -73,7 +73,7 @@ fn a_spring_in_a_bowl_settles_into_a_pond_that_reloads() {
 #[test]
 fn running_and_keeping_is_one_undo() {
     let (mut ctx, dir) = setup("undo");
-    let file = dir.join("water/m.field.ron");
+    let file = dir.join("water/m.field.yaml");
     let first = done(ops::dispatch(&mut ctx, "water_run", &json!({"map": "m", "pour_s": 5.0})));
     let before = std::fs::read_to_string(&file).unwrap();
     let second = done(ops::dispatch(&mut ctx, "water_run", &json!({"map": "m", "pour_s": 10.0})));
@@ -92,5 +92,5 @@ fn a_run_with_no_water_or_no_ground_is_refused() {
     done(ops::dispatch(&mut ctx, "water_place", &json!({"map": "m", "place": {"Spring": {"x": 1.0, "z": 1.0, "rate_m3_s": 1.0, "radius_m": 1.0}}})));
     let r = ops::dispatch(&mut ctx, "water_run", &json!({"map": "m"}));
     assert!(matches!(r, Err(_) | Ok(Applied::Refused(_))), "no terrain to run on");
-    assert!(!dir.join("water/m.field.ron").exists());
+    assert!(!dir.join("water/m.field.yaml").exists());
 }

@@ -25,7 +25,7 @@ const MAX_STEPS: u32 = 100;
 ///
 /// These tests wrote `(sun: (hour: 6.0))`, which is not an `ElementsSettings`: the host's typed read
 /// refuses it (`Unexpected field named sun`), nothing is stored, and the test was asserting on a
-/// fixture the crate throws away (#152). The base is `ElementsSettings::defaults().to_ron()` with
+/// fixture the crate throws away (#152). The base is `ElementsSettings::defaults().to_yaml()` with
 /// `clock.hour` set; **exactly one line differs** between the two, which is what makes the edit an
 /// edit rather than a second file.
 const SETTINGS: &str = include_str!("fixtures/bevy_elements.ron");

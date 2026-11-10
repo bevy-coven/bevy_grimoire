@@ -75,30 +75,30 @@ fn with_no_game_every_file_says_so_and_the_editors_own_refusal_rides_beside_it()
     assert_eq!(s["reload_files"]["game"]["connected"], json!(false), "{s}");
     assert_eq!(s["reload_files"]["game"]["watching"], json!(true), "{s}");
     let files = s["reload_files"]["files"].as_array().expect("a list of files");
-    for expected in ["kits.ron", "maps/m.map.ron", "maps/m.notes.ron"] {
+    for expected in ["kits.yaml", "maps/m.map.yaml", "maps/m.notes.yaml"] {
         assert!(files.iter().any(|f| f["file"] == expected), "{expected} is a row: {files:?}");
     }
     assert!(files.len() >= 4, "the library files are rows too: {files:?}");
     for f in files {
         assert_eq!(f["state"], json!("no_game_connected"), "every file reads it with no game: {f}");
     }
-    let notes = row(&s, "maps/m.notes.ron");
+    let notes = row(&s, "maps/m.notes.yaml");
     assert_eq!(notes["editor"]["outcome"], json!("refused"), "{notes}");
     assert_eq!(notes["editor"]["field"], json!("version"), "{notes}");
     assert!(!notes["editor"]["reason"].as_str().unwrap().is_empty(), "{notes}");
-    assert_eq!(row(&s, "kits.ron")["editor"], Value::Null, "a file the editor made nothing of has no editor verdict");
+    assert_eq!(row(&s, "kits.yaml")["editor"], Value::Null, "a file the editor made nothing of has no editor verdict");
 }
 
 #[test]
 fn a_game_that_answered_shows_each_file_applied_with_when_refused_with_why_or_pending() {
     let mut app = editor("reload_files_game", true);
     let (project_dir, map) = paths(&app);
-    let kits = project_dir.join("kits.ron");
+    let kits = project_dir.join("kits.yaml");
     touch(&kits);
     touch(&map);
     let kinds = vec![
-        KindVerdict::applied("kits", "kits.ron"),
-        KindVerdict::refused("map", "maps/m.map.ron", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
+        KindVerdict::applied("kits", "kits.yaml"),
+        KindVerdict::refused("map", "maps/m.map.yaml", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
     ];
     Verdict::with_kinds(3, "maps/m.map.ron: refused", kinds).write(&project_dir).unwrap();
     settle(&mut app);
@@ -106,15 +106,15 @@ fn a_game_that_answered_shows_each_file_applied_with_when_refused_with_why_or_pe
     let s = state(&mut app);
     assert_eq!(s["reload_files"]["game"]["connected"], json!(true), "{s}");
     assert_eq!(s["reload_files"]["game"]["seq"], json!(3));
-    let applied = row(&s, "kits.ron");
+    let applied = row(&s, "kits.yaml");
     assert_eq!(applied["state"], json!("game_applied"), "{applied}");
     let (at, edited) = (applied["at_unix_ms"].as_u64().unwrap(), applied["modified_unix_ms"].as_u64().unwrap());
     assert!(at > edited, "the game decided after the edit: decided {at}, edited {edited}");
-    let refused = row(&s, "maps/m.map.ron");
+    let refused = row(&s, "maps/m.map.yaml");
     assert_eq!(refused["state"], json!("game_refused"), "{refused}");
     assert_eq!(refused["field"], json!("placements[0].at[1]"));
     assert_eq!(refused["reason"], json!("1:47: Expected float"));
-    let silent = row(&s, "furniture/library.ron");
+    let silent = row(&s, "furniture/library.yaml");
     assert_eq!(silent["state"], json!("not_read"), "a file the game's decision did not read: {silent}");
     assert_eq!(silent["at_unix_ms"], Value::Null);
 
@@ -122,11 +122,11 @@ fn a_game_that_answered_shows_each_file_applied_with_when_refused_with_why_or_pe
     touch(&kits);
     settle(&mut app);
     let s = state(&mut app);
-    let pending = row(&s, "kits.ron");
+    let pending = row(&s, "kits.yaml");
     assert_eq!(pending["state"], json!("pending"), "{pending}");
     assert_eq!(pending["at_unix_ms"], json!(at), "it keeps the decision the edit overtook");
     assert!(pending["modified_unix_ms"].as_u64().unwrap() > at, "{pending}");
-    assert_eq!(row(&s, "maps/m.map.ron")["state"], json!("game_refused"), "a file left alone keeps its answer");
+    assert_eq!(row(&s, "maps/m.map.yaml")["state"], json!("game_refused"), "a file left alone keeps its answer");
 }
 
 /// (text, top y) of every drawn text.
@@ -156,11 +156,11 @@ fn the_reload_panel_draws_whether_a_game_is_connected_and_each_files_answer() {
     );
     assert!(!texts.iter().any(|(t, _)| t.contains("game applied")), "no game has applied anything");
 
-    touch(&project_dir.join("kits.ron"));
+    touch(&project_dir.join("kits.yaml"));
     touch(&map);
     let kinds = vec![
-        KindVerdict::applied("kits", "kits.ron"),
-        KindVerdict::refused("map", "maps/m.map.ron", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
+        KindVerdict::applied("kits", "kits.yaml"),
+        KindVerdict::refused("map", "maps/m.map.yaml", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
     ];
     Verdict::with_kinds(4, "refused", kinds).write(&project_dir).unwrap();
     let texts = drawn(&mut app);
@@ -180,7 +180,7 @@ fn an_editor_that_does_not_read_verdicts_says_how_to_connect_one() {
     let mut app = editor("reload_files_not_live", false);
     let (project_dir, _) = paths(&app);
     // A game's verdict is on disk, and the editor was not started with --live, so it never reads it.
-    Verdict::with_kinds(5, "applied", vec![KindVerdict::applied("kits", "kits.ron")]).write(&project_dir).unwrap();
+    Verdict::with_kinds(5, "applied", vec![KindVerdict::applied("kits", "kits.yaml")]).write(&project_dir).unwrap();
 
     let texts = drawn(&mut app);
     assert!(
@@ -190,7 +190,7 @@ fn an_editor_that_does_not_read_verdicts_says_how_to_connect_one() {
     let s = state(&mut app);
     assert_eq!(s["reload_files"]["game"]["connected"], json!(false), "{s}");
     assert_eq!(s["reload_files"]["game"]["watching"], json!(false), "{s}");
-    assert_eq!(row(&s, "kits.ron")["state"], json!("no_game_connected"));
+    assert_eq!(row(&s, "kits.yaml")["state"], json!("no_game_connected"));
 }
 
 #[test]

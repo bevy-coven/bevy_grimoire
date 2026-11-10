@@ -26,7 +26,7 @@ impl Scratch {
     }
 
     fn file(&self) -> PathBuf {
-        self.0.join("standards.ron")
+        self.0.join("standards.yaml")
     }
 }
 
@@ -41,7 +41,7 @@ fn standards(min: f32) -> Standards {
 }
 
 fn text(min: f32) -> String {
-    standards(min).to_ron().unwrap_or_else(|e| panic!("{e}"))
+    standards(min).to_yaml().unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// Steps the app every 4 ms until `done` or `within` has passed.
@@ -72,12 +72,12 @@ fn saw(app: &App, want: &Standards) -> bool {
 fn the_asset_loader_reads_with_the_types_own_reader() {
     let good = Scratch::new("good");
     std::fs::write(good.file(), text(0.9)).unwrap_or_else(|e| panic!("{e}"));
-    let (mut app, _handles) = app_over(&good.0, &["standards.ron"]);
+    let (mut app, _handles) = app_over(&good.0, &["standards.yaml"]);
     assert!(pump(&mut app, Duration::from_secs(10), |a| saw(a, &standards(0.9))), "the good file never loaded: {:?}", heard(&app));
 
     let bad = Scratch::new("bad");
     std::fs::write(bad.file(), text(0.9).replace("version: 1", "version: 2")).unwrap_or_else(|e| panic!("{e}"));
-    let (mut app, _handles) = app_over(&bad.0, &["standards.ron"]);
+    let (mut app, _handles) = app_over(&bad.0, &["standards.yaml"]);
     let refused = |a: &App| heard(a).iter().any(|h| matches!(h, Heard1::Failed(why) if why.contains("standards: version 2 is not the 1 this build reads")));
     assert!(pump(&mut app, Duration::from_secs(10), refused), "the refusal never arrived: {:?}", heard(&app));
 }
@@ -89,11 +89,11 @@ fn the_asset_loader_reads_with_the_types_own_reader() {
 fn a_refused_reload_keeps_the_last_good_asset() {
     let dir = Scratch::new("keeps");
     std::fs::write(dir.file(), text(0.9)).unwrap_or_else(|e| panic!("{e}"));
-    let (mut app, handles) = app_over(&dir.0, &["standards.ron"]);
+    let (mut app, handles) = app_over(&dir.0, &["standards.yaml"]);
     assert!(pump(&mut app, Duration::from_secs(10), |a| saw(a, &standards(0.9))), "the first text never loaded");
 
     std::fs::write(dir.file(), "(version: 1, rules: [(name: \"door\"").unwrap_or_else(|e| panic!("{e}"));
-    app.world().resource::<AssetServer>().reload("standards.ron");
+    app.world().resource::<AssetServer>().reload("standards.yaml");
     let failed = |a: &App| heard(a).iter().any(|h| matches!(h, Heard1::Failed(_)));
     assert!(pump(&mut app, Duration::from_secs(10), failed), "the cut-off file was not refused");
     let held = app.world().resource::<Assets<StandardsAsset>>().get(&handles[0]).map(|a| a.0.clone());
@@ -110,7 +110,7 @@ fn a_refused_reload_keeps_the_last_good_asset() {
 fn bevys_watcher_reloads_the_asset_after_a_write_in_place_and_after_a_rename_over_it() {
     let dir = Scratch::new("rename");
     std::fs::write(dir.file(), text(0.9)).unwrap_or_else(|e| panic!("{e}"));
-    let (mut app, _handles) = app_over(&dir.0, &["standards.ron"]);
+    let (mut app, _handles) = app_over(&dir.0, &["standards.yaml"]);
     assert!(pump(&mut app, Duration::from_secs(10), |a| saw(a, &standards(0.9))), "the first text never loaded");
     pump(&mut app, Duration::from_millis(800), |_| false);
 

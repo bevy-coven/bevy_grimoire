@@ -11,9 +11,9 @@ use crate::fixtures;
 fn project(tag: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
     let file = root.join("family/bevy_elements.ron");
-    std::fs::write(&file, ElementsSettings::defaults().to_ron()).unwrap();
+    std::fs::write(&file, ElementsSettings::defaults().to_yaml()).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -147,7 +147,7 @@ fn snow_rocks_and_sand_are_set_in_the_crates_own_types_and_an_old_file_still_loa
     let s = ElementsSettings::from_ron(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(s.wetness.wet_per_mm, bevy_elements::WetnessSettings::default().wet_per_mm, "one undo per change");
     // A file written before these fields existed takes the crate's defaults.
-    let old = ElementsSettings::defaults().to_ron();
+    let old = ElementsSettings::defaults().to_yaml();
     let start = old.find("snow:").unwrap();
     let trimmed = format!("{})", &old[..start]);
     let s = ElementsSettings::from_ron(&trimmed).unwrap();

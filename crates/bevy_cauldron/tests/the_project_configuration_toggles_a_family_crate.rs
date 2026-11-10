@@ -43,7 +43,7 @@ fn verdict(app: &App) -> Option<(String, String)> {
 #[test]
 fn toggling_a_crate_writes_family_ron_atomically_and_the_verdict_row_reads_applied() {
     let (mut app, root) = rig("project_config_toggle");
-    assert!(!root.join("family.ron").exists(), "the fixture project lists no family crate");
+    assert!(!root.join("family.yaml").exists(), "the fixture project lists no family crate");
     assert!(find_by_label(&mut app, "bevy_gooey").is_ok(), "every crate the editor can host has a switch");
 
     let gooey = find_by_label(&mut app, "bevy_gooey").unwrap();
@@ -52,8 +52,8 @@ fn toggling_a_crate_writes_family_ron_atomically_and_the_verdict_row_reads_appli
     let family = Family::load(&root).expect("what the screen wrote reads");
     assert_eq!(family.crates, ["bevy_gooey"], "the switch listed the crate");
     let leftovers: Vec<_> = std::fs::read_dir(&root).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.contains("family")).collect();
-    assert_eq!(leftovers, ["family.ron"], "an atomic write leaves no temporary file beside it");
-    assert_eq!(verdict(&app), Some(("applied".to_owned(), "family.ron".to_owned())), "the reload contract's verdict on the file it wrote is recorded");
+    assert_eq!(leftovers, ["family.yaml"], "an atomic write leaves no temporary file beside it");
+    assert_eq!(verdict(&app), Some(("applied".to_owned(), "family.yaml".to_owned())), "the reload contract's verdict on the file it wrote is recorded");
     assert!(find_by_label(&mut app, "family.ron: applied").is_ok(), "and the screen says so");
 
     let again = find_by_label(&mut app, "bevy_gooey").unwrap();
@@ -66,7 +66,7 @@ fn toggling_a_crate_writes_family_ron_atomically_and_the_verdict_row_reads_appli
 fn a_crate_this_build_lacks_can_be_listed_and_the_line_says_how_to_host_it_and_the_others_keep_their_order() {
     let (mut app, root) = rig("project_config_unbuilt");
     // Written by hand before the next switch: the order a person chose is the order that stays.
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").unwrap();
     settle(&mut app);
     let missing = bevy_cauldron::family_host::KNOWN.iter().find(|k| !bevy_cauldron::family_host::built().contains(k)).expect("a default build lacks some family crate");
     let toggle = find_by_label(&mut app, &format!("{missing} (not built here)")).unwrap();
@@ -82,17 +82,17 @@ fn a_crate_this_build_lacks_can_be_listed_and_the_line_says_how_to_host_it_and_t
 fn a_family_ron_that_does_not_read_is_said_and_left_exactly_as_it_is() {
     let (mut app, root) = rig("project_config_unreadable");
     let broken = "(version: 1, crates: [\"bevy_gooey\"";
-    std::fs::write(root.join("family.ron"), broken).unwrap();
+    std::fs::write(root.join("family.yaml"), broken).unwrap();
     settle(&mut app);
     let mut texts = app.world_mut().query::<&Text>();
     let said: Vec<String> = texts.iter(app.world()).map(|t| t.0.clone()).collect();
-    assert!(said.iter().any(|t| t.contains("family.ron") && t.contains("nothing is written until it reads")), "the screen names the file: {said:?}");
+    assert!(said.iter().any(|t| t.contains("family.yaml") && t.contains("nothing is written until it reads")), "the screen names the file: {said:?}");
     assert!(find_by_label(&mut app, "bevy_gooey").is_err(), "no switch is offered over a file that does not read");
-    assert_eq!(std::fs::read_to_string(root.join("family.ron")).unwrap(), broken);
+    assert_eq!(std::fs::read_to_string(root.join("family.yaml")).unwrap(), broken);
     // And the writer itself refuses, for an agent or a test that reaches it without the screen.
     let err = bevy_cauldron::project_config::write_family(&root, "bevy_gooey", false).unwrap_err();
     assert!(err.contains("not changed"), "{err}");
-    assert_eq!(std::fs::read_to_string(root.join("family.ron")).unwrap(), broken);
+    assert_eq!(std::fs::read_to_string(root.join("family.yaml")).unwrap(), broken);
     let v = bevy_cauldron::project_config::verdict_of(&root);
     assert_eq!(v.outcome.word(), "refused", "the contract's check refuses it too: {v:?}");
 }

@@ -23,7 +23,7 @@ mod with_flora {
 
     use crate::fixtures;
 
-    const SPECIES: &str = "trees/old.tree.ron";
+    const SPECIES: &str = "trees/old.tree.yaml";
 
     /// A tree file that reads (every field it leaves out takes its default).
     const GOOD: &str = "(undergrowth: true)";

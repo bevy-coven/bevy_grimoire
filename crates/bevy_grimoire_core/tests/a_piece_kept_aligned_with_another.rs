@@ -94,5 +94,5 @@ fn the_file_reads_and_writes_aligned_with() {
     let text = r#"(version: 1, relations: [(of: "pew_2", kind: AlignedWith("pew_1"))])"#;
     let parsed = Relations::parse(text).unwrap();
     assert_eq!(parsed, second_with_first());
-    assert_eq!(Relations::parse(&parsed.to_ron().unwrap()).unwrap(), parsed);
+    assert_eq!(Relations::parse(&parsed.to_yaml().unwrap()).unwrap(), parsed);
 }

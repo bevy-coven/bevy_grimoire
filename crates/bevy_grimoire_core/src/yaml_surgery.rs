@@ -178,6 +178,21 @@ fn starts_with_indicator(s: &str) -> bool {
     s.starts_with(['-', '?', ':', ',', '[', ']', '{', '}', '#', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`'])
 }
 
+/// **Format an `f32` at the fewest decimal places that still round-trip to the same value.**
+///
+/// Round-tripping through `parse` is what decides, rather than a tolerance, so a written file always reloads
+/// to the same `f32` the writer was holding. One decimal is exact for anything snapped to a half-metre or a
+/// whole degree; the wider forms are only reached by a value that came from elsewhere.
+pub fn fmt_number(v: f32) -> String {
+    for places in 1..=6 {
+        let s = format!("{v:.places$}");
+        if s.parse::<f32>() == Ok(v) {
+            return s;
+        }
+    }
+    format!("{v}")
+}
+
 /// **Set the scalar at `path`**, keeping its kind, and answer the whole file's new text. Only that
 /// leaf's bytes change. `bounds` is what a caller registered for a number, if anything.
 #[allow(clippy::result_large_err)]
@@ -539,6 +554,62 @@ pub fn add_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem>
         block.push('\n');
     }
     verified(insert_after_last_of(text, node, &walk, &block, flow), path)
+}
+
+/// **Set the entry `key` of the mapping at `path`, or add it if the mapping does not have it.**
+///
+/// **One call, because a caller that has to ask which case it is has to search the file itself** — which is
+/// the bookkeeping this module exists to remove. `entry` is the key and its value as YAML (`provenance:` then
+/// its block, `scale: 1.0`), indented however the caller wrote it; [`add_entry`]'s own rules decide where it
+/// goes when it is new, so a first stamp and a re-stamp cannot disagree about the file's shape.
+#[allow(clippy::result_large_err)]
+pub fn set_entry(text: &str, path: &str, entry: &str) -> Result<String, Problem> {
+    let walk = walk_or_refuse(text)?;
+    let node = find(&walk, path)?;
+    let key = entry
+        .trim_start()
+        .split_once(':')
+        .map(|(k, _)| k.trim())
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| at_node_named(text, node, path, "an entry needs a `key:` and a value", "there is nothing to set", "write the entry's first line as `key: value`"))?;
+    let at = yaml::join_path_key(path, key);
+    let exists = walk.nodes.iter().any(|n| n.path == at);
+    if !exists {
+        return add_entry(text, path, entry);
+    }
+    // **An edit of an entry is a set of its leaf's value**, which keeps the key's own line, its comments and
+    // its neighbours — so this is `set` on the entry's own path, and a caller whose value is a block writes
+    // the entry afresh through `remove_entry` then `add_entry` (the two calls that exist for a shape change).
+    let value = entry.trim_start().split_once(':').map(|(_, v)| v.trim()).unwrap_or_default();
+    if value.is_empty() {
+        return Err(at_node_named(text, node, path, &format!("`{key}:` has no value on its line"), "an entry whose value is a block cannot be set through this call", "remove the entry and add it again"));
+    }
+    set(text, &at, scalar_of(value), None)
+}
+
+/// **A scalar as the value a written line spells**: a number, a bool, a quoted string or a plain word.
+fn scalar_of(value: &str) -> Value {
+    let plain = value.trim();
+    if let Some(inner) = plain.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+        return Value::Str(inner.to_owned());
+    }
+    if let Some(inner) = plain.strip_prefix('\'').and_then(|t| t.strip_suffix('\'')) {
+        return Value::Str(inner.replace("''", "'"));
+    }
+    match plain {
+        "true" => return Value::Bool(true),
+        "false" => return Value::Bool(false),
+        _ => {}
+    }
+    if let Ok(i) = plain.parse::<i64>() {
+        return Value::Int(i);
+    }
+    if let Ok(f) = plain.parse::<f64>()
+        && f.is_finite()
+    {
+        return Value::Float(f);
+    }
+    Value::Str(plain.to_owned())
 }
 
 /// **Remove item `index` of the sequence at `path`**, taking only its own lines.

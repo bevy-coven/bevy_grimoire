@@ -41,7 +41,7 @@ struct PosixShell(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
 fn editor_with_an_agent(tag: &str) -> App {
     let tag = format!("{tag}_{}", std::process::id());
     let root = fixtures::Fixture::new(&tag).descriptor("site/wall", "alpha").build("m");
-    let file = root.join("assets/grimoire/editor.ron");
+    let file = root.join("assets/grimoire/editor.yaml");
     std::fs::write(&file, r#"(version: 1, terminal_agent: Some(Custom), terminal_agent_command: Some("printf 'AGENT-%s\\n' UP"))"#)
         .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let files = std::env::temp_dir().join(format!("{tag}_agents"));

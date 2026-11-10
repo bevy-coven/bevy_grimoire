@@ -61,14 +61,14 @@ impl Project {
             bash: Vec::new(),
             authoring: Some("kit".to_owned()),
         };
-        p.write("kits.ron", &kits.to_ron().unwrap());
+        p.write("kits.yaml", &kits.to_yaml().unwrap());
         std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), p.grimoire.join("vocab.ron"))
             .unwrap();
-        p.write("kit/project.ron", "(\n    version: 2,\n    note: None,\n    patches: [],\n)");
+        p.write("kit/project.yaml", "(\n    version: 2,\n    note: None,\n    patches: [],\n)");
         let library = Library { version: LIBRARY_VERSION, note: None, descriptors: vec![piece("kit/crate")] };
-        p.write("kit/library.ron", &library.to_ron().unwrap());
-        p.write("rules.ron", &format!("(\n    version: {RULES_VERSION},\n    blocks: [],\n)"));
-        p.write("compositions.ron", &Compositions { version: COMPOSITIONS_VERSION, ..Compositions::default() }.to_ron().unwrap());
+        p.write("kit/library.yaml", &library.to_yaml().unwrap());
+        p.write("rules.yaml", &format!("(\n    version: {RULES_VERSION},\n    blocks: [],\n)"));
+        p.write("compositions.yaml", &Compositions { version: COMPOSITIONS_VERSION, ..Compositions::default() }.to_yaml().unwrap());
         p.write_map(&map(vec![row("crate_a", "kit/crate", (1.0, 1.0))]));
         p
     }
@@ -89,7 +89,7 @@ impl Project {
     }
 
     fn write_map(&self, m: &Map) {
-        self.write("maps/yard.map.ron", &m.to_ron().unwrap());
+        self.write("maps/yard.map.yaml", &m.to_yaml().unwrap());
     }
 
     fn verdict(&self) -> Verdict {
@@ -145,13 +145,13 @@ fn entry<'a>(v: &'a Verdict, file: &str) -> &'a KindVerdict {
 
 /// **The files the game reads**: path, the kind it is, and the root field each bad edit damages.
 const FILES: &[(&str, &str, &str)] = &[
-    ("kits.ron", "kits", "version"),
-    ("kit/library.ron", "library", "version"),
-    ("kit/project.ron", "policy", "version"),
+    ("kits.yaml", "kits", "version"),
+    ("kit/library.yaml", "library", "version"),
+    ("kit/project.yaml", "policy", "version"),
     ("vocab.ron", "vocab", "kind"),
-    ("rules.ron", "rules", "version"),
-    ("compositions.ron", "compositions", "version"),
-    ("maps/yard.map.ron", "map", "version"),
+    ("rules.yaml", "rules", "version"),
+    ("compositions.yaml", "compositions", "version"),
+    ("maps/yard.map.yaml", "map", "version"),
 ];
 
 fn bad(project: &Project, rel: &str, field: &str, case: &str) -> String {
@@ -215,7 +215,7 @@ fn one_edit_is_one_verdict_however_many_frames_pass() {
     let project = Project::new("once");
     let mut app = app(&project);
 
-    project.write("maps/yard.map.ron", "this is not a map");
+    project.write("maps/yard.map.yaml", "this is not a map");
     settle(&mut app, 8);
     let first = project.verdict();
     assert_eq!(first.seq, 1);
@@ -242,10 +242,10 @@ fn a_refusal_about_how_files_fit_together_goes_to_the_file_it_names() {
     assert_eq!((entities(&mut app), held(&app)), before);
     let v = project.verdict();
     assert!(!v.ok);
-    let k = entry(&v, "maps/yard.map.ron");
+    let k = entry(&v, "maps/yard.map.yaml");
     assert_eq!((k.kind.as_str(), k.outcome), ("map", Outcome::Refused));
     assert!(k.reason.contains("kit/missing"), "{}", k.reason);
-    assert!(v.kinds.iter().filter(|o| o.file != "maps/yard.map.ron").all(|o| o.outcome == Outcome::Applied), "{:?}", v.kinds);
+    assert!(v.kinds.iter().filter(|o| o.file != "maps/yard.map.yaml").all(|o| o.outcome == Outcome::Applied), "{:?}", v.kinds);
 }
 
 #[test]
@@ -259,8 +259,8 @@ fn an_error_no_file_owns_is_a_project_entry_beside_the_files_that_are_wrong() {
     let mut odd = piece("kit/crate");
     odd.kind = vec!["no-such-token".to_owned()];
     let library = Library { version: LIBRARY_VERSION, note: None, descriptors: vec![odd] };
-    project.write("kit/library.ron", &library.to_ron().unwrap());
-    project.write("maps/yard.map.ron", "this is not a map");
+    project.write("kit/library.yaml", &library.to_yaml().unwrap());
+    project.write("maps/yard.map.yaml", "this is not a map");
     assert_eq!(settle(&mut app, 8), 0);
     assert_eq!((entities(&mut app), held(&app)), before);
 
@@ -269,6 +269,6 @@ fn an_error_no_file_owns_is_a_project_entry_beside_the_files_that_are_wrong() {
     let fit = entry(&v, ".");
     assert_eq!((fit.kind.as_str(), fit.outcome), ("project", Outcome::Refused));
     assert!(fit.reason.contains("no-such-token"), "{}", fit.reason);
-    assert_eq!(entry(&v, "maps/yard.map.ron").outcome, Outcome::Refused, "the corrupt map is named too, not hidden by the other error");
-    assert_eq!(entry(&v, "kit/library.ron").outcome, Outcome::Applied, "the library reads fine by itself");
+    assert_eq!(entry(&v, "maps/yard.map.yaml").outcome, Outcome::Refused, "the corrupt map is named too, not hidden by the other error");
+    assert_eq!(entry(&v, "kit/library.yaml").outcome, Outcome::Applied, "the library reads fine by itself");
 }

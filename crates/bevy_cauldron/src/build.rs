@@ -12,8 +12,8 @@
 //! good kit is hierarchical: parts -> sub-assemblies -> assemblies"*, the editor already gave a tab
 //! to every other level, and only that one carried two.
 //!
-//! A mesh is a measurement written to `library.ron` and described once; a tile is an arrangement
-//! written to `compositions.ron` and built constantly. Splitting them retired the mode key with the
+//! A mesh is a measurement written to `library.yaml` and described once; a tile is an arrangement
+//! written to `compositions.yaml` and built constantly. Splitting them retired the mode key with the
 //! mode: a tab strip is a mode nobody can forget, which is Raskin's whole condition. FVS-R-21.
 //!
 //! The twelve-row cap is what made two contexts affordable —
@@ -372,7 +372,7 @@ pub fn fresh_id(members: &[Member], descriptor: &str) -> String {
 ///
 /// Separate from [`fresh_id`] because the two have different preconditions, and conflating them is
 /// what broke: `fresh_id` assumes its seed is already a legal id segment, which is true of a
-/// descriptor id (`naming::is_id` validates every one on the way into `library.ron`) and **false of
+/// descriptor id (`naming::is_id` validates every one on the way into `library.yaml`) and **false of
 /// a vocabulary token**. Tokens are deliberately not ids — `vocab.rs` documents
 /// `"uses-electricity"` and `"stamina-recharge"` — so seeding a member id with `wall-fixture`
 /// produced a member `composition::validate` refuses, and a tile carrying any hole could not be
@@ -398,7 +398,7 @@ pub fn slot_id(members: &[Member], accepts: &str) -> Result<String, String> {
     }
     if !bevy_grimoire_core::naming::is_id(&seed) {
         return Err(format!(
-            "slot token `{accepts}` cannot name a member — ids start with a lowercase letter and carry only letters, digits and `_`. Rename the token in vocab.ron."
+            "slot token `{accepts}` cannot name a member — ids start with a lowercase letter and carry only letters, digits and `_`. Rename the token in vocab.yaml."
         ));
     }
     Ok(fresh_id(members, &seed))
@@ -952,7 +952,7 @@ pub const BUILD_HISTORY: usize = 64;
 /// systems key their redraws off it — pushing a snapshot would rebuild the 3-D stage every time the
 /// history moved, which is the one thing a history should never do.
 ///
-/// Separate from the mesh tab's stack, which is over `library.ron` edits. Two tabs editing different
+/// Separate from the mesh tab's stack, which is over `library.yaml` edits. Two tabs editing different
 /// files through one stack would make "undo" mean whichever thing was touched last.
 #[derive(Resource, Default)]
 pub struct TileHistory {
@@ -2072,7 +2072,7 @@ pub fn build_keys(
         };
         // **A member must name a library descriptor.** `ImportState::editing` falls back to the
         // focused *candidate* when nothing in the library is selected, and a candidate is a mesh
-        // measured but not imported — so dropping one writes a tile naming an id `library.ron` does
+        // measured but not imported — so dropping one writes a tile naming an id `library.yaml` does
         // not carry, which expands to nothing at stamp time. Refused at the door rather than
         // written and discovered later, which is this crate's rule for staged edits.
         if project.library.get(&d.id).is_none() {
@@ -2109,7 +2109,7 @@ pub fn build_keys(
     if pressed(Action::BuildSlot) {
         let Some(accepts) = project.vocab.slot.names().next().map(str::to_owned) else {
             state.status.problem(
-                "no `slot` tokens declared — add one to vocab.ron before dropping a hole"
+                "no `slot` tokens declared — add one to vocab.yaml before dropping a hole"
                     .to_owned(),
             );
             return;
@@ -2308,7 +2308,7 @@ fn open_named(build: &mut Build, project: &crate::project::Project, id: &str) {
 /// `N`/`+ New Tile` name a blank tile and open it for filling, and the author expects to see it
 /// under TILES the moment it has a name — not only once `Cmd+S` has committed it. The draft is
 /// `build.open` whose id no committed composition carries: a reopened or already-saved tile is not
-/// a draft, and saving is what ends the draft (the id enters `compositions.ron` and the row keeps
+/// a draft, and saving is what ends the draft (the id enters `compositions.yaml` and the row keeps
 /// its name, dropping the draft marker).
 pub fn draft<'a>(build: &'a Build, project: &crate::project::Project) -> Option<&'a Composition> {
     build.open.as_ref().filter(|c| {
@@ -2354,7 +2354,7 @@ pub fn landing_row(project: &crate::project::Project, build: &Build) -> usize {
 ///
 /// The verb the tab never had. `open_blank` was the only opener, so every tile was a new one and a
 /// tile saved wrong stayed wrong — an author who put a piece in the middle of a tile instead of
-/// flush against its edge could only fix it by editing `compositions.ron` by hand.
+/// flush against its edge could only fix it by editing `compositions.yaml` by hand.
 ///
 /// Goes through the same fields `open_blank` sets, including `opened`, because this is a different
 /// document by exactly the argument that field carries: an undo that crossed the boundary would
@@ -3287,9 +3287,9 @@ mod tests {
     /// records: a hardcoded 2.4 m ceiling hung the lights of a 3.5 m room in mid-air. `refit` then
     /// wrote all three axes but compared only two, so an author who changed the height and came back
     /// kept the old one for ever — and every `OnCeiling` fixture in that tile was wrong by the
-    /// difference, in `compositions.ron` and in the game.
+    /// difference, in `compositions.yaml` and in the game.
     ///
-    /// **The number moved on 2026-08-16**, from `map.bounds.1` to `kits.ron`'s
+    /// **The number moved on 2026-08-16**, from `map.bounds.1` to `kits.yaml`'s
     /// `Lattice::cell_height`, and that is a deliberate behaviour change rather than a port. A tile
     /// is a *kit* artifact: taking its height from whichever map was open meant the same kit made
     /// differently-shaped blank tiles depending on where you came from, and meant nothing at all on

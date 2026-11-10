@@ -42,30 +42,30 @@ fn fixture(rel: &str) -> String {
 fn samples() -> Vec<Sample> {
     let s = |id, file, text: String, field, required| Sample { id, file, text, field, required };
     vec![
-        s("kits", "kits.ron", fixture("kits.ron"), "version", true),
+        s("kits", "kits.yaml", fixture("kits.yaml"), "version", true),
         s("vocab", "vocab.ron", fixture("vocab.ron"), "kind", true),
-        s("library", "site/library.ron", fixture("site/library.ron"), "version", true),
-        s("policy", "site/project.ron", fixture("site/project.ron"), "version", true),
-        s("rules", "rules.ron", format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION), "version", true),
-        s("compositions", "compositions.ron", fixture("compositions.ron"), "version", true),
-        s("standards", "standards.ron", Standards::default().to_ron().unwrap(), "version", true),
-        s("repetition", "repetition.ron", "(radius_m: 3.0)".to_owned(), "radius_m", false),
-        s("rigs", "rigs.ron", fixture("rigs.ron"), "version", true),
-        s("map", "maps/yard.map.ron", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_ron().unwrap(), "version", true),
-        s("notes", "maps/yard.notes.ron", Notes::default().to_ron().unwrap(), "version", true),
-        s("plan", "maps/yard.plan.ron", Plan::default().to_ron().unwrap(), "version", true),
-        s("references", "maps/yard.references.ron", References::default().to_ron().unwrap(), "version", true),
-        s("relations", "maps/yard.relations.ron", Relations::default().to_ron().unwrap(), "version", true),
-        s("terrain", "site/terrain/yard.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])".to_owned(), "cell_m", true),
-        s("family_list", "family.ron", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),
+        s("library", "site/library.yaml", fixture("site/library.yaml"), "version", true),
+        s("policy", "site/project.yaml", fixture("site/project.yaml"), "version", true),
+        s("rules", "rules.yaml", format!("(version: {}, blocks: [])", bevy_grimoire_core::rules::RULES_VERSION), "version", true),
+        s("compositions", "compositions.yaml", fixture("compositions.yaml"), "version", true),
+        s("standards", "standards.yaml", Standards::default().to_yaml().unwrap(), "version", true),
+        s("repetition", "repetition.yaml", "(radius_m: 3.0)".to_owned(), "radius_m", false),
+        s("rigs", "rigs.yaml", fixture("rigs.yaml"), "version", true),
+        s("map", "maps/yard.map.yaml", Map { version: MAP_VERSION, name: "yard".to_owned(), bounds: (10.0, 4.0, 10.0), ..Map::default() }.to_yaml().unwrap(), "version", true),
+        s("notes", "maps/yard.notes.yaml", Notes::default().to_yaml().unwrap(), "version", true),
+        s("plan", "maps/yard.plan.yaml", Plan::default().to_yaml().unwrap(), "version", true),
+        s("references", "maps/yard.references.yaml", References::default().to_yaml().unwrap(), "version", true),
+        s("relations", "maps/yard.relations.yaml", Relations::default().to_yaml().unwrap(), "version", true),
+        s("terrain", "site/terrain/yard.yaml", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])".to_owned(), "cell_m", true),
+        s("family_list", "family.yaml", format!("(version: {}, crates: [])", bevy_grimoire_core::family::FAMILY_VERSION), "version", true),
         s("agent", "agent.yaml", format!("version: {}\n", bevy_grimoire_core::note_agent::AGENT_VERSION), "version", true),
         s("play", "play.yaml", format!("version: {}\ncommand: [\"game\"]\n", bevy_grimoire_core::play::PLAY_VERSION), "version", true),
-        s("water_plan", "site/water/yard.ron", "(springs: [], sinks: [], lakes: [])".to_owned(), "springs", false),
-        s("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "steps", true),
-        s("volume", "site/volume/yard.ron", "(edits: [])".to_owned(), "edits", false),
+        s("water_plan", "site/water/yard.yaml", "(springs: [], sinks: [], lakes: [])".to_owned(), "springs", false),
+        s("water_field", "site/water/yard.field.yaml", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "steps", true),
+        s("volume", "site/volume/yard.yaml", "(edits: [])".to_owned(), "edits", false),
         s("data_registry", "site/data.ron", format!("(version: {}, files: [])", bevy_grimoire_core::data_files::REGISTRY_VERSION), "version", true),
-        s("destructible_marks", "destructible.ron", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap(), "version", true),
-        s("destructible_bake", "destructible/site__cart.bake.ron", ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(), "key", true),
+        s("destructible_marks", "destructible.yaml", ron::to_string(&Marks { version: DESTRUCTIBLE_VERSION, pieces: vec!["site/cart".to_owned()] }).unwrap(), "version", true),
+        s("destructible_bake", "destructible/site__cart.bake.yaml", ron::to_string(&Bake { version: DESTRUCTIBLE_VERSION, key: 7, chunks: vec![Chunk { points: vec![[0.0, 0.0, 0.0]], faces: vec![vec![0, 0, 0]] }] }).unwrap(), "key", true),
     ]
 }
 
@@ -245,7 +245,7 @@ fn a_missing_required_field_is_refused_and_named_and_an_optional_one_is_not() {
 
 #[test]
 fn a_nested_field_is_named_by_its_path() {
-    let sample = Sample { id: "terrain", file: "site/terrain/yard.ron", text: String::new(), field: "heights", required: true };
+    let sample = Sample { id: "terrain", file: "site/terrain/yard.yaml", text: String::new(), field: "heights", required: true };
     let text = "(origin: (0.0, \"x\"), cell_m: 1.0, width: 2, depth: 2, heights: [0.0, 0.0, 0.0, 0.0])";
     assert_eq!(refused(&sample, text).field.as_deref(), Some("origin[1]"));
 }
@@ -258,9 +258,9 @@ fn a_file_that_parses_but_is_not_valid_is_refused_and_says_why() {
     use bevy_grimoire_core::volume::{Edit, Mode, Shape, Volume};
     let carve = Edit { shape: Shape::Sphere { center: [0.0; 3], radius_m: 0.0 }, mode: Mode::Carve, smooth_m: 0.0 };
     let cases = [
-        ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "3 depths for 2x2"),
-        ("water_field", "site/water/yard.field.ron", "(origin: (0.0, 0.0), cell_m: 0.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "cell_m"),
-        ("volume", "site/volume/yard.ron", ron::to_string(&Volume { edits: vec![carve], ..Volume::default() }).unwrap(), "above zero"),
+        ("water_field", "site/water/yard.field.yaml", "(origin: (0.0, 0.0), cell_m: 1.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "3 depths for 2x2"),
+        ("water_field", "site/water/yard.field.yaml", "(origin: (0.0, 0.0), cell_m: 0.0, width: 2, depth: 2, depth_m: [0.0, 0.0, 0.0, 0.0], settled: true, steps: 3)".to_owned(), "cell_m"),
+        ("volume", "site/volume/yard.yaml", ron::to_string(&Volume { edits: vec![carve], ..Volume::default() }).unwrap(), "above zero"),
         ("data_registry", "site/data.ron", "(version: 99, files: [])".to_owned(), "version 99"),
         (
             "data_registry",

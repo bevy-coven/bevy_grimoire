@@ -42,24 +42,24 @@ use crate::fixtures;
 
 /// **A rules file with real numbers**, so `rules_set` has a block to write and the no-page test is
 /// about the page rather than about the refusal that precedes it. `alpha` is the fixture's piece.
-const RULES: &str = "// the block rules\n\
-(\n\
-    version: 1,\n\
-    blocks: [\n\
-        (\n\
-            example: \"m\",\n\
-            regions: [],\n\
-            cell: 2.0,\n\
-            size: (4, 4),\n\
-            border: None,\n\
-            no_empty: true,\n\
-            weights: [(prefix: \"alpha\", times: 2.0)],\n\
-            footprints: [],\n\
-            attempts: 8,\n\
-            seed: 7,\n\
-        ),\n\
-    ],\n\
-)\n";
+const RULES: &str = r"# the block rules
+version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights:
+  - prefix: alpha
+    times: 2.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 /// **One frame of the test clock.** The reveal is a queue carried out a frame at a time, and a
 /// crossing is `PreUpdate` + a state transition, so a test that stepped real frames would be reading
@@ -83,11 +83,11 @@ fn project(tag: &str) -> std::path::PathBuf {
         .place("bed", (2.0, 2.0))
         .composition("nook", &[("seat", "bed", (2.0, 2.0))])
         .side(64.0)
-        .rules(RULES)
+        .rules_text(RULES)
         .build("m");
     let grimoire = root.join("assets/grimoire");
     // The rig manifest and the mesh it measures, from the workspace.
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), grimoire.join("rigs.ron")).expect("rigs.ron");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), grimoire.join("rigs.yaml")).expect("rigs.yaml");
     std::fs::create_dir_all(root.join("assets/characters")).expect("characters dir");
     std::fs::copy(workspace_asset("characters/valkyrie.glb"), root.join("assets/characters/valkyrie.glb"))
         .expect("valkyrie.glb");
@@ -100,7 +100,7 @@ fn project(tag: &str) -> std::path::PathBuf {
     )
     .expect("data.ron");
     // A note on the open map, so `Note` has one to select.
-    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.ron"));
+    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.yaml"));
     let note = bevy_grimoire_core::notes::Notes {
         version: bevy_grimoire_core::notes::NOTES_VERSION,
         notes: vec![bevy_grimoire_core::notes::Note {
@@ -383,8 +383,8 @@ fn a_rigs_page_opens_on_the_rig_bench_with_that_rig_selected() {
         .world()
         .resource::<Project>()
         .root
-        .join("assets/grimoire/rigs.ron");
-    let text = std::fs::read_to_string(&rig).expect("the fixture copied rigs.ron");
+        .join("assets/grimoire/rigs.yaml");
+    let text = std::fs::read_to_string(&rig).expect("the fixture copied rigs.yaml");
     let name = text
         .lines()
         .find_map(|l| {
@@ -520,7 +520,7 @@ fn a_change_the_editor_has_no_page_for_raises_a_problem_naming_it() {
     let status = &app.world().resource::<EditorState>().status;
     let raised = &status.problems()[before..];
     assert!(
-        raised.iter().any(|p| p.text.contains("rules_set") && p.text.contains("rules.ron")),
+        raised.iter().any(|p| p.text.contains("rules_set") && p.text.contains("rules.yaml")),
         "a change with no page said nothing about it. The problems raised were {raised:?}"
     );
 }

@@ -53,7 +53,7 @@ fn a_play_file_is_yaml() {
 
     // **A `play.ron` is not read**, and the refusal names the file the project must now have.
     std::fs::remove_file(root.join("play.yaml")).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(root.join("play.ron"), "(version: 1, command: [\"game\"])").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("play.yaml"), "(version: 1, command: [\"game\"])").unwrap_or_else(|e| panic!("{e}"));
     let refused = PlayConfig::load(&root).expect_err("a `play.ron` is not a `play.yaml`");
     assert!(refused.contains("play.yaml"), "the refusal names the file it wanted: {refused}");
 
@@ -68,13 +68,13 @@ fn a_project_holding_ron_files_is_refused_naming_the_command() {
     // **A kind whose reader has moved**: `agent.yaml` is YAML now, so an `agent.ron` is the spelling nothing
     // reads, and the open must name it. A kind the cutover has not reached still reads its RON, so a
     // `kits.ron` alone is not a refusal yet.
-    std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("agent.yaml"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
 
     let problem = migrate::leftover(&root, migrate::COMMAND)
         .unwrap_or_else(|p| panic!("a folder with no project files: {}", p.line()))
         .expect("a `.ron` project file is refused");
 
-    assert!(problem.line().contains("agent.ron"), "the refusal names the file: {}", problem.line());
+    assert!(problem.line().contains("agent.yaml"), "the refusal names the file: {}", problem.line());
     assert!(
         problem.line().contains(bevy_grimoire_core::migrate::COMMAND),
         "the refusal names the command that fixes it: {}",
@@ -82,7 +82,7 @@ fn a_project_holding_ron_files_is_refused_naming_the_command() {
     );
 
     std::fs::write(root.join("agent.yaml"), "version: 1\n").unwrap_or_else(|e| panic!("{e}"));
-    std::fs::remove_file(root.join("agent.ron")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::remove_file(root.join("agent.yaml")).unwrap_or_else(|e| panic!("{e}"));
     assert!(
         migrate::leftover(&root, migrate::COMMAND).unwrap_or_else(|p| panic!("{}", p.line())).is_none(),
         "a YAML project is opened"

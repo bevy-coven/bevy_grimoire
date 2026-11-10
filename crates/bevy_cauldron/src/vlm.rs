@@ -792,7 +792,7 @@ pub fn extract_reply(http_body: &str) -> Result<Reply, String> {
         .to_owned();
     // **Refused, rather than filled in from the request.** `model` is a required member of the
     // chat-completion object every endpoint this speaks to serves, and the alternative to reading
-    // it is what stood here: `cfg.model` written into a provenance record, so `library.ron` named
+    // it is what stood here: `cfg.model` written into a provenance record, so `library.yaml` named
     // the model that was asked as though it were the one that replied. There is no honest empty
     // either — `LabelOrigin.model` of `None` is drawn as *"by hand"* by the Meshes pane, which
     // would trade one false claim for a worse one — so an envelope that names nobody is a refusal.
@@ -2451,7 +2451,7 @@ mod tests {
 
     /// **An envelope that names no model is refused, not credited to the model we asked for.**
     ///
-    /// `Provenance::model` exists to say whose judgement ends up in `library.ron`, and the request's
+    /// `Provenance::model` exists to say whose judgement ends up in `library.yaml`, and the request's
     /// own `model` is not evidence of who replied — it is only what was asked, which is what
     /// `cfg.model.clone()` used to write. There is no honest empty to fall back to either: the
     /// Meshes pane draws a `LabelOrigin` with no model as *"by hand"*, so a blank would claim a

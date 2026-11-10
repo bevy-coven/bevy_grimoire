@@ -7,7 +7,7 @@
 //!
 //! # Where it lives
 //!
-//! One file per map, **beside the map**: `maps/town.map.ron` has `maps/town.notes.ron`. It is
+//! One file per map, **beside the map**: `maps/town.map.yaml` has `maps/town.notes.yaml`. It is
 //! written through [`crate::ron_surgery::save_atomic`] like the map is, and its extension is `ron`,
 //! so a [`crate::live::FileWatch`] over the project already sees it change and a running game or
 //! editor reloads it with the rest.
@@ -371,20 +371,21 @@ impl Default for Notes {
     }
 }
 
-/// The notes file that belongs to a map file: `town.map.ron` → `town.notes.ron`, in the same
-/// directory. A map path that does not end `.map.ron` gets `.notes.ron` appended to its stem.
+/// The notes file that belongs to a map file: `town.map.yaml` → `town.notes.yaml`, in the same
+/// directory. A map path that does not end `.map.yaml` gets `.notes.yaml` appended to its stem.
 pub fn path_for_map(map_path: &Path) -> PathBuf {
     let name = map_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let stem = name
-        .strip_suffix(".map.ron")
-        .or_else(|| name.strip_suffix(".ron"))
+        .strip_suffix(crate::map::MAP_SUFFIX)
+        .or_else(|| name.strip_suffix(".yaml"))
         .unwrap_or(&name);
-    map_path.with_file_name(format!("{stem}.notes.ron"))
+    map_path.with_file_name(format!("{stem}.notes.yaml"))
 }
 
 impl Notes {
-    pub fn from_ron(text: &str) -> Result<Notes, String> {
-        let notes: Notes = ron::from_str(text).map_err(|e| format!("notes: parse: {e}"))?;
+    pub fn parse(text: &str) -> Result<Notes, String> {
+        let notes: Notes =
+            crate::yaml::from_str(text, "notes").map_err(|p| format!("notes: parse: {}", p.line()))?;
         if notes.version != NOTES_VERSION {
             return Err(format!(
                 "notes: version {} is not the {NOTES_VERSION} this build reads",
@@ -400,19 +401,15 @@ impl Notes {
         Ok(notes)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        let mut text = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("notes: serialize: {e}"))?;
-        if !text.ends_with('\n') {
-            text.push('\n');
-        }
-        Ok(text)
+    /// **The file as the one YAML writer writes it**, which ends with a newline already.
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("notes: {}", p.line()))
     }
 
     /// Reads the notes file; a file that is not there is no notes, not an error.
     pub fn load(path: &Path) -> Result<Notes, String> {
         match std::fs::read_to_string(path) {
-            Ok(text) => Notes::from_ron(&text).map_err(|e| format!("{}: {e}", path.display())),
+            Ok(text) => Notes::parse(&text).map_err(|e| format!("{}: {e}", path.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Notes::default()),
             Err(e) => Err(format!("notes: {}: {e}", path.display())),
         }
@@ -424,7 +421,7 @@ impl Notes {
         if self.notes.is_empty() && !path.exists() {
             return Ok(());
         }
-        crate::ron_surgery::save_atomic(path, &self.to_ron()?)
+        crate::yaml::save(path, &self.to_yaml()?)
     }
 
     pub fn get(&self, id: &str) -> Option<&Note> {

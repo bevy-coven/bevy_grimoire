@@ -168,7 +168,7 @@ fn create_temp(path: &Path) -> io::Result<(PathBuf, File)> {
 }
 
 /// Whether `file_name` is a temp file of the target called `target_name`, exactly: `.<target_name>.`,
-/// then `<digits>-<digits>`, then `.tmp`. `town.map.ron.bak`'s temp files are not `town.map.ron`'s.
+/// then `<digits>-<digits>`, then `.tmp`. `town.map.yaml.bak`'s temp files are not `town.map.yaml`'s.
 fn is_temp_of(target_name: &str, file_name: &str) -> bool {
     let Some(rest) = file_name.strip_prefix('.').and_then(|r| r.strip_prefix(target_name)).and_then(|r| r.strip_prefix('.'))
     else {

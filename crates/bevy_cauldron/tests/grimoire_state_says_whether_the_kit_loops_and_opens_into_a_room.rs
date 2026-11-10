@@ -51,7 +51,7 @@ fn project(name: &str, pieces: &[(&str, &str)]) -> PathBuf {
 }
 
 fn library_path(root: &std::path::Path) -> PathBuf {
-    root.join("assets/grimoire/furniture/library.ron")
+    root.join("assets/grimoire/furniture/library.yaml")
 }
 
 /// Rewrite piece `id`'s lattice in the project's library file to `hall` on `faces`.

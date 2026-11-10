@@ -13,7 +13,7 @@ use crate::fixtures;
 
 fn editor(name: &str) -> (bevy::prelude::App, Ctx) {
     let root = fixtures::Fixture::new(name).descriptor("site/torch", "alpha").place("site/torch", (0.0, 0.0)).place("site/torch", (6.0, 6.0)).build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();

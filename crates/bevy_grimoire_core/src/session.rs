@@ -138,7 +138,8 @@ impl Session {
     /// Read a session file, refusing a version this build does not read and a turn whose relations
     /// the relations file itself would refuse.
     pub fn parse(text: &str) -> Result<Session, String> {
-        let s: Session = ron::from_str(text).map_err(|e| format!("session: parse: {e}"))?;
+        let s: Session =
+            crate::yaml::from_str(text, "session").map_err(|p| format!("session: parse: {}", p.line()))?;
         if s.version != SESSION_VERSION {
             return Err(format!(
                 "session: version {} is not the {SESSION_VERSION} this build reads",
@@ -146,16 +147,15 @@ impl Session {
             ));
         }
         for (i, t) in s.turns.iter().enumerate() {
-            let text = as_relations(&t.keeps).to_ron()?;
+            let text = as_relations(&t.keeps).to_yaml()?;
             Relations::parse(&text).map_err(|e| format!("session: turn {i}: {e}"))?;
         }
         Ok(s)
     }
 
     /// The file's text.
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("session: write: {e}"))
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("session: write: {}", p.line()))
     }
 }
 

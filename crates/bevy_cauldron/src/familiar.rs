@@ -484,7 +484,7 @@ fn tick_the_follow_row(
 ///
 /// **The user's layer**, which is where `settings.rs`'s own doc puts this key: *"it is how a person
 /// wants to watch an agent, not a fact about one project"*. The first version wrote the project's
-/// `editor.ron`, which would have made one person's preference a file every other person opening
+/// `editor.yaml`, which would have made one person's preference a file every other person opening
 /// that project inherits — the opposite of what the doc says, and the disagreement is what the review
 /// caught.
 ///

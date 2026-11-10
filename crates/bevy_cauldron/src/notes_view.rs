@@ -1,6 +1,6 @@
 //! **The open map's notes, as the editor holds them** (#200, H3).
 //!
-//! The sign over every standing note and the Notes panel both draw from the map's `.notes.ron`. Each
+//! The sign over every standing note and the Notes panel both draw from the map's `.notes.yaml`. Each
 //! used to read the file itself and take an empty list when it did not parse, so one bad edit (a hand
 //! edit, a truncated write, an agent's mistake) made every sign and every row vanish until the file
 //! was fixed. Now one system reads it, decides each edit once, and holds the last good [`Notes`]: a
@@ -117,7 +117,7 @@ pub fn sync_notes_view(
         .unwrap_or(&path)
         .to_string_lossy()
         .replace('\\', "/");
-    let verdict = match Notes::from_ron(&text) {
+    let verdict = match Notes::parse(&text) {
         Ok(read) => {
             view.notes = read;
             view.generation += 1;

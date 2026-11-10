@@ -67,7 +67,7 @@ fn tree_path<'a>(ctx: &'a Ctx, name: &str) -> Result<(&'a Project, std::path::Pa
     let Some(project) = ctx.project.as_ref() else {
         return Err(Refusal::new("no project is open, so there is no tree file to write."));
     };
-    Ok((project, project.grimoire_dir.join("trees").join(format!("{name}.tree.ron"))))
+    Ok((project, project.grimoire_dir.join("trees").join(format!("{name}.tree.yaml"))))
 }
 
 #[cfg(feature = "bevy_flora")]
@@ -106,7 +106,7 @@ fn edited(project: &Project, path: &std::path::Path, existing: Option<&str>, p: 
         set_path(&mut value, path, v.clone())?;
     }
     let tree: TreeParams = serde_json::from_value(value).map_err(|e| Refusal::new(format!("that is not a tree: {e}. Nothing was written.")))?;
-    Ok(tree.to_ron())
+    Ok(tree.to_yaml())
 }
 
 /// **Write or edit a tree file.**

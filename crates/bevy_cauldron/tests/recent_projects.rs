@@ -30,7 +30,7 @@ impl Scratch {
     }
 
     fn file(&self) -> PathBuf {
-        self.0.join("data").join("Grimoire").join("recent.ron")
+        self.0.join("data").join("Grimoire").join("recent.yaml")
     }
 }
 
@@ -127,7 +127,7 @@ fn a_list_of_another_version_is_refused_by_name_and_left_as_it_is() {
     std::fs::write(&file, newer).unwrap();
 
     let err = recent::record(&file, &a).unwrap_err();
-    assert!(err.contains("version 2") && err.contains("recent.ron"), "the refusal names the version and the file: {err}");
+    assert!(err.contains("version 2") && err.contains("recent.yaml"), "the refusal names the version and the file: {err}");
     assert_eq!(std::fs::read_to_string(&file).unwrap(), newer, "a list a newer build wrote is not overwritten");
 }
 
@@ -140,7 +140,7 @@ fn a_list_survives_a_round_trip_through_its_file() {
     r.pin(&a, true);
     r.save(&s.file()).unwrap();
     assert_eq!(Recent::load(&s.file()).unwrap(), r);
-    assert_eq!(Recent::load(&s.0.join("absent.ron")).unwrap(), Recent::default(), "no file is an empty list");
+    assert_eq!(Recent::load(&s.0.join("absent.yaml")).unwrap(), Recent::default(), "no file is an empty list");
 }
 
 /// **Every way into the editor records the opening**, because `open_the_door` is the one way in: an

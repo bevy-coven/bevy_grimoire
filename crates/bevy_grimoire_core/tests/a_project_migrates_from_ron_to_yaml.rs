@@ -81,7 +81,7 @@ fn a_copy_of_the_shipped_project_migrates_and_every_yaml_reads_to_its_ron_value(
     let all = project_files(&root);
     let ron_before: Vec<&String> = all
         .iter()
-        .filter(|f| f.ends_with(".ron") && planned.iter().any(|(_, rel, _)| rel == *f))
+        .filter(|f| f.ends_with(".yaml") && planned.iter().any(|(_, rel, _)| rel == *f))
         .collect();
     assert!(ron_before.len() >= 10, "the shipped project is the fixture: {} RON project files", ron_before.len());
 
@@ -128,10 +128,10 @@ fn a_kind_holding_an_enum_and_an_option_reads_back_to_the_same_value() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     let text = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.ron"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.yaml"),
     )
     .unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("standards.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("standards.yaml"), &text).unwrap_or_else(|e| panic!("{e}"));
     let was: Standards = ron::from_str(&text).unwrap_or_else(|e| panic!("the fixture is RON: {e}"));
 
     let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
@@ -149,14 +149,14 @@ fn the_old_files_are_moved_into_the_archive_and_not_deleted() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     let text = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.ron"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/old_data/core-0.3.0/standards.yaml"),
     )
     .unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("standards.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("standards.yaml"), &text).unwrap_or_else(|e| panic!("{e}"));
 
     let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 
-    let archived = root.join(ARCHIVE_DIR).join(migrate::GRIMOIRE_DIR).join("standards.ron");
+    let archived = root.join(ARCHIVE_DIR).join(migrate::GRIMOIRE_DIR).join("standards.yaml");
     assert!(archived.is_file(), "the RON original is in the archive: {}", archived.display());
     assert_eq!(
         std::fs::read_to_string(&archived).unwrap_or_else(|e| panic!("{e}")),
@@ -178,26 +178,26 @@ fn a_migration_that_would_change_a_value_stops_names_the_file_and_writes_nothing
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     // A kind this crate declares a type for, which converts.
-    std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)\n")
+    std::fs::write(grimoire.join("kits.yaml"), "(version: 3, bind: [], bash: [], authoring: None)\n")
         .unwrap_or_else(|e| panic!("{e}"));
     // A kind it does not: a forest is read by the editor, and only the editor can compare its value.
     // A forest of a KIT: `<kit>/forest/<name>.ron`, which is where the kind's pattern points.
     std::fs::create_dir_all(grimoire.join("site/forest")).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("site/forest/yard.ron"), "(trees: [])\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("site/forest/yard.yaml"), "(trees: [])\n").unwrap_or_else(|e| panic!("{e}"));
 
     let refusal = match migrate::migrate(&root) {
         Ok(_) => panic!("a file the command cannot verify stops the migration"),
         Err(p) => p,
     };
     let line = refusal.line();
-    assert!(line.contains("site/forest/yard.ron"), "the refusal names the file: {line}");
+    assert!(line.contains("site/forest/yard.yaml"), "the refusal names the file: {line}");
     assert!(
         !grimoire.join("kits.yaml").exists(),
         "the file that converted cleanly is not written either, so no half-migrated project is left"
     );
     assert!(!grimoire.join("site/forest/yard.yaml").exists(), "and the refused file is not written");
-    assert!(grimoire.join("kits.ron").is_file(), "the RON originals are left where they were");
-    assert!(grimoire.join("site/forest/yard.ron").is_file());
+    assert!(grimoire.join("kits.yaml").is_file(), "the RON originals are left where they were");
+    assert!(grimoire.join("site/forest/yard.yaml").is_file());
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -207,7 +207,7 @@ fn a_comment_is_carried_above_the_field_it_was_written_about() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("standards.ron"),
+        grimoire.join("standards.yaml"),
         "(\n    version: 1,\n    // a door is 0.9 to 1.2 m, and the module is a decimetre\n    rules: [],\n)\n",
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -233,7 +233,7 @@ fn a_header_comment_goes_at_the_top_of_the_file() {
     // A header describes the whole file, so it belongs above the first line — and it must survive, not
     // be reported as unplaceable. This is the shape every shipped project file carries.
     std::fs::write(
-        grimoire.join("standards.ron"),
+        grimoire.join("standards.yaml"),
         "// this project follows the site kit's module\n(\n    version: 1,\n    rules: [],\n)\n",
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -259,7 +259,7 @@ fn a_comment_after_the_last_field_is_listed_and_never_dropped() {
     // A footer stands after the last field: YAML has no node after the last one to hang it from, so it
     // is listed rather than moved somewhere it might not mean what it said.
     std::fs::write(
-        grimoire.join("standards.ron"),
+        grimoire.join("standards.yaml"),
         "(\n    version: 1,\n    rules: [],\n)\n// measured against the shipped kits, 2026-08\n",
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -268,7 +268,7 @@ fn a_comment_after_the_last_field_is_listed_and_never_dropped() {
 
     assert_eq!(report.unplaced.len(), 1, "{:?}", report.lines());
     assert!(report.unplaced[0].comment.contains("measured against the shipped kits"));
-    assert!(report.unplaced[0].file.ends_with("standards.ron"));
+    assert!(report.unplaced[0].file.ends_with("standards.yaml"));
     let said = report.lines().join("\n");
     assert!(said.contains("comment not placed"), "the report says it: {said}");
     let _ = std::fs::remove_dir_all(&root);
@@ -281,13 +281,13 @@ fn a_project_with_a_ron_file_left_over_is_refused_naming_the_file_and_the_comman
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     // **A kind whose reader has moved to YAML** (GD-03, #365): a kind the cutover has not reached still
     // reads its RON, so only a moved kind's old spelling is what an open refuses.
-    std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("agent.yaml"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
 
     let problem = migrate::leftover(&root, COMMAND)
         .unwrap_or_else(|p| panic!("{}", p.line()))
         .expect("a project holding a RON file is refused");
     let line = problem.line();
-    assert!(line.contains("agent.ron"), "the refusal names the file: {line}");
+    assert!(line.contains("agent.yaml"), "the refusal names the file: {line}");
     assert!(line.contains(COMMAND), "the refusal names the command: {line}");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -307,10 +307,10 @@ fn a_project_of_yaml_files_is_not_refused() {
 #[test]
 fn a_project_file_is_named_dot_yaml_where_it_was_named_dot_ron() {
     let cases = [
-        ("kits.ron", "kits.yaml"),
-        ("maps/town.map.ron", "maps/town.map.yaml"),
-        ("editor.ron", "editor.yaml"),
-        ("destructible/site__cart.bake.ron", "destructible/site__cart.bake.yaml"),
+        ("kits.yaml", "kits.yaml"),
+        ("maps/town.map.yaml", "maps/town.map.yaml"),
+        ("editor.yaml", "editor.yaml"),
+        ("destructible/site__cart.bake.yaml", "destructible/site__cart.bake.yaml"),
     ];
     for (rom, yaml_name) in cases {
         assert_eq!(
@@ -340,32 +340,32 @@ fn frozen_files() -> Vec<(&'static str, &'static str, &'static str)> {
     // alloc per file in the test: this runs once per test process.
     let leak = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
     vec![
-        ("kits", "kits.ron", leak(read("core-0.1.0/kits.ron"))),
+        ("kits", "kits.yaml", leak(read("core-0.1.0/kits.yaml"))),
         ("vocab", "vocab.ron", leak(read("core-0.1.0/vocab.ron"))),
-        ("library", "scp/library.ron", leak(read("core-0.1.0/library.ron"))),
-        ("library", "site/library.ron", leak(read("core-0.1.0/library_site.ron"))),
-        ("policy", "site/project.ron", leak(read("core-0.1.0/policy.ron"))),
-        ("policy", "furniture/project.ron", leak(read("core-0.1.0/policy_furniture.ron"))),
-        ("compositions", "compositions.ron", leak(read("core-0.1.0/compositions.ron"))),
-        ("rigs", "rigs.ron", leak(read("core-0.1.0/rigs.ron"))),
-        ("rules", "rules.ron", leak(read("core-0.3.0/rules.ron"))),
-        ("standards", "standards.ron", leak(read("core-0.3.0/standards.ron"))),
-        ("repetition", "repetition.ron", leak(read("core-0.3.0/repetition.ron"))),
-        ("map", "maps/yard.map.ron", leak(read("core-0.3.0/map.ron"))),
-        ("notes", "maps/yard.notes.ron", leak(read("core-0.3.0/notes.ron"))),
-        ("plan", "maps/yard.plan.ron", leak(read("core-0.3.0/plan.ron"))),
-        ("references", "maps/yard.references.ron", leak(read("core-0.3.0/references.ron"))),
-        ("relations", "maps/yard.relations.ron", leak(read("core-0.3.0/relations.ron"))),
-        ("terrain", "site/terrain/yard.ron", leak(read("core-0.3.0/terrain.ron"))),
-        ("water_plan", "site/water/yard.ron", leak(read("core-0.3.0/water_plan.ron"))),
-        ("water_field", "site/water/yard.field.ron", leak(read("core-0.3.0/water_field.ron"))),
-        ("volume", "site/volume/yard.ron", leak(read("core-0.3.0/volume.ron"))),
-        ("data_registry", "site/data.ron", leak(read("core-0.3.0/data_registry.ron"))),
-        ("family_list", "family.ron", leak(read("core-0.3.0/family_list.ron"))),
-        ("agent", "agent.ron", leak(read("core-0.3.0/agent.ron"))),
-        ("play", "play.ron", leak(read("core-0.3.0/play.ron"))),
-        ("destructible_marks", "destructible.ron", leak(read("editor-3f4084c/destructible.ron"))),
-        ("destructible_bake", "destructible/site__cart.bake.ron", leak(read("editor-3f4084c/site__cart.bake.ron"))),
+        ("library", "scp/library.yaml", leak(read("core-0.1.0/library.yaml"))),
+        ("library", "site/library.yaml", leak(read("core-0.1.0/library_site.yaml"))),
+        ("policy", "site/project.yaml", leak(read("core-0.1.0/policy.yaml"))),
+        ("policy", "furniture/project.yaml", leak(read("core-0.1.0/policy_furniture.yaml"))),
+        ("compositions", "compositions.yaml", leak(read("core-0.1.0/compositions.yaml"))),
+        ("rigs", "rigs.yaml", leak(read("core-0.1.0/rigs.yaml"))),
+        ("rules", "rules.yaml", leak(read("core-0.3.0/rules.yaml"))),
+        ("standards", "standards.yaml", leak(read("core-0.3.0/standards.yaml"))),
+        ("repetition", "repetition.yaml", leak(read("core-0.3.0/repetition.yaml"))),
+        ("map", "maps/yard.map.yaml", leak(read("core-0.3.0/map.yaml"))),
+        ("notes", "maps/yard.notes.yaml", leak(read("core-0.3.0/notes.yaml"))),
+        ("plan", "maps/yard.plan.yaml", leak(read("core-0.3.0/plan.yaml"))),
+        ("references", "maps/yard.references.yaml", leak(read("core-0.3.0/references.yaml"))),
+        ("relations", "maps/yard.relations.yaml", leak(read("core-0.3.0/relations.yaml"))),
+        ("terrain", "site/terrain/yard.yaml", leak(read("core-0.3.0/terrain.yaml"))),
+        ("water_plan", "site/water/yard.yaml", leak(read("core-0.3.0/water_plan.yaml"))),
+        ("water_field", "site/water/yard.field.yaml", leak(read("core-0.3.0/water_field.yaml"))),
+        ("volume", "site/volume/yard.yaml", leak(read("core-0.3.0/volume.yaml"))),
+        ("data_registry", "site/data.ron", leak(read("core-0.3.0/data_registry.yaml"))),
+        ("family_list", "family.yaml", leak(read("core-0.3.0/family_list.yaml"))),
+        ("agent", "agent.yaml", leak(read("core-0.3.0/agent.yaml"))),
+        ("play", "play.yaml", leak(read("core-0.3.0/play.yaml"))),
+        ("destructible_marks", "destructible.yaml", leak(read("editor-3f4084c/destructible.yaml"))),
+        ("destructible_bake", "destructible/site__cart.bake.yaml", leak(read("editor-3f4084c/site__cart.bake.yaml"))),
     ]
 }
 
@@ -416,7 +416,7 @@ fn a_comment_above_a_named_list_item_goes_above_that_item() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("standards.ron"),
+        grimoire.join("standards.yaml"),
         "(\n    version: 1,\n    rules: [\n        (\n            name: \"door_width\",\n            \
          kind: Some(\"door\"),\n            dim: Width,\n            min: Some(0.9),\n        ),\n        \
          // the wall module is a decimetre, and `min` is the only dimension this rule bounds\n        (\n            \
@@ -457,7 +457,7 @@ fn a_comment_is_never_inserted_into_a_multi_line_string() {
     // `project.ron` is a KIT's policy: `<kit>/project.ron`, not a root file.
     std::fs::create_dir_all(grimoire.join("site")).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("site/project.ron"),
+        grimoire.join("site/project.yaml"),
         "(\n    version: 2,\n    note: Some(\"the wall\\npatches: []\\nand more\"),\n    \
          // the patches below are the ones this kit states, and an empty list is a statement\n    patches: [],\n)\n",
     )
@@ -548,7 +548,7 @@ fn an_item_is_matched_by_its_whole_name_not_a_prefix() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("standards.ron"),
+        grimoire.join("standards.yaml"),
         "(\n    version: 1,\n    rules: [\n        ( name: \"wall_module\", dim: Depth, multiple_of: Some(0.1) ),\n        \
          // this one is a door's width, and nothing else\n        ( name: \"wall\", dim: Width, min: Some(0.9) ),\n    ],\n)\n",
     )
@@ -584,7 +584,7 @@ fn a_written_text_that_differs_is_reported_by_line_and_never_panics() {
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        grimoire.join("standards.ron"),
+        grimoire.join("standards.yaml"),
         "(\n    version: 1,\n    rules: [\n        (\n            name: \"café façade — porte\",\n            \
          kind: None,\n            dim: Width,\n            min: Some(NaN),\n        ),\n    ],\n)\n",
     )
@@ -610,7 +610,7 @@ fn a_symlinked_folder_is_never_walked_out_of_the_project() {
     let outside = scratch("symlink_outside");
     std::fs::create_dir_all(outside.join("elsewhere")).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        outside.join("elsewhere/library.ron"),
+        outside.join("elsewhere/library.yaml"),
         "(\n    version: 1,\n    note: None,\n    descriptors: [],\n)\n",
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -626,7 +626,7 @@ fn a_symlinked_folder_is_never_walked_out_of_the_project() {
 
     assert!(report.converted.is_empty(), "nothing outside the project is converted: {:?}", report.lines());
     assert!(
-        outside.join("elsewhere/library.ron").is_file(),
+        outside.join("elsewhere/library.yaml").is_file(),
         "the file outside the project is untouched"
     );
     assert!(!outside.join("elsewhere/library.yaml").exists(), "and no YAML is written out there");
@@ -641,7 +641,7 @@ fn a_yaml_file_already_beside_the_ron_refuses_the_migration() {
     let root = scratch("no_replace");
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(grimoire.join("kits.ron"), "(version: 3, bind: [], bash: [], authoring: None)\n")
+    std::fs::write(grimoire.join("kits.yaml"), "(version: 3, bind: [], bash: [], authoring: None)\n")
         .unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(grimoire.join("kits.yaml"), "# a person's own\nversion: 3\n")
         .unwrap_or_else(|e| panic!("{e}"));
@@ -656,7 +656,7 @@ fn a_yaml_file_already_beside_the_ron_refuses_the_migration() {
         "# a person's own\nversion: 3\n",
         "the person's file is not replaced"
     );
-    assert!(grimoire.join("kits.ron").is_file(), "and the RON is left where it was");
+    assert!(grimoire.join("kits.yaml").is_file(), "and the RON is left where it was");
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -672,9 +672,9 @@ fn every_comment_in_the_shipped_rigs_file_finds_its_field() {
     let root = scratch("shipped_rigs");
     let grimoire = root.join(migrate::GRIMOIRE_DIR);
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
-    let text = std::fs::read_to_string(shipped_grimoire().join("rigs.ron"))
+    let text = std::fs::read_to_string(shipped_grimoire().join("rigs.yaml"))
         .unwrap_or_else(|e| panic!("the shipped rigs.ron: {e}"));
-    std::fs::write(grimoire.join("rigs.ron"), &text).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("rigs.yaml"), &text).unwrap_or_else(|e| panic!("{e}"));
 
     let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
 

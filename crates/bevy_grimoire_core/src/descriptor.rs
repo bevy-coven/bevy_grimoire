@@ -182,7 +182,7 @@ pub struct AxisOrigin {
 /// it would have had no writer. `None` already says *no record*, which is exactly and only what a
 /// manifest-generated descriptor means.
 ///
-/// **Old readers.** A file without `Agent` parses everywhere. A `library.ron` that holds `Agent`
+/// **Old readers.** A file without `Agent` parses everywhere. A `library.yaml` that holds `Agent`
 /// (written by `label_set` from an agent) does not parse in a core older than the one that added
 /// the variant, so a consumer pinned to an older core must move with the editor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -782,7 +782,7 @@ pub fn mount_options(surfaces: &[String]) -> Vec<Mount> {
         // They were the first class alone, on the argument that an `or the floor` entry per class
         // would double the list. That is true and it was the wrong trade: this list is a cycle an
         // author taps through with `M`, and **an entry that does not exist cannot be reached at any
-        // price**. `assets/grimoire/vocab.ron` declares three classes, so a dressing set that belongs
+        // price**. `assets/grimoire/vocab.yaml` declares three classes, so a dressing set that belongs
         // on a *shelf* or the floor had no rung, and the labeller's prompt offered the shape for one
         // class while refusing the other two — the only way through was hand-editing the file, which
         // is exactly what the cycle exists to make unnecessary. With the shipped three classes the

@@ -106,7 +106,7 @@ fn until(app: &mut App, mut done: impl FnMut(&mut App) -> bool) {
 }
 
 fn map_file(root: &Path, name: &str) -> PathBuf {
-    root.join("assets/grimoire/maps").join(format!("{name}.map.ron"))
+    root.join("assets/grimoire/maps").join(format!("{name}.map.yaml"))
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn a_maps_settings_are_changed_from_the_page_through_the_operation() {
 #[test]
 fn a_kits_policy_lists_and_an_entry_is_removed_after_the_question() {
     let (root, mut app) = on_the_page("policy");
-    let policy = root.join("assets/grimoire/furniture/project.ron");
+    let policy = root.join("assets/grimoire/furniture/project.yaml");
     std::fs::write(
         &policy,
         "(\n    version: 2,\n    // A comment that must survive.\n    note: None,\n    exclude: [\"characters\"],\n    patches: [],\n)\n",
@@ -366,7 +366,7 @@ fn the_first_frame_of_the_page_is_whole() {
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(LauncherPlugin);
     // The home, with this project as its one card, as opening it from the Projects home leaves things.
-    let file = root.join("recent.ron");
+    let file = root.join("recent.yaml");
     bevy_cauldron::recent::record(&file, &root).expect("the project is recorded");
     app.insert_resource(bevy_cauldron::recent::RecentProjects(file));
     app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);

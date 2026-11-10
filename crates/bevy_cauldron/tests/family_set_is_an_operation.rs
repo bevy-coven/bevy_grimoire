@@ -8,7 +8,7 @@ use crate::fixtures;
 fn project(tag: &str, listed: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), format!("(version: 1, crates: [\"{listed}\"])")).unwrap();
+    std::fs::write(root.join("family.yaml"), format!("(version: 1, crates: [\"{listed}\"])")).unwrap();
     let file = root.join("family/bevy_elements.ron");
     std::fs::write(&file, "// the sun\n(sun: (hour: 12.0, tilt: 0.4), wind: 3)\n").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -42,7 +42,7 @@ fn an_unlisted_crate_or_a_bad_value_changes_nothing() {
         Err(e) | Ok(Applied::Refused(e)) => e.0,
         Ok(_) => panic!("an unlisted crate was written"),
     };
-    assert!(e.contains("not listed in family.ron"), "{e}");
+    assert!(e.contains("not listed in family.yaml"), "{e}");
     let (mut ctx2, file2) = project("badvalue", "bevy_elements");
     assert!(matches!(set(&mut ctx2, "(1.0"), Err(_) | Ok(Applied::Refused(_))));
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);

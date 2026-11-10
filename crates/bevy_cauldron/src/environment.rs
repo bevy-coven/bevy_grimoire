@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::family_host::FamilySettings;
 use crate::terrain_view::TerrainView;
 
-/// The crate this settings file belongs to, as `family.ron` names it.
+/// The crate this settings file belongs to, as `family.yaml` names it.
 pub const CRATE: &str = "bevy_elements";
 
 /// Game time a forced or released weather takes to blend, so the sky does not jump.

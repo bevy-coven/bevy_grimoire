@@ -73,7 +73,7 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
 
 /// **The saved water plan of the open map**, or `None` when it has none.
 pub fn plan_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<WaterPlan> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
     ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.ron"))).ok()?).ok()
 }
 
@@ -189,13 +189,13 @@ pub struct RunParams {
 }
 
 fn field_path(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
-    path_of(ctx, map).map(|p| p.with_file_name(format!("{map}.field.ron")))
+    path_of(ctx, map).map(|p| p.with_file_name(format!("{map}.field.yaml")))
 }
 
 /// **The kept water of the open map**, the field `water_run` saved, or `None` when it has none.
 pub fn field_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<bevy_grimoire_core::water::WaterField> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
-    ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.field.ron"))).ok()?).ok()
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
+    ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.field.yaml"))).ok()?).ok()
 }
 
 /// **Run the map's springs, sinks and lakes over its terrain until the water settles, and keep it.**

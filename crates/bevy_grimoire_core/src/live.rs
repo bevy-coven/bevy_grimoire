@@ -453,10 +453,10 @@ mod tests {
     #[test]
     fn a_dotfile_change_never_fires() {
         let dir = Scratch::new("dotfile");
-        dir.write("maps/town.map.ron", 1);
+        dir.write("maps/town.map.yaml", 1);
         let mut watch = FileWatch::new(&dir.0, &["ron"]);
-        dir.write(".live/game.ron", 2);
-        dir.write("maps/.town.map.ron", 2);
+        dir.write(".live/game.yaml", 2);
+        dir.write("maps/.town.map.yaml", 2);
         for step in 0..8 {
             assert!(
                 !watch.poll(step as f64 * POLL_SECS),
@@ -464,7 +464,7 @@ mod tests {
             );
         }
         // And the watch is not blind: a real change still fires.
-        dir.write("maps/town.map.ron", 3);
+        dir.write("maps/town.map.yaml", 3);
         let fired = (8..16).any(|step| watch.poll(step as f64 * POLL_SECS));
         assert!(fired, "a change to the map never fired");
     }
@@ -472,10 +472,10 @@ mod tests {
     #[test]
     fn a_file_of_another_extension_is_ignored() {
         let dir = Scratch::new("extension");
-        dir.write("town.map.ron", 1);
+        dir.write("town.map.yaml", 1);
         let mut watch = FileWatch::new(&dir.0, &["ron"]);
         dir.write("pieces.yaml", 2);
-        dir.write("town.map.ron.tmp", 2);
+        dir.write("town.map.yaml.tmp", 2);
         for step in 0..8 {
             assert!(!watch.poll(step as f64 * POLL_SECS));
         }
@@ -486,10 +486,10 @@ mod tests {
     #[test]
     fn two_polls_within_the_poll_interval_stat_once() {
         let dir = Scratch::new("interval");
-        dir.write("town.map.ron", 1);
+        dir.write("town.map.yaml", 1);
         let mut watch = FileWatch::new(&dir.0, &["ron"]);
         assert!(!watch.poll(0.0));
-        dir.write("town.map.ron", 2);
+        dir.write("town.map.yaml", 2);
         // Too soon after the last poll: no stat, so the change is not yet seen.
         assert!(!watch.poll(0.1));
         // Had 0.1 stat'ed, the change would have settled by 0.6 and fired here.

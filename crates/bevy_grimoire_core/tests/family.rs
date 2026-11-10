@@ -6,12 +6,12 @@ fn a_project_without_a_family_file_uses_no_crate() {
     let d = std::env::temp_dir().join(format!("grimoire_family_none_{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
     assert_eq!(Family::load(&d).unwrap(), Family::default());
-    assert!(path_for_project(&d).ends_with("family.ron"));
+    assert!(path_for_project(&d).ends_with("family.yaml"));
 }
 
 #[test]
 fn a_listed_crate_without_its_feature_is_a_problem_not_a_silent_skip() {
-    let f = Family::from_ron("(version: 1, crates: [\"bevy_elements\", \"bevy_flora\"])").unwrap();
+    let f = Family::parse("version: 1\ncrates: [bevy_elements, bevy_flora]\n").unwrap();
     let problems = f.problems(KNOWN, &["bevy_elements"]);
     assert_eq!(problems.len(), 1);
     assert!(problems[0].contains("bevy_flora") && problems[0].contains("--features bevy_flora"), "{problems:?}");
@@ -21,10 +21,10 @@ fn a_listed_crate_without_its_feature_is_a_problem_not_a_silent_skip() {
 
 #[test]
 fn an_unknown_name_and_a_repeat_are_refused_or_reported() {
-    let f = Family::from_ron("(version: 1, crates: [\"nope\"])").unwrap();
+    let f = Family::parse("version: 1\ncrates: [nope]\n").unwrap();
     assert!(f.problems(&["bevy_elements"], &["nope"])[0].contains("not a family crate"));
-    assert!(Family::from_ron("(version: 1, crates: [\"isomesh\", \"isomesh\"])").unwrap_err().contains("twice"));
-    assert!(Family::from_ron("(version: 2, crates: [])").is_err());
+    assert!(Family::parse("version: 1\ncrates: [isomesh, isomesh]\n").unwrap_err().contains("twice"));
+    assert!(Family::parse("version: 2\ncrates: []\n").is_err());
 }
 
 const SETTINGS: &str = "Settings(\n    // sun\n    sun: (hour: 6.5, tilt: 0.4),\n    label: \"a, (b)\",\n    wind: 3,\n)\n";

@@ -54,7 +54,7 @@ fn define(app: &mut App, parameters: serde_json::Value) -> serde_json::Value {
 }
 
 fn comps(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default()
+    std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default()
 }
 
 fn log(app: &App) -> Vec<Entry> {
@@ -136,7 +136,7 @@ fn a_tile_that_does_not_validate_is_refused_and_nothing_is_written() {
         let r = define(&mut app, params);
         assert_eq!(r["outcome"], "refused", "{what} was accepted: {r}");
     }
-    assert_eq!(comps(&root), before, "a refusal wrote compositions.ron");
+    assert_eq!(comps(&root), before, "a refusal wrote compositions.yaml");
     assert_eq!(log(&app).len(), lines, "a refusal logged a line");
 }
 

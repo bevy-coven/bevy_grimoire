@@ -26,7 +26,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/standards.ron"))
+    (app, root.join("assets/grimoire/standards.yaml"))
 }
 
 fn state(app: &mut App) -> serde_json::Value {
@@ -94,7 +94,7 @@ fn a_file_that_does_not_parse_is_named_not_read_as_none() {
     write(&file, r#"(name: "module", dim: Width, min: Some(3.0), max: Some(2.0)),"#);
     let st = &state(&mut app)["standards"];
     let error = st["error"].as_str().unwrap_or_else(|| panic!("no error named: {st}"));
-    assert!(error.contains("standards.ron"), "the error names the file: {error}");
+    assert!(error.contains("standards.yaml"), "the error names the file: {error}");
     assert!(error.contains("min 3"), "and what is wrong in it: {error}");
     assert_eq!(st["breaches"], serde_json::json!([]), "{st}");
 }

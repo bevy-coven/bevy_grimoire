@@ -1,6 +1,6 @@
 //! **Moving a project's files from RON to YAML, losslessly** (GD-03, #365).
 //!
-//! A project used to be RON (`kits.ron`, `maps/town.map.ron`, `editor.ron`, …). [`migrate`] turns one
+//! A project used to be RON (`kits.yaml`, `maps/town.map.yaml`, `editor.yaml`, …). [`migrate`] turns one
 //! into YAML, [`migrate_moved`] is the narrower run a person's command takes while the cutover is
 //! unfinished, and [`leftover`] is the refusal an open raises when a project has not been converted.
 //!
@@ -23,12 +23,12 @@
 //!   a person cannot repair by hand.
 //! - **Loud.** A RON comment is carried over as a YAML comment above the same key wherever its place
 //!   can be found. One that cannot be placed is listed in the [`Report`], never dropped quietly. A file
-//!   whose kind this crate has no type for — `checks.ron` (the checks crate), `editor.ron`, `family/*.ron`
+//!   whose kind this crate has no type for — `checks.ron` (the checks crate), `editor.yaml`, `family/*.ron`
 //!   and a kit's `forest/people/scripts/trees` files (the editor) — **stops the whole migration**
 //!   and is named: guessing at a value it cannot read is how a file loses a field.
 //!
 //! **A file no kind's pattern names is not walked at all.** `game_data` states no pattern (it is "the
-//! files a game registers in `data.ron`"), so a game's own tuning files are neither converted nor
+//! files a game registers in `data.yaml`"), so a game's own tuning files are neither converted nor
 //! refused: they stay RON, untouched, and this module has no opinion about them. Giving them a pattern
 //! belongs to the crate that declares their type, in the slice that moves them.
 //!
@@ -163,7 +163,7 @@ impl Report {
     }
 }
 
-/// **The path a project file is written at now**, from the path it had: `kits.ron` → `kits.yaml`.
+/// **The path a project file is written at now**, from the path it had: `kits.yaml` → `kits.yaml`.
 /// `None` for a path that does not end in [`RON_EXT`], which is not a project file this converts.
 pub fn yaml_path(rom: &Path) -> Option<PathBuf> {
     let name = rom.file_name()?.to_str()?;
@@ -221,7 +221,7 @@ fn kind_of_rel(rel: &str) -> Option<&'static FileKind> {
 }
 
 /// **A kind's path pattern as the cutover left it**: `play.yaml` → `play.ron`, `maps/<name>.map.yaml` →
-/// `maps/<name>.map.ron`.
+/// `maps/<name>.map.yaml`.
 ///
 /// A file the cutover has not converted yet is named the way it always was, so a pattern that only says
 /// `.yaml` matches nothing on that project. A pattern holding no `.yaml` (an `oplog.jsonl`, a
@@ -464,10 +464,10 @@ pub fn migrate(root: &Path) -> Result<Report, Problem> {
 /// kind exactly where it is.
 ///
 /// **This is what a person's command runs**, and the difference from [`migrate`] is not a convenience.
-/// The cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.ron`:
-/// converting `kits.ron` would write a `kits.yaml` nothing reads *and* archive the `kits.ron` everything
+/// The cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.yaml`:
+/// converting `kits.yaml` would write a `kits.yaml` nothing reads *and* archive the `kits.yaml` everything
 /// does, which is a project that opens empty with its content in `.dark_factory/migrated-ron/`. Likewise a
-/// kind whose type belongs to another crate (`editor.ron`, `checks.ron`, a forest) is not this command's
+/// kind whose type belongs to another crate (`editor.yaml`, `checks.ron`, a forest) is not this command's
 /// work and must not block the work it can do.
 ///
 /// **The list only grows.** A kind joins [`READS_YAML`] in the commit that moves its reader, and the last
@@ -864,18 +864,22 @@ fn item_name_from(all: &[&str], at: usize) -> Option<String> {
     None
 }
 
-/// **The kinds whose reader parses YAML now** (GD-03, #365): the cutover is one kind at a time, and this
-/// is the one list that says how far it has got.
+/// **The kinds whose reader parses YAML**: every kind this crate owns a type for.
 ///
-/// It exists because a file on disk is read in exactly one spelling, and which one is a property of the
-/// kind, not of the file: a frozen fixture a release wrote (`tests/old_data.rs`) is checked as the type
-/// reads it *today*, so a kind on this list goes through [`written_as_yaml`] first and a kind off it is
-/// read as the RON it is. A second reader that took either spelling would be the two paths the cutover
-/// exists to remove.
+/// It began as a two-entry list and grew one kind per commit as the cutover moved each reader off RON; it
+/// is complete now, which is the state its own note said it would end in — the commit that adds the last
+/// kind is the commit that deletes the RON readers. **It stays a list rather than being deleted** because
+/// three things ask it: [`migrate_moved`] (the command a person runs), [`leftover`] (the refusal an open
+/// raises), and `reload_check`, which has nothing to say about a kind whose reader another crate owns.
 ///
-/// **It can only grow, and a kind leaves `tests/old_data.rs`'s RON reading in the same commit** that adds
-/// its id here.
-pub const READS_YAML: &[&str] = &["agent", "play"];
+/// **A kind not on this list belongs to a layer above**: `checks`, `editor_settings`, `family` (a crate's own
+/// settings), `forest`, `people`, `scripts`, `trees` and `game_data`. Each of those moves in the crate that
+/// declares its type, in its own commit, and joins this list there.
+pub const READS_YAML: &[&str] = &[
+    "kits", "vocab", "library", "policy", "rules", "compositions", "standards", "repetition", "rigs",
+    "map", "notes", "plan", "references", "relations", "terrain", "water_plan", "water_field", "volume",
+    "data_registry", "family_list", "agent", "play", "destructible_marks", "destructible_bake",
+];
 
 /// **Whether `kind`'s reader parses YAML now**, per [`READS_YAML`].
 pub fn reads_yaml(kind: &str) -> bool {
@@ -885,7 +889,7 @@ pub fn reads_yaml(kind: &str) -> bool {
 /// **One project file's text, as YAML, from the RON it was written in** — the conversion [`migrate`] runs,
 /// for one file a caller already holds in memory.
 ///
-/// Answers the text and the name it would be written at (`kits.ron` → `kits.yaml`), or a refusal naming
+/// Answers the text and the name it would be written at (`kits.yaml` → `kits.yaml`), or a refusal naming
 /// the file. This exists for the two callers that are not a folder walk: the frozen fixtures a release
 /// wrote (`tests/old_data.rs`), which are checked as the type reads them *today*, and a game's own data
 /// file, whose type lives above this crate and which is therefore refused by name rather than guessed at.
@@ -894,7 +898,7 @@ pub fn reads_yaml(kind: &str) -> bool {
 /// same one [`migrate`] runs, so a value that would change here is a value that would change there.
 #[allow(clippy::result_large_err)]
 pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, String), Problem> {
-    // **The name a frozen fixture carries is the project-relative one** (`kits.ron`, `site/library.ron`),
+    // **The name a frozen fixture carries is the project-relative one** (`kits.yaml`, `site/library.yaml`),
     // and a [`Base::Grimoire`] pattern hangs from `assets/grimoire`, so both spellings are tried. The root
     // itself is the other base, whose patterns are already project-relative.
     let kind = kind_of_rel(rel)
@@ -936,7 +940,7 @@ pub fn written_as_yaml(rel: &str, text: &str, command: &str) -> Result<(String, 
 pub fn leftover(root: &Path, command: &str) -> Result<Option<Problem>, Problem> {
     let plan = plan(root)?;
     // **Only a kind whose reader has moved to YAML refuses an open.** A kind the cutover has not reached
-    // still reads its RON, so a `kits.ron` is a file this build reads and no reason to refuse a project;
+    // still reads its RON, so a `kits.yaml` is a file this build reads and no reason to refuse a project;
     // the refusal is for the spelling nothing reads any more, which is what [`READS_YAML`] answers. The
     // list grows one kind at a time, and the last kind to leave it is the commit that deletes the RON
     // readers entirely.

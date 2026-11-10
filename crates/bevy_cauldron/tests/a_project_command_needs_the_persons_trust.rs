@@ -34,7 +34,7 @@ fn write_play(root: &Path, marker: &Path) {
 
 /// A store of the test's own that trusts nothing.
 fn empty_store(root: &Path) -> PathBuf {
-    let file = root.join("nothing-trusted.ron");
+    let file = root.join("nothing-trusted.yaml");
     TrustStore::default().save(&file).unwrap();
     file
 }

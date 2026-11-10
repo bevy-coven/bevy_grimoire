@@ -6,7 +6,7 @@
 //!
 //! # The file is the crate's, and there is no second schema
 //!
-//! A project's `family.ron` lists the family crates it uses; each one's settings are its own serde type
+//! A project's `family.yaml` lists the family crates it uses; each one's settings are its own serde type
 //! written as RON in `<project>/family/<crate>.ron` — the file `family_set` writes (`ops_family.rs`) and
 //! a running game's copy of the plugin reads. [`ElementsSettings`] is the one settings type this build
 //! holds, and it is the editor's thin wrapper around the crate's own types (`WorldClock`, `Climate`,
@@ -49,11 +49,11 @@
 //!
 //! # Read when something changed, never once per frame
 //!
-//! The panel is derived from three facts — the open [`Project`] (which `family.ron` names, and the root
+//! The panel is derived from three facts — the open [`Project`] (which `family.yaml` names, and the root
 //! its settings live under), [`FamilySettings`] (the text the watch last saw good), and the preview's
 //! held [`ClockScrub`] for the hour — so it re-reads on a change in one of those and on nothing else.
 //!
-//! **The first cut did not.** It loaded `family.ron`, read every `family/<crate>.ron` and parsed its RON
+//! **The first cut did not.** It loaded `family.yaml`, read every `family/<crate>.ron` and parsed its RON
 //! every frame, and it read from disk even when [`FamilySettings`] already held the text: sixty file
 //! reads a second to be told what the panel was already showing (`#243` review). A settled panel now
 //! costs one comparison, and the disk is the *fallback* for the first frames before the watch has polled
@@ -109,12 +109,12 @@ pub const FILE_FIELDS: &[(&str, &str)] = &[
 
 /// **Which family crates this project draws a block for**, and the settings text the last read saw.
 ///
-/// A crate is offered when the project's `family.ron` lists it, this build was compiled with it, and its
+/// A crate is offered when the project's `family.yaml` lists it, this build was compiled with it, and its
 /// settings file is on disk. The list is what a person sees as blocks, and a test can read it without
 /// hunting the screen.
 #[derive(Resource, Default, Clone, Debug, PartialEq)]
 pub struct FamilyPanel {
-    /// The crates with a block, in `family.ron`'s order.
+    /// The crates with a block, in `family.yaml`'s order.
     crates: Vec<String>,
     /// The crates whose fields this build can draw; the others show their file as RON.
     fields: Vec<String>,
@@ -125,7 +125,7 @@ pub struct FamilyPanel {
     /// **How many times this panel has gone to its files**: one per frame in which one of its inputs
     /// moved, and none in the frames between.
     ///
-    /// A count of reads rather than of frames, on purpose. The first cut read `family.ron` and every
+    /// A count of reads rather than of frames, on purpose. The first cut read `family.yaml` and every
     /// `family/<crate>.ron` sixty times a second to be told what it already showed (`#243` review), and
     /// a number that only goes up on a read is the cheapest thing that can hold it to *"a settled panel
     /// reads nothing"* — `a_settled_panel_reads_nothing` is the test.
@@ -162,7 +162,7 @@ impl FamilyPanel {
 #[derive(Component, Reflect, Debug, Clone, PartialEq)]
 #[reflect(Component)]
 pub struct FamilyView {
-    /// The crate this view is of, as `family.ron` names it.
+    /// The crate this view is of, as `family.yaml` names it.
     pub krate: String,
     /// Time of day, hours in `[0, 24)`. The one field that is a scrub, not an operation.
     #[reflect(@HOURS)]
@@ -341,15 +341,15 @@ impl Plugin for FamilyPanelPlugin {
     }
 }
 
-/// **`family.ron`'s size and modification time.**
+/// **`family.yaml`'s size and modification time.**
 ///
 /// **A `stat` a frame, not a parse a frame** — the shape `project_config::refresh` uses for this same
-/// file. A crate listed or taken out is a write to `family.ron`, and the project configuration's
+/// file. A crate listed or taken out is a write to `family.yaml`, and the project configuration's
 /// switches write it without touching [`Project`], so the panel has to watch the file itself or a crate
 /// switched on would have no block until the next restart.
 type Stamp = (std::time::SystemTime, u64);
 
-/// **What the panel last saw of `family.ron`.**
+/// **What the panel last saw of `family.yaml`.**
 ///
 /// The inner `Option` is the file's own answer (`None` for a project that lists no crate at all, which is
 /// an ordinary project rather than an error); the outer one is *"the panel has not looked yet"*, which has
@@ -365,11 +365,11 @@ fn listed_stamp(root: &std::path::Path) -> Option<Stamp> {
 ///
 /// # Read when an input moved, and never otherwise
 ///
-/// The panel is derived from four facts: the [`Project`] (which `family.ron` names, and the root the
-/// settings live under), `family.ron` itself (the switches write it without touching the project),
+/// The panel is derived from four facts: the [`Project`] (which `family.yaml` names, and the root the
+/// settings live under), `family.yaml` itself (the switches write it without touching the project),
 /// [`FamilySettings`] (the text the watch last took as good), and the preview's held [`ClockScrub`]
 /// (the hour). A frame in which none of them moved returns here on one `stat`, two change ticks and a
-/// look at the view entities — the first cut loaded `family.ron`, read every `family/<crate>.ron` and
+/// look at the view entities — the first cut loaded `family.yaml`, read every `family/<crate>.ron` and
 /// parsed its RON on **every** frame, sixty times a second, to be told what the panel already showed.
 ///
 /// **The view entities are part of the gate** because a door change sweeps them without touching these
@@ -430,7 +430,7 @@ fn read_the_files(
     let mut parsed = Vec::new();
     for krate in listed {
         let from_host = held.as_ref().and_then(|h| h.text.get(&krate).cloned());
-        let Some(settings_text) = from_host.or_else(|| std::fs::read_to_string(settings_dir.join(format!("{krate}.ron"))).ok()) else {
+        let Some(settings_text) = from_host.or_else(|| std::fs::read_to_string(settings_dir.join(format!("{krate}.yaml"))).ok()) else {
             continue;
         };
         if krate == CRATE
@@ -624,7 +624,7 @@ fn an_edit_is_the_operation(
             // delivers it within a tenth of a second; the panel does not make a person wait for that.
             if let Some(settings) = settings.as_mut()
                 && let Some(root) = ctx.project.as_ref().map(|p| p.root.clone())
-                && let Ok(text) = std::fs::read_to_string(bevy_grimoire_core::family::settings_dir(&root).join(format!("{krate}.ron")))
+                && let Ok(text) = std::fs::read_to_string(bevy_grimoire_core::family::settings_dir(&root).join(format!("{krate}.yaml")))
             {
                 settings.text.insert(krate, text);
             }

@@ -15,7 +15,7 @@ use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo, shown_placement}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
-    /// The family crate whose settings file is written, as named in `family.ron`.
+    /// The family crate whose settings file is written, as named in `family.yaml`.
     #[serde(rename = "crate")]
     pub krate: String,
     /// Dot-separated field names inside the settings, `sun.hour`.
@@ -31,7 +31,7 @@ impl Params {
             "additionalProperties": false,
             "required": ["crate", "field", "value"],
             "properties": {
-                "crate": {"type": "string", "description": "The family crate whose settings are written, as listed in family.ron."},
+                "crate": {"type": "string", "description": "The family crate whose settings are written, as listed in family.yaml."},
                 "field": {"type": "string", "description": "Dot-separated field names inside its settings file, e.g. sun.hour."},
                 "value": {"type": "string", "description": "The new value as one RON value, e.g. 6.5 or \"dusk\"."}
             }
@@ -55,9 +55,9 @@ pub(crate) fn settings_path(ctx: &Ctx, krate: &str) -> Result<std::path::PathBuf
     }
     let listed = family::Family::load(&root).map_err(Refusal::new)?;
     if !listed.crates.iter().any(|c| c == krate) {
-        return Err(Refusal::new(format!("{krate} is not listed in family.ron, so its settings were not changed.")));
+        return Err(Refusal::new(format!("{krate} is not listed in family.yaml, so its settings were not changed.")));
     }
-    Ok(root.join("family").join(format!("{krate}.ron")))
+    Ok(root.join("family").join(format!("{krate}.yaml")))
 }
 
 fn read(ctx: &Ctx, krate: &str) -> Option<String> {
@@ -130,7 +130,7 @@ impl Operation for FamilySet {
 pub struct PieceParams {
     /// The placement's id, as the map file names it.
     pub id: String,
-    /// The family crate whose settings this piece carries, as listed in `family.ron`.
+    /// The family crate whose settings this piece carries, as listed in `family.yaml`.
     #[serde(rename = "crate")]
     pub krate: String,
     /// The crate's own settings type for this piece as one RON value, `(base: 900.0, phase: 1.3, depth: 0.15)`.
@@ -147,7 +147,7 @@ impl PieceParams {
             "required": ["id", "crate"],
             "properties": {
                 "id": {"type": "string", "description": "The placement's id, as the map file names it."},
-                "crate": {"type": "string", "description": "The family crate whose settings the piece carries, as listed in family.ron, e.g. bevy_lights."},
+                "crate": {"type": "string", "description": "The family crate whose settings the piece carries, as listed in family.yaml, e.g. bevy_lights."},
                 "value": {"type": "string", "description": "The crate's own settings type as one RON value, e.g. (base: 900.0, phase: 1.3, depth: 0.15) for a bevy_lights Flicker, or (kind: Campfire, lumens: Some(40.0)) for a Fire. Leave it out to take the settings off the piece."}
             }
         })

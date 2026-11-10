@@ -30,7 +30,7 @@
 //!
 //! The files are every file of the open project that [`bevy_grimoire_core::reload::KINDS`] names, found
 //! on disk, plus any file a verdict names that is not there (a refused file that was deleted, a file
-//! `data.ron` registers). Nothing here reads a file's text: it stats it.
+//! `data.yaml` registers). Nothing here reads a file's text: it stats it.
 
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -169,7 +169,7 @@ pub fn files(project_dir: &Path, root: &Path, game: Option<&Verdict>, editor: &[
     walk(project_dir, "", Base::Grimoire, depth_of(Base::Grimoire), &mut listed);
     walk(root, "", Base::Root, depth_of(Base::Root), &mut listed);
     // A file a verdict names is a row even when it is not on disk or no kind's path matches it: a
-    // refused file that was then deleted, a file `data.ron` registers, the `project` entry.
+    // refused file that was then deleted, a file `data.yaml` registers, the `project` entry.
     let named = game.into_iter().flat_map(|v| v.kinds.iter()).chain(editor.iter());
     for k in named {
         if !listed.iter().any(|l| l.file == k.file) {

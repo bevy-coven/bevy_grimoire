@@ -23,7 +23,7 @@ fn make(ctx: &mut Ctx, name: &str) -> String {
 }
 
 fn file(ctx: &Ctx, name: &str) -> std::path::PathBuf {
-    ctx.project.as_ref().unwrap().maps_dir.join(format!("{name}.map.ron"))
+    ctx.project.as_ref().unwrap().maps_dir.join(format!("{name}.map.yaml"))
 }
 
 #[test]

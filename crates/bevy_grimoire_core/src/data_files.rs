@@ -1,9 +1,10 @@
 //! **Game data files the editor may tune: a registry and type-keeping leaf edits.**
 //!
-//! A game keeps tuning numbers in its own RON files (Sanctuary: `assets/data/tuning/<domain>.ron`).
+//! A game keeps tuning numbers in its own YAML files (Sanctuary: `assets/data/tuning/<domain>.yaml`).
 //! They are not part of the grimoire project's schema, so the project lists them in
-//! `<grimoire_dir>/data.ron`, and the editor edits one scalar at a time through [`set_leaf`], which
-//! substitutes only that token's bytes: every comment, alignment and neighbouring literal survives.
+//! `<grimoire_dir>/data.yaml`, and the editor edits one scalar at a time through [`set_leaf`], which is
+//! [`crate::yaml_surgery::set`] — the one YAML surgery, so an edit changes that leaf's bytes and nothing else,
+//! and every comment, alignment and neighbouring literal survives.
 //!
 //! An edit never changes what *kind* of value a leaf is. A number stays a number (an integer token
 //! takes only whole values), a string a string, `None` stays `None`; a value outside the registered
@@ -15,11 +16,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 
-use crate::ron_surgery::{fmt_f32, scan_ron_leaves};
 use crate::reload_check::Refusal;
+use crate::yaml_surgery::Value;
 
 /// File name of the registry inside the grimoire directory.
-pub const REGISTRY_FILE: &str = "data.ron";
+pub const REGISTRY_FILE: &str = "data.yaml";
 /// The registry's schema version.
 pub const REGISTRY_VERSION: u32 = 1;
 
@@ -46,7 +47,7 @@ pub struct DataFile {
     pub bounds: BTreeMap<String, Bounds>,
 }
 
-/// The parsed `data.ron`, with the directory its paths are relative to.
+/// The parsed `data.yaml`, with the directory its paths are relative to.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DataFiles {
     pub version: u32,
@@ -61,10 +62,7 @@ impl DataFiles {
     /// entry's file exists is [`Self::load`]'s question, because it depends on where the registry is.
     /// Messages carry no path; [`Self::load`] prefixes the registry's.
     pub fn parse(text: &str) -> Result<DataFiles, String> {
-        let d: DataFiles = ron::Options::default()
-            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
-            .from_str(text)
-            .map_err(|e| e.to_string())?;
+        let d: DataFiles = crate::yaml::from_str(text, REGISTRY_FILE).map_err(|p| p.line())?;
         if d.version != REGISTRY_VERSION {
             return Err(format!("version {} is not {REGISTRY_VERSION}", d.version));
         }
@@ -73,7 +71,7 @@ impl DataFiles {
                 return Err(format!("id `{}` is registered twice", f.id));
             }
             // **Not a file that names a program.** A game's own data legitimately lives outside this folder
-            // (`../data/mob.ron`), so where a path points is not the question; what it is. `data_set`
+            // (`../data/mob.yaml`), so where a path points is not the question; what it is. `data_set`
             // edits a registered file's values, and `agent.yaml` or `play.yaml` registered here would let
             // it edit a command a person had not read (the review of 2026-11-02).
             if let Some(name) = std::path::Path::new(&f.path).file_name().and_then(|n| n.to_str())
@@ -88,7 +86,7 @@ impl DataFiles {
         Ok(d)
     }
 
-    /// Read `<grimoire_dir>/data.ron`. An absent registry is `Ok(None)`; a malformed one, a version
+    /// Read `<grimoire_dir>/data.yaml`. An absent registry is `Ok(None)`; a malformed one, a version
     /// this build does not know, a repeated id, or an entry whose file does not exist is an error
     /// naming the entry.
     pub fn load(grimoire_dir: &Path) -> Result<Option<DataFiles>, String> {
@@ -128,10 +126,11 @@ impl DataFiles {
 
 /// Every scalar leaf's dotted path and its token text, in source order.
 pub fn leaves(text: &str) -> Result<Vec<(String, String)>, String> {
-    Ok(scan_ron_leaves(text)?
-        .into_iter()
-        .map(|l| (l.path, l.text))
-        .collect())
+    // **A file that does not read has no leaves at all**, rather than a list of the ones a scan could see:
+    // the caller's next question is always "and does the whole file read", and answering a short list here
+    // would let an edit land in a file the reader refuses.
+    crate::yaml::from_str::<serde_json::Value>(text, "a data file").map_err(|p| p.line())?;
+    Ok(crate::yaml::leaves(text))
 }
 
 /// The kind id a refusal of a registered data file carries.
@@ -150,9 +149,9 @@ fn stopped_at(why: &str) -> Option<String> {
 /// refused with RON's position and no field.
 pub fn read(file: &str, text: &str) -> Result<Vec<(String, String)>, Refusal> {
     let refuse = |field, reason: String| Refusal { kind: KIND, file: file.to_owned(), field, reason };
-    let all = leaves(text).map_err(|why| refuse(stopped_at(&why), why))?;
-    ron::from_str::<ron::Value>(text).map_err(|e| refuse(None, e.to_string()))?;
-    Ok(all)
+    // **One reader, so it says where the fault is.** `leaves` refuses a file that does not read and answers
+    // the field path its walk reached, which is what a person goes to.
+    leaves(text).map_err(|why| refuse(stopped_at(&why), why))
 }
 
 /// `[0, 9]`, `[1, inf]`: a range as a refusal says it.
@@ -173,76 +172,26 @@ pub fn check(file: &str, entry: &DataFile, text: &str) -> Result<(), Refusal> {
             let near = nearest(path, &known).iter().map(|p| format!("`{p}`")).collect::<Vec<_>>().join(", ");
             return Err(refuse(format!("the registry bounds `{path}` and this file has no such leaf; nearest: {near}")));
         };
-        let kind = Kind::of(token);
-        let x = match (kind, leaf_json(token).and_then(|v| v.as_f64())) {
-            (Kind::Int | Kind::Float, Some(x)) => x,
-            _ => return Err(refuse(format!("`{path}` holds {} (`{token}`) and the registry bounds it as a number", kind.name()))),
+        // **The leaf is a number or it is refused**, and the refusal says what it holds instead: a bound on
+        // a leaf somebody turned into a string is a registry that no longer describes its game, and reading
+        // it as "not a number, carry on" is how a bound silently stops being checked.
+        let Some(x) = leaf_json(token).and_then(|v| v.as_f64()) else {
+            let held = leaf_json(token).map_or_else(|| "something no file holds".to_owned(), |v| {
+                match v {
+                    serde_json::Value::Bool(_) => "a bool".to_owned(),
+                    serde_json::Value::String(_) => "a string".to_owned(),
+                    other => format!("{other}"),
+                }
+            });
+            return Err(refuse(format!(
+                "`{path}` holds {held} (`{token}`) and the registry bounds it as a number"
+            )));
         };
         if b.min.is_some_and(|m| x < m) || b.max.is_some_and(|m| x > m) {
             return Err(refuse(format!("`{path}` is {token}, outside its bounds {}", range(b))));
         }
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Kind {
-    Int,
-    Float,
-    Str,
-    Bool,
-    None,
-    Variant,
-}
-
-impl Kind {
-    fn of(token: &str) -> Kind {
-        match token {
-            "true" | "false" => Kind::Bool,
-            "None" => Kind::None,
-            _ if token.starts_with('"') => Kind::Str,
-            _ if is_int(token) => Kind::Int,
-            _ if token.parse::<f64>().is_ok() => Kind::Float,
-            _ => Kind::Variant,
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Kind::Int => "an integer",
-            Kind::Float => "a float",
-            Kind::Str => "a string",
-            Kind::Bool => "a bool",
-            Kind::None => "`None`",
-            Kind::Variant => "an enum variant",
-        }
-    }
-}
-
-fn is_int(t: &str) -> bool {
-    let u = t.strip_prefix(['-', '+']).unwrap_or(t);
-    let digits = |s: &str, radix| {
-        !s.is_empty()
-            && s.chars().all(|c| c == '_' || c.is_digit(radix))
-            && s.starts_with(|c: char| c.is_digit(radix))
-    };
-    match u.get(..2) {
-        Some("0x") => digits(&u[2..], 16),
-        Some("0o") => digits(&u[2..], 8),
-        Some("0b") => digits(&u[2..], 2),
-        _ => digits(u, 10),
-    }
-}
-
-fn json_kind(v: &serde_json::Value) -> &'static str {
-    match v {
-        serde_json::Value::Null => "null",
-        serde_json::Value::Bool(_) => "a bool",
-        serde_json::Value::Number(_) => "a number",
-        serde_json::Value::String(_) => "a string",
-        serde_json::Value::Array(_) => "an array",
-        serde_json::Value::Object(_) => "an object",
-    }
 }
 
 /// Up to five known paths sharing the longest prefix with `path`.
@@ -265,122 +214,75 @@ fn nearest(path: &str, known: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// **A JSON value as the surgery's**, for the one caller that holds JSON: an MCP request's arguments. A
+/// value JSON cannot express as a project file is refused rather than turned into something else.
+#[allow(clippy::result_large_err)]
+fn to_value(value: &serde_json::Value) -> Result<Value, String> {
+    match value {
+        serde_json::Value::Null => Err("`null` is a value no data file holds".to_owned()),
+        serde_json::Value::Bool(b) => Ok(Value::Bool(*b)),
+        serde_json::Value::String(s) => Ok(Value::Str(s.clone())),
+        serde_json::Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(i), _, _) => Ok(Value::Int(i)),
+            (_, Some(u), _) => i64::try_from(u)
+                .map(Value::Int)
+                .map_err(|_| format!("{u} is too large for any integer a file holds")),
+            (_, _, Some(x)) if x.is_finite() => Ok(Value::Float(x)),
+            (_, _, Some(x)) => Err(format!("{x} is not a finite number")),
+            _ => Err(format!("{n} is not a number a file holds")),
+        },
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+            Err("a list or a mapping; a leaf takes a single value".to_owned())
+        }
+    }
+}
+
 /// Replace the scalar at `path` with `value`, keeping its kind, and return the new text. Only that
-/// token's bytes change. See the module docs for what is refused.
+/// leaf's bytes change.
+///
+/// **This is [`crate::yaml_surgery::set`]**, the one edit a YAML project file has: it refuses a value of
+/// another kind (a number into a string, a fraction into an integer), a number outside `bounds`, and a result
+/// that no longer reads, and it names the field at the line and column it stands on. There is no second
+/// implementation here — a data file is a project file with a registry entry, and the cutover gave it the
+/// same reader, writer and surgery as every other kind.
+#[allow(clippy::result_large_err)]
 pub fn set_leaf(
     text: &str,
     path: &str,
     value: &serde_json::Value,
     bounds: Option<&Bounds>,
 ) -> Result<String, String> {
-    let all = scan_ron_leaves(text)?;
-    let Some(leaf) = all.iter().find(|l| l.path == path) else {
-        let known: Vec<String> = all.iter().map(|l| l.path.clone()).collect();
-        let near = nearest(path, &known);
+    let value = to_value(value).map_err(|why| format!("`{path}`: {why}"))?;
+    // **A leaf that is not here is named with its neighbours**, which is the answer a person needs: a
+    // mistyped `mob.speeed` is one edit away, and the surgery's own refusal says `not a value` without the
+    // list of what is.
+    let known: Vec<String> = crate::yaml::leaves(text).into_iter().map(|(p, _)| p).collect();
+    if !known.iter().any(|p| p == path) {
         return Err(format!(
             "`{path}` is not a leaf of this file; nearest: {}",
-            near.iter()
-                .map(|p| format!("`{p}`"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            nearest(path, &known).iter().map(|p| format!("`{p}`")).collect::<Vec<_>>().join(", ")
         ));
-    };
-    let kind = Kind::of(&leaf.text);
-    let mismatch = |why: &str| {
-        format!(
-            "`{path}` holds {} (`{}`); {} is {why}",
-            kind.name(),
-            leaf.text,
-            json_kind(value)
-        )
-    };
-
-    let new = match (kind, value) {
-        (Kind::Int | Kind::Float, serde_json::Value::Number(n)) => {
-            let x = n
-                .as_f64()
-                .filter(|x| x.is_finite())
-                .ok_or_else(|| format!("`{path}`: {n} is not a finite number"))?;
-            if let Some(b) = bounds
-                && (b.min.is_some_and(|m| x < m) || b.max.is_some_and(|m| x > m))
-            {
-                return Err(format!("`{path}`: {n} is outside its bounds {}", range(b)));
-            }
-            if kind == Kind::Int {
-                if let Some(i) = n.as_i64() {
-                    i.to_string()
-                } else if let Some(u) = n.as_u64() {
-                    u.to_string()
-                } else if x.fract() == 0.0 && x.abs() < 9.0e15 {
-                    (x as i64).to_string()
-                } else {
-                    return Err(format!(
-                        "`{path}` holds an integer (`{}`); {n} is not a whole number",
-                        leaf.text
-                    ));
-                }
-            } else {
-                let f = x as f32;
-                if !f.is_finite() {
-                    return Err(format!("`{path}`: {n} does not fit an f32"));
-                }
-                fmt_f32(f)
-            }
-        }
-        (Kind::Str, serde_json::Value::String(s)) => {
-            ron::to_string(s).map_err(|e| format!("`{path}`: {e}"))?
-        }
-        (Kind::Bool, serde_json::Value::Bool(b)) => b.to_string(),
-        (Kind::None, _) => return Err(mismatch("a change from `None` to a value; refused")),
-        (Kind::Variant, _) => {
-            return Err(format!(
-                "`{path}` holds an enum variant (`{}`); variants are not editable",
-                leaf.text
-            ));
-        }
-        _ => return Err(mismatch("a different kind of value")),
-    };
-
-    let mut out = String::with_capacity(text.len() + new.len());
-    out.push_str(&text[..leaf.span.start]);
-    out.push_str(&new);
-    out.push_str(&text[leaf.span.end..]);
-    ron::from_str::<ron::Value>(&out)
-        .map_err(|e| format!("`{path}`: the edited file would not parse: {e}"))?;
-    Ok(out)
+    }
+    crate::yaml_surgery::set(text, path, value, bounds).map_err(|p| p.line())
 }
 
-/// The scalar at `path` as JSON, from its token text: what [`set_leaf`] would accept back. `None` for
-/// a token that is not editable (`None`, an enum variant).
+/// The scalar at `path` as JSON, from its token text: what [`set_leaf`] would accept back. `None` for a
+/// token that is not a scalar a person edits — a mapping, a list, or a value JSON cannot hold.
 pub fn leaf_json(token: &str) -> Option<serde_json::Value> {
-    match Kind::of(token) {
-        Kind::Bool => Some(serde_json::Value::Bool(token == "true")),
-        Kind::Str => ron::from_str::<String>(token).ok().map(serde_json::Value::String),
-        Kind::Int => ron::from_str::<i64>(token).ok().map(Into::into),
-        Kind::Float => token
-            .parse::<f64>()
-            .ok()
-            .and_then(serde_json::Number::from_f64)
-            .map(serde_json::Value::Number),
-        Kind::None | Kind::Variant => None,
-    }
+    crate::yaml::to_json(token, "a leaf").ok().and_then(|value| match &value {
+        serde_json::Value::Object(_) | serde_json::Value::Array(_) => None,
+        _ => Some(value),
+    })
 }
 
-/// Put the exact token text `token` back at `path`, byte for byte: the undo of [`set_leaf`], which
-/// may have rewritten `1.50` as `1.5`. Refused unless the leaf exists, and unless `token` is of the kind the leaf holds now
-/// and the result parses.
+/// Put the exact token text `token` back at `path`: the undo of [`set_leaf`], which may have rewritten
+/// `1.50` as `1.5`.
+///
+/// **The token is a YAML scalar**, so it is read back as the value it spells and written by the surgery —
+/// which is what keeps a file reading. A token that does not spell a value of the leaf's kind is refused
+/// before anything changes.
+#[allow(clippy::result_large_err)]
 pub fn restore_leaf(text: &str, path: &str, token: &str) -> Result<String, String> {
-    let all = scan_ron_leaves(text)?;
-    let Some(leaf) = all.iter().find(|l| l.path == path) else {
-        return Err(format!("`{path}` is not a leaf of this file"));
-    };
-    if Kind::of(token) != Kind::of(&leaf.text) {
-        return Err(format!("`{token}` is not a value `{path}` can hold"));
-    }
-    let mut out = String::with_capacity(text.len() + token.len());
-    out.push_str(&text[..leaf.span.start]);
-    out.push_str(token);
-    out.push_str(&text[leaf.span.end..]);
-    ron::from_str::<ron::Value>(&out).map_err(|e| format!("`{path}`: the restored file would not parse: {e}"))?;
-    Ok(out)
+    let json = crate::yaml::to_json(token, "a restored value").map_err(|p| p.line())?;
+    set_leaf(text, path, &json, None)
 }

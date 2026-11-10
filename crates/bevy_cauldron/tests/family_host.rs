@@ -9,7 +9,7 @@ use crate::fixtures;
 fn problems_after_open(family_ron: Option<&str>, tag: &str) -> Vec<String> {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     if let Some(text) = family_ron {
-        std::fs::write(root.join("family.ron"), text).unwrap();
+        std::fs::write(root.join("family.yaml"), text).unwrap();
     }
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.init_resource::<EditorState>().add_systems(Update, report_problems);

@@ -236,7 +236,7 @@ fn removing_a_projects_skin_brings_the_chosen_theme_back() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.yaml");
     let file = root.join("family/bevy_gooey.ron");
     std::fs::write(&file, "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))").expect("a project skin");
     let settings_file = root.join(format!("user_config_skin_gone_{}/settings.ron", std::process::id()));
@@ -286,7 +286,7 @@ fn a_projects_skin_keeps_its_colours_and_takes_the_persons_text_size() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).expect("a family folder");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.ron");
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_gooey\"])").expect("a family.yaml");
     // The project's own accent, so "the project wins" is visible and not a coincidence of defaults.
     std::fs::write(root.join("family/bevy_gooey.ron"), "(accent: Srgba((red: 0.2, green: 0.6, blue: 0.9, alpha: 1.0)))")
         .expect("a project skin");

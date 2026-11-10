@@ -74,7 +74,7 @@ fn launcher_with_text(tag: &str, changelog: &str, seen: Option<&str>) -> (App, P
     let dir = std::env::temp_dir().join(format!("grimoire_news_{tag}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("recent.ron");
+    let file = dir.join("recent.yaml");
     recent::record(&file, &root).unwrap();
     if let Some(id) = seen {
         let mut r = Recent::load(&file).unwrap();
@@ -122,7 +122,7 @@ fn the_page_lists_the_sentences_marks_the_new_ones_and_remembers_the_newest_once
         app.update();
         app.update();
     }
-    let stored = Recent::load(&dir.join("recent.ron")).unwrap();
+    let stored = Recent::load(&dir.join("recent.yaml")).unwrap();
     assert_eq!(stored.changelog_seen.as_deref(), Some("delta"), "opening a project is what marks the news as read");
     assert!(launcher::whats_new(CHANGELOG, stored.changelog_seen.as_deref()).is_empty());
     let _ = std::fs::remove_dir_all(&dir);

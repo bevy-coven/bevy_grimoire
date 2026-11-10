@@ -183,7 +183,7 @@ fn send_from_an_untrusted_project_starts_nothing_and_asks_the_person() {
     let mut r = rig(&format!("send_untrusted_{}", std::process::id()));
     let log = agent(&r.root, "");
     r.draft("tidy the wall");
-    let nothing = r.root.join("nothing-trusted.ron");
+    let nothing = r.root.join("nothing-trusted.yaml");
     bevy_grimoire_core::trust::TrustStore::default().save(&nothing).unwrap();
     r.trust_file = nothing;
 

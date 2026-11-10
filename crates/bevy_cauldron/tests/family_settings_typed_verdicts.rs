@@ -33,14 +33,14 @@ struct Case {
 #[cfg(feature = "bevy_elements")]
 fn elements() -> Case {
     use bevy_cauldron::environment::ElementsSettings;
-    let good = ElementsSettings::defaults().to_ron();
+    let good = ElementsSettings::defaults().to_yaml();
     let clock = ron::to_string(&bevy_elements::WorldClock::default()).unwrap();
     let climate = ron::to_string(&bevy_elements::Climate::default()).unwrap();
     let mut other = ElementsSettings::defaults();
     other.clock.hour = 18.5;
     Case {
         krate: "bevy_elements",
-        other_good: other.to_ron(),
+        other_good: other.to_yaml(),
         bad: vec![
             ("corrupt: a save cut off", good[..good.len() / 2].to_owned(), ""),
             ("wrong type: the clock is a number", format!("(clock: 5, climate: {climate})"), "clock"),

@@ -74,8 +74,8 @@ impl Lifetime {
 /// **Where a kind's path pattern starts.**
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Base {
-    /// The project's directory (`assets/grimoire`, the one holding `kits.ron`). A kit's own files
-    /// (its library, policy, terrain, water, forest, trees and `data.ron`) are under `<kit>/`, the
+    /// The project's directory (`assets/grimoire`, the one holding `kits.yaml`). A kit's own files
+    /// (its library, policy, terrain, water, forest, trees and `data.yaml`) are under `<kit>/`, the
     /// authoring kit's directory.
     Grimoire,
     /// The game's root, the directory holding `assets/`.
@@ -90,8 +90,8 @@ pub struct FileKind {
     pub base: Base,
     /// Path under [`Self::base`]. `<name>` and `<kit>` each stand for one word of letters, digits and
     /// underscores (no `.` and no `/`); `<file>` for one file name of any characters. Empty for a kind
-    /// with no fixed path: the files a game registers in `data.ron`. A kit's own files
-    /// (`<kit>/library.ron`, `<kit>/terrain/...`) live in the authoring kit's directory.
+    /// with no fixed path: the files a game registers in `data.yaml`. A kit's own files
+    /// (`<kit>/library.yaml`, `<kit>/terrain/...`) live in the authoring kit's directory.
     pub pattern: &'static str,
     /// The type it parses to.
     pub parses_to: &'static str,
@@ -127,38 +127,38 @@ use ReloadClass::{Live, Respawn, Restart};
 /// **Every kind of file the editor writes, and the hand-authored files it reads.** One row each.
 pub const KINDS: &[FileKind] = &[
     // ---- the project's own files ----
-    kind("kits", Grimoire, "kits.ron", "Kits", Respawn, Global,
+    kind("kits", Grimoire, "kits.yaml", "Kits", Respawn, Global,
         "the project chooser (create, bind, unbind)",
         "The editor reopens the whole project; the game's `GrimoireLivePlugin` reloads it whole."),
-    kind("vocab", Grimoire, "vocab.ron", "Vocabularies", Respawn, Global,
+    kind("vocab", Grimoire, "vocab.yaml", "Vocabularies", Respawn, Global,
         "the project chooser (create), the vocabulary editor",
         "The editor re-resolves its libraries in place; the game reloads the project whole."),
-    kind("library", Grimoire, "<kit>/library.ron", "Library", Respawn, Global,
+    kind("library", Grimoire, "<kit>/library.yaml", "Library", Respawn, Global,
         "the project chooser (create a kit)",
         "One per kit. The editor rereads the kit; the game rebuilds the maps that place a changed piece."),
-    kind("policy", Grimoire, "<kit>/project.ron", "Policy", Respawn, Global,
+    kind("policy", Grimoire, "<kit>/project.yaml", "Policy", Respawn, Global,
         "the project chooser (create a kit, remove a policy), `policy::remove_patch`",
         "One per kit: its exclusions, patches and mounts. Reloads with the kit's library."),
-    kind("rules", Grimoire, "rules.ron", "Rules", Respawn, Global, "",
+    kind("rules", Grimoire, "rules.yaml", "Rules", Respawn, Global, "",
         "The editor reopens the project; the game revalidates it against the library."),
-    kind("compositions", Grimoire, "compositions.ron", "Compositions", Respawn, Global, "",
+    kind("compositions", Grimoire, "compositions.yaml", "Compositions", Respawn, Global, "",
         "A stamp expands to rows, so the maps that stamp a changed composition are rebuilt."),
-    kind("standards", Grimoire, "standards.ron", "Standards", Live, Global,
+    kind("standards", Grimoire, "standards.yaml", "Standards", Live, Global,
         "by hand",
         "Read fresh each time a kit is checked; the editor revalidates it when it changes."),
-    kind("repetition", Grimoire, "repetition.ron", "RepetitionRules", Live, Global,
+    kind("repetition", Grimoire, "repetition.yaml", "RepetitionRules", Live, Global,
         "by hand",
         "Read fresh on each `repetition_vary` run; the editor revalidates it when it changes."),
-    kind("checks", Grimoire, "checks.ron", "Checks", Live, Global,
+    kind("checks", Grimoire, "checks.yaml", "Checks", Live, Global,
         "by hand",
         "`Checks::for_project` reads it fresh on every run, so an edit takes effect at once."),
     kind("schema", Root, "<file>/schema/<name>.schema.json", "a generated JSON Schema", Live, Global,
         "the editor, when it opens a project; a running game, when it starts",
         "**Derived, never authored.** The editor writes one per file kind from the type (`schema.rs`, GD-04) into the project's `.dark_factory/schema/` folder, and `game.schema.json` there comes from the running game's `registry.schema` each time it starts. **Which files are the editor's is recorded** in `generated.schema.json` beside them, so a hand edit to a generated file is overwritten on the next write while a schema a person put at that path is refused by name and kept — reading ownership out of the file itself would turn one hand edit into a permanently protected file. Nothing holds them: an outside editor's YAML extension reads them from disk."),
-    kind("data_registry", Grimoire, "<kit>/data.ron", "DataFiles", Live, Global,
+    kind("data_registry", Grimoire, "<kit>/data.yaml", "DataFiles", Live, Global,
         "by hand",
         "The registry of a game's own tuning files, read at each `data_set`; nothing holds it."),
-    kind("rigs", Grimoire, "rigs.ron", "Rigs", Live, Global,
+    kind("rigs", Grimoire, "rigs.yaml", "Rigs", Live, Global,
         "the animation tab",
         "Read when the animation tab loads, and again at once when the file changes: the tab takes a good edit (`applied`), measures its rigs again and keeps the rig the author was on selected by name; a file that does not read is `refused` with the file and the field and the tab keeps what it holds; a file that is gone is `needs_restart`, because the tab has no manifest to take in its place."),
     kind("oplog", Grimoire, "oplog.jsonl", "JSON lines", Live, Global,
@@ -168,55 +168,55 @@ pub const KINDS: &[FileKind] = &[
         "the editor, when a person drops an image on a map",
         "Copied into the project, where `reference_set` lists it and `grimoire_state.references` says whether it is there; nothing holds it. The editor looks at each picture the open map lists when its size or modification time moves and says in `grimoire_state.reloads` whether it is still the picture its name says: `refused` with the file and the header field (`signature`, `format`, `header`, `width` or `height`) when it is not, `applied` once it is again."),
     // ---- a map's own files ----
-    kind("map", Grimoire, "maps/<name>.map.ron", "Map", Respawn, PerMap,
+    kind("map", Grimoire, "maps/<name>.map.yaml", "Map", Respawn, PerMap,
         "the project chooser (create, settings, rename)",
         "The editor adopts it into the open map, or keeps what it had when it does not parse; the game respawns the placements that changed."),
-    kind("notes", Grimoire, "maps/<name>.notes.ron", "Notes", Live, PerMap, "",
+    kind("notes", Grimoire, "maps/<name>.notes.yaml", "Notes", Live, PerMap, "",
         "The editor rereads it when its modification time moves; the game has no reader."),
-    kind("plan", Grimoire, "maps/<name>.plan.ron", "Plan", Live, PerMap, "",
+    kind("plan", Grimoire, "maps/<name>.plan.yaml", "Plan", Live, PerMap, "",
         "Read on demand by `plan_set` and the plan view."),
-    kind("references", Grimoire, "maps/<name>.references.ron", "References", Live, PerMap, "",
+    kind("references", Grimoire, "maps/<name>.references.yaml", "References", Live, PerMap, "",
         "Read on demand by `reference_set` and the notes."),
-    kind("relations", Grimoire, "maps/<name>.relations.ron", "Relations", Live, PerMap,
+    kind("relations", Grimoire, "maps/<name>.relations.yaml", "Relations", Live, PerMap,
         "by hand",
         "Read on demand by `relations_solve`."),
-    kind("terrain", Grimoire, "<kit>/terrain/<name>.ron", "Heightfield", Respawn, PerMap,
+    kind("terrain", Grimoire, "<kit>/terrain/<name>.yaml", "Heightfield", Respawn, PerMap,
         "`terrain_preset` (only in a build with the elements feature)",
         "The editor redraws the ground when the file's modification time moves. A file that does not parse is refused with its field named, and what is drawn stays; with nothing drawn yet, no ground is drawn."),
-    kind("water_plan", Grimoire, "<kit>/water/<name>.ron", "WaterPlan", Live, PerMap, "",
+    kind("water_plan", Grimoire, "<kit>/water/<name>.yaml", "WaterPlan", Live, PerMap, "",
         "The plan `water_run` reads; nothing draws it directly."),
-    kind("water_field", Grimoire, "<kit>/water/<name>.field.ron", "WaterField", Respawn, PerMap, "",
+    kind("water_field", Grimoire, "<kit>/water/<name>.field.yaml", "WaterField", Respawn, PerMap, "",
         "The editor redraws the water surface when the file's modification time moves. A refused file keeps the water drawn before it."),
-    kind("volume", Grimoire, "<kit>/volume/<name>.ron", "Volume", Respawn, PerMap, "",
+    kind("volume", Grimoire, "<kit>/volume/<name>.yaml", "Volume", Respawn, PerMap, "",
         "The editor rebuilds the carved ground when the file's modification time moves. A refused file keeps the ground drawn before it."),
-    kind("forest", Grimoire, "<kit>/forest/<name>.ron", "Forest", Respawn, PerMap, "",
+    kind("forest", Grimoire, "<kit>/forest/<name>.yaml", "Forest", Respawn, PerMap, "",
         "The editor respawns the trees when the file's modification time moves."),
-    kind("people", Grimoire, "<kit>/people/<name>.ron", "People", Live, PerMap, "",
+    kind("people", Grimoire, "<kit>/people/<name>.yaml", "People", Live, PerMap, "",
         "Read at each `people_run`; nothing holds it."),
-    kind("scripts", Grimoire, "<kit>/scripts/<name>.ron", "Scripts", Live, PerMap, "",
+    kind("scripts", Grimoire, "<kit>/scripts/<name>.yaml", "Scripts", Live, PerMap, "",
         "The map's triggers, read when they are run; nothing holds it."),
     // ---- shared by maps ----
-    kind("trees", Grimoire, "<kit>/trees/<name>.tree.ron", "TreeParams", Respawn, Global, "",
+    kind("trees", Grimoire, "<kit>/trees/<name>.tree.yaml", "TreeParams", Respawn, Global, "",
         "A species a forest uses: the editor regrows every tree of it when the file's modification time moves, and a file that does not read leaves them as the last good one drew them."),
     // ---- the game root's files ----
-    kind("family", Root, "family/<name>.ron", "a family crate's settings", Live, Global, "",
+    kind("family", Root, "family/<name>.yaml", "a family crate's settings", Live, Global, "",
         "One file per family crate: the editor applies it in place, polled every 0.1 s. The game-side `GrimoireLivePlugin` does not watch `<root>/family/`."),
-    kind("family_list", Root, "family.ron", "Family", Live, Global, "by hand",
+    kind("family_list", Root, "family.yaml", "Family", Live, Global, "by hand",
         "Which family crates the project uses, read when the editor needs the list; nothing holds it."),
-    kind("editor_settings", Grimoire, "editor.ron", "EditorSettings", Live, Global, "by hand",
+    kind("editor_settings", Grimoire, "editor.yaml", "EditorSettings", Live, Global, "by hand",
         "The project layer of the editor's settings, laid over the user's `<config_dir>/Grimoire/settings.ron` key by key. The editor looks at it while it runs and applies it in place; a file that does not read keeps the last good one and is refused in `grimoire_state.reloads`. The game has no reader."),
     kind("agent", Root, "agent.yaml", "AgentSettings", Live, Global, "by hand",
         "The note agent's model and prompt, read each time a note is sent; nothing holds it."),
     kind("play", Root, "play.yaml", "PlayConfig", Live, Global, "by hand",
         "How the editor launches the game, read each time `play` runs; nothing holds it."),
-    kind("destructible_marks", Root, "destructible.ron", "Marks", Live, Global,
+    kind("destructible_marks", Root, "destructible.yaml", "Marks", Live, Global,
         "`destructible_set` (only in a build with the carnage feature)",
         "Read at each `destructible_set` and `destructible_hit`; nothing holds it. A file that does not read refuses both, naming the file and the field, and is left as it is."),
-    kind("destructible_bake", Root, "destructible/<name>.bake.ron", "a baked fracture", Live, Global,
+    kind("destructible_bake", Root, "destructible/<name>.bake.yaml", "a baked fracture", Live, Global,
         "`destructible_set` and `destructible_hit` (only in a build with the carnage feature)",
         "A cache the next hit rebuilds when it is absent or stale (another mesh or other cut settings). A file that does not read at all is refused, naming the file and the field, and is left as it is: remove it to bake afresh."),
     kind("game_data", Root, "", "the game's own RON", Live, Global, "",
-        "Written by `data_set` into files the game owns, and followed by a running game that registers a reader for one (`GrimoireLiveApp::reload_data_file`, in the runtime crate): about a second after the file's last write it is checked against its `data.ron` entry and handed to the game's own parse, and the game's verdict (`.live/game.ron`) says `applied`, or `refused` with the file and the leaf and the old value kept. The editor looks at each file `data.ron` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `applied` when it does."),
+        "Written by `data_set` into files the game owns, and followed by a running game that registers a reader for one (`GrimoireLiveApp::reload_data_file`, in the runtime crate): about a second after the file's last write it is checked against its `data.yaml` entry and handed to the game's own parse, and the game's verdict (`.live/game.ron`) says `applied`, or `refused` with the file and the leaf and the old value kept. The editor looks at each file `data.yaml` lists when its size or modification time moves and says in `grimoire_state.reloads` whether it still reads: `refused` with the file and the leaf when it does not (a bounded leaf missing, not a number or outside its bounds, or a file cut off), `applied` when it does."),
 ];
 
 /// **The kind with this id.**
@@ -320,7 +320,7 @@ pub fn table(writers: &dyn Fn(&str) -> Vec<String>) -> String {
             Base::Root => "<root>",
         };
         let path = if k.pattern.is_empty() {
-            "(any file registered in `data.ron`)".to_owned()
+            "(any file registered in `data.yaml`)".to_owned()
         } else {
             format!("`{base}/{}`", k.pattern)
         };
@@ -373,7 +373,7 @@ pub const REBUILD: &[Rebuild] = &[
     Rebuild {
         id: "family_crates",
         what: "Which family crates a build of the editor can host: one cargo feature each.",
-        reason: "A family crate is compiled in, as an optional dependency pinned by git revision. `family.ron` says which a project uses and reloads live, but a build without the crate cannot run it: the editor names the entry as a problem until it is built with the feature.",
+        reason: "A family crate is compiled in, as an optional dependency pinned by git revision. `family.yaml` says which a project uses and reloads live, but a build without the crate cannot run it: the editor names the entry as a problem until it is built with the feature.",
     },
     Rebuild {
         id: "operations",
@@ -393,7 +393,7 @@ pub const REBUILD: &[Rebuild] = &[
     Rebuild {
         id: "algorithms",
         what: "The solvers: the constraint solver, wave function collapse, the relation solver and the sight and reach checks.",
-        reason: "An algorithm is code. Its tuning (a radius, a weight, a seed) is data where a file already carries it, such as `repetition.ron` and `standards.ron`; the search itself is not.",
+        reason: "An algorithm is code. Its tuning (a radius, a weight, a seed) is data where a file already carries it, such as `repetition.yaml` and `standards.yaml`; the search itself is not.",
     },
     Rebuild {
         id: "editor_surface",
@@ -425,24 +425,24 @@ mod tests {
 
     #[test]
     fn a_segment_pattern_matches_one_word() {
-        assert!(segment_matches("<name>.map.ron", "town.map.ron"));
-        assert!(!segment_matches("<name>.ron", "town.field.ron"));
-        assert!(!segment_matches("<name>.map.ron", ".map.ron"));
-        assert!(segment_matches("kits.ron", "kits.ron"));
-        assert!(!segment_matches("kits.ron", "kits.ron.tmp"));
+        assert!(segment_matches("<name>.map.yaml", "town.map.yaml"));
+        assert!(!segment_matches("<name>.yaml", "town.field.yaml"));
+        assert!(!segment_matches("<name>.map.yaml", ".map.yaml"));
+        assert!(segment_matches("kits.yaml", "kits.yaml"));
+        assert!(!segment_matches("kits.yaml", "kits.yaml.tmp"));
     }
 
     #[test]
     fn a_changed_path_is_classified_by_its_pattern() {
-        let map = kind_of(Base::Grimoire, "maps/town.map.ron").expect("a map is a kind");
+        let map = kind_of(Base::Grimoire, "maps/town.map.yaml").expect("a map is a kind");
         assert_eq!((map.id, map.class, map.lifetime), ("map", Respawn, PerMap));
-        assert_eq!(kind_of(Base::Grimoire, "site/water/lake.field.ron").map(|k| k.id), Some("water_field"));
-        assert_eq!(kind_of(Base::Grimoire, "site/water/lake.ron").map(|k| k.id), Some("water_plan"));
-        assert_eq!(kind_of(Base::Grimoire, "site/library.ron").map(|k| k.id), Some("library"));
+        assert_eq!(kind_of(Base::Grimoire, "site/water/lake.field.yaml").map(|k| k.id), Some("water_field"));
+        assert_eq!(kind_of(Base::Grimoire, "site/water/lake.yaml").map(|k| k.id), Some("water_plan"));
+        assert_eq!(kind_of(Base::Grimoire, "site/library.yaml").map(|k| k.id), Some("library"));
         assert_eq!(kind_of(Base::Root, "references/Sketch v2.JPG").map(|k| k.id), Some("reference_images"));
-        assert_eq!(kind_of(Base::Root, "family/weather.ron").map(|k| k.id), Some("family"));
-        assert_eq!(kind_of(Base::Grimoire, "maps/town.map.ron.tmp"), None);
-        assert_eq!(kind_of(Base::Grimoire, ".live/game.ron"), None);
+        assert_eq!(kind_of(Base::Root, "family/weather.yaml").map(|k| k.id), Some("family"));
+        assert_eq!(kind_of(Base::Grimoire, "maps/town.map.yaml.tmp"), None);
+        assert_eq!(kind_of(Base::Grimoire, ".live/game.yaml"), None);
     }
 
     #[test]
@@ -456,7 +456,7 @@ mod tests {
         assert_eq!(by("rigs"), Reload::InPlace);
         assert_eq!(by("game_data"), Reload::InPlace);
         // No kind is `Restart` any more (#263), so the mapping is pinned on a row of its own.
-        let held = kind("held", Grimoire, "held.ron", "Held", Restart, Global, "", "");
+        let held = kind("held", Grimoire, "held.yaml", "Held", Restart, Global, "", "");
         assert_eq!(reload_for(&held, true), Reload::NeedsRestart);
         assert_eq!(reload_for(&held, false), Reload::NotLoaded);
     }

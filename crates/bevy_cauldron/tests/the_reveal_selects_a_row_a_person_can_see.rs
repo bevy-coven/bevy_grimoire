@@ -50,7 +50,7 @@ fn project(tag: &str) -> std::path::PathBuf {
         .side(64.0)
         .build("m");
     let grimoire = root.join("assets/grimoire");
-    std::fs::copy(workspace_asset("grimoire/rigs.ron"), grimoire.join("rigs.ron")).expect("rigs.ron");
+    std::fs::copy(workspace_asset("grimoire/rigs.yaml"), grimoire.join("rigs.yaml")).expect("rigs.yaml");
     std::fs::create_dir_all(root.join("assets/characters")).expect("characters dir");
     std::fs::copy(workspace_asset("characters/valkyrie.glb"), root.join("assets/characters/valkyrie.glb"))
         .expect("valkyrie.glb");
@@ -63,7 +63,7 @@ fn project(tag: &str) -> std::path::PathBuf {
         "(version: 1, files: [(id: \"tuning/mob\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])",
     )
     .expect("data.ron");
-    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.ron"));
+    let notes = bevy_grimoire_core::notes::path_for_map(&grimoire.join("maps/m.map.yaml"));
     let file = bevy_grimoire_core::notes::Notes {
         version: bevy_grimoire_core::notes::NOTES_VERSION,
         notes: vec![bevy_grimoire_core::notes::Note {

@@ -36,7 +36,7 @@ fn a_4x3_area_note_is_a_draft_that_records_its_place_and_survives_a_restart() {
 
     let dir = std::env::temp_dir().join(format!("grimoire_note_areas_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let path = path_for_map(&dir.join("t.map.ron"));
+    let path = path_for_map(&dir.join("t.map.yaml"));
     notes.save(&path).unwrap();
     assert_eq!(Notes::load(&path).unwrap(), notes);
     let _ = std::fs::remove_dir_all(&dir);

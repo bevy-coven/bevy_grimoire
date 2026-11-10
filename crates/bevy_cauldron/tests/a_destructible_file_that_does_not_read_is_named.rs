@@ -45,11 +45,11 @@ fn hit(ctx: &mut Ctx) -> Result<(), String> {
 }
 
 fn marks(root: &Path) -> PathBuf {
-    root.join("destructible.ron")
+    root.join("destructible.yaml")
 }
 
 fn bake(root: &Path) -> PathBuf {
-    root.join("destructible/site__cart.bake.ron")
+    root.join("destructible/site__cart.bake.yaml")
 }
 
 /// The three bad marks files: `(what is wrong, the text, the field the refusal must name)`.
@@ -83,10 +83,10 @@ fn a_marks_file_that_does_not_read_refuses_both_calls_and_stays_as_it_was() {
         let before = text.as_bytes();
         for on in [true, false] {
             let refusal = set(&mut ctx, on).expect_err(what);
-            names(&refusal, "destructible.ron", field, what);
+            names(&refusal, "destructible.yaml", field, what);
         }
         let refusal = hit(&mut ctx).expect_err(what);
-        names(&refusal, "destructible.ron", field, what);
+        names(&refusal, "destructible.yaml", field, what);
         assert_eq!(std::fs::read(marks(&root)).unwrap(), before, "{what}: the bytes stand");
         assert!(!bake(&root).exists(), "{what}: nothing was baked over a marks file that does not read");
     }
@@ -113,9 +113,9 @@ fn a_bake_that_does_not_read_refuses_both_calls_and_stays_as_it_was() {
         let marked = std::fs::read(marks(&root)).unwrap();
         // Taking the mark off reads no bake, so only marking (which bakes) and a hit refuse.
         let refusal = set(&mut ctx, true).expect_err(what);
-        names(&refusal, "destructible/site__cart.bake.ron", field, what);
+        names(&refusal, "destructible/site__cart.bake.yaml", field, what);
         let refusal = hit(&mut ctx).expect_err(what);
-        names(&refusal, "destructible/site__cart.bake.ron", field, what);
+        names(&refusal, "destructible/site__cart.bake.yaml", field, what);
         assert_eq!(std::fs::read(bake(&root)).unwrap(), text.as_bytes(), "{what}: the bake was not baked over");
         assert_eq!(std::fs::read(marks(&root)).unwrap(), marked, "{what}: the marks were not written either");
         // Taking the mark off reads no bake: it applies, and the damaged file is still not touched.

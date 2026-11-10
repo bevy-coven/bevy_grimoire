@@ -64,7 +64,7 @@ fn on_the_launcher(tag: &str, scratch: &Scratch, names: &[&str]) -> (App, Vec<Pa
     let root = fixtures::Fixture::new(&format!("conventions_{tag}_{}", std::process::id())).descriptor("site/wall", "alpha").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(FRAME_MS)));
-    let file = scratch.0.join("recent.ron");
+    let file = scratch.0.join("recent.yaml");
     let paths: Vec<PathBuf> = names.iter().map(|name| project(&scratch.0, name)).collect();
     for path in &paths {
         recent::record(&file, path).unwrap_or_else(|e| panic!("{e}"));

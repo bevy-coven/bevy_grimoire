@@ -18,7 +18,7 @@
 //!
 //! - **The map's other contents are four groups of their own** below the pieces': its stamps
 //!   (`compositions`), its people (`people/<map>.ron`), its triggers (`scripts/<map>.ron`) and its notes
-//!   (`.notes.ron`). A row in one of them names the thing and nothing else: it is not a placement, so
+//!   (`.notes.yaml`). A row in one of them names the thing and nothing else: it is not a placement, so
 //!   clicking it selects nothing and its menu offers no Pin and no Hide.
 //!
 //! # A row's menu

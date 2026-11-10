@@ -134,7 +134,7 @@ fn the_file_reads_and_writes_both_sides_and_refuses_a_negative_distance() {
         let text = format!(r#"(version: 1, relations: [(of: "lamp", kind: {name}(of: "door", within: 3.0))])"#);
         let parsed = Relations::parse(&text).unwrap();
         assert_eq!(parsed, relations);
-        assert_eq!(Relations::parse(&parsed.to_ron().unwrap()).unwrap(), parsed);
+        assert_eq!(Relations::parse(&parsed.to_yaml().unwrap()).unwrap(), parsed);
         let bad = text.replace("3.0", "-1.0");
         assert!(Relations::parse(&bad).is_err(), "{name}");
     }

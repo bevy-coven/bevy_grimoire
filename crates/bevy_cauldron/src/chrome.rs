@@ -1430,7 +1430,7 @@ pub fn title(parent: &mut ChildSpawnerCommands, text: &str) {
 ///
 /// Every tab used to hold one `status: String` written from ~215 places, and decided at *render* time
 /// whether it was bad news. The Map tab sniffed `status.starts_with("NOT SAVED")`; the Anim tab
-/// coloured by whether `rigs.ron` had loaded, which is a fact about a file rather than about the
+/// coloured by whether `rigs.yaml` had loaded, which is a fact about a file rather than about the
 /// sentence; the Compose tab painted everything [`ACCENT`]; the Tiles tab had no colour rule at all,
 /// so a refusal was byte-identical to a receipt. `stamp refused:`, `is not a number of metres` and
 /// `NOT WRITTEN:` all rendered in the same grey as `stamped 4 piece(s)`.
@@ -1630,7 +1630,7 @@ impl Status {
     /// `ImportState`. The author read a message announcing a rotation, on a tab they had just
     /// arrived at, beside a piece that was lying on its side, and concluded the tab switch had
     /// turned it. Measured over BRP: the rotation quaternion is identical on both tabs and
-    /// `library.ron` is not written. **The stale receipt was the whole of the bug.**
+    /// `library.yaml` is not written. **The stale receipt was the whole of the bug.**
     pub fn clear_note(&mut self) {
         self.note.clear();
     }

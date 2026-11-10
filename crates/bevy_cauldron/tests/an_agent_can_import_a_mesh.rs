@@ -131,7 +131,7 @@ fn an_agent_imports_a_glb_and_it_is_in_the_library() {
     );
 
     // **On disk.** The library file is what the next launch reads.
-    let lib = project.root.join("assets/grimoire").join(&project.namespace).join("library.ron");
+    let lib = project.root.join("assets/grimoire").join(&project.namespace).join("library.yaml");
     let text = std::fs::read_to_string(&lib).unwrap_or_else(|e| panic!("{}: {e}", lib.display()));
     assert!(
         text.contains("inbox_box"),

@@ -1,4 +1,4 @@
-//! **A spike, not a migration (#204, hot-reload H7): `standards.ron` through Bevy's asset system, beside
+//! **A spike, not a migration (#204, hot-reload H7): `standards.yaml` through Bevy's asset system, beside
 //! [`bevy_grimoire_core::live::FileWatch`].**
 //!
 //! The question is whether the editor's own watcher (a stat of the project's files, one reload after
@@ -20,7 +20,7 @@ use bevy::asset::{AssetLoadFailedEvent, AssetLoader, AssetPlugin, LoadContext};
 use bevy::prelude::*;
 use bevy_grimoire_core::standards::Standards;
 
-/// `standards.ron` as an asset: the parsed rules, held by Bevy's `Assets` storage.
+/// `standards.yaml` as an asset: the parsed rules, held by Bevy's `Assets` storage.
 #[derive(Asset, TypePath, Debug, PartialEq)]
 pub struct StandardsAsset(pub Standards);
 

@@ -12,7 +12,7 @@
 //! - [`BenchReports`] holds the results keyed by rig NAME, and [`BenchGeneration`] bumps only when
 //!   a stored report actually changed — the `ThumbGeneration` idiom, because `resource_changed` on
 //!   a resource a system takes as `ResMut` fires every frame.
-//! - [`sync_rigs_reload`] takes an edit to `rigs.ron` itself the moment it is made: a valid edit is
+//! - [`sync_rigs_reload`] takes an edit to `rigs.yaml` itself the moment it is made: a valid edit is
 //!   `applied` and measured again, a broken one is `refused`, in `grimoire_state.reloads`.
 //!
 //! The stale count is painted onto the tab strip's `ANIM` label in place, so it survives tab
@@ -376,7 +376,7 @@ pub(crate) fn paint_stale_badge(
 /// How long a rigs file whose size and modification time did not move goes unread.
 const RIGS_RECHECK_SECS: f32 = 1.0;
 
-/// What [`sync_rigs_reload`] last saw of `rigs.ron`, and what it last decided.
+/// What [`sync_rigs_reload`] last saw of `rigs.yaml`, and what it last decided.
 #[derive(Default)]
 pub(crate) struct RigsSeen {
     stat: Option<(SystemTime, u64)>,
@@ -398,7 +398,7 @@ pub(crate) struct Measuring<'w> {
     queue: ResMut<'w, MeasureQueue>,
 }
 
-/// **Take an edit of `rigs.ron` the moment it is made, and say what became of it** (#200, H3; #202 made the
+/// **Take an edit of `rigs.yaml` the moment it is made, and say what became of it** (#200, H3; #202 made the
 /// kind `Live`).
 ///
 /// The tab reads the manifest when it loads (the first entry to the tab, and again after a door change
@@ -424,7 +424,7 @@ pub(crate) fn sync_rigs_reload(
     use bevy_grimoire_core::reload_check::{self, Check};
     use bevy_grimoire_core::rigs::Rigs;
 
-    const FILE: &str = "rigs.ron";
+    const FILE: &str = "rigs.yaml";
     let Some(project) = project else { return };
     // Nothing to compare with until the tab has read the manifest, and a door change drops what it
     // held (`BenchState` is the door's): a verdict about those rigs is not true of the next load, which

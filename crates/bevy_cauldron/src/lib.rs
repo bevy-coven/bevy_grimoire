@@ -1,7 +1,7 @@
 //! **bevy_cauldron** — a standalone world-building editor.
 //!
-//! It opens a *project directory*, not a game: `grimoire/vocab.ron` says what tokens exist,
-//! `grimoire/library.ron` says what can be placed, meshes resolve under the same root, and the map it
+//! It opens a *project directory*, not a game: `grimoire/vocab.yaml` says what tokens exist,
+//! `grimoire/library.yaml` says what can be placed, meshes resolve under the same root, and the map it
 //! writes is `bevy_grimoire_core::map::Map` — which any engine can read, because the schema crate has no
 //! engine in it. `crates/bevy_grimoire_core/tests/engine_free.rs` fails the build if that stops being true.
 //!
@@ -10,7 +10,7 @@
 //! ```
 //!
 //! The second argument is a **name**, not a filename: `bevy_cauldron . site_67` opens (or starts)
-//! `assets/grimoire/site_67.map.ron`. Names are snake_case and are *forced* into it rather than
+//! `assets/grimoire/site_67.map.yaml`. Names are snake_case and are *forced* into it rather than
 //! checked, so there is no path through this program on which a map is called something the
 //! filesystem and the schema disagree about. Both arguments default, so a bare
 //! `cargo run -p bevy_cauldron` from the workspace root opens the shipped library.

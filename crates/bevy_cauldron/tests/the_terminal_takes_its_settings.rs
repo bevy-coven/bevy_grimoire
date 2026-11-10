@@ -28,7 +28,7 @@ struct PosixShell(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
 /// The editor on a project whose `editor.ron` says `settings`.
 fn editor_with_settings(tag: &str, settings: &str) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("floor", "alpha").build("m");
-    let file = root.join("assets/grimoire/editor.ron");
+    let file = root.join("assets/grimoire/editor.yaml");
     std::fs::write(&file, settings).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let guard = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     unsafe { std::env::set_var("SHELL", "/bin/sh") };

@@ -72,7 +72,7 @@ fn warm_reports(root: &std::path::Path) -> BTreeMap<String, RigReport> {
     if file.version != CACHE_VERSION || file.tool != bevy_grimoire_core::rigs::BENCH_TOOL_VERSION {
         return out;
     }
-    let Ok(manifest_text) = std::fs::read_to_string(root.join("assets/grimoire/rigs.ron")) else {
+    let Ok(manifest_text) = std::fs::read_to_string(root.join("assets/grimoire/rigs.yaml")) else {
         return out;
     };
     let Ok(rigs) = bevy_grimoire_core::rigs::Rigs::parse(&manifest_text) else {
@@ -193,8 +193,8 @@ mod tests {
         std::fs::create_dir_all(dir.join("assets/grimoire")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::create_dir_all(dir.join("assets/characters")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::copy(
-            ws.join("assets/grimoire/rigs.ron"),
-            dir.join("assets/grimoire/rigs.ron"),
+            ws.join("assets/grimoire/rigs.yaml"),
+            dir.join("assets/grimoire/rigs.yaml"),
         )
         .unwrap_or_else(|e| panic!("{e}"));
         std::fs::copy(
@@ -208,7 +208,7 @@ mod tests {
     fn valkyrie_report_and_rig(
         root: &std::path::Path,
     ) -> (RigReport, bevy_grimoire_core::rigs::Rig) {
-        let text = std::fs::read_to_string(root.join("assets/grimoire/rigs.ron"))
+        let text = std::fs::read_to_string(root.join("assets/grimoire/rigs.yaml"))
             .unwrap_or_else(|e| panic!("{e}"));
         let rigs = bevy_grimoire_core::rigs::Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         let rig = rigs

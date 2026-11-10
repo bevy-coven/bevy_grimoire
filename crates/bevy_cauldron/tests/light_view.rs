@@ -18,7 +18,7 @@ fn editor(name: &str) -> App {
         .place("site/torch", (0.0, 0.0))
         .place("site/torch", (6.0, 0.0))
         .build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(40)));
     for _ in 0..4 {

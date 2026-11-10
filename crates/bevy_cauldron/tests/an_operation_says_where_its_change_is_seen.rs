@@ -357,7 +357,7 @@ fn a_change_names_a_box_that_holds_the_placement() {
     // **There is no `placement_move` in the registry** — the moves are the biggest verb #129 still
     // owes and they wait on the owner — so the move this proves is the one operation that walks a
     // placement across the floor for it: the relations solver.
-    let relations = root.join("assets/grimoire/maps/m.relations.ron");
+    let relations = root.join("assets/grimoire/maps/m.relations.yaml");
     std::fs::write(&relations, "(version: 1, relations: [(of: \"chair\", kind: Near(to: \"table\", within: 1.0))])")
         .unwrap_or_else(|e| panic!("{relations:?}: {e}"));
     // Reopened, so the solver reads the relations file this test just wrote.

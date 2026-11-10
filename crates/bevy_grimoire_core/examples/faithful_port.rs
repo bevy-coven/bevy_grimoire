@@ -55,11 +55,11 @@ const WALKABLE: f32 = 0.5;
 
 fn main() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/site");
-    let library: Library = match read(&root.join("library.ron")) {
+    let library: Library = match read(&root.join("library.yaml")) {
         Ok(l) => l,
         Err(e) => return eprintln!("cannot read the site library: {e}"),
     };
-    let comps: Compositions = match read(&root.join("compositions.ron")) {
+    let comps: Compositions = match read(&root.join("compositions.yaml")) {
         Ok(c) => c,
         Err(e) => return eprintln!("cannot read the site compositions: {e}"),
     };

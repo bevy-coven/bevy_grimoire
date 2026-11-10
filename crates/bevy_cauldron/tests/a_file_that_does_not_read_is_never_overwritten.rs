@@ -87,7 +87,7 @@ fn cases() -> Vec<Case> {
     cases.push(Case {
         kind: "trees",
         dir: "trees",
-        file: "m.tree.ron",
+        file: "m.tree.yaml",
         op: "tree_edit",
         call: json!({"name": "m", "set": {"seed": 9}}),
         good: "(seed: 5)",

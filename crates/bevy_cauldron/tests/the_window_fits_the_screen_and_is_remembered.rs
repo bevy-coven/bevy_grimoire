@@ -18,7 +18,7 @@ fn scratch(tag: &str) -> PathBuf {
 
 /// An app with one 1280x720 monitor and a primary window, whose recent list holds `saved`.
 fn app_with(tag: &str, saved: Option<WindowFrame>) -> (App, PathBuf) {
-    let file = scratch(tag).join("recent.ron");
+    let file = scratch(tag).join("recent.yaml");
     Recent { window: saved, ..Recent::default() }.save(&file).unwrap_or_else(|e| panic!("{e}"));
     let mut app = App::new();
     app.add_plugins(MinimalPlugins).insert_resource(RecentProjects(file.clone())).add_plugins(WindowFramePlugin);

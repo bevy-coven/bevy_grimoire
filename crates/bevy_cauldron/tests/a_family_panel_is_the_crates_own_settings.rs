@@ -61,11 +61,11 @@ fn editor(tag: &str, hour: f64) -> (App, std::path::PathBuf) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
     let mut settings = bevy_cauldron::environment::ElementsSettings::defaults();
     settings.clock.hour = hour;
     let file = root.join("family/bevy_elements.ron");
-    std::fs::write(&file, settings.to_ron()).unwrap();
+    std::fs::write(&file, settings.to_yaml()).unwrap();
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The preview's sky, without a window: `bevy_elements`' celestial plugin keeps `SunState` from the
@@ -83,9 +83,9 @@ fn editor_with_a_file_block(tag: &str) -> (App, std::path::PathBuf) {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), format!("(version: 1, crates: [\"bevy_elements\", \"{SKIN_CRATE}\"])")).unwrap();
-    std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_ron()).unwrap();
-    let skin = root.join(format!("family/{SKIN_CRATE}.ron"));
+    std::fs::write(root.join("family.yaml"), format!("(version: 1, crates: [\"bevy_elements\", \"{SKIN_CRATE}\"])")).unwrap();
+    std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml()).unwrap();
+    let skin = root.join(format!("family/{SKIN_CRATE}.yaml"));
     std::fs::write(&skin, SKIN_BLUE).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_elements::ElementsPlugins);
@@ -261,7 +261,7 @@ fn a_settled_panel_reads_its_files_once_and_then_not_again() {
 
     // **And it reads again the moment an input moves**, or the gate above would be satisfied by a panel
     // that never reads at all.
-    app.world_mut().resource_mut::<FamilySettings>().text.insert("bevy_elements".to_owned(), bevy_cauldron::environment::ElementsSettings::defaults().to_ron());
+    app.world_mut().resource_mut::<FamilySettings>().text.insert("bevy_elements".to_owned(), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml());
     app.update();
     assert!(
         app.world().resource::<FamilyPanel>().reads() > reads,
@@ -353,7 +353,7 @@ fn a_crate_this_build_does_not_have_gets_no_panel() {
         .descriptor("site/wall", "alpha")
         .build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
     std::fs::write(root.join("family/bevy_carnage.ron"), "(hitstop_seconds: 0.05)").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     settle(&mut app);

@@ -35,7 +35,7 @@ fn scratch(tag: &str) -> PathBuf {
 fn on_the_home(tag: &str, dir: &Path) -> App {
     let root = Fixture::new(&format!("new_project_{tag}_{}", std::process::id())).descriptor("bench", "props").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    app.insert_resource(RecentProjects(dir.join("recent.ron"))).insert_resource(ClipboardOff).add_plugins((LauncherPlugin, LoadingPlugin));
+    app.insert_resource(RecentProjects(dir.join("recent.yaml"))).insert_resource(ClipboardOff).add_plugins((LauncherPlugin, LoadingPlugin));
     // The glTF loader is registered when plugins finish, which a stepped app does not do on its own.
     app.finish();
     app.cleanup();

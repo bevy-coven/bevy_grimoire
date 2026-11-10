@@ -16,7 +16,7 @@ use bevy_gooey::GooeySkin;
 use crate::editor::EditorState;
 use crate::family_host::FamilySettings;
 
-/// The crate this settings file belongs to, as `family.ron` names it.
+/// The crate this settings file belongs to, as `family.yaml` names it.
 pub const CRATE: &str = "bevy_gooey";
 
 /// Reads a skin file's text as the crate's own type.

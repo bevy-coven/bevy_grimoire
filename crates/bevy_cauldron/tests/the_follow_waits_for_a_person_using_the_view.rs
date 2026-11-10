@@ -318,8 +318,8 @@ fn with_the_toggle_off_nothing_moves_and_look_still_frames_it() {
     let root = room("pace_toggle");
     let mut app = editor(&root);
     // **The person's setting**, written where the editor reads it, not the resource it resolves to.
-    let settings = app.world().resource::<Project>().project_dir.join("editor.ron");
-    std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.ron");
+    let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
+    std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.yaml");
     // The watcher looks at the file's size and modification time, and again once a second regardless.
     for _ in 0..frames_of(1.5) {
         app.update();
@@ -382,8 +382,8 @@ fn the_follow_setting_survives_a_restart() {
     let root = room("pace_restart");
     {
         let mut app = editor(&root);
-        let settings = app.world().resource::<Project>().project_dir.join("editor.ron");
-        std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.ron");
+        let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
+        std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.yaml");
         for _ in 0..frames_of(1.5) {
             app.update();
         }
@@ -412,9 +412,9 @@ fn an_old_settings_file_with_no_follow_agent_reads_as_on() {
     // **A settings file from before this key existed**: every key it sets is one an older editor
     // could write, and `follow_agent` is not among them.
     let mut app = editor(&root);
-    let settings = app.world().resource::<Project>().project_dir.join("editor.ron");
+    let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
     std::fs::write(&settings, "(version: 1, show_grid: Some(false), reduced_motion: Some(true))")
-        .expect("editor.ron");
+        .expect("editor.yaml");
     for _ in 0..frames_of(1.5) {
         app.update();
     }

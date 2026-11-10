@@ -57,7 +57,7 @@ impl Location {
 }
 
 impl fmt::Display for Location {
-    /// `maps/yard.map.ron (placements[3].yaw)`, or `` `crate_b` `` for an entity.
+    /// `maps/yard.map.yaml (placements[3].yaw)`, or `` `crate_b` `` for an entity.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
         if let Some(file) = &self.file {
@@ -161,7 +161,7 @@ impl Problem {
     /// **The sentence a person reads**: the toast, a journal row, the status line. A problem with
     /// nothing but `what` reads as `what`, so a message that has not gained its parts yet is
     /// unchanged; each part it has is added in a fixed order and is never left out:
-    /// `rigs.ron did not read — rigs.ron (rigs[2]): 1:47: Expected float. Fix: save a rigs.ron that reads.`
+    /// `rigs.yaml did not read — rigs.yaml (rigs[2]): 1:47: Expected float. Fix: save a rigs.yaml that reads.`
     pub fn line(&self) -> String {
         let mut line = self.what.clone();
         if let Some(location) = &self.where_ {
@@ -210,24 +210,24 @@ mod tests {
     #[test]
     fn every_part_a_problem_has_is_in_its_line_and_in_its_json() {
         let p = Problem::with(
-            "rigs.ron did not read",
+            "rigs.yaml did not read",
             Detail::default()
-                .at(Location::file("rigs.ron").field(Some("rigs[2]".into())))
+                .at(Location::file("rigs.yaml").field(Some("rigs[2]".into())))
                 .because("1:47: Expected float")
-                .fix("save a rigs.ron that reads")
+                .fix("save a rigs.yaml that reads")
                 .docs("docs/guide/reload-contract.md"),
         );
         assert_eq!(
             p.line(),
-            "rigs.ron did not read — rigs.ron (rigs[2]): 1:47: Expected float. Fix: save a rigs.ron that reads"
+            "rigs.yaml did not read — rigs.yaml (rigs[2]): 1:47: Expected float. Fix: save a rigs.yaml that reads"
         );
         assert_eq!(
             p.to_json(),
             serde_json::json!({
-                "what": "rigs.ron did not read",
-                "where": {"file": "rigs.ron", "field": "rigs[2]"},
+                "what": "rigs.yaml did not read",
+                "where": {"file": "rigs.yaml", "field": "rigs[2]"},
                 "why": "1:47: Expected float",
-                "fix": "save a rigs.ron that reads",
+                "fix": "save a rigs.yaml that reads",
                 "docs": "docs/guide/reload-contract.md",
             })
         );
@@ -238,8 +238,8 @@ mod tests {
         assert_eq!(Location::file("a.ron").to_string(), "a.ron");
         assert_eq!(Location::file("a.ron").field(Some("version".into())).to_string(), "a.ron (version)");
         assert_eq!(Location::entity("crate_b").to_string(), "`crate_b`");
-        let both = Location { entity: Some("crate_b".into()), ..Location::file("maps/y.map.ron") };
-        assert_eq!(both.to_string(), "maps/y.map.ron `crate_b`");
+        let both = Location { entity: Some("crate_b".into()), ..Location::file("maps/y.map.yaml") };
+        assert_eq!(both.to_string(), "maps/y.map.yaml `crate_b`");
     }
 
     #[test]

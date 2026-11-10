@@ -105,7 +105,8 @@ impl WaterPlan {
     /// refusal names the entry (`spring 2`), so an edit that cannot be run is refused when it lands
     /// and not when `water_run` reads it.
     pub fn parse(text: &str) -> Result<WaterPlan, String> {
-        let read: WaterPlan = ron::from_str(text).map_err(|e| format!("water plan: {e}"))?;
+        let read: WaterPlan =
+            crate::yaml::from_str(text, "water").map_err(|p| format!("water plan: {}", p.line()))?;
         let mut checked = WaterPlan::default();
         for (i, s) in read.springs.iter().enumerate() {
             checked.place(Placed::Spring(*s)).map_err(|e| format!("water plan: spring {i}: {e}"))?;
@@ -147,7 +148,8 @@ impl WaterField {
     /// the drawing relies on: a field of another shape than its ground draws no water, and one whose
     /// depths are short must not be indexed at all.
     pub fn parse(text: &str) -> Result<WaterField, String> {
-        let field: WaterField = ron::from_str(text).map_err(|e| format!("water field: {e}"))?;
+        let field: WaterField =
+            crate::yaml::from_str(text, "water").map_err(|p| format!("water field: {}", p.line()))?;
         let (w, d) = (field.width, field.depth);
         if w.checked_mul(d) != Some(field.depth_m.len()) {
             return Err(format!("water field: {} depths for {w}x{d} (it needs {})", field.depth_m.len(), w.saturating_mul(d)));

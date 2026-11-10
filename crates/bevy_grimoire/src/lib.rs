@@ -127,7 +127,7 @@ impl GrimoireWorld {
         // opens a kit for the hub's own layout and never reads an edge token.
         //
         // **Passed in rather than read off the map**, since the same day's second correction: the
-        // lattice is the *project's* (`kits.ron`), because a tile's adjacency contract cannot depend
+        // lattice is the *project's* (`kits.yaml`), because a tile's adjacency contract cannot depend
         // on which map happens to be open. See `bevy_grimoire_core::kits::Lattice`.
         library.validate_lattices(lattice.face_bands)?;
         let known: Vec<&str> = library.descriptors.iter().map(|d| d.id.as_str()).collect();

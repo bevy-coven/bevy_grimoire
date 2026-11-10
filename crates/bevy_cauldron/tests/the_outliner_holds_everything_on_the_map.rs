@@ -56,9 +56,9 @@ fn rig(tag: &str) -> App {
         .place("site/wall", (1.0, 1.0))
         .build("m");
     let maps = root.join("assets/grimoire/maps");
-    add_a_stamp(&maps.join("m.map.ron"));
+    add_a_stamp(&maps.join("m.map.yaml"));
     write_file(
-        &maps.join("m.notes.ron"),
+        &maps.join("m.notes.yaml"),
         "(version: 1, notes: [(id: \"lamp_note\", targets: [Cell(1, 1)], text: \"a lamp belongs here\", state: Open)])",
     );
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

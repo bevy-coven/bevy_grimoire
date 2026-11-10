@@ -84,7 +84,7 @@ fn stamped(app: &App) -> Vec<String> {
 }
 
 fn files(root: &std::path::Path, app: &App) -> (String, String) {
-    let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.ron")).unwrap_or_default();
+    let comps = std::fs::read_to_string(root.join("assets/grimoire/compositions.yaml")).unwrap_or_default();
     let map = std::fs::read_to_string(app.world().resource::<OpenMap>().map_path.clone())
         .expect("the map file");
     (comps, map)

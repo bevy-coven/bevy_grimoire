@@ -1,7 +1,7 @@
 //! **Reference images as project data** (E-075): the pictures a person points at with "like this".
 //!
 //! A reference is a project-relative image path, a caption and an id (`r1`, `r2`, … never reused).
-//! The file sits **beside the map** (`maps/town.map.ron` has `maps/town.references.ron`), like
+//! The file sits **beside the map** (`maps/town.map.yaml` has `maps/town.references.yaml`), like
 //! [`crate::notes`], so a [`crate::live::FileWatch`] sees it change. An agent reads the list and names
 //! a reference back by id with [`References::cite`], so the picture it worked from is on record.
 
@@ -39,11 +39,14 @@ impl Default for References {
     }
 }
 
-/// `town.map.ron` → `town.references.ron`, in the same directory.
+/// `town.map.yaml` → `town.references.yaml`, in the same directory.
 pub fn path_for_map(map_path: &Path) -> PathBuf {
     let name = map_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let stem = name.strip_suffix(".map.ron").or_else(|| name.strip_suffix(".ron")).unwrap_or(&name);
-    map_path.with_file_name(format!("{stem}.references.ron"))
+    let stem = name
+        .strip_suffix(crate::map::MAP_SUFFIX)
+        .or_else(|| name.strip_suffix(".yaml"))
+        .unwrap_or(&name);
+    map_path.with_file_name(format!("{stem}.references.yaml"))
 }
 
 /// A project-relative image path with `.` removed; refuses absolute paths, `..` and non-images.
@@ -67,27 +70,24 @@ fn normalise(path: &str) -> Result<String, String> {
 }
 
 impl References {
-    pub fn from_ron(text: &str) -> Result<References, String> {
-        let r: References = ron::from_str(text).map_err(|e| format!("references: parse: {e}"))?;
+    pub fn parse(text: &str) -> Result<References, String> {
+        let r: References =
+            crate::yaml::from_str(text, "references").map_err(|p| format!("references: parse: {}", p.line()))?;
         if r.version != REFERENCES_VERSION {
             return Err(format!("references: version {} is not the {REFERENCES_VERSION} this build reads", r.version));
         }
         Ok(r)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        let mut text = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("references: serialize: {e}"))?;
-        if !text.ends_with('\n') {
-            text.push('\n');
-        }
-        Ok(text)
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("references: {}", p.line()))
     }
 
     /// A file that is not there is no references, not an error.
     pub fn load(path: &Path) -> Result<References, String> {
         match std::fs::read_to_string(path) {
-            Ok(text) => References::from_ron(&text).map_err(|e| format!("{}: {e}", path.display())),
+            Ok(text) => References::parse(&text).map_err(|e| format!("{}: {e}", path.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(References::default()),
             Err(e) => Err(format!("references: {}: {e}", path.display())),
         }
@@ -98,7 +98,7 @@ impl References {
         if self.refs.is_empty() && !path.exists() {
             return Ok(());
         }
-        crate::ron_surgery::save_atomic(path, &self.to_ron()?)
+        crate::yaml::save(path, &self.to_yaml()?)
     }
 
     pub fn get(&self, id: &str) -> Option<&Reference> {

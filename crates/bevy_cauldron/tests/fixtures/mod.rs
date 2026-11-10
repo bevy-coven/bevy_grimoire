@@ -28,6 +28,18 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Once;
 
+use bevy_grimoire_core::agent_guide;
+use bevy_grimoire_core::composition::{Body, Compositions, Envelope, Member};
+use bevy_grimoire_core::descriptor::{
+    Align, AxisOrigin, By, Confidence, Descriptor, Extent, LabelOrigin, Mount, Offers,
+    Placement as DescriptorPlacement, SubCell, Subgrid,
+};
+use bevy_grimoire_core::kits::{Bash, Bind, Kits};
+use bevy_grimoire_core::library::Library;
+use bevy_grimoire_core::map::{Map, Placed};
+use bevy_grimoire_core::policy::Policy;
+use bevy_grimoire_core::vocab::{Token, Vocabularies, Vocabulary};
+
 /// Remove the directories of exited test processes, once per process. A directory whose pid is
 /// alive belongs to a run in flight and is left alone, as is anything that does not parse.
 fn sweep_dead_fixtures() {
@@ -81,11 +93,11 @@ fn pid_is_alive(pid: u32) -> bool {
 /// at it. Before this sweep every run left about 200 directories behind, several GB in all.
 pub struct Fixture {
     dir: PathBuf,
-    descriptors: Vec<String>,
-    placements: Vec<String>,
-    compositions: Vec<String>,
-    /// **Kits beside the default one**, as `(directory name, library rows)`. See [`Fixture::kit`].
-    kits: Vec<(String, Vec<String>)>,
+    descriptors: Vec<Descriptor>,
+    placements: Vec<Placed>,
+    compositions: Vec<bevy_grimoire_core::composition::Composition>,
+    /// **Kits beside the default one**, as `(directory name, descriptors)`. See [`Fixture::kit`].
+    kits: Vec<(String, Vec<Descriptor>)>,
     /// The ids each of those kits was asked for, so the binding can name the namespace they carry
     /// rather than guessing it from the directory.
     ///
@@ -96,9 +108,11 @@ pub struct Fixture {
     /// **Named combinations of kits**, as `(bash name, namespaces)` — `kits.ron`'s `bash`. Every
     /// namespace named must be one this fixture binds, or the write is refused at load.
     bashes: Vec<(String, Vec<String>)>,
-    /// **`rules.ron`'s text**, written beside `kits.ron` by [`Self::build`]. `None` writes no file,
+    /// **The project's rules**, written beside `kits.yaml` by [`Self::build`]. `None` writes no file,
     /// which is a project without rules. See [`Self::rules`].
-    rules: Option<String>,
+    rules: Option<bevy_grimoire_core::rules::Rules>,
+    /// A `rules.yaml` a test writes verbatim, because its subject is a file the loader must refuse.
+    rules_text: Option<String>,
     /// The open map's edge in metres, both horizontal axes. See [`Self::side`].
     side: f32,
 }
@@ -184,37 +198,116 @@ fn namespace_of(dir: &str, ids: &[String]) -> String {
         .unwrap_or_else(|| dir.to_owned())
 }
 
-/// **One library row, and the mesh it names**, written under `pack` inside `root`.
+/// **One library entry, and the mesh it names**, written under `pack` inside `root`.
 ///
 /// The file is named for the id's **last segment**, so `site/floor` writes `ozea/floor.glb` rather
 /// than a `site/` subdirectory nobody asked for — the shape the shipped kits actually have, where
 /// the namespace is in the id and never in the mesh path.
 ///
-/// Free rather than a method, because two callers want it: the root kit's builder pushes the row
-/// onto its own list, and [`Fixture::kit`] collects rows for a directory of its own.
-fn descriptor_row(root: &Path, id: &str, pack: &str, y_offset: f32) -> String {
+/// **A value, not a row of text.** The fixture used to format RON by hand, which meant every helper here
+/// carried a `replace("footprint: Some((1.0, 1.0))", …)` that silently did nothing the day the shape moved.
+/// A `Descriptor` with the field set cannot drift from the type, and the file is written by the one YAML
+/// writer the editor itself uses.
+///
+/// Free rather than a method, because two callers want it: the root kit's builder pushes the entry onto its
+/// own list, and [`Fixture::kit`] collects entries for a directory of its own.
+fn descriptor_value(root: &Path, id: &str, pack: &str, y_offset: f32) -> Descriptor {
     let stem = id.rsplit('/').next().unwrap_or(id);
     let at = root.join("assets").join(pack);
     std::fs::create_dir_all(&at).unwrap_or_else(|e| panic!("cannot make {at:?}: {e}"));
     std::fs::write(at.join(format!("{stem}.glb")), glb(1.0, 0.5, 1.0))
         .unwrap_or_else(|e| panic!("cannot write {stem}.glb: {e}"));
-    format!(
-        r#"        (
-            id: "{id}",
-            mesh: Some("{pack}/{stem}.glb"),
-            align: ( scale: None, stretch_y: None, y_offset: Some({y_offset:.4}), pivot: None, front: None ),
-            extent: ( footprint: Some((1.0, 1.0)), height: Some(0.5) ),
-            mount: Some(OnFloor),
-            clearance: [],
-            offers: ( surfaces: [], sockets: [] ),
-            kind: ["prop"],
-            effects: ["inert"],
-            look: ["plain"],
-            subgrid: None,
-            note: Some("a fixture piece"),
-            placement: ( rooms: [], group: None ),
-        ),"#
-    )
+    Descriptor {
+        id: id.to_owned(),
+        mesh: Some(format!("{pack}/{stem}.glb")),
+        align: Align { y_offset: Some(y_offset), ..Align::default() },
+        extent: Extent { footprint: Some((1.0, 1.0)), height: Some(0.5) },
+        mount: Some(Mount::OnFloor),
+        kind: vec!["prop".to_owned()],
+        effects: vec!["inert".to_owned()],
+        look: vec!["plain".to_owned()],
+        note: Some("a fixture piece".to_owned()),
+        ..Descriptor::default()
+    }
+}
+
+/// **The fixture's vocabulary**: one token on each axis a fixture uses.
+///
+/// A value rather than a hand-written file, so a helper that declares another token edits the value it will
+/// write instead of replacing a string that used to be in the file.
+fn vocabulary() -> Vocabularies {
+    let axis = |tokens: &[(&str, &str)]| Vocabulary {
+        tokens: tokens
+            .iter()
+            .map(|(name, note)| Token { name: (*name).to_owned(), note: (*note).to_owned(), implies: Vec::new() })
+            .collect(),
+    };
+    Vocabularies {
+        version: bevy_grimoire_core::vocab::VOCAB_VERSION,
+        kind: axis(&[("prop", "a thing")]),
+        effects: axis(&[("inert", "does nothing")]),
+        look: axis(&[("plain", "unremarkable")]),
+        surfaces: axis(&[("worktop", "a top")]),
+        capabilities: axis(&[]),
+        edge: axis(&[("wall", "a solid run-face")]),
+        slot: axis(&[]),
+    }
+}
+
+/// **A fragment written in a project file's own spelling, read back as its type.**
+///
+/// The label helpers take their record in the reader's words — `(kind: Some(Human), look: Some(Model))` —
+/// because that is what makes a test about *who wrote what* readable. Reading it back through the same reader
+/// a file goes through is what keeps it honest: a fragment that does not read panics with the field it was
+/// wrong at, rather than producing a descriptor with a silently empty record.
+fn parse_fragment<T: serde::de::DeserializeOwned>(fragment: &str, what: &str) -> T {
+    bevy_grimoire_core::yaml::from_str(fragment, what)
+        .unwrap_or_else(|p| panic!("the fixture's {what} does not read: {}", p.line()))
+}
+
+/// **A `LabelOrigin` from its two fragments**: the per-axis author (a value) and the record's remaining
+/// fields (a project file's lines).
+fn parse_record(by: AxisOrigin, rest: &str) -> LabelOrigin {
+    let text = format!("by: {by:?}\n{rest}\n");
+    let _ = &text;
+    // The fields are read one at a time, because the fragments are the reader's spelling and a record built
+    // from a `format!` is a file that has to pass the reader twice.
+    let model = field_of(rest, "model").map(|v| v.to_owned());
+    let model_at = field_of(rest, "model_at").map(|v| v.to_owned());
+    let confidence = field_of(rest, "confidence").map(confidence_of);
+    let at = field_of(rest, "at").unwrap_or_default().to_owned();
+    LabelOrigin { by, model, model_at, at, confidence }
+}
+
+/// **A quoted string field out of a fragment**, or `None` for a field that is absent or `None`.
+fn field_of<'a>(rest: &'a str, name: &str) -> Option<&'a str> {
+    let at = rest.find(&format!("{name}: "))? + name.len() + 2;
+    let tail = rest[at..].trim_start();
+    if tail.starts_with("None") {
+        return None;
+    }
+    let inner = tail.strip_prefix("Some(")?;
+    let body = inner.split(')').next()?;
+    let quoted = body.trim();
+    Some(quoted.strip_prefix('"')?.split('"').next()?)
+}
+
+/// **A `Confidence` from the variant name a test writes**: `High`, `Medium` or `Low`.
+fn confidence_of(name: &str) -> Confidence {
+    match name.trim() {
+        "High" => Confidence::High,
+        "Medium" => Confidence::Medium,
+        "Low" => Confidence::Low,
+        other => panic!("`{other}` is not a confidence (High, Medium or Low)"),
+    }
+}
+
+/// **Write a fixture file through the one YAML writer**, which is the writer the editor itself uses. A
+/// fixture written any other way is a second spelling, and a project file has one.
+fn write_yaml<T: serde::Serialize>(path: &Path, value: &T) {
+    let text = bevy_grimoire_core::yaml::to_string(value)
+        .unwrap_or_else(|p| panic!("{}: {}", path.display(), p.line()));
+    std::fs::write(path, text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
 impl Fixture {
@@ -236,25 +329,8 @@ impl Fixture {
         std::fs::copy(&from, fonts.join("FiraMono-Regular.ttf"))
             .unwrap_or_else(|e| panic!("cannot copy the shipped font from {from:?}: {e}"));
 
-        std::fs::write(
-            grimoire.join("vocab.ron"),
-            r#"(
-    kind: (tokens: [( name: "prop", note: "a thing" )]),
-    effects: (tokens: [( name: "inert", note: "does nothing" )]),
-    look: (tokens: [( name: "plain", note: "unremarkable" )]),
-    surfaces: (tokens: [( name: "worktop", note: "a top" )]),
-    capabilities: (tokens: []),
-    edge: (tokens: [( name: "wall", note: "a solid run-face" )]),
-    slot: (tokens: []),
-)"#,
-        )
-        .unwrap_or_else(|e| panic!("{e}"));
-
-        std::fs::write(
-            grimoire.join("project.ron"),
-            "(\n    version: 2,\n    note: None,\n    patches: [],\n)",
-        )
-        .unwrap_or_else(|e| panic!("{e}"));
+        write_yaml(&grimoire.join("vocab.yaml"), &vocabulary());
+        write_yaml(&grimoire.join("project.yaml"), &Policy::default());
 
         Fixture {
             dir,
@@ -265,6 +341,7 @@ impl Fixture {
             ids: Vec::new(),
             bashes: Vec::new(),
             rules: None,
+            rules_text: None,
             side: 16.0,
         }
     }
@@ -285,7 +362,7 @@ impl Fixture {
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot make {dir:?}: {e}"));
         let rows = ids
             .iter()
-            .map(|id| descriptor_row(&self.dir, id, pack, 0.0))
+            .map(|id| descriptor_value(&self.dir, id, pack, 0.0))
             .collect();
         self.ids
             .push((name.to_owned(), ids.iter().map(|s| (*s).to_owned()).collect()));
@@ -300,20 +377,18 @@ impl Fixture {
     /// cannot both be bound, because that is the ambiguity binding exists to resolve. A test about
     /// the pair binds one at a time, which is what a real project does.
     pub fn bind(root: &Path, binds: &[(&str, &str)], authoring: &str) {
-        let list = binds
-            .iter()
-            .map(|(ns, dir)| format!("(namespace: \"{ns}\", dir: \"{dir}\")"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let path = root.join("assets/grimoire/kits.ron");
-        std::fs::write(
-            &path,
-            format!(
-                "(version: {}, bind: [{list}], bash: [], authoring: Some(\"{authoring}\"))",
-                bevy_grimoire_core::kits::KITS_VERSION
-            ),
-        )
-        .unwrap_or_else(|e| panic!("{path:?}: {e}"));
+        let kits = Kits {
+            version: bevy_grimoire_core::kits::KITS_VERSION,
+            note: None,
+            lattice: Default::default(),
+            bind: binds
+                .iter()
+                .map(|(ns, dir)| Bind { namespace: (*ns).to_owned(), dir: (*dir).to_owned() })
+                .collect(),
+            bash: Vec::new(),
+            authoring: Some(authoring.to_owned()),
+        };
+        write_yaml(&root.join("assets/grimoire/kits.yaml"), &kits);
     }
 
     /// **A named combination of kits**, declared in call order — which is the order the chooser's
@@ -334,27 +409,16 @@ impl Fixture {
     pub fn sized_descriptor(mut self, id: &str, pack: &str, w: f32, d: f32) -> Fixture {
         self = self.descriptor(id, pack);
         if let Some(last) = self.descriptors.last_mut() {
-            let was = "footprint: Some((1.0, 1.0))";
-            assert!(
-                last.contains(was),
-                "the fixture's descriptor shape changed under this helper"
-            );
-            *last = last.replace(was, &format!("footprint: Some(({w}, {d}))"));
+            last.extent.footprint = Some((w, d));
         }
         self
     }
 
-    /// **A descriptor of a stated height**, for a test about what stands in a frame. [`Self::descriptor`]
-    /// writes a 0.5 m piece; this states the number, so a test can put a tall piece on the map.
+    /// **A descriptor of a stated height**, for a test about what stands in a frame.
     pub fn tall_descriptor(mut self, id: &str, pack: &str, h: f32) -> Fixture {
         self = self.descriptor(id, pack);
         if let Some(last) = self.descriptors.last_mut() {
-            let was = "height: Some(0.5)";
-            assert!(
-                last.contains(was),
-                "the fixture's descriptor shape changed under this helper"
-            );
-            *last = last.replace(was, &format!("height: Some({h})"));
+            last.extent.height = Some(h);
         }
         self
     }
@@ -364,23 +428,17 @@ impl Fixture {
     /// `y_offset`. Two of these placed over one another are the case where their top faces are
     /// coplanar and the editor has to decide which one draws.
     pub fn flat_descriptor(mut self, id: &str, w: f32, d: f32) -> Fixture {
-        self.descriptors.push(format!(
-            r#"        (
-            id: "{id}",
+        self.descriptors.push(Descriptor {
+            id: id.to_owned(),
             mesh: None,
-            align: ( scale: None, stretch_y: None, y_offset: None, pivot: None, front: None ),
-            extent: ( footprint: Some(({w}, {d})), height: Some(0.05) ),
-            mount: Some(OnFloor),
-            clearance: [],
-            offers: ( surfaces: [], sockets: [] ),
-            kind: ["prop"],
-            effects: ["inert"],
-            look: ["plain"],
-            subgrid: None,
-            note: Some("a flat fixture piece"),
-            placement: ( rooms: [], group: None ),
-        ),"#
-        ));
+            extent: Extent { footprint: Some((w, d)), height: Some(0.05) },
+            mount: Some(Mount::OnFloor),
+            kind: vec!["prop".to_owned()],
+            effects: vec!["inert".to_owned()],
+            look: vec!["plain".to_owned()],
+            note: Some("a flat fixture piece".to_owned()),
+            ..Descriptor::default()
+        });
         match self.ids.iter_mut().find(|(k, _)| k == DEFAULT_KIT) {
             Some((_, v)) => v.push(id.to_owned()),
             None => self.ids.push((DEFAULT_KIT.to_owned(), vec![id.to_owned()])),
@@ -392,24 +450,17 @@ impl Fixture {
     ///
     /// Every other descriptor this fixture writes carries `subgrid: None`, which is right for the
     /// ordinary case and is why *"an authored lattice survives the disk round-trip"* had no fixture
-    /// to be tested against — it read the shipped `site/wall` instead, and went red the day that kit
-    /// stopped shipping.
-    ///
-    /// The round-trip is real here despite the fixture writing the file: this emits RON text, and
-    /// what is under test is `policy::layered_library` + `Project::open` reading it back. The two
-    /// are not the same code.
+    /// to be tested against. The round trip is real here despite the fixture writing the file: this
+    /// emits a **value**, and what is under test is `policy::layered_library` + `Project::open`
+    /// reading the YAML back. The two are not the same code.
     ///
     /// `run` cells wide **along the run axis**, so the piece is sized to exactly that many divisions
     /// across — `grid::cells` is what decides, and a lattice with a cell outside its own divisions
-    /// is refused at load. The claim is one-axis on purpose: every cell written here sits at
-    /// `(x, 0, 0)`, and that fills the *whole* face only because the fixture leaves
-    /// `Lattice::face_bands` at 1. Set that and these cells are still legal, but they are one band
-    /// of several rather than the face.
+    /// is refused at load.
     pub fn authored_lattice(mut self, id: &str, pack: &str, token: &str, run: u32) -> Fixture {
-        // **Zero is the caller's bug, and it surfaces four layers away.** `run: 0` writes
-        // `footprint: Some((0, 1))` and an empty cell list, and the project then fails to open with
-        // a load error about a descriptor — pointing at the RON this helper generated rather than at
-        // the test that asked for nothing.
+        // **Zero is the caller's bug, and it surfaces four layers away.** `run: 0` writes a piece 0 m
+        // wide and a lattice with nothing in it, and the project then fails to open with a load error
+        // about a descriptor — pointing at the fixture rather than at the test that asked for nothing.
         assert!(
             run > 0,
             "authored_lattice was asked for a run of 0 cells: that writes a piece 0 m wide and a \
@@ -418,19 +469,11 @@ impl Fixture {
         );
         self = self.sized_descriptor(id, pack, run as f32 * bevy_grimoire_core::grid::SNAP, 1.0);
         if let Some(last) = self.descriptors.last_mut() {
-            let was = "subgrid: None";
-            assert!(
-                last.contains(was),
-                "the fixture's descriptor shape changed under this helper"
-            );
-            let cells: Vec<String> = (0..run)
-                .map(|x| {
-                    format!(
-                        "( at: ({x}, 0, 0), solid: true, edge: Some(\"{token}\") )"
-                    )
-                })
-                .collect();
-            *last = last.replace(was, &format!("subgrid: Some(( cells: [{}] ))", cells.join(", ")));
+            last.subgrid = Some(Subgrid {
+                cells: (0..run)
+                    .map(|x| SubCell { at: (x, 0, 0), solid: true, edge: Some(token.to_owned()) })
+                    .collect(),
+            });
         }
         self
     }
@@ -442,15 +485,7 @@ impl Fixture {
     pub fn mounted_descriptor(mut self, id: &str, pack: &str, class: &str) -> Fixture {
         self = self.descriptor(id, pack);
         if let Some(last) = self.descriptors.last_mut() {
-            let was = "mount: Some(OnFloor)";
-            assert!(
-                last.contains(was),
-                "the fixture's descriptor shape changed under this helper"
-            );
-            *last = last.replace(
-                was,
-                &format!("mount: Some(OnSurface( class: \"{class}\" ))"),
-            );
+            last.mount = Some(Mount::OnSurface { class: class.to_owned() });
         }
         self
     }
@@ -464,15 +499,7 @@ impl Fixture {
     pub fn two_way_descriptor(mut self, id: &str, pack: &str, class: &str) -> Fixture {
         self = self.descriptor(id, pack);
         if let Some(last) = self.descriptors.last_mut() {
-            let was = "mount: Some(OnFloor)";
-            assert!(
-                last.contains(was),
-                "the fixture's descriptor shape changed under this helper"
-            );
-            *last = last.replace(
-                was,
-                &format!("mount: Some(OnSurfaceOrFloor( class: \"{class}\" ))"),
-            );
+            last.mount = Some(Mount::OnSurfaceOrFloor { class: class.to_owned() });
         }
         self
     }
@@ -484,15 +511,7 @@ impl Fixture {
     pub fn surface_descriptor(mut self, id: &str, pack: &str, class: &str) -> Fixture {
         self = self.descriptor(id, pack);
         if let Some(last) = self.descriptors.last_mut() {
-            let was = "offers: ( surfaces: [], sockets: [] )";
-            assert!(
-                last.contains(was),
-                "the fixture's descriptor shape changed under this helper"
-            );
-            *last = last.replace(
-                was,
-                &format!("offers: ( surfaces: [\"{class}\"], sockets: [] )"),
-            );
+            last.offers = Offers { surfaces: vec![class.to_owned()], ..Offers::default() };
         }
         self
     }
@@ -508,22 +527,11 @@ impl Fixture {
     /// `adjacency::derive_edges` names — so the refusal branch is the default and a test has to opt
     /// in to the accepting one.
     pub fn edge_tokens(self, names: &[&str]) -> Fixture {
-        let at = self.dir.join("assets/grimoire/vocab.ron");
-        let was =
-            std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-        let one = r#"edge: (tokens: [( name: "wall", note: "a solid run-face" )]),"#;
-        assert!(
-            was.contains(one),
-            "the fixture's edge axis must be the shipped one, or this is a no-op"
-        );
-        let mut rows = vec![r#"( name: "wall", note: "a solid run-face" )"#.to_owned()];
+        let mut vocab = vocabulary();
         for n in names {
-            rows.push(format!(r#"( name: "{n}", note: "derived from the mesh" )"#));
+            vocab.edge.tokens.push(Token { name: (*n).to_owned(), note: "derived from the mesh".to_owned(), implies: Vec::new() });
         }
-        let full = format!("edge: (tokens: [{}]),", rows.join(", "));
-        std::fs::write(&at, was.replace(one, &full))
-            .unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
-        self
+        self.rewrite_vocabulary(&vocab)
     }
 
     /// **Declare `look` tokens**, so a test can drive the tag block with the words a shipped guide
@@ -535,22 +543,11 @@ impl Fixture {
     /// works and not that the script can be followed — and the script's payload is exactly what was
     /// wrong with it.
     pub fn look_tokens(self, names: &[&str]) -> Fixture {
-        let at = self.dir.join("assets/grimoire/vocab.ron");
-        let was =
-            std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-        let one = r#"look: (tokens: [( name: "plain", note: "unremarkable" )]),"#;
-        assert!(
-            was.contains(one),
-            "the fixture's look axis must be the shipped one, or this is a no-op"
-        );
-        let mut rows = vec![r#"( name: "plain", note: "unremarkable" )"#.to_owned()];
+        let mut vocab = vocabulary();
         for n in names {
-            rows.push(format!(r#"( name: "{n}", note: "how it reads" )"#));
+            vocab.look.tokens.push(Token { name: (*n).to_owned(), note: "how it reads".to_owned(), implies: Vec::new() });
         }
-        let full = format!("look: (tokens: [{}]),", rows.join(", "));
-        std::fs::write(&at, was.replace(one, &full))
-            .unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
-        self
+        self.rewrite_vocabulary(&vocab)
     }
 
     /// **Declare `kind` tokens**, so a test can move a piece's kind from one chip to another.
@@ -558,85 +555,48 @@ impl Fixture {
     /// The fixture ships `prop` alone, which is enough to observe *a* kind chip but not enough to
     /// watch a click move the light from one chip to the next — the question B-047 asks.
     pub fn kind_tokens(self, names: &[&str]) -> Fixture {
-        let at = self.dir.join("assets/grimoire/vocab.ron");
-        let was =
-            std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-        let one = r#"kind: (tokens: [( name: "prop", note: "a thing" )]),"#;
-        assert!(
-            was.contains(one),
-            "the fixture's kind axis must be the shipped one, or this is a no-op"
-        );
-        let mut rows = vec![r#"( name: "prop", note: "a thing" )"#.to_owned()];
+        let mut vocab = vocabulary();
         for n in names {
-            rows.push(format!(r#"( name: "{n}", note: "a kind" )"#));
+            vocab.kind.tokens.push(Token { name: (*n).to_owned(), note: "a kind".to_owned(), implies: Vec::new() });
         }
-        let full = format!("kind: (tokens: [{}]),", rows.join(", "));
-        std::fs::write(&at, was.replace(one, &full))
-            .unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
+        self.rewrite_vocabulary(&vocab)
+    }
+
+    /// **The fixture's vocabulary with `edit` applied**, written through the one YAML writer.
+    ///
+    /// One door for every axis helper: each used to read the file's text, replace a literal string and write
+    /// it back, which is three places to keep in step with the spelling and silently a no-op the day the
+    /// spelling moved. This edits the value the builder already holds.
+    fn rewrite_vocabulary(self, vocab: &Vocabularies) -> Fixture {
+        write_yaml(&self.dir.join("assets/grimoire/vocab.yaml"), vocab);
         self
+    }
+
+    /// **A `slot` token, so a tile can declare a hole.**
+    ///
+    /// `new` writes an empty slot axis, which is the honest default: a project that has not grown one
+    /// refuses `Shift+Enter` by name rather than inventing a token.
+    pub fn slot_token(self, name: &str) -> Fixture {
+        let mut vocab = vocabulary();
+        vocab.slot.tokens.push(Token { name: name.to_owned(), note: "a hole".to_owned(), implies: Vec::new() });
+        self.rewrite_vocabulary(&vocab)
     }
 
     /// **A `kind` token that brings an `effects` token with it** — the *derived* half of `effects`.
     ///
-    /// `Vocabularies::implied_effects` resolves the implication, `Vocabularies::masks` folds it into
-    /// the mask, and `labels::settle_library` writes it into the stored list at open. The fixture's
-    /// own vocabulary declares no implication at all, which is right for every other test here and
-    /// is exactly why the settling had nothing to be driven against — the one test that reached it
-    /// read the shipped corpus.
-    ///
-    /// The effect token is declared on the `effects` axis in the same breath, because a vocabulary
-    /// whose `kind` token implies a word the `effects` axis does not hold **does not load**:
-    /// `Vocabularies::validate_tables` calls `validate_implications`, and that is the door. Writing
-    /// the implication alone would fail at `Project::open` with a refusal about the vocabulary
-    /// rather than at the assertion the test is about.
-    ///
-    /// # It used to name the wrong door
-    ///
-    /// This said `implied_effects` refuses it. It did once — the check lived inside the resolver and
-    /// so ran once per descriptor, which meant an invented implied token loaded clean for ever and
-    /// exploded the first time an author used that kind. The refusal moved to parse, and
-    /// `implied_effects` is infallible now; a sentence still pointing at the resolver would send the
-    /// next reader looking for a `Result` that no longer exists.
+    /// `Vocabularies::implied_effects` resolves the implication, `Vocabularies::masks` folds it into the mask,
+    /// and `labels::settle_library` writes it into the stored list at open. The effect token is declared on
+    /// the `effects` axis in the same breath, because a vocabulary whose `kind` token implies a word the
+    /// `effects` axis does not hold **does not load** (`validate_implications`), and writing the implication
+    /// alone would fail at `Project::open` with a refusal about the vocabulary rather than at the assertion
+    /// the test is about.
     pub fn kind_implies(self, effect: &str) -> Fixture {
-        let at = self.dir.join("assets/grimoire/vocab.ron");
-        let was =
-            std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-        let kind = r#"kind: (tokens: [( name: "prop", note: "a thing" )]),"#;
-        let effects = r#"effects: (tokens: [( name: "inert", note: "does nothing" )]),"#;
-        assert!(
-            was.contains(kind) && was.contains(effects),
-            "the fixture's kind and effects axes must be the shipped ones, or this is a no-op"
-        );
-        let text = was
-            .replace(
-                kind,
-                &format!(
-                    r#"kind: (tokens: [( name: "prop", note: "a thing", implies: ["{effect}"] )]),"#
-                ),
-            )
-            .replace(
-                effects,
-                &format!(
-                    r#"effects: (tokens: [( name: "inert", note: "does nothing" ), ( name: "{effect}", note: "follows the kind" )]),"#
-                ),
-            );
-        std::fs::write(&at, text).unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
-        self
-    }
-
-    pub fn slot_token(self, name: &str) -> Fixture {
-        let at = self.dir.join("assets/grimoire/vocab.ron");
-        let was =
-            std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
-        let empty = "slot: (tokens: []),";
-        assert!(
-            was.contains(empty),
-            "the fixture's slot axis must start empty, or this is a no-op"
-        );
-        let full = format!("slot: (tokens: [( name: \"{name}\", note: \"a hole\" )]),");
-        std::fs::write(&at, was.replace(empty, &full))
-            .unwrap_or_else(|e| panic!("cannot write {at:?}: {e}"));
-        self
+        let mut vocab = vocabulary();
+        if let Some(prop) = vocab.kind.tokens.first_mut() {
+            prop.implies = vec![effect.to_owned()];
+        }
+        vocab.effects.tokens.push(Token { name: effect.to_owned(), note: "follows the kind".to_owned(), implies: Vec::new() });
+        self.rewrite_vocabulary(&vocab)
     }
 
     /// **A pack of meshes on disk**, none of them in the library — i.e. import candidates.
@@ -658,10 +618,9 @@ impl Fixture {
     pub fn unjudged_descriptor(mut self, id: &str, pack: &str) -> Fixture {
         self = self.descriptor(id, pack);
         if let Some(last) = self.descriptors.last_mut() {
-            *last = last
-                .replace(r#"effects: ["inert"],"#, "effects: [],")
-                .replace(r#"look: ["plain"],"#, "look: [],")
-                .replace(r#"note: Some("a fixture piece"),"#, "note: None,");
+            last.effects.clear();
+            last.look.clear();
+            last.note = None;
         }
         self
     }
@@ -674,8 +633,7 @@ impl Fixture {
     /// The same, recessed into its own floor by `y_offset` metres — `bevy_grimoire_core::stack::datum`'s
     /// ordinary case, and the thing a backdrop has to sit under.
     pub fn sunk_descriptor(mut self, id: &str, pack: &str, y_offset: f32) -> Fixture {
-        self.descriptors
-            .push(descriptor_row(&self.dir, id, pack, y_offset));
+        self.descriptors.push(descriptor_value(&self.dir, id, pack, y_offset));
         match self.ids.iter_mut().find(|(k, _)| k == DEFAULT_KIT) {
             Some((_, v)) => v.push(id.to_owned()),
             None => self
@@ -688,26 +646,39 @@ impl Fixture {
     /// A fully judged descriptor whose six fields were all written by `model` at `confidence`, a
     /// Rust variant name (`High`, `Medium` or `Low`). For tests that read the labels row.
     pub fn labelled_descriptor(self, id: &str, pack: &str, model: &str, confidence: &str) -> Fixture {
-        self.labelled_by(
-            id,
-            pack,
-            "(kind: Some(Model), effects: Some(Model), look: Some(Model))",
-            &format!(r#"model: Some("{model}"), at: "2026-10-20", confidence: Some({confidence})"#),
-        )
+        let by = AxisOrigin { kind: Some(By::Model), effects: Some(By::Model), look: Some(By::Model), ..AxisOrigin::default() };
+        let labels = LabelOrigin {
+            by,
+            model: Some(model.to_owned()),
+            model_at: None,
+            at: "2026-10-20".to_owned(),
+            confidence: Some(confidence_of(confidence)),
+        };
+        self.with_labels(id, pack, labels)
     }
 
-    /// A library entry whose `labels` record is written verbatim: `by` is the per-axis author
-    /// (RON for an `AxisOrigin`) and `rest` is the record's remaining fields. For the tests that
-    /// need a human-confirmed axis or a record with no model, which `labelled_descriptor` cannot say.
+    /// **A library entry whose `labels` record a test states in the file's own words.**
+    ///
+    /// `by` is an `AxisOrigin` as a project file writes one (`(kind: Some(Human), look: Some(Model))`) and
+    /// `rest` is the record's remaining fields (`model: Some("gemma-x"), at: "2026-10-21", confidence:
+    /// Some(Medium)`), for the tests that need a human-confirmed axis, a record with no model, or a model
+    /// stored by its full path — none of which a single "written by the model" constructor can say.
+    ///
+    /// **The two fragments are parsed, not formatted into a file.** They are written in the reader's own
+    /// spelling because that is what makes the test readable, so they are read back by the same reader a
+    /// project file goes through — and a fragment that does not read is a panic here rather than a descriptor
+    /// with a silently empty record.
     pub fn labelled_by(self, id: &str, pack: &str, by: &str, rest: &str) -> Fixture {
+        let by: AxisOrigin = parse_fragment(by, "the per-axis author");
+        let labels = parse_record(by, rest);
+        self.with_labels(id, pack, labels)
+    }
+
+    /// **The piece with `labels` set**, which is the one place a record reaches a descriptor.
+    fn with_labels(self, id: &str, pack: &str, labels: LabelOrigin) -> Fixture {
         let mut f = self.descriptor(id, pack);
         if let Some(last) = f.descriptors.last_mut() {
-            *last = last.replace(
-                "placement: ( rooms: [], group: None ),",
-                &format!(
-                    "placement: ( rooms: [], group: None ),\n            labels: Some((by: {by}, {rest})),"
-                ),
-            );
+            last.labels = Some(labels);
         }
         f
     }
@@ -746,22 +717,12 @@ impl Fixture {
              what is on it passes over nothing. Note that `descriptor(\"floor\", \"alpha\")` mints \
              the id `floor`: the pack is the mesh folder, never a namespace."
         );
-        self.placements.push(format!(
-            r#"        (
-            id: "{row}",
-            descriptor: "{id}",
-            at: ({:.1}, {:.1}),
-            yaw: 0.0,
-            tip: (0, 0),
-            lift: 0.0,
-            on: None,
-            owned: false,
-            owned_because: None,
-            note: None,
-            patch: None,
-        ),"#,
-            at.0, at.1
-        ));
+        self.placements.push(Placed {
+            id: row.to_owned(),
+            descriptor: id.to_owned(),
+            at,
+            ..Placed::default()
+        });
         self
     }
 
@@ -770,11 +731,7 @@ impl Fixture {
     pub fn place_painted(self, id: &str, at: (f32, f32), paint: i8) -> Fixture {
         let mut f = self.place(id, at);
         if let Some(last) = f.placements.last_mut() {
-            *last = last.replacen(
-                "lift: 0.0,",
-                &format!("lift: 0.0,\n            paint: {paint},"),
-                1,
-            );
+            last.paint = paint;
         }
         f
     }
@@ -784,7 +741,7 @@ impl Fixture {
     pub fn place_on(self, id: &str, host: &str, at: (f32, f32)) -> Fixture {
         let mut f = self.place(id, at);
         if let Some(last) = f.placements.last_mut() {
-            *last = last.replacen("on: None,", &format!("on: Some(\"{host}\"),"), 1);
+            last.on = Some(host.to_owned());
         }
         f
     }
@@ -806,64 +763,60 @@ impl Fixture {
         size: (f32, f32, f32),
         members: &[(&str, &str, (f32, f32))],
     ) -> Fixture {
-        let envelope = format!(
-            "Bounded( size: ({:.1}, {:.1}, {:.1}) )",
-            size.0, size.1, size.2
-        );
-        self.composition_with(id, &envelope, members)
+        self.composition_with(id, Envelope::Bounded { size }, members)
     }
 
     pub fn composition(self, id: &str, members: &[(&str, &str, (f32, f32))]) -> Fixture {
-        self.composition_with(id, "Anchored", members)
+        self.composition_with(id, Envelope::Anchored, members)
     }
 
     fn composition_with(
         mut self,
         id: &str,
-        envelope: &str,
+        envelope: Envelope,
         members: &[(&str, &str, (f32, f32))],
     ) -> Fixture {
-        // **Sorted by member id**, which the schema requires rather than prefers: one group must
-        // have one encoding, or two authors building the same thing produce diffs that differ
-        // without meaning to. `Composition::validate_shape` refuses otherwise, and names the order.
+        // **Sorted by member id**, which the schema requires rather than prefers: one group must have one
+        // encoding, or two authors building the same thing produce diffs that differ without meaning to.
+        // `Composition::validate_shape` refuses otherwise, and names the order.
         let mut members = members.to_vec();
         members.sort_by(|a, b| a.0.cmp(b.0));
-        let rows: Vec<String> = members
-            .iter()
-            .map(|(member, descriptor, at)| {
-                format!(
-                    r#"                (
-                    id: "{member}",
-                    body: Descriptor( id: "{descriptor}", tip: (0, 0), on: None, patch: None ),
-                    at: ({:.1}, {:.1}),
+        self.compositions.push(bevy_grimoire_core::composition::Composition {
+            id: id.to_owned(),
+            envelope,
+            members: members
+                .iter()
+                .map(|(member, descriptor, at)| Member {
+                    id: (*member).to_owned(),
+                    body: Body::Descriptor { id: (*descriptor).to_owned(), tip: (0, 0), on: None, patch: None },
+                    at: *at,
                     yaw: 0.0,
                     lift: 0.0,
+                    paint: 0,
                     of_fingerprint: None,
                     note: None,
-                ),"#,
-                    at.0, at.1
-                )
-            })
-            .collect();
-        self.compositions.push(format!(
-            r#"        (
-            id: "{id}",
-            envelope: {envelope},
+                })
+                .collect(),
             note: None,
-            members: [
-{}
-            ],
-            locations: [],
-        ),"#,
-            rows.join("\n")
-        ));
+            locations: Vec::new(),
+        });
         self
     }
 
     /// **The project's `rules.ron`**, as the text a project would hold — written verbatim by
     /// [`Self::build`], so a test can also hand it something the loader must refuse.
-    pub fn rules(mut self, text: &str) -> Fixture {
-        self.rules = Some(text.to_owned());
+    /// **The project's `rules.yaml` from a value**, which is the ordinary case: a test that wants a rule
+    /// states it, and the builder writes the file through the one YAML writer.
+    pub fn rules(mut self, rules: bevy_grimoire_core::rules::Rules) -> Fixture {
+        self.rules = Some(rules);
+        self
+    }
+
+    /// **The project's `rules.yaml` from text**, for a test whose subject *is* a file the loader must
+    /// refuse. The text is written verbatim, so it is not written through a writer that would have to read
+    /// it first — which is the whole point of a malformed fixture.
+    pub fn rules_text(mut self, text: &str) -> Fixture {
+        self.rules_text = Some(text.to_owned());
         self
     }
 
@@ -878,13 +831,8 @@ impl Fixture {
     pub fn place_owned(mut self, id: &str, at: (f32, f32)) -> Fixture {
         self = self.place(id, at);
         if let Some(last) = self.placements.last_mut() {
-            assert!(
-                last.contains("owned: false,") && last.contains("owned_because: None,"),
-                "the fixture's placement shape changed under this helper"
-            );
-            *last = last
-                .replace("owned: false,", "owned: true,")
-                .replace("owned_because: None,", "owned_because: Some(\"pinned by the test\"),");
+            last.owned = true;
+            last.owned_because = Some("pinned by the test".to_owned());
         }
         self
     }
@@ -894,157 +842,140 @@ impl Fixture {
     /// owned)`, named `<descriptor>@<n>`. The map is not checked against the library, because the
     /// reader of an example (`rules::learn`) never asks.
     pub fn write_map(root: &Path, name: &str, side: f32, rows: &[(&str, (f32, f32), bool)]) {
-        let placements: Vec<String> = rows
-            .iter()
-            .enumerate()
-            .map(|(n, (id, at, owned))| {
-                let because = if *owned {
-                    "Some(\"pinned by the test\")"
-                } else {
-                    "None"
-                };
-                format!(
-                    "        (id: \"{id}@{n}\", descriptor: \"{id}\", at: ({:.1}, {:.1}), yaw: 0.0, \
-                     tip: (0, 0), lift: 0.0, on: None, owned: {owned}, owned_because: {because}, \
-                     note: None, patch: None),",
-                    at.0, at.1
-                )
-            })
-            .collect();
-        let path = root
-            .join("assets/grimoire/maps")
-            .join(format!("{name}.map.ron"));
+        // The map is not checked against the library, because the reader of an example (`rules::learn`)
+        // never asks: it reads rows and their positions.
+        let map = Map {
+            version: bevy_grimoire_core::map::MAP_VERSION,
+            name: name.to_owned(),
+            origin: (0.0, 0.0, 0.0),
+            bounds: (side, 3.0, side),
+            placements: rows
+                .iter()
+                .enumerate()
+                .map(|(n, (id, at, owned))| Placed {
+                    id: format!("{id}@{n}"),
+                    descriptor: (*id).to_owned(),
+                    at: *at,
+                    owned: *owned,
+                    owned_because: (*owned).then(|| "pinned by the test".to_owned()),
+                    ..Placed::default()
+                })
+                .collect(),
+            ..Map::default()
+        };
+        let path = root.join("assets/grimoire/maps").join(format!("{name}.map.yaml"));
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).unwrap_or_else(|e| panic!("{dir:?}: {e}"));
         }
-        std::fs::write(
-            &path,
-            format!(
-                "(\n    version: 3,\n    name: \"{name}\",\n    origin: (0.0, 0.0, 0.0),\n    \
-                 bounds: ({side:?}, 3.0, {side:?}),\n    bash: None,\n    placements: [\n{}\n    ],\n    \
-                 stamps: [],\n    locations: [],\n)",
-                placements.join("\n")
-            ),
-        )
-        .unwrap_or_else(|e| panic!("{path:?}: {e}"));
+        write_yaml(&path, &map);
     }
 
     /// Write the library and the map, and hand back the root [`crate::harness::build_headless`] opens.
+    ///
+    /// **Every file is written through the one YAML writer, from a value.** The builder used to format RON
+    /// text by hand — nine `format!` calls, each a second spelling of a schema the crate already states — and
+    /// every helper above reached into that text with `replace(…)`. A value cannot drift from the type, and it
+    /// is what makes this builder the gate the cutover needed rather than the thing blocking it.
     pub fn build(self, map: &str) -> PathBuf {
         let grimoire = self.dir.join("assets/grimoire");
 
-        // **The project root is not a kit.** `vocab.ron`, `kits.ron`, `compositions.ron` and
-        // `maps/` are the project's; every library lives in a kit directory beside them. This used
-        // to write a `library.ron` here, which is exactly the conflation the 2026-08-16 split undid.
-        //
-        // The unnamed descriptors go into `furniture` — the same name the shipped project uses for
-        // the same set, so a fixture and the real thing agree about where flat ids live.
+        // **The project root is not a kit.** `vocab.yaml`, `kits.yaml`, `compositions.yaml` and `maps/` are
+        // the project's; every library lives in a kit directory beside them. The unnamed descriptors go into
+        // `furniture` — the same name the shipped project uses for the same set.
         let mut binds = vec![DEFAULT_KIT.to_owned()];
         binds.extend(self.kits.iter().map(|(n, _)| n.clone()));
-        for (name, rows) in std::iter::once(&(DEFAULT_KIT.to_owned(), self.descriptors.clone()))
+        for (name, descriptors) in std::iter::once(&(DEFAULT_KIT.to_owned(), self.descriptors.clone()))
             .chain(self.kits.iter())
         {
             let dir = grimoire.join(name);
             std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{dir:?}: {e}"));
-            std::fs::write(
-                dir.join("library.ron"),
-                format!(
-                    "(\n    version: 1,\n    note: None,\n    descriptors: [\n{}\n    ],\n)",
-                    rows.join("\n")
-                ),
-            )
-            .unwrap_or_else(|e| panic!("{e}"));
+            write_yaml(
+                &dir.join("library.yaml"),
+                &Library {
+                    version: bevy_grimoire_core::library::LIBRARY_VERSION,
+                    note: None,
+                    descriptors: descriptors.clone(),
+                },
+            );
             // *"A project states its policy, even when its policy is nothing"* — a kit missing
-            // `project.ron` is not a kit with defaults, it is a kit the editor refuses.
-            std::fs::write(
-                dir.join("project.ron"),
-                "(\n    version: 2,\n    note: None,\n    patches: [],\n)",
-            )
-            .unwrap_or_else(|e| panic!("{e}"));
+            // `project.yaml` is not a kit with defaults, it is a kit the editor refuses.
+            write_yaml(&dir.join("project.yaml"), &Policy::default());
         }
 
-        // **Bound as their own names.** A fixture kit built with `Fixture::kit` may carry `site/*`
-        // ids and be called something else — that is the re-skin shape — so the binding is verified
-        // against the library at load and a mismatch is a refusal, not a silent re-point. Tests
-        // that want the pair write their own `kits.ron` on top.
+        // **Bound as their own names.** A fixture kit built with `Fixture::kit` may carry `site/*` ids and be
+        // called something else — that is the re-skin shape — so the binding is verified against the library
+        // at load and a mismatch is a refusal, not a silent re-point. Tests that want the pair write their
+        // own `kits.yaml` on top.
         let bind = binds
             .iter()
             .map(|n| {
-                let ids = self
-                    .ids
-                    .iter()
-                    .find(|(k, _)| k == n)
-                    .map(|(_, v)| v.as_slice())
-                    .unwrap_or(&[]);
-                format!("(namespace: \"{}\", dir: \"{n}\")", namespace_of(n, ids))
+                let ids = self.ids.iter().find(|(k, _)| k == n).map(|(_, v)| v.as_slice()).unwrap_or(&[]);
+                Bind { namespace: namespace_of(n, ids), dir: n.clone() }
             })
-            .collect::<Vec<_>>()
-            .join(", ");
-        // **The declared combinations, in call order.** Empty is the ordinary fixture: every map
-        // offers every bound kit, which is what `Map::bash: None` means.
+            .collect();
+        // **The declared combinations, in call order.** Empty is the ordinary fixture: every map offers every
+        // bound kit, which is what `Map::bash: None` means.
         let bash = self
             .bashes
             .iter()
-            .map(|(name, kits)| {
-                let members = kits
-                    .iter()
-                    .map(|k| format!("\"{k}\""))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("(name: \"{name}\", kits: [{members}])")
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        std::fs::write(
-            grimoire.join("kits.ron"),
-            format!(
-                "(version: {}, bind: [{bind}], bash: [{bash}], authoring: Some(\"{DEFAULT_KIT}\"))",
-                bevy_grimoire_core::kits::KITS_VERSION
-            ),
-        )
-        .unwrap_or_else(|e| panic!("{e}"));
+            .map(|(name, kits)| Bash { name: name.clone(), kits: kits.clone(), note: None })
+            .collect();
+        write_yaml(
+            &grimoire.join("kits.yaml"),
+            &Kits {
+                version: bevy_grimoire_core::kits::KITS_VERSION,
+                note: None,
+                lattice: Default::default(),
+                bind,
+                bash,
+                authoring: Some(DEFAULT_KIT.to_owned()),
+            },
+        );
 
         // **Absent is the ordinary project.** Only a test that is about rules writes the file.
-        if let Some(text) = &self.rules {
-            std::fs::write(grimoire.join("rules.ron"), text).unwrap_or_else(|e| panic!("{e}"));
+        if let Some(rules) = &self.rules {
+            write_yaml(&grimoire.join("rules.yaml"), rules);
         }
-        let side = self.side;
+        if let Some(text) = &self.rules_text {
+            std::fs::write(grimoire.join("rules.yaml"), text).unwrap_or_else(|e| panic!("{e}"));
+        }
 
-        // **One collection, at the project root.** Its absence and an empty one mean the same
-        // thing, so a project that stamps nothing writes no file.
+        // **One collection, at the project root.** Its absence and an empty one mean the same thing, so a
+        // project that stamps nothing writes no file.
         if !self.compositions.is_empty() {
-            std::fs::write(
-                grimoire.join("compositions.ron"),
-                format!(
-                    "(\n    version: 1,\n    note: None,\n    compositions: [\n{}\n    ],\n)",
-                    self.compositions.join("\n")
-                ),
-            )
-            .unwrap_or_else(|e| panic!("{e}"));
+            write_yaml(
+                &grimoire.join("compositions.yaml"),
+                &Compositions {
+                    version: bevy_grimoire_core::composition::COMPOSITIONS_VERSION,
+                    note: None,
+                    compositions: self.compositions.clone(),
+                },
+            );
         }
 
         let maps = grimoire.join("maps");
         std::fs::create_dir_all(&maps).unwrap_or_else(|e| panic!("{maps:?}: {e}"));
-        std::fs::write(
-            maps.join(format!("{map}.map.ron")),
-            format!(
-                "(\n    version: 3,\n    name: \"{map}\",\n    origin: (0.0, 0.0, 0.0),\n    \
-                 bounds: ({side:?}, 3.0, {side:?}),\n    bash: None,\n    placements: [\n{}\n    ],\n    \
-                 stamps: [],\n    locations: [],\n)",
-                self.placements.join("\n")
-            ),
-        )
-        .unwrap_or_else(|e| panic!("{e}"));
+        write_yaml(
+            &maps.join(format!("{map}.map.yaml")),
+            &Map {
+                version: bevy_grimoire_core::map::MAP_VERSION,
+                name: map.to_owned(),
+                origin: (0.0, 0.0, 0.0),
+                bounds: (self.side, 3.0, self.side),
+                placements: self.placements.clone(),
+                ..Map::default()
+            },
+        );
         self.dir
     }
 }
 
-/// **A person's trust store of the test's own, trusting `root` as a whole project.** The editor starts
-/// a program a project names only once a person has allowed it; a test that is about *starting* the
-/// program says so with this, and points `Ctx::trust_file` or `EditorState::trust.file` at it. It sits
-/// beside the project so no test reads or writes the real one in the user's data directory.
+/// **A person's trust store of the test's own, trusting `root` as a whole project.** The editor starts a
+/// program a project names only once a person has allowed it; a test that is about *starting* the program
+/// says so with this, and points `Ctx::trust_file` or `EditorState::trust.file` at it. It sits beside the
+/// project so no test reads or writes the real one in the user's data directory.
 pub fn trusted_store(root: &Path) -> PathBuf {
-    let file = root.join("trusted-by-the-test.ron");
+    let file = root.join("trusted-by-the-test.yaml");
     let mut store = bevy_grimoire_core::trust::TrustStore::default();
     store.trust_project(root).unwrap_or_else(|e| panic!("{e}"));
     store.save(&file).unwrap_or_else(|e| panic!("{e}"));

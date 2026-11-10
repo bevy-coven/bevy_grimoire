@@ -50,7 +50,7 @@ pub fn read_text<T: DeserializeOwned>(kind: &'static str, project: &Project, pat
 }
 
 /// **`text` as a `T`, naming the file `file`**: for a file that is not under the project's directory
-/// (the game root's own, `destructible.ron`), where `file` is the path the author edits it by.
+/// (the game root's own, `destructible.yaml`), where `file` is the path the author edits it by.
 pub fn read_named<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str) -> Result<T, Refusal> {
     reload_check::read(kind, file, text).map_err(|r| {
         Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))

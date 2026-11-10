@@ -291,14 +291,14 @@ fn resolving_on_this_machine_uses_what_is_installed_unless_a_file_says() {
 
     // **A file wins, both ways**: someone on a machine with `omp` may still want a plain shell, and
     // someone whose agent is not on the login shell's PATH may name one they have.
-    let off = SettingsLayer::read("editor.ron", "(version: 1, terminal_agent: Some(Off))")
+    let off = SettingsLayer::read("editor.yaml", "(version: 1, terminal_agent: Some(Off))")
         .unwrap_or_else(|e| panic!("{}", e.reason));
     assert_eq!(
         EditorSettings::resolve_on_this_machine(None, Some(&off), TerminalAgent::OhMyPi).terminal_agent,
         TerminalAgent::Off,
         "a file that names Off beats the machine's installed agent"
     );
-    let pi = SettingsLayer::read("editor.ron", "(version: 1, terminal_agent: Some(OhMyPi))")
+    let pi = SettingsLayer::read("editor.yaml", "(version: 1, terminal_agent: Some(OhMyPi))")
         .unwrap_or_else(|e| panic!("{}", e.reason));
     assert_eq!(
         EditorSettings::resolve_on_this_machine(None, Some(&pi), TerminalAgent::Off).terminal_agent,
@@ -307,7 +307,7 @@ fn resolving_on_this_machine_uses_what_is_installed_unless_a_file_says() {
     );
 
     // **The project's layer is the later one**, exactly as every other key resolves.
-    let project = SettingsLayer::read("editor.ron", "(version: 1, terminal_agent: Some(Off))")
+    let project = SettingsLayer::read("editor.yaml", "(version: 1, terminal_agent: Some(Off))")
         .unwrap_or_else(|e| panic!("{}", e.reason));
     assert_eq!(
         EditorSettings::resolve_on_this_machine(Some(&pi), Some(&project), TerminalAgent::Off).terminal_agent,

@@ -64,7 +64,7 @@ fn move_the_piece_on_disk(root: &std::path::Path, to: (f32, f32)) {
         .join("assets")
         .join("grimoire")
         .join("maps")
-        .join("m.map.ron");
+        .join("m.map.yaml");
     let text = std::fs::read_to_string(&path).expect("the map file is there");
     let (x, z) = to;
     let moved = text.replace("at: (0.0, 0.0)", &format!("at: ({x}, {z})"));
@@ -161,7 +161,7 @@ fn a_malformed_map_on_disk_is_refused_on_the_map_door() {
         .join("assets")
         .join("grimoire")
         .join("maps")
-        .join("m.map.ron");
+        .join("m.map.yaml");
     let text = std::fs::read_to_string(&path).expect("the map file is there");
     let broken = text.replacen("bounds: (", "bounds: ((", 1);
     assert_ne!(broken, text, "the map file has no bounds to break: {text}");
@@ -184,7 +184,7 @@ fn a_malformed_map_on_disk_is_refused_on_the_map_door() {
         }
     }
     assert!(
-        said.contains("m.map.ron"),
+        said.contains("m.map.yaml"),
         "the malformed map file was refused nowhere the Map door shows, so the author sees the old \
          map and no reason; the Map's problem slot reads {said:?}"
     );

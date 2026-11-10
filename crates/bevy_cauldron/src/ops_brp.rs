@@ -318,13 +318,13 @@ pub(crate) fn carry_proposal(
 /// **Put the operation's map back into the editor's own resource.**
 ///
 /// **The map, and the rules when an operation changed them.** Most operations read the library and
-/// write the file and leave the project alone; a rename is the one that rewrites `rules.ron`.
+/// write the file and leave the project alone; a rename is the one that rewrites `rules.yaml`.
 pub(crate) fn put_back(
     project: &mut Option<ResMut<crate::project::Project>>,
     open: &mut Option<ResMut<crate::project::OpenMap>>,
     ctx: Ctx,
 ) {
-    // **The rules too, and only when they changed.** A rename rewrites `rules.ron`'s examples, and
+    // **The rules too, and only when they changed.** A rename rewrites `rules.yaml`'s examples, and
     // the editor reads the rules it generates from out of the Project resource, so a change that
     // stayed in the clone would leave the next generate reading a map the rename had removed. The
     // comparison comes first: writing through `as_deref_mut` marks the resource changed, and most
@@ -353,7 +353,7 @@ pub(crate) fn put_back(
     {
         crate::editor::adopt_library(handle, fresh);
     }
-    // **The vocabulary too** (E-002, #129 slice 11): `vocab_add_token` appends to `vocab.ron` and
+    // **The vocabulary too** (E-002, #129 slice 11): `vocab_add_token` appends to `vocab.yaml` and
     // re-resolves the masks in the clone, and the editor's own copy must say so or the chips would
     // not show the token and a piece could not wear it. Compared first, like the library.
     if let Some(fresh) = ctx.project.as_ref()
@@ -363,7 +363,7 @@ pub(crate) fn put_back(
         handle.vocab = fresh.vocab.clone();
         handle.masks = fresh.masks.clone();
     }
-    // **The compositions too** (E-072): `composition_define` writes `compositions.ron` through the
+    // **The compositions too** (E-072): `composition_define` writes `compositions.yaml` through the
     // clone's project, and the editor's own copy must say so or the next define would not see it.
     // Compared first, like the rules and the library.
     if let Some(fresh) = ctx.project.as_ref()
@@ -952,13 +952,13 @@ fn editor_state(
         // **The repeats a player will notice first** (#136): same piece, yaw (any yaw for a round
         // kind, #184) and tip, close together,
         // weighed by role so repeated clutter heads the list above repeated structure. The rules are
-        // the project's `repetition.ron` (#139), read on every call so an edit is seen with no restart.
+        // the project's `repetition.yaml` (#139), read on every call so an edit is seen with no restart.
         "repetition": match (open.as_ref(), project.as_ref()) {
             (Some(o), Some(p)) => repetition_json(&o.map.placements, &p.library, &p.project_dir),
             _ => Value::Null,
         },
-        // **The kit pieces that break the project's standards** (#138): read from `standards.ron`
-        // beside `kits.ron` on every call, so an edit to that file is seen with no restart.
+        // **The kit pieces that break the project's standards** (#138): read from `standards.yaml`
+        // beside `kits.yaml` on every call, so an edit to that file is seen with no restart.
         "standards": project.as_ref().map(|p| standards_json(&p.library, &p.project_dir)),
         // **The kit's dead ends** (#142): every declared face no piece of the kit meets at any
         // quarter turn, through the same seam check the map uses, so a socket nothing can close is
@@ -968,7 +968,7 @@ fn editor_state(
         // tests after `dead_ends`, `adjacency::ring` (#160) and `adjacency::room` (#162), from the
         // library on every call, so an edit to a piece's tokens is in the next answer.
         "stress": project.as_ref().map(|p| stress_json(&p.library, p.lattice.face_bands)),
-        // **The intended relations this map breaks** (#137): read from `<map>.relations.ron` on every
+        // **The intended relations this map breaks** (#137): read from `<map>.relations.yaml` on every
         // call, so an edit to that file is seen by the next answer with no restart.
         "relations": open.as_ref().map(|o| relations_json(&o.map.placements, &o.map_path)),
         "project": project_summary,
@@ -1081,7 +1081,7 @@ fn repetition_json(
     json!({"repeats": rows, "total": all.len(), "error": null})
 }
 
-/// `<project_dir>/repetition.ron`, or the default rules when there is no such file; any other
+/// `<project_dir>/repetition.yaml`, or the default rules when there is no such file; any other
 /// failure to read or parse it is the error, naming the file. Shared by `grimoire_state` and the
 /// status bar's `REPEATS` line (#139), so the two cannot disagree.
 pub(crate) fn load_repetition(
@@ -1281,7 +1281,7 @@ pub(crate) fn piece_unnested(
         .collect()
 }
 
-/// `<project_dir>/standards.ron`, or no rules when there is no such file; any other failure to read
+/// `<project_dir>/standards.yaml`, or no rules when there is no such file; any other failure to read
 /// or parse it is the error, naming the file.
 pub(crate) fn load_standards(
     project_dir: &std::path::Path,
@@ -3285,7 +3285,7 @@ pub(crate) fn join_history(
     }
 }
 
-/// **`data.ron`'s files, with each one's leaf count**, read from disk so a hand edit shows at once.
+/// **`data.yaml`'s files, with each one's leaf count**, read from disk so a hand edit shows at once.
 /// Empty with no registry; a malformed one reads as `{"error": ..}`.
 fn data_files_json(grimoire_dir: &std::path::Path) -> Value {
     use bevy_grimoire_core::data_files::{DataFiles, leaves};

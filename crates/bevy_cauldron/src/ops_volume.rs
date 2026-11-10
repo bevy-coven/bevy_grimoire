@@ -74,7 +74,7 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
 
 /// **The saved volume of the open map**, or `None` when it has none.
 pub fn volume_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<Volume> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
     ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("volume").join(format!("{name}.ron"))).ok()?).ok()
 }
 

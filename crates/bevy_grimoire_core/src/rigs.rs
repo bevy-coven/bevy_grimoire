@@ -39,6 +39,10 @@ pub const MAX_MASK_GROUP: u32 = 64;
 /// against itself.
 pub const RIGS_VERSION: u32 = 3;
 
+/// **The file this kind lives in**: `rigs.yaml`, at the project root beside `kits.yaml`. A rig names bones
+/// and clips, and is read by the animation tab and by any game that animates a placed piece.
+pub const FILE: &str = "rigs.yaml";
+
 /// The node the FK checks anchor on when a rig does not name its own — see [`Rig::root_node`].
 pub const DEFAULT_ROOT_NODE: &str = "Root";
 
@@ -217,14 +221,15 @@ pub struct Rigs {
 
 impl Rigs {
     pub fn parse(text: &str) -> Result<Rigs, String> {
-        let parsed: Rigs = ron::from_str(text).map_err(|e| format!("rigs.ron is not valid: {e}"))?;
+        let parsed: Rigs = crate::yaml::from_str(text, FILE)
+            .map_err(|p| format!("rigs.yaml is not valid: {}", p.line()))?;
         parsed.validate()?;
         Ok(parsed)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("cannot write rigs.ron: {e}"))
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("cannot write {}: {}", FILE, p.line()))
     }
 
     pub fn get(&self, name: &str) -> Option<&Rig> {
@@ -238,7 +243,7 @@ impl Rigs {
     pub fn validate(&self) -> Result<(), String> {
         if self.version != RIGS_VERSION {
             return Err(format!(
-                "rigs.ron is version {}, this build reads {RIGS_VERSION}",
+                "rigs.yaml is version {}, this build reads {RIGS_VERSION}",
                 self.version
             ));
         }
@@ -463,7 +468,7 @@ mod tests {
     #[test]
     fn a_manifest_survives_a_round_trip() {
         let before = one(gait());
-        let text = before.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = before.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let after = Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(before, after);
     }
@@ -600,7 +605,7 @@ mod tests {
         if let Some(r) = m.rigs.get_mut("valkyrie") {
             r.drive_speed = Some((0.9, 6.0));
         }
-        let text = m.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = m.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let back = Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(m, back);
     }
@@ -621,7 +626,7 @@ mod tests {
         if let Some(r) = m.rigs.get_mut("valkyrie") {
             r.provenance = Some(stamp());
         }
-        let text = m.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = m.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         let back = Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(m, back);
     }

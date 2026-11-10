@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
-const FILE: &str = "rigs.ron";
+const FILE: &str = "rigs.yaml";
 const GOOD: &str = "(version: 3, rigs: {})";
 const EDITED: &str = "(version: 3, note: Some(\"edited by hand\"), rigs: {})";
 

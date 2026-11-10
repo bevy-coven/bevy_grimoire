@@ -12,16 +12,28 @@ use bevy_cauldron::project::{OpenMap, Project};
 
 use crate::fixtures;
 
-const RULES: &str = "// the block rules: learned from `m`\n\
-(version: 1, blocks: [(example: \"m\", regions: [], cell: 2.0, \
-size: (4, 4), border: None, no_empty: true, weights: [], \
-footprints: [], attempts: 8, seed: 7)])\n";
+const RULES: &str = r"# the block rules: learned from `m`
+version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights: []
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 fn editor(name: &str) -> App {
     let root = fixtures::Fixture::new(name)
         .descriptor("site/wall", "alpha")
         .place("site/wall", (0.0, 0.0))
-        .rules(RULES)
+        .rules_text(RULES)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -63,7 +75,7 @@ fn undo(app: &mut App) -> serde_json::Value {
 }
 
 fn rules_path(app: &App) -> std::path::PathBuf {
-    app.world().resource::<Project>().project_dir.join("rules.ron")
+    app.world().resource::<Project>().project_dir.join("rules.yaml")
 }
 
 fn example_in_memory(app: &App) -> String {

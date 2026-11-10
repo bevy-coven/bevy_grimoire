@@ -7,8 +7,8 @@
 //! loaded project, so the log line goes in the root's `oplog.jsonl` (the way `map_create`'s does).
 //!
 //! **`kit_create` undoes exactly what it wrote and nothing else.** Its inverse names the kit and the
-//! text `kits.ron` had before; it takes the kit's directory away only while that holds nothing but the
-//! two files this operation wrote, unchanged, and puts `kits.ron` back. A kit someone has since put a
+//! text `kits.yaml` had before; it takes the kit's directory away only while that holds nothing but the
+//! two files this operation wrote, unchanged, and puts `kits.yaml` back. A kit someone has since put a
 //! piece in, or a file the author touched, is refused rather than deleted. The undo is the writer's own
 //! ([`Operation::only_as_undo`]): an agent cannot delete a kit by calling `kit_create`.
 
@@ -22,14 +22,14 @@ use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 
 fn root(ctx: &Ctx) -> Result<PathBuf, Refusal> {
     ctx.root_or_project()
-        .ok_or_else(|| Refusal::new("no project is open, so there is no kits.ron to bind a kit in."))
+        .ok_or_else(|| Refusal::new("no project is open, so there is no kits.yaml to bind a kit in."))
 }
 
 fn kits_path(root: &Path) -> PathBuf {
     root.join(GRIMOIRE_DIR).join(bevy_grimoire_core::kits::KITS_FILE)
 }
 
-/// What `kits.ron` holds now, for an undo to compare and to put back.
+/// What `kits.yaml` holds now, for an undo to compare and to put back.
 fn kits_text(root: &Path) -> Result<String, Refusal> {
     let path = kits_path(root);
     std::fs::read_to_string(&path).map_err(|e| {
@@ -52,10 +52,10 @@ pub struct CreateParams {
     /// What the kit is called, forced to snake_case. It is also the namespace its pieces take.
     #[serde(default)]
     pub name: String,
-    /// **Undo only.** Take this kit away again, and put `kits.ron` back as `kits` says.
+    /// **Undo only.** Take this kit away again, and put `kits.yaml` back as `kits` says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remove: Option<String>,
-    /// **Undo only.** The text `kits.ron` had before the kit was bound.
+    /// **Undo only.** The text `kits.yaml` had before the kit was bound.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kits: Option<String>,
 }
@@ -79,7 +79,7 @@ impl KitCreate {
     fn removal(ctx: &Ctx, p: &CreateParams, write: bool) -> Result<Outcome, Refusal> {
         let root = root(ctx)?;
         let (Some(name), Some(prior)) = (&p.remove, &p.kits) else {
-            return Err(Refusal::new("an undo names the kit to take away and the `kits.ron` to put back."));
+            return Err(Refusal::new("an undo names the kit to take away and the `kits.yaml` to put back."));
         };
         let dir = Self::dir(&root, name);
         let (library, policy) = new_kit_files(name);
@@ -110,7 +110,7 @@ impl KitCreate {
             bevy_grimoire_core::ron_surgery::save_atomic(&kits_path(&root), prior).map_err(Refusal::new)?;
         }
         Ok(Outcome {
-            summary: format!("took the empty kit `{name}` away and put kits.ron back"),
+            summary: format!("took the empty kit `{name}` away and put kits.yaml back"),
             affected: 1,
             saved: write,
             inverse: Some(json!({"name": name})),
@@ -145,7 +145,7 @@ impl Operation for KitCreate {
         "kit_create"
     }
     fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
-        // **A kit is a row of the project chooser's kit list**, and its binding is `kits.ron`'s.
+        // **A kit is a row of the project chooser's kit list**, and its binding is `kits.yaml`'s.
         Shown::Settings { section: "kits".to_owned() }
     }
     fn writes(&self) -> &'static [&'static str] {
@@ -163,11 +163,11 @@ impl Operation for KitCreate {
             "additionalProperties": false,
             "required": ["name"],
             "properties": {
-                "name": {"type": "string", "description": "What the kit is called. Forced to snake_case: lowercase letters, digits and single underscores, starting with a letter. A kit is a directory under assets/grimoire with an empty library.ron and project.ron, bound in kits.ron as its own namespace; the first kit of a project is also where new work lands."}
+                "name": {"type": "string", "description": "What the kit is called. Forced to snake_case: lowercase letters, digits and single underscores, starting with a letter. A kit is a directory under assets/grimoire with an empty library.yaml and project.yaml, bound in kits.yaml as its own namespace; the first kit of a project is also where new work lands."}
             }
         })
     }
-    /// **The kit's directory and `kits.ron` as an undo finds them**, against what the change recorded.
+    /// **The kit's directory and `kits.yaml` as an undo finds them**, against what the change recorded.
     fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
         let name = after.get("kit")?.as_str()?;
         let root = ctx.root_or_project()?;
@@ -243,7 +243,7 @@ impl Operation for KitSetAuthoring {
         "kit_set_authoring"
     }
     fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
-        // **A kit is a row of the project chooser's kit list**, and its binding is `kits.ron`'s.
+        // **A kit is a row of the project chooser's kit list**, and its binding is `kits.yaml`'s.
         Shown::Settings { section: "kits".to_owned() }
     }
     fn writes(&self) -> &'static [&'static str] {
@@ -299,7 +299,7 @@ impl Operation for KitSetAuthoring {
             let text = kits_text(&root)?;
             let mut kits = bevy_grimoire_core::kits::Kits::parse(&text).map_err(Refusal::new)?;
             kits.authoring = None;
-            let out = kits.to_ron().map_err(Refusal::new)?;
+            let out = kits.to_yaml().map_err(Refusal::new)?;
             bevy_grimoire_core::kits::Kits::parse(&out).map_err(Refusal::new)?;
             bevy_grimoire_core::ron_surgery::save_atomic(&kits_path(&root), &out).map_err(Refusal::new)?;
             ("new work lands in no particular kit again".to_owned(), None)

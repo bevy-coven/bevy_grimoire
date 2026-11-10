@@ -124,10 +124,10 @@ fn a_line_from_before_the_version_reads_as_the_first_and_nothing_is_rewritten() 
     assert_eq!(std::fs::read_to_string(log_path(&ctx)).unwrap(), old.join("\n") + "\n", "reading rewrote nothing");
 
     let maps = ctx.project.as_ref().unwrap().maps_dir.clone();
-    assert!(maps.join("west.map.ron").exists());
+    assert!(maps.join("west.map.yaml").exists());
     ops::undo(&mut ctx, Some(&ids[1])).unwrap_or_else(|e| panic!("an undo of a log from before the version refused: {}", e.0));
-    assert!(!maps.join("west.map.ron").exists(), "the undo took the change back");
-    assert!(maps.join("east.map.ron").exists(), "and only that change");
+    assert!(!maps.join("west.map.yaml").exists(), "the undo took the change back");
+    assert!(maps.join("east.map.yaml").exists(), "and only that change");
 }
 
 /// **A line of another version is refused with a verdict, the undo refuses naming it, and the bytes stand**:

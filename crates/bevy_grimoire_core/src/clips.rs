@@ -1124,8 +1124,8 @@ mod tests {
     /// The valkyrie's render scale, from the one place that owns it. The game scales the whole
     /// figurine, so a distance measured in the file's units becomes this many world units.
     fn figurine_scale() -> f32 {
-        let text = std::fs::read_to_string("../../assets/grimoire/rigs.ron")
-            .unwrap_or_else(|e| panic!("rigs.ron: {e}"));
+        let text = std::fs::read_to_string("../../assets/grimoire/rigs.yaml")
+            .unwrap_or_else(|e| panic!("rigs.yaml: {e}"));
         let rigs = crate::rigs::Rigs::parse(&text).unwrap_or_else(|e| panic!("{e}"));
         rigs.get("valkyrie")
             .unwrap_or_else(|| panic!("no valkyrie in the manifest"))

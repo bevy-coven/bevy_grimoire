@@ -32,31 +32,31 @@ use crate::fixtures;
 
 /// **A rules file with comments in it**, which is the case the text surgery exists for. The
 /// descriptor ids a rule names must be in the fixture's library, so `alpha` is the piece.
-const RULES: &str = "// the block rules: learned from `m`\n\
-(\n\
-    version: 1,\n\
-    blocks: [\n\
-        (\n\
-            example: \"m\",\n\
-            regions: [],\n\
-            cell: 2.0,\n\
-            size: (4, 4),\n\
-            border: None,\n\
-            no_empty: true,\n\
-            // houses should outnumber the road\n\
-            weights: [(prefix: \"alpha\", times: 2.0)],\n\
-            footprints: [],\n\
-            attempts: 8,\n\
-            seed: 7,\n\
-        ),\n\
-    ],\n\
-)\n";
+const RULES: &str = r"# the block rules: learned from `m`
+version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  # houses should outnumber the road
+  weights:
+  - prefix: alpha
+    times: 2.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
 
 fn editor(name: &str) -> App {
     let root = fixtures::Fixture::new(name)
         .side(8.0)
         .descriptor("alpha", "alpha")
-        .rules(RULES)
+        .rules_text(RULES)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -97,7 +97,7 @@ fn undo(app: &mut App) -> serde_json::Value {
 }
 
 fn rules_text(app: &App) -> String {
-    let path = app.world().resource::<Project>().project_dir.join("rules.ron");
+    let path = app.world().resource::<Project>().project_dir.join("rules.yaml");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
@@ -281,20 +281,48 @@ fn a_change_and_its_undo_leave_the_file_unchanged() {
 /// surgery has to survive, and it is a test rather than a comment because the failure is silent.
 #[test]
 fn a_field_name_inside_a_prefix_does_not_hijack_the_write() {
-    const TRICKY: &str = "(version: 1, blocks: [(example: \"m\", regions: [], cell: 2.0, \
-size: (4, 4), border: None, no_empty: true, \
-weights: [(prefix: \"cell:x\", times: 2.0)], footprints: [], attempts: 8, seed: 7)])\n";
+    const TRICKY: &str = r"version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights:
+  - prefix: cell:x
+    times: 2.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
     // **The order matters and that is the point.** `cell:` appears before `weights:` in a file
     // written by the editor, so `find` takes the real one. A hand-edited file can put `weights`
     // first, and then the same characters are the ones `find` reaches. Both orders are run, because
     // only the second one exercises the hazard.
-    const TRICKY_WEIGHTS_FIRST: &str = "(version: 1, blocks: [(example: \"m\", regions: [], \
-weights: [(prefix: \"cell:x\", times: 2.0)], cell: 2.0, size: (4, 4), border: None, \
-no_empty: true, footprints: [], attempts: 8, seed: 7)])\n";
+    const TRICKY_WEIGHTS_FIRST: &str = r"version: 1
+blocks:
+- example: m
+  regions: []
+  cell: 2.0
+  size:
+  - 4
+  - 4
+  border: null
+  no_empty: true
+  weights:
+  - prefix: cell:x
+    times: 2.0
+  footprints: []
+  attempts: 8
+  seed: 7
+";
     let root = fixtures::Fixture::new("rules_tricky")
         .side(8.0)
         .descriptor("alpha", "alpha")
-        .rules(TRICKY)
+        .rules_text(TRICKY)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -310,7 +338,7 @@ no_empty: true, footprints: [], attempts: 8, seed: 7)])\n";
     assert!(!reply.to_string().contains("refused"), "refused: {reply}");
     let rules = bevy_grimoire_core::rules::Rules::parse(
         &std::fs::read_to_string(
-            app.world().resource::<Project>().project_dir.join("rules.ron"),
+            app.world().resource::<Project>().project_dir.join("rules.yaml"),
         )
         .expect("on disk"),
     )
@@ -325,7 +353,7 @@ no_empty: true, footprints: [], attempts: 8, seed: 7)])\n";
     let root = fixtures::Fixture::new("rules_tricky_order")
         .side(8.0)
         .descriptor("alpha", "alpha")
-        .rules(TRICKY_WEIGHTS_FIRST)
+        .rules_text(TRICKY_WEIGHTS_FIRST)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
@@ -339,7 +367,7 @@ no_empty: true, footprints: [], attempts: 8, seed: 7)])\n";
         serde_json::json!({"operation": "rules_set", "parameters": {"example": "m", "cell": 3.0}, "dry_run": false}),
     );
     let text = std::fs::read_to_string(
-        app.world().resource::<Project>().project_dir.join("rules.ron"),
+        app.world().resource::<Project>().project_dir.join("rules.yaml"),
     )
     .expect("on disk");
     let rules = bevy_grimoire_core::rules::Rules::parse(&text)

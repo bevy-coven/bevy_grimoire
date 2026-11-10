@@ -156,15 +156,15 @@ fn choosing_a_commands_default_in_the_project_keeps_it_when_the_user_rebound_it(
     use std::collections::BTreeMap;
     let dir = std::env::temp_dir().join(format!("grimoire_keymap_project_default_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let project = dir.join("editor.ron");
+    let project = dir.join("editor.yaml");
     let users = Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyY);
     // The user's file gives Save Ctrl+Shift+Y; the project asks for Ctrl+S, the default, which is not what is in force.
     rebind(&project, "file.save", Some(ctrl_s()), &BTreeMap::new(), Some(users)).unwrap();
-    let layer = SettingsLayer::read("editor.ron", &std::fs::read_to_string(&project).unwrap()).unwrap();
+    let layer = SettingsLayer::read("editor.yaml", &std::fs::read_to_string(&project).unwrap()).unwrap();
     assert_eq!(layer.keymap.get("file.save"), Some(&ctrl_s()), "the project's choice is saved, because the layer below says something else");
     // And choosing what the user's layer already gives is no rebinding in the project's file.
     rebind(&project, "file.save", Some(users), &BTreeMap::new(), Some(users)).unwrap();
-    let layer = SettingsLayer::read("editor.ron", &std::fs::read_to_string(&project).unwrap()).unwrap();
+    let layer = SettingsLayer::read("editor.yaml", &std::fs::read_to_string(&project).unwrap()).unwrap();
     assert!(layer.keymap.is_empty(), "{:?}", layer.keymap);
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -49,7 +49,7 @@ pub const TRUST_VERSION_READS_FROM: u32 = 1;
 pub const COMMAND_FILES: [&str; 3] = ["agent.yaml", "play.yaml", "AGENTS.md"];
 
 /// The store's file name, inside the editor's own folder of the user's data directory.
-pub const STORE_FILE: &str = "trusted.ron";
+pub const STORE_FILE: &str = "trusted.yaml";
 
 /// **Which command of a project.** The same words in two kinds are two commands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,8 +176,13 @@ impl TrustStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(TrustStore::default()),
             Err(e) => return Err(format!("trust: {}: {e}", file.display())),
         };
-        let mut store: TrustStore =
-            ron::from_str(&text).map_err(|e| format!("trust: {} does not read ({e}). Fix or delete it: nothing is trusted until it does.", file.display()))?;
+        let mut store: TrustStore = crate::yaml::from_str(&text, &file.display().to_string()).map_err(|p| {
+            format!(
+                "trust: {} does not read ({}). Fix or delete it: nothing is trusted until it does.",
+                file.display(),
+                p.line()
+            )
+        })?;
         if store.version < TRUST_VERSION_READS_FROM || store.version > TRUST_VERSION {
             return Err(format!(
                 "trust: {} is version {}, and this build reads versions {TRUST_VERSION_READS_FROM} to {TRUST_VERSION}. Nothing is trusted until it does.",
@@ -194,9 +199,9 @@ impl TrustStore {
 
     /// Writes the store all or nothing, creating its folder.
     pub fn save(&self, file: &Path) -> Result<(), String> {
-        let text = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("trust: cannot write {}: {e}", file.display()))?;
-        crate::atomic_file::write(file, text).map_err(|e| format!("trust: {}: {e}", file.display()))
+        let text = crate::yaml::to_string(self)
+            .map_err(|p| format!("trust: cannot write {}: {}", file.display(), p.line()))?;
+        crate::yaml::save(file, &text)
     }
 
     /// **Has a person allowed this command in this project?** An `Err` when the project folder cannot

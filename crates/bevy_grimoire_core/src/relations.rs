@@ -2,7 +2,7 @@
 //!
 //! An agent placing pieces by number writes coordinates, and what it *meant* is lost: "the chair
 //! faces the table", "nothing stands in front of the door". This module keeps that intent as data
-//! beside the map (`<map>.relations.ron`, [`FILE_SUFFIX`]) and checks a map's placements against it,
+//! beside the map (`<map>.relations.yaml`, [`FILE_SUFFIX`]) and checks a map's placements against it,
 //! so a broken relation is named with what was measured rather than discovered by looking.
 //!
 //! Each [`Relation`] is about one placement, [`Relation::of`], by its stable id
@@ -28,16 +28,19 @@ use crate::map::Placed;
 pub const RELATIONS_VERSION: u32 = 1;
 
 /// A map's relations live in `<map name>` + this, beside the map file.
-pub const FILE_SUFFIX: &str = ".relations.ron";
+pub const FILE_SUFFIX: &str = ".relations.yaml";
 
 /// How far off dead-on, in degrees, a piece may point and still face its target.
 pub const FACING_TOLERANCE_DEG: f32 = 30.0;
 
-/// The relations file that belongs to a map file: `town.map.ron` → `town.relations.ron`, in the
-/// same directory. A map path that does not end `.map.ron` gets [`FILE_SUFFIX`] appended to its stem.
+/// The relations file that belongs to a map file: `town.map.yaml` → `town.relations.yaml`, in the
+/// same directory. A map path that does not end `.map.yaml` gets [`FILE_SUFFIX`] appended to its stem.
 pub fn path_for_map(map_path: &std::path::Path) -> std::path::PathBuf {
     let name = map_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let stem = name.strip_suffix(".map.ron").or_else(|| name.strip_suffix(".ron")).unwrap_or(&name);
+    let stem = name
+        .strip_suffix(crate::map::MAP_SUFFIX)
+        .or_else(|| name.strip_suffix(".yaml"))
+        .unwrap_or(&name);
     map_path.with_file_name(format!("{stem}{FILE_SUFFIX}"))
 }
 
@@ -64,7 +67,8 @@ impl Relations {
     /// negative or not finite (a negative corridor would contain nothing, so a typo would read as a
     /// clear doorway).
     pub fn parse(text: &str) -> Result<Relations, String> {
-        let r: Relations = ron::from_str(text).map_err(|e| format!("relations: parse: {e}"))?;
+        let r: Relations = crate::yaml::from_str(text, "relations")
+            .map_err(|p| format!("relations: parse: {}", p.line()))?;
         if r.version != RELATIONS_VERSION {
             return Err(format!(
                 "relations: version {} is not the {RELATIONS_VERSION} this build reads",
@@ -125,9 +129,9 @@ impl Relations {
     }
 
     /// The file's text.
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("relations: write: {e}"))
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("relations: write: {}", p.line()))
     }
 }
 

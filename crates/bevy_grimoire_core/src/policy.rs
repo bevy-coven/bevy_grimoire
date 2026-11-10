@@ -16,8 +16,8 @@
 //! answer is not a new mechanism, it is **one more layer of the mechanism that already exists**:
 //!
 //! ```text
-//! library.ron   the measurements          — shared, portable, true anywhere
-//! project.ron   this game's policy        — stretch_y, and anything else that is an opinion
+//! library.yaml   the measurements          — shared, portable, true anywhere
+//! project.yaml   this game's policy        — stretch_y, and anything else that is an opinion
 //! map.ron       this instance's overrides — Placed::patch
 //! ```
 //!
@@ -46,9 +46,9 @@ use crate::library::Library;
 pub const POLICY_VERSION: u32 = 2;
 
 /// The library file, inside a project directory.
-pub const LIBRARY_FILE: &str = "library.ron";
+pub const LIBRARY_FILE: &str = "library.yaml";
 /// The policy file, inside a project directory.
-pub const POLICY_FILE: &str = "project.ron";
+pub const POLICY_FILE: &str = "project.yaml";
 
 /// **Which kit directories this process has layered**, in order — the measure E-003 needed.
 ///
@@ -88,7 +88,7 @@ pub fn forget_layered_for_test() {
 /// way in the editor and another in the game is a preview that lies, which is the failure this whole
 /// crate keeps being written to avoid.
 ///
-/// Both files are **required**. A missing `project.ron` could reasonably mean "no rules", and that is
+/// Both files are **required**. A missing `project.yaml` could reasonably mean "no rules", and that is
 /// exactly the reasoning that grows a second code path: the absent-file branch and the empty-file
 /// branch would then be two ways to say the same thing, and only one of them would get tested. A
 /// project states its policy, even when its policy is nothing.
@@ -117,7 +117,7 @@ pub fn layered_library(dir: &Path) -> Result<Layered, String> {
     // measurement falls outside.
     // **Compositions are not read here, and that moved with the collection.** A tile may seat
     // `site/wall` beside `lab/bench`, so it belongs to no single kit and cannot be validated against
-    // one — `kits::bound_library` reads the project's one `compositions.ron` and checks it against
+    // one — `kits::bound_library` reads the project's one `compositions.yaml` and checks it against
     // the merged library, which is the only library that can answer.
     Ok(Layered {
         measured,
@@ -137,7 +137,7 @@ pub fn layered_library(dir: &Path) -> Result<Layered, String> {
 /// [`layered_library`] exists at all: a library layered one way in the editor and another in the
 /// game is a preview that lies.
 pub struct Layered {
-    /// `library.ron` exactly as parsed — the measurements, portable to any game.
+    /// `library.yaml` exactly as parsed — the measurements, portable to any game.
     ///
     /// **What an editor writes back.** Serializing the layered library over this file bakes one
     /// game's wall heights into a kit meant to be shared, and the next load applies the patches
@@ -236,14 +236,15 @@ impl Default for Policy {
 
 impl Policy {
     pub fn parse(text: &str) -> Result<Policy, String> {
-        let p: Policy = ron::from_str(text).map_err(|e| format!("policy: {e}"))?;
+        let p: Policy =
+            crate::yaml::from_str(text, POLICY_FILE).map_err(|p| format!("policy: {}", p.line()))?;
         p.validate()?;
         Ok(p)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("policy: {e}"))
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("policy: {}", p.line()))
     }
 
     fn validate(&self) -> Result<(), String> {
@@ -455,7 +456,7 @@ mod tests {
             }],
             ..Policy::default()
         }
-        .to_ron()
+        .to_yaml()
         .unwrap_or_else(|e| panic!("{e}"));
         let err = Policy::parse(&text).err().unwrap_or_default();
         assert!(err.contains("says nothing about why"), "{err}");
@@ -475,7 +476,7 @@ mod tests {
             }],
             ..Policy::default()
         }
-        .to_ron()
+        .to_yaml()
         .unwrap_or_else(|e| panic!("{e}"));
         let err = Policy::parse(&text).err().unwrap_or_default();
         assert!(err.contains("renaming it"), "{err}");
@@ -491,7 +492,7 @@ mod tests {
             exclude: vec!["characters".into()],
             patches: vec![rule(Match::Kind("door".into()), stretch(1.2))],
         };
-        let text = policy.to_ron().unwrap_or_else(|e| panic!("{e}"));
+        let text = policy.to_yaml().unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(Policy::parse(&text).unwrap_or_else(|e| panic!("{e}")), policy);
     }
 
@@ -504,7 +505,7 @@ mod tests {
             version: POLICY_VERSION + 1,
             ..Policy::default()
         }
-        .to_ron()
+        .to_yaml()
         .unwrap_or_else(|e| panic!("{e}"));
         let err = Policy::parse(&text).err().unwrap_or_default();
         assert!(err.contains("refusing to load"), "{err}");
@@ -561,7 +562,7 @@ mod exclude_tests {
 
 /// **Rewrite a policy file's `exclude` list, and nothing else.**
 ///
-/// A serialize-and-write would be shorter and would destroy the file: `assets/grimoire/site/project.ron`
+/// A serialize-and-write would be shorter and would destroy the file: `assets/grimoire/site/project.yaml`
 /// is hand-authored, and its patches carry paragraphs explaining why each one exists. That is the
 /// whole argument `ron_surgery` was written for — *"a writer that reformats them is not a faster
 /// version of this, it is a different, lossy tool"* — so this splices the one field.
@@ -754,7 +755,7 @@ fn temp_policy(name: &str, text: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("grimoire-policy-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot make {dir:?}: {e}"));
-    let path = dir.join("project.ron");
+    let path = dir.join("project.yaml");
     std::fs::write(&path, text).unwrap_or_else(|e| panic!("cannot write {path:?}: {e}"));
     path
 }

@@ -82,9 +82,9 @@ fn to_text(field: &Heightfield) -> Result<String, Refusal> {
 
 /// **The saved terrain of the open map**, or `None` for flat ground (no file, or one
 /// [`Heightfield::parse`] refuses: not a heightfield, or heights that do not fill its shape). The
-/// map's name is its file name without `.map.ron`, the name `terrain_stroke` takes.
+/// map's name is its file name without `.map.yaml`, the name `terrain_stroke` takes.
 pub fn ground_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<Heightfield> {
-    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
+    let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
     let text = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{name}.ron"))).ok()?;
     Heightfield::parse(&text).ok()
 }

@@ -174,7 +174,7 @@ fn a_multiple_within_a_centimetre_is_on_the_module() {
 #[test]
 fn the_file_round_trips_and_refuses_what_could_never_hold() {
     let s = standards();
-    let text = s.to_ron().unwrap();
+    let text = s.to_yaml().unwrap();
     assert_eq!(Standards::parse(&text).unwrap(), s);
 
     let bad =

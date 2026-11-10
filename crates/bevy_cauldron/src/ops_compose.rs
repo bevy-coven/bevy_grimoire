@@ -9,7 +9,7 @@
 //! from the ceiling) and the same replace rule: an existing id is redefined only when `replace` is
 //! true, and never over a stamp override it would strand.
 //!
-//! Undo puts `compositions.ron` back: the previous definition, or removal when the id was new.
+//! Undo puts `compositions.yaml` back: the previous definition, or removal when the id was new.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -32,7 +32,7 @@ pub struct Params {
     /// Redefine a composition that already has this id. Every stamp of it then expands to the new body.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub replace: bool,
-    /// A whole definition, as `compositions.ron` holds it, instead of members to convert: what the Tiles tab's
+    /// A whole definition, as `compositions.yaml` holds it, instead of members to convert: what the Tiles tab's
     /// `Cmd+S` sends, and how an agent writes a tile with slots, nested groups or an envelope of its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub composition: Option<Composition>,
@@ -65,7 +65,7 @@ impl Params {
                         "half": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Half the footprint's width and depth in metres, [x, z]. It becomes the group's bounded envelope, so it must enclose the pieces; a zero is refused (a bounded group has to enclose something)."}
                     }
                 },
-                "composition": {"type": "object", "description": "A whole definition as compositions.ron holds it ({id, envelope, members, locations, note}); its id must be `id`. Written as it is, validated against the library and every other group, with no map needed. Name `composition`, `from` or `set`, one."},
+                "composition": {"type": "object", "description": "A whole definition as compositions.yaml holds it ({id, envelope, members, locations, note}); its id must be `id`. Written as it is, validated against the library and every other group, with no map needed. Name `composition`, `from` or `set`, one."},
                 "replace": {"type": "boolean", "description": "Redefine a group that already has this id. Without it an existing id is refused and nothing is written."}
             }
         })

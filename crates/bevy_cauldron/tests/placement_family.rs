@@ -9,7 +9,7 @@ use crate::fixtures;
 
 fn editor(name: &str) -> (std::path::PathBuf, Ctx) {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_lights\"])").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
         app.update();
@@ -20,7 +20,7 @@ fn editor(name: &str) -> (std::path::PathBuf, Ctx) {
 }
 
 fn saved(root: &std::path::Path) -> bevy_grimoire_core::map::Map {
-    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap();
+    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap();
     ron::from_str(&text).unwrap()
 }
 

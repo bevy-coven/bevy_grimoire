@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 use crate::fixtures;
 
-const FILE: &str = "maps/m.notes.ron";
+const FILE: &str = "maps/m.notes.yaml";
 
 /// The three ways to break it, and the field the verdict must name (`None`: the file is cut off, so
 /// where reading stopped is all the position says).
@@ -53,7 +53,7 @@ fn some_notes(texts: &[&str]) -> String {
     for (i, t) in texts.iter().enumerate() {
         n.add(vec![Target::Cell(i as i32, 0)], t).unwrap();
     }
-    n.to_ron().unwrap()
+    n.to_yaml().unwrap()
 }
 
 fn reloads(app: &mut App) -> Value {

@@ -18,7 +18,7 @@ use crate::fixtures;
 ///
 /// These tests wrote `(sun: (hour: 6.0))`, which is not an `ElementsSettings`: the host's typed read
 /// refuses it (`Unexpected field named sun`), so nothing was stored and the tests asserted on a
-/// fixture the crate throws away (#152). The base is `ElementsSettings::defaults().to_ron()` with
+/// fixture the crate throws away (#152). The base is `ElementsSettings::defaults().to_yaml()` with
 /// `clock.hour` set; `hour` names the hour by rewriting **that one line**, so every call is a whole,
 /// valid settings file and the edit between any two is exactly the clock.
 fn settings_at(hour: &str) -> String {
@@ -135,7 +135,7 @@ fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_d
     let dir = root.join("family");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("bevy_elements.ron"), settings_at("6.0")).unwrap();
-    std::fs::write(dir.join("bevy_lights.ron"), "(budget: (").unwrap();
+    std::fs::write(dir.join("bevy_lights.yaml"), "(budget: (").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.update();
     assert_eq!(kinds(&app).len(), 2, "{:?}", kinds(&app));
@@ -156,7 +156,7 @@ fn a_file_broken_before_the_editor_started_is_named_decided_once_and_goes_when_d
     assert_eq!(verdict(&app, "family/bevy_lights.ron")["outcome"], "refused");
 
     // Deleting a file that never read: nothing was in force to be removed, and the refusal still goes.
-    std::fs::remove_file(dir.join("bevy_lights.ron")).unwrap();
+    std::fs::remove_file(dir.join("bevy_lights.yaml")).unwrap();
     until(&mut app, "the refusal gone", |a| verdict(a, "family/bevy_lights.ron") == Value::Null);
     assert_eq!(app.world().resource::<EditorReloads>().state_json()["ok"], true);
 }

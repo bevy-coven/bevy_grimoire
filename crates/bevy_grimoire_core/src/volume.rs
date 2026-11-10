@@ -120,7 +120,7 @@ impl Volume {
     /// that is not finite, a size that is not above zero, a negative blend) and naming it (`edit 2`).
     /// A hand edit that reads as a list of edits but would feed the mesher a NaN is refused here.
     pub fn parse(text: &str) -> Result<Volume, String> {
-        let volume: Volume = ron::from_str(text).map_err(|e| format!("volume: {e}"))?;
+        let volume: Volume = crate::yaml::from_str(text, "volume").map_err(|p| format!("volume: {}", p.line()))?;
         for (i, e) in volume.edits.iter().enumerate() {
             e.check().map_err(|why| format!("volume: edit {i}: {why}"))?;
         }

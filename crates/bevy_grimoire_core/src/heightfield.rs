@@ -108,13 +108,13 @@ impl Heightfield {
         Ok(Self { version: TERRAIN_VERSION, origin, cell_m, width, depth, heights })
     }
 
-    /// **Read a terrain file** (`<grimoire_dir>/terrain/<map>.ron`), refusing one whose shape and data
+    /// **Read a terrain file** (`<grimoire_dir>/terrain/<map>.yaml`), refusing one whose shape and data
     /// disagree (#187). Every reader indexes `heights` by `iz * width + ix` and clamps to
     /// `width - 1`, so a short or overfull `heights`, a side under 2, or a size or height that is not
     /// a finite number would panic the editor or wrap. This is the one way a file becomes a field; the
     /// refusal names the shape, as `Relations::parse` and `Standards::parse` name theirs.
     pub fn parse(text: &str) -> Result<Heightfield, String> {
-        let field: Heightfield = ron::from_str(text).map_err(|e| format!("terrain: {e}"))?;
+        let field: Heightfield = crate::yaml::from_str(text, "terrain").map_err(|p| format!("terrain: {}", p.line()))?;
         field.validate()?;
         Ok(field)
     }

@@ -22,7 +22,7 @@ fn with_start(start: &str) -> String {
 fn open(name: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
     let file = root.join("family/bevy_speech_bubbles.ron");
     std::fs::write(&file, SCRIPT).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -64,7 +64,7 @@ fn a_valid_edit_is_written_and_reads_back_as_the_crates_own_script() {
 fn placed(name: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
     std::fs::write(root.join("family/bevy_speech_bubbles.ron"), SCRIPT).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
@@ -76,7 +76,7 @@ fn placed(name: &str) -> (Ctx, std::path::PathBuf) {
 }
 
 fn saved_family(root: &std::path::Path) -> std::collections::BTreeMap<String, String> {
-    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap();
+    let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap();
     let map: bevy_grimoire_core::map::Map = ron::from_str(&text).unwrap();
     map.placements[0].family.clone().into_iter().collect()
 }

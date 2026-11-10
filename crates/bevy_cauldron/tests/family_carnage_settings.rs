@@ -11,7 +11,7 @@ use crate::fixtures;
 fn a_hit_stop_is_set_through_family_set_and_reads_back_as_the_crates_own_type() {
     let root = fixtures::Fixture::new("carnage_settings").descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_carnage\"])").unwrap();
     let file = root.join("family/bevy_carnage.ron");
     std::fs::write(&file, "(trauma_per_wound: 0.4, hitstop_seconds: 0.055)").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

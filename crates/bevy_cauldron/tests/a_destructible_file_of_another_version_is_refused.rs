@@ -37,7 +37,7 @@ fn call(ctx: &mut Ctx, op: &str, params: serde_json::Value) -> Result<(), String
 fn a_marks_file_of_another_version_refuses_both_calls_and_stays_as_it_was() {
     for (what, text) in [("a newer build's", "(version: 2, pieces: [\"site/other\"])"), ("version zero", "(version: 0, pieces: [\"site/other\"])")] {
         let (mut ctx, root) = open(&format!("marks_version_{}", what.replace([' ', '\''], "_")));
-        let marks = root.join("destructible.ron");
+        let marks = root.join("destructible.yaml");
         std::fs::write(&marks, text).unwrap();
         let refusals = [
             call(&mut ctx, "destructible_set", json!({"piece": PIECE, "on": true})).expect_err(what),
@@ -49,6 +49,6 @@ fn a_marks_file_of_another_version_refuses_both_calls_and_stays_as_it_was() {
             assert!(refusal.contains("left as it is"), "{what}: the refusal says the file stands: {refusal}");
         }
         assert_eq!(std::fs::read(&marks).unwrap(), text.as_bytes(), "{what}: the bytes stand");
-        assert!(!root.join("destructible/site__cart.bake.ron").exists(), "{what}: nothing was baked over a marks file this build does not read");
+        assert!(!root.join("destructible/site__cart.bake.yaml").exists(), "{what}: nothing was baked over a marks file this build does not read");
     }
 }

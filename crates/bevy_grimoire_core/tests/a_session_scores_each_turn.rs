@@ -113,11 +113,11 @@ fn a_played_list_that_is_not_one_per_turn_is_refused() {
 #[test]
 fn a_session_file_round_trips_and_a_bad_one_is_refused() {
     let s = session();
-    assert_eq!(Session::parse(&s.to_ron().unwrap()).unwrap(), s);
+    assert_eq!(Session::parse(&s.to_yaml().unwrap()).unwrap(), s);
     let mut bad = session();
     bad.version = SESSION_VERSION + 1;
-    assert!(Session::parse(&bad.to_ron().unwrap()).unwrap_err().contains("version"));
+    assert!(Session::parse(&bad.to_yaml().unwrap()).unwrap_err().contains("version"));
     let mut negative = session();
     negative.turns[2].keeps[0] = near("well", "bench", -1.0);
-    assert!(Session::parse(&negative.to_ron().unwrap()).unwrap_err().contains("turn 2"));
+    assert!(Session::parse(&negative.to_yaml().unwrap()).unwrap_err().contains("turn 2"));
 }

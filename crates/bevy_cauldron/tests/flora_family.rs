@@ -12,7 +12,7 @@ use crate::fixtures;
 fn open(tag: &str) -> (App, std::path::PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_flora\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_flora\"])").unwrap();
     std::fs::write(root.join("family/bevy_flora.ron"), "(scatter: (density: 0.2, seed: 7))\n").unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.init_resource::<EditorState>().add_systems(Update, report_problems);

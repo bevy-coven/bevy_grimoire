@@ -257,7 +257,7 @@ pub enum Shown {
     Rig { id: String },
     /// **A project file**, and the lines changed when the operation knows them (GD-14, #376).
     File {
-        /// Relative to the project root, the way a refusal names one: `assets/grimoire/vocab.ron`.
+        /// Relative to the project root, the way a refusal names one: `assets/grimoire/vocab.yaml`.
         path: String,
         /// `[first, last]`, 1-based, when the changed span is known.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -281,7 +281,7 @@ pub enum Shown {
 
 impl Shown {
     /// **The change in words a refusal can name**: `a library piece `lamp_tall``, ``the file
-    /// `assets/grimoire/vocab.ron` ``. Used where the editor cannot show it (AF-03, #359), so the
+    /// `assets/grimoire/vocab.yaml` ``. Used where the editor cannot show it (AF-03, #359), so the
     /// problem says which change it could not show rather than `Some(Shown { .. })`.
     pub fn words(&self) -> String {
         match self {
@@ -739,7 +739,7 @@ pub struct Ctx {
     /// **The project's root directory, when there is no loaded `Project` in hand.**
     ///
     /// The menu is the screen you are on *before* a door: it has a root and an unloaded library, and
-    /// opening the whole `Project` to make one map would parse every kit and require `vocab.ron`.
+    /// opening the whole `Project` to make one map would parse every kit and require `vocab.yaml`.
     /// What a *change made from the menu* needs is the root — the log line goes in it, and a map goes
     /// in its `maps/`. An operation that needs the library says so, which is the refusal it already
     /// has; nothing dispatched from the menu does.
@@ -2574,7 +2574,7 @@ pub mod map_open {
                 "required": ["name"],
                 "properties": {
                     "name": {
-                        "description": "The map to open, by name. The name IS its file (maps/<name>.map.ron), so a name that does not exist is refused rather than started.",
+                        "description": "The map to open, by name. The name IS its file (maps/<name>.map.yaml), so a name that does not exist is refused rather than started.",
                         "type": "string"
                     }
                 }
@@ -3062,7 +3062,7 @@ pub mod placement_add {
 /// operation does is the step after that: take a `.glb` that is already inside the project, measure it
 /// with `import::measure`, run the Meshes tab's own four admissions (`tiles::admit_candidate`), and
 /// write it into the library. It shares no code with golem and neither project knows the other's
-/// schema — golem writes `kit.yaml` for kitbashing in Blender, and this writes a `library.ron`
+/// schema — golem writes `kit.yaml` for kitbashing in Blender, and this writes a `library.yaml`
 /// `Descriptor` for placing on a map. The duplication to refuse is a second *generator*, not a bridge.
 ///
 /// # The path is confined to the project
@@ -3287,7 +3287,7 @@ pub mod piece_import {
             trial.descriptors.push(descriptor);
             crate::tiles::commit_measured(project, trial).map_err(Refusal::new)?;
             // **The new piece's breaches of the project's standards** (#138 slice 3), read from the
-            // policy-applied library a placement uses, and from `standards.ron` as it is now. Reported,
+            // policy-applied library a placement uses, and from `standards.yaml` as it is now. Reported,
             // not refused: the piece is admitted either way, and the summary says what it breaks.
             let (standards, broken) = match project.library.get(&imported) {
                 Some(d) => crate::ops_brp::piece_standards_json(d, &project.project_dir),
@@ -3355,7 +3355,7 @@ pub mod piece_import {
 
 /// **Send one piece back out of the library, and put it back (E-002, #129 slice 8).**
 ///
-/// `Delete` on the Meshes tab's library shelf took a piece out of `library.ron` with a write of its
+/// `Delete` on the Meshes tab's library shelf took a piece out of `library.yaml` with a write of its
 /// own, so an agent could import a piece and never un-import one (the removal existed only as
 /// `piece_import`'s undo form), the key left no operation-log line, and the registry's two-front-end
 /// rule listed it as unmigrated. This is the same removal, named: `id` takes the piece out, and the
@@ -4353,7 +4353,7 @@ pub mod piece_set_cells {
 
 /// **Add one token to an axis of the project's vocabulary (E-002, #129 slice 11).**
 ///
-/// `Shift+T`, and the `+` chip on an axis row, opened a prompt whose Enter spliced `vocab.ron` with a
+/// `Shift+T`, and the `+` chip on an axis row, opened a prompt whose Enter spliced `vocab.yaml` with a
 /// write of its own, so an agent could use the vocabulary and never grow it, no log line named the
 /// addition, and the registry's two-front-end rule listed `Shift+T` as unmigrated. This is the same
 /// addition, named: `axis` (`kind`, `effects`, `look` or `surfaces`), `name` (lowercase letters,
@@ -4397,7 +4397,7 @@ pub mod vocab_add_token {
     }
 
     fn vocab_path(project: &Project) -> std::path::PathBuf {
-        project.root.join("assets/grimoire/vocab.ron")
+        project.root.join("assets/grimoire/vocab.yaml")
     }
 
     /// **The splice, run on a copy**, so a plan writes nothing.
@@ -4428,7 +4428,7 @@ pub mod vocab_add_token {
         }
         fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             // **The vocabulary is one project file**, at the root of the grimoire directory.
-            shown_named(ctx, "assets/grimoire/vocab.ron")
+            shown_named(ctx, "assets/grimoire/vocab.yaml")
         }
         fn writes(&self) -> &'static [&'static str] {
             &["vocab"]
@@ -4498,7 +4498,7 @@ pub mod vocab_add_token {
     }
 }
 
-/// **Adopt a rig's measured gait values into `rigs.ron`** (E-002, #129 slice 13). Enter on the Anim tab
+/// **Adopt a rig's measured gait values into `rigs.yaml`** (E-002, #129 slice 13). Enter on the Anim tab
 /// and an agent's `apply` are this one operation: it measures the rig's mesh now, rewrites each gait
 /// slot that is not kept, stamps provenance and refuses the whole write unless the edited manifest
 /// parses back to what was built ([`crate::anim_tab::adopt_text`]). Undo puts the manifest back whole.
@@ -4509,7 +4509,7 @@ pub mod rig_adopt_measured {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Params {
-        /// The rig's name in `rigs.ron`.
+        /// The rig's name in `rigs.yaml`.
         pub rig: String,
         /// Gait slots to hold back for this write only, by index in the rig's slot list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4523,13 +4523,13 @@ pub mod rig_adopt_measured {
         serde_json::from_value(raw.clone()).map_err(|e| {
             Refusal::new(format!(
                 "this is not a rig to adopt measured values for: {e}. The fields are `rig` (a name in \
-                 rigs.ron) and, optionally, `skip_slots` (slot indexes to leave as they are)."
+                 rigs.yaml) and, optionally, `skip_slots` (slot indexes to leave as they are)."
             ))
         })
     }
 
     fn manifest(project: &Project) -> PathBuf {
-        project.root.join("assets/grimoire/rigs.ron")
+        project.root.join("assets/grimoire/rigs.yaml")
     }
 
     /// **FNV-1a of the manifest text**: stable across runs, because an undo compares it with what the log
@@ -4567,14 +4567,14 @@ pub mod rig_adopt_measured {
                 path,
                 was,
                 text: restore.clone(),
-                summary: format!("put rigs.ron back as it was before '{}' adopted its measured values", p.rig),
+                summary: format!("put rigs.yaml back as it was before '{}' adopted its measured values", p.rig),
             });
         }
         let rigs = bevy_grimoire_core::rigs::Rigs::parse(&was)
             .map_err(|e| Refusal::new(format!("{}: {e}. Nothing was changed.", path.display())))?;
         let Some(rig) = rigs.get(&p.rig) else {
             return Err(Refusal::new(format!(
-                "no rig named `{}` in rigs.ron (it has {}). Nothing was changed.",
+                "no rig named `{}` in rigs.yaml (it has {}). Nothing was changed.",
                 p.rig,
                 rigs.rigs.keys().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
             )));
@@ -4621,7 +4621,7 @@ pub mod rig_adopt_measured {
 
         /// **A manifest write is a kit-level change, scoped to its own rig** by the `id` its recorded state
         /// carries, like a pack's exclusion: a bare `operation_undo` scopes past it to the open map's newest
-        /// change instead of reverting `rigs.ron`, and it joins the Meshes history beside the other
+        /// change instead of reverting `rigs.yaml`, and it joins the Meshes history beside the other
         /// library writes when an agent makes it.
         fn writes_library(&self) -> bool {
             true
@@ -4640,7 +4640,7 @@ pub mod rig_adopt_measured {
                 "properties": {
                     "rig": {
                         "type": "string",
-                        "description": "The rig's name in rigs.ron, as the Anim tab lists it."
+                        "description": "The rig's name in rigs.yaml, as the Anim tab lists it."
                     },
                     "skip_slots": {
                         "type": "array",
@@ -4651,7 +4651,7 @@ pub mod rig_adopt_measured {
             })
         }
 
-        /// **Whether `rigs.ron` is still what the change left**, against what it recorded.
+        /// **Whether `rigs.yaml` is still what the change left**, against what it recorded.
         fn state_of(&self, ctx: &Ctx, after: &serde_json::Value) -> Option<serde_json::Value> {
             let rig = after.get("id")?.as_str()?.strip_prefix("rig:")?;
             let text = std::fs::read_to_string(manifest(ctx.project.as_ref()?)).ok()?;
@@ -4661,7 +4661,7 @@ pub mod rig_adopt_measured {
         fn plan(&self, ctx: &Ctx, params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
             let p = parse(params)?;
             let Some(project) = ctx.project.as_ref() else {
-                return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
+                return Err(Refusal::new("no project is open, so there is no rigs.yaml to adopt values into."));
             };
             let e = edit(project, &p)?;
             let mut planned = state_json(&p.rig, &e.text);
@@ -4672,11 +4672,11 @@ pub mod rig_adopt_measured {
         fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
             let p = parse(params)?;
             let Some(project) = ctx.project.as_ref() else {
-                return Err(Refusal::new("no project is open, so there is no rigs.ron to adopt values into."));
+                return Err(Refusal::new("no project is open, so there is no rigs.yaml to adopt values into."));
             };
             let e = edit(project, &p)?;
             bevy_grimoire_core::ron_surgery::save_atomic(&e.path, &e.text).map_err(|why| {
-                Refusal::new(format!("rigs.ron refused the change, so nothing was written: {why}"))
+                Refusal::new(format!("rigs.yaml refused the change, so nothing was written: {why}"))
             })?;
             Ok(Outcome {
                 summary: e.summary,
@@ -8138,7 +8138,7 @@ pub mod piece_set_mount {
 
 /// **Leave a pack out of the kit, or bring it back** (E-002, #129 slice 7).
 ///
-/// `Shift+R` on the Meshes tab wrote the kit's `project.ron` with a splice of its own, named by no
+/// `Shift+R` on the Meshes tab wrote the kit's `project.yaml` with a splice of its own, named by no
 /// operation, so an agent could label a piece and not say that a whole folder of art is not what the
 /// kit is built from, no log line named the change, and Cmd+Z could not take it back. This is the same
 /// write, one validated, saved, logged and undoable change for the key and for an agent.
@@ -9774,7 +9774,7 @@ pub mod rules_set {
             if rules.blocks.is_empty() {
                 return Err(Refusal::new(
                     "this project states no block rules, so there is no rule to change. \
-                     grimoire_list_rules reads what there is; a rule has to be authored in rules.ron \
+                     grimoire_list_rules reads what there is; a rule has to be authored in rules.yaml \
                      before it can be tuned."
                         .to_owned(),
                 ));
@@ -10169,7 +10169,7 @@ pub mod rules_set {
             "rules_set"
         }
         fn shows(&self, ctx: &Ctx, _params: &serde_json::Value) -> Shown {
-            shown_named(ctx, "assets/grimoire/rules.ron")
+            shown_named(ctx, "assets/grimoire/rules.yaml")
         }
         fn writes(&self) -> &'static [&'static str] {
             &["rules"]
@@ -10322,7 +10322,7 @@ pub mod map_rename {
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "The map's new name. It is forced to snake_case, the way every map name is, because the name becomes the file: `Town Two` is written as `town_two.map.ron`. It must not be empty, and no other map in the project may have it."
+                        "description": "The map's new name. It is forced to snake_case, the way every map name is, because the name becomes the file: `Town Two` is written as `town_two.map.yaml`. It must not be empty, and no other map in the project may have it."
                     }
                 }
             })

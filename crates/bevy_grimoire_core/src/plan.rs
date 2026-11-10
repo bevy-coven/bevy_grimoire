@@ -2,7 +2,7 @@
 //!
 //! An agent that means to do several things shows them first, so the person watching can see what it
 //! intends before it acts and how far it has got. The plan is data, not editor state: one file per map,
-//! **beside the map**: `maps/town.map.ron` has `maps/town.plan.ron`, written through
+//! **beside the map**: `maps/town.map.yaml` has `maps/town.plan.yaml`, written through
 //! [`crate::ron_surgery::save_atomic`] like the map and the notes are, so a [`crate::live::FileWatch`]
 //! over the project sees it change.
 //!
@@ -56,12 +56,15 @@ impl Default for Plan {
     }
 }
 
-/// The plan file that belongs to a map file: `town.map.ron` → `town.plan.ron`, in the same directory.
-/// A map path that does not end `.map.ron` gets `.plan.ron` appended to its stem.
+/// The plan file that belongs to a map file: `town.map.yaml` → `town.plan.yaml`, in the same directory.
+/// A map path that does not end `.map.yaml` gets `.plan.yaml` appended to its stem.
 pub fn path_for_map(map_path: &Path) -> PathBuf {
     let name = map_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let stem = name.strip_suffix(".map.ron").or_else(|| name.strip_suffix(".ron")).unwrap_or(&name);
-    map_path.with_file_name(format!("{stem}.plan.ron"))
+    let stem = name
+        .strip_suffix(crate::map::MAP_SUFFIX)
+        .or_else(|| name.strip_suffix(".yaml"))
+        .unwrap_or(&name);
+    map_path.with_file_name(format!("{stem}.plan.yaml"))
 }
 
 impl Plan {
@@ -73,27 +76,23 @@ impl Plan {
         Ok(Plan { version: PLAN_VERSION, items })
     }
 
-    pub fn from_ron(text: &str) -> Result<Plan, String> {
-        let plan: Plan = ron::from_str(text).map_err(|e| format!("plan: parse: {e}"))?;
+    pub fn parse(text: &str) -> Result<Plan, String> {
+        let plan: Plan = crate::yaml::from_str(text, "plan").map_err(|p| format!("plan: parse: {}", p.line()))?;
         if plan.version != PLAN_VERSION {
             return Err(format!("plan: version {} is not the {PLAN_VERSION} this build reads", plan.version));
         }
         Ok(plan)
     }
 
-    pub fn to_ron(&self) -> Result<String, String> {
-        let mut text = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(|e| format!("plan: serialize: {e}"))?;
-        if !text.ends_with('\n') {
-            text.push('\n');
-        }
-        Ok(text)
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("plan: {}", p.line()))
     }
 
     /// Reads the plan file; a file that is not there is an empty plan, not an error.
     pub fn load(path: &Path) -> Result<Plan, String> {
         match std::fs::read_to_string(path) {
-            Ok(text) => Plan::from_ron(&text).map_err(|e| format!("{}: {e}", path.display())),
+            Ok(text) => Plan::parse(&text).map_err(|e| format!("{}: {e}", path.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Plan::default()),
             Err(e) => Err(format!("plan: {}: {e}", path.display())),
         }
@@ -105,7 +104,7 @@ impl Plan {
         if self.items.is_empty() && !path.exists() {
             return Ok(());
         }
-        crate::ron_surgery::save_atomic(path, &self.to_ron()?)
+        crate::yaml::save(path, &self.to_yaml()?)
     }
 
     /// How many items are in each status, as `(pending, doing, done, skipped)`.

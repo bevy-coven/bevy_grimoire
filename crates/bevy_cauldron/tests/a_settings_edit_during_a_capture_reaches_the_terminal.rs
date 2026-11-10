@@ -37,7 +37,7 @@ fn columns(app: &App) -> u16 {
 fn a_text_size_saved_while_a_capture_runs_makes_the_terminal_narrower_in_cells() {
     let tag = format!("capture_settings_{}", std::process::id());
     let root = fixtures::Fixture::new(&tag).descriptor("floor", "alpha").build("m");
-    let file = root.join("assets/grimoire/editor.ron");
+    let file = root.join("assets/grimoire/editor.yaml");
     std::fs::write(&file, "(version: 1)").unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let guard = SHELL_ENV.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     unsafe { std::env::set_var("SHELL", "/bin/sh") };

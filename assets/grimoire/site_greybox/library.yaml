@@ -1,0 +1,1706 @@
+version: 1
+note: 'Measurements only — this facility''s architecture is in project.ron beside it. Originally generated from the Site kit by tests/site_descriptors.rs, but that generator no longer exists anywhere in the tree: this file is hand-maintained now, and emerge-mapper writes it. tests/site_descriptors.rs still CHECKS the numbers here, which is what keeps it honest.'
+descriptors:
+- id: site/floor
+  mesh: kenney_prototype-kit/Models/GLB format/floor-square.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/wall
+  mesh: kenney_prototype-kit/Models/GLB format/wall.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: false
+      edge: wall
+  note: null
+- id: site/wall_corner
+  mesh: kenney_prototype-kit/Models/GLB format/wall-corner.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 1
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 2
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 3
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 4
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 1
+      - 4
+      - 1
+      solid: false
+      edge: wall
+  note: null
+- id: site/wall_doorway
+  mesh: kenney_prototype-kit/Models/GLB format/wall-doorway.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.3
+    - 1.0
+    height: 1.0
+  mount: !InOpening
+    clear:
+    - 0.6
+    - 0.8
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: false
+      edge: wall
+  note: null
+- id: site/wall_doorway_wide
+  mesh: kenney_prototype-kit/Models/GLB format/wall-doorway-wide.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.3
+    - 1.5
+    height: 1.0
+  mount: !InOpening
+    clear:
+    - 0.9
+    - 0.8
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 2
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 2
+      solid: false
+      edge: wall
+  note: null
+- id: site/wall_header
+  mesh: kenney_prototype-kit/Models/GLB format/wall-window-cutout-small.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: false
+      edge: wall
+  note: null
+- id: site/wall_window
+  mesh: kenney_prototype-kit/Models/GLB format/wall-window-large.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.3
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: false
+      edge: wall
+  note: null
+- id: site/door_plaque
+  mesh: kenney_prototype-kit/Models/GLB format/indicator-square-b.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.34
+    - 0.12
+    height: 0.18
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/wall_low
+  mesh: kenney_prototype-kit/Models/GLB format/wall-low.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 1.0
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: false
+      edge: wall
+  note: null
+- id: site/column
+  mesh: kenney_prototype-kit/Models/GLB format/column.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 0.2
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: false
+      edge: wall
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: false
+      edge: wall
+  note: null
+- id: site/slab
+  mesh: kenney_prototype-kit/Models/GLB format/shape-cube-half.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/crate
+  mesh: kenney_prototype-kit/Models/GLB format/crate-color.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.5
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/pipe
+  mesh: kenney_prototype-kit/Models/GLB format/pipe.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 0.17
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/pipe_corner
+  mesh: kenney_prototype-kit/Models/GLB format/pipe-corner.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 0.5
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/floor_button
+  mesh: kenney_prototype-kit/Models/GLB format/button-floor-square.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/area_decal
+  mesh: kenney_prototype-kit/Models/GLB format/indicator-square-a.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/trash_bin
+  mesh: kenney_prototype-kit/Models/GLB format/crate.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.5
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/pallet
+  mesh: kenney_prototype-kit/Models/GLB format/floor-thick.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.2
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/step_ladder
+  mesh: kenney_prototype-kit/Models/GLB format/ladder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.15
+    - 0.55
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/storage_box
+  mesh: kenney_prototype-kit/Models/GLB format/ladder-top.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.4
+    - 0.5
+    height: 0.302
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/storage_crate
+  mesh: kenney_prototype-kit/Models/GLB format/button-floor-round.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.5
+    height: 0.15
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/utility_cart
+  mesh: kenney_prototype-kit/Models/GLB format/door-sliding-double.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.35
+    - 0.9
+    height: 0.8
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/tube_rack
+  mesh: kenney_prototype-kit/Models/GLB format/column-low.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 0.2
+    height: 0.5
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/data_folder
+  mesh: kenney_prototype-kit/Models/GLB format/button-floor-square-small.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.5
+    height: 0.15
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/medical_vial
+  mesh: kenney_prototype-kit/Models/GLB format/column-rounded-low.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.2
+    - 0.2
+    height: 0.5
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/mug
+  mesh: kenney_prototype-kit/Models/GLB format/hat-cap.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.335
+    - 0.22
+    height: 0.15
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/books
+  mesh: kenney_prototype-kit/Models/GLB format/hat-hard.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.33
+    - 0.24
+    height: 0.175
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/arrow_decal
+  mesh: kenney_prototype-kit/Models/GLB format/indicator-special-arrow.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/specimen_standin
+  mesh: kenney_prototype-kit/Models/GLB format/shape-cylinder-detailed.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/bunk
+  mesh: kenney_prototype-kit/Models/GLB format/shape-cube.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/locker
+  mesh: kenney_prototype-kit/Models/GLB format/door-sliding.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.35
+    - 0.7
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/bedside_table
+  mesh: kenney_prototype-kit/Models/GLB format/shape-cube-rounded.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/galley_counter
+  mesh: kenney_prototype-kit/Models/GLB format/shape-slope.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/mess_table
+  mesh: kenney_prototype-kit/Models/GLB format/shape-hexagon.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.87
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/stool
+  mesh: kenney_prototype-kit/Models/GLB format/shape-cylinder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/coffee_machine
+  mesh: kenney_prototype-kit/Models/GLB format/shape-cylinder-half.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/water_dispenser
+  mesh: kenney_prototype-kit/Models/GLB format/shape-hollow-cylinder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/bench
+  mesh: kenney_prototype-kit/Models/GLB format/shape-triangular-prism-low.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/vending_machine
+  mesh: kenney_prototype-kit/Models/GLB format/door-garage.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.35
+    - 1.1
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/chair
+  mesh: kenney_prototype-kit/Models/GLB format/shape-hexagon-half.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.43
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/map_table
+  mesh: kenney_prototype-kit/Models/GLB format/target-a-round.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.12
+    - 0.5
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/control_desk
+  mesh: kenney_prototype-kit/Models/GLB format/lever-double.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.5
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/surveillance_console
+  mesh: kenney_prototype-kit/Models/GLB format/lever-single.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.5
+    - 0.3
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/server_rack
+  mesh: kenney_prototype-kit/Models/GLB format/shape-hollow-hexagon.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.87
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind: []
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null
+- id: site/command_chair
+  mesh: kenney_prototype-kit/Models/GLB format/shape-triangular-prism.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: null
+    pivot: null
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look: []
+  placement:
+    rooms: []
+    group: null
+  subgrid: null
+  note: null

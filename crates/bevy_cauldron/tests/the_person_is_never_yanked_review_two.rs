@@ -583,7 +583,7 @@ fn the_toggle_row_is_ticked_from_the_setting_and_writes_the_users_layer() {
         "the row did not write the person's own layer: {text}"
     );
     // **And the project's file is untouched**, because this is not this project's preference.
-    let project_file = app.world().resource::<Project>().project_dir.join("editor.ron");
+    let project_file = app.world().resource::<Project>().project_dir.join("editor.yaml");
     assert!(
         !project_file.exists() || !std::fs::read_to_string(&project_file).unwrap_or_default().contains("follow_agent"),
         "the row wrote the project's editor.ron, which is another project's preference to set"

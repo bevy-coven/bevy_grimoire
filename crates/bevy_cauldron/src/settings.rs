@@ -2,7 +2,7 @@
 //!
 //! 1. The built-in defaults ([`EditorSettings::default`]).
 //! 2. The user's file, `<config_dir>/Grimoire/settings.ron` ([`user_file`]).
-//! 3. The project's file, `<project>/assets/grimoire/editor.ron` (kind `editor_settings` in
+//! 3. The project's file, `<project>/assets/grimoire/editor.yaml` (kind `editor_settings` in
 //!    `reload::KINDS`).
 //!
 //! **Precedence is per key, and the later layer wins.** A file is a [`SettingsLayer`]: every key is an
@@ -45,7 +45,7 @@ pub const KIND: &str = "editor_settings";
 
 const USER_FILE: &str = "settings.ron";
 /// The project's file, under the project directory (`assets/grimoire`).
-pub const PROJECT_FILE: &str = "editor.ron";
+pub const PROJECT_FILE: &str = "editor.yaml";
 
 /// How long a file whose size and modification time did not move goes unread.
 const RECHECK_SECS: f32 = 1.0;
@@ -380,7 +380,7 @@ pub struct SettingsLayer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reduced_motion: Option<bool>,
     /// **View ▸ Follow the agent** (AF-04, #360). `None` means the layer leaves it alone, so an
-    /// `editor.ron` written before this key existed reads as on — the default, not a stored `false`.
+    /// `editor.yaml` written before this key existed reads as on — the default, not a stored `false`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub follow_agent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

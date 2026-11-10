@@ -15,7 +15,7 @@ use crate::fixtures;
 /// These tests used to write `(sun: (hour: 6.0))`, which is not an `ElementsSettings` — the host's
 /// typed read refuses it with `Unexpected field named sun`, so nothing was ever stored and the test
 /// was asserting on a fixture the crate throws away (#152). `tests/fixtures/bevy_elements.ron` is
-/// `ElementsSettings::defaults().to_ron()` with `clock.hour` set, so the text these tests compare
+/// `ElementsSettings::defaults().to_yaml()` with `clock.hour` set, so the text these tests compare
 /// against is the text a real file holds.
 fn elements_settings() -> &'static str {
     include_str!("fixtures/bevy_elements.ron")

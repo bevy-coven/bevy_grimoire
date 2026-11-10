@@ -90,7 +90,7 @@ fn an_agent_renames_a_map_and_the_file_moves_with_it() {
         "the name is forced to snake_case"
     );
     let after = held_path(&app);
-    assert_eq!(after, maps_dir(&app).join("town_two.map.ron"));
+    assert_eq!(after, maps_dir(&app).join("town_two.map.yaml"));
     assert!(after.exists(), "the new file is written at once");
     assert!(!before.exists(), "the old file is removed at once");
 
@@ -106,7 +106,7 @@ fn an_agent_renames_a_map_and_the_file_moves_with_it() {
 fn a_name_another_map_has_is_refused_and_nothing_moves() {
     let mut app = editor("map_collides");
     let before = held_path(&app);
-    let taken = maps_dir(&app).join("taken.map.ron");
+    let taken = maps_dir(&app).join("taken.map.yaml");
     std::fs::copy(&before, &taken).expect("a second map to collide with");
     let taken_text = std::fs::read_to_string(&taken).expect("the other map reads back");
 
@@ -212,7 +212,7 @@ fn n_then_a_name_then_enter_moves_the_file_through_the_registry() {
         "Enter must commit the typed name"
     );
     let after = held_path(&app);
-    assert_eq!(after, maps_dir(&app).join("lakeside.map.ron"));
+    assert_eq!(after, maps_dir(&app).join("lakeside.map.yaml"));
     assert!(
         after.exists(),
         "the new file must be on disk, not waiting for a save"
@@ -234,7 +234,7 @@ fn n_then_escape_renames_nothing() {
     assert_eq!(held_path(&app), before);
     assert!(before.exists(), "the old file must still be there");
     assert!(
-        !maps_dir(&app).join("lakeside.map.ron").exists(),
+        !maps_dir(&app).join("lakeside.map.yaml").exists(),
         "Escape must write nothing"
     );
 }

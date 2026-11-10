@@ -147,7 +147,7 @@ fn moving_the_crate_out_of_the_doorway_meets_every_relation_it_can() {
 
 #[test]
 fn relations_round_trip_as_ron() {
-    let text = relations().to_ron().expect("serialises");
+    let text = relations().to_yaml().expect("serialises");
     let back = Relations::parse(&text).expect("parses");
     assert_eq!(back, relations());
     assert!(

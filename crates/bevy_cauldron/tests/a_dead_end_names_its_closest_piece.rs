@@ -17,7 +17,7 @@ fn project(name: &str) -> PathBuf {
         .descriptor("jamb", "alpha")
         .descriptor("b_near", "alpha")
         .build("m");
-    let lib = root.join("assets/grimoire/furniture/library.ron");
+    let lib = root.join("assets/grimoire/furniture/library.yaml");
     let mut text = std::fs::read_to_string(&lib).unwrap_or_else(|e| panic!("{lib:?}: {e}"));
     for (id, cells) in [
         (

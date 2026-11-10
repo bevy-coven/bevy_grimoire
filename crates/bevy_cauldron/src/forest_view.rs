@@ -67,7 +67,7 @@ impl Plugin for ForestViewPlugin {
 /// path, or one that would leave the folder.
 fn species_file(project: &Project, species: &str) -> Option<PathBuf> {
     let rel = Path::new(species);
-    (species.ends_with(".tree.ron") && rel.components().all(|c| matches!(c, PathPart::Normal(_)))).then(|| project.grimoire_dir.join(rel))
+    (species.ends_with(".tree.yaml") && rel.components().all(|c| matches!(c, PathPart::Normal(_)))).then(|| project.grimoire_dir.join(rel))
 }
 
 fn modified(path: &Path) -> Option<SystemTime> {
@@ -185,7 +185,7 @@ pub fn sync_forest_view(
         return;
     }
     state.since = 0.0;
-    let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.ron")).unwrap_or_default();
+    let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.yaml")).unwrap_or_default();
     let forest_path = project.grimoire_dir.join("forest").join(format!("{name}.ron"));
     let drop = crate::editor::ground_drop(&project);
     let origin = open.map.origin;

@@ -95,7 +95,7 @@ fn a_trigger_set_names_the_file_it_writes() {
     );
     // **A file, never the folder** — and with no `map`, nothing a person can look at at all.
     assert!(
-        named.ends_with(".ron"),
+        named.ends_with(".yaml"),
         "a trigger names one file, and `{named}` is a folder"
     );
     assert_eq!(
@@ -125,7 +125,7 @@ fn a_tree_edit_names_the_file_it_writes() {
     let named = path_of(&shown(&app, "tree_edit", serde_json::json!({"name": "oak"})), "a tree");
     assert_eq!(
         named,
-        format!("{relative}/trees/oak.tree.ron"),
+        format!("{relative}/trees/oak.tree.yaml"),
         "`tree_edit` names where its change is seen and must name the file it writes: the \
          authoring kit's own `trees/oak.tree.ron`. It answered `{named}`."
     );

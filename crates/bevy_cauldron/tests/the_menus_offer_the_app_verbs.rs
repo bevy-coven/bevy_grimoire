@@ -286,7 +286,7 @@ fn open_recent_lists_at_most_five_projects() {
         std::fs::create_dir_all(&folder).expect("a folder to list");
         projects.push(folder);
     }
-    let file = dir.join("recent.ron");
+    let file = dir.join("recent.yaml");
     let mut recent = bevy_cauldron::recent::Recent::default();
     for (n, folder) in projects.iter().enumerate() {
         recent.opened(folder, 1_000 + n as u64);
@@ -323,7 +323,7 @@ fn a_recent_project_opens_from_the_menu() {
     let mut app = editor("menus_recent_open");
     let dir = std::env::temp_dir().join(format!("grimoire-recent-open-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a folder");
-    let file = dir.join("recent.ron");
+    let file = dir.join("recent.yaml");
     let mut recent = bevy_cauldron::recent::Recent::default();
     recent.opened(&other, 1_000);
     recent.save(&file).expect("the list");

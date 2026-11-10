@@ -68,16 +68,16 @@ impl Project {
             bash: Vec::new(),
             authoring: Some("kit".to_owned()),
         };
-        std::fs::write(grimoire.join("kits.ron"), kits.to_ron().unwrap()).unwrap();
+        std::fs::write(grimoire.join("kits.yaml"), kits.to_yaml().unwrap()).unwrap();
         std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), grimoire.join("vocab.ron"))
             .unwrap();
-        std::fs::write(grimoire.join("kit/project.ron"), "(\n    version: 2,\n    note: None,\n    patches: [],\n)").unwrap();
+        std::fs::write(grimoire.join("kit/project.yaml"), "(\n    version: 2,\n    note: None,\n    patches: [],\n)").unwrap();
         let library = Library {
             version: LIBRARY_VERSION,
             note: None,
             descriptors: vec![piece("kit/crate", (1.0, 1.0)), piece("kit/table", (2.0, 1.0))],
         };
-        std::fs::write(grimoire.join("kit/library.ron"), library.to_ron().unwrap()).unwrap();
+        std::fs::write(grimoire.join("kit/library.yaml"), library.to_yaml().unwrap()).unwrap();
         Project { grimoire }
     }
 
@@ -86,8 +86,8 @@ impl Project {
     fn write_map(&self, m: &Map) {
         use std::sync::atomic::{AtomicU64, Ordering};
         static TICK: AtomicU64 = AtomicU64::new(1);
-        let path = self.grimoire.join("maps/yard.map.ron");
-        std::fs::write(&path, m.to_ron().unwrap()).unwrap();
+        let path = self.grimoire.join("maps/yard.map.yaml");
+        std::fs::write(&path, m.to_yaml().unwrap()).unwrap();
         let t = SystemTime::now() + Duration::from_secs(TICK.fetch_add(10, Ordering::SeqCst));
         std::fs::File::options().write(true).open(&path).unwrap().set_modified(t).unwrap();
     }

@@ -25,7 +25,7 @@ fn scratch(tag: &str) -> PathBuf {
 fn on_the_launcher(tag: &str, dir: &std::path::Path) -> App {
     let root = Fixture::new(&format!("wizard_{tag}_{}", std::process::id())).descriptor("bench", "props").build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    app.insert_resource(RecentProjects(dir.join("recent.ron"))).insert_resource(ClipboardOff).add_plugins(LauncherPlugin);
+    app.insert_resource(RecentProjects(dir.join("recent.yaml"))).insert_resource(ClipboardOff).add_plugins(LauncherPlugin);
     app.world_mut().resource_mut::<NextState<Screen>>().set(Screen::Launcher);
     for _ in 0..4 {
         app.update();
@@ -109,12 +109,12 @@ fn an_existing_folder_is_a_problem_on_the_name_and_create_stays_disabled_until_t
 
     press(&mut app, "Create");
     let made = places.join("harbour");
-    assert!(made.join("assets/grimoire/kits.ron").is_file() && made.join("assets/grimoire/vocab.ron").is_file(), "the project is written");
+    assert!(made.join("assets/grimoire/kits.yaml").is_file() && made.join("assets/grimoire/vocab.ron").is_file(), "the project is written");
     assert_eq!(app.world().resource::<PointedAt>().root, made.canonicalize().unwrap(), "and opened the way a recent row is, in this process");
     assert_eq!(*app.world().resource::<State<Screen>>().get(), Screen::Loading, "on its first map");
     assert!(bevy_cauldron::catalog::Catalog::scan(&made).unwrap().map("first_map").is_some(), "which Create made");
     assert!(app.world_mut().query_filtered::<(), With<NameField>>().iter(app.world()).next().is_none(), "the form is gone");
-    let listed = recent::Recent::load(&dir.join("recent.ron")).unwrap().listing();
+    let listed = recent::Recent::load(&dir.join("recent.yaml")).unwrap().listing();
     assert_eq!(listed[0].project.path, made.canonicalize().unwrap(), "and it is at the top of the recent list");
     let _ = std::fs::remove_dir_all(&dir);
 }

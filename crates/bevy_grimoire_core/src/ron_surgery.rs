@@ -703,19 +703,11 @@ pub fn trailing_comment(line: &str) -> Option<&str> {
     (at < line.len()).then(|| line[at..].trim_end())
 }
 
-/// Format an `f32` at the fewest decimal places that still round-trip to the same value.
-///
-/// Round-tripping through `parse` is what decides, rather than a tolerance, so a written file always
-/// reloads to the same `f32` the writer was holding. One decimal is exact for anything snapped to a
-/// half-metre or a whole degree; the wider forms are only reached by a value that came from elsewhere.
+/// **Format an `f32` at the fewest decimal places that still round-trip**, which lives with the YAML surgery
+/// now that a project file is YAML: a number's spelling is not a format's business. Kept as a name here while
+/// this module's remaining callers move.
 pub fn fmt_f32(v: f32) -> String {
-    for places in 1..=6 {
-        let s = format!("{v:.places$}");
-        if s.parse::<f32>() == Ok(v) {
-            return s;
-        }
-    }
-    format!("{v}")
+    crate::yaml_surgery::fmt_number(v)
 }
 
 /// Write `text` to `path` atomically: a reader sees the old file or the new one, never half of

@@ -42,7 +42,7 @@ fn age(path: &Path, by: Duration) {
 #[test]
 fn a_write_makes_the_directory_and_leaves_only_the_target() {
     let dir = Scratch::new("makes");
-    let target = dir.0.join("deep").join("er").join("town.map.ron");
+    let target = dir.0.join("deep").join("er").join("town.map.yaml");
     atomic_file::write(&target, "one").unwrap_or_else(|e| panic!("{e}"));
     atomic_file::write(&target, "two").unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(std::fs::read_to_string(&target).unwrap_or_default(), "two");
@@ -51,7 +51,7 @@ fn a_write_makes_the_directory_and_leaves_only_the_target() {
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(beside, ["town.map.ron"], "a write left something behind");
+    assert_eq!(beside, ["town.map.yaml"], "a write left something behind");
 }
 
 /// **A write that cannot land leaves the target alone and no temp file.** The target here is a
@@ -59,31 +59,31 @@ fn a_write_makes_the_directory_and_leaves_only_the_target() {
 #[test]
 fn a_refused_write_changes_nothing_and_leaves_no_temp_file() {
     let dir = Scratch::new("refused");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     std::fs::create_dir(&target).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(target.join("inside.txt"), "kept").unwrap_or_else(|e| panic!("{e}"));
 
     assert!(atomic_file::write(&target, "new").is_err(), "a file was written over a directory");
     assert_eq!(std::fs::read_to_string(target.join("inside.txt")).unwrap_or_default(), "kept");
-    assert_eq!(dir.names(), ["town.map.ron"], "the refused write left a temp file");
+    assert_eq!(dir.names(), ["town.map.yaml"], "the refused write left a temp file");
 }
 
 #[test]
 fn write_new_refuses_to_replace_and_says_why() {
     let dir = Scratch::new("new");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     atomic_file::write_new(&target, "first").unwrap_or_else(|e| panic!("{e}"));
     let refused = atomic_file::write_new(&target, "second").expect_err("a second write_new must be refused");
     assert_eq!(refused.kind(), std::io::ErrorKind::AlreadyExists);
     assert_eq!(std::fs::read_to_string(&target).unwrap_or_default(), "first");
-    assert_eq!(dir.names(), ["town.map.ron"], "write_new left a temp file");
+    assert_eq!(dir.names(), ["town.map.yaml"], "write_new left a temp file");
 }
 
 /// **A temp name is hidden and is not `.ron`**, so a loader that scans for `ron` files, and a watch
 /// that skips dotfiles, never meet it; and two serials never share a name.
 #[test]
 fn a_temp_name_is_hidden_and_never_ron() {
-    let target = Path::new("/project/maps/town.map.ron");
+    let target = Path::new("/project/maps/town.map.yaml");
     let (a, b) = (atomic_file::temp_path(target, 0), atomic_file::temp_path(target, 1));
     assert_ne!(a, b, "two serials share a temp name");
     for tmp in [&a, &b] {
@@ -94,17 +94,17 @@ fn a_temp_name_is_hidden_and_never_ron() {
         assert!(tmp.extension().is_some_and(|e| e != "ron"), "{name} would be loaded as a ron file");
     }
     assert!(!atomic_file::is_temp(target), "the target itself is not a temp file");
-    assert!(!atomic_file::is_temp(Path::new("/project/.live/game.ron")), "a hidden file is not a temp file");
+    assert!(!atomic_file::is_temp(Path::new("/project/.live/game.yaml")), "a hidden file is not a temp file");
 }
 
 /// **A dead writer's temp file goes at the next write, and a live one's does not.**
 #[test]
 fn the_next_write_clears_a_dead_writers_temp_file_and_spares_a_fresh_one() {
     let dir = Scratch::new("sweep");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     let stale = atomic_file::temp_path(&target, 900_001);
     let fresh = atomic_file::temp_path(&target, 900_002);
-    let other_targets = atomic_file::temp_path(&dir.0.join("kits.ron"), 900_003);
+    let other_targets = atomic_file::temp_path(&dir.0.join("kits.yaml"), 900_003);
     // A target whose name only *starts* with this one's: `town.map.ron.bak` is not `town.map.ron`.
     let longer_name = atomic_file::temp_path(&dir.0.join("town.map.ron.bak"), 900_004);
     for p in [&stale, &fresh, &other_targets, &longer_name] {
@@ -128,7 +128,7 @@ fn the_next_write_clears_a_dead_writers_temp_file_and_spares_a_fresh_one() {
 #[test]
 fn a_leftover_temp_name_is_stepped_over() {
     let dir = Scratch::new("collide");
-    let target = dir.0.join("town.map.ron");
+    let target = dir.0.join("town.map.yaml");
     // The first 32 serials, which is where this binary's counter is (it has made a handful of writes);
     // a write tries 64 names before it gives up, so it must step over all of these and land.
     let mut taken = Vec::new();

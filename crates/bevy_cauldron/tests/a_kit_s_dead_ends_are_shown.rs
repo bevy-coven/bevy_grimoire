@@ -20,7 +20,7 @@ fn project(name: &str) -> PathBuf {
         .descriptor("jamb", "alpha")
         .descriptor("crate", "alpha")
         .build("m");
-    let lib = root.join("assets/grimoire/furniture/library.ron");
+    let lib = root.join("assets/grimoire/furniture/library.yaml");
     let text = std::fs::read_to_string(&lib).unwrap_or_else(|e| panic!("{lib:?}: {e}"));
     let jamb_at = text.find("id: \"jamb\"").unwrap_or_else(|| panic!("no jamb row: {text}"));
     let (head, tail) = text.split_at(jamb_at);

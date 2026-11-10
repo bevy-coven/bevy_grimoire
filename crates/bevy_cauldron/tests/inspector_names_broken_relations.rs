@@ -25,7 +25,7 @@ fn editor(name: &str, relations: Option<&str>) -> (App, PathBuf) {
         .place_as("door", "site/door", (8.0, 8.0))
         .place_as("crate", "site/crate", (8.0, 8.5))
         .build("m");
-    let file = root.join("assets/grimoire/maps/m.relations.ron");
+    let file = root.join("assets/grimoire/maps/m.relations.yaml");
     if let Some(r) = relations {
         write(&file, r);
     }

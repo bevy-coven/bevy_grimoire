@@ -18,7 +18,7 @@
 //!
 //! # Settings are files, and the screen only writes them
 //!
-//! A change is one key written into `settings.ron` or `editor.ron` ([`setting_catalogue::write_key`],
+//! A change is one key written into `settings.ron` or `editor.yaml` ([`setting_catalogue::write_key`],
 //! atomic, and a file that does not read is refused and left as it is). The editor's watcher
 //! ([`crate::settings::sync_settings`]) reads the file back as it reads an edit made by hand, so the screen
 //! has no second path to the running settings. The screen reads the two files itself, a few times a
@@ -53,7 +53,7 @@ pub enum Scope {
     /// `<config_dir>/Grimoire/settings.ron`: the person's, for every project.
     #[default]
     User,
-    /// `<project>/assets/grimoire/editor.ron`: this project's, for everyone who opens it.
+    /// `<project>/assets/grimoire/editor.yaml`: this project's, for everyone who opens it.
     Project,
 }
 

@@ -3,7 +3,7 @@
 //! # The gap this closes
 //!
 //! The editor read its project **once**, at open, and never again. `Project::open` parses
-//! `kits.ron`, the vocabulary, every bound kit's `library.ron` and `project.ron`, and the map —
+//! `kits.yaml`, the vocabulary, every bound kit's `library.yaml` and `project.yaml`, and the map —
 //! and that is the whole load. The only on-demand re-read in the crate is
 //! [`crate::project::Project::reload_vocab`], called after the vocabulary prompt appends a token.
 //!
@@ -81,7 +81,7 @@ pub struct Watched {
     project: Option<PathBuf>,
     /// **The watched paths that had no file at the last tick** (#158).
     ///
-    /// `repetition.ron`, `standards.ron`, `rules.ron` and `compositions.ron` are optional, so the
+    /// `repetition.yaml`, `standards.yaml`, `rules.yaml` and `compositions.yaml` are optional, so the
     /// first edit an author makes to one is creating it. A file with no earlier stamp is only a
     /// first sighting when the watcher has never looked at its path; one it saw missing and now
     /// finds is a file written while the editor was open, and that is a change.
@@ -98,8 +98,8 @@ impl Watched {
         // **The project's own files, by the names the core uses to find them.**
         //
         // **The names are the core's constants, not literals here.** The first version watched
-        // `<root>/library.ron` — **a file that does not exist** — because the library lives in
-        // each kit's own directory and the root holds `kits.ron` instead. A watcher that names a
+        // `<root>/library.yaml` — **a file that does not exist** — because the library lives in
+        // each kit's own directory and the root holds `kits.yaml` instead. A watcher that names a
         // file nobody writes is a watcher that never sees a change it should.
         let mut out = vec![
             project.root.join(crate::project::VOCAB),
@@ -117,8 +117,8 @@ impl Watched {
         ];
         // **Every bound kit's own files**, because each kit has a library and a policy of its own.
         for kit in project.kits.iter() {
-            out.push(kit.dir.join("library.ron"));
-            out.push(kit.dir.join("project.ron"));
+            out.push(kit.dir.join("library.yaml"));
+            out.push(kit.dir.join("project.yaml"));
         }
         if let Some(open) = open {
             out.push(open.map_path.clone());
@@ -164,7 +164,7 @@ pub struct Due {
     /// signal that says so. The map lives in [`crate::project::OpenMap`], and the pieces on
     /// screen are entities — and **the entities were spawned once, when the editor opened**.
     ///
-    /// So a person editing `town.map.ron` in a text editor got the map and not the screen: the
+    /// So a person editing `town.map.yaml` in a text editor got the map and not the screen: the
     /// inspector's numbers changed, because they are read from the map every frame, and the
     /// world did not, because the pieces are the ones spawned at startup. **That is the worst
     /// shape a bug can have** — the editor looks like it took the edit.
@@ -208,7 +208,7 @@ pub fn tick_watch(
         watched.project = Some(project.root.clone());
     }
 
-    // **The open map's file is in the list**, because a person editing `town.map.ron` in a text
+    // **The open map's file is in the list**, because a person editing `town.map.yaml` in a text
     // editor is the case this module exists for, and the map file is the most-edited file in a
     // project.
     let files = Watched::files_of(project, open.as_deref());
@@ -267,7 +267,7 @@ pub fn adopt_changes(
     for path in &changed_paths {
         // **The open map's own file, re-read.**
         //
-        // **A person editing `town.map.ron` in a text editor is the case this whole module
+        // **A person editing `town.map.yaml` in a text editor is the case this whole module
         // exists for**, and the map file is the most-edited file in a project. So it is
         // watched like every other authored file — **and the editor's own save is not a
         // change**, because the file the editor writes is the file the editor already has.
@@ -303,7 +303,7 @@ pub fn adopt_changes(
         // **A change in a file the editor reads.**
         //
         // **And the editor's own writes are not changes.** The editor writes a kit's
-        // `library.ron` when a piece is committed, and the file's stamp changes — so the
+        // `library.yaml` when a piece is committed, and the file's stamp changes — so the
         // watcher would re-open the project over the editor's own back, **in the frame after the
         // commit**, and reset the kit's state the author (or a test) is looking at.
         //
@@ -349,16 +349,16 @@ fn differs(path: &Path, project: &Project) -> bool {
     };
     // **The kit's own library, compared against the layer the editor holds.**
     //
-    // **Compared by PARSING, and not by the bytes.** A hand-written `library.ron` carries
+    // **Compared by PARSING, and not by the bytes.** A hand-written `library.yaml` carries
     // comments and its own formatting, so a byte comparison against the editor's own
     // serialisation would say "different" for a file the editor itself wrote — and the watcher
     // would re-open the project over the editor's back every time. **Parsing both sides and
     // comparing the values is what "the same library" means.**
-    if path.file_name().and_then(|n| n.to_str()) == Some("library.ron")
+    if path.file_name().and_then(|n| n.to_str()) == Some("library.yaml")
         && let Some(kit) = project
             .kits
             .iter()
-            .find(|k| k.dir.join("library.ron") == path)
+            .find(|k| k.dir.join("library.yaml") == path)
     {
         // **The editor's copy is the *measured* layer**, which is what it writes and what it
         // reads back; the layered one is that plus the kit's policy patches.
@@ -452,16 +452,16 @@ fn adopt_map(path: &Path, open: &mut OpenMap) -> Result<bool, String> {
 ///
 /// # A kit's save re-reads that kit, and the project-wide files still go through the open (E-003)
 ///
-/// A kit's `library.ron` or `project.ron` can only change that kit: which directory answers for
-/// which namespace is `kits.ron`'s business and a different file. So the two kit files go through
+/// A kit's `library.yaml` or `project.yaml` can only change that kit: which directory answers for
+/// which namespace is `kits.yaml`'s business and a different file. So the two kit files go through
 /// [`Project::reload_kit`], which re-reads the one directory, re-merges, and re-does every check
 /// the open does over the result — instead of re-opening the project, its GLBs and every other kit.
 ///
-/// **`kits.ron`, `vocab.ron`, `compositions.ron` and `rules.ron` are the project's**, and a change
+/// **`kits.yaml`, `vocab.yaml`, `compositions.yaml` and `rules.yaml` are the project's**, and a change
 /// to one of them still goes through a whole open: the binding decides which directories are read
 /// at all, and the other two are parsed and validated against the merge.
 fn adopt(path: &Path, project: &mut Project) -> Result<(), String> {
-    if path.ends_with("vocab.ron") {
+    if path.ends_with("vocab.yaml") {
         return project.reload_vocab();
     }
     // **The kit standards and the repetition rules are read where they are shown** (the Meshes
@@ -498,7 +498,7 @@ fn adopt(path: &Path, project: &mut Project) -> Result<(), String> {
         // over, where the number agrees with the file and the picture is a lie.
         //
         // `touched` is compared against the library being replaced, not against the file, so a
-        // hand-written `library.ron` with its own formatting cannot read as a change — and
+        // hand-written `library.yaml` with its own formatting cannot read as a change — and
         // [`Project::reload_kit`] returns every refusal before it touches `self`, so a bad file
         // leaves the editor holding the last good project whole.
         let touched = project.reload_kit(&dir)?;

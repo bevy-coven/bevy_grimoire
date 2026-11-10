@@ -124,7 +124,7 @@ fn a_grant_is_for_one_project_and_a_symlink_to_it_is_that_project() {
 #[test]
 fn a_store_written_before_guides_grants_existed_still_reads() {
     let dir = Dir::new("old");
-    let file = dir.0.join("trusted.ron");
+    let file = dir.0.join("trusted.yaml");
     let project = project("old-project");
     // What version 1 wrote, before this build added a field: no `guides`, and its own version number.
     let resolved = std::fs::canonicalize(&project.0).expect("the project resolves");

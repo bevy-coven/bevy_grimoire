@@ -74,7 +74,7 @@ pub fn to_snake_case(s: &str) -> String {
 
 /// The file a named map is written to.
 pub fn map_file_name(name: &str) -> String {
-    format!("{name}.map.ron")
+    format!("{name}.map.yaml")
 }
 
 /// **The words a person reads for an id**: its last `/` segment, underscores as spaces, the first
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn the_file_name_is_derived_from_the_name() {
-        assert_eq!(map_file_name("site_67"), "site_67.map.ron");
+        assert_eq!(map_file_name("site_67"), "site_67.map.yaml");
     }
 }
 

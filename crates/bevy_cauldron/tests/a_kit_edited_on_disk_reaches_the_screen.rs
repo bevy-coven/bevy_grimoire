@@ -59,7 +59,7 @@ fn stretch_the_piece_on_disk(root: &std::path::Path, factor: f32) {
         .join("assets")
         .join("grimoire")
         .join(fixtures::DEFAULT_KIT)
-        .join("library.ron");
+        .join("library.yaml");
     let text = std::fs::read_to_string(&path).expect("the kit's library is there");
     let edited = text.replace("stretch_y: None", &format!("stretch_y: Some({factor})"));
     assert_ne!(

@@ -32,7 +32,7 @@ fn rig(tag: &str) -> Rig {
     for _ in 0..3 {
         app.update();
     }
-    let project = app.world().resource::<Project>().project_dir.join("editor.ron");
+    let project = app.world().resource::<Project>().project_dir.join("editor.yaml");
     Rig { app, user, project }
 }
 
@@ -212,7 +212,7 @@ fn the_chord_opens_the_screen_and_the_same_chord_closes_it_and_the_launcher_has_
     let dir = std::env::temp_dir().join(format!("grimoire_settings_launcher_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(r.project.parent().unwrap().parent().unwrap().parent().unwrap(), "m", None).unwrap_or_else(|e| panic!("{e}"));
-    app.insert_resource(bevy_cauldron::recent::RecentProjects(dir.join("recent.ron"))).add_plugins(bevy_cauldron::launcher::LauncherPlugin);
+    app.insert_resource(bevy_cauldron::recent::RecentProjects(dir.join("recent.yaml"))).add_plugins(bevy_cauldron::launcher::LauncherPlugin);
     app.world_mut().resource_mut::<NextState<bevy_cauldron::screen::Screen>>().set(bevy_cauldron::screen::Screen::Launcher);
     updates(&mut app, 4);
     let settings = find_by_label(&mut app, "Settings").expect("the launcher offers Settings");

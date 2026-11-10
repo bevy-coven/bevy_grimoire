@@ -31,7 +31,7 @@ fn rig(tag: &str) -> Rig {
     for _ in 0..3 {
         app.update();
     }
-    let project = app.world().resource::<Project>().project_dir.join("editor.ron");
+    let project = app.world().resource::<Project>().project_dir.join("editor.yaml");
     Rig { app, user, project }
 }
 
@@ -116,7 +116,7 @@ fn a_file_that_does_not_read_keeps_the_last_good_value_and_is_refused_naming_the
         write(&r.project, text);
         until(&mut r.app, &format!("a refusal of {text}"), |a| verdicts(a).iter().any(|v| v.1 == "refused"));
         let v = verdicts(&r.app).remove(0);
-        assert_eq!((v.0.as_str(), v.1.as_str()), ("editor.ron", "refused"), "{text}: {v:?}");
+        assert_eq!((v.0.as_str(), v.1.as_str()), ("editor.yaml", "refused"), "{text}: {v:?}");
         if let Some(field) = field {
             assert_eq!(v.2.as_deref(), Some(field), "{text}: {v:?}");
         }

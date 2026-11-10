@@ -33,7 +33,7 @@ fn editor(tag: &str) -> (App, PathBuf, PathBuf, PathBuf) {
     let root = fixtures::Fixture::new(tag).descriptor("site/wall", "alpha").build("m");
     let home = root.join(".user-config");
     std::fs::create_dir_all(&home).expect("the person's folder is made");
-    let store = root.join("trusted.ron");
+    let store = root.join("trusted.yaml");
     TrustStore::default().save(&store).expect("an empty store");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(UserGuideFile(home.join(USER_FILE)));

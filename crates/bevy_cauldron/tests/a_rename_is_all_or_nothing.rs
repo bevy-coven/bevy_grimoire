@@ -52,8 +52,8 @@ fn a_rename_onto_a_taken_name_is_refused_and_the_other_map_is_untouched() {
     let root = project("rename-taken");
     // **A second map**, so there is a name to collide with.
     {
-        let other = root.join("assets/grimoire/maps/other.map.ron");
-        let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron"))
+        let other = root.join("assets/grimoire/maps/other.map.yaml");
+        let text = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml"))
             .expect("the map is there");
         std::fs::write(
             &other,
@@ -120,7 +120,7 @@ fn a_rename_leaves_one_file_and_the_new_name() {
     let names: Vec<&str> = after.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(
         names,
-        vec!["renamed.map.ron"],
+        vec!["renamed.map.yaml"],
         "a rename must leave ONE file, named for the map. Before this the old file stayed, so the \\
          project held two files answering to one map and the stale one refused to open with a \\
          message about a schema mismatch. The files are now {names:?}"
@@ -141,7 +141,7 @@ fn a_rename_leaves_one_file_and_the_new_name() {
 #[test]
 fn a_rename_that_cannot_remove_the_old_file_names_the_old_file() {
     let root = project("rename-stuck");
-    let old = root.join("assets/grimoire/maps/m.map.ron");
+    let old = root.join("assets/grimoire/maps/m.map.yaml");
     std::fs::remove_file(&old).expect("the old map is removable at the start");
     std::fs::create_dir(&old).expect("a directory can stand where the old file was");
 
@@ -163,7 +163,7 @@ fn a_rename_that_cannot_remove_the_old_file_names_the_old_file() {
         err
     };
     assert!(
-        err.contains("m.map.ron") && !err.contains("renamed.map.ron"),
+        err.contains("m.map.yaml") && !err.contains("renamed.map.yaml"),
         "the error must name the OLD file the author has to delete by hand, and not the new one \
          that was written. It said `{err}`"
     );
@@ -202,7 +202,7 @@ fn a_rename_changes_the_name_and_nothing_else() {
     let after = maps(&root);
     assert_eq!(
         after.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(),
-        vec!["m.map.ron"],
+        vec!["m.map.yaml"],
         "the round trip left a different set of files. A rename is a move, not a copy, so the \
          round trip must land on exactly the file it started from."
     );

@@ -33,7 +33,7 @@ fn rig(tag: &str) -> (App, [String; 3]) {
         .place("chair", (3.0, 1.0))
         .build("m");
     // The fixture gives every descriptor the kind `prop`; the lamps are lights.
-    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.ron");
+    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
     let mut text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
     for lamp in ["lamp_tall", "lamp_short"] {
         let at = text.find(&format!("id: \"{lamp}\"")).unwrap_or_else(|| panic!("no `{lamp}` in the library"));

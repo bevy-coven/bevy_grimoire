@@ -1,4 +1,4 @@
-//! `destructible.ron` and `destructible/<piece>.bake.ron`: which pieces of a project break, and the
+//! `destructible.yaml` and `destructible/<piece>.bake.yaml`: which pieces of a project break, and the
 //! chunks each one breaks into (#108).
 //!
 //! Engine-free: these are the two files' schemas and their readers. The fracture that makes the
@@ -15,7 +15,7 @@ use schemars::JsonSchema;
 /// The `version` a fresh marks file or bake is written with.
 pub const DESTRUCTIBLE_VERSION: u32 = 1;
 
-/// **`<project>/destructible.ron`**: the pieces marked destructible.
+/// **`<project>/destructible.yaml`**: the pieces marked destructible.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Marks {
@@ -31,7 +31,7 @@ pub struct Chunk {
     pub faces: Vec<Vec<u32>>,
 }
 
-/// **`<project>/destructible/<piece>.bake.ron`**: a piece's chunks, cached.
+/// **`<project>/destructible/<piece>.bake.yaml`**: a piece's chunks, cached.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Bake {
@@ -47,7 +47,8 @@ impl Marks {
     /// would be written back as this one's, and what the newer build put there lost. (A [`Bake`] of
     /// another version is not refused: it is a cache, stale and baked again.)
     pub fn parse(text: &str) -> Result<Marks, String> {
-        let marks: Marks = ron::from_str(text).map_err(|e| format!("destructible marks: {e}"))?;
+        let marks: Marks =
+            crate::yaml::from_str(text, "destructible").map_err(|p| format!("destructible marks: {}", p.line()))?;
         if marks.version != DESTRUCTIBLE_VERSION {
             return Err(format!(
                 "destructible marks: version {} is not the {DESTRUCTIBLE_VERSION} this program reads",
@@ -61,6 +62,6 @@ impl Marks {
 impl Bake {
     /// **Read a bake from its file's text.**
     pub fn parse(text: &str) -> Result<Bake, String> {
-        ron::from_str(text).map_err(|e| format!("destructible bake: {e}"))
+        crate::yaml::from_str(text, "destructible bake").map_err(|p| format!("destructible bake: {}", p.line()))
     }
 }

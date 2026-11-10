@@ -91,7 +91,7 @@ struct PosixShell(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
 /// and the card is waited for exactly as `an_agent_tab_runs_its_self_test` waits for it.
 fn editor_on_an_agent_tab(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id())).descriptor("floor", "alpha").build("m");
-    let file = root.join("assets/grimoire/editor.ron");
+    let file = root.join("assets/grimoire/editor.yaml");
     let settings = r#"(version: 1, terminal_agent: Some(Custom), terminal_agent_command: Some("printf 'AGENT-%s\n' UP"))"#;
     std::fs::write(&file, settings).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     let agents = std::env::temp_dir().join(format!("{tag}_{}_agents", std::process::id()));

@@ -63,13 +63,13 @@ where
 /// Every tagged kind and its fixture, as YAML.
 fn tagged_kinds() -> Vec<(&'static str, String)> {
     vec![
-        ("library", value_of::<bevy_grimoire_core::library::Library>(&shipped("site/library.ron"))),
-        ("policy", value_of::<bevy_grimoire_core::policy::Policy>(&shipped("site/project.ron"))),
-        ("compositions", value_of::<bevy_grimoire_core::composition::Compositions>(&shipped("compositions.ron"))),
-        ("rigs", value_of::<bevy_grimoire_core::rigs::Rigs>(&shipped("rigs.ron"))),
-        ("notes", value_of::<bevy_grimoire_core::notes::Notes>(&frozen("core-0.3.0/notes.ron"))),
-        ("relations", value_of::<bevy_grimoire_core::relations::Relations>(&frozen("core-0.3.0/relations.ron"))),
-        ("volume", value_of::<bevy_grimoire_core::volume::Volume>(&frozen("core-0.3.0/volume.ron"))),
+        ("library", value_of::<bevy_grimoire_core::library::Library>(&shipped("site/library.yaml"))),
+        ("policy", value_of::<bevy_grimoire_core::policy::Policy>(&shipped("site/project.yaml"))),
+        ("compositions", value_of::<bevy_grimoire_core::composition::Compositions>(&shipped("compositions.yaml"))),
+        ("rigs", value_of::<bevy_grimoire_core::rigs::Rigs>(&shipped("rigs.yaml"))),
+        ("notes", value_of::<bevy_grimoire_core::notes::Notes>(&frozen("core-0.3.0/notes.yaml"))),
+        ("relations", value_of::<bevy_grimoire_core::relations::Relations>(&frozen("core-0.3.0/relations.yaml"))),
+        ("volume", value_of::<bevy_grimoire_core::volume::Volume>(&frozen("core-0.3.0/volume.yaml"))),
     ]
 }
 

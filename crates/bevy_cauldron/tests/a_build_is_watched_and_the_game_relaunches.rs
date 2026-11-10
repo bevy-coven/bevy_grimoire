@@ -82,7 +82,7 @@ map_name = os.environ["GRIMOIRE_PLAY_MAP"]
 # **What the game reads when it starts**, and the editor's own test reads the same thing to compare
 # against: the bytes of the map file at the moment the game came up. A relaunch that did not write the
 # editor's unsaved map starts on the older bytes, which is the difference under test.
-path = os.path.join(root, "assets/grimoire/maps", map_name + ".map.ron")
+path = os.path.join(root, "assets/grimoire/maps", map_name + ".map.yaml")
 text = open(path).read() if os.path.exists(path) else ""
 open(os.path.join(root, "launches.txt"), "a").write(
     os.environ["GRIMOIRE_PLAY_MAP"] + " " + os.environ.get("GRIMOIRE_PLAY_CAMERA", "")
@@ -428,7 +428,7 @@ fn a_relaunch_reads_the_map_the_editor_holds_even_unsaved() {
     );
 
     // **The game read the map the editor held**, which is the yaw the person set and never saved.
-    let on_disk = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap_or_default();
+    let on_disk = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap_or_default();
     assert!(
         on_disk.contains("1.25"),
         "the unsaved yaw was not written before the game restarted, so it came up on the old map"

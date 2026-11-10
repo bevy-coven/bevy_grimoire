@@ -75,7 +75,7 @@ fn pump_until(app: &mut App, mut done: impl FnMut(&mut App) -> bool) -> bool {
 
 /// **The kit's library with one piece twice as tall.**
 fn stretch_on_disk(dir: &std::path::Path, factor: f32) {
-    let path = dir.join("library.ron");
+    let path = dir.join("library.yaml");
     let text = std::fs::read_to_string(&path).expect("the kit's library is there");
     let edited = text.replace("stretch_y: None", &format!("stretch_y: Some({factor})"));
     assert_ne!(
@@ -248,7 +248,7 @@ fn a_kit_edit_that_breaks_a_composition_is_refused_and_keeps_the_last_good_proje
 
     // **And now the kit loses its only piece**, which the composition names.
     std::fs::write(
-        site_dir.join("library.ron"),
+        site_dir.join("library.yaml"),
         "(version: 1, note: None, descriptors: [])",
     )
     .expect("the library is written");

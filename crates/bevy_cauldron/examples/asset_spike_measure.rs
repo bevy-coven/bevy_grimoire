@@ -36,7 +36,7 @@ fn standards(n: u32) -> Standards {
 }
 
 fn text(n: u32) -> String {
-    standards(n).to_ron().expect("a standards text")
+    standards(n).to_yaml().expect("a standards text")
 }
 
 #[derive(Clone, Copy)]
@@ -58,9 +58,9 @@ impl Way {
 type Seen = Option<(f64, u32)>;
 
 fn trial(way: Way, n: u32, dir: &Path) -> [Seen; 4] {
-    let file = dir.join("standards.ron");
+    let file = dir.join("standards.yaml");
     way.write(&file, &text(0));
-    let (mut app, _handles) = app_over(dir, &["standards.ron"]);
+    let (mut app, _handles) = app_over(dir, &["standards.yaml"]);
     let begin = Instant::now();
     while !app.world().resource::<Heard>().events.iter().any(|h| matches!(h, Heard1::Loaded(_))) {
         assert!(begin.elapsed() < Duration::from_secs(10), "the asset never loaded the first text");

@@ -59,8 +59,8 @@ fn each_files_verdict_is_in_the_state_and_a_refusal_names_its_file_and_field() {
     std::fs::write(&map, std::fs::read_to_string(&map).unwrap()).unwrap();
     std::thread::sleep(Duration::from_millis(20));
     let kinds = vec![
-        KindVerdict::applied("kits", "kits.ron"),
-        KindVerdict::refused("map", "maps/m.map.ron", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
+        KindVerdict::applied("kits", "kits.yaml"),
+        KindVerdict::refused("map", "maps/m.map.yaml", Some("placements[0].at[1]".to_owned()), "1:47: Expected float"),
     ];
     Verdict::with_kinds(7, "maps/m.map.ron: refused", kinds).write(&dir).unwrap();
     settle(&mut app);
@@ -71,8 +71,8 @@ fn each_files_verdict_is_in_the_state_and_a_refusal_names_its_file_and_field() {
     assert_eq!(
         g["kinds"],
         serde_json::json!([
-            {"kind": "kits", "file": "kits.ron", "outcome": "applied", "field": null, "reason": ""},
-            {"kind": "map", "file": "maps/m.map.ron", "outcome": "refused", "field": "placements[0].at[1]", "reason": "1:47: Expected float"},
+            {"kind": "kits", "file": "kits.yaml", "outcome": "applied", "field": null, "reason": ""},
+            {"kind": "map", "file": "maps/m.map.yaml", "outcome": "refused", "field": "placements[0].at[1]", "reason": "1:47: Expected float"},
         ])
     );
     let problem = app.world().resource::<EditorState>().status.problem_text().to_owned();

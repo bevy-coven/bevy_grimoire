@@ -1,9 +1,9 @@
 //! **Destructible props, through `bevy_carnage`** (#108): `destructible_set` and `destructible_hit`.
 //!
 //! A piece marked destructible is fractured once, by the crate's own `fracture_mesh`, over its mesh
-//! and a box proxy of its bounds. The chunks are cached in the project, `destructible/<piece>.bake.ron`,
+//! and a box proxy of its bounds. The chunks are cached in the project, `destructible/<piece>.bake.yaml`,
 //! keyed by the mesh's bytes and the cut settings, so marking it again (or reopening the project)
-//! never bakes it a second time and a changed mesh does. The marks are `destructible.ron`.
+//! never bakes it a second time and a changed mesh does. The marks are `destructible.yaml`.
 //!
 //! `destructible_hit` previews a hit on the cached chunks and reports which break loose and whether
 //! each is a closed solid, by the crate's own audit. The violence dials (`GorePolicy`) are the crate's
@@ -24,15 +24,15 @@ const TARGET_CHUNKS: usize = 6;
 const MIN_FRACTION: f32 = 0.05;
 
 /// What a refusal calls the marks file: the path the author edits it by.
-const MARKS_FILE: &str = "destructible.ron";
+const MARKS_FILE: &str = "destructible.yaml";
 
 fn marks_path(root: &Path) -> PathBuf {
     root.join(MARKS_FILE)
 }
 
-/// `<project>/destructible/<piece>.bake.ron`, the piece id's `/` written `__`.
+/// `<project>/destructible/<piece>.bake.yaml`, the piece id's `/` written `__`.
 pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
-    root.join("destructible").join(format!("{}.bake.ron", piece.replace('/', "__")))
+    root.join("destructible").join(format!("{}.bake.yaml", piece.replace('/', "__")))
 }
 
 /// **The marks, strictly**: no file is no marks, and a file that does not read refuses with its field
@@ -52,13 +52,13 @@ fn load_marks(root: &Path) -> Result<Marks, Refusal> {
             Ok(marks)
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Marks { version: VERSION, pieces: Vec::new() }),
-        Err(e) => Err(Refusal::new(format!("destructible.ron cannot be read: {e}"))),
+        Err(e) => Err(Refusal::new(format!("destructible.yaml cannot be read: {e}"))),
     }
 }
 
 fn write_marks(root: &Path, marks: &Marks) -> Result<(), Refusal> {
     let text = ron::ser::to_string_pretty(marks, ron::ser::PrettyConfig::default()).map_err(|e| Refusal::new(e.to_string()))?;
-    bevy_grimoire_core::atomic_file::write(&marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.ron refused the write, so nothing changed: {e}")))
+    bevy_grimoire_core::atomic_file::write(&marks_path(root), text).map_err(|e| Refusal::new(format!("destructible.yaml refused the write, so nothing changed: {e}")))
 }
 
 fn cut_for(piece: &str) -> CutSettings {

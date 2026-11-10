@@ -266,7 +266,7 @@ fn name_the_window(
 /// - on a refusal, the `Problem`'s own line, which names the file and the fix, and a non-zero exit.
 ///
 /// **It converts the kinds that already read YAML, and no others** ([`migrate::migrate_moved`]). The
-/// cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.ron`:
+/// cutover moves one kind at a time, so this build reads `play.yaml` and still reads `kits.yaml`:
 /// converting the second would write a file nothing reads and archive the one everything does. The list
 /// grows as kinds move, and the last kind to join it is the commit that deletes the RON readers.
 ///

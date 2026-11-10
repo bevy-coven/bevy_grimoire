@@ -11,7 +11,7 @@ use bevy_grimoire_core::rules::RULES_VERSION;
 
 fn refused(text: &str) -> Refusal {
     let kind = kind_by_id("rules").expect("a registry kind");
-    match reload_check::check(kind, "rules.ron", text) {
+    match reload_check::check(kind, "rules.yaml", text) {
         Check::Refused(r) => r,
         other => panic!("a file with a field the type does not know must be refused, got {other:?}"),
     }

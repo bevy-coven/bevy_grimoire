@@ -1,7 +1,7 @@
 //! **The editor as host of the owner's family crates** (#96).
 //!
 //! Each family crate is an optional cargo feature of this crate, named after it. A project's
-//! `family.ron` (`bevy_grimoire_core::family`) lists the ones it uses. A listed crate this build was
+//! `family.yaml` (`bevy_grimoire_core::family`) lists the ones it uses. A listed crate this build was
 //! compiled without is a problem the author is told about, never a silent no-op.
 
 use bevy::prelude::*;
@@ -63,7 +63,7 @@ pub fn built() -> Vec<&'static str> {
     on
 }
 
-/// **What is wrong with the project's `family.ron` for this build**: an unreadable file, an unknown
+/// **What is wrong with the project's `family.yaml` for this build**: an unreadable file, an unknown
 /// crate, or a crate whose feature is off. Empty when the project lists nothing or has no file.
 pub fn problems_with(root: &std::path::Path, built: &[&str]) -> Vec<String> {
     match Family::load(root) {
@@ -107,7 +107,7 @@ pub struct Reloaded;
 /// **The file a crate's settings are in**, as the verdicts name it: under the game's root, which is
 /// where a `family` kind's pattern starts.
 fn settings_file(krate: &str) -> String {
-    format!("family/{krate}.ron")
+    format!("family/{krate}.yaml")
 }
 
 /// **What the crate's own type makes of a settings file** (#200): for the crates this build has the type
@@ -195,7 +195,7 @@ fn settle_refused(
         .collect();
     let mut decided = Vec::new();
     for file in refused {
-        let Some(krate) = file.strip_prefix("family/").and_then(|f| f.strip_suffix(".ron")) else { continue };
+        let Some(krate) = file.strip_prefix("family/").and_then(|f| f.strip_suffix(".yaml")) else { continue };
         match std::fs::read_to_string(root.join(&file)) {
             Err(_) => {
                 bad.remove(krate);
@@ -317,7 +317,7 @@ pub fn reload_settings(
             }
             SettingsChange::Invalid { krate, error } => {
                 // The same bytes are decided once, however often the watch says so.
-                let text = std::fs::read_to_string(bevy_grimoire_core::family::settings_dir(&held.root).join(format!("{krate}.ron"))).ok();
+                let text = std::fs::read_to_string(bevy_grimoire_core::family::settings_dir(&held.root).join(format!("{krate}.yaml"))).ok();
                 if text.is_some() && held.bad.get(&krate) == text.as_ref() {
                     continue;
                 }

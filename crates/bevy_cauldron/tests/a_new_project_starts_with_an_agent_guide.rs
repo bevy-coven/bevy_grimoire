@@ -185,7 +185,7 @@ fn opening_an_existing_project_writes_no_guide() {
 #[test]
 fn the_writer_is_the_one_function_and_it_is_idempotent() {
     let dir = scratch(&format!("writer_{}", std::process::id()));
-    let store = dir.join("trusted.ron");
+    let store = dir.join("trusted.yaml");
     TrustStore::default().save(&store).expect("an empty store");
     let root = dir.join("project");
     std::fs::create_dir_all(&root).expect("the project folder");
@@ -206,13 +206,13 @@ fn the_writer_is_the_one_function_and_it_is_idempotent() {
 #[test]
 fn a_store_that_will_not_read_is_an_error_and_not_a_silent_ungranted_guide() {
     let dir = scratch(&format!("badstore_{}", std::process::id()));
-    let store = dir.join("trusted.ron");
+    let store = dir.join("trusted.yaml");
     std::fs::write(&store, "(version: 2, projects: [").expect("a damaged store");
     let store_root = bevy_cauldron::trusted::StoreRoot(dir.clone());
     let root = dir.join("project");
     std::fs::create_dir_all(&root).expect("the project folder");
     let said = guide_template::write(&root, Some(&store_root), None).expect_err("a damaged store is refused");
-    assert!(said.contains("trusted.ron"), "the refusal names the file: {said}");
+    assert!(said.contains("trusted.yaml"), "the refusal names the file: {said}");
 }
 
 #[test]

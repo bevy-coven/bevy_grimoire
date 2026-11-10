@@ -39,8 +39,8 @@ mod drawn {
     fn bases(root: &std::path::Path, with_environment_file: bool) -> Vec<f32> {
         if with_environment_file {
             std::fs::create_dir_all(root.join("family")).unwrap();
-            std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
-            std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_ron()).unwrap();
+            std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
+            std::fs::write(root.join("family/bevy_elements.ron"), bevy_cauldron::environment::ElementsSettings::defaults().to_yaml()).unwrap();
         }
         let mut app = bevy_cauldron::harness::build_headless(root, "m", None).unwrap_or_else(|e| panic!("{e}"));
         app.init_asset::<WeatheredMaterial>();

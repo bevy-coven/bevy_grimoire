@@ -1,0 +1,6531 @@
+version: 1
+note: The editor's working library. Seeded once from library_from_manifests.ron and OWNED BY emerge-mapper thereafter — its import mode appends here. The converter's output stays pinned separately, so a manifest that moves still fails a test without fighting an author's imports.
+descriptors:
+- id: lamp_tall
+  mesh: low_poly_furniture/glb/Lights/Ceiling Light.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.8454529
+    pivot:
+    - 0.00041016936
+    - 0.0003722012
+    rotate:
+    - 270
+    - 270
+    - 270
+    front: South
+  extent:
+    footprint:
+    - 0.61471224
+    - 0.61471224
+    height: 0.8454529
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  - prop
+  effects:
+  - emit
+  - uses-electricity
+  look:
+  - white
+  - plastic
+  - clean
+  - green
+  placement:
+    rooms:
+    - bedroom
+    - living
+    - office
+    - dining
+    group: null
+  subgrid: null
+  note: Filename and asset name are contradictory; dimensions and visuals confirm it is a small table lamp.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: wall_light
+  mesh: low_poly_furniture/glb/Lights/Wall Light.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.38
+    - 0.2
+    height: 0.0
+  mount: !OnWall
+    height: 1.8
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  - light
+  effects:
+  - emit
+  look:
+  - white
+  - plastic
+  - beige
+  placement:
+    rooms:
+    - hall
+    - bathroom
+    - bedroom
+    group: null
+  subgrid: null
+  note: null
+  labels:
+    by:
+      mount: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bin
+  mesh: low_poly_furniture/glb/Miscellaneous/Bin.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.4
+    - 0.4
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bin
+  effects: []
+  look:
+  - grey
+  - plastic
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    - kitchen
+    - living
+    - office
+    - storage
+    group: null
+  subgrid: null
+  note: Symmetric tapered bin; the 0.00 m measured height is a data error. Low-poly, clean, grey plastic.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: globe
+  mesh: low_poly_furniture/glb/Miscellaneous/Globe.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.33
+    - 0.28
+    height: 0.3
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - decor
+  - prop
+  effects: []
+  look:
+  - brown
+  - blue
+  - green
+  - wood
+  placement:
+    rooms:
+    - office
+    - living
+    - dining
+    group: null
+  subgrid: null
+  note: Hand-scale globe; place on a desk, shelf or side table, not the floor.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: plant_a
+  mesh: low_poly_furniture/glb/Miscellaneous/Plant A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.52
+    - 0.55
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - decor
+  - plant
+  effects: []
+  look:
+  - brown
+  - blue
+  - green
+  placement:
+    rooms:
+    - living
+    - office
+    - dining
+    - bedroom
+    - hall
+    group: null
+  subgrid: null
+  note: Symmetric topiary plant; no front. Low-poly style with green foliage, brown stem, and blue pot.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: plant_b
+  mesh: low_poly_furniture/glb/Miscellaneous/Plant B.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.18
+    - 0.18
+    height: 0.25
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - decor
+  - plant
+  effects: []
+  look:
+  - brown
+  - green
+  - beige
+  placement:
+    rooms:
+    - office
+    - living
+    - dining
+    - bedroom
+    group: null
+  subgrid: null
+  note: Low-poly, stylized cactus in a red pot. Intended for small surfaces like desks or shelves. Symmetric design with no front-facing bias.
+- id: lamp
+  mesh: low_poly_furniture/glb/Lights/Lamp C.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.32
+    - 0.32
+    height: 0.4
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  - uses-electricity
+  look:
+  - grey
+  - metal
+  - blue
+  placement:
+    rooms:
+    - office
+    - dining
+    - living
+    - bedroom
+    group: null
+  subgrid: null
+  note: Compact desk lamp with a faceted blue shade.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bed_double
+  mesh: low_poly_furniture/glb/Beds/Bed Double.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.278
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.72
+    - 2.22
+    height: 0.714
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects:
+  - stamina-recharge
+  look:
+  - white
+  - brown
+  - clean
+  - blue
+  - wood
+  - fabric
+  placement:
+    rooms:
+    - bedroom
+    group: null
+  subgrid: null
+  note: Double bed with a light wooden frame, white pillows and a blue duvet; the headboard sits on the north side so the bed fronts south.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: sofa
+  mesh: low_poly_furniture/glb/Sofas/Sofa A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.058
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 2.08
+    - 0.88
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - clean
+  - red
+  - wood
+  - fabric
+  placement:
+    rooms:
+    - living
+    - dining
+    - bedroom
+    - office
+    group: null
+  subgrid: null
+  note: Two-seat sofa with red cushions and a light wooden base.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: table
+  mesh: low_poly_furniture/glb/Tables/Table A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.66
+    - 0.71
+    height: 0.796
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look:
+  - brown
+  - clean
+  - wood
+  placement:
+    rooms:
+    - dining
+    - living
+    - office
+    - kitchen
+    group: null
+  subgrid: null
+  note: Plain rectangular table with a symmetric top; no face is the visual front.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: chair
+  mesh: low_poly_furniture/glb/Chairs/Chair A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.057
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.41
+    - 0.51
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - brown
+  - clean
+  - wood
+  placement:
+    rooms:
+    - dining
+    - living
+    - office
+    - bedroom
+    group: null
+  subgrid: null
+  note: Plain low-poly wooden chair; the seat top is a usable support surface for small props.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: drawer
+  mesh: low_poly_furniture/glb/Drawers/Drawer A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - -0.141
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.55
+    - 0.6
+    height: 0.756
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - brown
+  - clean
+  - wood
+  placement:
+    rooms:
+    - bedroom
+    - dorm
+    - living
+    group: null
+  subgrid: null
+  note: Dresser/chest of drawers; the drawer fronts face the south face. Low-poly, clean, wooden finish.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: shelf
+  mesh: low_poly_furniture/glb/Shelves/Shelf D.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.23
+    - 0.38
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - brown
+  - clean
+  - wood
+  placement:
+    rooms:
+    - living
+    - office
+    - dorm
+    - storage
+    group: null
+  subgrid: null
+  note: The measured height of 0.00m is a data error; it is a tall upright unit. The asset is symmetric and stands upright as authored.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: fridge
+  mesh: low_poly_furniture/glb/Kitchen/Fridge A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.157
+    - -0.136
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.88
+    - 0.61
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - uses-electricity
+  look:
+  - white
+  - clean
+  placement:
+    rooms:
+    - kitchen
+    group: null
+  subgrid: null
+  note: Standard kitchen fridge; the flat top can hold small items.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: tv
+  mesh: low_poly_furniture/glb/Electronics/TV A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.88
+    - 0.8
+    height: 0.5
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - screen
+  - uses-electricity
+  look:
+  - grey
+  - plastic
+  - blue
+  placement:
+    rooms:
+    - living
+    - dining
+    - office
+    - command
+    group: null
+  subgrid: null
+  note: Boxy CRT-style TV; the blue face is a cosmetic screen.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: crt_large
+  mesh: retro_tvs/retro_tv_large.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.88
+    - 0.56
+    height: 0.66
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - screen
+  - uses-electricity
+  look:
+  - plastic
+  - worn
+  - blue
+  - beige
+  placement:
+    rooms:
+    - living
+    - dining
+    - office
+    group: null
+  subgrid: null
+  note: Retro CRT TV with a glowing blue screen and worn cream casing. The front face is the screen, which is oriented south in the render.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: crt_a
+  mesh: retro_tvs/retro_tv_a.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.89
+    - 0.89
+    height: 0.66
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - screen
+  - uses-electricity
+  look:
+  - plastic
+  - worn
+  - beige
+  - emissive
+  placement:
+    rooms:
+    - living
+    - dining
+    - office
+    group: null
+  subgrid: null
+  note: Retro TV with a lit blue screen; designed to sit on furniture. The screen is emissive and the casing is worn beige plastic.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: crt_b
+  mesh: retro_tvs/retro_tv_b.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.51
+    - 0.47
+    height: 0.45
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - screen
+  - uses-electricity
+  look:
+  - plastic
+  - worn
+  - blue
+  - beige
+  placement:
+    rooms:
+    - living
+    - office
+    - dining
+    - bedroom
+    group: null
+  subgrid: null
+  note: Small tabletop CRT; the blue screen is a cosmetic display, not a light source.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: armchair
+  mesh: tinyliving/lovely_armchair.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.82
+    - 0.74
+    height: 1.03
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - white
+  - orange
+  - clean
+  - blue
+  - wood
+  - fabric
+  placement:
+    rooms:
+    - living
+    - bedroom
+    - dining
+    - office
+    group: null
+  subgrid: null
+  note: Single-seat armchair with decorative pillow.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: loveseat
+  mesh: tinyliving/lovely_loveseat.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.83
+    - 0.75
+    height: 0.91
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - white
+  - orange
+  - beige
+  - wood
+  - fabric
+  placement:
+    rooms:
+    - living
+    - dining
+    - bedroom
+    - office
+    group: null
+  subgrid: null
+  note: Two-seater sofa; the seat is for sitting, not a support surface for other props.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: dining_chair
+  mesh: tinyliving/lovely_dining_chair.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.62
+    - 0.66
+    height: 0.99
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - brown
+  - clean
+  - blue
+  - yellow
+  - wood
+  - fabric
+  - striped
+  placement:
+    rooms:
+    - dining
+    - living
+    - kitchen
+    group: null
+  subgrid: null
+  note: Mid-century dining armchair; the seat cushion is striped blue and yellow on a tan wood frame.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: pouffe
+  mesh: tinyliving/modern_pouffe.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.59
+    - 0.6
+    height: 0.53
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - orange
+  - blue
+  - beige
+  - fabric
+  placement:
+    rooms:
+    - living
+    - bedroom
+    - dining
+    - office
+    group: null
+  subgrid: null
+  note: Symmetric cube pouffe; the chevron pattern wraps all four sides so no face is a distinct front.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: coffee_table
+  mesh: tinyliving/sir_cumference_coffee_table.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.73
+    - 0.73
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look:
+  - brown
+  - plastic
+  - clean
+  - blue
+  placement:
+    rooms:
+    - living
+    - dining
+    group: null
+  subgrid: null
+  note: Symmetric octagonal coffee table; the blue top reads as a smooth matte surface. No distinct front face.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: writing_desk
+  mesh: tinyliving/tiny_desk_for_tiny_living.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.81
+    - 0.85
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look:
+  - brown
+  - clean
+  - beige
+  placement:
+    rooms:
+    - dining
+    - living
+    - office
+    - bedroom
+    group: null
+  subgrid: null
+  note: Sloped writing surface with a small drawer bank (purple, beige, orange fronts) on the front face; angled wooden legs.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bookcase_tall
+  mesh: tinyliving/power_tower_bookcase.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.85
+    - 0.59
+    height: 2.4
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - white
+  - brown
+  - clean
+  - blue
+  - yellow
+  placement:
+    rooms:
+    - living
+    - bedroom
+    - office
+    - dorm
+    group: null
+  subgrid: null
+  note: Tall storage unit with open shelving, a white cabinet door, and colored drawers. The front face is the side with the shelving and doors.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: dresser_tall
+  mesh: tinyliving/power_tower_dresser.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: West
+  extent:
+    footprint:
+    - 0.52
+    - 0.53
+    height: 1.51
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - white
+  - brown
+  - clean
+  - blue
+  - yellow
+  placement:
+    rooms:
+    - bedroom
+    - living
+    - dorm
+    - office
+    group: null
+  subgrid: null
+  note: Tall chest of drawers with a light wood body and teal, white, and yellow drawer fronts. The flat top can hold small items.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: dresser_stubby
+  mesh: tinyliving/stubby_cubby_dresser.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.68
+    - 0.85
+    height: 1.36
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - brown
+  - orange
+  - clean
+  - beige
+  placement:
+    rooms:
+    - bedroom
+    - dorm
+    - living
+    group: null
+  subgrid: null
+  note: Compact dresser with a flat top that can hold small items. The front face has a mix of drawers and cabinet doors in different colors.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: tiered_shelf
+  mesh: tinyliving/tiered_shelf.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.3
+    - 0.78
+    height: 1.04
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - brown
+  - metal
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    - kitchen
+    - living
+    group: bath
+  subgrid: null
+  note: Open-fronted two-tier shelf with a towel bar; the stocked side faces the room for viewing.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: vanity
+  mesh: tinyliving/the_sinkz_bathroom_vanity.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.65
+    - 0.68
+    height: 1.37
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  - table
+  effects: []
+  look:
+  - white
+  - brown
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Bathroom vanity with a sink basin and a single drawer. The top surface is occupied by the sink, so it offers general support rather than a clear worktop.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: lavatory
+  mesh: tinyliving/compact_lavatory.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.39
+    - 0.74
+    height: 0.89
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look:
+  - white
+  - clean
+  - beige
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Compact one-piece lavatory with integrated tank; lid is open in the render. The bowl opening faces the south face.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: desk_lamp_modern
+  mesh: tinyliving/the_modern_desk_lamp.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: North
+  extent:
+    footprint:
+    - 0.25
+    - 0.24
+    height: 0.56
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  effects:
+  - emit
+  - uses-electricity
+  look:
+  - plastic
+  - clean
+  - blue
+  placement:
+    rooms:
+    - office
+    - dining
+    - living
+    - bedroom
+    group: null
+  subgrid: null
+  note: Tripod-based task lamp sized for a desk or shelf; the saturated teal body reads as blue.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: barrel_acid
+  mesh: barrels/barrel_acid.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look:
+  - metal
+  - worn
+  - yellow
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - storage
+    - warehouse
+    group: null
+  subgrid: null
+  note: Cylindrical and rotationally symmetric, so no front; the radiation symbol is a side decal. The flat top can hold small props.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: barrel_acid_b
+  mesh: barrels/barrel_acid_b.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look:
+  - plastic
+  - worn
+  - yellow
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - storage
+    - warehouse
+    group: null
+  subgrid: null
+  note: Symmetric hazard drum; the radiation trefoil is a painted decal, not a light source. Flat top can hold small items.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: barrel_metal
+  mesh: barrels/barrel_metal.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look:
+  - brown
+  - orange
+  - metal
+  - worn
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - storage
+    - warehouse
+    group: null
+  subgrid: null
+  note: Cylindrical metal drum with rust and painted hazard triangles; symmetric so no front. The flat top can serve as a small support surface.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: barrel_rusty
+  mesh: barrels/barrel_rusty.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.56
+    - 0.56
+    height: 0.86
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look:
+  - brown
+  - metal
+  - worn
+  - red
+  placement:
+    rooms:
+    - industrial
+    - storage
+    - warehouse
+    - lab
+    - dorm
+    - medical
+    - bathroom
+    - kitchen
+    - living
+    - bedroom
+    - dining
+    - hall
+    - command
+    - office
+    - bar
+    group: null
+  subgrid: null
+  note: Symmetric cylinder with no functional front; the top lid is a flat support surface. The red markings are stencils, not a primary colour.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: floor_grate
+  mesh: ozea/floor_grate.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.03
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.06
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - metal
+  placement:
+    rooms:
+    - industrial
+    - warehouse
+    - lab
+    - storage
+    group: null
+  subgrid: null
+  note: 1 m square floor tile with a central grate; place as part of the floor grid, not as a freestanding prop.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: floor_light
+  mesh: ozea/floor_light.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.03
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.06
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  - light
+  effects:
+  - emit
+  - uses-electricity
+  look:
+  - black
+  - metal
+  - clean
+  - emissive
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - warehouse
+    - storage
+    - office
+    group: null
+  subgrid: null
+  note: Symmetric 1x1 m floor tile with emissive cyan strips; embeds into the floor grid as a repeating surface piece.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: desk
+  mesh: low_poly_furniture/glb/Tables/Desk.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.347
+    - -0.126
+    rotate: null
+    front: West
+  extent:
+    footprint:
+    - 1.897
+    - 0.895
+    height: 0.854
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  - table
+  effects: []
+  look:
+  - brown
+  - clean
+  placement:
+    rooms:
+    - office
+    - dining
+    - living
+    - bedroom
+    group: null
+  subgrid: null
+  note: Long rectangular top with a two-drawer pedestal on the west short end; the drawer side is the visual front.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: toilet
+  mesh: low_poly_furniture/glb/Bathroom/Toilet.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.029
+    - 0.124
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.592
+    - 0.765
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look:
+  - white
+  - brown
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Bathroom fixture; the bowl and open wooden seat face the room, tank at the back.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: sink
+  mesh: low_poly_furniture/glb/Bathroom/Sink.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - -0.006
+    - 0.09
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.444
+    - 0.29
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look:
+  - white
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Pedestal basin; the flat rim around the bowl can take small items. Measured height of 0.00 m is a placeholder — the mesh clearly stands on the floor.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bath
+  mesh: low_poly_furniture/glb/Bathroom/Bath.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: 0.0
+    pivot:
+    - 0.545
+    - 0.004
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.412
+    - 0.781
+    height: 0.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look:
+  - white
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Bathtub fixture; the long side with the two cross-handle taps is the front. The flat rim can hold small items.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: wall_low
+  mesh: ozea/wall_low.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.20000003
+    - 0.99999845
+    height: 2.0
+  mount: !OnWall
+    height: 1.0
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - orange
+  - glass
+  - clean
+  placement:
+    rooms:
+    - living
+    - office
+    - industrial
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+  note: Full-height (2.0 m) wall element, not a small sconce; the recessed glass face is the visual front. Mount height should be ~1.0 m (mid-height) so the panel spans the wall, not 1.8 m.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: wall_window
+  mesh: ozea/wall_window.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.20000003
+    - 2.0000005
+    height: 2.4
+  mount: !InOpening
+    clear: null
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - black
+  - orange
+  - metal
+  - glass
+  - clean
+  placement:
+    rooms:
+    - living
+    - bedroom
+    - office
+    - dorm
+    - hall
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 3
+      solid: true
+      edge: null
+  note: Fills a wall opening as a window; the dark panel is glass, not a passable door. Orange trim lines the frame with a small cyan accent strip near the bottom.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: water_dispenser
+  mesh: ozea/water_dispenser.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.45
+    - 0.45000008
+    height: 1.2
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  - container
+  effects:
+  - uses-electricity
+  look:
+  - white
+  - grey
+  - orange
+  - plastic
+  - clean
+  placement:
+    rooms:
+    - kitchen
+    - office
+    - dining
+    - living
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+  note: Floor-standing appliance with dispensing controls on the east face; the design suggests it is meant to be viewed from that side. The asset is symmetric in geometry but the front is defined by the control panel location.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: wall_corner
+  mesh: ozea/wall_corner.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.22
+    - 0.22000015
+    height: 2.4
+  mount: !OnWall
+    height: 1.8
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - light
+  - structure
+  effects:
+  - emit
+  - uses-electricity
+  look:
+  - grey
+  - metal
+  - clean
+  - blue
+  placement:
+    rooms:
+    - living
+    - office
+    - hall
+    - industrial
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: true
+      edge: null
+  note: Symmetric vertical corner element; the geometry has no distinct front face. Intended to be placed at a wall intersection.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: wall_header
+  mesh: ozea/wall_header.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.10000067
+    - 1.0
+    height: 0.4000001
+  mount: !InOpening
+    clear: null
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - metal
+  placement:
+    rooms:
+    - industrial
+    - warehouse
+    - storage
+    - lab
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Symmetric structural beam with a central slot; no distinct front face. Spans a wall opening rather than resting on the floor.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: wall
+  mesh: ozea/wall.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.10000067
+    - 1.0000001
+    height: 2.3999999
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - clean
+  placement:
+    rooms:
+    - bar
+    - bathroom
+    - bedroom
+    - command
+    - dining
+    - dorm
+    - hall
+    - industrial
+    - kitchen
+    - lab
+    - living
+    - medical
+    - office
+    - storage
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: true
+      edge: null
+  note: Flat 0.10 x 1.00 x 2.40 m wall panel; symmetric, no front face. Tiled grid piece for building walls.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: tube_rack
+  mesh: ozea/tube_rack.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.051290706
+    - 0.21575937
+    height: 0.12533914
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - white
+  - orange
+  - plastic
+  - clean
+  placement:
+    rooms:
+    - lab
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Lab dressing for holding test tubes; open top, no resting surface. Place on worktop, not floor.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: mess_table
+  mesh: ozea/mess_table.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.6
+    - 0.6
+    height: 1.2000029
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look:
+  - white
+  - orange
+  - clean
+  placement:
+    rooms:
+    - bar
+    - dining
+    - living
+    - kitchen
+    - office
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+  note: Symmetric pedestal table; the 1.2 m height reads as a high/bar table rather than a standard dining height.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: pipe
+  mesh: ozea/pipe.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.30028182
+    - 0.87794495
+    height: 0.30226162
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects:
+  - emit
+  look:
+  - grey
+  - metal
+  - clean
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Symmetric pipe segment with luminous cyan fluid visible at the ends and in a side slot; the glowing channel reads as a light emitter.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: pipe_corner
+  mesh: ozea/pipe_corner.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.58911353
+    - 0.5891134
+    height: 0.3022616
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects:
+  - emit
+  look:
+  - grey
+  - metal
+  - clean
+  - emissive
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Symmetric pipe corner with emissive strips; no front face. Designed for industrial or tech settings.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: server_rack
+  mesh: ozea/server_rack.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.74377644
+    - 1.3168555
+    height: 1.8
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  - storage
+  effects:
+  - uses-electricity
+  look:
+  - grey
+  - black
+  - orange
+  - metal
+  - clean
+  placement:
+    rooms:
+    - industrial
+    - lab
+    - office
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 2
+      solid: true
+      edge: null
+  note: Front (east) face has the door handle, lit display and indicator-light column; south face is a vented side panel. Stands upright on the floor.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: medical_vial
+  mesh: ozea/medical_vial.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.07
+    - 0.07000001
+    height: 0.15657106
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects: []
+  look:
+  - white
+  - grey
+  - plastic
+  - clean
+  - blue
+  placement:
+    rooms:
+    - lab
+    - medical
+    - dorm
+    - office
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Tiny hand-scale medical dressing; the cross label is the visual front. Place on a counter, shelf or table, not the floor.
+- id: map_table
+  mesh: ozea/map_table.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.4596505
+    - 1.4617425
+    height: 1.0141555
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects:
+  - emit
+  - screen
+  look:
+  - grey
+  - orange
+  - metal
+  - clean
+  - blue
+  placement:
+    rooms:
+    - lab
+    - command
+    - office
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 2
+      solid: true
+      edge: null
+  note: Octagonal tech pedestal with a lit central hologram; the flat top is a usable worktop but the central display occupies the middle.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: data_folder
+  mesh: ozea/data_folder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.2500955
+    - 0.20234182
+    height: 0.05002685
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects:
+  - screen
+  look:
+  - grey
+  - orange
+  - plastic
+  - blue
+  - emissive
+  placement:
+    rooms:
+    - office
+    - lab
+    - dining
+    - living
+    - command
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: A small, flat data cartridge intended to be placed on a desk or shelf. The glowing cyan panel on the front face suggests a sci-fi data storage device.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: doorframe_double
+  mesh: ozea/doorframe_double.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.4033714
+    - 2.0031145
+    height: 1.9799953
+  mount: !InOpening
+    clear: null
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - door
+  - structure
+  effects:
+  - pass
+  look:
+  - grey
+  - orange
+  - clean
+  placement:
+    rooms:
+    - hall
+    - living
+    - office
+    - dorm
+    - command
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 3
+      solid: true
+      edge: null
+  note: Hollow double doorframe with no leaves; the cyan strips are decorative trim, not a light source. Fills a wall opening and provides a walkable passage.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: floor
+  mesh: ozea/floor.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.05976976
+  mount: Tiled
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - clean
+  placement:
+    rooms:
+    - bar
+    - bathroom
+    - bedroom
+    - command
+    - dining
+    - dorm
+    - hall
+    - industrial
+    - kitchen
+    - lab
+    - living
+    - medical
+    - office
+    - storage
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Repeating 1x1 m floor tile with a raised frame and corner caps; place in a grid to cover the ground.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: floor_line_cross
+  mesh: ozea/floor_line_cross.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.050000153
+  mount: !Decal
+    on: Floor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - marking
+  effects: []
+  look:
+  - grey
+  - clean
+  - blue
+  placement:
+    rooms:
+    - hall
+    - industrial
+    - kitchen
+    - lab
+    - living
+    - office
+    - storage
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Symmetric 1m floor tile with a light-blue cross inlay; no front face.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: floor_line_straight
+  mesh: ozea/floor_line_straight.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0
+    height: 0.050000153
+  mount: !Decal
+    on: Floor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - marking
+  effects: []
+  look:
+  - white
+  - clean
+  placement:
+    rooms:
+    - hall
+    - living
+    - office
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: A flat, straight line decal used to mark the floor, likely for guidance or decoration. The asset is symmetric and presented as a decal, not a physical object.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: galley_counter
+  mesh: ozea/galley_counter.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.6
+    - 1.4
+    height: 0.74886465
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects: []
+  look:
+  - white
+  - orange
+  - clean
+  placement:
+    rooms:
+    - kitchen
+    - dining
+    - industrial
+    - lab
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+  note: Freestanding galley counter with a clean white top and orange edge trim. The mesh is symmetric, so it has no designated front face.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: locker
+  mesh: ozea/locker.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: West
+  extent:
+    footprint:
+    - 0.45583838
+    - 1.1000001
+    height: 1.9000001
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - white
+  - grey
+  - orange
+  - metal
+  - clean
+  placement:
+    rooms:
+    - dorm
+    - industrial
+    - storage
+    - warehouse
+    group: bath
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+  note: Tall vertical locker with two doors, ventilation grilles top and bottom, and orange accent lines.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bench
+  mesh: ozea/bench.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.54999995
+    - 2.0
+    height: 0.4500001
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - white
+  - grey
+  - orange
+  - plastic
+  placement:
+    rooms:
+    - dining
+    - living
+    - office
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+  note: Symmetric bench; the top slats afford a support surface for small items. No distinct front face.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bunk
+  mesh: ozea/bunk.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 2.2865834
+    - 1.1837324
+    height: 0.5496147
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects:
+  - stamina-recharge
+  look:
+  - white
+  - grey
+  - orange
+  - clean
+  placement:
+    rooms:
+    - dorm
+    - bedroom
+    - living
+    - medical
+    - industrial
+    - storage
+    group: bunk
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 3
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 3
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 4
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 4
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Single low bunk base; the 0.55m height suggests it is the lower unit of a stacked bunk set.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: coffee_machine
+  mesh: ozea/coffee_machine.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.39999998
+    - 0.5022619
+    height: 0.67348593
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - uses-electricity
+  look:
+  - white
+  - grey
+  - black
+  - orange
+  - plastic
+  placement:
+    rooms:
+    - kitchen
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Compact drip coffee machine with a control panel and front drip tray; designed to sit on a kitchen worktop rather than the floor.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: doorframe_single
+  mesh: ozea/doorframe_single.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.45807338
+    - 2.0580733
+    height: 2.0122507
+  mount: !InOpening
+    clear: null
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - door
+  - structure
+  effects:
+  - pass
+  - door
+  look:
+  - grey
+  - orange
+  - metal
+  - glass
+  placement:
+    rooms:
+    - hall
+    - living
+    - bedroom
+    - office
+    - dorm
+    - command
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 3
+      solid: true
+      edge: null
+  note: Doorframe with a glass door leaf; the orange trim and glass panel are on the south face. The frame is designed to be placed in a wall opening.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: pallet
+  mesh: ozea/pallet.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.81082094
+    - 1.2108209
+    height: 0.12553447
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  - prop
+  effects: []
+  look:
+  - grey
+  - orange
+  - plastic
+  - worn
+  placement:
+    rooms:
+    - industrial
+    - storage
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Flat slatted pallet with orange corner caps; reads as a stackable base for crates or goods in industrial/storage spaces.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: slab
+  mesh: ozea/slab.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 2.171285
+    - 1.0736263
+    height: 1.7151144
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects:
+  - stamina-recharge
+  look:
+  - white
+  - grey
+  - black
+  - orange
+  - metal
+  - clean
+  placement:
+    rooms:
+    - medical
+    - lab
+    group: null
+  subgrid: null
+  note: The asset is a high-tech bed with integrated lighting and a sleek, modern design, likely used for patient care or therapy. Its clean lines and integrated lighting suggest advanced functionality.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: cryo_pod
+  mesh: ozea/cryo_pod.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.0
+    - 1.0231869
+    height: 2.4084597
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - appliance
+  effects:
+  - emit
+  - uses-electricity
+  look:
+  - white
+  - grey
+  - orange
+  - metal
+  - clean
+  placement:
+    rooms:
+    - lab
+    - medical
+    - industrial
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 3
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 4
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 4
+      - 1
+      solid: true
+      edge: null
+  note: Tall sci-fi stasis capsule with an illuminated base and a small display on the front face. The orange trim and cyan lights suggest an active, powered state.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: door_plaque
+  mesh: ozea/door_plaque.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.3360979
+    - 0.120000005
+    height: 0.17999999
+  mount: !OnWall
+    height: 1.8
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - terminal
+  effects:
+  - emit
+  - screen
+  - uses-electricity
+  look:
+  - white
+  - grey
+  - orange
+  - metal
+  - clean
+  placement:
+    rooms:
+    - command
+    - office
+    - lab
+    - medical
+    - industrial
+    - storage
+    group: null
+  subgrid: null
+  note: A functional sign with a lit display panel, used to label a room or door. The 'ROOM' text is illuminated and the plaque is mounted on a wall at 1.8m height.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: utility_cart
+  mesh: ozea/utility_cart.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 1.0840936
+    - 0.8130703
+    height: 0.9038393
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  - prop
+  effects: []
+  look:
+  - grey
+  - metal
+  - clean
+  placement:
+    rooms:
+    - industrial
+    - warehouse
+    - storage
+    - lab
+    - office
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+  note: Low slatted platform on four wheels with two tall handle frames; the platform top is a usable support surface for stacked items.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: step_ladder
+  mesh: ozea/step_ladder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.6716165
+    - 0.56346023
+    height: 0.84496397
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects: []
+  look:
+  - grey
+  - orange
+  - metal
+  placement:
+    rooms:
+    - kitchen
+    - living
+    - office
+    - storage
+    - warehouse
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+  note: Compact step ladder that stands on the floor; the top platform and steps can be used as small support surfaces.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: control_desk
+  mesh: ozea/control_desk.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 1.4703499
+    - 3.6820874
+    height: 1.1314399
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - worktop
+    faces: []
+    sockets: []
+  kind:
+  - table
+  effects:
+  - screen
+  look:
+  - grey
+  - black
+  - orange
+  - glass
+  - clean
+  placement:
+    rooms:
+    - command
+    - lab
+    - office
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 4
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 5
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 6
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 4
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 5
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 6
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 4
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 5
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 6
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 4
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 5
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 6
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 0
+      - 6
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 4
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 5
+      solid: true
+      edge: null
+    - at:
+      - 2
+      - 1
+      - 6
+      solid: true
+      edge: null
+  note: Long monitoring desk with two lit angled screens and orange accent trim; the screens face the long side.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: command_chair
+  mesh: ozea/command_chair.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: East
+  extent:
+    footprint:
+    - 0.59183437
+    - 0.54699314
+    height: 1.0975693
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - grey
+  - black
+  - orange
+  - plastic
+  - clean
+  placement:
+    rooms:
+    - command
+    - office
+    - living
+    - dining
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+  note: Modern angular command chair with a high back, armrests and a wide pedestal base; orange accents on the headrest and arm tops.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bedside_table
+  mesh: ozea/bedside_table.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.4033082
+    - 0.5
+    height: 0.5
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  - table
+  effects: []
+  look:
+  - white
+  - grey
+  - orange
+  - plastic
+  - clean
+  placement:
+    rooms:
+    - bedroom
+    - living
+    - dorm
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Compact bedside table with a top drawer and a lower open compartment; the front face (with the drawer handle) is the side to present to the room.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: crate
+  mesh: ozea/crate.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - 0.0
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0
+    - 1.0000001
+    height: 1.0
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - container
+  effects: []
+  look:
+  - grey
+  - worn
+  placement:
+    rooms:
+    - storage
+    - warehouse
+    - industrial
+    - office
+    - dorm
+    - lab
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 1
+      solid: true
+      edge: null
+  note: Symmetric 1 m cube crate with reinforced corners; no distinct front face. Measured footprint 1.00 x 1.00 m; height 1.00 m.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: shower
+  mesh: low_poly_furniture/glb/Bathroom/Shower.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.047096163
+    - -0.030176818
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.6982294
+    - 0.6982294
+    height: 1.8126979
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - structure
+  effects: []
+  look:
+  - grey
+  - glass
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+  note: Corner shower unit with a hinged glass door on the front face; the door leaf is the passable opening.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: toilet_roll_holder
+  mesh: low_poly_furniture/glb/Bathroom/Toilet Roll Holder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.00043097883
+    - 0.0014442019
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.17700273
+    - 0.13511372
+    height: 0.12959231
+  mount: !OnWall
+    height: 1.0
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look:
+  - white
+  - plastic
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Bathroom fixture; the flat plate is the wall face and the spindle projects toward the room.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: toilet_rolls
+  mesh: low_poly_furniture/glb/Bathroom/Toilet Rolls.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - -0.0028229877
+    - -1.8626451e-9
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 0.20887722
+    - 0.10349277
+    height: 0.20446084
+  mount: !OnSurface
+    class: support
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects: []
+  look:
+  - white
+  - clean
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Tiny bathroom dressing; place on a shelf, counter or holder rather than the floor.
+- id: towel_holder
+  mesh: low_poly_furniture/glb/Bathroom/Towel Holder.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.025406629
+    - 0.015581835
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.99029845
+    - 0.17088532
+    height: 0.51730883
+  mount: !OnWall
+    height: 1.2
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - fixture
+  effects: []
+  look:
+  - metal
+  - clean
+  - blue
+  placement:
+    rooms:
+    - bathroom
+    group: bath
+  subgrid: null
+  note: Towel bar with a draped towel; mounts flat to a bathroom wall at roughly waist height.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bed_single
+  mesh: low_poly_furniture/glb/Beds/Bed Single.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - -0.0012978464
+    - 0.17346516
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.9921278
+    - 2.2195797
+    height: 0.7138453
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces: []
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects:
+  - stamina-recharge
+  look:
+  - brown
+  - wood
+  placement:
+    rooms:
+    - bedroom
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 3
+      solid: true
+      edge: null
+  note: Low-poly single bed with wooden frame, red mattress, and white pillow. Designed for bedroom use.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: bunk_bed
+  mesh: low_poly_furniture/glb/Beds/Bunk Bed.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.046103776
+    - 0.07024437
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0371472
+    - 2.2195797
+    height: 1.713827
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects:
+  - stamina-recharge
+  look:
+  - clean
+  - wood
+  placement:
+    rooms:
+    - bedroom
+    - dorm
+    group: bunk
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 3
+      solid: true
+      edge: null
+  note: Standard bunk bed with two tiers and ladder. Symmetrical, upright as authored. Suitable for bedrooms or dorms.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: triple_bunk_bed
+  mesh: low_poly_furniture/glb/Beds/Triple Bunk Bed.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.049822807
+    - 0.0681262
+    rotate: null
+    front: null
+  extent:
+    footprint:
+    - 1.0371472
+    - 2.2195802
+    height: 2.847065
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - bed
+  effects:
+  - stamina-recharge
+  look:
+  - clean
+  - wood
+  placement:
+    rooms:
+    - dorm
+    - bedroom
+    - living
+    group: bunk
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 2
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 3
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 4
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 5
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 5
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 5
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 5
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 2
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 3
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 3
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 4
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 4
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 4
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 4
+      - 3
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 5
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 5
+      - 1
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 5
+      - 2
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 5
+      - 3
+      solid: true
+      edge: null
+  note: Three sleeping levels stacked vertically with a ladder on the side for access. Designed for compact sleeping space.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: chair_b
+  mesh: low_poly_furniture/glb/Chairs/Chair B.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0020270124
+    - 0.047919236
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.41214663
+    - 0.43382484
+    height: 1.0587702
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - brown
+  - wood
+  placement:
+    rooms:
+    - dining
+    - kitchen
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+  note: simple wooden chair with slatted back, suitable for dining or kitchen areas
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: chair_c
+  mesh: low_poly_furniture/glb/Chairs/Chair C.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0
+    - -5.9604645e-8
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.36731797
+    - 0.36731797
+    height: 0.62154675
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - metal
+  - red
+  placement:
+    rooms:
+    - bar
+    - dining
+    - kitchen
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: simple stool with octagonal seat and base, low-poly style. Red seat, grey metal legs and base. Intended for bar or counter use.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: chair_d
+  mesh: low_poly_furniture/glb/Chairs/Chair D.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0033949614
+    - -0.0034430176
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.42587957
+    - 0.42587957
+    height: 0.3340788
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - brown
+  - wood
+  placement:
+    rooms:
+    - dining
+    - kitchen
+    - living
+    - office
+    - storage
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: simple stool with octagonal top and three legs; low-poly style, brown wood texture
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: chair_e
+  mesh: low_poly_furniture/glb/Chairs/Chair E.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - -0.0021870881
+    - 0.0068021566
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.85911584
+    - 0.66441405
+    height: 1.1333731
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - seating
+  effects: []
+  look:
+  - plastic
+  - beige
+  placement:
+    rooms:
+    - office
+    - dining
+    - living
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 0
+      - 1
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 1
+      - 0
+      solid: true
+      edge: null
+  note: low-poly office chair with armrests and caster base; beige upholstery, grey metal frame
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: drawer_b
+  mesh: low_poly_furniture/glb/Drawers/Drawer B.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.0022057444
+    - -0.12801038
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.5083599
+    - 0.5247295
+    height: 0.70690763
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - storage
+  effects: []
+  look:
+  - brown
+  - clean
+  - wood
+  placement:
+    rooms:
+    - bedroom
+    - office
+    - dorm
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Simple dresser with three drawers, suitable for bedrooms or offices. The top surface can support items.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: console_a
+  mesh: low_poly_furniture/glb/Electronics/Console A.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.02121196
+    - -0.03275898
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.2937699
+    - 0.29377
+    height: 0.61593366
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - terminal
+  effects:
+  - uses-electricity
+  look:
+  - grey
+  - metal
+  placement:
+    rooms:
+    - office
+    - lab
+    - industrial
+    - command
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: A minimalist, hexagonal console unit, likely for a terminal or control panel. Low-poly design suggests use in stylized or retro-futuristic environments.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: keyboard
+  mesh: low_poly_furniture/glb/Electronics/Keyboard.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.035064876
+    - 0.0014614984
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.7933716
+    - 0.3154717
+    height: 0.06396379
+  mount: !OnSurface
+    class: worktop
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - prop
+  effects: []
+  look:
+  - grey
+  - plastic
+  placement:
+    rooms:
+    - office
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+    - at:
+      - 1
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: Low-poly, grey plastic keyboard with separate numeric keypad. Designed for placement on a surface, likely in an office or computer room. No functional effects.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High
+- id: console_b
+  mesh: low_poly_furniture/glb/Electronics/Console B.glb
+  align:
+    scale: null
+    stretch_y: null
+    y_offset: -0.0
+    pivot:
+    - 0.026024707
+    - -0.048279367
+    rotate: null
+    front: South
+  extent:
+    footprint:
+    - 0.54173046
+    - 0.4437645
+    height: 0.18660673
+  mount: OnFloor
+  clearance: []
+  offers:
+    surfaces:
+    - support
+    faces: []
+    sockets: []
+  kind:
+  - terminal
+  effects:
+  - uses-electricity
+  look:
+  - grey
+  - plastic
+  placement:
+    rooms:
+    - office
+    - lab
+    group: null
+  subgrid:
+    cells:
+    - at:
+      - 0
+      - 0
+      - 0
+      solid: true
+      edge: null
+  note: a small, low-profile console with a flat top, likely for placing electronics or controls. The low poly style suggests it's meant for efficiency in game rendering.
+  labels:
+    by:
+      kind: Model
+      effects: Model
+      look: Model
+      surfaces: Model
+      mount: Model
+      note: Model
+    model: qwen3-vl
+    at: 2026-08-22
+    confidence: High

@@ -198,7 +198,7 @@ pub const TOOLS: &[ToolDoc] = &[
                        forest, trees, notes, family, rigs): {ok, seq, kinds} with the same entries, where \
                        an outcome is applied, refused (the file did not read: it names the field, and \
                        the editor keeps what it had) or needs_restart (the file reads but the editor \
-                       holds that kind from when it started, as it does rigs.ron, so the edit is on \
+                       holds that kind from when it started, as it does rigs.yaml, so the edit is on \
                        disk and not in use); ok is false while any file is not applied, and seq counts \
                        decisions, one per edit. reload_files is what became of the latest edit of \
                        every file of the open project, as a running game says it: {now_unix_ms, game \
@@ -219,13 +219,13 @@ pub const TOOLS: &[ToolDoc] = &[
                        within 6 m; any yaw for a round kind), the one a player notices first first: \
                        descriptor, patched, role (clutter or structure), pieces, pairs, score; total \
                        counts them all; the radius, the structure kinds, their weight and the round \
-                       kinds come from the project's repetition.ron, \
+                       kinds come from the project's repetition.yaml, \
                        re-read on every call, and a bad file is named in error. \
-                       relations checks the <map>.relations.ron beside the open map, re-read on \
+                       relations checks the <map>.relations.yaml beside the open map, re-read on \
                        every call: each relation (of, kind) with outcome met, unmet or missing, \
                        measured (metres, or degrees off for Faces), by (the piece that breaks it) \
                        and missing_id; unmet and missing count them; error names a file that does not parse. \
-                       standards checks the project's standards.ron (beside kits.ron), re-read on \
+                       standards checks the project's standards.yaml (beside kits.yaml), re-read on \
                        every call: breaches (piece, rule, dim, found metres, why below_min, above_max, \
                        not_multiple_of or unmeasured, bound), idle, the rules no piece is covered by, \
                        and unnested, the pairs of rules whose multiple_of modules do not nest (rules, \
@@ -378,10 +378,10 @@ pub const TOOLS: &[ToolDoc] = &[
     ToolDoc {
         name: "grimoire_list_rules",
         description: "The block rules the project states for generating layouts, read from \
-                      assets/grimoire/rules.ron: for each block, the example map its grammar is learned from, the \
+                      assets/grimoire/rules.yaml: for each block, the example map its grammar is learned from, the \
                       region descriptors that ask for a block, the cell size and block size in cells, the border \
                       piece, no_empty, the weight multipliers, the footprint rules, attempts and seed. Returns the \
-                      blocks and the path of the file read. A project with no rules.ron answers with no blocks, \
+                      blocks and the path of the file read. A project with no rules.yaml answers with no blocks, \
                       because an absent file means no rules -- not a broken project. A file that is present but \
                       does not parse, or states a version this program does not read or a number it cannot \
                       generate from (no attempts, a cell that is not a usable step, a footprint under 2x2, a yaw \

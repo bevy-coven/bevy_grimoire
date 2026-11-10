@@ -13,10 +13,10 @@
 //! * **Kit create** and **map create** are the registry's operations (`kit_create`, `map_create`), dispatched with the project's root and no
 //!   loaded project: the page is the screen before a door, exactly as the chooser was, and an agent's call and a person's click are one
 //!   write. A new map opens at once, as the chooser's name field did.
-//! * **Authoring**: the kit marked *Default for new pieces* is `kits.ron`'s `authoring`, changed by `kit_set_authoring`.
+//! * **Authoring**: the kit marked *Default for new pieces* is `kits.yaml`'s `authoring`, changed by `kit_set_authoring`.
 //! * **Delete** asks first, in the one prompt (`confirm.rs`), naming what goes; a kit the project still depends on is refused with the files
 //!   that name it ([`crate::catalog::ask_delete_kit`]).
-//! * **Bash**: a map's *uses pieces from* is one of the combinations `kits.ron` declares, chosen when the map is made and changed from its
+//! * **Bash**: a map's *uses pieces from* is one of the combinations `kits.yaml` declares, chosen when the map is made and changed from its
 //!   menu ([`crate::catalog::cycle_bash`]).
 //! * **Map info** is on the card: its size in metres, how many pieces stand in it, where its pieces come from and why it will not open.
 //! * **An agent's `map_open` and `door_open`** enter the editor from here as from the chooser: `ops_brp` reads this screen as the one a
@@ -65,7 +65,7 @@ pub enum PageAction {
     DeleteKit(String),
     /// Make the kit `0` the one new work lands in.
     MakeDefault(String),
-    /// Change where the map `0` draws its pieces from: the next combination `kits.ron` declares, or every kit.
+    /// Change where the map `0` draws its pieces from: the next combination `kits.yaml` declares, or every kit.
     NextSource(String),
     /// Ask for the settings dialog of the map `0`: its size, origin and note.
     MapSettings(String),
@@ -128,7 +128,7 @@ impl ProjectPage {
 /// agent, the editor, a person's file manager). A listing that follows its directory is what the chooser's `follow_the_maps_directory` did.
 const WATCH_SECS: f32 = 1.0;
 
-/// The files whose change makes the page out of date: the maps folder's entries, `kits.ron`, and each kit's library.
+/// The files whose change makes the page out of date: the maps folder's entries, `kits.yaml`, and each kit's library.
 pub fn fingerprint(root: &Path) -> Vec<(PathBuf, SystemTime)> {
     let base = root.join(catalog::GRIMOIRE_DIR);
     let mut watched = vec![base.join(catalog::MAPS_DIR), base.join(bevy_grimoire_core::kits::KITS_FILE)];

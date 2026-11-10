@@ -477,7 +477,7 @@ fn stamp_and_piece_in_one_box(name: &str) -> App {
         .composition("site/room", &[("site/wall", "site/wall", (0.0, 0.0))])
         .place("site/wall", (3.0, 0.0))
         .build("m");
-    let map = root.join("assets/grimoire/maps/m.map.ron");
+    let map = root.join("assets/grimoire/maps/m.map.yaml");
     let text = std::fs::read_to_string(&map).expect("the map is there");
     let stamped = text.replace(
         "stamps: [],",

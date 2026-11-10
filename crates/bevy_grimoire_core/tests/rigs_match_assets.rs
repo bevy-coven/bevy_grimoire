@@ -26,7 +26,7 @@ fn root() -> PathBuf {
 }
 
 fn manifest() -> Rigs {
-    let path = root().join("assets/grimoire/rigs.ron");
+    let path = root().join("assets/grimoire/rigs.yaml");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     Rigs::parse(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))

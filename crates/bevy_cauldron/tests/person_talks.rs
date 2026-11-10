@@ -17,7 +17,7 @@ const SCRIPT: &str = r#"(conversations: {"hello": (start: "a", nodes: {
 fn a_person_keeps_a_defined_conversation_and_an_undefined_one_is_refused() {
     let root = fixtures::Fixture::new("person_talks").descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
     std::fs::write(root.join("family/bevy_speech_bubbles.ron"), SCRIPT).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {

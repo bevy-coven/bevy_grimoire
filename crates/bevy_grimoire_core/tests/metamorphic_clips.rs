@@ -38,7 +38,7 @@ fn valkyrie() -> Glb {
 }
 
 fn valkyrie_rig() -> bevy_grimoire_core::rigs::Rig {
-    let text = std::fs::read_to_string(root().join("assets/grimoire/rigs.ron"))
+    let text = std::fs::read_to_string(root().join("assets/grimoire/rigs.yaml"))
         .unwrap_or_else(|e| panic!("{e}"));
     Rigs::parse(&text)
         .unwrap_or_else(|e| panic!("{e}"))

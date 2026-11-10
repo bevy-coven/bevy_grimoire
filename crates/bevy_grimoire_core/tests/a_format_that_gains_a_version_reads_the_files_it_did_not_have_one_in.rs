@@ -40,7 +40,7 @@ fn prove<T: Serialize + DeserializeOwned + Debug + PartialEq>(id: &'static str, 
         assert!(said.contains(&format!("version {other} is not the 1 this build reads")), "`{id}` at version {other}: {said}");
 
         // The reader the editor's views use says which field.
-        let refusal = reload_check::read::<T>(id, "a/file.ron", &text).expect_err("refused");
+        let refusal = reload_check::read::<T>(id, "a/file.yaml", &text).expect_err("refused");
         assert_eq!(refusal.field.as_deref(), Some("version"), "`{id}` at version {other}: {refusal:?}");
         assert_eq!(refusal.kind, id);
     }

@@ -22,7 +22,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/standards.ron"))
+    (app, root.join("assets/grimoire/standards.yaml"))
 }
 
 fn state(app: &mut App) -> serde_json::Value {

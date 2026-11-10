@@ -1,6 +1,6 @@
 //! **An agent shows its plan, as one registered operation** (E-069): `plan_set`.
 //!
-//! The plan is data beside the map (`bevy_grimoire_core::plan`, the `.plan.ron` next to the `.map.ron`).
+//! The plan is data beside the map (`bevy_grimoire_core::plan`, the `.plan.yaml` next to the `.map.yaml`).
 //! The agent sends the whole list as it now stands, each item with its status; the list replaces the
 //! plan and an empty list clears it. The inverse is the same operation sent the list it replaced, so
 //! one undo step puts the previous plan back, and a plan (a preview) is the same code on a copy that is

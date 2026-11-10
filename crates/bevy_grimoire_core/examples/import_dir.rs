@@ -58,7 +58,7 @@ fn main() -> Result<(), String> {
     }
 
     library.validate().map_err(|e| format!("not written, the result is invalid: {e}"))?;
-    let out = library.to_ron()?;
+    let out = library.to_yaml()?;
     bevy_grimoire_core::ron_surgery::save_atomic(&library_path, &out)?;
     println!(
         "imported {added} mesh(es) from {} into {} ({warned} with warnings), {} descriptor(s) in all",

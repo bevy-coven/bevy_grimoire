@@ -86,14 +86,14 @@ impl Project {
             bash: Vec::new(),
             authoring: Some("kit".to_owned()),
         };
-        p.write("kits.ron", &kits.to_ron().unwrap());
+        p.write("kits.yaml", &kits.to_yaml().unwrap());
         std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), p.grimoire.join("vocab.ron"))
             .unwrap();
-        p.write("kit/project.ron", "(\n    version: 2,\n    note: None,\n    patches: [],\n)");
+        p.write("kit/project.yaml", "(\n    version: 2,\n    note: None,\n    patches: [],\n)");
         let library = Library { version: LIBRARY_VERSION, note: None, descriptors: vec![piece("kit/crate")] };
-        p.write("kit/library.ron", &library.to_ron().unwrap());
-        p.write("rules.ron", &format!("(\n    version: {RULES_VERSION},\n    blocks: [],\n)"));
-        p.write("compositions.ron", &Compositions { version: COMPOSITIONS_VERSION, ..Compositions::default() }.to_ron().unwrap());
+        p.write("kit/library.yaml", &library.to_yaml().unwrap());
+        p.write("rules.yaml", &format!("(\n    version: {RULES_VERSION},\n    blocks: [],\n)"));
+        p.write("compositions.yaml", &Compositions { version: COMPOSITIONS_VERSION, ..Compositions::default() }.to_yaml().unwrap());
         p.write_map(&map(vec![row("crate_a", (1.0, 1.0))]));
         p.write("data.ron", REGISTRY);
         p.write(FILE, &mob("1.0"));
@@ -112,7 +112,7 @@ impl Project {
     }
 
     fn write_map(&self, m: &Map) {
-        self.write("maps/yard.map.ron", &m.to_ron().unwrap());
+        self.write("maps/yard.map.yaml", &m.to_yaml().unwrap());
     }
 
     fn verdict(&self) -> Verdict {
@@ -253,14 +253,14 @@ fn the_data_verdict_keeps_what_the_project_said_and_the_projects_keeps_what_the_
     settle(&mut app, 8);
     let v = project.verdict();
     assert_eq!(v.seq, 1);
-    assert_eq!(entry(&v, "maps/yard.map.ron").outcome, Outcome::Applied);
+    assert_eq!(entry(&v, "maps/yard.map.yaml").outcome, Outcome::Applied);
 
     // The data file changes: its entry joins the project's in the next verdict.
     project.write(FILE, &mob("2.0"));
     settle(&mut app, 8);
     let v = project.verdict();
     assert_eq!(v.seq, 2);
-    assert_eq!(entry(&v, "maps/yard.map.ron").outcome, Outcome::Applied, "the project's entries stay");
+    assert_eq!(entry(&v, "maps/yard.map.yaml").outcome, Outcome::Applied, "the project's entries stay");
     assert_eq!(entry(&v, FILE).outcome, Outcome::Applied);
 
     // The project reloads again: the data file's entry is carried, not dropped.

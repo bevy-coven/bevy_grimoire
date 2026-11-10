@@ -37,9 +37,9 @@ fn the_command_leaves_a_kind_whose_reader_is_still_ron_and_converts_the_one_that
 
     // `play` reads YAML now; `kits` does not yet. The two are the whole question.
     let kits_ron = "(version: 1, bind: [], bash: [], authoring: None)";
-    std::fs::write(grimoire.join("kits.ron"), kits_ron).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("kits.yaml"), kits_ron).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        root.join("play.ron"),
+        root.join("play.yaml"),
         "(version: 1, command: [\"game\", \"{map}\"], port: 15702, build: [])",
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -49,15 +49,15 @@ fn the_command_leaves_a_kind_whose_reader_is_still_ron_and_converts_the_one_that
 
     assert_eq!(
         report.converted.iter().map(|c| c.rom.as_str()).collect::<Vec<_>>(),
-        ["play.ron"],
+        ["play.yaml"],
         "only the kind whose reader moved is converted"
     );
     let play_yaml = text_at(&root, "play.yaml").expect("`play.yaml` is written");
     // The text is the checked text, so the version it holds is the one the RON held.
     assert!(play_yaml.contains("command:"), "the converted file is the value's YAML:\n{play_yaml}");
-    assert_eq!(text_at(&root, "play.ron"), None, "the RON it came from is archived, not left beside it");
+    assert_eq!(text_at(&root, "play.yaml"), None, "the RON it came from is archived, not left beside it");
     assert_eq!(
-        text_at(&root, &format!("{}/kits.ron", migrate::GRIMOIRE_DIR)).as_deref(),
+        text_at(&root, &format!("{}/kits.yaml", migrate::GRIMOIRE_DIR)).as_deref(),
         Some(kits_ron),
         "a kind this build still reads as RON is left exactly as it was"
     );
@@ -77,16 +77,16 @@ fn the_command_is_not_blocked_by_a_kind_this_crate_cannot_convert() {
     std::fs::create_dir_all(&grimoire).unwrap_or_else(|e| panic!("{e}"));
     // `editor_settings` lives in the editor and `checks` in the checks crate: this crate has no type for
     // either, so converting them is not its work and must not stop the work it can do.
-    std::fs::write(grimoire.join("editor.ron"), "(version: 1)").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(grimoire.join("editor.yaml"), "(version: 1)").unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(grimoire.join("checks.ron"), "(version: 1, checks: [])").unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(root.join("agent.ron"), "(version: 1, command: Some(\"agent\"), args: [])").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("agent.yaml"), "(version: 1, command: Some(\"agent\"), args: [])").unwrap_or_else(|e| panic!("{e}"));
 
     let report = migrate::migrate_moved(&root, migrate::COMMAND)
         .unwrap_or_else(|p| panic!("a kind another crate owns does not block the command: {}", p.line()));
 
     assert_eq!(report.converted.len(), 1, "the one kind this command can convert: {:?}", report.converted);
     assert!(text_at(&root, "agent.yaml").is_some(), "`agent.yaml` is written");
-    assert_eq!(text_at(&root, &format!("{}/editor.ron", migrate::GRIMOIRE_DIR)).as_deref(), Some("(version: 1)"));
+    assert_eq!(text_at(&root, &format!("{}/editor.yaml", migrate::GRIMOIRE_DIR)).as_deref(), Some("(version: 1)"));
     assert_eq!(
         text_at(&root, &format!("{}/checks.ron", migrate::GRIMOIRE_DIR)).as_deref(),
         Some("(version: 1, checks: [])")

@@ -31,7 +31,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/maps/m.relations.ron"))
+    (app, root.join("assets/grimoire/maps/m.relations.yaml"))
 }
 
 fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::Value {
@@ -145,7 +145,7 @@ fn no_relations_file_and_a_bad_one_are_refused() {
     let before = rows(&app);
     let none = run(&mut app, false);
     assert_eq!(none["outcome"], "refused", "{none}");
-    assert!(none.to_string().contains("m.relations.ron"), "the refusal names the file it looked for: {none}");
+    assert!(none.to_string().contains("m.relations.yaml"), "the refusal names the file it looked for: {none}");
 
     write(&file, r#"(of: "door", kind: ClearInFront(depth: -2.0, width: 1.0)),"#);
     let bad = run(&mut app, false);

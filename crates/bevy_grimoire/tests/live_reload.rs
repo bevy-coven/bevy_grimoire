@@ -65,10 +65,10 @@ impl Project {
             bash: Vec::new(),
             authoring: Some("kit".to_owned()),
         };
-        std::fs::write(grimoire.join("kits.ron"), kits.to_ron().unwrap()).unwrap();
+        std::fs::write(grimoire.join("kits.yaml"), kits.to_yaml().unwrap()).unwrap();
         std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/grimoire/vocab.ron"), grimoire.join("vocab.ron"))
             .unwrap();
-        std::fs::write(grimoire.join("kit/project.ron"), "(\n    version: 2,\n    note: None,\n    patches: [],\n)").unwrap();
+        std::fs::write(grimoire.join("kit/project.yaml"), "(\n    version: 2,\n    note: None,\n    patches: [],\n)").unwrap();
         let p = Project { grimoire };
         p.write_library(library((2.0, 1.0)));
         p
@@ -84,19 +84,19 @@ impl Project {
     }
 
     fn write_library(&self, l: Library) {
-        let path = self.grimoire.join("kit/library.ron");
-        std::fs::write(&path, l.to_ron().unwrap()).unwrap();
+        let path = self.grimoire.join("kit/library.yaml");
+        std::fs::write(&path, l.to_yaml().unwrap()).unwrap();
         self.stamp(&path);
     }
 
     fn write_map(&self, m: &Map) {
-        let path = self.grimoire.join("maps/yard.map.ron");
-        std::fs::write(&path, m.to_ron().unwrap()).unwrap();
+        let path = self.grimoire.join("maps/yard.map.yaml");
+        std::fs::write(&path, m.to_yaml().unwrap()).unwrap();
         self.stamp(&path);
     }
 
     fn write_raw_map(&self, text: &str) {
-        let path = self.grimoire.join("maps/yard.map.ron");
+        let path = self.grimoire.join("maps/yard.map.yaml");
         std::fs::write(&path, text).unwrap();
         self.stamp(&path);
     }

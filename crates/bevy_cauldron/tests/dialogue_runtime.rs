@@ -28,7 +28,7 @@ impl Component for Talker {
 fn the_conversation_a_piece_carries_is_walked_by_the_crates_runtime_down_the_chosen_option() {
     let root = fixtures::Fixture::new("dialogue_runtime").descriptor("site/wall", "alpha").place("site/wall", (0.0, 0.0)).build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_speech_bubbles\"])").unwrap();
     std::fs::write(root.join("family/bevy_speech_bubbles.ron"), SCRIPT).unwrap();
     let mut editor = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..4 {
@@ -45,7 +45,7 @@ fn the_conversation_a_piece_carries_is_walked_by_the_crates_runtime_down_the_cho
 
     // The game reads the saved map and the saved script, as it would at load.
     let map: bevy_grimoire_core::map::Map =
-        ron::from_str(&std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.ron")).unwrap()).unwrap();
+        ron::from_str(&std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml")).unwrap()).unwrap();
     let name: String = ron::from_str(&map.placements[0].family["bevy_speech_bubbles"]).unwrap();
     let script: DialogueScript = ron::from_str(&std::fs::read_to_string(root.join("family/bevy_speech_bubbles.ron")).unwrap()).unwrap();
 

@@ -1,7 +1,7 @@
 //! **The vocabulary prompt** — one modal, two entry points, one code path.
 //!
 //! The tag block draws the project's whole vocabulary and every chip was a mouse target and nothing
-//! else, so growing the vocabulary was a hand edit to `vocab.ron` — the one file in the project
+//! else, so growing the vocabulary was a hand edit to `vocab.yaml` — the one file in the project
 //! whose comments are content. This is the editor's half of [`bevy_grimoire_core::vocab::append_token`]:
 //! a centred prompt asking for a name and a note, committing through the comment-preserving splice
 //! and then re-reading the file so the running editor adopts the new token.
@@ -61,7 +61,7 @@ impl Axis {
         }
     }
 
-    /// The field name in `vocab.ron` — what [`bevy_grimoire_core::vocab::append_token`] splices into.
+    /// The field name in `vocab.yaml` — what [`bevy_grimoire_core::vocab::append_token`] splices into.
     pub fn name(self) -> &'static str {
         match self {
             Axis::Kind => "kind",

@@ -25,7 +25,7 @@ fn editor(name: &str, relations: &str) -> App {
         .place_as("door", "site/door", (8.0, 8.0))
         .place_as("crate", "site/crate", (8.0, 8.5))
         .build("m");
-    let file = root.join("assets/grimoire/maps/m.relations.ron");
+    let file = root.join("assets/grimoire/maps/m.relations.yaml");
     std::fs::write(&file, format!("(version: 1, relations: [{relations}])")).unwrap_or_else(|e| panic!("{file:?}: {e}"));
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     for _ in 0..6 {

@@ -62,10 +62,10 @@ fn done(r: Result<Applied, ops::Refusal>) {
 fn the_carved_ground_wears_the_files_cover_and_follows_an_edit() {
     let root = fixtures::Fixture::new("volume_cover").descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_elements\"])").unwrap();
     let file = root.join("family/bevy_elements.ron");
     let wet = SurfaceCover { wetness: CoverBand::wet(1.0), ..default() };
-    std::fs::write(&file, ElementsSettings { volume_cover: Some(wet), ..ElementsSettings::defaults() }.to_ron()).unwrap();
+    std::fs::write(&file, ElementsSettings { volume_cover: Some(wet), ..ElementsSettings::defaults() }.to_yaml()).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // What `bevy_elements`' plugins give the editor's app; the headless harness renders nothing.
     app.init_asset::<WeatheredMaterial>();

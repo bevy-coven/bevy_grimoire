@@ -93,7 +93,7 @@ fn the_list_opens_at_its_top_with_its_first_row_armed() {
         fixture = fixture.descriptor(&format!("prop_{n:02}"), "beta");
     }
     let root = fixture.build("m");
-    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.ron");
+    let library = root.join("assets/grimoire").join(fixtures::DEFAULT_KIT).join("library.yaml");
     let text = std::fs::read_to_string(&library).unwrap_or_else(|e| panic!("{library:?}: {e}"));
     let first_kind = r#"kind: ["prop"]"#;
     assert!(text.contains(first_kind), "the fixture's first row carries the shipped kind");

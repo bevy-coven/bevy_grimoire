@@ -56,7 +56,7 @@ use crate::descriptor::{Descriptor, Mount};
 /// The most tokens one axis can hold, set by the width of the mask they pack into.
 pub const MAX_TOKENS: usize = 64;
 
-/// The format version of a `vocab.ron` (#202). A file with no `version` is the first.
+/// The format version of a `vocab.yaml` (#202). A file with no `version` is the first.
 pub const VOCAB_VERSION: u32 = 1;
 
 /// One axis's closed token table.
@@ -115,7 +115,7 @@ impl Vocabulary {
                 .map(|(n, d)| Token {
                     name: (*n).to_owned(),
                     note: (*d).to_owned(),
-                    // Rust-side tables state no implications; those are authored in `vocab.ron`,
+                    // Rust-side tables state no implications; those are authored in `vocab.yaml`,
                     // which is where a fact about the game's words belongs.
                     implies: Vec::new(),
                 })
@@ -303,10 +303,15 @@ impl Masks {
 impl Vocabularies {
     /// Parse a vocabulary file.
     pub fn parse(text: &str) -> Result<Vocabularies, String> {
-        let v: Vocabularies =
-            ron::from_str(text).map_err(|e| format!("vocab: does not parse: {e}"))?;
+        let v: Vocabularies = crate::yaml::from_str(text, crate::project_data::VOCAB_FILE)
+            .map_err(|p| format!("vocab: does not parse: {}", p.line()))?;
         v.validate_tables()?;
         Ok(v)
+    }
+
+    /// **The file as the one YAML writer writes it.**
+    pub fn to_yaml(&self) -> Result<String, String> {
+        crate::yaml::to_string(self).map_err(|p| format!("vocab: {}", p.line()))
     }
 
     /// Every table is well-formed, and every implication resolves. Called by [`Self::parse`]; call
@@ -551,7 +556,7 @@ impl Vocabularies {
                 }
                 let axis: Vec<&str> = self.slot.names().collect();
                 let holds = if axis.is_empty() {
-                    "the axis is empty — declare the first one in `vocab.ron` rather than at a \
+                    "the axis is empty — declare the first one in `vocab.yaml` rather than at a \
                      keyboard"
                         .to_owned()
                 } else {
@@ -958,16 +963,29 @@ mod tests {
     #[test]
     fn a_kind_implying_a_token_the_effects_axis_does_not_hold_is_refused_at_parse() {
         let err = Vocabularies::parse(
-            r#"(
-                kind: ( tokens: [
-                    ( name: "bed",  note: "a thing to lie on", implies: ["stamina-recharg"] ),
-                ] ),
-                effects: ( tokens: [
-                    ( name: "stamina-recharge",  note: "restores stamina to whoever uses it" ),
-                ] ),
-                look: ( tokens: [] ),
-                surfaces: ( tokens: [] ),
-            )"#,
+            r"version: 1
+kind:
+  tokens:
+  - name: bed
+    note: a thing to lie on
+    implies:
+    - stamina-recharg
+effects:
+  tokens:
+  - name: stamina-recharge
+    note: restores stamina to whoever uses it
+    implies: []
+look:
+  tokens: []
+surfaces:
+  tokens: []
+capabilities:
+  tokens: []
+edge:
+  tokens: []
+slot:
+  tokens: []
+",
         )
         .err()
         .unwrap_or_default();
@@ -992,15 +1010,29 @@ mod tests {
     #[test]
     fn an_implication_on_an_axis_that_does_not_resolve_one_is_refused_at_parse() {
         let err = Vocabularies::parse(
-            r#"(
-                kind: ( tokens: [] ),
-                effects: ( tokens: [
-                    ( name: "emit",  note: "casts light", implies: ["uses-electricity"] ),
-                    ( name: "uses-electricity",  note: "stops working when the power does" ),
-                ] ),
-                look: ( tokens: [] ),
-                surfaces: ( tokens: [] ),
-            )"#,
+            r"version: 1
+kind:
+  tokens: []
+effects:
+  tokens:
+  - name: emit
+    note: casts light
+    implies:
+    - uses-electricity
+  - name: uses-electricity
+    note: stops working when the power does
+    implies: []
+look:
+  tokens: []
+surfaces:
+  tokens: []
+capabilities:
+  tokens: []
+edge:
+  tokens: []
+slot:
+  tokens: []
+",
         )
         .err()
         .unwrap_or_default();
@@ -1090,7 +1122,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("grimoire-vocab-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot make {dir:?}: {e}"));
-        let path = dir.join("vocab.ron");
+        let path = dir.join("vocab.yaml");
         std::fs::write(&path, text).unwrap_or_else(|e| panic!("cannot write {path:?}: {e}"));
         path
     }

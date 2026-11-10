@@ -32,7 +32,7 @@ fn editor(name: &str) -> (App, PathBuf) {
     for _ in 0..8 {
         app.update();
     }
-    (app, root.join("assets/grimoire/maps/m.relations.ron"))
+    (app, root.join("assets/grimoire/maps/m.relations.yaml"))
 }
 
 fn state(app: &mut App) -> serde_json::Value {
@@ -107,7 +107,7 @@ fn a_file_that_does_not_parse_is_named_not_read_as_none() {
     write(&file, r#"(of: "door", kind: ClearInFront(depth: -2.0, width: 1.0)),"#);
     let rel = &state(&mut app)["relations"];
     let error = rel["error"].as_str().unwrap_or_else(|| panic!("no error named: {rel}"));
-    assert!(error.contains("m.relations.ron"), "the error names the file: {error}");
+    assert!(error.contains("m.relations.yaml"), "the error names the file: {error}");
     assert!(error.contains("-2"), "and what is wrong in it: {error}");
     assert_eq!(rel["relations"], serde_json::json!([]), "{rel}");
 }

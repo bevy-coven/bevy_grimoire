@@ -92,7 +92,7 @@ fn copy_command_line_shows_the_line_for_the_row_even_when_the_clipboard_cannot_t
     let root = Fixture::new(&format!("copy_{}", std::process::id())).descriptor("bench", "props").build("m");
     let scratch: PathBuf = std::env::temp_dir().join(format!("grimoire_copy_line_{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();
-    let file = scratch.join("recent.ron");
+    let file = scratch.join("recent.yaml");
     recent::record(&file, &root).unwrap();
 
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

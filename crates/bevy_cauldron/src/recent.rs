@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 pub const RECENT_VERSION: u32 = 1;
 
-const FILE: &str = "recent.ron";
+const FILE: &str = "recent.yaml";
 
 /// Where the recent list lives for this user, or `None` on a platform with no data directory.
 pub fn user_file() -> Option<PathBuf> {

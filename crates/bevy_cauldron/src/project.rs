@@ -1,7 +1,7 @@
 //! **Opening a project** — the vocabulary, the library, and the map being edited.
 //!
-//! A project is a directory with an `assets/` folder in it. `assets/grimoire/vocab.ron` says what
-//! tokens exist, `assets/grimoire/library.ron` says what can be placed, and a descriptor's `mesh` path
+//! A project is a directory with an `assets/` folder in it. `assets/grimoire/vocab.yaml` says what
+//! tokens exist, `assets/grimoire/library.yaml` says what can be placed, and a descriptor's `mesh` path
 //! resolves under `assets/` — which is also Bevy's asset root, so the editor and the game name the
 //! same file the same way. Nothing here knows about any particular game.
 //!
@@ -25,9 +25,9 @@ use bevy_grimoire_core::vocab::{Masks, Vocabularies};
 /// descriptor's `mesh` path means the same thing to this editor and to the game that loads the map.
 const GRIMOIRE_DIR: &str = "assets/grimoire";
 /// **Where the vocabulary lives** — public because the file watcher names it.
-pub const VOCAB: &str = "assets/grimoire/vocab.ron";
+pub const VOCAB: &str = "assets/grimoire/vocab.yaml";
 /// **The library file's name** — public because the file watcher names it.
-pub const LIBRARY_FILE: &str = "library.ron";
+pub const LIBRARY_FILE: &str = "library.yaml";
 /// **Where maps live** — the project's own directory, not a kit's.
 ///
 /// They sat beside the kit that drew them, on the argument that *"a map means nothing without the
@@ -36,7 +36,7 @@ pub const LIBRARY_FILE: &str = "library.ron";
 /// **merge**, so filing it under one of the kits picks an arbitrary winner.
 ///
 /// A subdirectory rather than the project root, and that is load-bearing: `.gitignore` carries
-/// `assets/grimoire/*.map.ron` to keep stray test maps out of git, and a map in `maps/` is not matched
+/// `assets/grimoire/*.map.yaml` to keep stray test maps out of git, and a map in `maps/` is not matched
 /// by it.
 const MAPS_DIR: &str = "maps";
 
@@ -117,17 +117,17 @@ pub struct Project {
     /// Where [`Self::measured`] came from and where it is written back.
     pub library_path: PathBuf,
     pub vocab: Vocabularies,
-    /// **`library.ron` as it sits on disk** — the measurements, with no policy layered on.
+    /// **`library.yaml` as it sits on disk** — the measurements, with no policy layered on.
     ///
     /// **Every edit lands here and this is what gets written.** `write_library` used to serialize
     /// [`Self::library`] back over `library_path`, which meant toggling one lattice cell under
     /// `--kit site` wrote SCP-9191's stretched 2.40 m wall heights into the measurements file the kit
     /// exists to share — and the next load applied the patches again on top of them. A library is
-    /// measurements; the architecture is `project.ron`'s, and it must not leak downward.
+    /// measurements; the architecture is `project.yaml`'s, and it must not leak downward.
     pub measured: Shared<Library>,
     /// **Every composition this project can stamp**, validated against [`Self::library`] at open.
     ///
-    /// Read from `compositions.ron` beside the library, or empty when the project has none — which is
+    /// Read from `compositions.yaml` beside the library, or empty when the project has none — which is
     /// the same state as a file with none in it, not a degraded one.
     pub compositions: bevy_grimoire_core::composition::Compositions,
     /// The measurements with [`Self::policy`] applied — what the game would place, and what every
@@ -141,7 +141,7 @@ pub struct Project {
     /// patches name a kit's pieces, so layering one project-wide would refuse to open the moment two
     /// kits were bound.
     pub policy: bevy_grimoire_core::policy::Policy,
-    /// **The grid every kit, tile and map in this project shares** — `kits.ron`'s
+    /// **The grid every kit, tile and map in this project shares** — `kits.yaml`'s
     /// [`bevy_grimoire_core::kits::Lattice`].
     ///
     /// Held here rather than on the map, which is where it lived for part of
@@ -150,13 +150,13 @@ pub struct Project {
     /// counts gave the same tile two different adjacency contracts. It is also the only form the
     /// doors that author tiles can ask, since they have no map open at all.
     pub lattice: bevy_grimoire_core::kits::Lattice,
-    /// **Every bound kit, layered**, in `kits.ron` order.
+    /// **Every bound kit, layered**, in `kits.yaml` order.
     ///
     /// Held so an edit to the authoring kit can rebuild [`Self::library`] without re-reading the
     /// other kits off disk — `commit_measured` validates before it writes, so the file it would
     /// re-read is still the old one at the moment the merge is needed.
     pub kits: Shared<Vec<bevy_grimoire_core::kits::KitLayer>>,
-    /// **The named combinations a map may draw on** — `kits.ron`'s `bash`, in file order.
+    /// **The named combinations a map may draw on** — `kits.yaml`'s `bash`, in file order.
     ///
     /// Held beside [`Self::kits`] because it is read at the same two moments: `OpenMap::open`
     /// refuses a map naming one this project does not declare, and `palette_namespaces` resolves
@@ -166,10 +166,10 @@ pub struct Project {
     /// Per-descriptor token masks, in library order — resolved once at load so the palette and the
     /// placement rules never re-resolve the same strings.
     pub masks: Shared<Vec<Masks>>,
-    /// **The project's own directory** — `assets/grimoire`, the one holding `vocab.ron`, `kits.ron`
-    /// and `compositions.ron`. Not a kit; kits are its subdirectories.
+    /// **The project's own directory** — `assets/grimoire`, the one holding `vocab.yaml`, `kits.yaml`
+    /// and `compositions.yaml`. Not a kit; kits are its subdirectories.
     pub project_dir: PathBuf,
-    /// **The block rules the project states** — `rules.ron` beside `kits.ron`, validated against
+    /// **The block rules the project states** — `rules.yaml` beside `kits.yaml`, validated against
     /// the merged [`Self::library`] at open. Empty (no blocks) when the file is absent, which is the
     /// same state as a file that states none: a project without rules behaves as it always did.
     ///
@@ -213,7 +213,7 @@ pub struct Project {
 /// says it is doing. A stage is reported when it starts, so the one a slow open is stuck in is the last one told.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
-    /// `kits.ron`, `vocab.ron` and the rules.
+    /// `kits.yaml`, `vocab.yaml` and the rules.
     ReadProject,
     /// Every bound kit's library, policy and compositions, merged and checked.
     Kits,
@@ -264,7 +264,7 @@ impl Project {
         {
             return Err(problem.line());
         }
-        // **The binding is the project's, not a kit's.** `kits.ron` says which directory provides
+        // **The binding is the project's, not a kit's.** `kits.yaml` says which directory provides
         // which namespace — `site/` and `site_greybox/` both provide `site/*`, so this is a question
         // no directory can answer about itself. See `bevy_grimoire_core::kits`.
         let project_dir = root.join(GRIMOIRE_DIR);
@@ -330,7 +330,7 @@ impl Project {
 
         // **The derived half of `effects` is settled over the whole set, at open.**
         //
-        // `implies` on a `kind` token (`vocab.ron`, resolved by `Vocabularies::implied_effects`)
+        // `implies` on a `kind` token (`vocab.yaml`, resolved by `Vocabularies::implied_effects`)
         // says these tokens follow the kind and are not hand-authorable —
         // *"set the kind and the effect follows, which is what makes them trustworthy to read"*. That
         // was true of every row written after the rule landed and false of every row written before
@@ -510,7 +510,7 @@ impl Project {
         Ok(div)
     }
 
-    /// Re-read `assets/grimoire/vocab.ron` and re-resolve the masks. Adopts only on success.
+    /// Re-read `assets/grimoire/vocab.yaml` and re-resolve the masks. Adopts only on success.
     ///
     /// The editor holds a parsed copy of the vocabulary and the resolved masks, so a token appended
     /// on disk (by [`bevy_grimoire_core::vocab::append_token`]) is invisible until this runs. Appending
@@ -566,14 +566,14 @@ impl Project {
     ///
     /// # Why this exists (E-003)
     ///
-    /// [`crate::watch::adopt`] answered a save to a kit's `library.ron` or `project.ron` by
-    /// re-opening the whole project: `kits.ron`, the vocabulary, **every** bound kit's library and
+    /// [`crate::watch::adopt`] answered a save to a kit's `library.yaml` or `project.yaml` by
+    /// re-opening the whole project: `kits.yaml`, the vocabulary, **every** bound kit's library and
     /// policy, and a triangle count for every GLB in the merge. Measured on the shipped project
     /// (90 descriptors, 2 kits, six opens: 27, 58, 104, 185, 192, 315 ms), the triangle pass alone
     /// is 22–255 ms of that — up to a quarter second of the editor being wrong *per save*, on the
     /// file an author edits most.
     ///
-    /// **A kit's own save can only change that kit.** The binding (`kits.ron`) is what decides
+    /// **A kit's own save can only change that kit.** The binding (`kits.yaml`) is what decides
     /// which directories answer for which namespace, and it is a different file, watched
     /// separately; a change to it still goes through the whole-project open. So this re-reads one
     /// directory and re-does the *derived* work over the result.
@@ -608,7 +608,7 @@ impl Project {
 
         // **Declared, then verified** — the same rule as `kits::bound_library`, and the same
         // sentence: a directory that now defines a different namespace cannot answer for the one
-        // `kits.ron` binds it as.
+        // `kits.yaml` binds it as.
         match layered.measured.namespace()? {
             Some(ns) if ns != bound => {
                 return Err(format!(
@@ -762,7 +762,7 @@ impl Project {
         let mut paths: Vec<PathBuf> = Vec::new();
         for entry in dir {
             let path = entry.map_err(|e| format!("{}: {e}", self.maps_dir.display()))?.path();
-            if path.to_string_lossy().ends_with(".map.ron") {
+            if path.to_string_lossy().ends_with(".map.yaml") {
                 paths.push(path);
             }
         }
@@ -819,7 +819,7 @@ impl Project {
             .into();
     }
 
-    /// **The one door to `compositions.ron`.** Insert or replace by id, sort, validate the whole set,
+    /// **The one door to `compositions.yaml`.** Insert or replace by id, sort, validate the whole set,
     /// write atomically, and adopt only on success.
     ///
     /// # Why it lives here and not on a tab
@@ -833,7 +833,7 @@ impl Project {
     ///
     /// So the rule moves to where it was always aimed: **`project.rs` is the only module that names
     /// the file**, and every author-facing verb comes through here. That is the same shape
-    /// `tiles::commit_measured` has for `library.ron`, and the ratchet now asserts it directly.
+    /// `tiles::commit_measured` has for `library.yaml`, and the ratchet now asserts it directly.
     ///
     /// # Validated as a set, before anything is written
     ///
@@ -852,7 +852,7 @@ impl Project {
         let path = self
             .project_dir
             .join(bevy_grimoire_core::composition::Compositions::FILE);
-        let text = proposed.to_ron()?;
+        let text = proposed.to_yaml()?;
         bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)
             .map_err(|e| format!("NOT WRITTEN: {e}"))?;
         self.compositions = proposed;
@@ -916,7 +916,7 @@ impl Project {
         let path = self
             .project_dir
             .join(bevy_grimoire_core::composition::Compositions::FILE);
-        let text = proposed.to_ron()?;
+        let text = proposed.to_yaml()?;
         bevy_grimoire_core::ron_surgery::save_atomic(&path, &text)
             .map_err(|e| format!("NOT WRITTEN: {e}"))?;
         self.compositions = proposed;
@@ -1168,7 +1168,7 @@ impl OpenMap {
         };
 
         // **A map names a bash the project declares, or it does not open.** The name is not checked
-        // by `Map::validate` — a map validates in isolation and cannot see `kits.ron` — so this is
+        // by `Map::validate` — a map validates in isolation and cannot see `kits.yaml` — so this is
         // the one door where both halves are in hand. Refused by name rather than resolved to
         // every-kit, because a silent fallback is a palette nobody chose.
         if let Some(name) = map.bash.as_deref()
@@ -1185,7 +1185,7 @@ impl OpenMap {
                     .join(", ")
             };
             return Err(format!(
-                "{}: names bash `{name}`, which `kits.ron` does not declare. Declared: {declared}.",
+                "{}: names bash `{name}`, which `kits.yaml` does not declare. Declared: {declared}.",
                 map_path.display()
             ));
         }
@@ -1255,7 +1255,7 @@ impl OpenMap {
         // picks a winner arbitrarily.
         let path = project.maps_dir.join(naming::map_file_name(&self.map.name));
         // One placement a line (`Map::to_ron`), so an edit of one row is a diff of one line.
-        let text = self.map.to_ron()?;
+        let text = self.map.to_yaml()?;
 
         // **A rename is a move, and a move is not a copy.**
         //

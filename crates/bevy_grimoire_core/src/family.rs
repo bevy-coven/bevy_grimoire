@@ -1,4 +1,4 @@
-//! `family.ron`: which of the owner's family crates a project uses.
+//! `family.yaml`: which of the owner's family crates a project uses.
 //!
 //! The editor hosts each family crate behind a cargo feature named after it. A project names the crates
 //! it uses here, and the editor shows only those panels. Listing a crate the running build was not
@@ -24,14 +24,14 @@ impl Default for Family {
     }
 }
 
-/// `<project>/family.ron`.
+/// `<project>/family.yaml`.
 pub fn path_for_project(root: &Path) -> PathBuf {
-    root.join("family.ron")
+    root.join("family.yaml")
 }
 
 impl Family {
-    pub fn from_ron(text: &str) -> Result<Family, String> {
-        let f: Family = ron::from_str(text).map_err(|e| format!("family: parse: {e}"))?;
+    pub fn parse(text: &str) -> Result<Family, String> {
+        let f: Family = crate::yaml::from_str(text, "family").map_err(|p| format!("family: parse: {}", p.line()))?;
         if f.version != FAMILY_VERSION {
             return Err(format!("family: version {} is not the {FAMILY_VERSION} this build reads", f.version));
         }
@@ -44,11 +44,11 @@ impl Family {
         Ok(f)
     }
 
-    /// Reads the project's `family.ron`; a project without one uses no family crate.
+    /// Reads the project's `family.yaml`; a project without one uses no family crate.
     pub fn load(root: &Path) -> Result<Family, String> {
         let path = path_for_project(root);
         match std::fs::read_to_string(&path) {
-            Ok(text) => Family::from_ron(&text).map_err(|e| format!("{}: {e}", path.display())),
+            Ok(text) => Family::parse(&text).map_err(|e| format!("{}: {e}", path.display())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Family::default()),
             Err(e) => Err(format!("family: {}: {e}", path.display())),
         }
@@ -62,10 +62,10 @@ impl Family {
             .iter()
             .filter_map(|c| {
                 if !known.contains(&c.as_str()) {
-                    Some(format!("family.ron lists {c}, which is not a family crate the editor knows"))
+                    Some(format!("family.yaml lists {c}, which is not a family crate the editor knows"))
                 } else if !built.contains(&c.as_str()) {
                     Some(format!(
-                        "family.ron lists {c}, but this editor was built without the `{c}` feature; rebuild with `--features {c}`"
+                        "family.yaml lists {c}, but this editor was built without the `{c}` feature; rebuild with `--features {c}`"
                     ))
                 } else {
                     None
@@ -232,7 +232,7 @@ fn value_extent(t: &str, i: usize, end: usize) -> usize {
     value_end(t, i, &[]).map_or(end, |e| e.min(end))
 }
 
-/// `<project>/family/`: one `<crate>.ron` of that crate's own settings each.
+/// `<project>/family/`: one `<crate>.yaml` of that crate's own settings each.
 pub fn settings_dir(root: &Path) -> PathBuf {
     root.join("family")
 }

@@ -3,7 +3,7 @@
 //! # What this is for
 //!
 //! A fence is not 282 pieces. It is **one piece, a pitch, a direction, and a corner rule** — and
-//! Sanctuary's `town.map.ron` holds 282 hand-placed `prop_wooden_fence_single` rows because the
+//! Sanctuary's `town.map.yaml` holds 282 hand-placed `prop_wooden_fence_single` rows because the
 //! editor had no way to say the other thing.
 //!
 //! The three tools the editor had could not draw it, and the reason is not that they were clumsy:

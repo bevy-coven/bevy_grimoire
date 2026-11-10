@@ -149,7 +149,7 @@ fn a_missing_end_is_missing() {
 fn the_file_round_trips_and_a_negative_clearance_is_refused() {
     let ok = "(version: 1, relations: [(of: \"chest\", kind: ReachableFrom(from: \"gate\", clearance: 0.6))])";
     assert_eq!(Relations::parse(ok), Ok(chest_from_gate(0.6)));
-    let text = chest_from_gate(0.6).to_ron().unwrap();
+    let text = chest_from_gate(0.6).to_yaml().unwrap();
     assert_eq!(Relations::parse(&text), Ok(chest_from_gate(0.6)));
     assert!(Relations::parse(&ok.replace("0.6", "-0.6")).is_err());
 }

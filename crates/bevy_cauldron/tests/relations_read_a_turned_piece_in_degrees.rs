@@ -32,7 +32,7 @@ fn editor(name: &str) -> (App, PathBuf) {
         app.update();
     }
     turn(&mut app, "door", 180.0);
-    (app, root.join("assets/grimoire/maps/m.relations.ron"))
+    (app, root.join("assets/grimoire/maps/m.relations.yaml"))
 }
 
 /// Set a row's yaw, degrees, as the map stores it.

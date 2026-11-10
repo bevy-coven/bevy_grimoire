@@ -12,7 +12,7 @@ const DEFS: &str = r#"(needs: [(id: "hunger", decay_per_day: 1.0)], factions: [(
 fn open(name: &str) -> (Ctx, std::path::PathBuf) {
     let root = fixtures::Fixture::new(name).descriptor("site/wall", "alpha").build("m");
     std::fs::create_dir_all(root.join("family")).unwrap();
-    std::fs::write(root.join("family.ron"), "(version: 1, crates: [\"bevy_society\"])").unwrap();
+    std::fs::write(root.join("family.yaml"), "(version: 1, crates: [\"bevy_society\"])").unwrap();
     let file = root.join("family/bevy_society.ron");
     std::fs::write(&file, DEFS).unwrap();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));

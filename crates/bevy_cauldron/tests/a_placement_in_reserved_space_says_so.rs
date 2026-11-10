@@ -69,7 +69,7 @@ fn a_reserved_band(name: &str) -> std::path::PathBuf {
         .sized_descriptor("crate", "alpha", 0.5, 0.5)
         .build("m");
 
-    let at = root.join("assets/grimoire/furniture/library.ron");
+    let at = root.join("assets/grimoire/furniture/library.yaml");
     let was = std::fs::read_to_string(&at).unwrap_or_else(|e| panic!("cannot read {at:?}: {e}"));
     let wrote = band_on(&was, "boulder", "clearance: [ ( dir: Around, dist: 0.91 ) ],");
     assert!(

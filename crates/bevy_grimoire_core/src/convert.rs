@@ -18,7 +18,7 @@
 //! From the audit's "dead surface — drop it in any migration, do not inherit it":
 //!
 //! * **`category`** has no reader and carries `#[allow(dead_code)]`. It is not *discarded* — its
-//!   fourteen values are the seed of the `kind` axis in `assets/grimoire/vocab.ron`, which is a reader.
+//!   fourteen values are the seed of the `kind` axis in `assets/grimoire/vocab.yaml`, which is a reader.
 //!   So it stops being an unvalidated string and becomes a validated token.
 //! * **`Role::Custom`** has never been constructed in the life of the codebase. An open variant that
 //!   nothing produces is surface every reader must consider and no writer uses.
