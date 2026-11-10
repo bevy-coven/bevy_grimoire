@@ -178,8 +178,11 @@ pub fn lines(text: &str) -> std::collections::BTreeMap<String, usize> {
 /// through, so they meet the rules every project file meets (#367).
 #[allow(clippy::result_large_err)]
 pub fn to_json(text: &str, path: &str) -> Result<serde_json::Value, Problem> {
-    let walk = walk(text);
+    let mut walk = walk(text);
     if let Some(site) = first_fault(text, &walk) {
+        return Err(refusal(path, site));
+    }
+    if let Some(site) = walk.non_finite.take() {
         return Err(refusal(path, site));
     }
     let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(text).map_err(|e| {
@@ -498,6 +501,10 @@ pub(crate) struct Walk {
     blocks: Blocks,
     /// The first construct the file may not say, when it says one.
     pub(crate) site: Option<Site>,
+    /// **The first `.nan` or `.inf`**, kept apart from `site` because only [`to_json`] refuses it: a typed
+    /// reader (`from_str`) takes a plain `.inf` as the float it is, and a file that holds one is not
+    /// broken for it. JSON has no spelling for it, so the JSON view cannot carry it.
+    pub(crate) non_finite: Option<Site>,
 }
 
 /// **Walk `text`'s events once**: the line ranges of its block scalars, and the first construct the file
@@ -510,7 +517,7 @@ pub(crate) struct Walk {
 /// indentation: it may be the content of a block scalar further down. So [`from_str`] weighs the two:
 /// see [`earlier_fault`].
 pub(crate) fn walk(text: &str) -> Walk {
-    let mut walk = Walk { nodes: Vec::new(), blocks: Vec::new(), site: None };
+    let mut walk = Walk { nodes: Vec::new(), blocks: Vec::new(), site: None, non_finite: None };
     let mut stack: Vec<Frame> = Vec::new();
     let mut open: Vec<usize> = Vec::new();
     let mut documents = 0usize;
@@ -647,12 +654,12 @@ pub(crate) fn walk(text: &str) -> Walk {
                     walk.blocks.push((span.start.line(), span.end.line()));
                 }
                 let path = child_path(&stack);
-                // **A number JSON cannot hold is refused here**, at the walk: `.nan` and `.inf` are YAML
-                // numbers a `serde_json::Value` has no spelling for, and `serde_json` turns a non-finite float
-                // into `null` rather than failing — so the check has to be the text's, and it has to be here,
-                // where the line is known.
+                // **A number JSON cannot hold is noted here**, at the walk, where the line is known: `.nan`
+                // and `.inf` are YAML numbers a `serde_json::Value` has no spelling for, and `serde_json`
+                // turns a non-finite float into `null` rather than failing — so the check has to be the
+                // text's. Only `to_json` refuses it.
                 if style == Style::Plain && is_non_finite_number(value.as_ref()) {
-                    walk.site = Some(Site {
+                    walk.non_finite.get_or_insert(Site {
                         what: format!("`{}` is not a number a reader can carry", value),
                         field: path_of(&path),
                         line,
@@ -663,7 +670,6 @@ pub(crate) fn walk(text: &str) -> Walk {
                         fix: "write a finite number, or keep the value as text".to_owned(),
                         tab_report: false,
                     });
-                    return walk;
                 }
                 let key = take_key(&mut stack);
                 let dash = dash_before(text, start);
