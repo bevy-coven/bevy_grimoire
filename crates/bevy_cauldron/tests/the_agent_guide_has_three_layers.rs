@@ -64,7 +64,7 @@ fn allow(app: &mut App, path: &std::path::Path, text: &str) {
     let store_path = app.world().resource::<bevy_cauldron::editor::EditorState>().trust.file.clone().expect("a store");
     let root = path.parent().and_then(|p| p.parent()).expect("the guide is inside the project").to_path_buf();
     let mut store = TrustStore::load(&store_path).expect("the store reads");
-    bevy_grimoire_core::trust::grant_guide(&mut store, &root, text).expect("the grant is written");
+    store.trust_guide(&root, text).expect("the grant is written");
     store.save(&store_path).expect("the store is saved");
 }
 

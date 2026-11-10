@@ -117,9 +117,21 @@ fn a_guide_read_with_no_editor_says_the_persons_and_the_projects_files_were_not_
         guide.contains("AGENTS.md"),
         "the answer names the files it could not read: {guide}"
     );
+    // **The project's guide is named as withheld, never as a file to go and read.** A server that told an
+    // agent to `cat .dark_factory/AGENTS.md` would be a route around the trust check AG-03 exists to hold,
+    // and that sentence is the one thing this text must not say.
     assert!(
         guide.contains(".dark_factory/AGENTS.md"),
         "and the project's path, which an agent cannot guess: {guide}"
+    );
+    assert!(
+        !guide.to_lowercase().contains("read them yourself"),
+        "the no-editor answer tells the agent to read the files itself, which is a route around the \
+         person's trust: {guide}"
+    );
+    assert!(
+        guide.contains("only once the person has allowed"),
+        "it says the project's guide is served only once the person has allowed it: {guide}"
     );
     // **The sentence is about the layers and not a failure of the tool**: an agent must still be able
     // to work from what it was given.

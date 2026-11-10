@@ -242,9 +242,8 @@ impl TrustStore {
     /// **A person allows this project's guide, exactly as it reads now.**
     pub fn trust_guide(&mut self, root: &Path, text: &str) -> Result<(), String> {
         let project = resolve(root)?;
-        // **One grant per project**: a guide allowed twice is the newer text's grant and the older one is
-        // kept too, so a person who edits back to an earlier wording is not asked again for a guide they
-        // have already read.
+        // **One grant per (project, text)**: an older grant is kept, so a person who edits back to a wording
+        // they already allowed is not asked again for a guide they have read; a new text is a new entry.
         let grant = GuideGrant { project: project.clone(), sha256: sha256_hex(text.as_bytes()) };
         if !self.guides.contains(&grant) {
             self.guides.push(grant);
@@ -263,81 +262,13 @@ impl TrustStore {
     }
 }
 
-/// **The SHA-256 of `bytes`, as lowercase hex.**
-///
-/// Here rather than as a dependency because `tests/engine_free.rs` keeps this crate's dependency list
-/// closed, and a digest is arithmetic: sixty lines against a crate every game would then link. The risk
-/// that buys is a digest that is subtly wrong, which would withhold a guide whose grant was made and read
-/// as a trust bug — so the published vectors (FIPS 180-4 / NIST's `SHA256ShortMsg` set) are checked in
-/// `tests/a_projects_guide_needs_the_persons_trust.rs`, including the 55-, 56- and 64-byte lengths where
-/// the padding is the part worth getting wrong.
+/// **The SHA-256 of `bytes`, as lowercase hex**, which is what a [`GuideGrant`] holds: whether a project's
+/// guide is the exact text a person read. The published construction, with published vectors checked in
+/// `tests/a_projects_guide_needs_the_persons_trust.rs` — the question is identity, not secrecy, and a
+/// digest that was subtly wrong would withhold a guide whose grant was made and read as a trust bug.
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-    ];
-    let mut h: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-    ];
-    // **The padding: a 1 bit, zeros up to 56 bytes into the block, then the length in bits as a u64.**
-    let mut message = bytes.to_vec();
-    let bit_len = (bytes.len() as u64).wrapping_mul(8);
-    message.push(0x80);
-    while message.len() % 64 != 56 {
-        message.push(0);
-    }
-    message.extend_from_slice(&bit_len.to_be_bytes());
-
-    let (blocks, _) = message.as_chunks::<64>();
-    for block in blocks {
-        let mut w = [0u32; 64];
-        let (words, _) = block.as_chunks::<4>();
-        for (i, word) in words.iter().enumerate() {
-            w[i] = u32::from_be_bytes(*word);
-        }
-        for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
-        }
-        let mut v = h;
-        for (i, k) in K.iter().enumerate() {
-            let s1 = v[4].rotate_right(6) ^ v[4].rotate_right(11) ^ v[4].rotate_right(25);
-            let ch = (v[4] & v[5]) ^ (!v[4] & v[6]);
-            let t1 = v[7].wrapping_add(s1).wrapping_add(ch).wrapping_add(*k).wrapping_add(w[i]);
-            let s0 = v[0].rotate_right(2) ^ v[0].rotate_right(13) ^ v[0].rotate_right(22);
-            let maj = (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
-            let t2 = s0.wrapping_add(maj);
-            v[7] = v[6];
-            v[6] = v[5];
-            v[5] = v[4];
-            v[4] = v[3].wrapping_add(t1);
-            v[3] = v[2];
-            v[2] = v[1];
-            v[1] = v[0];
-            v[0] = t1.wrapping_add(t2);
-        }
-        for (slot, added) in h.iter_mut().zip(v) {
-            *slot = slot.wrapping_add(added);
-        }
-    }
-    h.iter().map(|word| format!("{word:08x}")).collect()
-}
-
-/// **Has a person allowed this project's guide, as this text?**
-pub fn guide_decision(store: &TrustStore, root: &Path, text: &str) -> Result<Decision, String> {
-    store.guide_decision(root, text)
-}
-
-/// **A person allows this project's guide, exactly as it reads now.**
-pub fn grant_guide(store: &mut TrustStore, root: &Path, text: &str) -> Result<(), String> {
-    store.trust_guide(root, text)
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// **What an agent is told when the project's guide is withheld.**

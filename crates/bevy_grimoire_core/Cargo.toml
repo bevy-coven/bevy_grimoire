@@ -35,6 +35,8 @@ serde_path_to_error.workspace = true
 serde_json.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
+# The digest a guide grant holds (`trust.rs`): whether a project's `AGENTS.md` is the text a person allowed.
+sha2.workspace = true
 # The platform's per-user data and config folders (`user_dirs.rs`): the one place the editor and its MCP server
 # name where `recent.ron`, `settings.ron`, `trusted.ron` and `cauldron.log` live. No engine in it.
 dirs = "6"

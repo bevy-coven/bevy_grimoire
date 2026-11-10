@@ -123,44 +123,81 @@ impl Guide {
 }
 
 /// **Read one layer.** `Ok(None)` for a file that is not there — the one absence that is not a problem.
-/// `Ok(Some(text))` for a guide. `Err(problem)` for a file that cannot be read, is not UTF-8, or is over
-/// [`GUIDE_MAX_BYTES`]: the problem names the path and the reason, and the layer is left out.
+/// `Ok(Some(text))` for a guide. `Err(problem)` for a file that cannot be read, **is not a regular file**, is
+/// not UTF-8, or is over [`GUIDE_MAX_BYTES`]: the problem names the path and the reason, and the layer is
+/// left out.
+///
+/// # Why this does not call `std::fs::read`
+///
+/// **A guide path is attacker-controlled**: it arrives with a cloned project, and its text is read inside a
+/// BRP call while an agent waits. `std::fs::read` on a FIFO blocks forever and on `/dev/zero` grows until
+/// memory is gone — one symlink would hang or kill the editor for every agent and for the person, and the
+/// limit would be checked only after the damage. So the path is `stat`ed first and **anything that is not a
+/// regular file is refused without being opened**, and what is a regular file is then read through
+/// `.take(GUIDE_MAX_BYTES + 1)` so a file that grew between the two is still bounded.
 pub fn read_layer(source: Source, path: &Path) -> Result<Option<String>, Box<Problem>> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => {
-            return Err(Box::new(Problem::with(
-                format!("{} was left out of the agent's guide", what(source)),
-                Detail::default()
-                    .at(Location::file(path.display().to_string()))
-                    .because(format!("it cannot be read: {e}"))
-                    .fix("make the file readable, or remove it"),
-            )));
+        Err(e) => return Err(refused(source, path, format!("it cannot be read: {e}"), "make the file readable, or remove it")),
+    };
+    // **Not a regular file: a FIFO, a socket, a device, or a directory named `AGENTS.md`.**
+    if !metadata.is_file() {
+        return Err(refused(
+            source,
+            path,
+            "it is not a regular file".to_owned(),
+            "replace it with a text file: a guide is prose, and a pipe or a device has no end to read",
+        ));
+    }
+    // **A file that is already too large is refused from its size**, so a 4 GB guide is never opened.
+    if metadata.len() > GUIDE_MAX_BYTES as u64 {
+        return Err(refused(
+            source,
+            path,
+            format!("it is {} bytes and the limit is {GUIDE_MAX_BYTES}", metadata.len()),
+            "shorten it: a guide past that limit is more than an agent can be given",
+        ));
+    }
+    let bytes = {
+        use std::io::Read as _;
+        let file = match std::fs::File::open(path) {
+            Ok(file) => file,
+            Err(e) => return Err(refused(source, path, format!("it cannot be read: {e}"), "make the file readable, or remove it")),
+        };
+        let mut bytes = Vec::new();
+        // **The bound is on what is read, not on what was stat'ed**: a file that grew between the two is
+        // still refused, and one that shrank is read as it now is.
+        if let Err(e) = file.take(GUIDE_MAX_BYTES as u64 + 1).read_to_end(&mut bytes) {
+            return Err(refused(source, path, format!("it cannot be read: {e}"), "make the file readable, or remove it"));
         }
+        bytes
     };
     if bytes.len() > GUIDE_MAX_BYTES {
-        return Err(Box::new(Problem::with(
-            format!("{} was left out of the agent's guide", what(source)),
-            Detail::default()
-                .at(Location::file(path.display().to_string()))
-                .because(format!(
-                    "it is {} bytes and the limit is {GUIDE_MAX_BYTES}",
-                    bytes.len()
-                ))
-                .fix("shorten it: a guide past that limit is more than an agent can be given"),
-        )));
+        return Err(refused(
+            source,
+            path,
+            format!("it is more than {GUIDE_MAX_BYTES} bytes"),
+            "shorten it: a guide past that limit is more than an agent can be given",
+        ));
     }
     match String::from_utf8(bytes) {
         Ok(text) => Ok(Some(text)),
-        Err(e) => Err(Box::new(Problem::with(
-            format!("{} was left out of the agent's guide", what(source)),
-            Detail::default()
-                .at(Location::file(path.display().to_string()))
-                .because(format!("it is not UTF-8 text: {}", e.utf8_error()))
-                .fix("save it as UTF-8"),
-        ))),
+        Err(e) => Err(refused(
+            source,
+            path,
+            format!("it is not UTF-8 text: {}", e.utf8_error()),
+            "save it as UTF-8",
+        )),
     }
+}
+
+/// **One layer's refusal**, so every way a guide can be refused reads the same and names the same path.
+fn refused(source: Source, path: &Path, why: String, fix: &'static str) -> Box<Problem> {
+    Box::new(Problem::with(
+        format!("{} was left out of the agent's guide", what(source)),
+        Detail::default().at(Location::file(path.display().to_string())).because(why).fix(fix),
+    ))
 }
 
 /// What a refusal calls the layer, so the editor's status line and the tool's answer are one sentence.
@@ -222,6 +259,35 @@ mod tests {
         let problem = read_layer(Source::Project, &path).expect_err("a file over the limit is refused");
         assert!(problem.line().contains("left out"), "{}", problem.line());
         assert!(problem.line().contains(&(GUIDE_MAX_BYTES + 1).to_string()), "the size is named: {}", problem.line());
+    }
+
+    /// **A guide that is not a regular file is refused, never read.** A symlink to `/dev/zero` or a FIFO is
+    /// the shape of the attack: `std::fs::read` on either never returns, and this runs inside a BRP call —
+    /// so one path in a cloned project would hang the editor for every agent and for the person.
+    #[test]
+    #[cfg(unix)]
+    fn a_guide_that_is_not_a_regular_file_is_refused_without_being_read() {
+        let dir = scratch("notafile");
+        let fifo = dir.join("AGENTS.md");
+        let made = std::process::Command::new("mkfifo").arg(&fifo).status().map(|s| s.success()).unwrap_or(false);
+        if !made {
+            // No `mkfifo`: a symlink to `/dev/zero` is the same shape and is always available on macOS.
+            let _ = std::fs::remove_file(&fifo);
+            std::os::unix::fs::symlink("/dev/zero", &fifo).expect("a symlink to /dev/zero");
+        }
+        // **With a deadline**, so a regression fails here instead of hanging the suite: a read that returned
+        // would finish in microseconds, and one that does not is the bug.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let path = fifo.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(read_layer(Source::Project, &path));
+        });
+        let refused = rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("reading a guide that is not a regular file never returned: the editor would hang on a BRP call");
+        let problem = refused.expect_err("a FIFO or a device is not a guide");
+        assert!(problem.line().contains("not a regular file") || problem.line().contains("regular"), "{}", problem.line());
+        assert!(problem.line().contains(&fifo.display().to_string()), "the refusal names the path: {}", problem.line());
     }
 
     #[test]

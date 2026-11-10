@@ -72,16 +72,6 @@ use bevy_cauldron_mcp::{brp, docs, sequence};
 
 use brp::Brp;
 
-/// **What a layer's source is called in the heading an agent reads.** The editor serves the word, so a
-/// layer added later needs no change here; an unknown word is printed as it came rather than blanked.
-fn heading_of(source: &str) -> String {
-    match source {
-        "user" => "Your guide".to_owned(),
-        "project" => "This project's guide".to_owned(),
-        other => other.to_owned(),
-    }
-}
-
 /// **The parameters of `grimoire_list_operations`** (#141).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -673,13 +663,13 @@ impl Grimoire {
                     .cloned()
                     .unwrap_or_default();
                 for layer in &layers {
-                    let (source, path, body) = (
-                        layer.get("source").and_then(|s| s.as_str()).unwrap_or_default(),
-                        layer.get("path").and_then(|p| p.as_str()).unwrap_or_default(),
-                        layer.get("text").and_then(|t| t.as_str()).unwrap_or_default(),
-                    );
+                    // **The layer exactly as the editor rendered it** — heading, source and path — so the
+                    // one renderer is `bevy_grimoire_core::agent_guide::Layer::rendered` and this server
+                    // cannot spell a heading differently or print a path the agent does not need.
+                    let Some(rendered) = layer.get("rendered").and_then(|r| r.as_str()) else { continue };
                     text.push('\n');
-                    text.push_str(&format!("## {} ({path})\n\n{}\n", heading_of(source), body.trim_end()));
+                    text.push_str(rendered.trim_end());
+                    text.push('\n');
                 }
                 // **A withheld layer is one line where the layer would have been**, and the text it
                 // withheld is never sent: the editor never puts it in the answer, and this reads only what
@@ -695,26 +685,42 @@ impl Grimoire {
                     text.push_str(&format!("\n**No answer can be recorded about it: {trouble}**\n"));
                 }
                 for problem in answer.get("problems").and_then(|p| p.as_array()).cloned().unwrap_or_default() {
-                    let said = problem
-                        .get("what")
-                        .and_then(|w| w.as_str())
-                        .unwrap_or("a guide was left out");
+                    // **Every part the problem has**, because the reason is what an agent acts on: a path
+                    // with no `why` is a refusal a reader has to guess the cause of.
+                    let said = problem.get("what").and_then(|w| w.as_str()).unwrap_or("a guide was left out");
                     let at = problem
                         .get("where")
                         .and_then(|w| w.get("file"))
                         .and_then(|f| f.as_str())
                         .unwrap_or("no file was named");
-                    text.push_str(&format!("\n**A guide was not served: {said} — {at}.**\n"));
+                    let why = problem.get("why").and_then(|w| w.as_str());
+                    let fix = problem.get("fix").and_then(|w| w.as_str());
+                    let mut line = format!("\n**A guide was not served: {said} — {at}");
+                    if let Some(why) = why {
+                        line.push_str(&format!(": {why}"));
+                    }
+                    line.push('.');
+                    if let Some(fix) = fix {
+                        line.push_str(&format!(" {fix}."));
+                    }
+                    line.push_str("**\n");
+                    text.push_str(&line);
                 }
             }
             // **No editor, or an older one that has no such method.** The shipped layer is the whole
             // guide and says so, because an agent that is told nothing about the two files cannot know
             // whether they are empty or unread.
             Err(e) => {
+                // **The project's guide is named as withheld, not as a file to go and read.** Its whole
+                // point is that an agent cannot serve itself a project's rules: the editor reads it only
+                // once a person has allowed that content, so an agent told to `cat` it would be a route
+                // around the check this server exists to hold.
                 text.push_str(&format!(
-                    "\n**The person's guide and this project's guide were not read: {e}** They are \
-                     `AGENTS.md` in the editor's config folder and `.dark_factory/AGENTS.md` in the \
-                     project. Read them yourself if you need them.\n"
+                    "\n**Neither the person's guide nor this project's guide was read: {e}** The \
+                     person's is `AGENTS.md` in the editor's config folder, and reading it is safe. \
+                     This project's guide (`.dark_factory/AGENTS.md`) is served only by the editor, \
+                     and only once the person has allowed that exact content there — it is not a file \
+                     for you to read around this tool.\n"
                 ));
             }
         }

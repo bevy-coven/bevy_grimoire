@@ -52,6 +52,9 @@ pub fn user_file() -> Option<PathBuf> {
     bevy_grimoire_core::user_dirs::config_dir().map(|dir| dir.join(agent_guide::USER_FILE))
 }
 
+/// **The path the page shows**, project-relative: what a person types, and what `reload` classifies.
+pub const PROJECT_PATH_SHOWN: &str = bevy_grimoire_core::agent_guide::PROJECT_PATH;
+
 /// `<root>/.dark_factory/AGENTS.md`.
 pub fn project_file(root: &Path) -> PathBuf {
     root.join(agent_guide::PROJECT_PATH)
@@ -71,9 +74,10 @@ pub struct Composed {
     pub trouble: Option<String>,
 }
 
-/// **The guide as the person has allowed it.** `trust_file` is the store (a test's own, so no test reads
-/// the real one).
-pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, trust_file: Option<&Path>) -> Composed {
+/// **The guide as the person has allowed it.** `trust_file` is the store's **override**: `None` is the
+/// person's own `<data_dir>/Grimoire/trusted.ron`, resolved by [`crate::trusted::store_path`], which is what
+/// a real editor always has. A test names a file of its own so nothing reads or writes the real one.
+pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, store_root: Option<&crate::trusted::StoreRoot>, trust_file: Option<&Path>) -> Composed {
     let mut composed = Composed::default();
     if let Some(user) = user {
         match agent_guide::read_layer(Source::User, &user.0) {
@@ -99,8 +103,11 @@ pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, trust_fi
         }
     };
     let withheld = trust::withheld_sentence(&project.root);
-    let decision = match trust_file.map(TrustStore::load) {
-        Some(Ok(store)) => match trust::guide_decision(&store, &project.root, &text) {
+    // **`None` is the person's own store**, not "no store": `store_path` resolves it through the user's
+    // data directory, and that is where a real editor keeps every grant. A `None` read as "nothing can be
+    // allowed" would withhold every project's guide in the shipped app while every test passed.
+    let decision = match crate::trusted::load_at(store_root, trust_file) {
+        Ok(store) => match store.guide_decision(&project.root, &text) {
             Ok(decision) => decision,
             Err(e) => {
                 composed.trouble = Some(e);
@@ -108,18 +115,8 @@ pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, trust_fi
                 return composed;
             }
         },
-        Some(Err(e)) => {
+        Err(e) => {
             composed.trouble = Some(e);
-            composed.withheld = Some(withheld);
-            return composed;
-        }
-        // **No store named is no place to keep an answer**, so the question cannot be answered and the
-        // layer is withheld with the reason rather than served on the strength of a missing file.
-        None => {
-            composed.trouble = Some(
-                "there is nowhere to keep what you have allowed, so this project's guide cannot be allowed"
-                    .to_owned(),
-            );
             composed.withheld = Some(withheld);
             return composed;
         }
@@ -139,11 +136,38 @@ pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, trust_fi
     composed
 }
 
+/// **What the project page's Agent guide section says about the file.**
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UserGuideState {
+    /// The content is granted, or the project is trusted.
+    #[default]
+    Allowed,
+    /// The content is not allowed: the page offers Allow this guide and Trust this project.
+    Waiting,
+    /// There is no file: the page offers Create guide.
+    Missing,
+}
+
+impl UserGuideState {
+    /// The word the status line shows, and the word the tests read.
+    pub fn word(self) -> &'static str {
+        match self {
+            UserGuideState::Allowed => "allowed",
+            UserGuideState::Waiting => "waiting for you",
+            UserGuideState::Missing => "missing",
+        }
+    }
+}
+
 /// **A guide waiting for a person's answer.**
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GuideRequest {
     pub root: PathBuf,
     pub text: String,
+    /// **Whether the question offered "Allow this guide".** A guide too long to show is asked about with
+    /// two answers — Trust this project, Not now — so its affirmative is the project, not the text: a Yes
+    /// read as a text grant would be a person's answer to one question taken as an answer to another.
+    pub offer_allow: bool,
 }
 
 /// **Where the guide's question stands**, kept on the editor's state because the answer arrives in a
@@ -205,6 +229,30 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
     // **The text is shown, because the text is what is being allowed.** A question that asked "allow this
     // project's guide?" over a filename would be asking a person to trust a file they have not read.
     let body = format!("{}\n\n---\n{}", project_file(&request.root).display(), text_preview(&request.text));
+    // **A guide too long to show is not offered: allowing what was not read is the hole this closes.** The
+    // person is told the file is longer than the question can show, and the answers that remain are the two
+    // that never grant unseen text — Not now, and Trust this project (which is a decision about the project
+    // and is made with that whole-project meaning in front of them, not a claim to have read the file).
+    if text_preview(&request.text) != request.text.trim_end() {
+        let mut request = request;
+        request.offer_allow = false;
+        confirm.ask(
+            Asked::TrustGuide,
+            "This project's guide is too long to show here".to_owned(),
+            format!(
+                "{}\n\nIt is {} characters, and a question can show {SHOWN_CHARS}. Read it in the project \
+                 page's Agent guide section, where the whole file is shown and can be allowed there.",
+                project_file(&request.root).display(),
+                request.text.chars().count()
+            ),
+            "Trust this project",
+            "Not now",
+        );
+        state.guide.awaiting = Some(request);
+        return;
+    }
+    let mut request = request;
+    request.offer_allow = true;
     confirm.ask_three(
         Asked::TrustGuide,
         "Give this project's guide to your agent?".to_owned(),
@@ -218,10 +266,17 @@ fn ask_the_person(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confir
 }
 
 /// Writes the person's answer down and says what happened.
-fn take_the_answer(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confirm>) {
+fn take_the_answer(
+    state: Option<ResMut<EditorState>>,
+    mut confirm: ResMut<Confirm>,
+    root: Option<Res<crate::trusted::StoreRoot>>,
+) {
+    let store_root = root.as_deref();
     let Some(mut state) = state else { return };
     let Some(choice) = confirm.answer_choice(Asked::TrustGuide) else { return };
     let Some(request) = state.guide.awaiting.take() else { return };
+    // **A question that asked with no Allow button cannot be answered `Yes`.** A two-answer question's
+    // affirmative is Trust this project (`Choice::Yes`), which the arm below reads as `Scope::Project`.
     if choice == Choice::No {
         state.guide.denied.insert((request.root.clone(), digest(&request.text)));
         state.status.note(
@@ -230,20 +285,20 @@ fn take_the_answer(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confi
         );
         return;
     }
-    let scope = if choice == Choice::Alt { Scope::Project } else { Scope::Command };
-    let written = match state.trust.file.as_deref() {
-        Some(path) => match TrustStore::load(path) {
-            Ok(mut store) => {
-                let answer = match scope {
-                    Scope::Project => store.trust_project(&request.root),
-                    _ => store.trust_guide(&request.root, &request.text),
-                };
-                answer.and_then(|()| store.save(path))
+    // **Which answer means the project** depends on which question was asked: a three-answer one has the
+    // middle button for it, and a two-answer one has its affirmative.
+    let scope = if !request.offer_allow || choice == Choice::Alt { Scope::Project } else { Scope::Command };
+    // **The person's own store when none is named** (`store_path`), so the answer is written where the
+    // next `grimoire/agent_guide` looks for it.
+    let written = crate::trusted::resolve(store_root, state.trust.file.as_deref())
+        .and_then(|path| {
+            let mut store = TrustStore::load(&path)?;
+            match scope {
+                Scope::Project => store.trust_project(&request.root),
+                _ => store.trust_guide(&request.root, &request.text),
             }
-            Err(e) => Err(e),
-        },
-        None => Err("there is nowhere to keep what you have allowed".to_owned()),
-    };
+            .and_then(|()| store.save(&path))
+        });
     match written {
         Ok(()) => {
             let what = if scope == Scope::Project { "this project's guides" } else { "that guide" };
@@ -255,9 +310,14 @@ fn take_the_answer(state: Option<ResMut<EditorState>>, mut confirm: ResMut<Confi
 
 /// **Read the guide for an agent calling `grimoire/agent_guide`**: the allowed layers, the withheld line,
 /// and the question when the person has not answered for this content yet.
-pub fn serve(state: &mut EditorState, project: Option<&Project>, user: Option<&UserGuideFile>) -> Composed {
+pub fn serve(
+    state: &mut EditorState,
+    project: Option<&Project>,
+    user: Option<&UserGuideFile>,
+    store_root: Option<&crate::trusted::StoreRoot>,
+) -> Composed {
     let trust_file = state.trust.file.clone();
-    let composed = compose(project, user, trust_file.as_deref());
+    let composed = compose(project, user, store_root, trust_file.as_deref());
     if let (Some(text), Some(project)) = (composed.project_text.as_ref(), project) {
         let already_asked = state
             .guide
@@ -267,7 +327,7 @@ pub fn serve(state: &mut EditorState, project: Option<&Project>, user: Option<&U
         // **Not now is an answer**, so the same text is never asked for twice in one session. A changed
         // file is a different digest and is asked about again.
         if !already_asked && !state.guide.denied_at(&project.root, text) {
-            state.guide.pending = Some(GuideRequest { root: project.root.clone(), text: text.clone() });
+            state.guide.pending = Some(GuideRequest { root: project.root.clone(), text: text.clone(), offer_allow: true });
         }
     }
     composed
@@ -285,6 +345,10 @@ pub fn json(composed: &Composed) -> serde_json::Value {
                 "source": layer.source.word(),
                 "path": layer.path.display().to_string(),
                 "text": layer.text,
+                // **The heading, rendered once** (`bevy_grimoire_core::agent_guide::Layer::rendered`), so
+                // the layer an agent reads has one spelling of `## This project's guide (.dark_factory/AGENTS.md)`
+                // wherever it is added up: a second renderer in the server would be a second spelling.
+                "rendered": layer.rendered(),
             }))
             .collect::<Vec<_>>(),
         "withheld": composed.withheld,
@@ -311,7 +375,7 @@ mod tests {
 
     #[test]
     fn a_guide_with_no_project_and_no_file_is_empty_and_says_nothing() {
-        let composed = compose(None, None, None);
+        let composed = compose(None, None, None, None);
         assert!(composed.guide.layers.is_empty());
         assert!(composed.guide.problems.is_empty());
         assert!(composed.withheld.is_none());
