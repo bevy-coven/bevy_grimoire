@@ -111,7 +111,10 @@ fn two_maps_and_three_files_come_back_with_the_same_one_active() {
     settle(&mut app, SETTLE);
     let file = session::path_for(&w.store, &w.root);
     assert!(file.is_file(), "the session is written under the person's data directory: {}", file.display());
-    assert!(!file.starts_with(&w.root), "and never inside the project");
+    assert!(
+        !w.root.join(session::FILE).exists() && !w.root.join("assets/grimoire").join(session::FILE).exists(),
+        "and the project itself holds no session, so committing it never commits somebody's open tabs"
+    );
     drop(app);
 
     // **Restart**: the editor opens the map it was on, and the tabs are read back.

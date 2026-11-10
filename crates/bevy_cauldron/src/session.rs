@@ -662,7 +662,7 @@ pub struct DocumentClose(pub Doc);
 
 /// What the strip last drew, so a settled editor rebuilds nothing.
 #[derive(Default, PartialEq)]
-struct Drawn {
+pub struct Drawn {
     workspace: Option<Workspace>,
     tabs: Vec<(Doc, bool)>,
     active: Option<usize>,
