@@ -128,7 +128,9 @@ pub struct EditorSettings {
     /// turned it off has not lost the ability to see — they have taken away only the moving.
     ///
     /// A settings key rather than a session switch for `reduced_motion`'s reason: it is how a person
-    /// wants to watch an agent, not a fact about one project.
+    /// wants to watch an agent, not a fact about one project. **Its tests and its changelog line are
+    /// AF-04's** (`tests/the_follow_waits_for_a_person_using_the_view.rs`, `af-04-pace`), which is
+    /// where the behaviour it switches was built.
     pub follow_agent: bool,
     /// The map's grid is drawn in the viewport.
     pub show_grid: bool,
