@@ -118,9 +118,33 @@ pub fn read<T: DeserializeOwned>(
     parse(text).map_err(|reason| Refusal {
         kind,
         file: file.to_owned(),
-        field: field_of_yaml::<T>(text),
+        // **A RON document's field is found by RON's own reader**, not the YAML one: `(version: 2)` has no
+        // top-level `version:` key for the YAML walk to see, so asking it would name `(version` instead.
+        field: field_of_ron::<T>(text),
         reason,
     })
+}
+
+/// **The path to the field a RON document is wrong at as a `T`**, or `None` when it reads.
+///
+/// `ron` reports a missing or an unknown field at the struct rather than at the field, so the two are taken
+/// from its own error and joined to the path, exactly as [`field_of_yaml`] does for YAML.
+fn field_of_ron<T: DeserializeOwned>(text: &str) -> Option<String> {
+    let mut de = ron::de::Deserializer::from_str(text).ok()?;
+    let err = serde_path_to_error::deserialize::<_, T>(&mut de).err()?;
+    let path = err.path().to_string().replace(".?", "");
+    let (named, key_in_path) = match err.inner() {
+        ron::Error::MissingStructField { field, .. } => (Some(field.to_string()), false),
+        ron::Error::NoSuchStructField { found, .. } => (Some(found.to_string()), true),
+        _ => (None, false),
+    };
+    match (path.as_str(), named) {
+        (".", None) => None,
+        (".", Some(field)) => Some(field),
+        (_, None) => Some(path),
+        (_, Some(field)) if key_in_path && (path == field || path.ends_with(&format!(".{field}"))) => Some(path),
+        (_, Some(field)) => Some(format!("{path}.{field}")),
+    }
 }
 
 /// **Read `text` as the `T` that kind `kind` is, through this crate's own RON reader**, for a type whose
@@ -137,10 +161,13 @@ pub fn read_ron<T: DeserializeOwned>(kind: &'static str, file: &str, text: &str)
     parse(text).map_err(|reason| Refusal {
         kind,
         file: file.to_owned(),
-        field: field_of_yaml::<T>(text),
+        // **A RON document's field is found by RON's own reader**, not the YAML one: `(version: 2)` has no
+        // top-level `version:` key for the YAML walk to see, so asking it would name `(version` instead.
+        field: field_of_ron::<T>(text),
         reason,
     })
 }
+
 
 /// **Read every line of a JSON-lines file as a `T`**, for a log the editor appends to and a reader walks
 /// (`oplog.jsonl`): a line that does not read as a `T` refuses the file, naming the line and the field.

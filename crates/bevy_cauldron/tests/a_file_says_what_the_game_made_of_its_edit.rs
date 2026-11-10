@@ -151,7 +151,7 @@ fn the_reload_panel_draws_whether_a_game_is_connected_and_each_files_answer() {
     let header = texts.iter().find(|(t, _)| t.starts_with("no game connected (")).unwrap_or_else(|| panic!("no header; drawn: {texts:?}"));
     assert!(header.1 > heading, "the header is under the heading");
     assert!(
-        texts.iter().any(|(t, _)| t.starts_with("maps/m.notes.ron · editor refused (version): ")),
+        texts.iter().any(|(t, _)| t.starts_with("maps/m.notes.yaml · editor refused (version): ")),
         "the editor's own refusal is a line even with no game; drawn: {texts:?}"
     );
     assert!(!texts.iter().any(|(t, _)| t.contains("game applied")), "no game has applied anything");
@@ -165,11 +165,11 @@ fn the_reload_panel_draws_whether_a_game_is_connected_and_each_files_answer() {
     Verdict::with_kinds(4, "refused", kinds).write(&project_dir).unwrap();
     let texts = drawn(&mut app);
     assert!(texts.iter().any(|(t, _)| t.starts_with("game decided ") && t.ends_with("(decision 4)")), "{texts:?}");
-    let applied = texts.iter().find(|(t, _)| t.starts_with("kits.ron · game applied ")).unwrap_or_else(|| panic!("{texts:?}"));
+    let applied = texts.iter().find(|(t, _)| t.starts_with("kits.yaml · game applied ")).unwrap_or_else(|| panic!("{texts:?}"));
     assert!(applied.0.ends_with(" ago"), "{}", applied.0);
     let refused = texts
         .iter()
-        .find(|(t, _)| t.starts_with("maps/m.map.ron · game refused (placements[0].at[1]): 1:47: Expected float · "))
+        .find(|(t, _)| t.starts_with("maps/m.map.yaml · game refused (placements[0].at[1]): 1:47: Expected float · "))
         .unwrap_or_else(|| panic!("{texts:?}"));
     assert!(refused.1 > heading, "the lines are under the heading");
     assert!(!texts.iter().any(|(t, _)| t.starts_with("no game connected")), "the header changed");

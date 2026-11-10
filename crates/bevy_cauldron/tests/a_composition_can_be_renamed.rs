@@ -93,12 +93,12 @@ fn the_rename_reaches_the_door_and_the_map_follows() {
     let map = std::fs::read_to_string(root.join("assets/grimoire/maps/m.map.yaml"))
         .expect("the map is there");
     assert!(
-        map.contains(r#"of: "site/room_v2""#),
+        map.contains("of: site/room_v2"),
         "the map's stamp still names the old composition, so the map has a dangling reference and \
          will not open. The map reads:\n{map}"
     );
     assert!(
-        !map.contains(r#"of: "site/room""#),
+        !map.contains("of: site/room\n"),
         "the map's stamp still names the old composition"
     );
 }

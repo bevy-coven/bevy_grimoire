@@ -10369,14 +10369,16 @@ pub mod map_rename {
         };
         let old = std::fs::read_to_string(&file)
             .map_err(|e| refuse(format!("{}: {e}", file.display())))?;
-        let needle = format!("example: \"{was}\"");
+        // **A YAML example is a plain scalar** (`example: m`), quoted only when YAML needs it, so the needle is
+        // the value as the writer emits it — not the RON spelling this used to look for.
+        let needle = format!("example: {was}");
         if old.matches(&needle).count() != named {
             return Err(refuse(format!(
                 "{} names `{was}` in a form this rename cannot rewrite; change its example by hand first",
                 file.display()
             )));
         }
-        let new = old.replace(&needle, &format!("example: \"{name}\""));
+        let new = old.replace(&needle, &format!("example: {name}"));
         let parsed = bevy_grimoire_core::rules::Rules::parse(&new)
             .map_err(|e| refuse(format!("{}: {e}", file.display())))?;
         let expected = project

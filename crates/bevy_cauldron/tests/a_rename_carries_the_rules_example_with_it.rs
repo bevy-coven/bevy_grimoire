@@ -83,7 +83,7 @@ fn example_in_memory(app: &App) -> String {
 }
 
 fn example_on_disk(app: &App) -> String {
-    let text = std::fs::read_to_string(rules_path(app)).expect("rules.ron is on disk");
+    let text = std::fs::read_to_string(rules_path(app)).expect("rules.yaml is on disk");
     bevy_grimoire_core::rules::Rules::parse(&text)
         .expect("rules.ron still parses")
         .blocks[0]
@@ -106,16 +106,16 @@ fn a_rename_rewrites_the_rules_example_on_disk_and_in_memory() {
     assert_eq!(
         example_on_disk(&app),
         "n",
-        "rules.ron still names the map the rename left behind"
+        "rules.yaml still names the map the rename left behind"
     );
     assert_eq!(
         example_in_memory(&app),
         "n",
         "the project still holds the old example, so generate would read a missing file"
     );
-    let text = std::fs::read_to_string(rules_path(&app)).expect("rules.ron is on disk");
+    let text = std::fs::read_to_string(rules_path(&app)).expect("rules.yaml is on disk");
     assert!(
-        text.starts_with("// the block rules"),
+        text.starts_with("# the block rules"),
         "the rewrite kept the author's comment: {text}"
     );
 }

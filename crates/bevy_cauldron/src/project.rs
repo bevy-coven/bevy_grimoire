@@ -901,7 +901,7 @@ impl Project {
         if let Ok(entries) = self.maps_dir.read_dir() {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
                     continue;
                 }
                 if std::fs::read_to_string(&path).is_ok_and(|t| t.contains(&quoted)) {
@@ -960,7 +960,9 @@ impl Project {
             .map_err(|e| format!("cannot read the maps: {e}"))?
             .filter_map(|entry| {
                 let path = entry.ok()?.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                // **A map file is YAML**, so a scan that only looked at `.ron` read no map at all — and a
+                // rename reached the composition's own file and stopped.
+                if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
                     return None;
                 }
                 let text = std::fs::read_to_string(&path).ok()?;
