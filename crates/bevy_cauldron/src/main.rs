@@ -29,6 +29,13 @@ fn main() -> AppExit {
         println!("{}", args::USAGE);
         return AppExit::Success;
     }
+    // **`cauldron migrate <root>`** (GD-03, #365): the command that moves a project's files from RON to
+    // YAML. Answered before a window, a plugin or an asset root exists, because it converts files and
+    // exits — and because a project with RON files left is refused at every open, so this is the only
+    // way in.
+    if args::asks_to_migrate(&argv) {
+        return migrate_then_exit(&argv);
+    }
 
     // **`bevy_audio` is opened only when something plays a sound.** The editor links
     // `bevy_audio` through `DefaultPlugins`, and an audio device that fails is what loops
@@ -243,6 +250,36 @@ fn name_the_window(
     for mut w in &mut windows {
         if w.title != want {
             w.title = want.clone();
+        }
+    }
+}
+
+/// **`cauldron migrate <root>`, run and printed** (GD-03, #365).
+///
+/// The report goes to stdout, one line per file, so a person can read what moved and a script can
+/// diff it. A refusal goes to stderr with a non-zero exit, because a migration that changed nothing
+/// must not look like one that did.
+fn migrate_then_exit(argv: &[String]) -> AppExit {
+    let root = match args::migrate_root(argv) {
+        Ok(root) => root,
+        Err(e) => {
+            eprintln!("bevy_cauldron: {e}");
+            return AppExit::error();
+        }
+    };
+    match bevy_grimoire_core::migrate::migrate(&root) {
+        Ok(report) => {
+            for line in report.lines() {
+                println!("{line}");
+            }
+            if report.converted.is_empty() {
+                println!("{} already holds no RON project files; nothing to migrate", root.display());
+            }
+            AppExit::Success
+        }
+        Err(problem) => {
+            eprintln!("bevy_cauldron: {}", problem.line());
+            AppExit::error()
         }
     }
 }

@@ -57,6 +57,7 @@ pub mod kits;
 pub mod library;
 pub mod live;
 pub mod map;
+pub mod migrate;
 pub mod naming;
 pub mod note_agent;
 pub mod notes;
