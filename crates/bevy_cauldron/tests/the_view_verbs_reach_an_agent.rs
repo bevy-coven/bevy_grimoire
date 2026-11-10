@@ -171,3 +171,63 @@ fn the_ghost_has_no_second_toggle_in_the_source() {
          or there are two rules for one toggle"
     );
 }
+
+/// **An agent toggles the journal panel**, and the panel's own `Display` is what moves.
+#[test]
+fn an_agent_toggles_the_journal_and_the_panel_moves() {
+    let mut app = editor("agent_journal");
+    let display = |app: &mut App| {
+        let mut panels = app.world_mut().query_filtered::<&Node, With<bevy_cauldron::chrome::JournalPanel>>();
+        let all: Vec<Display> = panels.iter(app.world()).map(|n| n.display).collect();
+        assert!(!all.is_empty(), "the editor has a journal panel to toggle");
+        all[0]
+    };
+    assert_eq!(display(&mut app), Display::None, "the journal starts down");
+    let said = apply(&mut app, "view_toggle_journal", json!({}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_ne!(display(&mut app), Display::None, "the journal is up: {said}");
+    let said = apply(&mut app, "view_toggle_journal", json!({}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(display(&mut app), Display::None, "and down again: {said}");
+}
+
+/// **`Shift+B` arms the clone tool without a refusal painted over the editor.** The clone key dispatched
+/// `tool_arm` with a context that carried no project, so the operation's log line had nowhere to go and the
+/// status said the change "could not be logged" while the tool was armed all the same.
+#[test]
+fn shift_b_arms_the_clone_tool_and_is_logged_once_without_a_refusal() {
+    let mut app = editor("key_clone");
+    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ShiftLeft);
+    tap(&mut app, KeyCode::KeyB);
+    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().release(KeyCode::ShiftLeft);
+    assert_eq!(tool(&app), Tool::Clone, "Shift+B arms the clone tool");
+    let lines = logged(&app, "tool_arm");
+    assert_eq!(lines.len(), 1, "one press is one log line: {lines:?}");
+    assert_eq!(lines[0].0, "human", "{lines:?}");
+    let status = app.world().resource::<EditorState>().status.clone();
+    assert!(status.problems().is_empty(), "the clone key paints no refusal over the editor: {:?}", status.problems());
+}
+
+/// **An operation that refuses for want of a view says it needs one**, so the door that carries a view in
+/// does not skip a verb: the five view verbs are exactly the operations that name `changes_view`.
+#[test]
+fn an_operation_that_needs_a_view_says_so() {
+    use bevy_cauldron::ops::Operation;
+    let ctx = bevy_cauldron::ops::Ctx::default();
+    let mut says: Vec<&'static str> = Vec::new();
+    for op in bevy_cauldron::ops::registry() {
+        if op.changes_view() {
+            says.push(op.name());
+        }
+        if let Err(refusal) = op.plan(&ctx, &json!({})) {
+            assert!(
+                !refusal.0.contains("no view is in hand") || op.changes_view(),
+                "`{}` refuses for want of a view and does not say `changes_view`, so an agent's call is refused: {}",
+                op.name(),
+                refusal.0
+            );
+        }
+    }
+    says.sort_unstable();
+    assert_eq!(says, ["snip_arm", "tool_arm", "view_cycle_grid", "view_toggle_ghost", "view_toggle_journal"]);
+}
