@@ -197,6 +197,11 @@ fn fill(dir: &Path, template: Template) -> Result<(), String> {
     if template == Template::Starter {
         copy_prototype_kit(dir)?;
     }
+    // **A person who makes a project starts with an agent guide** (AG-04, #349): the four sections, so
+    // the file's shape is found rather than read about. The grant is written by whoever holds the
+    // person's trust file — the form's Create button and the project page — because the store is the
+    // person's and not the project's.
+    crate::guide_template::write_file(dir)?;
     let [width, depth, height] = FIRST_MAP_METRES;
     let origin = bevy_grimoire_core::map::Map::default().origin;
     crate::project_page::from_the_page(
@@ -362,11 +367,23 @@ fn spawn_the_card(
                         // **Return presses it** from the name field (UI-R03, #333): a dialog with a text field names its main action.
                         bevy_gooey::DefaultButton,
                         CreateButton,
-                        observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, mut out: MessageWriter<OpenMapRequest>| {
+                        observe(|_: On<bevy_gooey::Activate>, form: Res<NewProjectForm>, mut launcher: ResMut<Launcher>, state: Option<ResMut<crate::editor::EditorState>>, mut out: MessageWriter<OpenMapRequest>| {
                             // Checked again here: a dimmed button can still be activated by a script.
                             match create(&form.0) {
                                 Ok(dir) => {
-                                    launcher.problem = None;
+                                    // **The person who made the project wrote the guide**, so this is
+                                    // where its grant is written (AG-04, #349): the store is the person's,
+                                    // and the form's Create is the call that holds the editor's own. A
+                                    // store that will not take it is a problem the person is shown, and
+                                    // the project still opens — the guide is simply withheld until the
+                                    // project page can allow it.
+                                    let granted = match state.as_deref().and_then(|s| s.trust.file.as_deref()) {
+                                        Some(store) => crate::guide_template::grant(&dir, store),
+                                        None => Ok(()),
+                                    };
+                                    if let Err(e) = granted {
+                                        launcher.problem = Some(e);
+                                    }
                                     launcher.new_project_done = true;
                                     out.write(OpenMapRequest(dir, FIRST_MAP.to_owned()));
                                 }

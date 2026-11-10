@@ -86,6 +86,7 @@ pub mod filter;
 pub mod exit_watchdog;
 #[cfg(feature = "debugger")]
 pub mod guided;
+pub mod guide_template;
 #[cfg(feature = "debugger")]
 pub mod tour;
 pub mod harness;

@@ -109,6 +109,7 @@ mod a_placement_in_a_doorway_says_so;
 mod a_placement_in_reserved_space_says_so;
 mod a_preview_draws_at_the_level_the_piece_lands_at;
 mod a_project_file_created_while_open_is_read;
+mod a_new_project_starts_with_an_agent_guide;
 mod a_projects_guide_needs_the_persons_trust;
 mod a_projects_repetition_rules_decide_what_is_structure;
 mod a_proposal_is_drawn_before_it_is_kept;
