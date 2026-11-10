@@ -7,7 +7,7 @@
 //! - **`game_build`** runs the build command `play.ron` names (`build`), behind the same trust gate as
 //!   `play`: a file that names a program names this one too, and a person allows it the once.
 //! - **The build is a background job** ([`crate::jobs`], UI-22). **Cargo is run, never
-//!   reimplemented**: the command is the file's own, with `--message-format=json-render-diagnostics`
+//!   reimplemented**: the command is the file's own, with `--message-format=json-diagnostic-rendered-ansi`
 //!   added when the file does not already say how it wants its messages, and every
 //!   `compiler-artifact` message is one crate finished.
 //! - **Every compiler error becomes a problem with its file, its line and its message**, and a `file:

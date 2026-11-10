@@ -113,7 +113,7 @@ impl PlayConfig {
         if self.build.first().is_none_or(|p| p.trim().is_empty()) {
             return Err(format!(
                 "{} names no `build` command, so there is nothing to rebuild. Add one, e.g. \
-                 `build: [\"cargo\", \"build\", \"--message-format=json-render-diagnostics\"]`, \
+                 `build: [\"cargo\", \"build\", \"--message-format=json-diagnostic-rendered-ansi\"]`, \
                  and a change that needs Rust can be built from here.",
                 path_for_project(root).display()
             ));
