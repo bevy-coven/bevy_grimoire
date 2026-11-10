@@ -13454,7 +13454,7 @@ fn toggle_pin(
 ///
 /// **The undo entry names the pin the placement had before**, so Cmd+Z puts that back and the
 /// phrase reads `pin` or `unpin` the way the author will say it.
-fn set_pin(
+pub(crate) fn set_pin(
     project: &Project,
     open: &mut OpenMap,
     state: &mut EditorState,
@@ -15152,6 +15152,10 @@ fn hide_carried(
     drag: Res<MoveDrag>,
 
     open: Res<OpenMap>,
+    // **The outliner's eye is the one other reason a drawn piece is out of sight** (UI-51, #237), and it is
+    // read here rather than written by a system of its own: two writers of one placement's `Visibility`
+    // would take turns undoing each other.
+    eyes: Option<Res<crate::outliner::Eyes>>,
     mut placed: Query<(&Placement, &mut Visibility)>,
     mut instances: Query<(&StampInstance, &mut Visibility), Without<Placement>>,
 ) {
@@ -15190,7 +15194,8 @@ fn hide_carried(
     };
 
     for (marker, mut vis) in &mut placed {
-        let want = if carried.contains(&marker.0) {
+        let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0));
+        let want = if carried.contains(&marker.0) || behind_the_eye {
             Visibility::Hidden
         } else {
             // Nothing else in this crate manages a placement's visibility — `spawn_descriptor` gives

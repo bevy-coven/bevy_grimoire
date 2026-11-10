@@ -34,6 +34,10 @@ pub struct NotesView {
     /// The notes file this holds the notes of; another map's file starts the view afresh.
     path: PathBuf,
     stat: Option<(SystemTime, u64)>,
+    /// **How many times the notes have been replaced**, which is the only thing about this view other code
+    /// may watch: the view marks itself changed every frame (`since`), so `is_changed` says nothing about
+    /// whether the notes moved.
+    generation: u64,
     /// The text last read, good or refused, so the same bytes are decided once.
     text: Option<String>,
     since: f32,
@@ -52,6 +56,12 @@ impl NotesView {
     /// A reader that has to tell "this map has no notes" from "this map's file has not been looked
     /// at yet" cannot do it from [`Self::notes`] alone: both are empty. This is the difference, and
     /// it is what `present::record_handed_back_notes` reads to take its baseline.
+    /// **How many times the notes held here have been replaced.** A reader that must rebuild when the notes
+    /// move (the outliner's NOTES group) compares this and nothing else.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     pub fn looked_at(&self) -> Option<&std::path::Path> {
         (!self.path.as_os_str().is_empty()).then_some(self.path.as_path())
     }
@@ -88,12 +98,14 @@ pub fn sync_notes_view(
     if !same_file {
         // Another map has no earlier value of its own: nothing carries over.
         view.notes = Notes::default();
+        view.generation += 1;
     }
     view.path = path.clone();
     view.stat = stat;
     view.text = text.clone();
     let Some(text) = text else {
         view.notes = Notes::default();
+        view.generation += 1;
         if let Some(reloads) = reloads.as_deref_mut() {
             reloads.forget(&["notes"]);
         }
@@ -108,6 +120,7 @@ pub fn sync_notes_view(
     let verdict = match Notes::from_ron(&text) {
         Ok(read) => {
             view.notes = read;
+            view.generation += 1;
             KindVerdict::applied("notes", file)
         }
         Err(reason) => {

@@ -45,13 +45,18 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **Goal:** Pick a piece out of a crowded map by name, without hunting for it in the viewport.
 
-1. Choose **View ▸ Show outliner**. The OUTLINER section opens at the top of the INSPECTOR on the left (the row is ticked while it is there; choose it again to put it away). It lists every piece on the map, grouped by what it is (the first `kind` of its descriptor, or `other`), one row per piece named `<id> · <descriptor>`.
-2. Type in its Find a piece box. Every word must appear in a row's id, descriptor or group, so `lamp` leaves the lamps under their group and hides everything else. Clear the box to see the whole map again.
-3. Click a row to select its piece. Ctrl-click or Shift-click selects several. Clicking a group selects nothing.
+1. Choose **View ▸ Show outliner**. The OUTLINER section opens at the top of the INSPECTOR on the left (the row is ticked while it is there; choose it again to put it away). It lists everything on the map. Pieces are grouped by what they are (the first `kind` of their descriptor, or `other`), one row per piece named `<id> · <descriptor>`, and the map's **compositions**, **people**, **triggers** and **notes** are four groups of their own below them.
+2. Type in its Find a piece box. Every word must appear in a row's words or its group's name, so `lamp` leaves the lamps under their group and hides everything else, and `Mara` leaves the people's group and that person. Clear the box to see the whole map again.
+3. Click a row to select its piece. Ctrl-click or Shift-click selects several. Clicking a group selects nothing, and neither does a row for a composition, a person, a trigger or a note: they are not pieces, so there is nothing to select.
 
 **What you see:** The piece is outlined in the viewport, the POSE block above shows its pose, and the row stays selected as you search. Selecting a piece in the viewport selects its row here too.
 
-**If it goes wrong:** A piece that does not match the search is not in the tree, so it cannot be selected from there until the search is cleared. The outliner lists placements only; compositions, people, triggers and notes are not in it yet.
+**A row's menu has two switches.** Right-click a piece's row (or focus it and press Shift+F10):
+
+- **Pin** holds the piece where it is, for a generator to route around. It is the same write `O` makes on the piece under the cursor: one log line and one Cmd+Z. A pin carries a reason, so the editor asks for it in the field under the map; type it and press Enter, or Esc to leave the piece unpinned.
+- **Hide** takes the piece out of the viewport for this session, and choosing it again puts it back. A hide is **not saved**: reopening the map shows every piece, because "this wall is invisible" is a fact about your view and not about the map.
+
+**If it goes wrong:** A row that does not match the search is not in the tree, so it cannot be reached from there until the search is cleared. Hide is per session: it is not a map field, so a piece hidden here is drawn by the game.
 
 ## Edit a note's text on several lines
 
