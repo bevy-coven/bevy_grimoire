@@ -268,6 +268,14 @@ pub fn toggle_the_familiar(
                     }
                 }),
             ));
+            // **The shared list of rows** (#354): one per waiting wish today, one per lesson of
+            // AG-06's tomorrow. Its children are `wish_view`'s, so a row that is a wish does not
+            // teach this block what a wish is.
+            block.spawn((
+                crate::wish_view::WishRows,
+                Name::new("agent rows"),
+                Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), flex_shrink: 0.0, row_gap: Val::Px(crate::chrome::GAP_TIGHT), ..default() },
+            ));
         })
         .id();
     commands.entity(pane).insert_children(0, &[block]);

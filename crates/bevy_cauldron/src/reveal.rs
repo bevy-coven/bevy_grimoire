@@ -124,6 +124,11 @@ pub fn page_of(shown: &Shown, project: Option<&Project>) -> Result<Page, String>
         // **The operation said it has nothing to look at** (AF-01's pinning test lists those). The
         // reveal is not called for one; reaching here is a caller's mistake, not a missing view.
         Shown::Nowhere => return Err("this change says it has nothing to look at".to_owned()),
+        // **A job is work a person watches in the band**, which is on every screen: there is no page
+        // to open for it, and the band is already showing it (GD-09, #371).
+        Shown::Job { key } => {
+            return Err(format!("this change is the `{key}` job, which the status band is already showing"));
+        }
         // **A library piece is described on the Meshes shelf**, whose left pane also draws the
         // piece's size, labels and lattice.
         //

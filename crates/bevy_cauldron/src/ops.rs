@@ -268,6 +268,12 @@ pub enum Shown {
     /// **One section of the settings**, by the name the screen lists it under: a family crate's id, or
     /// `packs` for the kit's own policy.
     Settings { section: String },
+    /// **A background job in the status band**, by the producer's key (`crate::jobs`): work a person
+    /// watches there rather than on the map — a build (GD-09, #371), and what else grows a job later.
+    Job {
+        /// The producer's key, which is what the band's item and its popover name.
+        key: String,
+    },
     /// **Nothing a person can look at.** Pinned by name in
     /// `tests/an_operation_says_where_its_change_is_seen.rs`, so a new one is a visible decision.
     Nowhere,
@@ -294,6 +300,7 @@ impl Shown {
             },
             Shown::Note { id } => format!("the note `{id}`"),
             Shown::Settings { section } => format!("the `{section}` settings"),
+            Shown::Job { key } => format!("the `{key}` job in the status band"),
             Shown::Nowhere => "nothing to look at".to_owned(),
         }
     }
@@ -4766,6 +4773,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
         Box::new(crate::ops_water::WaterRun),
         Box::new(crate::ops_play::Play),
         Box::new(crate::ops_play::PlayStop),
+        Box::new(crate::build_view::GameBuild),
         Box::new(crate::ops_runs::RunAdd),
         Box::new(crate::ops_runs::RunSet),
         Box::new(crate::ops_runs::RunRemove),
@@ -5056,6 +5064,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // `stop_game`, the same start and stop an agent's `apply` makes.
     ("play", "play_game("),
     ("play_stop", "stop_game("),
+    // **The Build button** (GD-09, #371) dispatches `game_build` through `build_game`, the same
+    // watched rebuild an agent's `apply` makes.
+    ("game_build", "build_game(&mut ctx, params)"),
     // **The Data field (#86)** — Enter on `<file> <path> <value>` dispatches `data_set` through
     // `set_data_leaf`, the same write an agent's `apply` makes.
     ("data_set", "set_data_leaf("),

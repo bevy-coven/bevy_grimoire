@@ -58,6 +58,10 @@ pub enum CommandKind {
     Notes,
     /// The game `play.ron` names, started by Play.
     Play,
+    /// **The build `play.ron` names** (GD-09, #371), run by Build before a change that needs Rust can
+    /// be seen. A kind of its own, because a person allows the game and the rebuild separately: the
+    /// game is what they watch, and the rebuild is a compiler.
+    Build,
 }
 
 impl CommandKind {
@@ -66,6 +70,7 @@ impl CommandKind {
         match self {
             CommandKind::Notes => "notes agent",
             CommandKind::Play => "game",
+            CommandKind::Build => "build",
         }
     }
 
@@ -74,6 +79,7 @@ impl CommandKind {
         match self {
             CommandKind::Notes => "Send",
             CommandKind::Play => "Play",
+            CommandKind::Build => "Build",
         }
     }
 }

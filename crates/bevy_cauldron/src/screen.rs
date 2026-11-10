@@ -389,6 +389,11 @@ pub fn cross(world: &mut World, to: crate::tiles::Door) -> Result<(), String> {
 /// [`OWNERSHIP`] row, so either build compares the list and the table it actually has.
 macro_rules! door_state {
     ($($(#[$attr:meta])* $t:ty),* $(,)?) => {
+        /// **The same reset, for a test** that opens a door and asks whether a resource went back.
+        pub fn reset_door_state_for_test(world: &mut World) {
+            reset_door_state(world);
+        }
+
         pub(crate) fn reset_door_state(world: &mut World) {
             $(
                 $(#[$attr])*
@@ -407,6 +412,11 @@ macro_rules! door_state {
 }
 
 door_state![
+    // **A build is this door's project's work** (GD-09, #371): its record names a map and a camera of
+    // the project the build was started for, and a build carried across a door would relaunch a game
+    // in a project nobody is looking at. The building child is ended by `build_view::BuildPlugin`'s
+    // `OnExit(Editor)`, so no compiler outlives the project it was started for.
+    crate::build_view::BuildState,
     crate::build::TileHistory,
     crate::build::Build,
     crate::editor::EditorState,
@@ -420,6 +430,9 @@ door_state![
     // selection carried across a door would name a note the next map does not have.
     crate::editor::SelectedNote,
     crate::editor::NotesFilter,
+    // **The outliner's eye** (UI-51, #237): it holds ids of *this map's* placements, so another map's rows
+    // must not inherit them.
+    crate::outliner::Eyes,
     crate::editor::RunDrag,
     crate::editor::RunGhostDrag,
     crate::editor::FineAnchor,
@@ -600,6 +613,22 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
     ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
+    // **`Session`**: whether this run opens no addresses (it records them instead) is the run's own fact, true for as long as the app runs.
+    // **`Session`**: whether this run opens a browser is the run's own fact, true for as long as the
+    // app runs. The harness inserts it so a stepped editor records an address instead of launching
+    // one (#354), and a test may insert its own.
+    ("bevy_cauldron::app_verbs::LinksOff", Ownership::Session),
+    // **`Session`, for the queue's own reason**: which rows the person has unfolded, and what GitHub
+    // said about the wishes in them, are facts about this sitting's wishes — the queue outlives a door
+    // change, so the rows that read it must too or a wish would be folded again on every crossing.
+    ("bevy_cauldron::wish_view::WishOpenRows", Ownership::Session),
+    ("bevy_cauldron::wish_view::WishSearches", Ownership::Session),
+    // **`Session`**: whether this run asks GitHub nothing is the run's own fact, true for as long as
+    // the app runs (a test inserts it once and every row reads it).
+    ("bevy_cauldron::wish_view::WishSearchOff", Ownership::Session),
+    // **`Door`, like the job it reports** (UI-22): a build is this door's project's work, and its
+    // record names a map and a camera of a project nobody is looking at after a crossing.
+    ("bevy_cauldron::build_view::BuildState", Ownership::Door),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),
@@ -674,6 +703,8 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::editor::NoteBox", Ownership::Door),
     ("bevy_cauldron::editor::SelectedNote", Ownership::Door),
     ("bevy_cauldron::editor::NotesFilter", Ownership::Door),
+    // **The eye of the outliner** (UI-51, #237): the pieces a person hid are rows of the map that was open.
+    ("bevy_cauldron::outliner::Eyes", Ownership::Door),
     ("bevy_cauldron::editor::RunDrag", Ownership::Door),
     ("bevy_cauldron::editor::RunGhostDrag", Ownership::Door),
     ("bevy_cauldron::editor::FineAnchor", Ownership::Door),

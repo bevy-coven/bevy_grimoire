@@ -2599,8 +2599,17 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::ui_budget::UiBudgetPlugin);
         app.add_plugins(crate::inspector_view::InspectorPlugin);
         app.add_plugins(crate::outliner::OutlinerPlugin);
+        // **The LIBRARY browser** (UI-52, #238): the same library as a grid of portraits, with its own
+        // search, a tag row and a card that carries its piece onto the map.
+        app.add_plugins(crate::library_browser::LibraryBrowserPlugin);
         app.add_plugins(crate::problems_view::ProblemsViewPlugin);
         app.add_plugins(crate::familiar::FamiliarPlugin);
+        // **The AGENT block's rows** (#354): the list a wish is a row of, its answers, and the status
+        // band's count of them while the block is hidden. Beside the block because it fills the block.
+        app.add_plugins(crate::wish_view::WishViewPlugin);
+        // **The watched rebuild** (GD-09, #371): `game_build`, its background job, its problems and the
+        // relaunch a successful build makes.
+        app.add_plugins(crate::build_view::BuildPlugin);
         app.add_plugins(crate::shell_view::ShellViewPlugin);
         app.add_observer(drop_a_piece_on_the_map);
         app.add_plugins(crate::selection::SelectionPlugin);
@@ -3813,6 +3822,15 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(crate::ops_play::spawn_section);
+
+            // **Build (#371, GD-09):** rebuild the project's game when a change needs Rust, watching
+            // it as a background job, and relaunch on the same map when it works.
+            p.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
+                ..default()
+            })
+            .with_children(crate::build_view::spawn_section);
 
             // **Environment (#98):** clock scrubber and forced weather, for a project that uses `bevy_elements`.
             #[cfg(feature = "bevy_elements")]
@@ -9778,6 +9796,75 @@ pub fn click_palette_row_for_test(world: &mut World, descriptor: &str) {
     world.flush();
 }
 
+/// **Set one person through `person_set`**, the operation a person's entry in the PEOPLE panel dispatches: the
+/// file is written and the map does not change, which is exactly the case the outliner's fingerprint has to see.
+pub fn set_a_person_for_test(world: &mut World, name: &str) {
+    let map = map_name(world);
+    set_a_row_of_a_map_file_for_test(world, "person_set", serde_json::json!({"map": map, "name": name, "at": [3.0, 3.0]}));
+}
+
+/// **Set one trigger through `trigger_set`**, the operation the TRIGGERS panel dispatches.
+pub fn set_a_trigger_for_test(world: &mut World, id: &str) {
+    let map = map_name(world);
+    set_a_row_of_a_map_file_for_test(
+        world,
+        "trigger_set",
+        serde_json::json!({"map": map, "id": id, "on": "Activity(\"work\")", "then": "let x = 1;"}),
+    );
+}
+
+/// The open map's name, for an operation that names a file by it.
+fn map_name(world: &mut World) -> String {
+    world.get_resource::<OpenMap>().map(|open| open.map.name.clone()).unwrap_or_default()
+}
+
+/// **Dispatch one operation that writes a map's side file**, as the panel that offers it does, and carry what it
+/// changed back into the running editor's `Project`.
+fn set_a_row_of_a_map_file_for_test(world: &mut World, operation: &str, params: serde_json::Value) {
+    use bevy::ecs::system::RunSystemOnce;
+    let operation = operation.to_owned();
+    let named = operation.clone();
+    world
+        .run_system_once(
+            move |mut project: ResMut<Project>,
+                  mut open: Option<ResMut<OpenMap>>,
+                  mut state: Option<ResMut<EditorState>>| {
+                let Some(ref mut open) = open else { return };
+                let mut ctx = crate::ops::Ctx {
+                    view: None,
+                    trust_file: None,
+                    project: Some(project.clone()),
+                    open: Some(std::mem::replace(
+                        &mut **open,
+                        OpenMap::new(bevy_grimoire_core::map::Map::default(), std::path::PathBuf::new()),
+                    )),
+                    source: crate::ops::Source::Human,
+                    root: None,
+                    session: crate::ops::session_id(),
+                    proposal: None,
+                };
+                let outcome = crate::ops::dispatch(&mut ctx, &operation, &params);
+                if let Some(fresh) = ctx.open.take() {
+                    **open = fresh;
+                }
+                carry_changes(&mut project, &mut ctx);
+                match outcome {
+                    Ok(crate::ops::Applied::Done { outcome, .. }) => {
+                        if let Some(state) = state.as_deref_mut() {
+                            state.status.note(outcome.summary);
+                        }
+                    }
+                    Ok(crate::ops::Applied::Refused(refusal)) | Err(refusal) => {
+                        if let Some(state) = state.as_deref_mut() {
+                            state.status.problem(refusal.0);
+                        }
+                    }
+                }
+            },
+        )
+        .unwrap_or_else(|e| panic!("{named} could not be dispatched: {e}"));
+}
+
 /// **A run of `descriptor` between two points**, reachable from `tests/headless.rs`.
 ///
 /// The release path of the run tool, without the mouse — the same split `fill_for_test` makes. The
@@ -13502,14 +13589,26 @@ fn toggle_pin(
     let Some(p) = open.map.placements.get(index) else {
         return;
     };
-    let id = p.id.clone();
+    pin_or_unpin(project, open, state, &p.id.clone());
+}
+
+/// **Pin the piece `id`, or unpin it**, for every entry that offers the toggle: the `O` key on the piece under
+/// the cursor, and the outliner's row menu.
+///
+/// **One path, so the reason is never made up on one of them.** An unpin is immediate. A pin **asks**, by
+/// putting the id in `EditorState::pinning` — the field the reason is typed into and the only reader of that
+/// field — because `Placed::owned_because` is *a reason, never a bool*: a canned reason supplied by the editor
+/// would be that bool wearing a sentence (`editor.rs`, `EditorState::pinning`).
+pub(crate) fn pin_or_unpin(project: &Project, open: &mut OpenMap, state: &mut EditorState, id: &str) {
+    let Some(p) = open.map.placements.iter().find(|p| p.id == id) else {
+        state.status.problem(format!("{id} is no longer on the map, so it cannot be pinned."));
+        return;
+    };
     if p.owned {
-        set_pin(project, open, state, &id, false, None);
+        set_pin(project, open, state, id, false, None);
     } else {
-        state.pinning = Some((id.clone(), String::new()));
-        state.status.note(format!(
-            "why is {id} pinned? Enter to keep it, Esc to cancel"
-        ));
+        state.pinning = Some((id.to_owned(), String::new()));
+        state.status.note(format!("why is {id} pinned? Enter to keep it, Esc to cancel"));
     }
 }
 
@@ -13519,7 +13618,7 @@ fn toggle_pin(
 ///
 /// **The undo entry names the pin the placement had before**, so Cmd+Z puts that back and the
 /// phrase reads `pin` or `unpin` the way the author will say it.
-fn set_pin(
+pub(crate) fn set_pin(
     project: &Project,
     open: &mut OpenMap,
     state: &mut EditorState,
@@ -15217,6 +15316,10 @@ fn hide_carried(
     drag: Res<MoveDrag>,
 
     open: Res<OpenMap>,
+    // **The outliner's eye is the one other reason a drawn piece is out of sight** (UI-51, #237), and it is
+    // read here rather than written by a system of its own: two writers of one placement's `Visibility`
+    // would take turns undoing each other.
+    eyes: Option<Res<crate::outliner::Eyes>>,
     mut placed: Query<(&Placement, &mut Visibility)>,
     mut instances: Query<(&StampInstance, &mut Visibility), Without<Placement>>,
 ) {
@@ -15255,7 +15358,8 @@ fn hide_carried(
     };
 
     for (marker, mut vis) in &mut placed {
-        let want = if carried.contains(&marker.0) {
+        let behind_the_eye = eyes.as_ref().is_some_and(|eyes| eyes.is_hidden(&marker.0));
+        let want = if carried.contains(&marker.0) || behind_the_eye {
             Visibility::Hidden
         } else {
             // Nothing else in this crate manages a placement's visibility — `spawn_descriptor` gives
@@ -19482,4 +19586,45 @@ mod replace_tests {
             "one host in the set refuses the whole set"
         );
     }
+}
+
+/// **Type a pin's reason into the field and press Enter**, for a test that opened the field the way a person
+/// does. The keystrokes are the ones `pin_reason_keys` reads, and that system is the one run, so the reason
+/// committed is the one a person would have typed and the commit goes through `set_pin`.
+///
+/// The field is `EditorState::pinning`, which every path that pins opens ([`pin_or_unpin`]): the `O` key's
+/// prompt and the outliner's row menu. This is the typing half only, so the field must already be open.
+pub fn type_the_pin_reason_for_test(world: &mut World, reason: &str) {
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::ecs::message::Messages;
+    use bevy::input::keyboard::{Key, KeyboardInput};
+    let window = world
+        .query_filtered::<Entity, With<bevy::window::PrimaryWindow>>()
+        .single(world)
+        .ok()
+        .unwrap_or(Entity::PLACEHOLDER);
+    let mut press = |code: KeyCode, logical: Key| {
+        world.write_message(KeyboardInput {
+            key_code: code,
+            logical_key: logical,
+            state: bevy::input::ButtonState::Pressed,
+            text: None,
+            repeat: false,
+            window,
+        });
+        // **A system that cannot run is no keys read**, not a panic: the helper's job is to type, and the caller's
+        // assertion is what says whether the field took them.
+        let _ = world.run_system_once(pin_reason_keys);
+        // **One key, read once.** A `run_system_once` builds a fresh reader, so a message left in the queue
+        // would be read again by every later run; the queue is emptied after the one key it carried.
+        world.resource_mut::<Messages<KeyboardInput>>().clear();
+    };
+    for character in reason.chars() {
+        if character == ' ' {
+            press(KeyCode::Space, Key::Space);
+        } else {
+            press(KeyCode::KeyA, Key::Character(character.to_string().into()));
+        }
+    }
+    press(KeyCode::Enter, Key::Enter);
 }
