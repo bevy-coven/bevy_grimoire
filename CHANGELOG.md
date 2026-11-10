@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **gd-04-review** `d72e8a5c` game.schema.json is the running game's own registry export, and a wrong field is refused at the same path by the schema and the reader in all seven tagged file kinds *No clip: generated files; proved by bevy_grimoire/tests/a_games_schema_reaches_the_file_an_outside_editor_reads.rs (6), bevy_grimoire_core/tests/a_tagged_file_validates_against_its_schema.rs (4) and bevy_cauldron/tests/schemas_are_written_where_an_outside_editor_looks.rs (5)*
 - **gd-04-schemas** `4709d20f` Every project file kind has a JSON Schema generated from the Rust type it is read by, written into .dark_factory/schema/ when a project opens, and the seven kinds whose YAML carries an enum tag now validate against theirs *No clip: generated files; proved by bevy_grimoire_core/tests/a_tagged_file_validates_against_its_schema.rs (every_tagged_kinds_fixture_validates_against_its_schema, the_tagged_kinds_are_the_ones_whose_fixture_carries_a_tag, a_field_wrong_inside_a_variant_is_refused_at_its_own_path, the_reader_names_the_same_path_the_schema_refuses), bevy_grimoire_core/tests/a_generated_schema_is_replaced_and_a_hand_written_one_is_not.rs (3), bevy_cauldron/tests/schemas_are_written_where_an_outside_editor_looks.rs (3) and bevy_grimoire/tests/a_games_schema_reaches_the_file_an_outside_editor_reads.rs (4)*
 
 ## 2026-11-09
