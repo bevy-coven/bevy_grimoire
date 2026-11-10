@@ -115,17 +115,6 @@ impl TerminalAgent {
 /// that does not would only fail its self test.
 pub const AGENT_PROGRAM: &str = "omp";
 
-/// The shell asked when the environment names none — the same one [`crate::terminal`]'s pane runs.
-const DEFAULT_SHELL: &str = "/bin/sh";
-
-/// **The shell a question about this machine is put to**: `$SHELL`, else [`DEFAULT_SHELL`].
-///
-/// The same choice [`crate::terminal`]'s pane makes, so the machine is asked in the shell the `Invoke
-/// Agent` press will type into.
-fn login_shell() -> String {
-    std::env::var("SHELL").ok().filter(|shell| !shell.is_empty()).unwrap_or_else(|| DEFAULT_SHELL.to_owned())
-}
-
 /// **How long the login shell is given to answer, in seconds** (#341).
 ///
 /// A login shell reads the person's rc files, so it is slower than a plain one and one of them can
@@ -167,6 +156,9 @@ fn is_runnable(program: &Path) -> bool {
     }
 }
 
+/// How often a shell that has answered is looked at for its exit, in milliseconds.
+const LOGIN_ASK_EXIT_POLL_MS: u64 = 5;
+
 /// **What this machine has, asked once** and carried for the whole session (#341).
 ///
 /// A `PATH` that gains the agent while the editor runs does not change the editor under the person
@@ -186,16 +178,32 @@ impl MachineAgent {
     /// question is therefore put to the same login shell, so the pane's offer and the button's work
     /// come from one answer.
     ///
+    /// **The shell is the pane's own** — `crate::terminal`'s `shell_program_of_environment`, the one a
+    /// tab runs when no `terminal_shell` is chosen (`terminal_shell` is a setting read on the frames
+    /// after this, so it is not the shell an answer could be put to here). One function decides which
+    /// shell is this person's, so the question and the tab cannot disagree about `$SHELL` or about a
+    /// machine that has neither `$SHELL` nor `/bin/sh`.
+    ///
     /// Bounded: a login shell whose rc files hang answers nothing, and [`LOGIN_ASK_PATIENCE_S`] later
     /// the machine is read as having no agent rather than the window waiting.
     pub fn ask() -> MachineAgent {
-        MachineAgent(MachineAgent::ask_the_login_shell(&login_shell(), LOGIN_ASK_PATIENCE_S))
+        match crate::terminal::shell_program_of_environment() {
+            Ok(shell) => MachineAgent(MachineAgent::ask_the_login_shell(&shell, LOGIN_ASK_PATIENCE_S)),
+            // No shell at all: there is nothing to ask, and nothing the press could run either.
+            Err(_) => MachineAgent(TerminalAgent::Off),
+        }
     }
 
     /// [`MachineAgent::ask`] with the shell and its patience named, so a test can give both.
     ///
     /// `None` from `command -v` — the shell exits non-zero — is a machine without the agent; so is a
-    /// shell that cannot be started or does not answer inside `patience_s`.
+    /// shell that cannot be started, or one whose output does not arrive inside `patience_s`.
+    ///
+    /// **One deadline covers the whole question, the answer included.** The shell's exit alone is not
+    /// the answer: the text is read on its own thread and sent down a channel, so a login shell that
+    /// backgrounded a process which holds the pipe (`( sleep 30 & ) ; command -v omp ; exit 0`) cannot
+    /// keep the editor waiting for an EOF that arrives 30 s later. Past `patience_s`, the child is
+    /// killed and reaped and the machine reads `Off`.
     pub fn ask_the_login_shell(shell: &str, patience_s: u64) -> TerminalAgent {
         let script = format!("command -v {AGENT_PROGRAM}");
         let started = std::process::Command::new(shell)
@@ -206,32 +214,43 @@ impl MachineAgent {
             .stderr(std::process::Stdio::null())
             .spawn();
         let Ok(mut child) = started else { return TerminalAgent::Off };
-        // **Read on another thread, so a shell that answers nothing does not hold this one.** The wait
-        // below is the bound; a shell still running then is left to it and the machine reads `Off`.
-        let reading = child.stdout.take().map(|mut out| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(patience_s);
+        // **The text arrives on a channel, not from `join`.** A reader thread that is still blocked on
+        // the pipe at the deadline is left holding it: it writes into a channel nobody reads and its
+        // thread ends with the process, so the editor never waits on it.
+        let (saying, heard) = std::sync::mpsc::channel();
+        if let Some(mut out) = child.stdout.take() {
             std::thread::spawn(move || {
                 use std::io::Read as _;
                 let mut text = String::new();
                 let _ = out.read_to_string(&mut text);
-                text
-            })
-        });
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(patience_s);
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    let found = status.success() && reading.is_some_and(|r| r.join().is_ok_and(|text| !text.trim().is_empty()));
-                    return if found { TerminalAgent::OhMyPi } else { TerminalAgent::Off };
-                }
-                Ok(None) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(LOGIN_ASK_POLL_MS));
-                }
-                _ => {
-                    let _ = child.kill();
-                    return TerminalAgent::Off;
-                }
-            }
+                let _ = saying.send(text);
+            });
         }
+        let text = {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            heard.recv_timeout(left).ok()
+        };
+        // **A shell that never closed its output says nothing worth reading**, and outlived its
+        // patience: killed and reaped, so it does not stay a zombie for the hours this editor runs.
+        let Some(text) = text else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return TerminalAgent::Off;
+        };
+        // **The exit, then the answer.** Output arriving is not the exit arriving: the shell may still
+        // be in the microseconds before `wait` can see it, so the status is looked for inside the same
+        // patience rather than assumed. A shell whose status never comes is one that did not finish.
+        let failed_or_unfinished = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break !status.success(),
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(LOGIN_ASK_EXIT_POLL_MS));
+                }
+                _ => break true,
+            }
+        };
+        if failed_or_unfinished || text.trim().is_empty() { TerminalAgent::Off } else { TerminalAgent::OhMyPi }
     }
 
     /// **The agent a machine starts its terminal with**, from what the binary asked it.
@@ -243,9 +262,6 @@ impl MachineAgent {
         machine.map_or(TerminalAgent::Off, |machine| machine.0)
     }
 }
-
-/// How often the login shell is looked at while it is given its patience, in milliseconds.
-const LOGIN_ASK_POLL_MS: u64 = 10;
 
 /// **What the running editor uses**: the defaults with the user's file and then the project's laid over
 /// them, key by key.

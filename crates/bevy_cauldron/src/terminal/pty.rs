@@ -33,17 +33,24 @@ use alacritty_terminal::tty::{self, Options, Shell};
 /// emptiness answered with an error: a login shell that is not configured is a shell, and refusing
 /// to open a pane over it would be a refusal to be useful on a fresh machine.
 fn shell_of_environment() -> Result<Shell, String> {
-    let vars = std::env::var("SHELL").ok().filter(|s| !s.is_empty());
-    let program = match vars {
-        Some(shell) => shell,
-        None if Path::new("/bin/sh").exists() => "/bin/sh".to_owned(),
+    Ok(Shell::new(shell_program_of_environment()?, Vec::new()))
+}
+
+/// **The program [`shell_of_environment`] runs**, when only the program is asked for (#341).
+///
+/// The editor asks it once at start-up, to put a question about the machine to the shell its first tab
+/// will run. One place answers "which shell is this person's", so the question and the tab cannot
+/// disagree about `$SHELL` or about its absence.
+pub(crate) fn shell_program_of_environment() -> Result<String, String> {
+    match std::env::var("SHELL").ok().filter(|s| !s.is_empty()) {
+        Some(shell) => Ok(shell),
+        None if Path::new("/bin/sh").exists() => Ok("/bin/sh".to_owned()),
         // Named rather than guessed: a build with neither `$SHELL` nor `/bin/sh` is not Unix as this
         // code understands it, and inventing a path here would produce a spawn error nobody can act on.
         None => {
-            return Err("$SHELL is unset and /bin/sh does not exist, so there is no shell to run".to_owned());
+            Err("$SHELL is unset and /bin/sh does not exist, so there is no shell to run".to_owned())
         }
-    };
-    Ok(Shell::new(program, Vec::new()))
+    }
 }
 
 /// **A shell the person chose** (`terminal_shell` and `terminal_shell_args`, #324): VS Code's default

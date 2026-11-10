@@ -60,6 +60,7 @@ use bevy::prelude::*;
 
 pub use grid::{CaretShape, Cell, Cursor, FindStatus, Line, SCROLLBACK, TerminalScreen};
 pub use pty::{HANGUP_GRACE_MS, ShellChoice, TERM_PROGRAM, TerminalSession, session_env};
+pub(crate) use pty::shell_program_of_environment;
 
 /// **The variable that names the open project to a shell** (#324): its root, as the editor holds it.
 pub const PROJECT_ENV: &str = "CAULDRON_PROJECT";

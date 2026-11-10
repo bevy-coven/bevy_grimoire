@@ -60,16 +60,34 @@ fn program(dir: &std::path::Path, name: &str, runnable: bool) -> std::path::Path
     path
 }
 
-/// **A login shell that answers what a real one would**: the `command -v` line a stub is given, and
-/// what it says. `sleep_s` makes it take that long first, so a patient wait and one that hangs are
-/// both a stub away.
-fn stub_shell(dir: &std::path::Path, tag: &str, command: &str, code: i32, sleep_s: u64) -> std::path::PathBuf {
+/// **A login shell that is only a login shell when it is asked like one**: it refuses anything but
+/// `-lc 'command -v omp'`, then does what it is told.
+///
+/// The refusal is the point. `ask` must put the question to a *login* shell — a person's rc files are
+/// what put `~/.local/bin` on the `PATH`, and an app opened from Finder or the Dock is given none of
+/// them — so a stub that answered whatever it was called with could not tell a login shell from a
+/// plain one, and `ask` dropping `-l` would still pass. A stub that exits 3 for any other call makes
+/// that a failure.
+///
+/// `sleep_s` makes it take that long first, so a patient wait and one that hangs are both a stub away;
+/// `hold_s` starts a process that keeps the pipe open that long after the shell has said its piece,
+/// which is the shape a person's rc files produce when they background a daemon.
+fn stub_shell(dir: &std::path::Path, tag: &str, command: &str, code: i32, sleep_s: u64, hold_s: u64) -> std::path::PathBuf {
     let path = dir.join(format!("{tag}.sh"));
-    let text = if sleep_s == 0 {
-        format!("#!/bin/sh\n{command}\nexit {code}\n")
-    } else {
-        format!("#!/bin/sh\nsleep {sleep_s}\n{command}\nexit {code}\n")
-    };
+    let mut text = String::from("#!/bin/sh\n");
+    text.push_str(&format!(
+        "[ \"$1\" = -lc ] && [ \"$2\" = \"command -v {AGENT_PROGRAM}\" ] || exit 3\n",
+    ));
+    if sleep_s != 0 {
+        text.push_str(&format!("sleep {sleep_s}\n"));
+    }
+    text.push_str(&format!("{command}\n"));
+    if hold_s != 0 {
+        // **A background process holding this shell's stdout**: `read_to_string` on the parent cannot
+        // see an end of file until it exits, however long ago the shell itself said its piece.
+        text.push_str(&format!("( sleep {hold_s} & )\n"));
+    }
+    text.push_str(&format!("exit {code}\n"));
     std::fs::write(&path, text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     #[cfg(unix)]
     {
@@ -144,7 +162,7 @@ fn the_agent_is_asked_of_the_login_shell_and_answered_there() {
     std::fs::create_dir_all(&tool).unwrap_or_else(|e| panic!("{}: {e}", tool.display()));
     let found = program(&tool, AGENT_PROGRAM, true);
     let answer = format!("printf '%s\\n' \"{}\"", found.display());
-    let answering = stub_shell(&dir, "answering", &answer, 0, 0);
+    let answering = stub_shell(&dir, "answering", &answer, 0, 0, 0);
 
     assert_eq!(
         MachineAgent::ask_the_login_shell(&answering.display().to_string(), 5),
@@ -154,7 +172,7 @@ fn the_agent_is_asked_of_the_login_shell_and_answered_there() {
 
     // `command -v` says nothing when it finds nothing, so a stub that answers nothing is a machine
     // without the agent — whatever this process's `PATH` happens to hold.
-    let quiet = stub_shell(&dir, "quiet", "exit 1", 1, 0);
+    let quiet = stub_shell(&dir, "quiet", "exit 1", 1, 0, 0);
     assert_eq!(
         MachineAgent::ask_the_login_shell(&quiet.display().to_string(), 5),
         TerminalAgent::Off,
@@ -163,7 +181,7 @@ fn the_agent_is_asked_of_the_login_shell_and_answered_there() {
 
     // **A shell that cannot say anything is not an answer.** A path printed by a shell that exits
     // non-zero is a shell that failed, so the machine is read as having no agent.
-    let failing = stub_shell(&dir, "failing", &answer, 2, 0);
+    let failing = stub_shell(&dir, "failing", &answer, 2, 0, 0);
     assert_eq!(
         MachineAgent::ask_the_login_shell(&failing.display().to_string(), 5),
         TerminalAgent::Off,
@@ -171,7 +189,7 @@ fn the_agent_is_asked_of_the_login_shell_and_answered_there() {
     );
 
     // **Bounded**: a login shell whose rc files hang must not hold the window open.
-    let hanging = stub_shell(&dir, "hanging", &answer, 0, 30);
+    let hanging = stub_shell(&dir, "hanging", &answer, 0, 30, 0);
     let started = std::time::Instant::now();
     assert_eq!(
         MachineAgent::ask_the_login_shell(&hanging.display().to_string(), 1),
@@ -181,6 +199,29 @@ fn the_agent_is_asked_of_the_login_shell_and_answered_there() {
     assert!(
         started.elapsed() < std::time::Duration::from_secs(5),
         "the wait is the patience and no longer: a login shell that hangs costs 1 s, not the window"
+    );
+
+    // **A shell that said its piece and left a process holding the pipe is still answered now.** A
+    // person's rc files background a daemon often enough that this is the common shape, and a login
+    // shell that exits is not the same as its output ending: waiting for the second is waiting for a
+    // process the editor did not start and cannot see.
+    let held = stub_shell(&dir, "held_pipe", &answer, 0, 0, 30);
+    let asked = std::time::Instant::now();
+    let held_answer = MachineAgent::ask_the_login_shell(&held.display().to_string(), 1);
+    let cost = asked.elapsed();
+    // **The cost is asserted first**, because it is the defect this case is about: a shell that has
+    // exited, whose output a backgrounded process still holds open, blocks a wait on end of file for
+    // as long as that process lives — 30 s here, and a person's rc files background a daemon for
+    // hours. One deadline has to cover the whole question, not just the child.
+    assert!(
+        cost < std::time::Duration::from_secs(5),
+        "the answer is bounded by the patience, not by the pipe's end of file: a 1 s patience costs {} s, not the daemon's 30",
+        cost.as_secs_f32()
+    );
+    assert_eq!(
+        held_answer,
+        TerminalAgent::Off,
+        "a login shell that exited but left its output open has not answered inside its patience, so the machine reads Off rather than waiting 30 s for a daemon"
     );
 
     // A shell this machine does not have is a machine that answered nothing, never a panic.
@@ -200,8 +241,8 @@ fn ask_puts_the_question_to_the_shell_the_press_uses() {
     let tool = dir.join("login_bin");
     std::fs::create_dir_all(&tool).unwrap_or_else(|e| panic!("{}: {e}", tool.display()));
     let found = program(&tool, AGENT_PROGRAM, true);
-    let answering = stub_shell(&dir, "answering", &format!("printf '%s\\n' \"{}\"", found.display()), 0, 0);
-    let quiet = stub_shell(&dir, "quiet", "exit 1", 1, 0);
+    let answering = stub_shell(&dir, "answering", &format!("printf '%s\\n' \"{}\"", found.display()), 0, 0, 0);
+    let quiet = stub_shell(&dir, "quiet", "exit 1", 1, 0, 0);
     let was = std::env::var("SHELL").ok();
 
     let asked = |shell: &std::path::Path| -> TerminalAgent {
