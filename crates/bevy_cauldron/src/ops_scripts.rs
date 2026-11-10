@@ -125,7 +125,7 @@ fn path_of(project: &crate::project::Project, map: &str) -> Result<std::path::Pa
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("scripts").join(format!("{map}.ron")))
+    Ok(project.grimoire_dir.join("scripts").join(format!("{map}.yaml")))
 }
 
 /// **The saved triggers of a map**, none when there is no file.

@@ -207,9 +207,9 @@ pub fn sync_terrain_view(
     }
     *since = 0.0;
     let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.yaml")).unwrap_or_default().to_owned();
-    let ground_path = project.grimoire_dir.join("terrain").join(format!("{name}.ron"));
+    let ground_path = project.grimoire_dir.join("terrain").join(format!("{name}.yaml"));
     let water_path = project.grimoire_dir.join("water").join(format!("{name}.field.yaml"));
-    let volume_path = project.grimoire_dir.join("volume").join(format!("{name}.ron"));
+    let volume_path = project.grimoire_dir.join("volume").join(format!("{name}.yaml"));
     let drop = crate::editor::ground_drop(&project);
     let now = Built {
         map_path: open.map_path.clone(),

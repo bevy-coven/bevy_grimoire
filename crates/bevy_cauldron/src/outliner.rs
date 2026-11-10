@@ -453,8 +453,8 @@ impl FileStat {
 /// because a write to either is a change the map itself cannot show.
 fn side_files(project: &Project, map: &Map) -> Vec<FileStat> {
     [
-        project.grimoire_dir.join("people").join(format!("{}.ron", map.name)),
-        project.grimoire_dir.join("scripts").join(format!("{}.ron", map.name)),
+        project.grimoire_dir.join("people").join(format!("{}.yaml", map.name)),
+        project.grimoire_dir.join("scripts").join(format!("{}.yaml", map.name)),
     ]
     .iter()
     .map(|path| FileStat::of(path))

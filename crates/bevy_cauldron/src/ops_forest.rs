@@ -176,12 +176,12 @@ fn forest_path(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
     let Some(project) = ctx.project.as_ref() else {
         return Err(Refusal::new("no project is open, so there is no forest to plant."));
     };
-    Ok(project.grimoire_dir.join("forest").join(format!("{}.ron", map_name(map)?)))
+    Ok(project.grimoire_dir.join("forest").join(format!("{}.yaml", map_name(map)?)))
 }
 
 /// **The saved forest of a map**, empty when there is none.
 pub fn forest_of(project: &crate::project::Project, map: &str) -> Forest {
-    std::fs::read_to_string(project.grimoire_dir.join("forest").join(format!("{map}.ron")))
+    std::fs::read_to_string(project.grimoire_dir.join("forest").join(format!("{map}.yaml")))
         .ok()
         .and_then(|t| ron::from_str(&t).ok())
         .unwrap_or_default()
@@ -190,7 +190,7 @@ pub fn forest_of(project: &crate::project::Project, map: &str) -> Forest {
 /// **The saved forest of a map for an operation that rewrites the file**: empty when there is no file,
 /// and a refusal naming the file and the field when there is one that does not read (#200).
 pub fn try_forest_of(project: &crate::project::Project, map: &str) -> Result<Forest, Refusal> {
-    crate::map_files::read_or_empty("forest", project, &project.grimoire_dir.join("forest").join(format!("{map}.ron")))
+    crate::map_files::read_or_empty("forest", project, &project.grimoire_dir.join("forest").join(format!("{map}.yaml")))
 }
 
 /// Squared distance from `p` to the segment `a`-`b`.
@@ -297,7 +297,7 @@ impl ForestScatter {
             let project = ctx.project.as_ref().expect("forest_path needs a project");
             let mut forest = try_forest_of(project, &p.map)?;
             // A terrain file that does not read is flat ground here, as the terrain view draws it (#187).
-            let ground = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{}.ron", p.map)))
+            let ground = std::fs::read_to_string(project.grimoire_dir.join("terrain").join(format!("{}.yaml", p.map)))
                 .ok()
                 .and_then(|t| bevy_grimoire_core::heightfield::Heightfield::parse(&t).ok());
             let added = match (&p.place, &p.plant) {

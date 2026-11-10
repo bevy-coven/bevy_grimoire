@@ -1703,11 +1703,11 @@ impl Grimoire {
             // with what the person wrote.
             Err(e) => return Ok(refusal(&format!("{}: {e}", path.display()))),
         };
-        // **And every number the editor would refuse it for.** `Rules::parse` is `ron::from_str`
-        // and nothing else, so a file can parse and still be one `Project::open` rejects: a version
-        // this program does not read, `attempts: 0`, a `cell` that is not a usable step, a footprint
-        // size under 2x2, or a yaw that is not 0/180. Answering those as valid would hand an agent
-        // numbers the editor will not generate from.
+        // **And every number the editor would refuse it for.** `Rules::parse` reads the file's shape and
+        // nothing else, so a file can parse and still be one `Project::open` rejects: a version this program
+        // does not read, `attempts: 0`, a `cell` that is not a usable step, a footprint size under 2x2, or a
+        // yaw that is not 0/180. Answering those as valid would hand an agent numbers the editor will not
+        // generate from.
         if let Err(e) = rules.validate_numbers() {
             return Ok(refusal(&format!("{}: {e}", path.display())));
         }

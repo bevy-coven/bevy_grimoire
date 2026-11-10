@@ -4,7 +4,7 @@
 //! as RON, saved beside the map and the terrain. One call places one spring, sink or lake, or clears
 //! the plan; either is one undo. Placing never runs the simulation.
 
-use bevy_grimoire_core::water::{Placed, WaterPlan};
+use bevy_grimoire_core::water::{Placed, WaterField, WaterPlan};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -64,7 +64,7 @@ fn path_of(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }
-    Ok(project.grimoire_dir.join("water").join(format!("{map}.ron")))
+    Ok(project.grimoire_dir.join("water").join(format!("{map}.yaml")))
 }
 
 fn read(ctx: &Ctx, map: &str) -> Option<String> {
@@ -74,7 +74,7 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
 /// **The saved water plan of the open map**, or `None` when it has none.
 pub fn plan_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<WaterPlan> {
     let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
-    ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.ron"))).ok()?).ok()
+    WaterPlan::parse(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.yaml"))).ok()?).ok()
 }
 
 /// **Place a spring, a sink or a lake, or clear the map's water.**
@@ -92,12 +92,11 @@ impl WaterPlace {
             (None, 0)
         } else {
             let mut plan: WaterPlan = match &before {
-                Some(t) => ron::from_str(t).map_err(|e| Refusal::new(format!("{} is not a water plan: {e}", path.display())))?,
+                Some(t) => WaterPlan::parse(t).map_err(|e| Refusal::new(format!("{} is not a water plan: {e}", path.display())))?,
                 None => WaterPlan::default(),
             };
             plan.place(p.place.expect("parse needs a place, a clear or a put_back")).map_err(|e| Refusal::new(format!("{e}. Nothing was changed.")))?;
-            let t = ron::ser::to_string_pretty(&plan, ron::ser::PrettyConfig::default())
-                .map_err(|e| Refusal::new(format!("the water could not be written: {e}")))?;
+            let t = bevy_grimoire_core::yaml::to_string(&plan).map_err(|p| Refusal::new(format!("the water could not be written: {}", p.line())))?;
             (Some(t), 1)
         };
         if write {
@@ -195,7 +194,7 @@ fn field_path(ctx: &Ctx, map: &str) -> Result<std::path::PathBuf, Refusal> {
 /// **The kept water of the open map**, the field `water_run` saved, or `None` when it has none.
 pub fn field_of(project: &crate::project::Project, open: &crate::project::OpenMap) -> Option<bevy_grimoire_core::water::WaterField> {
     let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.yaml")?;
-    ron::from_str(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.field.yaml"))).ok()?).ok()
+    WaterField::parse(&std::fs::read_to_string(project.grimoire_dir.join("water").join(format!("{name}.field.yaml"))).ok()?).ok()
 }
 
 /// **Run the map's springs, sinks and lakes over its terrain until the water settles, and keep it.**
@@ -219,11 +218,11 @@ impl WaterRun {
             (back.text.clone(), format!("water {}: put back", p.map), 0)
         } else {
             let plan_text = read(ctx, &p.map).ok_or_else(|| Refusal::new(format!("map `{}` has no springs, sinks or lakes to run. Place some with `water_place`.", p.map)))?;
-            let plan: WaterPlan = ron::from_str(&plan_text).map_err(|e| Refusal::new(format!("the water plan is not readable: {e}")))?;
+            let plan = WaterPlan::parse(&plan_text).map_err(|e| Refusal::new(format!("the water plan is not readable: {e}")))?;
             if plan.is_empty() {
                 return Err(Refusal::new(format!("map `{}` has no springs, sinks or lakes to run.", p.map)));
             }
-            let ground_path = ctx.project.as_ref().expect("path_of needs a project").grimoire_dir.join("terrain").join(format!("{}.ron", p.map));
+            let ground_path = ctx.project.as_ref().expect("path_of needs a project").grimoire_dir.join("terrain").join(format!("{}.yaml", p.map));
             let ground = bevy_grimoire_core::heightfield::Heightfield::parse(
                 &std::fs::read_to_string(&ground_path)
                     .map_err(|_| Refusal::new(format!("map `{}` has no terrain for the water to run on. Sculpt one with `terrain_stroke`.", p.map)))?,
@@ -248,8 +247,7 @@ impl WaterRun {
                 field.steps,
                 if field.settled { ", settled" } else { ", not settled (step cap)" }
             );
-            let t = ron::ser::to_string_pretty(&field, ron::ser::PrettyConfig::default())
-                .map_err(|e| Refusal::new(format!("the water could not be written: {e}")))?;
+            let t = bevy_grimoire_core::yaml::to_string(&field).map_err(|p| Refusal::new(format!("the water could not be written: {}", p.line())))?;
             (Some(t), summary, field.wet_cells(0.01))
         };
         if write {

@@ -186,7 +186,7 @@ pub fn sync_forest_view(
     }
     state.since = 0.0;
     let name = open.map_path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".map.yaml")).unwrap_or_default();
-    let forest_path = project.grimoire_dir.join("forest").join(format!("{name}.ron"));
+    let forest_path = project.grimoire_dir.join("forest").join(format!("{name}.yaml"));
     let drop = crate::editor::ground_drop(&project);
     let origin = open.map.origin;
     // Each tree file the drawn forest reads is decided once per edit whether or not the trees are

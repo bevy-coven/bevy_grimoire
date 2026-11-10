@@ -1120,22 +1120,20 @@ fn project_with_rules(name: &str, rules: &str) -> (std::path::PathBuf, std::path
 /// disk, which is the parity gap this tool closes.
 #[test]
 fn an_agent_can_read_the_rules_a_layout_is_generated_from() {
-    let rules = r#"(
-    version: 1,
-    blocks: [
-        (
-            example: "town_block",
-            regions: ["town/houses_brick"],
-            cell: 2.0,
-            size: (16, 16),
-            border: Some("town/wall_segment"),
-            no_empty: true,
-            weights: [ ( prefix: "town/road", times: 2.5 ) ],
-            attempts: 40,
-            seed: 1234,
-        ),
-    ],
-)"#;
+    let rules = r#"version: 1
+blocks:
+- example: town_block
+  regions: [town/houses_brick]
+  cell: 2.0
+  size: [16, 16]
+  border: town/wall_segment
+  no_empty: true
+  weights:
+  - prefix: town/road
+    times: 2.5
+  attempts: 40
+  seed: 1234
+"#;
     let (root, _dir) = project_with_rules("read", rules);
     let mut server = Server::start_with(&["--project", root.to_str().expect("a UTF-8 path")]);
 
@@ -1203,29 +1201,27 @@ fn rules_the_editor_would_refuse_are_refused_here() {
         ("blank", "", "rules.yaml"),
         (
             "version",
-            r#"( version: 99, blocks: [] )"#,
+            "version: 99\nblocks: []\n",
             "version 99",
         ),
         (
             "attempts",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 2.0, size: (4, 4), attempts: 0, seed: 1 ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 2.0\n  size: [4, 4]\n  attempts: 0\n  seed: 1\n",
             "at least one attempt",
         ),
         (
             "cell",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 0.0, size: (4, 4), attempts: 1, seed: 1 ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 0.0\n  size: [4, 4]\n  attempts: 1\n  seed: 1\n",
             "not a usable step",
         ),
         (
             "footprint",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 2.0, size: (4, 4), attempts: 1, seed: 1,
-                footprints: [ ( prefix: "p", sizes: [(1, 2)], yaws: [0.0], gap: 0, min_count: 1 ) ] ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 2.0\n  size: [4, 4]\n  attempts: 1\n  seed: 1\n  footprints:\n  - prefix: p\n    sizes: [[1, 2]]\n    yaws: [0.0]\n    gap: 0\n    min_count: 1\n",
             "at least 2x2",
         ),
         (
             "yaw",
-            r#"( version: 1, blocks: [ ( example: "m", cell: 2.0, size: (4, 4), attempts: 1, seed: 1,
-                footprints: [ ( prefix: "p", sizes: [(2, 2)], yaws: [90.0], gap: 0, min_count: 1 ) ] ) ] )"#,
+            "version: 1\nblocks:\n- example: m\n  cell: 2.0\n  size: [4, 4]\n  attempts: 1\n  seed: 1\n  footprints:\n  - prefix: p\n    sizes: [[2, 2]]\n    yaws: [90.0]\n    gap: 0\n    min_count: 1\n",
             "0 or 180",
         ),
     ];
@@ -1253,7 +1249,7 @@ fn rules_the_editor_would_refuse_are_refused_here() {
 /// that had nothing to do with what the person wrote.
 #[test]
 fn a_broken_rules_file_is_refused_by_name() {
-    let (root, dir) = project_with_rules("broken", "( version: 1, blocks: [ oops");
+    let (root, dir) = project_with_rules("broken", "version: 1\nblocks: [oops\n");
     let mut server = Server::start_with(&["--project", root.to_str().expect("a UTF-8 path")]);
     let answer = server.call("grimoire_list_rules", json!({}));
     let body = answer_text(answer["result"]["content"].as_array().expect("content"));
