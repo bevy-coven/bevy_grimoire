@@ -77,7 +77,7 @@ fn read(ctx: &Ctx, map: &str) -> Option<String> {
 }
 
 fn to_text(field: &Heightfield) -> Result<String, Refusal> {
-    ron::ser::to_string_pretty(field, ron::ser::PrettyConfig::default()).map_err(|e| Refusal::new(format!("the terrain could not be written: {e}")))
+    bevy_grimoire_core::yaml::to_string(field).map_err(|p| Refusal::new(format!("the terrain could not be written: {}", p.line())))
 }
 
 /// **The saved terrain of the open map**, or `None` for flat ground (no file, or one

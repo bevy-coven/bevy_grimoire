@@ -15,7 +15,7 @@ use bevy_oracle::{Checks, Config, Evidence, Http, Transport, Verdict, evidence_f
 
 fn usage() -> String {
     "usage: decide_check --captures DIR [--project DIR] [--bar F] [--ask] [--no-builtin] [--json] [--facts FILE]\n\
-     \x20      decide_check --calibrate SET.ron [--check NAME] [--project DIR] [--model NAME]".to_owned()
+     \x20      decide_check --calibrate SET.yaml [--check NAME] [--project DIR] [--model NAME]".to_owned()
 }
 
 struct Args {
@@ -210,11 +210,7 @@ fn main() {
         // running the calibration, and the file is what a test and a gate can read afterwards.
         if let Some(out) = args.out.as_deref() {
             let write = || -> Result<(), String> {
-                let text = ron::ser::to_string_pretty(
-                    &calibration,
-                    ron::ser::PrettyConfig::default(),
-                )
-                .map_err(|e| e.to_string())?;
+                let text = serde_yaml_ng::to_string(&calibration).map_err(|e| e.to_string())?;
                 if let Some(parent) = out.parent() {
                     std::fs::create_dir_all(parent)
                         .map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -259,7 +255,7 @@ fn main() {
         listed += 1;
     }
     if listed == 0 {
-        eprintln!("no checks: neither a project checks.ron nor the built-in set");
+        eprintln!("no checks: neither a project checks.yaml nor the built-in set");
         std::process::exit(2);
     }
     println!("\n{} check(s); nothing was asked. Pass --ask to send them to {}", listed, transport.endpoint());

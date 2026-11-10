@@ -2406,8 +2406,13 @@ mod rotate_tests {
         let text = crate::yaml::to_string(&before).unwrap_or_else(|p| panic!("{}", p.line()));
         // **A tuple is a YAML sequence** (GD-03, #365), and an `Option` of one is the sequence or `null`:
         // there is no `Some(...)` wrapper to write, which is the whole difference the cutover makes to a
-        // file a person reads.
-        assert!(text.contains("rotate:\n      - 90\n      - 0\n      - 180"), "{text}");
+        // file a person reads. The three numbers are on their own lines under the key.
+        let block: Vec<&str> = text.lines().skip_while(|l| !l.trim_start().starts_with("rotate:")).take(4).collect();
+        assert_eq!(
+            block.iter().map(|l| l.trim()).collect::<Vec<_>>(),
+            ["rotate:", "- 90", "- 0", "- 180"],
+            "{text}"
+        );
         assert_eq!(
             crate::yaml::from_str::<Descriptor>(&text, "a descriptor").unwrap_or_else(|p| panic!("{}", p.line())),
             before

@@ -128,6 +128,10 @@ accesskit = "0.24"
 # The screenshot rig, shared with the game so there is one capture path rather than two copies of it.
 bevy_devshot = { path = "../bevy_devshot" }
 ron.workspace = true
+# **The RON-to-YAML migration** (GD-03, #365): `cauldron migrate` and the refusal an open raises for a
+# project still holding `.ron` files. A crate of its own because it is the one thing that must still read
+# RON, and `bevy_grimoire_core` must not.
+bevy_grimoire_migrate = { path = "../bevy_grimoire_migrate", version = "0.1.0" }
 serde.workspace = true
 # The platform's own data directory, where `recent.ron` lives (`recent.rs`, UI-11): no family crate finds
 # platform directories, so this is the one small crate that does.

@@ -120,7 +120,7 @@ pub fn write_family(root: &std::path::Path, krate: &str, on: bool) -> Result<(),
         (false, true) => family.crates.retain(|c| c != krate),
         _ => return Ok(()),
     }
-    let text = ron::ser::to_string_pretty(&family, ron::ser::PrettyConfig::default()).map_err(|e| e.to_string())?;
+    let text = bevy_grimoire_core::yaml::to_string(&family).map_err(|p| p.line())?;
     bevy_grimoire_core::atomic_file::write(&family::path_for_project(root), text).map_err(|e| format!("{FILE}: {e}"))
 }
 

@@ -145,8 +145,8 @@ pub fn read_file(text: &str) -> Result<(bevy_siren::SirenSettings, bevy_siren::C
         #[serde(default)]
         cues: bevy_siren::CueTable,
     }
-    let file: File =
-        ron::from_str(text).map_err(|e| format!("family/{FILE} does not parse: {e}"))?;
+    let file: File = bevy_grimoire_core::yaml::from_str(text, &format!("family/{FILE}"))
+        .map_err(|p| format!("family/{FILE} does not parse: {}", p.line()))?;
     Ok((file.settings, file.cues))
 }
 
@@ -160,14 +160,11 @@ pub fn write_file(
         settings: &'a bevy_siren::SirenSettings,
         cues: &'a bevy_siren::CueTable,
     }
-    ron::ser::to_string_pretty(
-        &File {
-            settings,
-            cues: table,
-        },
-        ron::ser::PrettyConfig::default(),
-    )
-    .map_err(|e| format!("family/{FILE} does not write: {e}"))
+    bevy_grimoire_core::yaml::to_string(&File {
+        settings,
+        cues: table,
+    })
+    .map_err(|p| format!("family/{FILE} does not write: {}", p.line()))
 }
 
 /// **Audition** plays the selected cue through the crate's own door, and the panel's log shows what happened.

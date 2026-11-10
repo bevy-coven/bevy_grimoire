@@ -66,7 +66,7 @@ fn warm_reports(root: &std::path::Path) -> BTreeMap<String, RigReport> {
     let Ok(text) = std::fs::read_to_string(root.join(CACHE_PATH)) else {
         return out; // no cache yet — the first session writes one
     };
-    let Ok(file) = ron::from_str::<CacheFile>(&text) else {
+    let Ok(file) = bevy_grimoire_core::yaml::from_str::<CacheFile>(&text, CACHE_PATH) else {
         return out; // an older/foreign shape re-measures; it does not complain
     };
     if file.version != CACHE_VERSION || file.tool != bevy_grimoire_core::rigs::BENCH_TOOL_VERSION {
@@ -161,7 +161,7 @@ pub(crate) fn save_bench_cache(
         tool: bevy_grimoire_core::rigs::BENCH_TOOL_VERSION,
         entries,
     };
-    let Ok(text) = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default()) else {
+    let Ok(text) = bevy_grimoire_core::yaml::to_string(&file) else {
         return;
     };
     let path = project.root.join(CACHE_PATH);
@@ -225,8 +225,8 @@ mod tests {
             tool: bevy_grimoire_core::rigs::BENCH_TOOL_VERSION,
             entries,
         };
-        let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
+        let text = bevy_grimoire_core::yaml::to_string(&file)
+            .unwrap_or_else(|p| panic!("{}", p.line()));
         let path = root.join(CACHE_PATH);
         std::fs::create_dir_all(path.parent().unwrap_or_else(|| panic!("no parent")))
             .unwrap_or_else(|e| panic!("{e}"));
@@ -286,8 +286,8 @@ mod tests {
             tool: bevy_grimoire_core::rigs::BENCH_TOOL_VERSION,
             entries,
         };
-        let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-            .unwrap_or_else(|e| panic!("{e}"));
+        let text = bevy_grimoire_core::yaml::to_string(&file)
+            .unwrap_or_else(|p| panic!("{}", p.line()));
         std::fs::create_dir_all(root.join("target")).unwrap_or_else(|e| panic!("{e}"));
         std::fs::write(root.join(CACHE_PATH), text).unwrap_or_else(|e| panic!("{e}"));
         assert!(warm_reports(&root).is_empty(), "a version bump must drop the file");

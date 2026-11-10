@@ -98,13 +98,13 @@ pub struct Labelled {
 ///
 /// A set is data, so it is a file and not a constant: a person adding a mismatch runs the same path the
 /// loop does, and a pass can see what a threshold was chosen from.
-pub const LABELLED_FILE: &str = "clip_samples.ron";
+pub const LABELLED_FILE: &str = "clip_samples.yaml";
 
 /// Read a labelled set, refusing a file whose samples cannot be read as evidence.
 pub fn load_labelled(path: &Path) -> Result<Vec<Labelled>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut samples: Vec<Labelled> =
-        ron::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        serde_yaml_ng::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     // **A relative `dir` is relative to the manifest**, so a committed manifest works from any clone and
     // from any working directory. An absolute one is left alone, which is what a scratch set uses.
     if let Some(base) = path.parent() {

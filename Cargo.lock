@@ -739,6 +739,7 @@ dependencies = [
  "bevy_grimoire",
  "bevy_grimoire_anim",
  "bevy_grimoire_core",
+ "bevy_grimoire_migrate",
  "bevy_grimoire_snip",
  "bevy_light_grid",
  "bevy_lights",

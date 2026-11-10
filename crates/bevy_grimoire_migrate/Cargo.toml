@@ -17,3 +17,11 @@ bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.1" }
 # The reader of the files this converts, and nothing else here needs it.
 ron.workspace = true
 serde.workspace = true
+# The one YAML reader and writer the example re-pins the oracle's fixtures through, and the writer its
+# own conversions use. Same crate the project's files are read by, so the two cannot disagree.
+serde_yaml_ng.workspace = true
+
+# **The crate whose three fixtures the example converts** (`examples/oracle_fixtures_to_yaml.rs`). A
+# dev-dependency, and one direction only: the oracle does not know this crate exists.
+[dev-dependencies]
+bevy_oracle = { path = "../bevy_oracle", version = "0.1.0" }

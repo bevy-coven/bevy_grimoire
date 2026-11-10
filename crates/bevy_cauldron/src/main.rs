@@ -258,7 +258,7 @@ fn name_the_window(
 /// **`bevy_cauldron migrate <project folder>`**: move a project's files from RON to YAML, and say what
 /// happened (GD-03, #365).
 ///
-/// The work is the library's (`bevy_grimoire_core::migrate`), which computes every conversion before it
+/// The work is the migration crate's (`bevy_grimoire_migrate`), which computes every conversion before it
 /// writes one — so a project this refuses is byte for byte what it was. This function only prints:
 ///
 /// - one line per converted file, then every comment that had no place, then where the old files went,
@@ -293,7 +293,7 @@ fn migrate_and_exit(argv: &[String], program: &str) -> AppExit {
         return AppExit::error();
     }
     let root = std::path::Path::new(root);
-    match bevy_grimoire_core::migrate::migrate_moved(root, &command) {
+    match bevy_grimoire_migrate::migrate_moved(root, &command) {
         Ok(report) => {
             let lines = report.lines();
             if lines.is_empty() {

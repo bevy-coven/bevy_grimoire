@@ -15,7 +15,7 @@
 use std::path::PathBuf;
 
 use crate::fixtures::Fixture;
-use bevy_grimoire_core::migrate;
+use bevy_grimoire_migrate as migrate;
 
 /// **A fixture project of this test's own**, named for the test and this process.
 fn a_fixture_project(tag: &str) -> PathBuf {
@@ -65,7 +65,7 @@ fn a_fixture_project_is_yaml_and_holds_no_ron_project_file() {
 
     // **A migration over it converts nothing**, because there is nothing left in the old spelling — and it
     // refuses nothing, which is the check that no file the builder writes is one the cutover missed.
-    let report = migrate::migrate(&root).unwrap_or_else(|p| panic!("{}", p.line()));
+    let report = migrate::convert_project(&root).unwrap_or_else(|p| panic!("{}", p.line()));
     assert!(
         report.converted.is_empty(),
         "a YAML fixture has nothing to migrate, and this found {:?}",

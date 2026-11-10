@@ -1070,11 +1070,11 @@ mod tests {
                 ..Map::default()
             };
             map.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
-            let text = ron::ser::to_string_pretty(&map, ron::ser::PrettyConfig::default())
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let text = bevy_grimoire_core::yaml::to_string(&map)
+                .unwrap_or_else(|p| panic!("{name}: {}", p.line()));
             let dir = self.maps();
             std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
-            std::fs::write(dir.join(naming::map_file_name(name)), text)
+            std::fs::write(dir.join(bevy_grimoire_core::naming::map_file_name(name)), text)
                 .unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
         }
 
