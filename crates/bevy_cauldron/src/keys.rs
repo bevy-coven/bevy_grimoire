@@ -1078,11 +1078,16 @@ impl Action {
             Action::CycleGrid => Some("view_cycle_grid"),
             // **The journal is a panel, and which panel is up is view state** (E-002, #129).
             Action::ShowErrors => Some("view_toggle_journal"),
-            // **The clone and run tools** (E-002, #129): two keys onto `tool_arm`.
+            // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its
             // handler calls `arm_tool`, and `Action::Remove`'s own command is titled "Remove mode".
-            Action::CloneMode | Action::RunMode | Action::Remove | Action::NoteTool => Some("tool_arm"),
+            Action::MoveMode | Action::CloneMode | Action::RunMode | Action::Remove | Action::NoteTool => {
+                Some("tool_arm")
+            }
+            // **The bench's ghost is an overlay, which is view state** (E-002, #129): `G` and the chip toggle it
+            // through `view_toggle_ghost`, the operation an agent calls.
+            Action::ToggleGhost => Some("view_toggle_ghost"),
             // **The snip is view state too** (E-002, #129): `Cmd+\` arms a capture, and the same key
             // puts it away. The file a *completed* rectangle writes is the drag's own path.
             Action::Snip => Some("snip_arm"),

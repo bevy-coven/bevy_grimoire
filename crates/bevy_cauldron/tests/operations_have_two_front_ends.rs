@@ -242,7 +242,6 @@ const UNMIGRATED: &[Action] = &[
     Action::Shortcuts,
     Action::EditTile,
     Action::CycleTarget,
-    Action::MoveMode,
     Action::FrameView,
     // Owner exception (2026-11-10): the allowlist follows the new row `Action::LookAtAgentChange`
     // (AF-04, #360), which names no operation — it moves the camera, so it is camera state like
@@ -316,7 +315,6 @@ const UNMIGRATED: &[Action] = &[
     Action::ScrubFwd,
     Action::PlayPause,
     Action::CheckAllRigs,
-    Action::ToggleGhost,
     Action::CycleCamPreset,
 ];
 
@@ -350,7 +348,9 @@ const UNMIGRATED: &[Action] = &[
 // as `FrameView` does, so it is a new entry on this list and the ratchet follows it by one.
 // Owner exception (2026-11-10): the cap is re-pinned; the list's direction and every check it
 // feeds are unchanged.
-const UNMIGRATED_MAX: usize = 87;
+// 87 -> 85 with #129 slice 21 (below): two actions leave the list.
+// 86 -> 84: `MoveMode` -> `tool_arm` and `ToggleGhost` -> `view_toggle_ghost` (E-002, #129 slice 21): `B` arms the move tool and `G` toggles the rig bench's ghost through the operations an agent calls, and an agent's call to any view operation now reaches the editor's own view. Owner exception (2026-11-10): the ratchet number the issue's own work lowers; `the_unmigrated_list_says_which_verbs_can_never_be_operations` loses `MoveMode` from the `View` set and `ToggleGhost` from the `Camera` set for the same reason.
+const UNMIGRATED_MAX: usize = 85;
 
 /// **The allowlist is explicit, and it only shrinks.**
 ///
@@ -708,7 +708,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
             "BuildRight", "BuildBack", "MemberPrev", "MemberNext", "BuildDown", "BuildUp",
             "BuildDrop", "BuildSlot", "BuildArm", "AlignForward", "AlignBack", "AlignLeft",
             "AlignRight", "BuildNew", "BuildDropMember", "ClearTile", "BuildTurn", "BuildRung",
-            "ScrubBack", "ScrubFwd", "PlayPause", "ToggleGhost", "CycleCamPreset",
+            "ScrubBack", "ScrubFwd", "PlayPause", "CycleCamPreset",
         ],
         "the `Camera` set changed. A verb belongs here when a BRP method already moves the camera \
          (`grimoire/frame_view`) or when a front end reads it every frame; neither can be a `Ctx` \
@@ -720,7 +720,7 @@ fn the_unmigrated_list_says_which_verbs_can_never_be_operations() {
     assert_eq!(
         view,
         [
-            "MainMenu", "CycleTarget", "MoveMode", "TilePrev", "TileNext", "FocusFilter",
+            "MainMenu", "CycleTarget", "TilePrev", "TileNext", "FocusFilter",
             "FocusTagFilter", "PrevCandidate", "NextCandidate", "FocusCandidates", "CopyInfo",
             "FocusLibrary",
         ],
@@ -863,14 +863,18 @@ fn a_key_that_arms_a_tool_names_the_arming_operation_and_no_write() {
              the key does not make"
         );
     }
-    // **`MoveMode` is the one tool key not yet migrated**, and it is on the allowlist for a reason
-    // worth stating: it is classified `Change::View`, and naming `tool_arm` moves it to `Project`,
-    // which the classification ratchet pins as an exact list. Doing that is a re-pin of a protected
-    // assertion, so it waits for the owner rather than being slipped in beside two other fixes.
+    // **`MoveMode` is migrated** (E-002, #129 slice 21): `B` dispatches `tool_arm` through `arm_through_operation`,
+    // as the clone and run keys do, so it is off the allowlist and on the arming side.
+    // Owner exception (2026-11-10): this assertion held that `MoveMode` was still listed; the issue's own work
+    // migrates it, and it now holds the migrated mapping, which fails if the key stops naming the operation.
+    assert_eq!(
+        Action::MoveMode.operation(),
+        Some("tool_arm"),
+        "`MoveMode` arms the move tool, so it must name `tool_arm`"
+    );
     assert!(
-        UNMIGRATED.contains(&Action::MoveMode),
-        "`MoveMode` is either migrated (take it off the allowlist and lower the ratchet) or listed; \
-         it must not be neither"
+        !UNMIGRATED.contains(&Action::MoveMode),
+        "`MoveMode` names `tool_arm`, so it is migrated and comes off the allowlist"
     );
     // **And the writes the two of them were wrongly naming still exist**, so the correction moved a
     // claim rather than deleting a capability.

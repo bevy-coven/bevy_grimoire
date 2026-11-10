@@ -35,6 +35,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use bevy_grimoire_core::agent_guide::{self, Guide, Layer, Source};
+use bevy_grimoire_core::live::KindVerdict;
 use bevy_grimoire_core::problem::Problem;
 use bevy_grimoire_core::trust::{self, Decision, Scope, TrustStore};
 
@@ -392,6 +393,45 @@ pub fn read_untrusted(project: Option<&Project>, user: Option<&UserGuideFile>) -
     let user_file = user.map(|f| f.0.clone());
     let project_file = project.map(|p| project_file(&p.root));
     agent_guide::read(user_file.as_deref(), project_file.as_deref())
+}
+
+/// **What [`sync_guide_reload`] saw last**: the file and its stamp (modification time and size). Held in a
+/// `Local`, so the editor gains no resource for a file it only watches.
+#[derive(Default)]
+pub struct GuideLooked {
+    path: PathBuf,
+    stamp: Option<(std::time::SystemTime, u64)>,
+}
+
+/// **Say what became of the project's guide each time it is edited** (#347): the registry's `guide` kind,
+/// as `grimoire_state.reloads` lists it. The guide is read on every `grimoire/agent_guide` call, so an
+/// edit is already live; this is the person's side of that, a refusal they can read before an agent asks.
+///
+/// A file that reads is `applied`; one the guide refuses (not UTF-8, over [`agent_guide::GUIDE_MAX_BYTES`],
+/// not a regular file) is `refused` with the reason the problem carries, and an absent file has no verdict.
+/// The file is read again only when its path, modification time or size moves, so one edit is one decision.
+pub fn sync_guide_reload(
+    project: Option<Res<Project>>,
+    mut reloads: Option<ResMut<crate::live::EditorReloads>>,
+    mut looked: Local<GuideLooked>,
+) {
+    let Some(project) = project else { return };
+    let path = project_file(&project.root);
+    let stamp = std::fs::metadata(&path).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
+    if looked.path == path && looked.stamp == stamp {
+        return;
+    }
+    looked.path = path.clone();
+    looked.stamp = stamp;
+    let Some(reloads) = reloads.as_deref_mut() else { return };
+    // Another project's verdict, or the verdict of a file since deleted, is not this file's.
+    reloads.forget(&["guide"]);
+    let verdict = match agent_guide::read_layer(Source::Project, &path) {
+        Ok(None) => return,
+        Ok(Some(_)) => KindVerdict::applied("guide", PROJECT_PATH_SHOWN),
+        Err(problem) => KindVerdict::refused("guide", PROJECT_PATH_SHOWN, None, problem.why.clone().unwrap_or(problem.what)),
+    };
+    reloads.decide(vec![verdict]);
 }
 
 #[cfg(test)]

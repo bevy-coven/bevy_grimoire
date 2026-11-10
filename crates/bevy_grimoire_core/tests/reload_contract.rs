@@ -63,7 +63,10 @@ fn every_kind_is_found_by_its_own_pattern_and_by_no_other() {
     for k in KINDS {
         assert!(ids.insert(k.id), "the kind id `{}` appears twice", k.id);
         for segment in k.pattern.split('/').filter(|s| !s.is_empty() && !s.contains('<')) {
-            words.insert(segment.split('.').next().unwrap_or(segment).to_owned());
+            // A folder written with a leading dot (`.dark_factory`, the guide's, #347) is the word after the dot:
+            // splitting at the first `.` would make it the empty word, which fills no placeholder.
+            // Owner exception (2026-11-10): the word is still what the segment names, now for a dot-folder too.
+            words.insert(segment.trim_start_matches('.').split('.').next().unwrap_or(segment).to_owned());
         }
     }
     let words: Vec<String> = words.into_iter().collect();

@@ -60,6 +60,10 @@ pub struct View {
     /// refusal should not meet them again next launch, so this is session state like the rung.
     #[serde(default)]
     pub journal_open: bool,
+    /// **Whether the rig bench's ghost is staged** (`G`): the translucent second figure playing the measured
+    /// gait over the declared one. Session state like the journal, and the same `BenchAb` the chip lights.
+    #[serde(default)]
+    pub ghost: bool,
 }
 
 /// **A tool by name**, for the same reason a rung is: an agent writes `"clone"` and a reordering of the
@@ -142,6 +146,13 @@ impl View {
         self.journal_open = !self.journal_open;
         self.journal_open
     }
+
+    /// **The bench's ghost, on or off**, and the answer is what it is now. A toggle, because `G` and the ghost
+    /// chip are the only ways in and the only way out.
+    pub fn toggle_ghost(&mut self) -> bool {
+        self.ghost = !self.ghost;
+        self.ghost
+    }
 }
 
 #[cfg(test)]
@@ -167,6 +178,8 @@ mod tests {
             filter_focus: Some(true),
             tool: Tool::Clone,
             snip_armed: true,
+            // Owner exception (2026-11-10): the literal names the new field; the round trip is unchanged.
+            ghost: true,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

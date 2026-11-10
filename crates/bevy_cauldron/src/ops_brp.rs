@@ -616,7 +616,7 @@ fn frame_json(
 /// follow lives here rather than in the signature because `operation_apply` is at the limit; the
 /// alternative was a second bundle and two ways to name the same call's side effects.
 #[derive(bevy::ecs::system::SystemParam)]
-struct Gates<'w> {
+struct Gates<'w, 's> {
     confirm: Option<Res<'w, crate::confirm::Confirm>>,
     pause: Option<Res<'w, crate::familiar::AgentPause>>,
     activity: Option<ResMut<'w, crate::familiar::AgentActivity>>,
@@ -628,9 +628,62 @@ struct Gates<'w> {
     /// **The page a change off the map is on** (AF-03, #359), asked for here for `following`'s
     /// reason: the request is raised where the agent comes in, never inside `dispatch`.
     revealing: Option<ResMut<'w, crate::reveal::Revealing>>,
+    /// **The editor's own view, for an operation that changes one** (E-002, #129): the grid's rung, the snip,
+    /// the bench's ghost and the journal panel. A view verb with no view in hand is refused, and this door
+    /// used to hand it none, so `tool_arm`, `view_cycle_grid`, `snip_arm` and `view_toggle_journal` were
+    /// registered, listed for an agent, and refused every time it called them. Held here for `following`'s
+    /// reason: `operation_apply` is at the limit of sixteen parameters.
+    rung: Option<ResMut<'w, crate::editor::Rung>>,
+    snip: Option<ResMut<'w, crate::snip::SnipEdit>>,
+    ghost: Option<ResMut<'w, crate::anim_stage::BenchAb>>,
+    journal: Query<'w, 's, &'static mut Node, With<crate::chrome::JournalPanel>>,
 }
 
-impl Gates<'_> {
+impl Gates<'_, '_> {
+    /// **The view an agent's call to a view operation changes**, as the editor holds it now: the tool from
+    /// the editor's state, the rest from the resources a person's key reads.
+    fn view_in(&self, state: Option<&crate::editor::EditorState>) -> crate::ops_view::View {
+        crate::ops_view::View {
+            tool: state.map(|s| s.tool).unwrap_or_default(),
+            rung: self.rung.as_deref().map(|r| r.0).unwrap_or_default(),
+            snip_armed: self.snip.as_deref().is_some_and(|s| s.armed),
+            ghost: self.ghost.as_deref().is_some_and(|a| a.0),
+            journal_open: self.journal.iter().any(|n| n.display != Display::None),
+            ..Default::default()
+        }
+    }
+
+    /// **Apply the view the operation answered with**, the way each key applies its own answer. Each is
+    /// compared first and written only when it moved: writing through a `ResMut` marks it changed, and
+    /// every system gated on a change would rebuild for a call that changed nothing.
+    fn apply_view(&mut self, view: crate::ops_view::View, state: Option<&mut crate::editor::EditorState>) {
+        if let Some(state) = state
+            && state.tool != view.tool
+        {
+            state.tool = view.tool;
+        }
+        if self.rung.as_deref().is_some_and(|r| r.0 != view.rung)
+            && let Some(rung) = self.rung.as_deref_mut()
+        {
+            rung.0 = view.rung;
+        }
+        if self.snip.as_deref().is_some_and(|s| s.armed != view.snip_armed)
+            && let Some(snip) = self.snip.as_deref_mut()
+        {
+            snip.armed = view.snip_armed;
+        }
+        if self.ghost.as_deref().is_some_and(|a| a.0 != view.ghost)
+            && let Some(ghost) = self.ghost.as_deref_mut()
+        {
+            ghost.0 = view.ghost;
+        }
+        if self.journal.iter().any(|n| n.display != Display::None) != view.journal_open {
+            for mut node in &mut self.journal {
+                node.display = if view.journal_open { Display::Flex } else { Display::None };
+            }
+        }
+    }
+
     /// An agent called `method`: the AGENT block says when it was last heard.
     fn hear(&mut self, method: &'static str) {
         if let (Some(activity), Some(time)) = (self.activity.as_mut(), self.time.as_deref()) {
@@ -1833,7 +1886,7 @@ fn operation_apply(
         let read_project = project.as_deref();
         let read_open = open.as_deref();
         let ctx = Ctx {
-        view: None, trust_file: None,
+        view: op.changes_view().then(|| gates.view_in(state.as_deref())), trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -1863,6 +1916,7 @@ fn operation_apply(
     let mut ctx = take(&project, &open);
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
+    ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref()));
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());
     // **A proposal with no seed named gets the editor's own next one.** This is what makes two
@@ -1887,6 +1941,10 @@ fn operation_apply(
         .then(|| crate::checks::find(&ctx).map(|after| crate::checks::report(before.as_ref(), &after)))
         .flatten();
     let carried = ctx.proposal.take();
+    // **The view the operation answered with goes back to the editor's own** (E-002, #129), as a key's does.
+    if let Some(view) = ctx.view.take() {
+        gates.apply_view(view, state.as_deref_mut());
+    }
     // **A project the operation LOADED is installed here, before the map goes back.** `map_open` can
     // load the project from the menu's root — that is what lets an agent make a map and then work in
     // it — and a write-back that skipped it left the editor holding a map and no project, which no
