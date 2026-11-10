@@ -96,7 +96,8 @@ pub struct UndoParams {
     pub dry_run: bool,
 }
 
-/// **`grimoire/agent_guide` — the person's and the project's layers of an agent's guide** (#347, AG-02).
+/// **`grimoire/agent_guide` — the person's and the project's layers of an agent's guide** (#347, AG-02;
+/// #348, AG-03).
 ///
 /// **The editor composes the two layers because it holds both things they hang off**: the open project,
 /// whose `.dark_factory/AGENTS.md` travels with it, and the person's own directory. The MCP server puts
@@ -107,24 +108,37 @@ pub struct UndoParams {
 /// A missing file is an absent layer; a file that cannot be read, is not UTF-8 or is over
 /// `GUIDE_MAX_BYTES` is left out and named in `problems` — never truncated.
 ///
+/// **The project's layer needs the person's trust** (AG-03). Untrusted, it is one line in `withheld`
+/// and the text never reaches the agent; the question is raised in the editor's modal, and answering
+/// **Allow this guide** serves it. **"Not now" holds for that content for the session**, so an agent that
+/// asks at the start of every task does not re-ask a question the person already answered.
+///
 /// **A problem also reaches the person's status line**, because a person who wrote a guide that is not
-/// being served is the only one who can fix it, and they are not reading the agent's answer.
+/// being served is the only one who can fix it.
 fn agent_guide(
     _: In<serde_json::Value>,
     project: Option<Res<crate::project::Project>>,
     user: Option<Res<crate::agent_guide::UserGuideFile>>,
-    mut state: Option<ResMut<crate::editor::EditorState>>,
+    state: Option<ResMut<crate::editor::EditorState>>,
 ) -> Result<Value, String> {
-    let guide = crate::agent_guide::read(project.as_deref(), user.as_deref());
-    if let Some(state) = state.as_mut() {
-        for problem in &guide.problems {
-            // **The same sentence each time, and the fold on [`crate::chrome::Status`] keeps one row**: an
-            // agent asks at the start of every task, and a guide that stays broken would otherwise push the
-            // same line on each ask.
-            state.status.raise("agent guide: ", problem.clone());
-        }
+    // **The Projects home is not an open project.** The menu's folder is a card being looked at, not a
+    // project whose guide an agent is following, so the project layer is absent there and only the
+    // person's is served.
+    let Some(mut state) = state else {
+        let composed = crate::agent_guide::compose(project.as_deref(), user.as_deref(), None);
+        return Ok(crate::agent_guide::json(&composed));
+    };
+    let composed = crate::agent_guide::serve(&mut state, project.as_deref(), user.as_deref());
+    for problem in &composed.guide.problems {
+        // **The same sentence each time, folded into one row by [`crate::chrome::Status`]**: an agent asks
+        // at the start of every task, and a guide that stays broken would otherwise push the same line on
+        // each ask.
+        state.status.raise("agent guide: ", problem.clone());
     }
-    Ok(crate::agent_guide::json(&guide))
+    if let Some(trouble) = &composed.trouble {
+        state.status.problem(format!("agent guide: {trouble}"));
+    }
+    Ok(crate::agent_guide::json(&composed))
 }
 
 /// **`true`, the default for the fields that mean "yes".**

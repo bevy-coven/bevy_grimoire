@@ -93,6 +93,14 @@ pub enum Asked {
     /// directory; an edit to any of them asks again), **trust the whole project**, or **not now**. The
     /// answer is a person's alone: nothing an agent can call reaches [`Confirm::settle_choice`].
     TrustCommand,
+    /// **The open project's `.dark_factory/AGENTS.md` is being given to an agent, and no person has
+    /// allowed that text** (AG-03, #348).
+    ///
+    /// The same three answers as [`Asked::TrustCommand`], because it is the same question about a
+    /// different subject: **allow this guide** (that exact content), **trust this project** (every guide
+    /// in it, from now on), or **not now**. The question shows the file's text, since the text is what is
+    /// being allowed.
+    TrustGuide,
 }
 
 impl Asked {
@@ -106,7 +114,7 @@ impl Asked {
     /// is a different matter and is every question's: [`take`] consumes it, so no verb behind a
     /// question reads the `N` that settled it (#286).
     pub fn owns_keyboard(self) -> bool {
-        matches!(self, Asked::TrustCommand)
+        matches!(self, Asked::TrustCommand | Asked::TrustGuide)
     }
 
     /// **Does saying yes throw work away?** The only thing the affirmative button's severity
@@ -129,7 +137,7 @@ impl Asked {
             //
             // **And crossing saves the map on the way out too** — the same rule, the same reason:
             // nothing is thrown away, so the affirmative is not destructive and must not look it.
-            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor | Asked::TrustCommand => false,
+            Asked::QuitApp | Asked::LeaveMap | Asked::SwitchDoor | Asked::TrustCommand | Asked::TrustGuide => false,
         }
     }
 }

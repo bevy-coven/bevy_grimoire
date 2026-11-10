@@ -48,8 +48,10 @@ pub const TOOLS: &[ToolDoc] = &[
                        project: the other tools say what one tool does, and this says which of them \
                        in what order, and what the person on the other end expects. It returns the \
                        shipped guide, then the person's own guide and the open project's, each under \
-                       a heading that names its source and path; it takes no parameters and changes \
-                       nothing.",
+                       a heading that names its source and path. A project's guide is served only once \
+                       the person has allowed that exact content (or trusted the project), so an \
+                       unread one arrives as one line saying they have not allowed it, never as its \
+                       text. It takes no parameters and changes nothing.",
         read_only: true,
         destructive: false,
         idempotent: true,

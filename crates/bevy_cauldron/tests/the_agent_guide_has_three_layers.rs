@@ -12,11 +12,17 @@
 //!
 //! **A missing file is an absent layer; a file that cannot be served is a problem.** Nothing is truncated,
 //! decoded lossily or guessed at: a guide an agent half-reads is worse than one it is told is missing.
+//!
+//! **The project's layer needs the person's trust** (AG-03, #348), so the tests that expect it to be served
+//! allow it first — the same grant `Allow this guide` writes. The one that expects a refusal does not, and
+//! reads the withheld line instead: a guide that cannot be served and one nobody has allowed are different
+//! answers, and both are checked.
 
 use bevy::prelude::*;
 use bevy_cauldron::ops_brp::OpsBridgePlugin;
 use bevy_cauldron::project::Project;
 use bevy_grimoire_core::agent_guide::{self, GUIDE_MAX_BYTES};
+use bevy_grimoire_core::trust::TrustStore;
 use serde_json::json;
 
 use crate::fixtures;
@@ -28,6 +34,10 @@ fn editor(tag: &str) -> (App, std::path::PathBuf, std::path::PathBuf) {
     std::fs::create_dir_all(&home).expect("the person's folder is made");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy_cauldron::agent_guide::UserGuideFile(home.join(agent_guide::USER_FILE)));
+    // **A store of the test's own**, as the settings file is: no test reads or writes the real one.
+    let store = root.join("trusted.ron");
+    TrustStore::default().save(&store).expect("an empty store");
+    app.world_mut().resource_mut::<bevy_cauldron::editor::EditorState>().trust.file = Some(store.clone());
     app.add_plugins(bevy_debugger_bevy::DebuggerPlugin::default());
     app.add_plugins(OpsBridgePlugin);
     for _ in 0..6 {
@@ -47,6 +57,15 @@ fn call(app: &mut App, params: serde_json::Value) -> serde_json::Value {
         .run_system_with(id, Some(params))
         .unwrap_or_else(|e| panic!("grimoire/agent_guide: {e:?}"))
         .unwrap_or_else(|e| panic!("grimoire/agent_guide: {e:?}"))
+}
+
+/// **What the person pressing Allow this guide writes**, through the same store the editor holds.
+fn allow(app: &mut App, path: &std::path::Path, text: &str) {
+    let store_path = app.world().resource::<bevy_cauldron::editor::EditorState>().trust.file.clone().expect("a store");
+    let root = path.parent().and_then(|p| p.parent()).expect("the guide is inside the project").to_path_buf();
+    let mut store = TrustStore::load(&store_path).expect("the store reads");
+    bevy_grimoire_core::trust::grant_guide(&mut store, &root, text).expect("the grant is written");
+    store.save(&store_path).expect("the store is saved");
 }
 
 /// The answer's layers, as `(source, path, text)`.
@@ -73,7 +92,11 @@ fn the_persons_guide_comes_before_the_projects_and_each_names_its_path() {
     std::fs::write(&user_file, "Be brief; I read the answers on a phone.").expect("the person's guide is written");
     let project_file = root.join(agent_guide::PROJECT_PATH);
     std::fs::create_dir_all(project_file.parent().expect("it has a folder")).expect("the folder is made");
-    std::fs::write(&project_file, "Walls are 2.40 m; never place a doorway against a corner.").expect("the project's guide is written");
+    let project_text = "Walls are 2.40 m; never place a doorway against a corner.";
+    std::fs::write(&project_file, project_text).expect("the project's guide is written");
+    // **A person allowed this guide** (AG-03): without that the layer is withheld, and this test is about
+    // the order of the two layers, not about trust.
+    allow(&mut app, &project_file, project_text);
 
     let answer = call(&mut app, json!({}));
     let layers = layers(&answer);

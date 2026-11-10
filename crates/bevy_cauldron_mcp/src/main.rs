@@ -651,8 +651,10 @@ impl Grimoire {
                        project: the other tools say what one tool does, and this says which of them \
                        in what order, and what the person on the other end expects. It returns the \
                        shipped guide, then the person's own guide and the open project's, each under \
-                       a heading that names its source and path; it takes no parameters and changes \
-                       nothing.",
+                       a heading that names its source and path. A project's guide is served only once \
+                       the person has allowed that exact content (or trusted the project), so an \
+                       unread one arrives as one line saying they have not allowed it, never as its \
+                       text. It takes no parameters and changes nothing.",
         annotations(
             title = "Read the guide to working in Cauldron",
             read_only_hint = true,
@@ -679,8 +681,18 @@ impl Grimoire {
                     text.push('\n');
                     text.push_str(&format!("## {} ({path})\n\n{}\n", heading_of(source), body.trim_end()));
                 }
-                if !layers.is_empty() {
+                // **A withheld layer is one line where the layer would have been**, and the text it
+                // withheld is never sent: the editor never puts it in the answer, and this reads only what
+                // the editor sent.
+                if let Some(withheld) = answer.get("withheld").and_then(|w| w.as_str()) {
                     text.push('\n');
+                    text.push_str(&format!("**{withheld}**\n"));
+                }
+                if !layers.is_empty() || answer.get("withheld").and_then(|w| w.as_str()).is_some() {
+                    text.push('\n');
+                }
+                if let Some(trouble) = answer.get("trouble").and_then(|t| t.as_str()) {
+                    text.push_str(&format!("\n**No answer can be recorded about it: {trouble}**\n"));
                 }
                 for problem in answer.get("problems").and_then(|p| p.as_array()).cloned().unwrap_or_default() {
                     let said = problem
