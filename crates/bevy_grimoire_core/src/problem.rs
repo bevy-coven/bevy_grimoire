@@ -26,6 +26,12 @@ pub struct Location {
     /// A placement, stamp, piece or person id.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entity: Option<String>,
+    /// **The line, counted from 1 as an editor shows it**, when the refusal is about a place in a file.
+    ///
+    /// Carried as a number rather than left inside `why`'s sentence: a caller that needs the line (an editor
+    /// jumping to it, a game's fault shape) reads it here instead of scraping `line 4, column 3:` out of prose.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
 }
 
 impl Location {
@@ -40,6 +46,12 @@ impl Location {
     /// The field inside the file, when the file got that far.
     pub fn field(mut self, field: Option<String>) -> Location {
         self.field = field;
+        self
+    }
+
+    /// The line in the file, when the refusal knows one.
+    pub fn line(mut self, line: usize) -> Location {
+        self.line = (line > 0).then_some(line);
         self
     }
 }

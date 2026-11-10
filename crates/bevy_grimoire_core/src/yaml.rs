@@ -149,6 +149,98 @@ where
     })
 }
 
+/// **The line each path in `text` stands on**, counted from 1 as an editor shows it.
+///
+/// **A fault a caller builds needs a line, not only a path**: `entities.door_north.Mana` is where a reader is
+/// told to look, and the line is what they go to. The walk already knows both — every node carries the path it
+/// stands at and the bytes it occupies — so this is that map, and a caller asks it instead of guessing 0.
+///
+/// **A path the file does not contain is absent**, rather than line 1: a caller that asks about a path it built
+/// itself then gets `None` and can say where the file is without inventing a place in it.
+///
+/// A path's line is the line its **first character** is on, which for a mapping or a sequence is the line its
+/// first `-` or first key is on — the line a person would click.
+pub fn lines(text: &str) -> std::collections::BTreeMap<String, usize> {
+    let walk = walk(text);
+    walk.nodes
+        .iter()
+        .map(|node| (node.path.clone(), line_of(text, node.span.0)))
+        .collect()
+}
+
+/// **Read `text` as the plain JSON a value holds**, keeping nothing but names, numbers and strings: a YAML tag
+/// names an enum variant, and a JSON Schema and a reflected type both spell a named variant as the key of a
+/// one-key object, so `!Near {to: …}` becomes `{"Near": {"to": …}}`.
+///
+/// **It is the same walk every refusal comes from**: the file is first checked by [`walk`] — no duplicate key,
+/// no anchor, no alias, no second document — and only then converted, so a document a person could not see the
+/// fault in is refused with a line rather than quietly reshaped. This is what a game's entity files are read
+/// through, so they meet the rules every project file meets (#367).
+#[allow(clippy::result_large_err)]
+pub fn to_json(text: &str, path: &str) -> Result<serde_json::Value, Problem> {
+    let walk = walk(text);
+    if let Some(site) = first_fault(text, &walk) {
+        return Err(refusal(path, site));
+    }
+    let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(text).map_err(|e| {
+        Problem::with(
+            format!("{path} {WHAT}"),
+            Detail::default().because(positioned(e.location(), &e.to_string())).docs(DOCS),
+        )
+    })?;
+    json_of(value, "", path)
+}
+
+/// **A `serde_yaml_ng` value as JSON**, a tag as the key of a one-key object, and **nothing quietly changed**:
+/// a key that is not a string and a number JSON cannot hold are refused rather than turned into `""` and
+/// `null`, because a value a reader silently replaces is one the file does not say.
+#[allow(clippy::result_large_err)]
+fn json_of(value: serde_yaml_ng::Value, at: &str, path: &str) -> Result<serde_json::Value, Problem> {
+    use serde_yaml_ng::Value as Y;
+    let here = |why: String| {
+        Problem::with(
+            format!("{path} {WHAT}"),
+            Detail::default().at(Location::file(path.to_owned()).field(Some(at.to_owned()))).because(why).docs(DOCS),
+        )
+    };
+    Ok(match value {
+        Y::Tagged(tagged) => {
+            let mut map = serde_json::Map::new();
+            let name = tagged.tag.to_string();
+            map.insert(
+                name.trim_start_matches('!').to_owned(),
+                json_of(tagged.value, at, path)?,
+            );
+            serde_json::Value::Object(map)
+        }
+        Y::Null => serde_json::Value::Null,
+        Y::Bool(b) => serde_json::Value::Bool(b),
+        // **`.nan` and `.inf` have no JSON spelling**, so they are refused rather than written as `null`.
+        Y::Number(n) => serde_json::to_value(&n).map_err(|_| {
+            here(format!("`{n}` is not a number JSON holds, so it cannot be read as one"))
+        })?,
+        Y::String(s) => serde_json::Value::String(s),
+        Y::Sequence(items) => serde_json::Value::Array(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(index, v)| json_of(v, &format!("{at}[{index}]"), path))
+                .collect::<Result<_, _>>()?,
+        ),
+        Y::Mapping(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                let Some(key) = k.as_str() else {
+                    return Err(here(format!("a key at `{at}` is not a string, and a JSON object's keys are")));
+                };
+                let child = if at.is_empty() { key.to_owned() } else { format!("{at}.{key}") };
+                out.insert(key.to_owned(), json_of(v, &child, path)?);
+            }
+            serde_json::Value::Object(out)
+        }
+    })
+}
+
 /// **The field path a refusal names**, from `serde_path_to_error`'s path: `.` is the file's root and is
 /// no field at all; `placements[0].turn_deg` is kept as it is.
 fn path_of(path: &str) -> Option<String> {
@@ -284,7 +376,7 @@ fn refusal(path: &str, site: Site) -> Problem {
     Problem::with(
         format!("{path} {WHAT}"),
         Detail::default()
-            .at(Location::file(path.to_owned()).field(site.field))
+            .at(Location::file(path.to_owned()).field(site.field).line(site.line))
             .because(format!("line {}, column {}: {} — {}", site.line, site.column, site.what, site.why))
             .fix(site.fix)
             .docs(DOCS),
@@ -367,6 +459,13 @@ impl Style {
             Style::Plain => !is_number(text) && !matches!(text, "true" | "false" | "null" | "Null" | "NULL" | "~" | ""),
         }
     }
+}
+
+/// **Whether `text` is a YAML number with no JSON spelling**: the infinities and NaN, which `serde_json`
+/// silently turns into `null`.
+fn is_non_finite_number(text: &str) -> bool {
+    let unsigned = text.strip_prefix(['-', '+']).unwrap_or(text);
+    matches!(unsigned, ".inf" | ".Inf" | ".INF" | ".nan" | ".NaN" | ".NAN")
 }
 
 /// **Whether `text` reads as a number** to this reader: a YAML 1.2 integer or float, and its infinities
@@ -548,6 +647,24 @@ pub(crate) fn walk(text: &str) -> Walk {
                     walk.blocks.push((span.start.line(), span.end.line()));
                 }
                 let path = child_path(&stack);
+                // **A number JSON cannot hold is refused here**, at the walk: `.nan` and `.inf` are YAML
+                // numbers a `serde_json::Value` has no spelling for, and `serde_json` turns a non-finite float
+                // into `null` rather than failing — so the check has to be the text's, and it has to be here,
+                // where the line is known.
+                if style == Style::Plain && is_non_finite_number(value.as_ref()) {
+                    walk.site = Some(Site {
+                        what: format!("`{}` is not a number a reader can carry", value),
+                        field: path_of(&path),
+                        line,
+                        column,
+                        why: "JSON has no way to write a NaN or an infinity, so a value here would arrive as `null` \
+                              and say something the file does not"
+                            .to_owned(),
+                        fix: "write a finite number, or keep the value as text".to_owned(),
+                        tab_report: false,
+                    });
+                    return walk;
+                }
                 let key = take_key(&mut stack);
                 let dash = dash_before(text, start);
                 walk.nodes.push(Node { path, kind: NodeKind::Scalar, span: (start, end), key, dash, scalar: Some(Leaf { text: value.to_string(), style }) });
