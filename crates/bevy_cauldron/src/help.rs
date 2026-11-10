@@ -45,6 +45,7 @@ pub const PAGES: &[GuidePage] = &[
     GuidePage { id: "keys", title: "Keys", file: "keys.md" },
     GuidePage { id: "data-files", title: "Data files", file: "data-files.md" },
     GuidePage { id: "behaviours", title: "Behaviours", file: "behaviours.md" },
+    GuidePage { id: "scripts", title: "Scripts", file: "scripts.md" },
     GuidePage { id: "reload-contract", title: "The reload contract", file: "reload-contract.md" },
     GuidePage { id: "loop", title: "The development loop", file: "loop.md" },
 ];
