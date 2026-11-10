@@ -249,7 +249,24 @@ pub enum Shown {
     MapWhole,
     /// **One library piece**, by the id the Meshes shelf names it.
     Piece { id: String },
-    /// **One tile** — a library piece's own lattice, on the Tiles tab.
+    /// **One tile** — a library piece's own lattice.
+    ///
+    /// **Its page is the Meshes panel, not the Tiles tab** (AF-03, #359), which is not what the name
+    /// suggests and was measured rather than guessed: `tiles::rebuild_detail` returns into
+    /// `build_detail` for `Mode::Tiles`, and that function draws the open *composition* — the TILE
+    /// heading, the envelope, the members. The `SUBGRID` block a lattice is edited in, and
+    /// `draw_subgrid`, `pick_lattice` and `click_lattice` with it, all run on the Meshes panel, whose
+    /// pane follows the focused library piece. Opening the Tiles tab for a lattice change would put
+    /// the person in front of a different subject and call it the one that changed.
+    ///
+    /// **Assumed decision (owner may override):** the issue text lists the three tabs as Meshes,
+    /// Tiles and Compose; the editor's Tiles tab shows a composition, so a `Tile` change goes to
+    /// Meshes, where its row and its lattice are both drawn. Moving it to Tiles needs a lattice on
+    /// that tab first, which is a change to what Tiles is for rather than to this page.
+    ///
+    /// It is listed apart from `Piece` in the enum because the two are different subjects even where
+    /// they share a page, and [`crate::reveal`] is the one place that decides which page a subject is
+    /// on.
     Tile { id: String },
     /// **One composition**, on the Compose tab.
     Composition { id: String },
