@@ -304,6 +304,15 @@ fn example_to_open(example: &Path) -> Result<PathBuf, String> {
 /// Where "Getting started guide" opens.
 pub const GUIDE_URL: &str = "https://github.com/bevy-coven/bevy_grimoire/blob/main/docs/guide/getting-started.md";
 
+/// **The guide's own folder, as the editor publishes it**, with the trailing slash. [`GUIDE_URL`] is one page of it and
+/// [`crate::help::url`] builds every other page's address from this, so the repository's location is written once.
+pub fn guide_dir_url() -> &'static str {
+    GUIDE_URL.strip_suffix(GUIDE_FILE).unwrap_or(GUIDE_URL)
+}
+
+/// The page file [`GUIDE_URL`] ends with, so [`guide_dir_url`] can cut it without a second copy of the folder.
+const GUIDE_FILE: &str = "getting-started.md";
+
 /// Where "See every change" opens.
 pub const CHANGELOG_URL: &str = "https://github.com/bevy-coven/bevy_grimoire/blob/main/CHANGELOG.md";
 

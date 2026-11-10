@@ -53,8 +53,8 @@ Or right-click the piece's row in the palette: its menu opens with Place, Mount 
 
 **A row's menu has two switches.** Right-click a piece's row (or focus it and press Shift+F10):
 
-- **Pin** holds the piece where it is, for a generator to route around. It is the same write `O` makes on the piece under the cursor: one log line and one Cmd+Z. A pin carries a reason, so the editor asks for it in the field under the map; type it and press Enter, or Esc to leave the piece unpinned.
-- **Hide** takes the piece out of the viewport for this session, and choosing it again puts it back. A hide is **not saved**: reopening the map shows every piece, because "this wall is invisible" is a fact about your view and not about the map.
+- **Pin** holds the piece where it is, for a generator to route around. It is the same write `O` makes on the piece under the cursor: one log line and one Cmd+Z. A pin carries a reason, and the editor asks for one — type it and press Enter, or press Esc to leave the piece unpinned. Choosing Pin on a piece that is already pinned unpins it at once, with no question.
+- **Hide** takes the piece out of the viewport for this session, and choosing it again puts it back. A hide is **not saved**: opening the map again (or opening another one) shows every piece, because "this wall is invisible" is a fact about your view and not about the map.
 
 **If it goes wrong:** A row that does not match the search is not in the tree, so it cannot be reached from there until the search is cleared. Hide is per session: it is not a map field, so a piece hidden here is drawn by the game.
 

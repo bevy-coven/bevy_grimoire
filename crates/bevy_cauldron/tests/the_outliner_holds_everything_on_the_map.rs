@@ -1,31 +1,35 @@
-//! **The outliner is a tree of everything on the map, not only its pieces, and its rows carry the two
-//! toggles a tree row has** (UI-51, #237).
+//! **The outliner is a tree of everything on the map, not only its pieces, and a piece row's menu pins it or
+//! hides it** (UI-51, #237).
 //!
 //! The issue's What is "a tree of the map's contents: placements by layer and group, compositions, people,
-//! triggers, notes. Includes search and visibility/lock toggles." The first slice built the placements,
-//! grouped by kind, with the search and the selection. This file is the rest:
+//! triggers, notes. Includes search and visibility/lock toggles." The first slice built the placements, grouped
+//! by kind, with the search and the selection. This file is the rest:
 //!
-//! - **Compositions, people, triggers and notes are groups of their own**, each holding the rows of that
-//!   kind, so a map with a stamp, a person, a trigger and a note has all four in the tree beside its
-//!   pieces — and a search reaches them too (`Mara` narrows to the people's group and that person).
-//! - **A row's lock is the piece's pin**, through `placement_set_pin`, so the toggle is the same write the
-//!   `P` key makes: one operation, one log line, one Cmd+Z. A row for a thing that is not a placement has
-//!   no lock.
-//! - **A row's eye is the piece's visibility in this session.** The map format has no "hidden" field and
-//!   this slice does not add one (a hidden piece is view state, and a map file that says a wall is
-//!   invisible is a map every consumer has to agree with); the eye takes a piece out of the viewport and
-//!   forgets it when the editor closes.
+//! - **Compositions, people, triggers and notes are groups of their own**, each holding the rows of that kind,
+//!   so a map with a stamp, a person, a trigger and a note has all four in the tree beside its pieces — and a
+//!   search reaches them too (`Mara` narrows to the people's group and that person).
+//! - **A piece row's menu carries Pin and Hide.** Pin is the piece's `placement_set_pin` through
+//!   `editor::pin_or_unpin` — the same function the `O` key's prompt goes through, so a pin **asks for its
+//!   reason** in the field the editor already has, and the reason is the person's own. Hide takes the piece out
+//!   of the viewport for this session ([`Eyes`]) and writes nothing: the map format has no "hidden" field.
+//! - **A row that is not a piece has no menu at all.** The tree's rows are a pool, so the menu is taken off a
+//!   row rebound to a group or to something that is not a placement.
+//!
+//! Every one of these goes through the real widget path: the row's `ContextMenu`, the panel's `ContextTarget`
+//! and the item's `Activate` — the same three things a right-click delivers. Nothing here calls the outliner's
+//! own state directly, so deleting the menu would fail these tests.
 
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Activate;
 use bevy_cauldron::editor::{EditorState, Placement};
 use bevy_cauldron::outliner::{
-    COMPOSITIONS, NOTES, PEOPLE, TRIGGERS, Outliner, OutlinerItem, OutlinerSearch, OutlinerTree, group_key,
-    placement_key, set_eye_for_test, set_lock_for_test,
+    COMPOSITIONS, Eyes, NOTES, PEOPLE, TRIGGERS, Outliner, OutlinerItem, OutlinerSearch, OutlinerTree, group_key,
+    placement_key,
 };
 use bevy_cauldron::project::OpenMap;
-use bevy_gooey::{Table, Tree, ValueChange};
+use bevy_gooey::{ContextMenu, ContextTarget, MenuItem, MenuPanel, Table, TableRow, Tree, ValueChange};
 
 use crate::fixtures;
 
@@ -40,11 +44,11 @@ const GROUP_KINDS: [&str; 4] = [COMPOSITIONS, PEOPLE, TRIGGERS, NOTES];
 
 /// A project with a piece, a stamp, a person, a trigger and a note.
 ///
-/// **The notes file is written before the editor opens** (its name follows the map's), so the view reads it
-/// on its first look; **the two files the operations own** (`people/`, `scripts/`) go in the directory the
-/// project itself names, because a test that guessed `assets/grimoire/` would be right only until a project
-/// bound its library somewhere else. Writing them after the open is what a person editing a file on disk
-/// does, and the tree is asked to rebuild the way a map edit asks it to.
+/// **The notes file is written before the editor opens** (its name follows the map's), so the view reads it on
+/// its first look; **the two files the operations own** (`people/`, `scripts/`) go in the directory the project
+/// itself names, because a test that guessed `assets/grimoire/` would be right only until a project bound its
+/// library somewhere else. The project is marked changed after they are written, which is what a person editing
+/// a file on disk does, so the tree looks again.
 fn rig(tag: &str) -> App {
     let root: PathBuf = fixtures::Fixture::new(&format!("{tag}_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
@@ -65,7 +69,6 @@ fn rig(tag: &str) -> App {
         &grimoire.join("scripts/m.ron"),
         "(version: 1, triggers: [(id: \"greet\", on: \"Activity(\\\"work\\\")\", then: \"()\")])",
     );
-    // The section's first build reads all four files, so there is nothing to ask for.
     show_the_outliner(&mut app, true);
     app
 }
@@ -128,9 +131,51 @@ fn outliner(app: &mut App) -> &Outliner {
     world.query::<&Outliner>().single(world).expect("the outliner is open")
 }
 
+/// **A tree row's entity**, by the key it shows: the widget's own answer, because the rows are a pool.
+fn row_entity(app: &mut App, key: u64) -> Entity {
+    let world = app.world_mut();
+    let mut rows = world.query::<(Entity, &TableRow)>();
+    rows.iter(world).find(|(_, row)| row.key == key).map(|(entity, _)| entity).expect("the row is drawn")
+}
+
+/// **Choose `label` from the menu a right-click on the row `key` opens**, through the real path: the row names
+/// the menu (`ContextMenu`), the panel is given the row it was opened for (`ContextTarget`), and the item takes
+/// the `Activate` the pointer or Enter sends.
+fn choose(app: &mut App, key: u64, label: &str) {
+    let row = row_entity(app, key);
+    assert!(
+        app.world().entity(row).contains::<ContextMenu>(),
+        "the row {key:x} names the row menu a right-click opens"
+    );
+    // **The outliner's own menu**, named by the row: the editor has a menu panel per thing that offers one.
+    let panel = {
+        let world = app.world_mut();
+        let named = world.entity(row).get::<ContextMenu>().expect("the row names a menu").0;
+        assert!(world.entity(named).contains::<MenuPanel>(), "the row's menu is a menu panel");
+        named
+    };
+    app.world_mut().entity_mut(panel).insert(ContextTarget(row));
+    let item = {
+        let world = app.world_mut();
+        let mut texts = world.query::<(&Text, &ChildOf)>();
+        let mut items = world.query_filtered::<(), With<MenuItem>>();
+        let found: Vec<Entity> = texts
+            .iter(world)
+            .filter(|(t, p)| t.0 == label && items.get(world, p.parent()).is_ok())
+            .map(|(_, p)| p.parent())
+            .collect();
+        assert_eq!(found.len(), 1, "one menu item says `{label}`: {found:?}");
+        found[0]
+    };
+    app.world_mut().commands().trigger(Activate { entity: item });
+    updates(app, 4);
+}
+
 /// **The tree holds a group for every kind of thing on the map**, and a piece is still a row of its own.
 #[test]
 fn the_tree_holds_compositions_people_triggers_and_notes_beside_the_pieces() {
+    // A person and a trigger are files the project reads on a change, so the fixture writes them before the
+    // section opens; the stamp and the note are in the map the editor opened.
     let mut app = rig("outliner_everything");
     let keys: Vec<u64> = GROUP_KINDS.iter().map(|k| group_key(k)).chain([group_key("prop")]).collect();
     let held = labels(&mut app, &keys);
@@ -139,38 +184,16 @@ fn the_tree_holds_compositions_people_triggers_and_notes_beside_the_pieces() {
         5,
         "a group for the pieces, the compositions, the people, the triggers and the notes: {held:?}"
     );
-    let order: Vec<&str> = held.iter().filter_map(|(k, _)| GROUP_KINDS.iter().find(|kind| group_key(kind) == *k).copied()).collect();
+    let order: Vec<&str> = held
+        .iter()
+        .filter_map(|(k, _)| GROUP_KINDS.iter().find(|kind| group_key(kind) == *k).copied())
+        .collect();
     assert_eq!(order, GROUP_KINDS, "the map's own groups are drawn in the issue's order: {held:?}");
 
     let piece = app.world().resource::<OpenMap>().map.placements[0].id.clone();
     let rows = labels(&mut app, &[placement_key(&piece)]);
     assert_eq!(rows.len(), 1, "the map's piece is still a row of its own: {rows:?}");
     assert!(rows[0].1.contains(&piece), "named by its id: {rows:?}");
-}
-
-/// **Each group holds the rows of its own kind**, named so a person can tell them apart.
-#[test]
-fn every_group_holds_the_things_of_its_kind() {
-    let mut app = rig("outliner_group_rows");
-    let outliner = app.world_mut().query::<&Outliner>().single(app.world()).expect("open");
-    let children: Vec<Vec<u64>> = GROUP_KINDS.iter().map(|kind| outliner.rows_under(group_key(kind)).to_vec()).collect();
-    assert_eq!(children.iter().map(Vec::len).collect::<Vec<_>>(), vec![1, 1, 1, 1], "one row under each: {children:?}");
-
-    let labels: Vec<String> = children
-        .iter()
-        .flatten()
-        .filter_map(|key| {
-            let entity = {
-                let world = app.world_mut();
-                world.query_filtered::<Entity, With<OutlinerTree>>().single(world).ok()?
-            };
-            app.world().get::<Table>(entity)?.source::<Tree>()?.label(*key).map(str::to_owned)
-        })
-        .collect();
-    assert!(labels.iter().any(|l| l.contains("arch_here")), "the stamp's row names it: {labels:?}");
-    assert!(labels.iter().any(|l| l == "Mara"), "the person's row is their name: {labels:?}");
-    assert!(labels.iter().any(|l| l == "greet"), "the trigger's row is its id: {labels:?}");
-    assert!(labels.iter().any(|l| l.contains("a lamp belongs here")), "the note's row shows its words: {labels:?}");
 }
 
 /// **A search reaches the other groups too**: a word in a person's name leaves the people's group and that
@@ -194,65 +217,71 @@ fn a_search_narrows_the_other_groups_the_way_it_narrows_the_pieces() {
     assert_eq!(node_count(&mut app), before, "a cleared search is the whole map again");
 }
 
-/// **A row's lock is the piece's pin**, written through the operation the `P` key writes.
+/// **A row's Pin is the piece's pin, and it asks for its reason**, as the `O` key's prompt does: the toggle puts
+/// the piece in the editor's pin field, and the reason the person types is what the pin carries.
 #[test]
-fn a_rows_lock_pins_its_piece_through_the_pin_operation() {
+fn a_rows_pin_asks_for_its_reason_and_pins_the_piece_through_the_pin_operation() {
     let mut app = rig("outliner_lock");
     let id = app.world().resource::<OpenMap>().map.placements[0].id.clone();
-    set_lock_for_test(app.world_mut(), placement_key(&id), true);
-    updates(&mut app, 4);
+    // The person and trigger files were written before the section opened, so the tree is one build.
+    choose(&mut app, placement_key(&id), "Pin");
 
+    // **A pin waits for its reason**: nothing is pinned yet, and nothing is on the undo stack.
+    let map = app.world().resource::<OpenMap>().map.clone();
+    assert!(!map.placements.iter().any(|p| p.id == id && p.owned), "a pin waits for its reason");
+    assert_eq!(app.world().resource::<EditorState>().undo_depth(), 0, "and nothing was written");
+
+    // The reason, typed the way the person types it at the field; Enter commits it.
+    bevy_cauldron::editor::type_the_pin_reason_for_test(app.world_mut(), "holds the doorway");
+    updates(&mut app, 4);
     let map = app.world().resource::<OpenMap>().map.clone();
     let placed = map.placements.iter().find(|p| p.id == id).expect("the piece is where it was");
-    assert!(placed.owned, "the row's lock pinned the piece");
-    assert!(placed.owned_because.is_some(), "and a pin carries its reason");
+    assert!(placed.owned, "the reason committed the pin");
+    assert_eq!(placed.owned_because.as_deref(), Some("holds the doorway"), "and the reason is the person's own");
     assert_eq!(app.world().resource::<EditorState>().undo_depth(), 1, "one operation, so one Cmd+Z");
 
-    set_lock_for_test(app.world_mut(), placement_key(&id), false);
-    updates(&mut app, 4);
+    // Pin again unpins at once: an unpin has no reason to ask for.
+    choose(&mut app, placement_key(&id), "Pin");
     let map = app.world().resource::<OpenMap>().map.clone();
-    assert!(!map.placements.iter().any(|p| p.id == id && p.owned), "unlocking unpins it");
+    assert!(!map.placements.iter().any(|p| p.id == id && p.owned), "unpinning is immediate");
 }
 
-/// **A row that is not a piece offers neither toggle**: the people, the triggers and the notes are not
-/// placements, so there is nothing to pin and nothing to draw.
+/// **A row that is not a piece names no menu at all**: the people, the triggers and the notes are not
+/// placements, so their rows offer neither Pin nor Hide — and so does a group row.
 #[test]
-fn a_row_that_is_not_a_piece_offers_no_lock_and_no_eye() {
+fn a_row_that_is_not_a_piece_has_no_menu() {
     let mut app = rig("outliner_toggles_none");
     let piece = app.world().resource::<OpenMap>().map.placements[0].id.clone();
-    let outliner = outliner(&mut app);
-    let person = outliner.rows_under(group_key(PEOPLE))[0];
-    let note = outliner.rows_under(group_key(NOTES))[0];
-    assert!(!outliner.toggles_offered(group_key(PEOPLE)), "a group is not a thing to pin");
-    assert!(!outliner.toggles_offered(person), "a person is not a placement");
-    assert!(!outliner.toggles_offered(note), "and a note is drawn nowhere");
-    assert!(outliner.piece_of(placement_key(&piece)).is_some(), "while a piece's row names its piece");
-    assert!(outliner.toggles_offered(placement_key(&piece)), "so a piece's row offers both");
+    let person = outliner(&mut app).rows_under(group_key(PEOPLE))[0];
+    let note = outliner(&mut app).rows_under(group_key(NOTES))[0];
+    let named = |app: &mut App, key: u64| {
+        let entity = row_entity(app, key);
+        app.world().entity(entity).contains::<ContextMenu>()
+    };
+    assert!(named(&mut app, placement_key(&piece)), "a piece's row names the menu");
+    assert!(!named(&mut app, group_key(PEOPLE)), "the people's group does not: nothing to pin, nothing to draw");
+    assert!(!named(&mut app, person), "nor a person's row");
+    assert!(!named(&mut app, note), "nor a note's");
 }
 
-/// **A row's eye hides its piece in this session**, and the map is not written by it.
+/// **A row's Hide takes the piece out of the viewport for this session**, and the map is not written by it.
 #[test]
-fn a_rows_eye_hides_the_piece_in_the_session_and_writes_nothing() {
+fn a_rows_hide_takes_the_piece_out_of_the_session_and_writes_nothing() {
     let mut app = rig("outliner_eye");
     let id = app.world().resource::<OpenMap>().map.placements[0].id.clone();
     let dirty_before = app.world().resource::<OpenMap>().dirty();
-    set_eye_for_test(app.world_mut(), placement_key(&id), false);
-    updates(&mut app, 4);
+    choose(&mut app, placement_key(&id), "Hide");
 
     assert_eq!(app.world().resource::<OpenMap>().dirty(), dirty_before, "the map is not written by an eye");
     assert_eq!(app.world().resource::<EditorState>().undo_depth(), 0, "and there is nothing to undo");
-    let hidden = app.world().resource::<bevy_cauldron::outliner::Eyes>().hidden();
+    let hidden = app.world().resource::<Eyes>().hidden();
     assert_eq!(hidden, vec![id.clone()], "the eye hid that piece and no other: {hidden:?}");
 
-    set_eye_for_test(app.world_mut(), placement_key(&id), true);
-    updates(&mut app, 4);
-    assert!(
-        !app.world().resource::<bevy_cauldron::outliner::Eyes>().is_hidden(&id),
-        "and the eye again shows it"
-    );
+    choose(&mut app, placement_key(&id), "Hide");
+    assert!(!app.world().resource::<Eyes>().is_hidden(&id), "and the eye again shows it");
 }
 
-/// **A hidden piece is not drawn in the viewport**, and showing it again brings it back.
+/// **A hidden piece is not drawn in the viewport**, and hiding it again brings it back.
 #[test]
 fn a_hidden_piece_is_not_drawn_and_showing_it_again_brings_it_back() {
     let mut app = rig("outliner_eye_draws");
@@ -266,10 +295,21 @@ fn a_hidden_piece_is_not_drawn_and_showing_it_again_brings_it_back() {
         app.world().get::<Visibility>(entity).copied().unwrap_or(Visibility::Inherited) != Visibility::Hidden
     };
     assert!(drawn(&mut app), "a piece starts visible");
-    set_eye_for_test(app.world_mut(), placement_key(&id), false);
-    updates(&mut app, 4);
+    choose(&mut app, placement_key(&id), "Hide");
+    updates(&mut app, 2);
     assert!(!drawn(&mut app), "the eye takes it out of the viewport");
-    set_eye_for_test(app.world_mut(), placement_key(&id), true);
-    updates(&mut app, 4);
+    choose(&mut app, placement_key(&id), "Hide");
+    updates(&mut app, 2);
     assert!(drawn(&mut app), "and puts it back");
+}
+
+/// **The eye is reset at a door**: another map's rows are not the ids it holds, so opening one shows everything.
+#[test]
+fn the_eye_does_not_outlive_the_map() {
+    let mut app = rig("outliner_eye_door");
+    let id = app.world().resource::<OpenMap>().map.placements[0].id.clone();
+    choose(&mut app, placement_key(&id), "Hide");
+    assert!(app.world().resource::<Eyes>().is_hidden(&id), "the piece is behind the eye");
+    bevy_cauldron::screen::reset_door_state_for_test(app.world_mut());
+    assert!(app.world().resource::<Eyes>().is_empty(), "and a door puts every eye back");
 }

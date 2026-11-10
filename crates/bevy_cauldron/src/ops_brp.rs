@@ -625,6 +625,9 @@ struct Gates<'w> {
     /// raised where the agent comes in — never inside `dispatch`, where a person's key would raise one
     /// too and the camera would move under their hands.
     following: Option<ResMut<'w, crate::follow::Following>>,
+    /// **The page a change off the map is on** (AF-03, #359), asked for here for `following`'s
+    /// reason: the request is raised where the agent comes in, never inside `dispatch`.
+    revealing: Option<ResMut<'w, crate::reveal::Revealing>>,
 }
 
 impl Gates<'_> {
@@ -635,16 +638,51 @@ impl Gates<'_> {
         }
     }
 
-    /// **Ask the camera to go to the change**, or nothing when it is not on the map.
+    /// **Show the change**: the camera for one on the map, the page for one that is not.
     ///
-    /// A change to a library piece, a composition, a rig, a note or a file is a place on another
-    /// screen; those are AF-04's (#359), and this answers `None` for them rather than guessing.
-    fn follow(&mut self, shown: &crate::ops::Shown) {
+    /// **Two mechanisms and one decision.** [`crate::follow::request_of`] answers for a change on the
+    /// map and the camera takes it; [`crate::reveal::page_of`] answers for everything else and the
+    /// reveal opens its door, panel and row (AF-03, #359). A `Shown` neither takes — `Nowhere` — is
+    /// nothing anybody can look at, and is left alone rather than being refused as a page.
+    fn follow(&mut self, operation: &str, shown: &crate::ops::Shown, summary: &str) {
+        if let Some(request) = crate::follow::request_of(shown) {
+            if let Some(following) = self.following.as_mut() {
+                following.request_named(request, crate::follow::as_the_familiar(summary));
+            }
+            return;
+        }
+        if matches!(shown, crate::ops::Shown::Nowhere) {
+            return;
+        }
+        if let Some(revealing) = self.revealing.as_mut() {
+            revealing.request(operation, shown);
+        }
+    }
+
+    /// **Follow a proposal** (AF-05, #361): `grimoire/operation_preview` and `operation_apply` with
+    /// `dry_run: true` go through the same queue, the same idle wait and the same dwell as a change.
+    ///
+    /// **The receipt says it is a preview**, and the outline is drawn in the preview colour: those two
+    /// are the only differences, which is the point. A person watching an agent plan sees each
+    /// proposal arrive exactly as a change would, can tell a proposal from a fact, and can stop the
+    /// agent before it applies one (Pause agent writes, or a note).
+    ///
+    /// **A preview writes nothing, and following it writes nothing either**: the camera, the ring and
+    /// a receipt are view state — no operation is recorded and no file is touched.
+    // The `state` parameter is why this is not a free function: the receipt is part of the follow's
+    // contract, not an extra, so a preview that frames nothing says nothing.
+    fn follow_a_preview(&mut self, shown: &crate::ops::Shown, summary: &str, state: Option<&mut crate::editor::EditorState>) {
         let Some(request) = crate::follow::request_of(shown) else {
             return;
         };
+        let about_to = format!("{} is about to {summary}", crate::follow::FAMILIAR);
         if let Some(following) = self.following.as_mut() {
-            following.request(request);
+            following.request_a_preview(request, about_to.clone());
+        }
+        // **The receipt says it is a preview** (AF-05, #361): the sentence a person reads while
+        // nothing has been written must not read as something that happened.
+        if let Some(state) = state {
+            state.status.note(about_to);
         }
     }
 }
@@ -1468,6 +1506,55 @@ fn capture_sequence_status(
     Ok(sequencer.status(p.id))
 }
 
+/// **`grimoire/stage_panel` — put the shell on one panel, for a capture** (UI-92, #258).
+///
+/// The one door `tools/demo/record.py`'s `stage` step and an agent use: [`crate::stage_panels::arrange`] does the
+/// arranging, so a clip and an agent cannot disagree about what staging a panel means. Queued for the end of the
+/// frame, because a screen change and a dock's layout are both read by schedules after this one.
+///
+/// **A refusal, and not a note**: a name the shell has not got, or a workbench panel asked for from the launcher, is
+/// answered with what is available rather than by leaving the editor where it was and letting the capture show the
+/// wrong panel.
+fn stage_panel(In(params): In<Value>, world: &mut World) -> Result<Value, String> {
+    let wanted = panel_named(&params)?;
+    let staged = crate::stage_panels::arrange(world, &wanted)?;
+    Ok(staged_answer(&staged))
+}
+
+/// **The panel a request names**, or the refusal naming the ones the shell has.
+fn panel_named(params: &Value) -> Result<String, String> {
+    Ok(params
+        .get("panel")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("pass panel: one of {}.", crate::stage_panels::names()))?
+        .to_owned())
+}
+
+/// **What a staged panel answers**: the panel, the screen it is on now, and that it was arranged.
+fn staged_answer(staged: &crate::stage_panels::Staged) -> Value {
+    json!({
+        "panel": staged.id,
+        "screen": format!("{:?}", staged.screen),
+        "staged": true,
+    })
+}
+
+/// **`grimoire/stage_panel`'s answer, read back**: what the shell is on now, so a caller can confirm the arrangement
+/// before it starts a sequence.
+fn staged_panels(_: In<Value>, screen: Option<Res<State<crate::screen::Screen>>>) -> Result<Value, String> {
+    let panels: Vec<Value> = crate::stage_panels::STAGES
+        .iter()
+        .map(|stage| json!({"panel": stage.id, "screen": crate::stage_panels::is_screen(stage.id)}))
+        .collect();
+    Ok(json!({
+        "panels": panels,
+        "screen": match screen.as_deref() {
+            Some(state) => format!("{:?}", state.get()),
+            None => "none".to_owned(),
+        },
+    }))
+}
+
 /// **`grimoire/operation_list` — every operation, its schema, and how it is undone.**
 ///
 /// **A discovery tool, not a page of tools.** The MCP server exposes one tool per operation, but
@@ -1516,6 +1603,7 @@ fn operation_preview(
     project: Option<ResMut<crate::project::Project>>,
     open: Option<ResMut<crate::project::OpenMap>>,
     menu: Option<Res<crate::project_assets::PointedAt>>,
+    mut state: Option<ResMut<crate::editor::EditorState>>,
     mut gates: Gates,
 ) -> Result<Value, String> {
     gates.hear("operation_preview");
@@ -1527,14 +1615,24 @@ fn operation_preview(
     };
     let ctx = context(project, open, menu);
     match ops::preview(&ctx, op.as_ref(), &p.parameters) {
-        Ok(plan) => Ok(json!({
-            "operation": p.operation,
-            "outcome": "previewed",
-            // **Where the change would be seen** (AF-01, #357), read from the same function the
-            // apply reads, so a preview and its apply cannot name different places.
-            "shown": ops::preview_shows(&ctx, op.as_ref(), &p.parameters),
-            "would_change": plan,
-        })),
+        Ok(plan) => {
+            let shown = ops::preview_shows(&ctx, op.as_ref(), &p.parameters);
+            // **A proposal is followed before it is applied** (AF-05, #361), through the same queue
+            // and idle wait a change goes through.
+            //
+            // **Previews are followed while agent writes are paused**, which is the one place in this
+            // file where the pause does not refuse: planning is exactly what a person watching an
+            // agent may want to see, and nothing is written to refuse.
+            gates.follow_a_preview(&shown, &crate::ops::preview_summary(op.as_ref(), &plan), state.as_deref_mut());
+            Ok(json!({
+                "operation": p.operation,
+                "outcome": "previewed",
+                // **Where the change would be seen** (AF-01, #357), read from the same function the
+                // apply reads, so a preview and its apply cannot name different places.
+                "shown": shown,
+                "would_change": plan,
+            }))
+        }
         Err(e) => Ok(refused_answer(&p.operation, &e)),
     }
 }
@@ -1723,12 +1821,18 @@ fn operation_apply(
             proposal: proposal.as_deref().and_then(|r| r.0.clone()),
         };
         return match ops::preview(&ctx, op.as_ref(), &p.parameters) {
-            Ok(plan) => Ok(json!({
-                "operation": p.operation,
-                "outcome": "previewed",
-                "shown": ops::preview_shows(&ctx, op.as_ref(), &p.parameters),
-                "would_change": plan,
-            })),
+            Ok(plan) => {
+                let shown = ops::preview_shows(&ctx, op.as_ref(), &p.parameters);
+                // **`dry_run` is a preview and is followed as one** (AF-05, #361): an agent that asks
+                // what would change is showing the person the same proposal the preview tool shows.
+                gates.follow_a_preview(&shown, &crate::ops::preview_summary(op.as_ref(), &plan), state.as_deref_mut());
+                Ok(json!({
+                    "operation": p.operation,
+                    "outcome": "previewed",
+                    "shown": shown,
+                    "would_change": plan,
+                }))
+            }
             Err(e) => Ok(refused_answer(&p.operation, &e)),
         };
     }
@@ -1974,7 +2078,7 @@ fn operation_apply(
             // **The editor follows the change** (AF-02, #358): the request is raised here, at the door
             // an agent comes through, and never inside `dispatch` — a person's key goes through the
             // same dispatch and must not move the camera under their hands.
-            gates.follow(&shown);
+            gates.follow(&p.operation, &shown, &outcome.summary);
             // **A door the editor will ask about is not yet open (cycle 8, gap 4).** The outcome is a
             // stable word, `waiting`, and `waiting_on` names what it waits for, so nobody reads "applied"
             // as "the door is open" and a caller can branch on the word.
@@ -2267,7 +2371,10 @@ fn operation_undo(
             // **The editor follows an undo too** (AF-02, #358): an undo of a removal is where the piece
             // stands again, and an undo of a placement is where it was — both are places the person
             // must be shown, from the same answer the apply's follow reads.
-            gates.follow(&shown);
+            // **Named by the operation the line was for**, not the word `undo`: a page the editor has
+            // no view for is reported by name, and `undo` names nothing a person can find in the
+            // operation list (review of #359, NIT).
+            gates.follow(&entry.op, &shown, &outcome.summary);
             json!({
                 "operation": entry.op,
                 "outcome": "applied",
@@ -2695,6 +2802,33 @@ impl Plugin for OpsBridgePlugin {
 
         app.add_debug_command(
             DebugCommandInfo::new(
+                "grimoire/stage_panel",
+                "Put the shell on one panel, so a capture starts on it: the launcher, the loader, the \
+                 settings screen, or a dock panel by the id the shell registers it under. The one \
+                 arrangement a storyboard and an agent share; it refuses a name the shell has not \
+                 got, and a workbench panel asked for from another screen, saying what is available.",
+            )
+            // **The catalog's own names**, so this text cannot list a panel the command refuses (it said `status`,
+            // which is registered and deliberately unstaged) and a panel added to the catalog appears here.
+            .params(format!(
+                "panel: one of {}. A name that is not here is refused with this list.",
+                crate::stage_panels::names()
+            ))
+            .example(json!({"panel": "settings"})),
+            stage_panel,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
+                "grimoire/stage_panels",
+                "Every panel a capture can be staged on, and the screen the editor is on now. A read.",
+            )
+            .example(json!({})),
+            staged_panels,
+        );
+
+        app.add_debug_command(
+            DebugCommandInfo::new(
                 "grimoire/operation_list",
                 "Every operation this editor knows, with its parameters' JSON schema and how it is \
                  undone. Read this before calling `grimoire/operation_apply`.",
@@ -2929,6 +3063,8 @@ fn editor_present(
     if let (Some(first), Some(following)) = (p.check.first(), following.as_mut())
         && !first.placements.is_empty()
     {
+        // **A hand-back is not a change of its own**, so it is the unnamed form: the chip says the
+        // Familiar changed something and names the first place to check (AF-04, #360).
         following.request(crate::follow::FollowRequest {
             target: crate::editor::FrameTarget::Placements(first.placements.clone()),
             ids: first.placements.clone(),
