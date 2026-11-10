@@ -462,14 +462,14 @@ pub fn snip_overlay(
                 border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
                 ..default()
             },
-            BorderColor::all(chrome::ACCENT),
-            BackgroundColor(chrome::SNIP_WASH),
+            BorderColor::all(chrome::ink().accent),
+            BackgroundColor(chrome::ink().snip_wash),
         ))
         .with_children(|p| {
             p.spawn((
                 Text::new(label),
                 chrome::font(chrome::text::LABEL),
-                TextColor(chrome::TEXT),
+                TextColor(chrome::ink().text),
                 // One line, so a narrow drag cannot wrap the label down across the box's top edge.
                 TextLayout::default().with_no_wrap(),
                 Node {

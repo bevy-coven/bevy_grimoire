@@ -2,7 +2,7 @@
 //!
 //! `chrome::list_heading` is the one builder behind the PLACE palette's heading, the rig list's and the
 //! kit's piece list, and it drew `chrome::LABEL` — the constant — so a project's skin could not reach the
-//! name of any of the three lists. `ListHeadingInk` is the seam: the shipped `LABEL` where there is no
+//! name of any of the three lists. `ListHeadingInk` is the seam: the shipped `Ink::label` where there is no
 //! skin (which keeps every protected test and the editor itself byte-identical), the skin's own `label`
 //! tone where a skin names one.
 
@@ -14,10 +14,10 @@ use bevy_cauldron::chrome::{self, ListHeadingInk};
 fn with_no_skin_the_heading_is_the_shipped_label() {
     assert_eq!(
         ListHeadingInk::of(None),
-        ListHeadingInk::SHIPPED,
+        ListHeadingInk::shipped(),
         "a harness that never ran the UI plugin draws what it always drew"
     );
-    assert_eq!(ListHeadingInk::SHIPPED.0, chrome::LABEL);
+    assert_eq!(ListHeadingInk::shipped().0, chrome::ink().label);
 }
 
 /// **A skin that names the `label` tone changes it**; the editor's own skin does not, by design.
@@ -35,7 +35,7 @@ fn a_skins_label_tone_is_the_headings_ink() {
     let plain = bevy_gooey::GooeySkin::default();
     assert_eq!(
         ListHeadingInk::of(Some(&plain)),
-        ListHeadingInk::SHIPPED,
+        ListHeadingInk::shipped(),
         "the editor's own skin carries no label tone, so its headings are unchanged"
     );
 }

@@ -35,52 +35,61 @@ use crate::chrome;
 /// [`chrome::DANGER`] for red, [`chrome::ACCENT`] for yellow — and the slots this palette has no word
 /// for are chosen to sit at the same lightness as the ones beside them, so a line mixing `31` and
 /// `33` does not flicker between two eras of design.
-const ANSI: [Color; 16] = [
-    // 0–7: black, red, green, yellow, blue, magenta, cyan, white.
-    Color::srgb(0.129, 0.122, 0.110), // CHROME-OK: ANSI slot 0 is a shade below PANEL_BG, so a
-    // `ESC[40m` block reads as a block against the panel rather than as the panel.
-    chrome::DANGER,
-    Color::srgb(0.545, 0.780, 0.490), // CHROME-OK: ANSI slot 2 — "success" green, which the
-    // editor's palette has no word for (it has DANGER and ACCENT, and a third severity would be a
-    // second green nobody asked for).
-    chrome::ACCENT,
-    Color::srgb(0.451, 0.647, 0.851), // CHROME-OK: ANSI slot 4 — the blue a compiler's `help:`
-    // lines arrive in, and the editor's palette is warm by design and has no blue at all.
-    Color::srgb(0.788, 0.573, 0.792), // CHROME-OK: ANSI slot 5, magenta; no palette word.
-    Color::srgb(0.478, 0.757, 0.776), // CHROME-OK: ANSI slot 6, cyan; no palette word.
-    chrome::TEXT,
-    // 8–15: the bright half.
-    chrome::MUTED,
-    Color::srgb(0.969, 0.635, 0.588), // CHROME-OK: bright red, `DANGER` lifted toward white so
-    // bold red still reads as an error rather than as a second red.
-    Color::srgb(0.663, 0.878, 0.604), // CHROME-OK: bright green.
-    Color::srgb(1.000, 0.831, 0.502), // CHROME-OK: bright yellow.
-    Color::srgb(0.573, 0.749, 0.937), // CHROME-OK: bright blue.
-    Color::srgb(0.878, 0.686, 0.882), // CHROME-OK: bright magenta.
-    Color::srgb(0.612, 0.855, 0.871), // CHROME-OK: bright cyan.
-    Color::srgb(0.976, 0.965, 0.941), // CHROME-OK: bright white — brighter than TEXT, because
-                                      // `ESC[97m` on a `ESC[1m` heading has to be the brightest thing
-                                      // on the pane or the escape did nothing.
-];
+/// **The ANSI slots 0–15**, in the standard's order: eight normal, then the same eight bright.
+///
+/// **A function and not a `const`** (UI-02, #210): four of the sixteen are the editor's own ink, and
+/// the ink is the skin's now — read from `src/editor_skin.ron` at run time, so the table cannot be a
+/// compile-time constant any more. The twelve that are nobody's word are still written here, each
+/// with the reason it has no palette name.
+fn ansi() -> [Color; 16] {
+    let ink = chrome::ink();
+    [
+        // 0–7: black, red, green, yellow, blue, magenta, cyan, white.
+        Color::srgb(0.129, 0.122, 0.110), // CHROME-OK: ANSI slot 0 is a shade below `ink.panel_bg`, so a
+        // `ESC[40m` block reads as a block against the panel rather than as the panel.
+        ink.danger,
+        Color::srgb(0.545, 0.780, 0.490), // CHROME-OK: ANSI slot 2 — "success" green, which the
+        // editor's palette has no word for (it has DANGER and ACCENT, and a third severity would be a
+        // second green nobody asked for).
+        ink.accent,
+        Color::srgb(0.451, 0.647, 0.851), // CHROME-OK: ANSI slot 4 — the blue a compiler's `help:`
+        // lines arrive in, and the editor's palette is warm by design and has no blue at all.
+        Color::srgb(0.788, 0.573, 0.792), // CHROME-OK: ANSI slot 5, magenta; no palette word.
+        Color::srgb(0.478, 0.757, 0.776), // CHROME-OK: ANSI slot 6, cyan; no palette word.
+        ink.text,
+        // 8–15: the bright half.
+        ink.muted,
+        Color::srgb(0.969, 0.635, 0.588), // CHROME-OK: bright red, `ink.danger` lifted toward white so
+        // bold red still reads as an error rather than as a second red.
+        Color::srgb(0.663, 0.878, 0.604), // CHROME-OK: bright green.
+        Color::srgb(1.000, 0.831, 0.502), // CHROME-OK: bright yellow.
+        Color::srgb(0.573, 0.749, 0.937), // CHROME-OK: bright blue.
+        Color::srgb(0.878, 0.686, 0.882), // CHROME-OK: bright magenta.
+        Color::srgb(0.612, 0.855, 0.871), // CHROME-OK: bright cyan.
+        Color::srgb(0.976, 0.965, 0.941), // CHROME-OK: bright white — brighter than `ink.text`, because
+                                          // `ESC[97m` on a `ESC[1m` heading has to be the brightest thing
+                                          // on the pane or the escape did nothing.
+    ]
+}
 
 /// What a cell draws when the child said nothing: the shell's own default.
 ///
 /// Taken from [`crate::chrome`] so a shell looks like the panel it is docked in — the same reasoning
 /// `docs/ui.md` §5 gives for keeping Bevy's Feathers greys out of the editor.
 pub fn default_fg() -> Color {
-    chrome::TEXT
+    chrome::ink().text
 }
 
 /// The pane's own ground. [`chrome::PANEL_BG`], because the terminal is a panel.
 pub fn default_bg() -> Color {
-    chrome::PANEL_BG
+    chrome::ink().panel_bg
 }
 
 /// **The selection's ground**, under the selected cells' own ink (#309). [`chrome::ROW_SELECTED`],
 /// the editor's one word for "selected", so a terminal selection reads like a chosen row anywhere
 /// else in the window and the cells keep their colours (a red error stays red).
 pub fn selection_bg() -> Color {
-    chrome::ROW_SELECTED
+    chrome::ink().row_selected
 }
 
 /// **A find match's ground** (#321): the accent, faint, so every match on screen is lit without
@@ -88,12 +97,12 @@ pub fn selection_bg() -> Color {
 /// pane's ground toward [`chrome::ACCENT`] rather than a new hue, so the terminal keeps the editor's one
 /// accent.
 pub fn find_bg() -> Color {
-    chrome::PANEL_BG.mix(&chrome::ACCENT, FIND_MIX)
+    chrome::ink().panel_bg.mix(&chrome::ink().accent, FIND_MIX)
 }
 
 /// **The current find match's ground**: the same accent, stronger.
 pub fn find_current_bg() -> Color {
-    chrome::PANEL_BG.mix(&chrome::ACCENT, FIND_CURRENT_MIX)
+    chrome::ink().panel_bg.mix(&chrome::ink().accent, FIND_CURRENT_MIX)
 }
 
 /// How far toward the accent a match's ground is mixed.
@@ -117,7 +126,7 @@ const GREY_STEP: u8 = 10;
 /// returns a `Color` rather than an `Option`, and a caller has no branch to get wrong.
 pub fn resolve(index: u8) -> Color {
     if index < 16 {
-        return ANSI[index as usize];
+        return ansi()[index as usize];
     }
     let (r, g, b) = rgb(index);
     Color::srgb_u8(r, g, b)

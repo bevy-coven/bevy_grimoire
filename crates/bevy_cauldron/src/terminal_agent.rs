@@ -152,7 +152,7 @@ pub fn insert_for_the_running_binary(app: &mut App) {
 ///
 /// **The fallback is the shipped palette**, never a second one: a headless harness that never ran
 /// `EditorUiPlugin` has no `GooeySkin`, and it must get exactly the colours the editor has always had.
-/// `MUTED` and `LABELED` are the skin's own named tones (`bevy_gooey`'s `GooeySkin::tones`), because
+/// `Ink::muted` and `Ink::labeled` are the skin's own named tones (`bevy_gooey`'s `GooeySkin::tones`), because
 /// no field of the skin means "excluded" or "judged"; a skin that carries neither falls back to the
 /// constant, so the editor's own look is unchanged by construction.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -171,12 +171,12 @@ impl AgentInk {
     /// From the running skin when there is one, the shipped palette when there is not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> AgentInk {
         let Some(skin) = skin else {
-            return AgentInk { read: chrome::TEXT, muted: chrome::MUTED, good: chrome::LABELED, danger: chrome::DANGER };
+            return AgentInk { read: chrome::ink().text, muted: chrome::ink().muted, good: chrome::ink().labeled, danger: chrome::ink().danger };
         };
         AgentInk {
             read: skin.text,
-            muted: skin.tone(MUTED_TONE).unwrap_or(chrome::MUTED),
-            good: skin.tone(LABELED_TONE).unwrap_or(chrome::LABELED),
+            muted: skin.tone(MUTED_TONE).unwrap_or(chrome::ink().muted),
+            good: skin.tone(LABELED_TONE).unwrap_or(chrome::ink().labeled),
             danger: skin.danger,
         }
     }

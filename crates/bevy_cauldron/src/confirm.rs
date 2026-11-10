@@ -121,7 +121,7 @@ impl Asked {
     /// depends on, and the only place this application decides what red means (`chrome::DANGER`:
     /// *"destructive, and only destructive"*).
     ///
-    /// Every question used to render its agreeing button filled `DANGER`, whichever question it
+    /// Every question used to render its agreeing button filled `Ink::danger`, whichever question it
     /// was — so `Quit bevy_cauldron?`, whose own body says *"anything already saved stays
     /// saved"*, was as red as deleting a kit directory. That is how an author learns to ignore red.
     fn destructive(self) -> bool {

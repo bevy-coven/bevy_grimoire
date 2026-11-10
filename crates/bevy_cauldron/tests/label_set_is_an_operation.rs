@@ -200,7 +200,7 @@ fn the_receipt_says_what_the_axis_changed_from_and_to() {
 /// **A re-stated axis names what actually happened**, not "unchanged".
 ///
 /// Setting an axis to the tokens it already holds is not a no-op: `stamp_by` moves the axis's
-/// provenance to this writer, so a chip a person had confirmed turns `UNCHECKED` on screen. A
+/// provenance to this writer, so a chip a person had confirmed turns `Ink::unchecked` on screen. A
 /// receipt reading `unchanged` would be contradicted by the panel beside it.
 #[test]
 fn a_receipt_for_a_restated_axis_says_the_claim_was_restated() {

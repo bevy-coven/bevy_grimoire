@@ -291,6 +291,7 @@ mod light_pool;
 mod light_view;
 mod live_writes_each_change_through;
 mod navigation;
+mod no_colour_lives_in_chrome;
 mod no_internal_words_on_screen;
 mod no_observer_hides_a_resource_in_a_bundle;
 mod no_system_writes_every_frame;

@@ -57,92 +57,182 @@ use crate::keys::{self};
 // surface they sit in, because pushed-in and typed-into are the two states where the metaphor is a
 // well rather than a card.
 
-/// The panel's own ground. Opaque, not the game's translucent HUD panel: an editor panel is a work
-/// surface, and a researcher in a white coat behind a translucent one is unreadable — measured.
-pub const PANEL_BG: Color = Color::srgb(0.115, 0.107, 0.093);
-/// A row at rest.
-pub const ROW_BG: Color = Color::srgb(0.165, 0.153, 0.134);
-/// A row (or chip, or field) under the pointer and not yet chosen. **One name.** This value lived
-/// as an unnamed literal in the map palette and the tab strip — byte-identical, twice — which is
-/// this module's founding failure one more time. One step above [`ROW_BG`], well short of
-/// [`ROW_SELECTED`]: hover is a signifier that the thing is actionable (Norman's term, via
-/// Seinfeld et al. 2020, `10.1080/07370024.2020.1724790` §3.1), not a claim that it is chosen.
-pub const ROW_HOVER: Color = Color::srgb(0.212, 0.197, 0.172);
-/// A row that is armed, selected, or otherwise the one being acted on. **One name.** This was
-/// `ROW_ARMED` in the map tab and `ROW_SELECTED` in the tiles tab, at the same value — two names for
-/// one idea is two things to keep in step.
+/// **The editor's own ink, and the only place a colour is named** (UI-02, #210).
 ///
-/// It steps only ΔL\* 3.9 over [`ROW_HOVER`] and does not need more, because since 2026-09-03
-/// selection also carries a **shape**: [`SELECT_RAIL_W`] of [`ACCENT`] down the row's leading edge.
-/// A fill alone had to shout to be unambiguous, and shouting is what pushed a selected row's ground
-/// so bright that [`LABEL`] on it measured 3.25:1.
-pub const ROW_SELECTED: Color = Color::srgb(0.248, 0.231, 0.201);
-/// **A control with the pointer down on it.** Recessed — *below* [`ROW_BG`], not above — because
-/// pressed is the one state whose metaphor is a well rather than a card, and because a press that
-/// merely brightened would be indistinguishable from the hover it is entered from.
+/// This module used to declare 28 `pub const … : Color` — a table the 2026-08-17 audit had already
+/// caught drifting against itself twice. They are gone: every colour the chrome paints is a field
+/// here, and every field is read from **the editor's own skin** (`src/editor_skin.ron`, through
+/// [`crate::ui::editor_skin`]), which is the same data `bevy_gooey` restyles the widgets from and
+/// the same data `GooeySkin::problems()` measures. One palette, one file, one check.
 ///
-/// Before 2026-09-03 nothing in this editor acknowledged a click at all: rest, hover and selected
-/// were the whole state machine, so a button that ran a slow verb looked identical during it.
-pub const ROW_PRESSED: Color = Color::srgb(0.110, 0.102, 0.089);
-/// Body text: a value, an id, the thing that changes.
-pub const TEXT: Color = Color::srgb(0.880, 0.865, 0.835);
-/// Quieter body text. Was `TEXT_DIM` in one tab and `DIM` in the other, same value.
-pub const DIM: Color = Color::srgb(0.700, 0.685, 0.655);
-/// **The one live-edit colour, and nothing else.**
+/// # Why a struct and not a resource
 ///
-/// It used to do five jobs — panel title, live edit, selection, an expensive verb, and the tab
-/// strip's active mark — which is four too many for a hue this loud. The 2026-09-03 answer at the
-/// keyboard was to keep exactly one: *a value you are changing right now*. Titles are [`TEXT`],
-/// selection is [`ROW_SELECTED`] plus the rail, and a verb that costs something is an ordinary
-/// command button. The caret in [`field_text`] is the canonical use.
-pub const ACCENT: Color = Color::srgb(0.950, 0.710, 0.300);
-/// The key column. Brighter than the description beside it, because the key is what you scan for.
-pub const KEY: Color = Color::srgb(0.790, 0.770, 0.735);
-/// A label column — quieter than its value, which is the thing that changes.
+/// The chrome is sixty-one spawn systems and helpers that hold no `Res<GooeySkin>`, and threading a
+/// skin through all of them would be a second parameter on every call for a value that never varies
+/// at run time: the editor's chrome paints with **the editor's** skin whatever a project ships
+/// (UI-03, #211 — a game's palette belongs inside the Game UI preview panel and nowhere else). So
+/// the ink is a function of a compiled-in file, built once, and [`ink`] hands out a reference.
 ///
-/// Raised 2026-09-03: at its old value this measured **3.65:1** on [`ROW_BG`], and it is 10 px type,
-/// which wants more contrast than body text rather than less. It now clears 4.5:1 on every ground a
-/// label renders on.
-pub const LABEL: Color = Color::srgb(0.615, 0.600, 0.575);
-/// **Destructive, and only destructive.** A refusal, a blocking finding, a verb that throws work
-/// away. Since 2026-09-03 it no longer marks *expensive* — that was a second meaning on one hue, and
-/// `rescan mesh` reading the same as `clear this cell` is how an author learns to ignore red.
-pub const DANGER: Color = Color::srgb(0.980, 0.520, 0.460);
+/// **A theme does not move it, and that is the honest state of things.** A theme (`ui::skin_for`)
+/// reaches the gooey-drawn widgets; the chrome's labels stay the editor's measured darks, which is
+/// why [`crate::ui::honoured_from`] refuses a theme whose ground would leave them unreadable rather
+/// than painting one and calling it accessible.
+///
+/// # The tone names are the file's keys
+///
+/// Twelve of these have no `GooeySkin` field — `key`, `label`, `muted`, `suggest`, `labeled`,
+/// `grid_line`, `bounds_line`, `veil`, `focus_bg`, `row_pressed`, `snip_wash`, `overlay_bg` — and
+/// live in the skin's `tones` map (bevy-coven/bevy_gooey#33). A tone the skin does not carry is
+/// answered in magenta, this module's convention for a colour that cannot be derived
+/// ([`scaled`], [`ink`]); for the editor's own skin it cannot happen, and
+/// `tests/the_skin_carries_the_editors_other_colours.rs` holds all twelve in place.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ink {
+    /// A panel's ground — the skin's `surface`.
+    pub panel_bg: Color,
+    /// A row, a chip, a field at rest — the skin's `surface_raised`.
+    pub row_bg: Color,
+    /// A row under the pointer — the skin's `hover`.
+    pub row_hover: Color,
+    /// A row that is the one being acted on — the ladder's seventh step.
+    pub row_selected: Color,
+    /// A control with the pointer down on it — the skin's `pressed`, recessed below [`Ink::row_bg`].
+    pub row_pressed: Color,
+    /// Body text: a value, an id, the thing that changes.
+    pub text: Color,
+    /// Quieter body text — the skin's `text_muted`.
+    pub dim: Color,
+    /// **The one live-edit colour**: a value being changed right now, and nothing else.
+    pub accent: Color,
+    /// The key column, brighter than the description beside it.
+    pub key: Color,
+    /// A label column, quieter than its value.
+    pub label: Color,
+    /// Destructive, and only destructive.
+    pub danger: Color,
+    /// The scrim behind a modal — black at 55%, so the question is the only lit thing.
+    pub scrim: Color,
+    /// The veil the shortcut badges are read through — lighter than the scrim on purpose.
+    pub veil: Color,
+    /// A row that exists on purpose and is deliberately not participating.
+    pub muted: Color,
+    /// Machine-proposed, human-unconfirmed — a cool slate, neither accent nor danger.
+    pub suggest: Color,
+    /// [`Ink::suggest`] one state later, lifted toward white so it reads on a chosen row.
+    pub unchecked: Color,
+    /// A mesh that has been judged — the one state that means *ready*.
+    pub labeled: Color,
+    /// An inspector slot, an empty thumbnail — the ladder's fifth step.
+    pub slot_bg: Color,
+    /// A modal card's ground, above the scrim — the skin's `card`.
+    pub overlay_bg: Color,
+    /// A text box that owns the keyboard: recessed below [`Ink::panel_bg`].
+    pub focus_bg: Color,
+    /// A group heading band — the ladder's third step.
+    pub header_bg: Color,
+    /// The working grid: the map's cell lattice and the seating lattice.
+    pub grid_line: Color,
+    /// A stated extent, brighter than the grid inside it.
+    pub bounds_line: Color,
+    /// The void the panels float over — the clear colour both entry points install.
+    pub void: Color,
+    /// The window's own chrome: the bar above the door strip and the band at its foot.
+    pub bar_bg: Color,
+    /// The hairline that ends any surface.
+    pub panel_edge: Color,
+    /// A louder edge, for the surface that owns the keyboard.
+    pub edge_strong: Color,
+    /// The snip's translucent wash over its rectangle.
+    pub snip_wash: Color,
+}
 
-/// **Present but switched off** — dimmer than [`LABEL`], which is already the quietest thing that
-/// still asks to be read.
-///
-/// For a row that exists on purpose and is deliberately not participating: a pack this kit excludes.
-/// **The scrim behind a modal** — the application, dimmed, so the question is the only lit thing.
-///
-/// Black at 55%: enough to push a full panel of text back without hiding what the question is
-/// about, which matters because every question here names a piece or a map the author can still
-/// see behind it. Named rather than written at the call site so a second modal cannot dim by a
-/// different amount, which is exactly the drift `panel_ink_comes_from_the_palette` exists to catch
-/// — and did, on this constant's first day.
-pub const SCRIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.55);
+/// **How far [`Ink::bar_bg`] sits above a slot's ground.** `Ink::bar_bg` was `scaled(SLOT_BG, 0.78)`; the
+/// relationship is the point (chrome a step above a panel, a step below a slot), so it is kept as a
+/// derivation rather than transcribed.
+const BAR_STEP_BACK: f32 = 0.78;
 
-/// **The interface, stood back, while the key badges are up.**
-///
-/// Lighter than [`SCRIM`], and the difference is what each is for: a scrim dims for a modal you have
-/// to answer, so hiding what is behind it is the point. This dims for a layer you read *through* —
-/// the badge is only useful next to the control it names, and a veil that hid the control would hide
-/// the thing being taught.
-///
-/// It is not a courtesy. Healey & Enns 2012 (`10.1109/TVCG.2011.127`) measured the feature hierarchy
-/// and the interference is **asymmetric**: background variation in colour masks patterns of form,
-/// while variation in form does not mask colour. Flattening the ground is therefore what makes a
-/// badge a *pop-out* — detectable "regardless of the number of distractors" — rather than a
-/// conjunction search at 25–40 ms an item. Named here rather than written at the call site so a
-/// second overlay cannot dim by a different amount, which is what `panel_ink_comes_from_the_palette`
-/// exists to catch.
-pub const VEIL: Color = Color::srgba(0.0, 0.0, 0.0, 0.35);
+/// **How far [`Ink::unchecked`] is lifted off [`Ink::suggest`]** — the value a model wrote, one state
+/// after the proposal, so it still reads on a chosen row.
+const UNCHECKED_LIFT: f32 = 1.45;
+
+/// The ladder's step for a selected row: `background, surface, header, raised, slot, hover,
+/// selected, edge`, lowest first (`src/editor_skin.ron`).
+const ROW_SELECTED_STEP: u8 = 6;
+/// The ladder's step for an inspector slot.
+const SLOT_STEP: u8 = 4;
+/// The ladder's step for a group heading band.
+const HEADER_STEP: u8 = 2;
+/// The ladder's step for the hairline that ends a surface.
+const EDGE_STEP: u8 = 7;
+
+impl Ink {
+    /// **The ink as a skin says it.** Every field is one of the skin's own roles or tones, except
+    /// the two that are *derived* and say so: [`Ink::bar_bg`] from a slot's ground and
+    /// [`Ink::unchecked`] from the suggest tone.
+    pub fn of(skin: &bevy_gooey::GooeySkin) -> Ink {
+        let tone = |name: &str| skin.tone(name).unwrap_or_else(|| {
+            // **Magenta, loudly.** This module answers a colour it cannot derive in fuchsia rather
+            // than with a silent grey ([`scaled`], [`ink`]); a skin missing one of the editor's tones
+            // is exactly that case. The editor's own skin carries all twelve, held by
+            // `tests/the_skin_carries_the_editors_other_colours.rs`.
+            Color::srgb(1.0, 0.0, 1.0)
+        });
+        let slot_bg = skin.surface_at(SLOT_STEP);
+        let suggest = tone("suggest");
+        Ink {
+            panel_bg: skin.surface,
+            row_bg: skin.surface_raised,
+            row_hover: skin.hovered(),
+            row_selected: skin.surface_at(ROW_SELECTED_STEP),
+            row_pressed: skin.pressed(),
+            text: skin.text,
+            dim: skin.text_muted,
+            accent: skin.accent,
+            key: tone("key"),
+            label: tone("label"),
+            danger: skin.danger,
+            scrim: skin.scrim,
+            veil: tone("veil"),
+            muted: tone("muted"),
+            suggest,
+            unchecked: scaled(suggest, UNCHECKED_LIFT),
+            labeled: tone("labeled"),
+            slot_bg,
+            overlay_bg: skin.card(),
+            focus_bg: tone("focus_bg"),
+            header_bg: skin.surface_at(HEADER_STEP),
+            grid_line: tone("grid_line"),
+            bounds_line: tone("bounds_line"),
+            void: skin.background,
+            bar_bg: scaled(slot_bg, BAR_STEP_BACK),
+            panel_edge: skin.surface_at(EDGE_STEP),
+            edge_strong: skin.outline,
+            snip_wash: tone("snip_wash"),
+        }
+    }
+
+    /// **The editor's own ink**, from `src/editor_skin.ron` — what every painter in this crate uses.
+    ///
+    /// Built once and handed out by [`ink`]: the file is compiled in, so the value cannot change
+    /// under a running editor, and parsing it per call site would be work with no answer at the end
+    /// of it.
+    pub fn editor() -> Ink {
+        Ink::of(&crate::ui::editor_skin())
+    }
+}
+
+/// **The editor's ink, built once.** See [`Ink`] for why this is a function of a compiled-in file
+/// rather than a resource: the chrome paints with the editor's skin whatever a project ships.
+pub fn ink() -> &'static Ink {
+    static INK: std::sync::OnceLock<Ink> = std::sync::OnceLock::new();
+    INK.get_or_init(Ink::editor)
+}
 
 /// **How far a ground fill steps back while the shortcuts key is held.**
 ///
 /// A panel's fill is the ground its rows stand on ([`Ground`]), and while `K` is down that ground is
 /// also what a badge may stand on. At full opacity the badge and the panel are two opaque boxes of
-/// the same colour meeting at a border; at this alpha the [`VEIL`] and the world read faintly
+/// the same colour meeting at a border; at this alpha the `Ink::veil` and the world read faintly
 /// through the ground, so the badge is plainly the nearest thing and the panel is plainly behind it.
 ///
 /// **Only the fill.** Rows, fields, chips and every word keep their own opacity — a badge points at
@@ -176,97 +266,20 @@ pub fn stepped_back(color: Color, held: bool) -> Color {
     }
 }
 
-/// It has to stay visible, because a mesh that has silently vanished looks identical to one that was
-/// never scanned — but it must not compete with rows an author can actually act on. Raised
-/// 2026-09-03 from 2.49:1 to clear 4.5:1 on the two grounds an excluded pack header actually sits
-/// on, [`PANEL_BG`] and [`HEADER_BG`].
-pub const MUTED: Color = Color::srgb(0.575, 0.560, 0.540);
-
-/// **Machine-proposed, human-unconfirmed** — the VLM labeler's third state. A cool slate,
-/// deliberately neither [`ACCENT`] (amber = a live edit, yours) nor [`DANGER`] (red = wrong):
-/// a proposal is a question, and it must not read as either an answer or an alarm.
-pub const SUGGEST: Color = Color::srgb(0.530, 0.710, 0.810);
-/// **A value a model wrote that nobody has checked** — [`SUGGEST`]'s sibling, one state later.
-///
-/// [`SUGGEST`] is a proposal *pending*: it sits on [`ROW_BG`], where a mid slate reads fine. This is
-/// the same idea after `U` — the token is now held, so it sits on [`ROW_SELECTED`], and the same
-/// slate against that lighter fill measures about **2.6:1**, under any threshold `docs/ui.md` §1.3
-/// will accept for text. Scaled toward white rather than hand-picked, so retinting `SUGGEST` retints
-/// this with it — the audit's `ENVELOPE_IDLE` finding, which was `ACCENT` divided by two and
-/// transcribed.
-///
-/// The pair is the whole visible half of `bevy_grimoire_core::descriptor::LabelOrigin`: this ink means *a
-/// machine decided this and you have not*, and [`TEXT`] on the same chip means *you did*.
-pub const UNCHECKED: Color = scaled(SUGGEST, 1.45);
-/// **A mesh that has been judged** — every axis answered, so it can compose a tile.
-///
-/// Asked for at the keyboard, 2026-08-15: *"could we add a visual indicator based on color to show
-/// whether a mesh has been labeled."* Green because it is the one state that means *ready*, and it
-/// has to be told apart at a glance from [`SUGGEST`] — a machine's proposal waiting on a human is a
-/// question, and a judged mesh is an answer.
-pub const LABELED: Color = Color::srgb(0.550, 0.830, 0.500);
-
-/// Empty preview tile, so an un-baked row reads as "not yet" rather than as a hole in the panel.
-/// `thumbs.rs` carries a third copy of this value as `BACKDROP`, for the booth's own background.
-pub const SLOT_BG: Color = Color::srgb(0.185, 0.172, 0.150);
 /// Edge of a row's preview box, logical px. One home since 2026-09-04: the map palette and the
 /// kit door's MESHES shelf both draw a portrait in this slot, and two copies of the size would
 /// be two row heights for one picture.
 pub const THUMB_SLOT: f32 = 30.0;
-/// **A modal card's ground** — the one thing lit while the [`SCRIM`] holds everything else back.
-/// Above [`PANEL_BG`] by ΔL\* 9.2, because a card that reads at the same elevation as the panel
-/// behind it is a panel with a shadow on it rather than a question being asked.
-pub const OVERLAY_BG: Color = Color::srgb(0.195, 0.181, 0.158);
-/// **A text box that owns the keyboard right now** — *recessed*, below [`PANEL_BG`], where every
-/// other state on the ladder is raised. Typed-into is a well; the accent border
-/// ([`focus_edge`]) is what actually announces the focus, and this is the ground it draws on.
-///
-/// It used to be byte-identical to [`SLOT_BG`] with its own name (the 2026-08-17 audit's
-/// moonlighting finding); the name survived the audit and the value has now moved, which is the
-/// whole reason to have named it.
-pub const FOCUS_BG: Color = Color::srgb(0.088, 0.082, 0.071);
-/// A group heading — quieter than a row, because it is a signpost rather than a thing to click on
-/// most of the time.
-pub const HEADER_BG: Color = Color::srgb(0.140, 0.130, 0.113);
-
 // ── world ink ────────────────────────────────────────────────────────────────────────────────────
 //
 // Gizmo colours the tabs draw INTO the scene — the exception to "nothing here knows what a map is",
 // carried because each is a fact two tabs state: a colour defined per-tab drifted into two names
 // for one value twice before this block existed (the audit's `BOUNDS_LINE == CELLS` finding).
 
-/// The working grid — the map's cell lattice on the Map tab, the seating lattice on Compose.
-///
-/// Derived, not chosen: `bevy_dev_tools`' grid drew `srgb(0.2, 0.2, 0.2)` against a `ClearColor`
-/// of `srgb(0.035, …)`, a separation of about 0.165. The Map's ground slab raised what the lines
-/// are read against to 0.105, so holding that separation puts them here. Warm-neutral rather than
-/// pure grey, because every other colour in this editor is.
-pub const GRID_LINE: Color = Color::srgb(0.300, 0.279, 0.243);
-/// A stated extent, brighter than the grid inside it: the map's bounds wireframe on the Map tab,
-/// the subgrid cell lattice on Tiles. Dim enough not to compete with [`GRID_LINE`], bright enough
-/// to find. One warm grey — previously two names at one value, one per tab.
-pub const BOUNDS_LINE: Color = Color::srgb(0.520, 0.470, 0.370);
-/// The void the panels float over — the clear colour both entry points install. Here because it
-/// was stated twice, byte-for-byte, in `main.rs` and `harness.rs`, and a fact stated more than
-/// once drifts. Darker than [`PANEL_BG`], so a panel reads as a surface laid on nothing.
-pub const VOID: Color = Color::srgb(0.075, 0.070, 0.061);
-
-/// **The window's own chrome** — the bar above the door strip and the band at its foot.
-///
-/// Reported at the keyboard: the two bars read as bands, but only just. They were on [`HEADER_BG`],
-/// which is a *group heading inside a panel* — a word for separating blocks on one surface, not for
-/// saying "this strip is not part of any panel". Two roles on one colour, which is the drift
-/// `chrome.rs` exists to stop, so window chrome gets its own word.
-///
-/// Derived from [`SLOT_BG`] rather than picked, because the relationship is the point: chrome sits a
-/// step above panel ground and a step below an inspector slot, so a back button on `SLOT_BG` still
-/// reads as raised *against* the bar it sits on.
-pub const BAR_BG: Color = scaled(SLOT_BG, 0.78);
-
 // (`BAR_EDGE` was here until 2026-09-03. It was `ROW_SELECTED × 0.62` — an edge derived from a row
 // fill, which stopped making sense the moment every surface got an edge: a chrome bar's hairline and
 // a panel's hairline are one fact, and this module's whole argument is that a fact stated twice
-// drifts. Its three call sites take [`PANEL_EDGE`].)
+// drifts. Its three call sites take `PANEL_EDGE`.)
 
 // ── edges and corners ────────────────────────────────────────────────────────────────────────────
 //
@@ -278,22 +291,14 @@ pub const BAR_BG: Color = scaled(SLOT_BG, 0.78);
 // whatever their contrast, which is why a bordered panel survives a bright thumbnail landing in it
 // and a fill-only panel does not.
 
-/// **The hairline that ends any surface** — a panel, a modal card, a group band. ΔL\* 23 over
-/// [`PANEL_BG`] and 27.6 over [`VOID`], so the same one line reads against both and a panel does not
-/// need a different edge depending on what is behind it.
-pub const PANEL_EDGE: Color = Color::srgb(0.325, 0.302, 0.263);
-
-/// **A louder edge, for the surface that owns the keyboard.** See [`focus_edge`].
-pub const EDGE_STRONG: Color = Color::srgb(0.440, 0.409, 0.356);
-
 /// **Which panel the keyboard is in**, as an edge rather than as a second selected row.
 ///
 /// Asked for 2026-09-03: in the chooser nothing said which of the three columns the arrows were
 /// walking, so `↑` was a guess until it moved something. A focused *row* already exists and cannot
 /// answer this — every column has one, all the time. The panel's own edge can, and it costs no
-/// layout: the border is already there at [`PANEL_EDGE`], and focus lights it.
-pub const fn focus_edge(focused: bool) -> Color {
-    if focused { ACCENT } else { PANEL_EDGE }
+/// layout: the border is already there at `Ink::panel_edge`, and focus lights it.
+pub fn focus_edge(focused: bool) -> Color {
+    if focused { ink().accent } else { ink().panel_edge }
 }
 
 /// One hairline. Not two: a 2 px border reads as a frame, and the thing being framed here is a work
@@ -307,11 +312,11 @@ pub const RADIUS_PANEL: f32 = 4.0;
 /// A row, a chip, a field, a button.
 pub const RADIUS_ROW: f32 = 3.0;
 
-/// **The rail that says "this one"** — [`ACCENT`] down the leading edge of the selected row.
+/// **The rail that says "this one"** — `Ink::accent` down the leading edge of the selected row.
 ///
 /// Selection used to be carried by fill and by amber *text*, and both were problems: the fill had to
-/// be loud enough to be unambiguous on its own, which pushed [`ROW_SELECTED`] bright enough to fail
-/// contrast for [`LABEL`] on it, and the amber text was one of [`ACCENT`]'s five jobs. A rail is a
+/// be loud enough to be unambiguous on its own, which pushed `Ink::row_selected` bright enough to fail
+/// contrast for `Ink::label` on it, and the amber text was one of `Ink::accent`'s five jobs. A rail is a
 /// shape, so it is unambiguous at any fill, and it re-uses the vocabulary [`severity_rail`] already
 /// established in this same interface — a tinted left edge means *this line is special*.
 pub const SELECT_RAIL_W: f32 = 2.0;
@@ -319,11 +324,7 @@ pub const SELECT_RAIL_W: f32 = 2.0;
 /// The snip's drag-rectangle border. It is heavier than the rail's 2 px on purpose: at 2 px a drag
 /// measured about 1% of a 600 px-wide capture and was hard to find, so the box gets 3 px.
 pub const SNIP_EDGE_W: f32 = 3.0;
-/// The snip's wash over the rectangle: the accent, translucent enough that the map under it still
-/// reads. At 0.08 it was too faint to find; 0.28 is a clear amber tint without hiding the pieces.
-pub const SNIP_WASH: Color = Color::srgba(0.950, 0.710, 0.300, 0.28);
-
-/// **A wash at `share` of a named colour's own strength**: [`SNIP_WASH`] at `0.5` is the quieter tint
+/// **A wash at `share` of a named colour's own strength**: `Ink::snip_wash` at `0.5` is the quieter tint
 /// a report draws over a pick it has already taken, so a person adding a second can tell which is the
 /// decision already made and which is the one being made now.
 ///
@@ -360,7 +361,10 @@ pub const fn scaled(colour: Color, k: f32) -> Color {
 
 /// A chrome colour as raster bytes, for the CPU-drawn plots — one palette, two encodings, no
 /// hand-transcribed mirror (the audit found three byte copies of chrome colours in `anim_plots`).
-pub const fn ink(colour: Color) -> [u8; 4] {
+///
+/// Named `ink_bytes` and not `ink`: [`ink`] is the palette itself, and a second `ink` that took a
+/// colour as an argument was the one collision this rename cost.
+pub const fn ink_bytes(colour: Color) -> [u8; 4] {
     match colour {
         Color::Srgba(c) => [
             (c.red * 255.0 + 0.5) as u8,
@@ -512,7 +516,7 @@ impl Plugin for WidgetsPlugin {
 ///
 /// The 2026-08-17 audit's verdict is that four tabs were drifting into four dialects, and its remedy
 /// is *one name per fact*. A token table that **restated** a colour — `srgb(0.098, 0.092, 0.082)`
-/// beside `ROW_BG` — would be exactly the leak it measured, one indirection later. So every entry
+/// beside `Ink::row_bg` — would be exactly the leak it measured, one indirection later. So every entry
 /// below is a reference to a const, never a literal, and `tests/chrome_census.rs` fails on a literal
 /// in this file's theme.
 ///
@@ -536,23 +540,23 @@ pub fn theme() -> bevy::feathers::theme::ThemeProps {
         props.token_assignments.insert(token, semantic.clone());
         props.semantic_base.insert(semantic, color);
     };
-    assign(tokens::WINDOW_BG, VOID);
-    assign(tokens::PANE_BODY_BG, PANEL_BG);
-    assign(tokens::PANE_HEADER_BG, HEADER_BG);
-    assign(tokens::SUBPANE_BODY_BG, SLOT_BG);
-    assign(tokens::SUBPANE_HEADER_BG, HEADER_BG);
-    assign(tokens::TEXT_MAIN, TEXT);
-    assign(tokens::TEXT_DIM, DIM);
+    assign(tokens::WINDOW_BG, ink().void);
+    assign(tokens::PANE_BODY_BG, ink().panel_bg);
+    assign(tokens::PANE_HEADER_BG, ink().header_bg);
+    assign(tokens::SUBPANE_BODY_BG, ink().slot_bg);
+    assign(tokens::SUBPANE_HEADER_BG, ink().header_bg);
+    assign(tokens::TEXT_MAIN, ink().text);
+    assign(tokens::TEXT_DIM, ink().dim);
     // The focus ring is the one thing Feathers gives that this editor has never had. `ACCENT` at
     // half alpha, because a ring is a *state* and the audit's rule is that persistent signals sit
     // at medium contrast with the loud end held in reserve.
-    assign(tokens::FOCUS_RING, ACCENT.with_alpha(0.5));
-    assign(tokens::SCROLLBAR_BG, HEADER_BG);
-    assign(tokens::SCROLLBAR_THUMB, scaled(ROW_SELECTED, 0.8));
-    assign(tokens::SCROLLBAR_THUMB_HOVER, ROW_SELECTED);
-    assign(tokens::LISTROW_BG, ROW_BG);
-    assign(tokens::LISTROW_BG_HOVER, ROW_HOVER);
-    assign(tokens::LISTROW_BG_SELECTED, ROW_SELECTED);
+    assign(tokens::FOCUS_RING, ink().accent.with_alpha(0.5));
+    assign(tokens::SCROLLBAR_BG, ink().header_bg);
+    assign(tokens::SCROLLBAR_THUMB, scaled(ink().row_selected, 0.8));
+    assign(tokens::SCROLLBAR_THUMB_HOVER, ink().row_selected);
+    assign(tokens::LISTROW_BG, ink().row_bg);
+    assign(tokens::LISTROW_BG_HOVER, ink().row_hover);
+    assign(tokens::LISTROW_BG_SELECTED, ink().row_selected);
     props
 }
 
@@ -570,7 +574,7 @@ pub fn theme() -> bevy::feathers::theme::ThemeProps {
 /// smaller of the two.
 ///
 /// A role is not the same thing as a distinct size, and two roles sharing a value is not a defect:
-/// [`HEADING`] and [`LABEL`] are both 10 because both are quiet supporting text, and what separates
+/// [`HEADING`] and `Ink::label` are both 10 because both are quiet supporting text, and what separates
 /// a heading from a label is that it is uppercase, in a different ink, and preceded by
 /// [`GAP_GROUP`]. `section`'s own doc says so — *"quiet, and separated from what came before it…
 /// the separation is the work"* — which is why the fix for three heading dialects is the smallest
@@ -616,7 +620,7 @@ pub mod text {
     /// The dim half of a label/value pair, and a log line.
     pub const LABEL: Role = Role(10.0);
     /// **A control's own word** — the text on a chip, a button, a field. Ten pixels, the same
-    /// number as [`LABEL`] and [`HEADING`], and a seventh role anyway.
+    /// number as `Ink::label` and [`HEADING`], and a seventh role anyway.
     ///
     /// `the_type_scale_stays_short` says a seventh role *"is a decision somebody should have to make
     /// on purpose"*, so here is the purpose. The 2026-09-03 decision was **shape carries kind,
@@ -749,7 +753,7 @@ pub const COL_WIDE: f32 = 96.0;
 pub fn section<'a>(parent: &'a mut ChildSpawnerCommands, label: &str) -> EntityCommands<'a> {
     parent.spawn((
         Text::new(label.to_owned()),
-        TextColor(LABEL),
+        TextColor(ink().label),
         font(text::HEADING),
         Node {
             margin: UiRect::top(Val::Px(GAP_GROUP)).with_bottom(Val::Px(GAP_TIGHT)),
@@ -850,12 +854,12 @@ pub fn panel_root<'a>(
             // unlabelled regions. `label` is what the panel calls itself on screen, passed in by its
             // spawner; `AccessibleLabel` is what a reader reads out.
             bevy::prelude::AccessibleLabel::new(label),
-            BackgroundColor(PANEL_BG),
-            Ground(PANEL_BG),
+            BackgroundColor(ink().panel_bg),
+            Ground(ink().panel_bg),
             PanelGround,
             // The edge and the corner are what make this read as a surface rather than as a
             // rectangle of slightly different paint — see the elevation-ladder header.
-            BorderColor::all(PANEL_EDGE),
+            BorderColor::all(ink().panel_edge),
             // Which panel the keyboard is in is drawn on this border; nothing lights it until a
             // `Focused` lands, so a panel nobody has focused keeps `PANEL_EDGE`.
             PanelEdge,
@@ -973,7 +977,7 @@ pub struct Control(pub keys::ControlId);
 
 /// **This node's fill is ground, not ink — and this is the colour it rests at.**
 ///
-/// A panel's [`PANEL_BG`] and a band's [`BAR_BG`] are what their rows and words *stand on*. They
+/// A panel's `Ink::panel_bg` and a band's `Ink::bar_bg` are what their rows and words *stand on*. They
 /// carry no information of their own, so a badge parked on bare ground covers nothing a reader
 /// needs — which is the whole difference between an overlay that has somewhere to go and one that
 /// hugs a dock edge and lands on the map. `badges::ink` reads this to subtract a container from the
@@ -992,7 +996,7 @@ pub struct Ground(pub Color);
 /// runs every frame over every [`Ground`], already compares before writing, and is therefore the one
 /// place where "what a panel is coloured" can be one expression rather than six.
 ///
-/// The marker is what tells a *panel's* ground (the skin's `surface`) from a *band's* ([`BAR_BG`],
+/// The marker is what tells a *panel's* ground (the skin's `surface`) from a *band's* (`Ink::bar_bg`,
 /// which gooey has no role for). Without it the repaint would repaint the status bar as a panel.
 #[derive(Component)]
 pub struct PanelGround;
@@ -1005,7 +1009,7 @@ pub struct BandGround;
 
 /// **The fills a panel and a band take from the running skin** (UI-02, #210, slice 4b).
 ///
-/// `panel_root` used to spawn `PANEL_BG` and `BAR_BG` — constants — so every panel in the editor was
+/// `panel_root` used to spawn `Ink::panel_bg` and `Ink::bar_bg` — constants — so every panel in the editor was
 /// painted once, at spawn, and never asked the skin again. A project's `editor_skin.ron`, or a
 /// `family/bevy_gooey.ron` edit at run time, therefore reached the list rows and the migrated ink but
 /// **not the largest surface on screen**.
@@ -1022,7 +1026,7 @@ pub struct PanelFills {
     pub panel: Color,
     /// A band's ground — the status bar and the chrome bar. A skin that carries a `"bar_bg"` tone paints
     /// the bands with it; one that does not (including the editor's own, whose exact tone set is pinned
-    /// by `the_skin_carries_the_editors_other_colours.rs`) falls back to [`BAR_BG`], which is what the
+    /// by `the_skin_carries_the_editors_other_colours.rs`) falls back to `Ink::bar_bg`, which is what the
     /// editor has always painted. So a *project's* skin can restyle the bands today without a protected
     /// assertion moving, and the editor's own look is unchanged by construction.
     pub band: Color,
@@ -1034,9 +1038,9 @@ impl PanelFills {
         match skin {
             Some(s) => PanelFills {
                 panel: s.surface,
-                band: s.tone("bar_bg").unwrap_or(BAR_BG),
+                band: s.tone("bar_bg").unwrap_or(ink().bar_bg),
             },
-            None => PanelFills { panel: PANEL_BG, band: BAR_BG },
+            None => PanelFills { panel: ink().panel_bg, band: ink().bar_bg },
         }
     }
 }
@@ -1194,10 +1198,10 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
                 border: UiRect::bottom(Val::Px(1.0)),
                 ..default()
             }),
-            BackgroundColor(BAR_BG),
-            Ground(BAR_BG),
+            BackgroundColor(ink().bar_bg),
+            Ground(ink().bar_bg),
             BandGround,
-            BorderColor::all(PANEL_EDGE),
+            BorderColor::all(ink().panel_edge),
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
@@ -1345,10 +1349,10 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
                 ..default()
             }),
             AccessibleLabel::new("Status bar"),
-            BackgroundColor(BAR_BG),
-            Ground(BAR_BG),
+            BackgroundColor(ink().bar_bg),
+            Ground(ink().bar_bg),
             BandGround,
-            BorderColor::all(PANEL_EDGE),
+            BorderColor::all(ink().panel_edge),
             bevy::picking::Pickable::IGNORE,
         ))
         .id();
@@ -1405,7 +1409,7 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
 
 /// **A panel's heading.**
 ///
-/// `TEXT`, not `ACCENT`. The amber used to head every left dock, and that was one of the five jobs
+/// `Ink::text`, not `Ink::accent`. The amber used to head every left dock, and that was one of the five jobs
 /// the 2026-09-03 decision took off it: amber now means *a value you are changing right now*, and a
 /// panel's name never changes. What separates a title from the rows under it is that it is the
 /// largest thing on the panel ([`text::TITLE`]) and has a group gap below it — size and space, which
@@ -1413,7 +1417,7 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
 pub fn title(parent: &mut ChildSpawnerCommands, text: &str) {
     parent.spawn((
         Text::new(text.to_owned()),
-        TextColor(TEXT),
+        TextColor(ink().text),
         font(text::TITLE),
         Node {
             margin: UiRect::bottom(Val::Px(GAP_ROW)),
@@ -1431,7 +1435,7 @@ pub fn title(parent: &mut ChildSpawnerCommands, text: &str) {
 /// Every tab used to hold one `status: String` written from ~215 places, and decided at *render* time
 /// whether it was bad news. The Map tab sniffed `status.starts_with("NOT SAVED")`; the Anim tab
 /// coloured by whether `rigs.ron` had loaded, which is a fact about a file rather than about the
-/// sentence; the Compose tab painted everything [`ACCENT`]; the Tiles tab had no colour rule at all,
+/// sentence; the Compose tab painted everything `Ink::accent`; the Tiles tab had no colour rule at all,
 /// so a refusal was byte-identical to a receipt. `stamp refused:`, `is not a number of metres` and
 /// `NOT WRITTEN:` all rendered in the same grey as `stamped 4 piece(s)`.
 ///
@@ -1922,8 +1926,8 @@ pub fn journal_panel(mut commands: Commands, frame: Res<Frame>) {
                 display: Display::None,
                 ..default()
             },
-            BackgroundColor(PANEL_BG),
-            BorderColor::all(KEY),
+            BackgroundColor(ink().panel_bg),
+            BorderColor::all(ink().key),
             JournalPanel,
             // No `CopyPane` marker: `notice::copy_out` harvests the TEXT of every visible node by
             // walking the roots, so an open journal is carried by `Cmd+C` already — the marker
@@ -1951,7 +1955,7 @@ pub fn journal_panel(mut commands: Commands, frame: Res<Frame>) {
                 keys::chord(keys::Action::Cancel),
                 keys::chord(keys::Action::CopyInfo)
             )),
-            TextColor(DIM),
+            TextColor(ink().dim),
             font(text::LABEL),
         ));
         // Asks the project's after-edit checks about the picture on screen now. A person's click only:
@@ -2285,7 +2289,7 @@ pub fn scroll_list<'a>(
                 border_radius: BorderRadius::all(Val::Px(BAR_W / 2.0)),
                 border: UiRect::ZERO,
             },
-            BackgroundColor(scaled(ROW_SELECTED, 0.9)),
+            BackgroundColor(scaled(ink().row_selected, 0.9)),
         ))
         .id();
 
@@ -2405,10 +2409,10 @@ fn forward_a_wheel_over_a_scrollbar(
 /// filter and list. One step louder than [`section`] (10 vs 9) because it heads the panel, not a
 /// block within one — the two roles the 2026-08-17 type-role decision named.
 pub fn list_heading(parent: &mut ChildSpawnerCommands, text: &str) {
-    list_heading_in(parent, text, ListHeadingInk::SHIPPED);
+    list_heading_in(parent, text, ListHeadingInk::shipped());
 }
 
-/// **The ink a list heading draws in** (UI-02, #210): the shipped [`LABEL`] where there is no skin, the
+/// **The ink a list heading draws in** (UI-02, #210): the shipped `Ink::label` where there is no skin, the
 /// skin's own label tone where there is one.
 ///
 /// A separate value rather than a `Res<GooeySkin>` parameter because every caller builds its heading
@@ -2420,15 +2424,17 @@ pub struct ListHeadingInk(pub Color);
 
 impl ListHeadingInk {
     /// The shipped palette, for a build with no skin.
-    pub const SHIPPED: ListHeadingInk = ListHeadingInk(LABEL);
+    pub fn shipped() -> ListHeadingInk {
+        ListHeadingInk(ink().label)
+    }
 
     /// The skin's ink where it has one, the shipped constant where it does not. `label` is a **tone**
     /// rather than a field (gooey has none for a list's quiet heading), so a project's skin that names
     /// it gets its own; the editor's own skin does not carry one, which keeps it byte-identical.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> ListHeadingInk {
         match skin {
-            Some(skin) => ListHeadingInk(skin.tone("label").unwrap_or(LABEL)),
-            None => ListHeadingInk::SHIPPED,
+            Some(skin) => ListHeadingInk(skin.tone("label").unwrap_or(ink().label)),
+            None => ListHeadingInk::shipped(),
         }
     }
 }
@@ -2443,7 +2449,7 @@ pub fn list_heading_in(parent: &mut ChildSpawnerCommands, text: &str, ink: ListH
 }
 
 /// **The label column of a `LABEL  value` row** — the shape the audit found hand-rolled eight times,
-/// differing only in this width. 10 px [`LABEL`], never wrapping, never shrinking.
+/// differing only in this width. 10 px `Ink::label`, never wrapping, never shrinking.
 ///
 /// # The column is a floor, not a cap, and that is the F5 fix
 ///
@@ -2516,7 +2522,7 @@ pub fn row_label_with(
             ..default()
         },
         Text::new(label.to_owned()),
-        TextColor(LABEL),
+        TextColor(ink().label),
         font(text::LABEL),
         TextLayout::new(Justify::Left, LineBreak::NoWrap),
         marker,
@@ -2536,7 +2542,7 @@ pub fn row_value(row: &mut ChildSpawnerCommands, text: impl Into<String>, colour
 }
 
 /// **A chip** — one small clickable word. [`CHIP_PAD`] and a permanent 1 px border whose COLOUR
-/// asks the questions (a ghost proposal lights it [`SUGGEST`]; everything else runs [`Color::NONE`]),
+/// asks the questions (a ghost proposal lights it `Ink::suggest`; everything else runs [`Color::NONE`]),
 /// so a chip never changes size when its state does.
 ///
 /// **`marker` must not contain a `Node`, and the failure is a panic rather than a warning.** This
@@ -2592,8 +2598,8 @@ pub fn chip<'a>(
 #[derive(Component, Clone, Copy)]
 pub struct RowRest(pub Color);
 
-/// **A selectable list row** — full width, [`CHIP_PAD`] inset, [`ROW_SELECTED`] when it is the one
-/// being acted on, [`ROW_HOVER`] under the pointer. Returns the row for the caller to fill; what a
+/// **A selectable list row** — full width, [`CHIP_PAD`] inset, `Ink::row_selected` when it is the one
+/// being acted on, `Ink::row_hover` under the pointer. Returns the row for the caller to fill; what a
 /// row holds is the tab's business, that it looks like every other row is not.
 pub fn list_row<'a>(
     parent: &'a mut ChildSpawnerCommands,
@@ -2644,7 +2650,7 @@ pub struct RowSelected(pub bool);
 /// is selected — so selecting a row cannot move its text sideways by two pixels, which is what an
 /// added child or a conditional border would do to a list the author is reading down.
 fn row_shape(selected: bool) -> impl Bundle {
-    let rest = if selected { ROW_SELECTED } else { ROW_BG };
+    let rest = if selected { ink().row_selected } else { ink().row_bg };
     (
         Hovered::default(),
         RowRest(rest),
@@ -2660,7 +2666,7 @@ fn row_shape(selected: bool) -> impl Bundle {
             border_radius: BorderRadius::all(Val::Px(RADIUS_ROW)),
             ..default()
         },
-        BorderColor::all(if selected { ACCENT } else { Color::NONE }),
+        BorderColor::all(if selected { ink().accent } else { Color::NONE }),
         BackgroundColor(rest),
     )
 }
@@ -2707,10 +2713,10 @@ impl RowFills {
         match skin {
             Some(s) => RowFills {
                 rest_panel: s.surface,
-                hover: s.hover.unwrap_or(ROW_HOVER),
-                pressed: s.pressed.unwrap_or(ROW_PRESSED),
+                hover: s.hover.unwrap_or(ink().row_hover),
+                pressed: s.pressed.unwrap_or(ink().row_pressed),
             },
-            None => RowFills { rest_panel: PANEL_BG, hover: ROW_HOVER, pressed: ROW_PRESSED },
+            None => RowFills { rest_panel: ink().panel_bg, hover: ink().row_hover, pressed: ink().row_pressed },
         }
     }
 }
@@ -2735,7 +2741,7 @@ fn style_list_rows(
     let (panel, pressed_col, hover_col) = (fills.rest_panel, fills.pressed, fills.hover);
     // gooey has no `selected` role, so a selected row keeps the editor's own colour — the honest
     // half-measure until that constant group moves.
-    let selected_col = ROW_SELECTED;
+    let selected_col = ink().row_selected;
     let held = mouse.pressed(MouseButton::Left);
     for ((rest, hovered, pressed, disabled), mut bg) in &mut rows {
         let want = if disabled {
@@ -2744,7 +2750,7 @@ fn style_list_rows(
             panel
         } else if pressed || (hovered.0 && held) {
             pressed_col
-        } else if rest.0 == ROW_SELECTED {
+        } else if rest.0 == ink().row_selected {
             selected_col
         } else if hovered.0 {
             hover_col
@@ -2774,16 +2780,16 @@ pub enum Severity {
 }
 
 impl Severity {
-    /// The word's ink. The *fill* is [`ROW_BG`] in every case: a filled red button in a panel of
+    /// The word's ink. The *fill* is `Ink::row_bg` in every case: a filled red button in a panel of
     /// grey ones is a stop sign, and most destructive verbs here are ordinary editing.
     /// Public because `confirm`'s card is built once and repainted per question: which button is
     /// destructive depends on which question is up, so the mapping has to be readable from outside
     /// without being restated outside.
-    pub const fn ink(self) -> Color {
+    pub fn ink(self) -> Color {
         match self {
-            Severity::Plain => TEXT,
-            Severity::Primary => ACCENT,
-            Severity::Destructive => DANGER,
+            Severity::Plain => ink().text,
+            Severity::Primary => ink().accent,
+            Severity::Destructive => ink().danger,
         }
     }
 }
@@ -2795,7 +2801,7 @@ impl Severity {
 /// the tag chips (toggles), `solid`/`edge`/`clear` (cell commands) and `rescan mesh` (an expensive
 /// action) all rendered as one grey rectangle. The only way to learn which was which was to press
 /// one. So a button is now visibly heavier — [`BUTTON_PAD`] rather than [`CHIP_PAD`], and a lit
-/// [`PANEL_EDGE`] border where a chip's border is `Color::NONE` unless it has something to say.
+/// `Ink::panel_edge` border where a chip's border is `Color::NONE` unless it has something to say.
 ///
 /// **`marker` must not contain a `Node`** — see [`chip`] for why that is a panic rather than a
 /// warning.
@@ -2808,7 +2814,7 @@ pub fn button<'a>(
     let mut b = parent.spawn((
         bevy::ui_widgets::Button,
         Hovered::default(),
-        RowRest(ROW_BG),
+        RowRest(ink().row_bg),
         marker,
         Node {
             padding: BUTTON_PAD,
@@ -2817,8 +2823,8 @@ pub fn button<'a>(
             flex_shrink: 0.0,
             ..default()
         },
-        BorderColor::all(PANEL_EDGE),
-        BackgroundColor(ROW_BG),
+        BorderColor::all(ink().panel_edge),
+        BackgroundColor(ink().row_bg),
     ));
     b.with_children(|b| {
         b.spawn((
@@ -2862,7 +2868,7 @@ pub fn modal_card<'a>(commands: &'a mut Commands, root: impl Bundle) -> EntityCo
                 display: Display::None,
                 ..default()
             },
-            BackgroundColor(SCRIM),
+            BackgroundColor(ink().scrim),
             GlobalZIndex(MODAL_Z),
             root,
         ))
@@ -2879,8 +2885,8 @@ pub fn modal_card<'a>(commands: &'a mut Commands, root: impl Bundle) -> EntityCo
                 border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 ..default()
             },
-            BackgroundColor(OVERLAY_BG),
-            BorderColor::all(PANEL_EDGE),
+            BackgroundColor(ink().overlay_bg),
+            BorderColor::all(ink().panel_edge),
             Hovered::default(),
         ))
         .id();
@@ -2920,7 +2926,7 @@ pub const MODAL_MIN_W: f32 = 360.0;
 /// And at most this wide, so a refusal naming three descriptors stays a paragraph rather than a line.
 pub const MODAL_MAX_W: f32 = 560.0;
 
-/// **A text field's box** — [`MIN_FIELD_H`] floor, [`FIELD_PAD`] inset, [`ROW_BG`] fill, with its
+/// **A text field's box** — [`MIN_FIELD_H`] floor, [`FIELD_PAD`] inset, `Ink::row_bg` fill, with its
 /// readout text spawned inside. The audit found this shape six times with three paddings.
 pub fn text_field<'a>(
     parent: &'a mut ChildSpawnerCommands,
@@ -2941,7 +2947,7 @@ pub fn text_field<'a>(
             flex_shrink: 0.0,
             ..default()
         },
-        BackgroundColor(ROW_BG),
+        BackgroundColor(ink().row_bg),
     ));
     boxed.with_children(|f| {
         f.spawn((
@@ -2955,11 +2961,11 @@ pub fn text_field<'a>(
 }
 
 /// **What a field's readout shows**: the live keystrokes with a caret while focused, the committed
-/// value otherwise. The `{raw}_` + [`ACCENT`] idiom was written five times before it had one home;
+/// value otherwise. The `{raw}_` + `Ink::accent` idiom was written five times before it had one home;
 /// the caret is what makes "empty because you cleared it" distinguishable from "empty".
 pub fn field_text(editing: Option<&str>, idle: (String, Color)) -> (String, Color) {
     match editing {
-        Some(raw) => (format!("{raw}_"), ACCENT),
+        Some(raw) => (format!("{raw}_"), ink().accent),
         None => idle,
     }
 }
@@ -2970,9 +2976,9 @@ pub fn field_text(editing: Option<&str>, idle: (String, Color)) -> (String, Colo
 /// travel together so no site can pair "worth checking" with the wrong ink.
 pub fn severity_style(severity: bevy_grimoire_core::import::Severity) -> (Color, &'static str) {
     match severity {
-        bevy_grimoire_core::import::Severity::Blocking => (DANGER, "blocking"),
-        bevy_grimoire_core::import::Severity::Warn => (ACCENT, "worth checking"),
-        bevy_grimoire_core::import::Severity::Note => (DIM, "note"),
+        bevy_grimoire_core::import::Severity::Blocking => (ink().danger, "blocking"),
+        bevy_grimoire_core::import::Severity::Warn => (ink().accent, "worth checking"),
+        bevy_grimoire_core::import::Severity::Note => (ink().dim, "note"),
     }
 }
 
@@ -3057,7 +3063,7 @@ fn spawn_name_box(mut commands: Commands) {
                     min_width: Val::Px(360.0),
                     ..default()
                 },
-                BackgroundColor(PANEL_BG),
+                BackgroundColor(ink().panel_bg),
                 // **The dialog itself is UI; the dimmed backdrop behind it is not.**
                 //
                 // "Is the pointer over UI" is asked everywhere as "is any `Hovered` true"
@@ -3078,19 +3084,19 @@ fn spawn_name_box(mut commands: Commands) {
                 b.spawn((
                     Text::new(String::new()),
                     font(text::BODY),
-                    TextColor(LABEL),
+                    TextColor(ink().label),
                     NameBoxTitle,
                 ));
                 b.spawn((
                     Text::new(String::new()),
                     font(text::TITLE),
-                    TextColor(ACCENT),
+                    TextColor(ink().accent),
                     NameBoxValue,
                 ));
                 b.spawn((
                     Text::new(String::new()),
                     font(text::BODY),
-                    TextColor(DIM),
+                    TextColor(ink().dim),
                     NameBoxHint,
                 ));
             });
@@ -3834,7 +3840,7 @@ pub fn subject(
 /// Asked for at the keyboard: *"when we go into the map editor, we actually need a button to go back
 /// to the main UI."* There was only `Cmd+O`, and a key nothing on screen mentions is a key nobody
 /// finds. So a button was added — **inside the left panel**, under that panel's own heading, on
-/// `SLOT_BG`, the ground this editor uses for an inspector slot. It was reported missing again:
+/// `Ink::slot_bg`, the ground this editor uses for an inspector slot. It was reported missing again:
 /// *"When I enter kit editing, there's no clear way to get back to the main menu."*
 ///
 /// `docs/2026-08-17-one-application.md` §3 diagnosed why, and it was not the contrast: the encoding
@@ -3879,7 +3885,7 @@ pub fn spawn_chrome_bar(
                 padding: CHIP_PAD,
                 ..default()
             },
-            BackgroundColor(SLOT_BG),
+            BackgroundColor(ink().slot_bg),
             // The bar is `Pickable::IGNORE` so the frame answers no clicks; this narrows that for
             // the one node on it that is a button — the same move `spawn_name_box` makes.
             bevy::picking::Pickable::default(),
@@ -3888,14 +3894,14 @@ pub fn spawn_chrome_bar(
         .with_children(|b| {
             b.spawn((
                 Text::new(format!("\u{2039} {back}")),
-                TextColor(KEY),
+                TextColor(ink().key),
                 font(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
             b.spawn((
                 BackChord,
                 Text::new(keys::chord(keys::Action::MainMenu)),
-                TextColor(LABEL),
+                TextColor(ink().label),
                 font(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
@@ -3917,7 +3923,7 @@ pub fn spawn_chrome_bar(
                 // Where you are is what `N` renames, so its badge goes on the words it changes.
                 Control(keys::ControlId::Title),
                 Text::new(here),
-                TextColor(DIM),
+                TextColor(ink().dim),
                 font(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
@@ -3999,21 +4005,21 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>, project: Opt
             ProblemsCount,
             bevy_gooey::StatusKind::Info,
             Text::new(String::new()),
-            TextColor(DIM),
+            TextColor(ink().dim),
             font(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
             SelectionCount,
             Text::new(String::new()),
-            TextColor(DIM),
+            TextColor(ink().dim),
             font(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
             LabelerLine,
             Text::new(String::new()),
-            TextColor(DIM),
+            TextColor(ink().dim),
             font(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
@@ -4086,9 +4092,9 @@ pub fn reload_readout(
     };
     let ink = match (kind, skin) {
         (bevy_gooey::StatusKind::Info, Some(s)) => s.text_muted,
-        (bevy_gooey::StatusKind::Info, None) => DIM,
+        (bevy_gooey::StatusKind::Info, None) => ink().dim,
         (_, Some(s)) => s.accent,
-        (_, None) => ACCENT,
+        (_, None) => ink().accent,
     };
     (parts.join(" \u{b7} "), kind, ink)
 }
@@ -4191,9 +4197,9 @@ fn stand_down_the_back_chord(
 ///
 /// This is the other half of letting a badge stand on a panel's empty middle. `badges::ink` reads
 /// [`Ground`] to say that a container's fill carries nothing a reader needs, so the ground under a
-/// short list is placeable — but a badge is itself a [`PANEL_BG`] box, and an opaque box on an
+/// short list is placeable — but a badge is itself a `Ink::panel_bg` box, and an opaque box on an
 /// opaque box of the same colour reads as one shape with a line through it. Dropping the ground to
-/// [`GROUND_HELD`] lets the [`VEIL`] and the window behind it show through, and the badge — which
+/// [`GROUND_HELD`] lets the `Ink::veil` and the window behind it show through, and the badge — which
 /// keeps its own opacity — separates by depth rather than by its border alone.
 ///
 /// **Fill only, and restored from the carried colour.** Every row, field, chip and word inside the
@@ -4240,7 +4246,7 @@ pub fn light_the_back_button(
     mut buttons: Query<BackButtonRow, (With<BackButton>, Changed<Hovered>)>,
 ) {
     for (hovered, mut bg) in &mut buttons {
-        bg.0 = if hovered.get() { ROW_SELECTED } else { SLOT_BG };
+        bg.0 = if hovered.get() { ink().row_selected } else { ink().slot_bg };
     }
 }
 
@@ -4271,7 +4277,7 @@ pub fn shortcut_hint(parent: &mut ChildSpawnerCommands, back: &str) {
             keys::chord(keys::Action::Shortcuts),
             keys::chord(keys::Action::MainMenu),
         )),
-        TextColor(LABEL),
+        TextColor(ink().label),
         font(text::LABEL),
         // **And holding it puts that key's own badge on this line.** The one control whose verb is
         // "show me the verbs" — ExposeHK's admitted weakness is that a modifier-triggered overlay

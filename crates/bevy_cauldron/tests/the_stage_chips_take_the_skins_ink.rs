@@ -14,8 +14,8 @@ use bevy_cauldron::chrome;
 #[test]
 fn with_no_skin_the_chips_read_the_shipped_table() {
     let ink = BenchInk::of(None);
-    assert_eq!(ink.read, chrome::TEXT, "a chip's words are TEXT with no skin");
-    assert_eq!(ink.label, chrome::LABEL, "the quiet line under them is LABEL");
+    assert_eq!(ink.read, chrome::ink().text, "a chip's words are TEXT with no skin");
+    assert_eq!(ink.label, chrome::ink().label, "the quiet line under them is LABEL");
 }
 
 /// **A skin's `text` reaches the chips**, and a skin that names the `label` tone quietens the line

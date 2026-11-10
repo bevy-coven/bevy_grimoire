@@ -11,7 +11,7 @@
 //! file is what makes the *next* change — a theme that moves `unchecked` — visible.
 //!
 //! What is claimed: the ink the pane would use comes from the skin. What is not: that every colour in
-//! the pane does. `TEXT`, `LABEL` and `SUGGEST` still read the constants, and that is the rest of #210.
+//! the pane does. `Ink::text`, `Ink::label` and `Ink::suggest` still read the constants, and that is the rest of #210.
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
@@ -38,8 +38,8 @@ fn the_model_written_ink_comes_from_the_skin() {
         .clone();
     assert_eq!(
         skin.unchecked,
-        Some(bevy_cauldron::chrome::UNCHECKED),
-        "the skin's `unchecked` and `chrome::UNCHECKED` must be one colour, or the pane's ink moves \
+        Some(bevy_cauldron::chrome::ink().unchecked),
+        "the skin's `unchecked` and `bevy_cauldron::chrome::ink().unchecked` must be one colour, or the pane's ink moves \
          the moment it starts reading the skin — a change nobody asked for"
     );
 
@@ -65,7 +65,7 @@ fn the_model_written_ink_comes_from_the_skin() {
     // And with no skin at all, the constant — a harness that never ran `EditorUiPlugin` still draws.
     assert_eq!(
         bevy_cauldron::tiles::unchecked_ink(None),
-        bevy_cauldron::chrome::UNCHECKED,
+        bevy_cauldron::chrome::ink().unchecked,
         "a build with no skin must still have an ink for a model-written label"
     );
 }

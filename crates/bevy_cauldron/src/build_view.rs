@@ -719,7 +719,7 @@ pub fn spawn_section(s: &mut ChildSpawnerCommands) {
     s.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(GAP_TIGHT), flex_shrink: 0.0, ..default() })
         .with_children(|row| {
             button(row, BuildButton, "Build", Severity::Plain).observe(on_build_click);
-            crate::chrome::row_value(row, "", crate::chrome::DIM, BuildLine);
+            crate::chrome::row_value(row, "", crate::chrome::ink().dim, BuildLine);
         });
 }
 

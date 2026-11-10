@@ -8,7 +8,7 @@
 //!
 //! **What is claimed:** the ink the list *would* use comes from the skin, and the fallbacks are exactly
 //! the constants, so nothing moves to the eye until a project edits its skin. **What is not:** that
-//! every colour in `tiles.rs` does — `PANEL_BG`, `ROW_SELECTED`, the severity rail and the rest still
+//! every colour in `tiles.rs` does — `Ink::panel_bg`, `Ink::row_selected`, the severity rail and the rest still
 //! read the constants, and that is the rest of #210. The count is in the report.
 
 use bevy::prelude::*;
@@ -23,7 +23,7 @@ fn skin(app: &App) -> bevy_gooey::GooeySkin {
 }
 
 /// **The editor's own skin is the constants today**, which is why no protected assertion moved when
-/// the list started reading it: `TEXT`, `DIM`, `ACCENT` and `DANGER` are the skin's own four values.
+/// the list started reading it: `Ink::text`, `Ink::dim`, `Ink::accent` and `Ink::danger` are the skin's own four values.
 ///
 /// This is the load-bearing half. If the skin and the constants disagreed, this change would have
 /// altered the editor's appearance without anybody asking, and the protected tests that compare ink to
@@ -40,10 +40,10 @@ fn the_lists_ink_is_the_skins_and_the_skin_is_the_palette() {
 
     let running = skin(&app);
     let words = ListInk::of(Some(&running));
-    assert_eq!(words.read, chrome::TEXT, "a row's own words are `TEXT`");
-    assert_eq!(words.quiet, chrome::DIM, "a quiet part is `DIM`");
-    assert_eq!(words.accent, chrome::ACCENT, "the cursor's row is `ACCENT`");
-    assert_eq!(words.danger, chrome::DANGER, "a refusal is `DANGER`");
+    assert_eq!(words.read, chrome::ink().text, "a row's own words are `TEXT`");
+    assert_eq!(words.quiet, chrome::ink().dim, "a quiet part is `DIM`");
+    assert_eq!(words.accent, chrome::ink().accent, "the cursor's row is `ACCENT`");
+    assert_eq!(words.danger, chrome::ink().danger, "a refusal is `DANGER`");
 }
 
 /// **With no skin at all the list falls back to the constants**, which is the harness case: a test that
@@ -51,10 +51,10 @@ fn the_lists_ink_is_the_skins_and_the_skin_is_the_palette() {
 #[test]
 fn a_list_with_no_skin_paints_the_shipped_palette() {
     let words = ListInk::of(None);
-    assert_eq!(words.read, chrome::TEXT);
-    assert_eq!(words.quiet, chrome::DIM);
-    assert_eq!(words.accent, chrome::ACCENT);
-    assert_eq!(words.danger, chrome::DANGER);
+    assert_eq!(words.read, chrome::ink().text);
+    assert_eq!(words.quiet, chrome::ink().dim);
+    assert_eq!(words.accent, chrome::ink().accent);
+    assert_eq!(words.danger, chrome::ink().danger);
 }
 
 /// **And a theme that moves `text` moves the list's words** — the change this seam exists for. Asked of
@@ -75,7 +75,7 @@ fn a_theme_that_moves_the_text_moves_the_lists_words() {
     let words = ListInk::of(Some(&edited));
     assert_eq!(words.read, moved, "a project's `text` reaches a row's words");
     assert_eq!(
-        words.quiet, chrome::DIM,
+        words.quiet, chrome::ink().dim,
         "and the fields the theme did not touch keep the editor's own values"
     );
 }

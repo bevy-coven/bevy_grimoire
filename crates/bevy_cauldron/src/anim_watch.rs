@@ -341,7 +341,7 @@ pub(crate) fn step_measure_queue(
 /// the bench notices.
 ///
 /// The badge is its own text child, not a suffix on the label: `style_tabs` owns every
-/// [`crate::tiles::TabLabel`]'s colour per frame, so a `DANGER` written into the label is stomped
+/// [`crate::tiles::TabLabel`]'s colour per frame, so a `Ink::danger` written into the label is stomped
 /// a frame later — the word rendered in the tab's ordinary grey, which the pane's own doc calls
 /// the one word here allowed to shout, whispering. See [`crate::tiles::TabBadge`] for the colour
 /// argument (Lewandowska et al. 2022: persistent peripheral signal at medium intensity).

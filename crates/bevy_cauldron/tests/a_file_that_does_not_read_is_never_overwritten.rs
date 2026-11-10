@@ -168,7 +168,7 @@ fn the_cases_are_exactly_the_kinds_read_here() {
 }
 
 /// **The kinds nothing reads with a named refusal**, checked in. Core's own list is
-/// `tests/reload_verdicts.rs`'s `UNCHECKED`; the four kinds this layer reads (`READ_HERE`) and the five it
+/// `tests/reload_verdicts.rs`'s `Ink::unchecked`; the four kinds this layer reads (`READ_HERE`) and the five it
 /// watches (`WATCHED_HERE`) are off it here. A kind comes off when its type gains a reader that names the
 /// file and the field; none joins unseen. Empty since #200 slice 12: every kind in the registry has one.
 const STILL_UNCHECKED: &[&str] = &[

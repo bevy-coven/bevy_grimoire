@@ -2,7 +2,7 @@
 //!
 //! The terminal's agent tab draws four things a person reads while a session warms up: the card's
 //! heading, one row per self-test check (passing, failing, waiting), and the status chip in the bar.
-//! All four were `chrome.rs` constants — `TEXT`, `MUTED`, `LABELED`, `DANGER` — read from
+//! All four were `chrome.rs` constants — `Ink::text`, `Ink::muted`, `Ink::labeled`, `Ink::danger` — read from
 //! `CheckStatus::ink` and `AgentPost::chip`, so a project's skin file could not reach any of them and
 //! a high-contrast theme could not either.
 //!
@@ -56,10 +56,10 @@ fn each_check_state_draws_in_its_own_role() {
 #[test]
 fn with_no_skin_the_agent_tab_is_the_shipped_palette() {
     let ink = AgentInk::of(None);
-    assert_eq!(ink.read, chrome::TEXT);
-    assert_eq!(ink.muted, chrome::MUTED);
-    assert_eq!(ink.good, chrome::LABELED);
-    assert_eq!(ink.danger, chrome::DANGER);
+    assert_eq!(ink.read, chrome::ink().text);
+    assert_eq!(ink.muted, chrome::ink().muted);
+    assert_eq!(ink.good, chrome::ink().labeled);
+    assert_eq!(ink.danger, chrome::ink().danger);
 }
 
 /// **The editor's own skin is the shipped palette**, so the running editor and a harness draw one
@@ -73,10 +73,10 @@ fn the_editor_skin_draws_the_shipped_palette() {
     let app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     let running = app.world().resource::<GooeySkin>();
     let ink = AgentInk::of(Some(running));
-    assert_eq!(ink.read, chrome::TEXT);
-    assert_eq!(ink.muted, chrome::MUTED);
-    assert_eq!(ink.good, chrome::LABELED);
-    assert_eq!(ink.danger, chrome::DANGER);
+    assert_eq!(ink.read, chrome::ink().text);
+    assert_eq!(ink.muted, chrome::ink().muted);
+    assert_eq!(ink.good, chrome::ink().labeled);
+    assert_eq!(ink.danger, chrome::ink().danger);
 }
 
 /// **`SHELL` is process-wide**, so the two tests that open a real shell take turns.

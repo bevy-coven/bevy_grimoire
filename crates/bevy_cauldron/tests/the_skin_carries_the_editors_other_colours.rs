@@ -1,7 +1,7 @@
 //! **The editor skin carries the twelve colours no `GooeySkin` field has, as tones** (UI-02, #210, slice 2).
 //!
-//! `chrome.rs` draws with `KEY`, `LABEL`, `MUTED`, `SUGGEST`, `LABELED`, `GRID_LINE`, `BOUNDS_LINE`, `VEIL`,
-//! `FOCUS_BG`, `ROW_PRESSED`, `SNIP_WASH` and `OVERLAY_BG`, none of which is a field of `GooeySkin`. They are
+//! `chrome.rs` draws with `Ink::key`, `Ink::label`, `Ink::muted`, `Ink::suggest`, `Ink::labeled`, `Ink::grid_line`, `Ink::bounds_line`, `Ink::veil`,
+//! `Ink::focus_bg`, `Ink::row_pressed`, `Ink::snip_wash` and `Ink::overlay_bg`, none of which is a field of `GooeySkin`. They are
 //! the skin's `tones` now (`src/editor_skin.ron`), so a project's skin file can change them and gooey can check
 //! the text pairs among them. Each constant is still what `chrome.rs` draws with until UI-99 moves its readers to
 //! `skin.tone(..)`, so this says the two are one colour: a tone edited without its constant (or the reverse) fails here.
@@ -12,18 +12,18 @@ use bevy_cauldron::ui::editor_skin;
 
 fn colours() -> [(&'static str, Color); 12] {
     [
-        ("bounds_line", chrome::BOUNDS_LINE),
-        ("focus_bg", chrome::FOCUS_BG),
-        ("grid_line", chrome::GRID_LINE),
-        ("key", chrome::KEY),
-        ("label", chrome::LABEL),
-        ("labeled", chrome::LABELED),
-        ("muted", chrome::MUTED),
-        ("overlay_bg", chrome::OVERLAY_BG),
-        ("row_pressed", chrome::ROW_PRESSED),
-        ("snip_wash", chrome::SNIP_WASH),
-        ("suggest", chrome::SUGGEST),
-        ("veil", chrome::VEIL),
+        ("bounds_line", chrome::ink().bounds_line),
+        ("focus_bg", chrome::ink().focus_bg),
+        ("grid_line", chrome::ink().grid_line),
+        ("key", chrome::ink().key),
+        ("label", chrome::ink().label),
+        ("labeled", chrome::ink().labeled),
+        ("muted", chrome::ink().muted),
+        ("overlay_bg", chrome::ink().overlay_bg),
+        ("row_pressed", chrome::ink().row_pressed),
+        ("snip_wash", chrome::ink().snip_wash),
+        ("suggest", chrome::ink().suggest),
+        ("veil", chrome::ink().veil),
     ]
 }
 

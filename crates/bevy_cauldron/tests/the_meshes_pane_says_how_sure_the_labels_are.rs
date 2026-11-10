@@ -121,7 +121,7 @@ fn the_labels_row_reads_the_confidence_as_a_word() {
     // as a model's word elsewhere, not the author's own text colour.
     assert_eq!(
         ink,
-        bevy_cauldron::chrome::UNCHECKED,
+        bevy_cauldron::chrome::ink().unchecked,
         "the model-written labels row should be drawn in the unchecked colour"
     );
 }
@@ -145,7 +145,7 @@ fn a_record_a_person_confirmed_in_full_is_not_drawn_unchecked() {
     );
     assert_eq!(
         ink,
-        bevy_cauldron::chrome::TEXT,
+        bevy_cauldron::chrome::ink().text,
         "a fully confirmed record must not wear the model's unchecked colour"
     );
 }
@@ -162,7 +162,7 @@ fn an_open_model_axis_keeps_the_models_date_and_names_who_wrote_the_rest() {
     ));
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "confidence high · gemma-x · 2026-10-20 · by hand set look");
-    assert_eq!(ink, bevy_cauldron::chrome::UNCHECKED);
+    assert_eq!(ink, bevy_cauldron::chrome::ink().unchecked);
 }
 
 /// **The row names the model as a person reads it.** A model stored by its full path shows its file
@@ -292,7 +292,7 @@ fn an_agent_write_on_a_legacy_model_record_keeps_the_models_date() {
         text, "confidence high · gemma-x · 2026-10-11 · agent set look",
         "the model still owns kind, so its date and name stay; the agent's look is named, not dated"
     );
-    assert_eq!(ink, bevy_cauldron::chrome::UNCHECKED);
+    assert_eq!(ink, bevy_cauldron::chrome::ink().unchecked);
 }
 
 /// **When the model wrote no axis still standing, the row names no model.** Failed before the fix:
@@ -315,7 +315,7 @@ fn an_agent_write_that_leaves_no_model_axis_names_no_model() {
     assert_eq!(answer["outcome"], "applied", "{answer}");
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "agent set look", "no model axis is left, so no model is named");
-    assert_eq!(ink, bevy_cauldron::chrome::UNCHECKED);
+    assert_eq!(ink, bevy_cauldron::chrome::ink().unchecked);
 }
 
 /// **An agent's write on a hand-labelled record is not called "by hand".** Failed before the fix: the
@@ -338,5 +338,5 @@ fn an_agent_write_on_a_hand_labelled_record_is_not_called_by_hand() {
     assert_eq!(answer["outcome"], "applied", "{answer}");
     let (text, ink) = labels_row(&mut app).expect("the labels row should be drawn");
     assert_eq!(text, "agent set look");
-    assert_eq!(ink, bevy_cauldron::chrome::UNCHECKED);
+    assert_eq!(ink, bevy_cauldron::chrome::ink().unchecked);
 }

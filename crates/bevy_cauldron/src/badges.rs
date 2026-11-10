@@ -63,7 +63,7 @@ use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 use bevy::ui::{ComputedNode, UiGlobalTransform};
 
-use crate::chrome::{self, ACCENT, GAP_TIGHT, KEY, PANEL_BG, VEIL};
+use crate::chrome::{self, GAP_TIGHT};
 use crate::keys::{self, Home};
 
 /// **How far a badge stands off the interface** — the gap to its anchor, the corridor its leader
@@ -126,7 +126,7 @@ const DOES_COL: f32 = 138.0;
 const CONTROL_DOES_COL: f32 = 90.0;
 
 /// **A leader line's thickness, in logical pixels.** One: it is a connector, not a shape, and the
-/// badge-border ink ([`KEY`]) at a hairline reads against both the veil and a panel without
+/// badge-border ink (`Ink::key`) at a hairline reads against both the veil and a panel without
 /// competing with either.
 const LEAD_THICK: f32 = 1.0;
 
@@ -166,7 +166,7 @@ const CHORD_WRAP_CHARS: usize = 12;
 /// false and bring the ceiling back with it.
 pub const RENDERS_NO_ROWS: bool = true;
 
-/// **The layer everything is drawn into.** Carries [`VEIL`] as its own background, so the interface
+/// **The layer everything is drawn into.** Carries `Ink::veil` as its own background, so the interface
 /// stands back and the badges — its children — draw over it. One node, not two: a UI parent paints
 /// its background before its children, which is exactly the stacking wanted here.
 #[derive(Component)]
@@ -261,7 +261,7 @@ type Painters<'w, 's> = Query<
 /// rows a badge is naming, which is as close to ExposeHK's third goal as this editor can get. Its
 /// border goes with it: a container's frame is part of the container.
 ///
-/// **The layer's own subtree is excluded**, because it paints [`VEIL`] across the whole window
+/// **The layer's own subtree is excluded**, because it paints `Ink::veil` across the whole window
 /// ([`spawn_layer`]) and would otherwise mark every pixel on screen occupied.
 fn ink(
     layer: Entity,
@@ -751,7 +751,7 @@ fn rebuild_badges(
                                 position_type: PositionType::Absolute,
                                 ..default()
                             },
-                            BackgroundColor(KEY),
+                            BackgroundColor(chrome::ink().key),
                             Visibility::Hidden,
                             bevy::picking::Pickable::IGNORE,
                         ))
@@ -2300,7 +2300,7 @@ fn flash_live_badges(
     for (badge, rest, mut bg, mut border) in &mut badges {
         let lit = badge.0.iter().any(|a| keys::pressed(&keyboard, *live, *a));
         let (fill, edge) = if lit {
-            (chrome::ROW_SELECTED, ACCENT)
+            (chrome::ink().row_selected, chrome::ink().accent)
         } else {
             (rest.0, rest.1)
         };
@@ -2340,21 +2340,19 @@ pub struct BadgeInk {
 
 impl BadgeInk {
     /// The shipped palette, for a build with no skin.
-    pub const SHIPPED: BadgeInk = BadgeInk {
-        panel: PANEL_BG,
-        key: KEY,
-        dim: chrome::DIM,
-        veil: VEIL,
-    };
+    pub fn shipped() -> BadgeInk {
+        let ink = chrome::ink();
+        BadgeInk { panel: ink.panel_bg, key: ink.key, dim: ink.dim, veil: ink.veil }
+    }
 
     /// The skin's ink where it has one, the shipped constant where it does not.
     pub fn of(skin: Option<&bevy_gooey::GooeySkin>) -> BadgeInk {
-        let Some(skin) = skin else { return BadgeInk::SHIPPED };
+        let Some(skin) = skin else { return BadgeInk::shipped() };
         BadgeInk {
             panel: skin.surface,
-            key: skin.tone("key").unwrap_or(KEY),
+            key: skin.tone("key").unwrap_or(chrome::ink().key),
             dim: skin.text_muted,
-            veil: skin.tone("veil").unwrap_or(VEIL),
+            veil: skin.tone("veil").unwrap_or(chrome::ink().veil),
         }
     }
 }

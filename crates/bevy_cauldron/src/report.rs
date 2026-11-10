@@ -1150,8 +1150,8 @@ fn report_overlay(
         // way: what is outlined is what will be recorded, and a drag is that answer in the making.
         let boxes = taken
             .into_iter()
-            .map(|rect| (Some(rect), chrome::wash_at(chrome::SNIP_WASH, PICK_TAKEN_SHARE)))
-            .chain([(outline, Color::NONE), (dragged, chrome::SNIP_WASH)]);
+            .map(|rect| (Some(rect), chrome::wash_at(chrome::ink().snip_wash, PICK_TAKEN_SHARE)))
+            .chain([(outline, Color::NONE), (dragged, chrome::ink().snip_wash)]);
         for (rect, wash) in boxes {
             let Some(rect) = rect else { continue };
             root.spawn((
@@ -1166,7 +1166,7 @@ fn report_overlay(
                     border: UiRect::all(Val::Px(chrome::SNIP_EDGE_W)),
                     ..default()
                 },
-                BorderColor::all(chrome::ACCENT),
+                BorderColor::all(chrome::ink().accent),
                 BackgroundColor(wash),
                 Pickable::IGNORE,
             ));
@@ -1184,7 +1184,7 @@ fn report_overlay(
                     height: Val::Px(arm * 0.4),
                     ..default()
                 },
-                BackgroundColor(chrome::ACCENT),
+                BackgroundColor(chrome::ink().accent),
                 Pickable::IGNORE,
             ));
             root.spawn((
@@ -1198,7 +1198,7 @@ fn report_overlay(
                     height: Val::Px(arm * 2.0),
                     ..default()
                 },
-                BackgroundColor(chrome::ACCENT),
+                BackgroundColor(chrome::ink().accent),
                 Pickable::IGNORE,
             ));
         }
@@ -1206,7 +1206,7 @@ fn report_overlay(
             ReportPart,
             Text::new(hint.to_owned()),
             chrome::font(chrome::text::LABEL),
-            TextColor(chrome::TEXT),
+            TextColor(chrome::ink().text),
             TextLayout::default().with_no_wrap(),
             Node {
                 // PLACES-ITSELF-OK: the hint rides the top edge of the frozen frame, not a panel.
@@ -1703,13 +1703,13 @@ fn draw_mark(image: &mut image::RgbaImage, at: Vec2, colour: [u8; 4]) {
 
 /// The accent as RGBA8, so the picture's outline and the on-screen outline are the same colour.
 fn accent_rgb() -> [u8; 4] {
-    rgba8(chrome::ACCENT)
+    rgba8(chrome::ink().accent)
 }
 
 /// **[`chrome::DANGER`] as RGBA8**, for the newest pick: the same red the interface uses for "wrong",
 /// so a person opening the picture finds the thing they added last.
 fn danger_rgb() -> [u8; 4] {
-    rgba8(chrome::DANGER)
+    rgba8(chrome::ink().danger)
 }
 
 /// A chrome colour as opaque RGBA8.
