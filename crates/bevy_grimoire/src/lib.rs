@@ -32,6 +32,7 @@
 //! than from a hand-maintained map. Both gotchas those pairs document apply here and are restated on
 //! the types.
 
+pub mod game_schema;
 pub mod live;
 
 use std::collections::HashMap;

@@ -424,6 +424,8 @@ mod water_place_is_an_operation;
 mod water_run_settles_a_pond;
 mod world_gizmos_stay_in_the_world;
 
+mod schemas_are_written_where_an_outside_editor_looks;
+
 /// A file under `tests/` that is not a module here is never compiled, so its tests would silently
 /// stop running.
 #[test]

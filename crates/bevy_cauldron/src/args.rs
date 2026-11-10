@@ -131,6 +131,22 @@ pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -
         .map_err(|e| format!("cannot open {}: {e}", root.display()))?;
     at(crate::project::Stage::Maps);
 
+    // **Every kind's JSON Schema is written into the project on the one path an open takes** (GD-04,
+    // #366), so an outside editor's YAML extension finds a schema beside each YAML file it is pointed at,
+    // and the schemas a release shipped are replaced by the ones this build's types describe. It is here
+    // rather than in a screen's `OnEnter` because the launcher, the command line and an agent's open all
+    // come through this function, and one seam is what keeps them one behaviour.
+    //
+    // **A refused write is reported and does not stop the open.** A schema is what completion is built
+    // from, not what the project is; a folder that cannot be written is a person told about it and an
+    // editor that still opens. The message is the `Problem`'s own line, which names the file it refused
+    // and never claims a file a person wrote was replaced.
+    if let Err(e) = bevy_grimoire_core::schema::write_all(&root) {
+        // The editor's own log, which a person reads from the Problems panel and an agent reads from
+        // `cauldron.log`: a refused schema is a file the editor did not write, and it has to be findable.
+        bevy::log::warn!(target: "cauldron::schema", "{}", e.line());
+    }
+
     // **Only the Maps door takes a map**, and it is the only one that needs the second positional.
     let open_map = if door == Door::Map {
         let name = positional.get(1).copied().unwrap_or("untitled_map");

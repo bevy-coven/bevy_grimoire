@@ -49,6 +49,13 @@ pub const SCHEMA_EXT: &str = ".schema.json";
 /// YAML language server reads it, and every editor built on it (VS Code, Neovim, Zed) follows.
 pub const SCHEMA_HINT: &str = "yaml-language-server: $schema=";
 
+/// **The `$comment` every generated schema carries**: it is what tells a person the file is derived, and
+/// what [`write_all`] and [`write_game`] read to know a file at a schema path is this crate's to replace.
+///
+/// One string, in the file and in the test that compares: a second spelling would make a generated file
+/// read as a person's and refuse every later write.
+pub const GENERATED: &str = "generated from the Rust type by bevy_grimoire_core::schema — a hand edit is overwritten the next time the editor opens this project";
+
 /// **Every kind whose schema this crate generates**, each with the JSON of its type.
 ///
 /// The list is [`crate::reload::KINDS`] filtered to the kinds whose type lives here: a kind whose type is
@@ -149,43 +156,112 @@ fn root<T: schemars::JsonSchema>() -> Value {
     serde_json::to_value(generated).expect("a schemars schema is JSON values and string keys")
 }
 
+/// **The record of which schema files this editor wrote**, inside [`SCHEMA_DIR`]: a JSON array of the file
+/// names.
+///
+/// **Provenance, not the file's own claim.** Whether a file at a schema path is this editor's is a fact
+/// about who wrote it, so it is recorded when the write happens. The alternative — reading the file's
+/// `$comment` — makes a hand edit that removes that comment turn a generated file into a person's, and makes
+/// a person who copied the comment into their own file lose it to the next open. Neither is what "a hand
+/// edit is overwritten" means.
+///
+/// It ends in `.schema.json` so it is a file the reload contract can classify (`schema`, `Live`) rather than
+/// one the editor notices and cannot name, and it is stamped like the schemas so it cannot itself be lost.
+pub const GENERATED_LIST: &str = "generated.schema.json";
+
 /// **Mark a schema as this crate's and this kind's**, and say it is generated.
 fn stamp(schema: &mut Value, kind: &str) {
     let Value::Object(map) = schema else { return };
     map.insert("x-dark-factory".to_owned(), Value::from(kind));
-    map.insert(
-        "$comment".to_owned(),
-        Value::from("generated from the Rust type by bevy_grimoire_core::schema — a hand edit is overwritten the next time the editor opens this project"),
-    );
+    map.insert("$comment".to_owned(), Value::from(GENERATED));
 }
 
 /// **Write every kind's schema into the project at `root`**, and answer the paths written.
 ///
 /// A file that cannot be written is one [`Problem`] naming it: a schema is what an outside editor's
 /// completion depends on, so a silent failure would show up as an editor that offers nothing.
+///
+/// **A file at a schema path that this crate did not generate is refused, not replaced.** The files here
+/// are derived and a hand edit to one is overwritten — that is what [`stamp`]'s `$comment` warns about —
+/// but a person who put a schema of their own at that path is not editing ours, they are keeping theirs.
+/// Replacing it would be a deletion nobody asked for.
+///
+/// **Every path is checked before any is written**, so a refusal writes nothing at all: half the project's
+/// schemas replaced and half not would be a state nobody could read off the disk.
 #[allow(clippy::result_large_err)]
 pub fn write_all(root: &Path) -> Result<Vec<PathBuf>, Problem> {
     let dir = root.join(SCHEMA_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| write_problem(&dir, &e.to_string()))?;
+    let schemas = all();
+    let mut names = generated(&dir);
+    for (kind, _) in &schemas {
+        let name = format!("{kind}{SCHEMA_EXT}");
+        if dir.join(&name).exists() && !names.contains(&name) {
+            return Err(hand_written_ours(&dir.join(&name)));
+        }
+    }
     let mut written = Vec::new();
-    for (kind, schema) in all() {
-        let path = dir.join(format!("{kind}{SCHEMA_EXT}"));
+    for (kind, schema) in schemas {
+        let name = format!("{kind}{SCHEMA_EXT}");
+        let path = dir.join(&name);
         write_json(&path, &schema)?;
+        names.insert(name);
         written.push(path);
     }
+    write_names(&dir, &names)?;
     Ok(written)
+}
+
+/// **Record the schema files written**, so the next write knows which ones are its own.
+#[allow(clippy::result_large_err)]
+fn write_names(dir: &Path, names: &std::collections::BTreeSet<String>) -> Result<(), Problem> {
+    let listed: Vec<&String> = names.iter().collect();
+    let value = serde_json::to_value(listed).map_err(|e| write_problem(&dir.join(GENERATED_LIST), &e.to_string()))?;
+    write_json(&dir.join(GENERATED_LIST), &value)
+}
+
+/// **The schema files this editor wrote**, by name, read from [`GENERATED_LIST`].
+///
+/// A missing or unreadable list is an empty one: nothing is recorded as written, so nothing is replaced.
+/// That is the safe direction — the cost is a person being asked to move a file, and the alternative is
+/// deleting one.
+fn generated(dir: &Path) -> std::collections::BTreeSet<String> {
+    let Ok(text) = std::fs::read_to_string(dir.join(GENERATED_LIST)) else {
+        return Default::default();
+    };
+    let Ok(names) = serde_json::from_str::<Vec<String>>(&text) else { return Default::default() };
+    names.into_iter().collect()
+}
+
+/// **The problem for a schema path a person's own file occupies.**
+fn hand_written_ours(path: &Path) -> Problem {
+    Problem::with(
+        format!("{}: is not a generated schema, so it was not replaced", path.display()),
+        Detail::default()
+            .at(Location::file(path.display().to_string()))
+            .because("a schema file this editor writes is derived from a Rust type; this file was not written by it, so it is a person's and replacing it would delete their work")
+            .fix(format!(
+                "move or delete {} to let this kind's schema be written there, or keep the file and write no schema for it",
+                path.display()
+            ))
+            .docs("docs/guide/your-game.md"),
+    )
 }
 
 /// **Write a game's own reflected schema** — the text the running game's remote registry answers — into
 /// the project: the game's components are what its own files accept, so its schema is the game's to
 /// produce and this only puts it where an editor looks.
+///
+/// **Stamped like the rest**, so the next start replaces it, and **refused over a person's file** for the
+/// same reason [`write_all`] is: `game.schema.json` is where this crate writes a derived file, not a path
+/// it owns.
 #[allow(clippy::result_large_err)]
 pub fn write_game(root: &Path, schema: &str) -> Result<PathBuf, Problem> {
     let dir = root.join(SCHEMA_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| write_problem(&dir, &e.to_string()))?;
     // A registry that answered text which is not JSON would be a game's bug, and saying so here is
     // better than writing a file an editor cannot read.
-    let value: Value = serde_json::from_str(schema).map_err(|e| {
+    let mut value: Value = serde_json::from_str(schema).map_err(|e| {
         Problem::with(
             "the game's schema is not JSON",
             Detail::default()
@@ -194,8 +270,16 @@ pub fn write_game(root: &Path, schema: &str) -> Result<PathBuf, Problem> {
                 .docs("docs/guide/your-game.md"),
         )
     })?;
-    let path = dir.join(format!("game{SCHEMA_EXT}"));
+    let name = format!("game{SCHEMA_EXT}");
+    let path = dir.join(&name);
+    let mut names = generated(&dir);
+    if path.exists() && !names.contains(&name) {
+        return Err(hand_written_ours(&path));
+    }
+    stamp(&mut value, "game");
     write_json(&path, &value)?;
+    names.insert(name);
+    write_names(&dir, &names)?;
     Ok(path)
 }
 
