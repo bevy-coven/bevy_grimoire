@@ -48,8 +48,9 @@ whichever of the two wrote first. That is settled on the **consumer** side, beca
 message too and no producer can know what another wrote.
 
 **A body already inside a volume is not a crossing.** A save that puts someone in a doorway is a state, not
-something that happened, so the first frame records where every body is and reports nothing; only a change after
-that is a crossing. A project reopened does not press the switch of every volume someone was saved inside.
+something that happened, so the first look at a volume-and-body pair records where it is and reports nothing; only a
+change after that is a crossing. That holds whether the volume was there first or the body was — a save that writes a
+walker into a yard that already exists does not press the switch of the door in that yard either.
 
 ```yaml
 entities:

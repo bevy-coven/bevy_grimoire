@@ -68,6 +68,14 @@ fn sent<M: Message + Clone>(app: &mut App) -> Vec<M> {
     app.world_mut().resource_mut::<Messages<M>>().drain().collect()
 }
 
+/// **One save, and the frames a reload takes**: the watch notices the new bytes on one poll and settles on the
+/// next, so three frames is what `a_game_defines_its_entities_in_yaml.rs` uses and what this file uses too.
+fn save(app: &mut App) {
+    frame(app);
+    frame(app);
+    frame(app);
+}
+
 fn at(x: f32, y: f32, z: f32) -> String {
     format!("{{ translation: [{x}, {y}, {z}], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }}")
 }
@@ -181,6 +189,93 @@ fn a_body_saved_inside_a_volume_does_not_press_its_switch() {
     frame(&mut app);
     assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(true), "walking in after leaving presses the switch");
     assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(true), "and opens the gate");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A body a live save puts inside a volume that already exists is not a crossing either** (#369 review M1).
+///
+/// The first version of this fix had two paths doing one job: a `first` set recording every body on a volume's
+/// first frame, and the main loop's `else continue` recording any pair it had never seen. The second is the one that
+/// covers a body appearing **after** the volume's first frame — what a YAML reload does when it adds a walker into a
+/// yard that is already there — and it is the only path this test can fail on: with it reverted to
+/// `unwrap_or(false)` a walker spawned inside reports an entry nobody saw, and the switch of a door in that yard
+/// flips when somebody saves a file.
+#[test]
+fn a_body_a_save_adds_inside_an_existing_volume_does_not_press_its_switch() {
+    let root = project("behaviour_body_added_inside");
+    // **The yard first, with nobody in it**: the volume exists and has been looked at.
+    write(
+        &root,
+        "entities:\n  \
+           latch:\n    Switch: { latch: gate_crossed, on: false }\n  \
+           gate:\n    Door: { link: gate_crossed, open: false }\n  \
+           tripwire:\n    Trigger: { radius_m: 2.0, signal: gate_crossed }\n",
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    let latch = entity(&app, &root, "latch");
+    let gate = entity(&app, &root, "gate");
+    assert!(sent::<Triggered>(&mut app).is_empty(), "an empty yard has no crossing");
+
+    // **The save adds a walker standing in the yard**, which is the shape of a reload that writes someone into a
+    // doorway rather than making them walk in.
+    write(
+        &root,
+        &format!(
+            "entities:\n  \
+               latch:\n    Switch: {{ latch: gate_crossed, on: false }}\n  \
+               gate:\n    Door: {{ link: gate_crossed, open: false }}\n  \
+               tripwire:\n    Trigger: {{ radius_m: 2.0, signal: gate_crossed }}\n  \
+               walker:\n    Body: {{}}\n    Transform: {}\n",
+            at(0.5, 0.0, 0.0)
+        ),
+    );
+    save(&mut app);
+
+    // **Nothing happened**: the walker has always been there, so it neither entered nor pressed anything.
+    assert!(sent::<Triggered>(&mut app).is_empty(), "a body a save placed inside did not enter");
+    assert_eq!(app.world().get::<Switch>(latch).map(|s| s.on), Some(false), "so the switch was not pressed");
+    assert_eq!(app.world().get::<Door>(gate).map(|d| d.open), Some(false), "and the gate is still shut");
+
+    // **And the walker is real**: leaving is a crossing this volume reports, so the quiet frame above is not quiet
+    // for the trivial reason that nothing was spawned.
+    let walker = entity(&app, &root, "walker");
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::new(10.0, 0.0, 0.0);
+    frame(&mut app);
+    let left = sent::<Triggered>(&mut app);
+    assert_eq!(left.len(), 1, "leaving is a crossing: {left:?}");
+    assert!(!left[0].entered, "and it says it was the way out");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **A volume with no `signal` writes none, read on the frame the crossing happened** (#369 review NIT).
+///
+/// The owner-excepted test in `a_game_behaves_from_yaml.rs` drains its `Signal`s after five frames, and Bevy keeps a
+/// message for two updates — so a signal written on frame 1 is gone by then and that drain cannot see it. This test
+/// drains **right after the crossing frame**, which is the only place a missing signal can be told from an expired
+/// one.
+#[test]
+fn a_volume_that_names_no_signal_writes_none_on_the_frame_it_is_crossed() {
+    let root = project("behaviour_no_signal_right_after");
+    write(
+        &root,
+        &format!(
+            "entities:\n  tripwire:\n    Trigger: {{ radius_m: 2.0 }}\n  walker:\n    Body: {{}}\n    Transform: {}\n",
+            at(10.0, 0.0, 0.0)
+        ),
+    );
+    let mut app = game(&root);
+    frame(&mut app);
+    assert!(sent::<Signal>(&mut app).is_empty(), "standing outside writes nothing");
+
+    // **The crossing frame, and the drain on it**: a `Triggered` was written, and no `Signal` beside it.
+    let walker = entity(&app, &root, "walker");
+    app.world_mut().get_mut::<Transform>(walker).expect("a body has a position").translation = Vec3::ZERO;
+    frame(&mut app);
+    assert_eq!(sent::<Triggered>(&mut app).len(), 1, "the volume reports the crossing");
+    assert!(sent::<Signal>(&mut app).is_empty(), "and a volume with no `signal` writes none, on the frame it was crossed");
 
     let _ = std::fs::remove_dir_all(&root);
 }
