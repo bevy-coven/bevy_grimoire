@@ -599,6 +599,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // map it is on, so the one-wish rule cannot read two hand-backs as one.
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
+    ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),
