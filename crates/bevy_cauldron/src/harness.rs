@@ -494,8 +494,28 @@ pub fn build_headless_at(
     if !app.is_plugin_added::<crate::screen::ScreenPlugin>() {
         app.add_plugins(crate::screen::ScreenPlugin);
     }
+    // **A headless run opens nothing, and asks nobody.**
+    //
+    // Both are the seams the features already have — [`crate::app_verbs::LinksOff`] records an
+    // address instead of launching the system's opener, and [`crate::wish_view::WishSearchOff`]
+    // answers a search without a network — and a test process has no business doing either for real:
+    // a suite that launched browsers would be rude, and one that asked GitHub would fail on an
+    // aeroplane and spend a rate limit per run. **Inserted rather than required of every test**, so
+    // the honest default is the safe one and a test that wants a different answer says so
+    // (`insert_resource` over these is the supported way).
+    app.init_resource::<crate::app_verbs::LinksOff>();
+    app.init_resource::<crate::wish_view::WishSearchOff>();
     install_font(&mut app, &root)?;
     Ok(app)
+}
+
+/// **The addresses a stepped editor opened**, in the order it opened them, for the tests that prove a
+/// button opens the right page (#354).
+///
+/// A headless run records them ([`crate::app_verbs::LinksOff`]) rather than launching a browser, so
+/// this is the record a person's press leaves behind — not a separate hook a test could pass by.
+pub fn opened_links(app: &App) -> Vec<String> {
+    app.world().get_resource::<crate::app_verbs::LinksOff>().map(|links| links.0.clone()).unwrap_or_default()
 }
 
 #[cfg(test)]

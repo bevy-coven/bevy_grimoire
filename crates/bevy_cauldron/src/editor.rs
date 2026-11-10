@@ -2604,6 +2604,9 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::library_browser::LibraryBrowserPlugin);
         app.add_plugins(crate::problems_view::ProblemsViewPlugin);
         app.add_plugins(crate::familiar::FamiliarPlugin);
+        // **The AGENT block's rows** (#354): the list a wish is a row of, its answers, and the status
+        // band's count of them while the block is hidden. Beside the block because it fills the block.
+        app.add_plugins(crate::wish_view::WishViewPlugin);
         app.add_plugins(crate::shell_view::ShellViewPlugin);
         app.add_observer(drop_a_piece_on_the_map);
         app.add_plugins(crate::selection::SelectionPlugin);

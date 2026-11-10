@@ -166,6 +166,7 @@ mod a_two_way_mount_seats_on_either;
 mod a_weight_names_the_pieces_it_tunes;
 mod a_wish_cites_a_hand_back_of_its_own_map_and_project;
 mod a_wish_cites_the_sessions_hand_back;
+mod a_wish_is_opened_or_discarded_in_the_agent_block;
 mod a_widget_is_clicked_by_its_label;
 mod the_colour_table_only_shrinks;
 mod the_commands_lenses_match_the_tree;

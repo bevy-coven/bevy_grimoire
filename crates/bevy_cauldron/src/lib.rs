@@ -212,3 +212,4 @@ pub mod view;
 pub mod vlm;
 pub mod watch;
 pub mod window_frame;
+pub mod wish_view;
