@@ -273,6 +273,32 @@ pub enum Shown {
     Nowhere,
 }
 
+impl Shown {
+    /// **The change in words a refusal can name**: `a library piece `lamp_tall``, ``the file
+    /// `assets/grimoire/vocab.ron` ``. Used where the editor cannot show it (AF-03, #359), so the
+    /// problem says which change it could not show rather than `Some(Shown { .. })`.
+    pub fn words(&self) -> String {
+        match self {
+            Shown::Map { rect, placements } => format!(
+                "a place on the map ({:.1}, {:.1})..({:.1}, {:.1}) with {} placement(s)",
+                rect[0], rect[1], rect[2], rect[3], placements.len()
+            ),
+            Shown::MapWhole => "the whole map".to_owned(),
+            Shown::Piece { id } => format!("the library piece `{id}`"),
+            Shown::Tile { id } => format!("the lattice of `{id}`"),
+            Shown::Composition { id } => format!("the composition `{id}`"),
+            Shown::Rig { id } => format!("the rig `{id}`"),
+            Shown::File { path, lines } => match lines {
+                Some([first, last]) => format!("the file `{path}` at lines {first}..{last}"),
+                _ => format!("the file `{path}`"),
+            },
+            Shown::Note { id } => format!("the note `{id}`"),
+            Shown::Settings { section } => format!("the `{section}` settings"),
+            Shown::Nowhere => "nothing to look at".to_owned(),
+        }
+    }
+}
+
 /// **How wide the box round a point is**, in metres, when the thing there has no measurement of its
 /// own — an unmeasured piece, a person's marker, a spring. **A rect of zero width is not a place**:
 /// the framing code refuses one, so an answer that could not be framed is not an answer.
@@ -5167,6 +5193,24 @@ pub fn preview(
 pub fn preview_shows(ctx: &Ctx, op: &dyn Operation, params: &serde_json::Value) -> Shown {
     op.shows(ctx, params)
 }
+
+/// **What a proposal would do, in the receipt's words** (AF-05, #361).
+///
+/// **The caller's own plan**, not a second `plan` call: `preview` already ran it, and running it again
+/// would be a second answer to what the change would be (and, for an operation with a side effect in
+/// `plan`, a second side effect).
+///
+/// **The plan's own summary, and nothing in front of it**: the receipt supplies the tense (`the Familiar
+/// is about to place bed@02`), so a preview and its apply describe one change in one set of words.
+pub fn preview_summary(op: &dyn Operation, plan: &serde_json::Value) -> String {
+    match plan.get("summary").and_then(serde_json::Value::as_str) {
+        Some(said) => said.to_owned(),
+        // **A plan that names no summary is one whose answer is the change itself** — a
+        // `placement_add`'s box, an undo's restore. Naming the operation is then the honest sentence.
+        None => format!("do `{}`", op.name()),
+    }
+}
+
 
 /// **[`dispatch`], with the line it undoes named** — the one path for a change and for its undo,
 /// so an undo is validated, written and logged exactly as the change was.

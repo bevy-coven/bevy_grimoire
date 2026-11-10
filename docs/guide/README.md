@@ -1,6 +1,6 @@
 # Guide
 
-Read these in order the first time through.
+Read these in order the first time through. The editor opens every page below from its Help menu, and a panel's header carries a `?` that opens the page covering what that panel holds.
 
 - [Getting started](getting-started.md): install, open the editor on the project, and make your first map.
 - [Building maps](building-maps.md): place, fill and undo pieces on a map.

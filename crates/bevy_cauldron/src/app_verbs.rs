@@ -57,6 +57,10 @@ pub enum AppVerb {
     Quit,
     /// Show the keymap: every command and its chord.
     KeyboardShortcuts,
+    /// **Open one page of the written guide** (UI-91, #257), by [`crate::help`]'s id. The row says the
+    /// page's title, and the address is the page's own file, so the menu and the guide's index cannot
+    /// name different pages.
+    GuidePage(&'static str),
     /// Open the written guide in the browser.
     GettingStarted,
     /// Leave for the home's What's new page.
@@ -82,6 +86,7 @@ impl AppVerb {
             AppVerb::TakeTour => "Take the tour".to_owned(),
             AppVerb::Quit => "Quit".to_owned(),
             AppVerb::KeyboardShortcuts => "Keyboard shortcuts".to_owned(),
+            AppVerb::GuidePage(id) => crate::help::page(id).map_or_else(|| "Guide".to_owned(), |page| page.title.to_owned()),
             AppVerb::GettingStarted => "Getting started guide".to_owned(),
             AppVerb::WhatsNew => "What's new".to_owned(),
             AppVerb::ReportProblem => "Report a problem".to_owned(),
@@ -156,6 +161,16 @@ pub fn run(world: &mut World, verb: AppVerb) {
         AppVerb::KeyboardShortcuts => {
             world.write_message(crate::keymap_screen::OpenKeymap);
         }
+        AppVerb::GuidePage(id) => match crate::help::page(id) {
+            Some(page) => open_link(world, &crate::help::url(page)),
+            // A row whose page the catalog lost cannot open anything: say so where the person reads
+            // it rather than opening the guide's front page and pretending it was the answer.
+            None => {
+                let said = format!("the guide has no page `{id}`, so this row has nothing to open");
+                world.spawn(bevy_gooey::toast_alert(said.clone()).sticky());
+                bevy::log::warn!("{said}");
+            }
+        },
         AppVerb::GettingStarted => open_link(world, launcher::GUIDE_URL),
         AppVerb::ReportProblem => open_link(world, &report_url()),
         AppVerb::About => {

@@ -184,6 +184,9 @@ fn read_the_titles_as_controls(
 enum Slot {
     Command(Action),
     Verb(AppVerb),
+    /// **Every page of the written guide, in the guide's own order** (UI-91, #257): one row each, so
+    /// Help finds every page and no page is named twice.
+    Guide,
     Recent(Vec<PathBuf>),
     Separator,
     Statistics,
@@ -193,6 +196,8 @@ enum Slot {
     Familiar,
     /// View ▸ Pause agent writes (UI-60, #246).
     PauseAgent,
+    /// View ▸ Follow the agent (AF-04, #360).
+    FollowAgent,
     /// View ▸ Show left panel (feedback-1794146831022): the tick is the panel shown.
     LeftPanel,
     /// View ▸ Zen mode (feedback-1794146831022).
@@ -263,6 +268,10 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
             Slot::Verb(AppVerb::KeyboardShortcuts),
             Slot::Command(Action::Shortcuts),
             Slot::Separator,
+            // The written guide, page by page (UI-91, #257). The rows are the catalog's, so a page
+            // added to `docs/guide` appears here the frame it is listed, and one removed goes.
+            Slot::Guide,
+            Slot::Separator,
             Slot::Verb(AppVerb::GettingStarted),
             Slot::Verb(AppVerb::WhatsNew),
             Slot::Separator,
@@ -288,6 +297,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::LightMap);
         slots.push(Slot::Familiar);
         slots.push(Slot::PauseAgent);
+        slots.push(Slot::FollowAgent);
         slots.push(Slot::Separator);
         slots.push(Slot::ResetLayout);
     }
@@ -331,6 +341,11 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
             let command = commands::command(action);
             menu.spawn((MenuCommand(action), bevy_gooey::menu_item(command.title).with_shortcut(command.shortcut_in(live))));
         }
+        Slot::Guide => {
+            for page in crate::help::PAGES {
+                menu.spawn((AppVerb::GuidePage(page.id), bevy_gooey::menu_item(page.title)));
+            }
+        }
         Slot::Verb(verb) => {
             let mut item = bevy_gooey::menu_item(verb.title());
             if let Some(shortcut) = verb.shortcut() {
@@ -367,6 +382,13 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::familiar::PauseItem,
                 bevy_gooey::check_item("Pause agent writes", false),
                 bevy_gooey::observe(crate::familiar::toggle_the_pause),
+            ));
+        }
+        Slot::FollowAgent => {
+            menu.spawn((
+                crate::familiar::FollowItem,
+                bevy_gooey::check_item("Follow the agent", true),
+                bevy_gooey::observe(crate::familiar::toggle_the_follow),
             ));
         }
         Slot::LeftPanel => {

@@ -213,19 +213,24 @@ pub fn nodes_for(
     group_open: impl Fn(u64) -> Option<bool>,
 ) -> (Vec<TreeNode>, HashMap<u64, String>) {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    // **No search builds no haystack.** The haystack is a lowercased copy of three fields per piece — two allocations per
+    // placement, measured at 2.5 ms of the tree's rebuild for ten thousand pieces (UI-93, #259) — and with nothing typed
+    // there is nothing to compare it against, so it is built only while something is searched for.
+    let searching = !words.is_empty();
     let mut groups: std::collections::BTreeMap<String, Vec<TreeNode>> = std::collections::BTreeMap::new();
     let mut rows = HashMap::new();
     for placed in &map.placements {
         let kind = descriptor_of(library, placed).and_then(|d| d.kind.first().cloned()).unwrap_or_else(|| OTHER_GROUP.to_owned());
-        let haystack = format!("{} {} {}", placed.id, placed.descriptor, kind).to_lowercase();
-        if !words.iter().all(|word| haystack.contains(word.as_str())) {
-            continue;
+        if searching {
+            let haystack = format!("{} {} {}", placed.id, placed.descriptor, kind).to_lowercase();
+            if !words.iter().all(|word| haystack.contains(word.as_str())) {
+                continue;
+            }
         }
         let key = placement_key(&placed.id);
         rows.insert(key, placed.id.clone());
         groups.entry(kind).or_default().push(TreeNode::new(key, format!("{} \u{b7} {}", placed.id, placed.descriptor)));
     }
-    let searching = !words.is_empty();
     let nodes = groups
         .into_iter()
         .map(|(kind, pieces)| {
@@ -238,16 +243,28 @@ pub fn nodes_for(
 }
 
 /// Whether the tree needs building again: a fingerprint of the query and of every piece's identity.
+///
+/// **Hashed as it is read, with no string built.** It used to append every piece's id and descriptor to a `String` — a few
+/// hundred kilobytes for ten thousand pieces, allocated and filled on the frame a change lands on — and hash that. The hash
+/// is the same one ([`fnv`]), taken over the pieces' own bytes as they are walked, so a build allocates nothing. The two
+/// separator bytes are the ones the old text used, so a piece that gained or lost a character still moves the fingerprint.
 fn fingerprint(map: &Map, query: &str) -> u64 {
-    let mut text = String::with_capacity(query.len() + map.placements.len() * 16);
-    text.push_str(query);
-    for placed in &map.placements {
-        text.push('\u{1f}');
-        text.push_str(&placed.id);
-        text.push('\u{1e}');
-        text.push_str(&placed.descriptor);
+    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0100_0000_01b3;
+    fn fold(mut hash: u64, bytes: &[u8]) -> u64 {
+        for byte in bytes {
+            hash = (hash ^ u64::from(*byte)).wrapping_mul(PRIME);
+        }
+        hash
     }
-    fnv(&text)
+    let mut hash = fold(BASIS, query.as_bytes());
+    for placed in &map.placements {
+        hash = fold(hash, b"\x1f");
+        hash = fold(hash, placed.id.as_bytes());
+        hash = fold(hash, b"\x1e");
+        hash = fold(hash, placed.descriptor.as_bytes());
+    }
+    hash
 }
 
 /// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
@@ -256,7 +273,12 @@ fn rebuild_the_tree(
     project: Option<Res<Project>>,
     mut outliners: Query<&mut Outliner>,
     mut tables: Query<&mut Table, With<OutlinerTree>>,
+    mut budget: ResMut<crate::ui_budget::UiFrame>,
 ) {
+    // **This system's cost, into the frame's total** (UI-93, #259): the tree is the list that grows with the map, and the
+    // budget's whole point is that a settled frame pays nothing for its depth. The guard writes on drop, so every `return`
+    // below is measured without a call of its own.
+    let spent = crate::ui_budget::measure(&mut budget);
     let (Some(open), Some(project)) = (open, project) else { return };
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
     // **A settled frame does no work that grows with the map.** The fingerprint reads every piece, so it is taken
@@ -273,6 +295,8 @@ fn rebuild_the_tree(
         outliner.built_for = query;
         return;
     }
+    // **From here it is a rebuild**, which the budget reports apart from a settled frame.
+    let _rebuild = spent.rebuilding();
     let Some(tree) = table.source_mut::<Tree>() else { return };
     let (nodes, rows) = nodes_for(&open.map, &project.library, &outliner.query, |key| tree.is_open(key));
     tree.set_nodes(nodes);

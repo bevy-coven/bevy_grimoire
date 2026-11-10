@@ -52,6 +52,11 @@ pub struct AgentPause(pub bool);
 #[derive(Component)]
 pub struct PauseItem;
 
+/// **View ▸ Follow the agent** (AF-04, #360). The tick is `EditorSettings::follow_agent`, so the row
+/// and the settings file cannot say different things.
+#[derive(Component)]
+pub struct FollowItem;
+
 /// **Whether hand-backs are answered in the AGENT block** (UI-60b, #340). Off, `grimoire/present` asks in the modal as it
 /// always did; on, and with the block open, it asks in the block, beside what the agent did. A person's choice for the
 /// sitting, never saved.
@@ -112,6 +117,7 @@ impl Plugin for FamiliarPlugin {
             Update,
             (
                 tick_the_menu_row,
+                tick_the_follow_row,
                 tick_the_familiar_row,
                 follow_the_agent,
                 follow_the_plan,
@@ -158,6 +164,14 @@ pub struct FamiliarSwitch;
 /// The block's Undo button.
 #[derive(Component)]
 pub struct FamiliarUndo;
+
+/// **The block's Look button** (AF-04, #360): show the change the Familiar is waiting on, now. The
+/// issue names two places for Look — the chip over the viewport and this block's newest-change line —
+/// and both call [`crate::follow::Following::look_now`], so a click and a button cannot wait on
+/// different things.
+#[derive(Component)]
+pub struct AgentLookButton;
+
 
 /// The block's "Answer hand-backs here" switch.
 #[derive(Component)]
@@ -238,6 +252,22 @@ pub fn toggle_the_familiar(
                 }),
             ));
             block.spawn((button("Undo the agent's change"), FamiliarUndo, observe(undo_the_agents_change)));
+            // **Look**, beside Undo: the block says what the agent did, so "show me" belongs under it
+            // (AF-04, #360). It calls the same `Following::look_now` the chip's button does.
+            block.spawn((
+                button("Look at the agent's change"),
+                AgentLookButton,
+                observe(|activate: On<Activate>, buttons: Query<(), With<AgentLookButton>>, mut following: Option<ResMut<crate::follow::Following>>, mut state: Option<ResMut<EditorState>>| {
+                    if !buttons.contains(activate.entity) {
+                        return;
+                    }
+                    let Some(following) = following.as_deref_mut() else { return };
+                    following.look_now();
+                    if let Some(state) = state.as_deref_mut() {
+                        state.status.note("looking at what the Familiar changed");
+                    }
+                }),
+            ));
             // **The shared list of rows** (#354): one per waiting wish today, one per lesson of
             // AG-06's tomorrow. Its children are `wish_view`'s, so a row that is a wish does not
             // teach this block what a wish is.
@@ -425,6 +455,64 @@ pub fn refusal(operation: &str) -> String {
 pub fn toggle_the_pause(change: On<ValueChange<bool>>, mut pause: ResMut<AgentPause>) {
     if pause.0 != change.value {
         pause.0 = change.value;
+    }
+}
+
+/// **The View ▸ Follow the agent row is ticked while the view follows**, read from the running
+/// settings so a settings-screen change and a menu click cannot disagree.
+fn tick_the_follow_row(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    items: Query<(Entity, Has<Checked>), With<FollowItem>>,
+    mut commands: Commands,
+) {
+    let on = settings.is_none_or(|s| s.follow_agent);
+    for (item, ticked) in &items {
+        match (on, ticked) {
+            (true, false) => {
+                commands.entity(item).insert(Checked);
+            }
+            (false, true) => {
+                commands.entity(item).remove::<Checked>();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// **The row was chosen: the setting follows the tick.** Written through the settings screen's own
+/// `write_key`, so the file, the running editor and the row are one change rather than three.
+///
+/// **The user's layer**, which is where `settings.rs`'s own doc puts this key: *"it is how a person
+/// wants to watch an agent, not a fact about one project"*. The first version wrote the project's
+/// `editor.ron`, which would have made one person's preference a file every other person opening
+/// that project inherits — the opposite of what the doc says, and the disagreement is what the review
+/// caught.
+///
+/// **A missing user file is said, not worked around.** A machine with no config directory has nowhere
+/// to keep a preference; writing the project's instead would let the project decide for its authors,
+/// so the refusal is shown and nothing is written anywhere.
+pub fn toggle_the_follow(
+    change: On<ValueChange<bool>>,
+    file: Option<Res<crate::settings::UserSettingsFile>>,
+    mut state: Option<ResMut<EditorState>>,
+) {
+    let Some(file) = file else {
+        if let Some(state) = state.as_deref_mut() {
+            state.status.problem(format!(
+                "no personal settings file is available on this machine, so Follow the agent was not \
+                 saved. It is {} until this session ends.",
+                if change.value { "on" } else { "off" }
+            ));
+        }
+        return;
+    };
+    if let Err(why) = crate::setting_catalogue::write_key(
+        &file.0,
+        "follow_agent",
+        Some(crate::setting_catalogue::Value::On(change.value)),
+    ) && let Some(state) = state.as_deref_mut()
+    {
+        state.status.problem(format!("could not save Follow the agent: {why}"));
     }
 }
 

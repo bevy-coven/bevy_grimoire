@@ -416,6 +416,9 @@ door_state![
     crate::editor::PlaceDrag,
     crate::editor::RemovalDrag,
     crate::editor::NoteBox,
+    // **The note a reveal selected** (AF-03, #359): it names a row of *this map's* `.notes.ron`, so a
+    // selection carried across a door would name a note the next map does not have.
+    crate::editor::SelectedNote,
     crate::editor::NotesFilter,
     crate::editor::RunDrag,
     crate::editor::RunGhostDrag,
@@ -596,6 +599,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // map it is on, so the one-wish rule cannot read two hand-backs as one.
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
+    ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
     // **`Session`, for the queue's own reason**: which rows the person has unfolded, and what GitHub
     // said about the wishes in them, are facts about this sitting's wishes — the queue outlives a door
     // change, so the rows that read it must too or a wish would be folded again on every crossing.
@@ -676,6 +680,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::editor::PlaceDrag", Ownership::Door),
     ("bevy_cauldron::editor::RemovalDrag", Ownership::Door),
     ("bevy_cauldron::editor::NoteBox", Ownership::Door),
+    ("bevy_cauldron::editor::SelectedNote", Ownership::Door),
     ("bevy_cauldron::editor::NotesFilter", Ownership::Door),
     ("bevy_cauldron::editor::RunDrag", Ownership::Door),
     ("bevy_cauldron::editor::RunGhostDrag", Ownership::Door),
@@ -737,6 +742,17 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // resource would be erased by the very crossing it asked for. `Camera state only`, like `Rig`,
     // but it outlives the door for that one reason.
     ("bevy_cauldron::follow::Following", Ownership::Session),
+    // **`Session`, and for `Following`'s exact reason**: a reveal raised on the Kit door asks the
+    // editor to open the Map, and the crossing that answers it resets the door's own state — so a
+    // request kept in a `Door` resource would be erased by the very crossing it asked for. AF-03, #359.
+    ("bevy_cauldron::reveal::Revealing", Ownership::Session),
+    // **`Session`**: which inspector heading was last brought into view is where the person's eye
+    // was sent, not a fact about this door's documents.
+    ("bevy_cauldron::reveal::InspectorReveal", Ownership::Session),
+    // **`Session`**, derived from `Following` every frame: a chip's sentence is about the sitting's
+    // agents, not about this door's documents, and it is rebuilt on the next frame from a queue that
+    // is itself `Session` — a `Door` classification would blank it for one frame for no reason.
+    ("bevy_cauldron::follow::LookChip", Ownership::Session),
     // **`Session`**: what the person has hidden of the shell (the left panel, Zen mode) is their call for the sitting, not a door's;
     // the next door's frame is folded the same way the frame of this one was.
     ("bevy_cauldron::shell_view::ShellView", Ownership::Session),
