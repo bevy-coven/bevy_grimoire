@@ -19,9 +19,14 @@ Storyboard format (JSON):
   {
     "name": "undo_place", "fps": 15,
     "setup": [{"key": "KeyJ", "mods": ["ControlLeft"]},   a chord before the capture (here: collapse the terminal)
+              {"stage": "settings"},                    put the shell on one panel before the capture starts,
+                                                        through grimoire/stage_panel (the editor's own catalog)
               {"mcp": "grimoire_frame_view", "args": {"target": {"rect": [-150, -110, 150, 110]}}}],
-    "chunks": [ {"seconds": 6}, {"seconds": 4, "operation": {"name": "...", "parameters": {...}}} ],
+    "chunks": [ {"seconds": 6}, {"seconds": 4, "operation": {"name": "...", "parameters": {...}}},
+                {"seconds": 0.0667, "stage": "place"} ],   one chunk PER staged panel, staged before it starts
     "steps": [
+      {"at": 0.5, "stage": "place"},            stage a panel from inside the take (a chunk boundary, so the
+                                                frame after it shows the new panel)
       {"at": 0.5, "cursor": [x, y]},            logical px
       {"at": 0.8, "click": [x, y]},             "mods": ["ShiftLeft"] holds keys through it; "button": "Right" is a right-click
       {"at": 0.9, "click_label": "sofa"},       a widget found by the words on it: the recorder asks
@@ -136,6 +141,46 @@ def brp(port, method, params):
     return reply
 
 
+def stage_a_panel(port, panel):
+    """**Put the shell on one panel, through the editor's own catalog** (UI-92, #258).
+
+    The answer names the screen it staged and, for a workbench panel, the panel; a name the editor does not
+    have is refused there, with the list it does have, so a storyboard's typo is a refusal rather than a take
+    that quietly films the panel before it."""
+    reply = brp(port, "grimoire/stage_panel", {"panel": panel})
+    answer = reply.get("result", reply)
+    if "refused" in answer or answer.get("error"):
+        raise RuntimeError(f"stage_panel refused `{panel}`: {answer}")
+    return answer
+
+
+def staged_panels(port):
+    """Every panel a capture can be staged on, in the editor's own order, and the screen it is on now."""
+    reply = brp(port, "grimoire/stage_panels", {})
+    return reply.get("result", reply)
+
+
+def plan_staged_panels(name, fps, panels):
+    """**One chunk and one frame per staged panel** (UI-92, #258).
+
+    A clip of every panel is a capture per panel, because a capture starts from the state the editor was in
+    when the sequence began: staging two panels inside one sequence would film the second from whatever frame
+    the first had already passed. So the plan is one chunk of a single frame per panel, each chunk staging its
+    panel before its capture starts. The frame count is therefore the panel count, which is what the run
+    checks rather than assumes."""
+    if fps < 1:
+        raise ValueError("a staged run captures at least one frame a second")
+    if not panels:
+        raise ValueError("the editor named no panel to stage")
+    return {
+        "name": name,
+        "fps": fps,
+        "setup": [],
+        "chunks": [{"seconds": 1.0 / fps, "stage": panel, "frames": 1} for panel in panels],
+        "steps": [],
+    }
+
+
 class Injector:
     """Person input over bevy_fairy/input, the editor's sanctioned injection path."""
 
@@ -196,6 +241,10 @@ def run_chunks(storyboard, server, project, port, timeline, errors):
         start = 0.0
         for i, chunk in enumerate(storyboard["chunks"]):
             wait_until(timeline, start)
+            if "stage" in chunk:
+                # **Before the sequence starts**, so frame 0 is the staged panel and not the one before it.
+                staged = stage_a_panel(port, chunk["stage"])
+                timeline.add(t=wall, type="stage", panel=chunk["stage"], screen=staged.get("screen"))
             args = {"label": f"demo_{storyboard['name']}_{i}", "seconds": chunk["seconds"],
                     "fps": storyboard["fps"]}
             if "operation" in chunk:
@@ -474,6 +523,12 @@ def do_step(step, timeline, inj, agent, named=None):
         brp(inj.port, "world.write_message", {"message": "bevy_window::event::FileDragAndDrop",
                                               "value": {"DroppedFile": {"window": rows[0]["entity"], "path_buf": step["drop_file"]}}})
         timeline.add(t=timeline.now(), type="drop", path=step["drop_file"])
+    elif kind == "stage":
+        # **The editor's own catalog, never a guessed pixel at a tab.** `grimoire/stage_panel` selects the
+        # panel's tab (or moves to its screen), so a clip of a panel starts on the panel itself however the
+        # shell's layout has been rearranged.
+        answer = stage_a_panel(inj.port, step["stage"])
+        timeline.add(t=timeline.now(), type="stage", panel=step["stage"], screen=answer.get("screen"))
     elif kind == "key":
         mods = step.get("mods", [])
         for m in mods:
@@ -563,7 +618,7 @@ def kind_of(step):
     # `events.json` as a storyboard that only had captions. It went unnoticed because no storyboard
     # used it until the status band's job item — a widget whose words move, so a guessed pixel cannot
     # reach it.
-    for k in ("scroll_to", "drag_divider", "click_label", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "drop_file", "wheel", "mcp", "write", "settle", "caption"):
+    for k in ("scroll_to", "drag_divider", "click_label", "stage", "cursor", "clear_cursor", "click", "drag", "key", "hold", "type", "drop_file", "wheel", "mcp", "write", "settle", "caption"):
         if k in step:
             return k
     raise ValueError(f"step has no action: {step}")
@@ -609,6 +664,10 @@ def main():
             inj.tap(call["key"])
             for mod in reversed(mods):
                 inj.release(mod)
+            time.sleep(call.get("settle", 1.0))
+            continue
+        if "stage" in call:
+            stage_a_panel(args.port, call["stage"])
             time.sleep(call.get("settle", 1.0))
             continue
         agent.json_call(call["mcp"], call.get("args", {}))

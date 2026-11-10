@@ -363,6 +363,7 @@ mod the_launcher_lists_what_the_changelog_added_since_you_last_opened;
 mod the_launcher_opens_a_project_by_its_name;
 mod the_picker_says_when_there_is_no_chooser;
 mod the_shortcut_overlay_answers_to_k;
+mod the_shell_can_be_staged_on_every_panel;
 mod the_shell_is_a_gooey_dock;
 mod the_viewport_keeps_the_arrow_keys;
 mod the_status_band_counts_the_set_in_hand;
