@@ -174,8 +174,10 @@ pub(crate) fn on_skip_click(
 }
 
 /// The node the selected rig's slot table is rebuilt into.
+/// **The bench's slot pane**, `pub` since UI-58 (#244) so a test can scope its widget counts to the
+/// pane rather than to the whole world (`Role::Row` is on every screen's tab strip).
 #[derive(Component)]
-struct SlotPane;
+pub struct SlotPane;
 
 /// The transient line.
 #[derive(Component)]
@@ -326,26 +328,27 @@ impl Plugin for AnimTabPlugin {
     }
 }
 
-/// **The slot table's two fixed columns, as gooey `cell`s** (UI-58, #244).
+/// **The slot table's two fixed columns, as gooey `cell`s** (UI-58, #244; review fix).
 ///
-/// The first holds `0 - clip 14`, the second `gait`, and the sub-lines under each row are indented by
-/// the first so a measured number sits under the declared one it is checking. They were three bare
-/// `84`s and a bare `30` in fixed pixels — the drift a name exists to stop (the 2026-09-03 audit's
-/// F8). A `cell` is measured in body text sizes instead, so the column keeps the same share of the
-/// row at 100% text and grows with it; and a cell **cuts what does not fit rather than overlapping
-/// its neighbour**, which is the job the old `TextLayout::NoWrap` was doing by hand.
-///
-/// They are deliberately **not** [`crate::chrome::COL_WIDE`] and [`crate::chrome::COL_LABEL`]: those
-/// are the label columns of a two-column `LABEL  value` row, and this is a three-column table whose
-/// last column carries the longest string the panel renders (`0.833s  ph +0.000  1.200m +-10%`).
-const SLOT_CELL: f32 = 3.5;
+/// A `cell`'s width is a multiple of **gooey's body type size**, and a cell **clips** what does not
+/// fit. So the width has to hold the longest string the column draws: `0 - clip 14` is 11 glyphs of
+/// `chrome::BODY_CHAR_W` (6.6 px at the 11 px body) over that 11 px body, about 6.6 body sizes; and
+/// `gait` is 4 glyphs, about 2.4. The first draft wrote 3.5 and 1.3 — about 38 px and 14 px — which
+/// cut `0 - clip 14` after six glyphs and drew `ga` for `gait`: the very column this table exists to
+/// line up. The numbers are computed from the character width rather than guessed.
+const SLOT_CELL: f32 = SLOT_CHARS * crate::chrome::BODY_CHAR_W / crate::chrome::text::BODY.px();
 /// See [`SLOT_CELL`].
-const KIND_CELL: f32 = 1.3;
-/// **A row's own rhythm**: one step of the skin's gap, which is what `bevy_gooey::row(1.0)` and
-/// `column(1.0)` mean. [`crate::chrome::GAP_ROW`] is the same 5 px the hand-built rows used.
-const GAP_ONE: f32 = 1.0;
-/// **An indent one panel wide**, in body text sizes, for the lines that hang under a slot row.
-const INDENT_CELL: f32 = 1.0;
+const KIND_CELL: f32 = KIND_CHARS * crate::chrome::BODY_CHAR_W / crate::chrome::text::BODY.px();
+/// The glyphs `0 - clip 14` takes, the widest first column a ten-slot rig draws.
+const SLOT_CHARS: f32 = 11.0;
+/// The glyphs of the widest kind word: `gait`, `free`, `once`.
+const KIND_CHARS: f32 = 4.0;
+
+
+/// **An indent one panel inset wide**, in body text sizes, for the lines that hang under a slot row:
+/// `chrome::PAD` (12 px) plus the row's gap over the body size — the 12 px the old
+/// `margin: left(PAD)` stood for (review of #244).
+const INDENT_CELL: f32 = (crate::chrome::PAD + crate::chrome::GAP_ROW) / crate::chrome::text::BODY.px();
 
 fn spawn_panels(
     mut commands: Commands,
@@ -1101,7 +1104,7 @@ fn rebuild_slots(
                         ),
                     )
                     .with_children(|row| {
-                        row.spawn(bevy_gooey::row(GAP_ONE))
+                        row.spawn(bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE))
                         .with_children(|head| {
                             head.spawn((
                                 Text::new((*n).to_owned()),
@@ -1180,7 +1183,7 @@ fn rebuild_slots(
                             // block steps in by the same unit the panel does. An empty `cell` is how a
                             // row begins with a gap, and it is gooey's own: a text node with a margin
                             // was the last raw `Node` in this file's provenance block (UI-58, #244).
-                            p.spawn((bevy_gooey::row(GAP_ONE), TextColor(danger))).with_children(|row| {
+                            p.spawn((bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE), TextColor(danger))).with_children(|row| {
                                 row.spawn(bevy_gooey::cell(INDENT_CELL));
                                 row.spawn((
                                     Text::new(d.clone()),
@@ -1215,7 +1218,7 @@ fn rebuild_slots(
                         },
                     ),
                 };
-                p.spawn(bevy_gooey::row(GAP_ONE))
+                p.spawn(bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE))
                 .with_children(|row| {
                     // **A `cell` is the two fixed columns** (UI-58, #244). Its width is in body text
                     // sizes, so the column keeps its share of the row as the person enlarges the type
@@ -1282,7 +1285,7 @@ fn rebuild_slots(
                     sub.push(format!("kept: {reason}"));
                 }
                 if !sub.is_empty() {
-                    p.spawn(bevy_gooey::row(GAP_ONE)).with_children(|row| {
+                    p.spawn(bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE)).with_children(|row| {
                         row.spawn(bevy_gooey::cell(SLOT_CELL));
                         row.spawn((
                             Text::new(sub.join(" | ")),
@@ -1302,7 +1305,7 @@ fn rebuild_slots(
                     if excluded.contains(&i) {
                         line.push_str(" | excluded from adopt");
                     }
-                    p.spawn(bevy_gooey::row(GAP_ONE)).with_children(|row| {
+                    p.spawn(bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE)).with_children(|row| {
                         row.spawn(bevy_gooey::cell(SLOT_CELL));
                         row.spawn((
                             Text::new(line),
@@ -1351,7 +1354,7 @@ fn rebuild_slots(
                 crate::chrome::section(p, "PLOTS");
                 // The legend: which color is which gait slot, labelled by the asset's clip name
                 // when it has one.
-                p.spawn(bevy_gooey::row(GAP_ONE))
+                p.spawn(bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE))
                 .with_children(|legend| {
                     // The same rank walk `render_plots` colors by: gait slots when the rig has
                     // any, else every free slot — lockstep or the legend lies.
@@ -1386,7 +1389,7 @@ fn rebuild_slots(
                 for (caption, handle) in charts {
                     // **A caption over its plot, as a column** (UI-58, #244): `column`'s gap is the
                     // spacing step, where the caption carried a top margin of its own.
-                    p.spawn(bevy_gooey::column(GAP_ONE)).with_children(|chart| {
+                    p.spawn(bevy_gooey::column(crate::chrome::GOOEY_GAP_ONE)).with_children(|chart| {
                         chart.spawn((
                             Text::new(caption),
                             TextColor(label),
@@ -1419,7 +1422,7 @@ fn rebuild_slots(
                     crate::chrome::typed(crate::chrome::text::HINT),
                     crate::anim_plots::PlotReadout,
                 ));
-                p.spawn(bevy_gooey::column(GAP_ONE)).with_children(|trace| {
+                p.spawn(bevy_gooey::column(crate::chrome::GOOEY_GAP_ONE)).with_children(|trace| {
                     trace.spawn((
                         Text::new("top-down trace (fwd = up; arrow = declared cycle along measured travel; dim arrow = measured, G)"),
                         TextColor(label),

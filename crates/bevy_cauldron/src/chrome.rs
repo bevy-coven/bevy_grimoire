@@ -848,6 +848,15 @@ impl LinesRoom {
 // crowded panel is spacing and grouping, not deletion.
 
 /// Between items that belong to each other — chips in one axis, cells in one row.
+/// **One step of a gooey layout's gap**, as `bevy_gooey::row(1.0)` / `column(1.0)` ask for: a
+/// multiple of the running skin's `gap` (5 px in `editor_skin.ron`), so an interface-size change
+/// moves every row's rhythm together (UI-58/#244, UI-59/#245).
+pub const GOOEY_GAP_ONE: f32 = 1.0;
+
+/// **The skin's `gap`**, from `editor_skin.ron`: the pixel unit [`GOOEY_GAP_ONE`] is a multiple of,
+/// and the divisor a hand-built pixel gap is turned into one (`GAP_TIGHT / SKIN_GAP_PX` is 0.6).
+pub const SKIN_GAP_PX: f32 = 5.0;
+
 pub const GAP_TIGHT: f32 = 3.0;
 /// Between the rows of one block.
 pub const GAP_ROW: f32 = 5.0;

@@ -495,6 +495,10 @@ fn clear_stale_rails(rails: Query<(Entity, &ChildOf), With<SelectedRail>>, selec
 /// **Registered once, at `PreStartup`.** The spawn closure fills the panel; a region whose contents
 /// the editor draws elsewhere — the viewport is a texture — gets the node that holds them, so the
 /// dock's own arrangement is what a person drags.
+/// **The reload panel's own rhythm**, in multiples of the skin's gap: half a step, because its lines
+/// are one datum each and a full step reads as separate paragraphs (UI-61, #247).
+pub const RELOAD_ROW_GAP: f32 = 0.5;
+
 fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
     for (id, title) in [
         ("inspector", "INSPECTOR"),
@@ -518,10 +522,7 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
             bevy_gooey::DockPanel("reload".to_owned()),
             crate::editor::ReloadPanel,
         ))
-        .with_child((
-            bevy_gooey::column(0.5),
-            crate::editor::ReloadList,
-        ));
+        .with_child((bevy_gooey::column(RELOAD_ROW_GAP), crate::editor::ReloadList));
     });
 }
 

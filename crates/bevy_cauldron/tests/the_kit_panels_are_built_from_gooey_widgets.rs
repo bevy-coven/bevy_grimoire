@@ -27,13 +27,18 @@ use crate::fixtures;
 /// The number of raw `Node {` literals `tiles.rs` may carry. Every one that goes is a step of #245;
 /// nothing may raise it.
 const TILES_NODES_LEFT: usize = 43;
-/// The number `compose.rs` may carry: a world-space slot label, and the flex item the 2026-08-17
-/// measurement sized.
-const COMPOSE_NODES_LEFT: usize = 2;
+/// The number `compose.rs` may carry: a world-space slot label, the flex item the 2026-08-17
+/// measurement sized, and one `Node::default()` that is a bundle's own direction.
+const COMPOSE_NODES_LEFT: usize = 3;
 
-fn count(dir: &std::path::Path, name: &str, needle: &str) -> usize {
+/// **Every spelling of a raw `Node` literal in `name`** (review of #245): `Node {` and `Node{` are the
+/// same thing to Rust, and `Node::default()` is the same thing to a reader — counting one spelling let
+/// a literal move between the two and pass.
+fn count(dir: &std::path::Path, name: &str) -> usize {
     let text = std::fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
-    text.lines().filter(|line| line.contains(needle)).count()
+    text.lines()
+        .filter(|line| line.contains("Node {") || line.contains("Node{") || line.contains("Node::default()"))
+        .count()
 }
 
 /// **The ratchet**: each module's raw `Node` count, against the number this issue left it at.
@@ -41,9 +46,9 @@ fn count(dir: &std::path::Path, name: &str, needle: &str) -> usize {
 fn the_kit_modules_are_down_to_the_nodes_this_issue_could_not_express() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     for (name, left) in [("tiles.rs", TILES_NODES_LEFT), ("compose.rs", COMPOSE_NODES_LEFT)] {
-        let found = count(&dir, name, "Node {");
+        let found = count(&dir, name);
         assert!(
-            found <= left,
+            found == left,
             "{name} carries {found} raw `Node` literals, and this issue left it at {left}: a raw `Node` \
              is a second layout path beside gooey's `row`, `column`, `cell`, `image_box` and `overlay`. \
              If a new one is genuinely needed (a margin gooey cannot carry, a flex measure chosen by \
@@ -52,7 +57,7 @@ fn the_kit_modules_are_down_to_the_nodes_this_issue_could_not_express() {
         );
     }
     // **And the labels module never had one**, so it cannot gain one unnoticed.
-    assert_eq!(count(&dir, "labels.rs", "Node {"), 0, "labels.rs lays itself out with gooey's widgets only");
+    assert_eq!(count(&dir, "labels.rs"), 0, "labels.rs lays itself out with gooey's widgets only");
 }
 
 /// The Compose pane, settled.

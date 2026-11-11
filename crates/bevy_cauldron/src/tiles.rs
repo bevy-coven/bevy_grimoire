@@ -861,9 +861,9 @@ pub struct ScaleReadout;
 /// in `library.ron` as an authored fact where there is none — the same rule `rotate_mesh` follows when
 /// it writes `(want != (0,0,0)).then_some(want)`. The bound is a tenth of a millimetre on a 1 m piece,
 /// which is finer than anything the importer can measure.
-/// **A row's rhythm at half the skin's step**: what `bevy_gooey::row(0.5)` asks for, and the
-/// [`crate::chrome::GAP_TIGHT`] the hand-built strips used (UI-59, #245).
-const GAP_HALF: f32 = 0.5;
+/// **A row's rhythm at half the skin's step**: the 3 px [`crate::chrome::GAP_TIGHT`] the hand-built
+/// strips used, over the skin's 5 px gap — 0.6, not 0.5, which would be 2.5 px (review of #245).
+const GAP_HALF: f32 = crate::chrome::GAP_TIGHT / crate::chrome::SKIN_GAP_PX;
 
 const SCALE_EPS: f32 = 1e-4;
 

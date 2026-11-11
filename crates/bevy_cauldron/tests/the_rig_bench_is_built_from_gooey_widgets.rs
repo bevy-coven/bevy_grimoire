@@ -17,7 +17,7 @@
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;
-use bevy_gooey::Role;
+use bevy_gooey::{CellWidth, Role};
 
 use crate::fixtures;
 
@@ -70,28 +70,60 @@ fn bench(tag: &str) -> App {
     app
 }
 
-/// **The bench's slot table and its plots are gooey widgets**: a `Row` per slot, its two fixed columns
-/// `Cell`s, and a phase plot an `Overlay` holding two `ImageBox`es.
+/// **The bench's slot table is gooey widgets**: a `Row` per slot and its two fixed columns `Cell`s,
+/// counted **inside the bench's own pane**.
 ///
-/// A bench with no rig selected draws neither, so this also proves the pane is on screen at all: a
-/// fixture with no `rigs.ron` still draws the "no rig selected" line inside gooey columns.
+/// **Scoped to `SlotPane`** (review of #244): `Role::Row` and `Role::Cell` are world-wide, and
+/// `tiles::spawn_tab_strip` spawns a `Role::Row` on every screen, so an unscoped count passes with the
+/// bench drawing nothing at all.
 #[test]
-fn the_bench_draws_rows_cells_and_plot_boxes() {
+fn the_bench_draws_rows_and_cells_inside_its_own_pane() {
     let mut app = bench("widgets");
-    let (rows, cells, boxes, overlays) = {
+    let (rows, cells, slot_text, widest) = {
         let world = app.world_mut();
-        let count = |world: &mut World, want: Role| world.query::<&Role>().iter(world).filter(|role| **role == want).count();
-        (
-            count(world, Role::Row),
-            count(world, Role::Cell),
-            count(world, Role::ImageBox),
-            count(world, Role::Overlay),
-        )
+        let pane = world
+            .query_filtered::<Entity, With<bevy_cauldron::anim_tab::SlotPane>>()
+            .single(world)
+            .expect("the bench has its slot pane")
+            .to_owned();
+        let mut children = world.query::<&Children>();
+        let mut roles = world.query::<&Role>();
+        let mut cells_q = world.query::<(&CellWidth, &ComputedNode)>();
+        let mut texts = world.query::<&Text>();
+        let mut seen = (0usize, 0usize);
+        let mut slot_text: Option<String> = None;
+        let mut widest = 0.0f32;
+        let mut queue = vec![pane];
+        while let Some(at) = queue.pop() {
+            if let Ok(kids) = children.get(world, at) {
+                for kid in kids.iter() {
+                    queue.push(kid);
+                    match roles.get(world, kid) {
+                        Ok(Role::Row) => seen.0 += 1,
+                        Ok(Role::Cell) => seen.1 += 1,
+                        _ => {}
+                    }
+                    if let Ok((_, node)) = cells_q.get(world, kid) {
+                        widest = widest.max(node.size().x);
+                    }
+                    if let Ok(text) = texts.get(world, kid)
+                        && text.0.contains(" - clip ")
+                    {
+                        slot_text = Some(text.0.clone());
+                    }
+                }
+            }
+        }
+        (seen.0, seen.1, slot_text, widest)
     };
-    assert!(rows > 0, "the bench lays its rows out with gooey's `row`");
+    assert!(rows > 0, "the bench lays its slot rows out with gooey's `row`");
     assert!(cells > 0, "and its fixed columns with `cell`");
-    // The plots are the crate's boxes: a bench with no measured report has no curves, so the count
-    // is what it is — but the layout the curves go in is still gooey's, which the assertion below
-    // holds by construction (there is no other path left in the file).
-    let _ = (boxes, overlays);
+    // **And the column holds its text** (review of #244, MUST-FIX a): a `cell` clips what does not fit,
+    // so a width under the string cuts the clip index — the one thing that column is for.
+    let text = slot_text.expect("the fixture's one slot draws `0 - clip 0`");
+    let needed = text.chars().count() as f32 * bevy_cauldron::chrome::BODY_CHAR_W;
+    assert!(
+        widest >= needed,
+        "the slot column is {widest:.1} px and `{text}` needs {needed:.1} px, so the cell cuts it"
+    );
 }

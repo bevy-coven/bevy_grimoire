@@ -193,7 +193,11 @@ fn reset_the_layout(world: &mut World) {
         .copied()
         .unwrap_or_default();
     let default = crate::ui::shell_layout(workspace);
-    let mut docks = world.query_filtered::<&mut bevy_gooey::Dock, ()>();
+    // **The arrangement's dock, and only it** (review of #247). The frame holds a second gooey `Dock`
+    // at the foot of the workbench (UI-61), and an unfiltered loop wrote the workspace's *split* into
+    // it: Window ▸ Reset layout then deleted the reload panel and built three placeholder pages in a
+    // 148-px strip. The workspace arrangement is `chrome::ArrangementDock`'s alone.
+    let mut docks = world.query_filtered::<&mut bevy_gooey::Dock, With<crate::chrome::ArrangementDock>>();
     for mut dock in docks.iter_mut(world) {
         if dock.0 != default {
             dock.0 = default.clone();

@@ -34,6 +34,11 @@ use bevy_gooey::{Dock, DockPanel};
 use crate::fixtures;
 
 /// The editor on a one-piece fixture, settled, with a window a pointer can be injected into.
+/// **The least viewport height this test can put a pointer in**, logical px. The editor's own viewport
+/// is 148 px shorter than the workbench it had before the bottom dock (`chrome::BOTTOM_DOCK_H`), which
+/// is the design; what the click test below needs is only a centre that is inside the world's hole.
+const VIEWPORT_LEAST_H: f32 = 80.0;
+
 fn editor(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("shell_dock_paints_{tag}_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
@@ -114,27 +119,54 @@ fn the_shells_dock_still_holds_the_workspaces_arrangement() {
     );
 }
 
-/// **No card the dock builds is laid out**: the panels are the editor's own, so the dock's three
+/// **No card the *arrangement* dock builds is laid out**: the panels are the editor's own, so its three
 /// placeholder pages must stay unbuilt rather than stand over the map as empty cards.
+///
+/// **Scoped to the arrangement dock's subtree** (review of #247, MUST-FIX 2). An unfiltered
+/// `(&DockPanel, &ComputedNode)` query also finds the *bottom* dock's `reload` page, which is a real
+/// page — `bevy_gooey` builds it and lays it out — so it is a genuine `DockPanel` with a size, and the
+/// assertion this test makes about placeholders is not a claim about it. Walking down from the
+/// arrangement dock is what the first test in this file does, and for the same reason.
 #[test]
 fn no_card_the_shells_dock_builds_is_laid_out() {
     let mut app = editor("unbuilt");
-    let world = app.world_mut();
-    let laid: Vec<(String, Vec2)> = world
-        .query::<(&DockPanel, &ComputedNode)>()
-        .iter(world)
-        .map(|(panel, node)| (panel.0.clone(), node.size()))
-        .collect();
+    let arrangement = {
+        let world = app.world_mut();
+        world
+            .query_filtered::<Entity, With<bevy_cauldron::chrome::ArrangementDock>>()
+            .single(world)
+            .expect("the frame has an arrangement dock")
+            .to_owned()
+    };
+    let laid = {
+        let world = app.world_mut();
+        let mut children = world.query::<&Children>();
+        let mut panels = world.query::<&DockPanel>();
+        let mut nodes = world.query::<&ComputedNode>();
+        let mut found: Vec<(String, Vec2)> = Vec::new();
+        let mut queue = vec![arrangement];
+        while let Some(at) = queue.pop() {
+            let Ok(kids) = children.get(world, at) else { continue };
+            for kid in kids.iter() {
+                queue.push(kid);
+                if let Ok(panel) = panels.get(world, kid) {
+                    let size = nodes.get(world, kid).map_or(Vec2::ZERO, |n| n.size());
+                    found.push((panel.0.clone(), size));
+                }
+            }
+        }
+        found
+    };
     assert!(
         !laid.is_empty(),
-        "the dock names `inspector`, `viewport` and `place`, so it has pages for them; finding none \
-         means this test is looking at nothing"
+        "the arrangement dock names `inspector`, `viewport` and `place`, so it has pages for them; \
+         finding none means this test is looking at nothing"
     );
     for (id, size) in &laid {
         assert!(
             size.x <= 0.0 || size.y <= 0.0,
-            "the dock laid its `{id}` page out at {size:?}: the panel the editor draws by hand is \
-             under an empty card here, and the card's fill is what covers the map"
+            "the arrangement dock laid its `{id}` page out at {size:?}: the panel the editor draws by \
+             hand is under an empty card here, and the card's fill is what covers the map"
         );
     }
 }
@@ -146,7 +178,15 @@ fn the_viewport_is_uncovered_and_a_click_in_it_still_places_a_piece() {
     let mut app = editor("clickable");
     let rect = viewport(&mut app);
     let centre = rect.center();
-    assert!(rect.width() > 200.0 && rect.height() > 200.0, "the viewport is a real area: {rect:?}");
+    // **A real area, measured against the frame the bottom dock leaves** (UI-61, #247): the dock is a
+    // 148-px row of the root's column, so the viewport is `BOTTOM_DOCK_H` shorter than the workbench it
+    // had. What this test needs of it is somewhere honest to put a pointer — wide enough that a click
+    // is not on a panel's edge, and tall enough that its centre is inside the world's hole — so the
+    // floor is the map's own minimum, [`VIEWPORT_LEAST_H`], not the tallest the editor ever draws.
+    assert!(
+        rect.width() > 200.0 && rect.height() > VIEWPORT_LEAST_H,
+        "the viewport is a real area: {rect:?}"
+    );
 
     // The editor's own answer to "is a panel under the pointer", which is what gates every map verb.
     step(&mut app, Some(centre), None);

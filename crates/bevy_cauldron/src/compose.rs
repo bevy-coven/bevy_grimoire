@@ -1569,9 +1569,7 @@ const LABEL_PX: (crate::chrome::text::Role, crate::chrome::text::Role) =
 /// Advance of one glyph at `LABEL_PX.0` — the one measurement, stated beside the size it
 /// belongs to. See [`crate::chrome::BODY_CHAR_W`] for why it lives there.
 const LABEL_CHAR_W: f32 = crate::chrome::BODY_CHAR_W;
-/// **A row's own rhythm**: one step of the skin's gap, which is what `bevy_gooey::row(1.0)` means
-/// (UI-59, #245). [`crate::chrome::GAP_ROW`] is the same 5 px the hand-built rows used.
-const GAP_ONE: f32 = 1.0;
+
 
 /// **Stand the focal group up, with its neighbours either side, each through `composition::expand`.**
 ///
@@ -2571,7 +2569,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                 Line::Face { name, band } => {
                     // **A gooey row** (UI-59, #245): the label column and its value, with the skin's
                     // own spacing step between them.
-                    p.spawn((bevy_gooey::row(GAP_ONE), ComposeLine))
+                    p.spawn((bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE), ComposeLine))
                     .with_children(|row| {
                         crate::chrome::row_label(row, crate::chrome::COL_LABEL, name);
                         crate::chrome::row_value(row, band, ink.read, ());
@@ -2691,7 +2689,9 @@ fn spawn_line(p: &mut ChildSpawnerCommands, text: &str, colour: Color) {
             // **The indent is a `cell`** (UI-59, #245), whose width is in body text sizes: the px it
             // stood for is divided by the row's own type size, so the gutter keeps its share of the
             // row and grows with the person's text size rather than falling short of it.
-            row.spawn(bevy_gooey::cell(indent as f32 * LABEL_CHAR_W * ROW_PX.px() / LABEL_PX.0.px() / ROW_PX.px()));
+            // **The indent, as a cell** (review of #245): the character advance over the row's own
+            // type size is the ratio the old expression reduced to (0.6), written as what it is.
+            row.spawn(bevy_gooey::cell(indent as f32 * LABEL_CHAR_W / ROW_PX.px()));
         }
         // **The line itself, with no `Node` of its own** (UI-59, #245). `flex_grow` hands the text the
         // row's remaining width as a DEFINITE size and `min_width: 0` lets it shrink below its longest

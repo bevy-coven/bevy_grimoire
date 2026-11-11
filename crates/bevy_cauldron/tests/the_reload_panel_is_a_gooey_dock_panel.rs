@@ -24,7 +24,7 @@ use bevy::ui::{ComputedNode, UiGlobalTransform};
 use bevy_cauldron::chrome::{ArrangementDock, BottomDock, Frame};
 use bevy_cauldron::editor::{ReloadList, ReloadPanel};
 use bevy_cauldron::harness;
-use bevy_gooey::{Dock, DockPanel};
+use bevy_gooey::{Dock, DockLayout, DockPanel};
 use bevy_grimoire_core::live::{KindVerdict, Verdict};
 use bevy_cauldron::project::Project;
 
@@ -147,4 +147,38 @@ fn a_dock_layout_change_in_the_bottom_dock_is_not_the_workspaces_arrangement() {
         !text.contains("reload"),
         "a drag in the bottom dock wrote this into the workspace's arrangement: {text}"
     );
+}
+
+/// **Window ▸ Reset layout leaves the bottom dock alone** (review of #247, MUST-FIX 1).
+///
+/// `app_verbs::reset_the_layout` writes the current workspace's default arrangement to the dock that
+/// arranges the shell. It used to write it to *every* `bevy_gooey::Dock`, so Reset replaced the bottom
+/// dock's `group(["reload"])` with the workspace's split: the reload panel was despawned and three
+/// placeholder pages were built in the 148-px strip.
+#[test]
+fn resetting_the_layout_leaves_the_bottom_dock_holding_the_reload_panel() {
+    let mut app = editor("reset_keeps_reload");
+    let bottom = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<BottomDock>>().single(world).expect("the frame has a bottom dock").to_owned()
+    };
+    app.world_mut().run_system_cached_with(run_the_verb, bevy_cauldron::app_verbs::AppVerb::ResetLayout)
+        .unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..4 {
+        app.update();
+    }
+    let layout = app.world().get::<Dock>(bottom).expect("the bottom dock is still a gooey Dock").0.clone();
+    assert_eq!(
+        layout,
+        DockLayout::group(["reload"]),
+        "Reset layout wrote the workspace's arrangement into the bottom dock, which despawns the reload panel"
+    );
+    assert!(
+        app.world_mut().query_filtered::<Entity, With<ReloadPanel>>().iter(app.world()).count() == 1,
+        "and the reload panel is still the dock's one page"
+    );
+}
+
+fn run_the_verb(In(verb): In<bevy_cauldron::app_verbs::AppVerb>, mut commands: Commands) {
+    commands.queue(move |world: &mut World| bevy_cauldron::app_verbs::run(world, verb));
 }
