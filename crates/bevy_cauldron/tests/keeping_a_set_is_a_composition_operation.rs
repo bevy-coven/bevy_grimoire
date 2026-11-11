@@ -60,6 +60,11 @@ fn define(app: &mut App, parameters: serde_json::Value) -> serde_json::Value {
     for _ in 0..FOLLOW_SETTLE_FRAMES {
         app.update();
     }
+    // The follow has crossed to the Kit workspace's COMPOSE tab, which is where an agent's change is shown. The tests
+    // that follow are a person at the Map, so they begin there.
+    app.world_mut().insert_resource(bevy_cauldron::workspace::Workspace::Map);
+    *app.world_mut().resource_mut::<bevy_cauldron::tiles::Mode>() = bevy_cauldron::tiles::Mode::Map;
+    app.update();
     outcome
 }
 
