@@ -274,10 +274,44 @@ pub fn shown_of(place: &Place) -> Option<Shown> {
     })
 }
 
+/// **A workspace or panel key leaves the place behind** (NV-06, #383).
+///
+/// The issue names four moves that push: Go to anything, a cross-link, a clicked problem, and **a
+/// workspace or tab switch**. The first three go through `reveal`'s door request, which records its own
+/// place; a key goes straight to `open_door`, so this is the one that watches the two navigation
+/// resources and records where the person was on the last frame they were elsewhere.
+///
+/// **`History::push` refuses a place it already holds**, so a key that follows a reveal — the reveal's
+/// own push, then this one watching the same move — is one place and not two.
+fn note_when_the_workspace_moves(
+    workspace: Option<Res<Workspace>>,
+    mode: Option<Res<Mode>>,
+    rig: Option<Res<crate::view::Rig>>,
+    selection: Option<Res<crate::selection::Selection>>,
+    mut history: ResMut<History>,
+    mut was: Local<Option<(Workspace, Mode, Place)>>,
+) {
+    let (Some(workspace), Some(mode)) = (workspace.as_deref().copied(), mode.as_deref().copied()) else {
+        return;
+    };
+    let here: Place = Place::of(Some(&workspace), Some(&mode), rig.as_deref(), selection.as_deref());
+    // **Last frame's place is the one to push**, not this frame's: a workspace switch resets `Rig`
+    // (`screen::door_state!` names it), so a place read on the frame the switch lands carries the
+    // default camera rather than the one the person was looking through. The copy taken before the
+    // crossing is the only honest answer to *where I was*.
+    if let Some((last_workspace, last_mode, last_place)) = was.as_ref()
+        && (*last_workspace, *last_mode) != (workspace, mode)
+    {
+        history.push(last_place.clone());
+    }
+    *was = Some((workspace, mode, here));
+}
+
 /// **Write the place a walk is waiting on, once its door has landed.**
 ///
 /// `Rig` is the door's own state and a workspace change resets it, so the camera goes in *after* the
 /// switch — and the selection is the reveal's to write, through the one `Shown` that names a row.
+#[allow(clippy::too_many_arguments)]
 fn settle_the_place(
     mut history: ResMut<History>,
     project: Option<Res<crate::project::Project>>,
@@ -360,6 +394,7 @@ impl Plugin for NavPlugin {
                     push_the_places_being_left,
                     walk_on_the_chords,
                     clear_the_history_when_the_project_changes,
+                    note_when_the_workspace_moves,
                     settle_the_place,
                 )
                     .chain()
@@ -370,6 +405,10 @@ impl Plugin for NavPlugin {
 
 /// **Cmd/Ctrl+[ back, Cmd/Ctrl+] forward**, and the mouse's two side buttons — as `bevy_input` names
 /// them (`MouseButton::Back`, `MouseButton::Forward`).
+// **Eleven reads and one write, and every read is a fact a place is made of** — the crate's own
+// `reveal::take_the_reveal` takes twenty and says the same. Bundling them would be a second type for
+// "where the editor is", which is exactly what a `Place` is.
+#[allow(clippy::too_many_arguments)]
 fn walk_on_the_chords(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,

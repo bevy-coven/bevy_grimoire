@@ -74,6 +74,7 @@ fn capitalised(word: &str) -> String {
 
 /// **Open the palette, or close it when it is open.** Not while a text field has the keys: Ctrl+K in a
 /// field is the field's.
+#[allow(clippy::too_many_arguments)]
 fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     live: Res<Live>,
@@ -162,7 +163,12 @@ impl Plugin for CommandPalettePlugin {
         }
         app.add_systems(
             Update,
-            (toggle, note_the_finder_closing)
+            // **The close is read *before* the open**, and that order is the whole of it: the palette
+            // is spawned by a command and does not exist as an entity until the next frame, so a close
+            // that ran after the toggle saw an empty query on the very frame the finder opened and shut
+            // it again — measured, `Cmd`+`P` then a query left the list on commands and Enter ran
+            // nothing. Reading the frame that is already past cannot see this frame's spawn.
+            (note_the_finder_closing, toggle)
                 .chain()
                 .run_if(in_state(crate::screen::Screen::Editor)),
         )

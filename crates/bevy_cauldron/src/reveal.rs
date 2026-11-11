@@ -263,6 +263,19 @@ pub struct Revealing {
     /// place the same way and for the same reason: **the person's place is pushed where their view
     /// moves, never once per interpolation frame**.
     leaving: Vec<crate::nav::Place>,
+    /// **Show the next reveal now, past the person's idle clock** (NV-05, #382).
+    ///
+    /// Choosing a row in Go to anything is pressing Enter and then reading: the Enter is a key press,
+    /// so `Following::busy` is set by the person's own hand and the reveal would wait
+    /// [`crate::follow::FOLLOW_IDLE_S`] before moving — which reads as the finder being broken. This is
+    /// `Following::look_now`'s rule (AF-04, #360: *show it now*) applied to the reveal, and it is one
+    /// flag read at the one gate rather than a second clock.
+    show_now: bool,
+    /// **How many reveals are ones the person asked for by name** (NV-05, #382). `show_now` is spent
+    /// on the frame it is read; this outlives that frame, so the Enter that *asked* for the page cannot
+    /// also be the key press that clears it (`follow::a_persons_input_takes_the_camera_back` drops the
+    /// queue on every key). Counted rather than flagged: three rows chosen quickly are three asks.
+    asked: u32,
 }
 
 /// One thing to show, with the operation that made it — what the refusal names.
@@ -315,13 +328,37 @@ impl Revealing {
     }
 
     /// **Take the places a reveal is leaving**, so `nav` can push them. Empties the list.
+    /// **Show the next reveal now**, past the person's idle clock (NV-05, #382). Cleared by the frame
+    /// that spends it, so it cannot leak onto a later reveal.
+    pub fn show_now(&mut self) {
+        self.show_now = true;
+        self.asked = self.asked.saturating_add(1);
+    }
+
+    /// Take the places a reveal is leaving, so `nav` can push them. Empties the list.
+    /// **One asked-for reveal has been carried out**, so the next key press may clear again.
+    pub fn asked_for_one(&mut self) {
+        self.asked = self.asked.saturating_sub(1);
+    }
+
+    /// Take the places a reveal is leaving, so `nav` can push them. Empties the list.
     pub fn take_leaving(&mut self) -> Vec<crate::nav::Place> {
         std::mem::take(&mut self.leaving)
     }
 
     /// **Forget the queue and the one in flight.** A project change makes them meaningless; a map
     /// change does not, because a page is a door and a row rather than a place in metres.
+    /// **A reveal the person just asked for is not thrown away by the key they asked with.**
+    ///
+    /// The Enter that chooses a Go to anything row is a key press, and
+    /// `follow::a_persons_input_takes_the_camera_back` drops the queue on every key press — measured:
+    /// the finder closed, the index held the row, and nothing moved, because the person's own Enter
+    /// had cleared the reveal it made. `show_now` is [the Look chord's rule](crate::follow) one surface
+    /// over: the press that *asks* for the move is not the press that cancels it.
     pub fn clear(&mut self) {
+        if self.asked > 0 {
+            return;
+        }
         self.queue.clear();
         self.in_flight = None;
         self.leaving.clear();
@@ -413,7 +450,12 @@ fn take_the_reveal(
     // **Nothing moves while the person is working.** The queue is untouched, so the reveal lands
     // once they stop rather than being thrown away: the change it names is still what the editor
     // promised to show.
-    if at.following.as_deref().is_some_and(crate::follow::Following::busy) {
+    // **A reveal the person asked for is not held back by their own key press** (NV-05, #382): the
+    // Enter that chose a Go to anything row is a gesture, and waiting out the idle clock after it
+    // reads as the finder being broken. Spent on the frame it is read.
+    let asked_for = revealing.show_now;
+    revealing.show_now = false;
+    if !asked_for && at.following.as_deref().is_some_and(crate::follow::Following::busy) {
         return;
     }
     let Some(in_flight) = revealing.in_flight.take() else {
@@ -543,6 +585,8 @@ fn take_the_reveal(
     };
     if done {
         revealing.in_flight = None;
+        // **The person's ask is spent here**, on the frame its page landed.
+        revealing.asked_for_one();
     } else {
         revealing.in_flight = Some(in_flight);
     }

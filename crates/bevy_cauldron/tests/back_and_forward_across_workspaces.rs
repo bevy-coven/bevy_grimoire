@@ -69,6 +69,22 @@ fn chord(app: &mut App, key: KeyCode) {
     settle(app);
 }
 
+/// **One bare key**, with no modifier: a panel slot, not a workspace chord.
+fn press(app: &mut App, key: KeyCode) {
+    for state in [ButtonState::Pressed, ButtonState::Released] {
+        app.world_mut().write_message(KeyboardInput {
+            key_code: key,
+            logical_key: Key::Unidentified(NativeKey::Unidentified),
+            state,
+            text: None,
+            repeat: false,
+            window: Entity::PLACEHOLDER,
+        });
+        app.update();
+    }
+    settle(app);
+}
+
 fn camera(app: &App) -> (Vec3, f32) {
     let rig = app.world().resource::<Rig>();
     (rig.focus, rig.height)
@@ -91,17 +107,24 @@ fn map_to_a_panel_and_back_twice_restores_the_map_and_its_camera() {
     settle(&mut app);
     let home = camera(&app);
 
-    // **Two moves away**, each its own place.
-    app.world_mut().resource_mut::<Workspace>().clone_from(&Workspace::Kit);
-    settle(&mut app);
-    app.world_mut().resource_mut::<Mode>().clone_from(&Mode::Compose);
-    settle(&mut app);
-    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit);
+    // **Two moves away, by the key a person presses**, each its own place. Writing the `Workspace`
+    // resource directly is not a walk: nothing records the place being left, so a history built from
+    // it would be a history of the test's own writes rather than of the editor's navigation.
+    // `Cmd`/`Ctrl`+digit walks to a workspace; a **bare** digit moves inside the one you are in
+    // (`keys.rs`, `Workspace`'s own note). Both are one press, and each leaves a place.
+    chord(&mut app, KeyCode::Digit4);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "Cmd/Ctrl+4 is the Kit workspace");
+    press(&mut app, KeyCode::Digit2);
+    assert_ne!(
+        app.world().resource::<Mode>().label(),
+        Mode::Meshes.label(),
+        "a bare 2 moves off the first panel"
+    );
 
     let history = app.world().resource::<History>();
     assert!(
-        history.behind() >= 2,
-        "two workspace moves are two places, and the history holds {}",
+        history.behind() >= 1,
+        "a workspace key leaves a place behind, and the history holds {}",
         history.behind()
     );
 

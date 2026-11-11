@@ -47,7 +47,11 @@ fn editor(tag: &str) -> App {
         .sized_descriptor("lamp_tall", "alpha", 0.4, 0.4)
         .sized_descriptor("bed", "alpha", 2.0, 1.0)
         .place("lamp_tall", (2.0, 2.0))
-        .place_as("bed@3", "bed", (9.0, 9.0))
+        // **Far from the origin, because the entry frame is on it**: a 64 m map opens framed on the
+        // whole map, and a 2 m piece at (9, 9) still covers 29% of that viewport — the first version's
+        // own guard fired on it. A far corner and a small piece put it below the threshold honestly,
+        // rather than by weakening the guard.
+        .place_as("bed@3", "bed", (28.0, -28.0))
         .side(64.0)
         .build("m");
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -122,12 +126,23 @@ fn ctrl_p(app: &mut App) {
     settle(app);
 }
 
+/// **Type `text` as a hand types it.** `>` is Shift+Period on a US keyboard, and the character is what
+/// the palette's field reads — a bare `KeyCode::Period` produces no `>` at all, which is why the first
+/// version's `>` never reached the source swap. The modifier goes down with the key and up after it,
+/// the way [`crate::fixtures`]' own chord helper does it.
 fn type_str(app: &mut App, text: &str) {
     for c in text.chars() {
         let s = c.to_string();
+        let shift = c == '>';
         for state in [ButtonState::Pressed, ButtonState::Released] {
+            if shift {
+                send(app, KeyCode::ShiftLeft, Key::Unidentified(NativeKey::Unidentified), None, state);
+            }
             let typed = (state == ButtonState::Pressed).then_some(s.as_str());
             send(app, key_for(c), Key::Character(s.as_str().into()), typed, state);
+            if shift {
+                send(app, KeyCode::ShiftLeft, Key::Unidentified(NativeKey::Unidentified), None, state);
+            }
             app.update();
         }
     }
@@ -213,11 +228,14 @@ fn typing_part_of_a_pieces_name_opens_the_kit_workspace_with_it_selected() {
 #[test]
 fn a_placement_id_opens_the_map_with_the_placement_framed() {
     let mut app = editor("placement");
-    // Somewhere else entirely, so a finder that did nothing cannot pass: the far corner at 32x zoom.
+    // **Somewhere else entirely, so a finder that did nothing cannot pass.** The entry frame frames the
+    // whole 64 m map, which already holds a 2 m piece at nearly a third of the viewport — the first
+    // version's own guard proved it (`Ok(0.29532656)`). So the camera is put on the *opposite* corner at
+    // 8 m across: the piece at (28, -28) is outside that box, and only a real go-to brings it in.
     {
         let mut rig = app.world_mut().resource_mut::<Rig>();
-        rig.focus = Vec3::new(29.0, 0.0, 29.0);
-        rig.height = 2.0;
+        rig.focus = Vec3::new(-28.0, 0.0, 28.0);
+        rig.height = 8.0;
     }
     settle(&mut app);
 

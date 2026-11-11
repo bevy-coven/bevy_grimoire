@@ -518,11 +518,15 @@ pub fn first_line(text: &str) -> String {
 fn show_the_chosen_row(
     chosen: On<RunCommand>,
     index: Res<GotoIndex>,
+    live: Option<Res<crate::keys::Live>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut revealing: Option<ResMut<crate::reveal::Revealing>>,
     mut following: Option<ResMut<crate::follow::Following>>,
 ) {
-    let Some(entry) = index.find(&chosen.id).cloned() else { return };
+    let Some(entry) = index.find(&chosen.id).cloned() else {
+        return;
+    };
+    let _ = &live;
     // **The workspace row is where you are**, so it is asked for as the chord asks for it.
     if let Some(workspace) = entry.opens {
         if let Some(state) = state.as_mut()
@@ -552,6 +556,9 @@ fn show_the_chosen_row(
     }
     if let Some(revealing) = revealing.as_mut() {
         revealing.request("go_to", &entry.shown);
+        // **The person asked for this page by pressing Enter**, so it is not held back by the idle
+        // clock their own key set — one flag, read at the one gate.
+        revealing.show_now();
     }
 }
 
