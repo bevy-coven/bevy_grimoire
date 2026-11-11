@@ -30,6 +30,12 @@ struct Case {
     stays: &'static str,
 }
 
+/// A block of YAML one step in, so it can stand under a key.
+#[cfg(feature = "bevy_elements")]
+fn indent(block: &str) -> String {
+    block.lines().map(|l| format!("  {l}\n")).collect()
+}
+
 #[cfg(feature = "bevy_elements")]
 fn elements() -> Case {
     use bevy_cauldron::environment::ElementsSettings;
@@ -43,8 +49,8 @@ fn elements() -> Case {
         other_good: other.to_yaml(),
         bad: vec![
             ("corrupt: a save cut off", good[..good.len() / 2].to_owned(), ""),
-            ("wrong type: the clock is a number", format!("{{clock: 5, climate: {climate}}}"), "clock"),
-            ("missing field: no climate", format!("{{clock: {clock}}}"), "climate"),
+            ("wrong type: the clock is a number", format!("clock: 5\nclimate:\n{}", indent(&climate)), "clock"),
+            ("missing field: no climate", format!("clock:\n{}", indent(&clock)), "climate"),
         ],
         good,
         stays: "previous environment stays",

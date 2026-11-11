@@ -42,7 +42,7 @@ pub fn bake_path(root: &Path, piece: &str) -> PathBuf {
 fn load_marks(root: &Path) -> Result<Marks, Refusal> {
     match std::fs::read_to_string(marks_path(root)) {
         Ok(t) => {
-            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t, Marks::parse)?;
+            let marks: Marks = read_named("destructible_marks", MARKS_FILE, &t, |t| bevy_grimoire_core::yaml::from_str::<Marks>(t, MARKS_FILE).map_err(|p| p.why.unwrap_or(p.what)))?;
             if marks.version != VERSION {
                 return Err(Refusal::new(format!(
                     "{MARKS_FILE} (version): version {} is not the {VERSION} this program reads. The file is left as it is: it comes from another build, so use that build or remove the file, then try again. Nothing was changed.",

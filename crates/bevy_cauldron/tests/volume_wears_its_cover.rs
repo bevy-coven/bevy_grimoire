@@ -100,7 +100,7 @@ fn the_carved_ground_wears_the_files_cover_and_follows_an_edit() {
     set(&mut ctx, bevy_grimoire_core::yaml::to_string(&Some(snow)).unwrap());
     assert!(until(&mut app, all_wear(wearing(Some(snow)))), "the snow cover replaces the wet one: {:?}", chunks(&mut app));
     assert_eq!(ids(&mut app), before, "a cover edit remeshed the carved ground");
-    set(&mut ctx, "None".to_owned());
+    set(&mut ctx, "null".to_owned());
     assert!(until(&mut app, all_wear(wearing(None))), "no cover: the scene's weather decides: {:?}", chunks(&mut app));
     assert_eq!(ids(&mut app), before, "a cover edit remeshed the carved ground");
 

@@ -52,7 +52,7 @@ fn forcing_rain_holds_until_it_is_released_back_to_the_climate() {
     let mut applied = None;
     let read = |file: &std::path::Path| ElementsSettings::from_yaml(&std::fs::read_to_string(file).unwrap()).unwrap();
 
-    set(&mut ctx, "forced_weather", "Some(Rain)");
+    set(&mut ctx, "forced_weather", "Rain");
     apply(&read(&file), &mut clock, &mut loc, &mut climate, &mut director, &mut applied);
     assert!(director.is_forced());
     assert_eq!(director.current(), WeatherPreset::Rain);
@@ -62,7 +62,7 @@ fn forcing_rain_holds_until_it_is_released_back_to_the_climate() {
     apply(&read(&file), &mut clock, &mut loc, &mut climate, &mut director, &mut applied);
     assert_eq!(director, before);
 
-    set(&mut ctx, "forced_weather", "None");
+    set(&mut ctx, "forced_weather", "null");
     apply(&read(&file), &mut clock, &mut loc, &mut climate, &mut director, &mut applied);
     assert!(!director.is_forced(), "None releases the weather to the climate's schedule");
 }
@@ -149,7 +149,7 @@ fn snow_rocks_and_sand_are_set_in_the_crates_own_types_and_an_old_file_still_loa
     // A file written before these fields existed takes the crate's defaults.
     let old = ElementsSettings::defaults().to_yaml();
     let start = old.find("snow:").unwrap();
-    let trimmed = format!("{})", &old[..start]);
+    let trimmed = old[..start].to_owned();
     let s = ElementsSettings::from_yaml(&trimmed).unwrap();
     assert_eq!(s.snow, bevy_elements::SnowSettings::default());
 }

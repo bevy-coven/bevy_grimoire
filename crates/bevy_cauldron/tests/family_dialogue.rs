@@ -11,7 +11,7 @@ const SCRIPT: &str = r#"{conversations: {"hello": {start: "a", nodes: {"a": !Lin
 
 /// The `conversations` field's value with the start node replaced: a conversation is edited whole.
 fn with_start(start: &str) -> String {
-    let body = SCRIPT.trim_start_matches("{conversations: ").trim_end_matches(')');
+    let body = SCRIPT.strip_prefix("{conversations: ").and_then(|s| s.strip_suffix('}')).expect("the script is one flow mapping");
     body.replace("start: \"a\"", &format!("start: \"{start}\""))
 }
 

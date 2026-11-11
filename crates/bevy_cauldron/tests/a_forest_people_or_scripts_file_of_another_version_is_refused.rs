@@ -108,7 +108,7 @@ fn a_file_with_no_version_is_taken_and_written_back_with_one() {
             "{triggers: [{id: \"first\", on: \"!Activity work\", then: \"let x = 1;\"}]}",
             "first",
             json!({"map": "m", "id": "t", "on": "!Activity work", "then": "let x = 1;"}),
-            "\"t\"",
+            "id: t",
         ),
     ];
     for (op, dir, old, old_row, params, new_row) in cases {
