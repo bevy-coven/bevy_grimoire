@@ -46,7 +46,7 @@ use bevy::input_focus::FocusedInput;
 use bevy::prelude::*;
 use bevy_gooey::{Modifiers, Role, Shortcut, SplitDivider, SplitFraction, SplitGlide, SplitMin, SplitPeek, SplitSaved};
 
-use crate::chrome::{Frame, FrameSystems, ShellSplit};
+use crate::chrome::{BOTTOM_DOCK_H, BottomDock, Frame, FrameSystems, ShellSplit, WORKBENCH_FLOOR_H};
 use crate::confirm::Confirm;
 use crate::empty_state::EmptyMapPrompt;
 use crate::keys::{Context, Live};
@@ -107,7 +107,13 @@ impl Plugin for ShellViewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShellView>().add_systems(
             Update,
-            (toggle_on_the_chords, collapse_the_left_pane.after(FrameSystems), fold_the_shell.after(FrameSystems), tick_the_menu_rows)
+            (
+                toggle_on_the_chords,
+                collapse_the_left_pane.after(FrameSystems),
+                give_the_bottom_dock_its_room.after(FrameSystems),
+                fold_the_shell.after(FrameSystems),
+                tick_the_menu_rows,
+            )
                 .chain()
                 .run_if(in_state(Screen::Editor)),
         );
@@ -263,6 +269,34 @@ fn collapse_the_left_pane(
     }
 }
 
+/// **The bottom dock is shown when the workbench can spare the room, and only then** (UI-61, #247).
+///
+/// A 148-px row under the body is taken from the body, and at the editor's reference window (1280 x
+/// 720, terminal open) that left the inspector 24 px of visible height and the Kit tabs' badge legends
+/// under the dock. So the dock is a row only when the workbench keeps [`WORKBENCH_FLOOR_H`] beside it:
+/// `Display::None` otherwise, which lays out to nothing and leaves no text for the census to find
+/// drawn outside a clip. **The room is the body plus the dock's own row, whether it is shown or not**,
+/// so showing it does not change the answer the next frame (no flicker at the threshold). Not while
+/// the view has folded the shell: Zen mode owns the dock then ([`fold_the_shell`]).
+fn give_the_bottom_dock_its_room(
+    view: Res<ShellView>,
+    frame: Option<Res<Frame>>,
+    laid: Query<&ComputedNode>,
+    mut docks: Query<&mut Node, (With<BottomDock>, Without<Folded>)>,
+) {
+    let Some(frame) = frame else { return };
+    if view.the_rest_is_hidden() {
+        return;
+    }
+    let (Ok(mut dock), Ok(body)) = (docks.get_mut(frame.bottom), laid.get(frame.body)) else { return };
+    let interface_px = |node: &ComputedNode| node.size().y * node.inverse_scale_factor();
+    let own_row = if dock.display == Display::None { 0.0 } else { laid.get(frame.bottom).map_or(0.0, interface_px) };
+    let display = if interface_px(body) + own_row >= WORKBENCH_FLOOR_H + BOTTOM_DOCK_H { Display::Flex } else { Display::None };
+    if dock.display != display {
+        dock.display = display;
+    }
+}
+
 /// **Fold what the view hides, and unfold what it has let go of.** Every frame the view is on, the same answer, so a part
 /// another system raised is folded again; a settled shell costs one comparison per part.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -280,7 +314,7 @@ fn fold_the_shell(
     let mut fold: Vec<Entity> = Vec::new();
     if view.the_rest_is_hidden() {
         fold.extend(parts.iter());
-        fold.extend([frame.chrome_bar, frame.door_strip, frame.status, frame.right]);
+        fold.extend([frame.chrome_bar, frame.door_strip, frame.status, frame.right, frame.bottom]);
     }
     for (kids, collapsed, gliding, peek) in &splits {
         if view.zen {

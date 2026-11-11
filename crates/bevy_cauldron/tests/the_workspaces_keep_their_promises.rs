@@ -61,13 +61,14 @@ fn run_command(app: &mut App, id: &str) {
 
 fn shown(app: &mut App) -> DockLayout {
     let world = app.world_mut();
-    let mut q = world.query::<&bevy_gooey::Dock>();
+    let mut q = world.query_filtered::<&bevy_gooey::Dock, With<bevy_cauldron::chrome::ArrangementDock>>();
     q.iter(world).next().expect("the shell is a gooey Dock").0.clone()
 }
 
 fn dock(app: &mut App) -> Entity {
     let world = app.world_mut();
-    let mut q = world.query_filtered::<Entity, With<bevy_gooey::Dock>>();
+    let mut q = world
+        .query_filtered::<Entity, (With<bevy_gooey::Dock>, With<bevy_cauldron::chrome::ArrangementDock>)>();
     q.iter(world).next().expect("the shell's dock")
 }
 

@@ -49,7 +49,7 @@ fn shown_tabs(layout: &DockLayout) -> Vec<(Vec<String>, String)> {
 /// The dock's arrangement as the editor holds it, or the default one when no dock has been built yet.
 fn dock_here(app: &mut App) -> DockLayout {
     app.world_mut()
-        .query_filtered::<&Dock, ()>()
+        .query_filtered::<&Dock, With<bevy_cauldron::chrome::ArrangementDock>>()
         .iter(app.world())
         .next()
         .map_or_else(|| bevy_cauldron::ui::shell_layout(bevy_cauldron::workspace::Workspace::Map), |dock| dock.0.clone())
@@ -181,4 +181,36 @@ fn the_staging_command_answers_with_the_arrangement_or_the_refusal() {
     updates(&mut app, 6);
     let refused = stage_panels::arrange(app.world_mut(), "place").expect_err("the workbench is closed");
     assert!(refused.contains("place") && refused.contains("Launcher"), "{refused}");
+}
+
+/// **Staging a panel selects its tab in the arrangement's dock, never in the bottom dock** (review of
+/// #247, MUST-FIX 1).
+///
+/// `stage_panels::stage_a_dock_panel` writes the selected tab of every dock it can reach. With a second
+/// gooey `Dock` in the frame an unfiltered loop also visited the bottom dock, whose one panel is
+/// `reload` — a capture asking for `place` left the strip alone, but a `select()` that matched there
+/// would have rewritten the bottom dock's layout and despawned its page. This asks the bottom dock's
+/// layout directly after staging each workbench panel.
+#[test]
+fn staging_a_panel_leaves_the_bottom_dock_alone() {
+    use bevy_cauldron::chrome::BottomDock;
+
+    let mut app = editor(&format!("stage_bottom_{}", std::process::id()));
+    let bottom = {
+        let world = app.world_mut();
+        world
+            .query_filtered::<Entity, With<BottomDock>>()
+            .single(world)
+            .expect("the frame has a bottom dock")
+            .to_owned()
+    };
+    let before = app.world().get::<Dock>(bottom).expect("a gooey Dock").0.clone();
+    for id in stage_panels::dock_panels() {
+        stage_panels::arrange(app.world_mut(), id).unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert_eq!(
+            app.world().get::<Dock>(bottom).map(|d| d.0.clone()),
+            Some(before.clone()),
+            "staging `{id}` rewrote the bottom dock's layout"
+        );
+    }
 }

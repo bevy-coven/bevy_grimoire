@@ -495,6 +495,10 @@ fn clear_stale_rails(rails: Query<(Entity, &ChildOf), With<SelectedRail>>, selec
 /// **Registered once, at `PreStartup`.** The spawn closure fills the panel; a region whose contents
 /// the editor draws elsewhere — the viewport is a texture — gets the node that holds them, so the
 /// dock's own arrangement is what a person drags.
+/// **The reload panel's own rhythm**, in multiples of the skin's gap: half a step, because its lines
+/// are one datum each and a full step reads as separate paragraphs (UI-61, #247).
+pub const RELOAD_ROW_GAP: f32 = 0.5;
+
 fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
     for (id, title) in [
         ("inspector", "INSPECTOR"),
@@ -506,6 +510,20 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
             c.insert(bevy_gooey::DockPanel(id.to_owned()));
         });
     }
+    // **The bottom dock's own panel, and the first one with contents** (UI-61, #247).
+    //
+    // The four above are placeholders: the editor draws those regions itself, so their pages are empty
+    // by design. This one is a real panel — gooey's dock builds it, gooey's tab names it and gooey's
+    // body sizes it — and `editor::refresh_reload_list` fills the column it spawns with what became of
+    // each file's latest edit. The lines keep the editor's ink because gooey has no per-severity text
+    // role (its `Role::Tone` is a fill): the *panel* is the crate's, and that is what this issue asks.
+    registry.register("reload", "RELOAD", |c| {
+        c.insert((
+            bevy_gooey::DockPanel("reload".to_owned()),
+            crate::editor::ReloadPanel,
+        ))
+        .with_child((bevy_gooey::column(RELOAD_ROW_GAP), crate::editor::ReloadList));
+    });
 }
 
 /// **The shell's arrangement for a workspace**, as a dock layout a divider can move (UI-30, #224;
@@ -525,11 +543,17 @@ fn register_the_shell_panels(mut registry: ResMut<bevy_gooey::PanelRegistry>) {
 /// that drags a divider does not write the real config.
 pub fn save_the_layout(
     changed: On<bevy_gooey::DockLayoutChanged>,
+    arrangement: Query<(), With<crate::chrome::ArrangementDock>>,
     file: Option<Res<crate::settings::UserSettingsFile>>,
     workspace: Option<Res<crate::workspace::Workspace>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
 ) {
     let Some(file) = file else { return };
+    // **A drag in the bottom dock is not the workspace's arrangement** (UI-61, #247): it is that dock's
+    // own, and it does not move the split that places the inspector and the viewport.
+    if arrangement.get(changed.entity).is_err() {
+        return;
+    }
     // **`edit_layer`, not `write_key`.** `write_key` speaks the Settings screen's value vocabulary
     // (a switch, a number, a named choice), and a layout is none of those; `edit_layer` is the same
     // primitive underneath it — the file is read as the editor reads it, refused if it does not
@@ -557,7 +581,10 @@ pub fn save_the_layout(
 pub fn follow_the_saved_layout(
     settings: Option<Res<crate::settings::EditorSettings>>,
     workspace: Option<Res<crate::workspace::Workspace>>,
-    mut docks: Query<&mut bevy_gooey::Dock>,
+    // **The arrangement's dock, and only it** (UI-61, #247): a second gooey `Dock` stands at the foot
+    // of the workbench, and writing the workspace's layout into that one would replace the panels it
+    // holds with the split that arranges the shell.
+    mut docks: Query<&mut bevy_gooey::Dock, With<crate::chrome::ArrangementDock>>,
 ) {
     let Some(settings) = settings else { return };
     let workspace = workspace.as_deref().copied().unwrap_or_default();
