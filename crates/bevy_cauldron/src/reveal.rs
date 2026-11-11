@@ -256,6 +256,13 @@ pub fn registered_data_file(project: &Project, relative: &str) -> Option<String>
 pub struct Revealing {
     queue: VecDeque<Request>,
     in_flight: Option<InFlight>,
+    /// **The places a reveal has left and `nav` has not yet pushed** (NV-06, #383).
+    ///
+    /// Recorded here because this is the one system that knows a view is about to move for the person,
+    /// and drained by `nav` because this system is at Bevy's parameter cap. The follow records its own
+    /// place the same way and for the same reason: **the person's place is pushed where their view
+    /// moves, never once per interpolation frame**.
+    leaving: Vec<crate::nav::Place>,
 }
 
 /// One thing to show, with the operation that made it — what the refusal names.
@@ -264,6 +271,16 @@ pub struct Request {
     /// The operation's registered name (`vocab_add_token`, `data_set`), as the log has it.
     pub operation: String,
     pub shown: Shown,
+    /// **Whether the person asked for this page** (NV-05, #382), rather than an agent's change.
+    ///
+    /// Choosing a row in Go to anything is pressing Enter and then reading. The Enter is a key press,
+    /// so the person's own hand has set `Following::busy` and would hold the reveal for
+    /// [`crate::follow::FOLLOW_IDLE_S`] — which reads as the finder being broken — and the same press
+    /// is a gesture that drops what an agent had queued. A request the person made is neither held nor
+    /// dropped by the key that made it. The flag lives on the request, so it is spent with the request
+    /// on every path that ends it (carried out, refused, or cleared by a project change) and cannot
+    /// outlive it.
+    pub by_person: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -294,7 +311,26 @@ impl Revealing {
         self.queue.push_back(Request {
             operation: operation.to_owned(),
             shown: shown.clone(),
+            by_person: false,
         });
+    }
+
+    /// **Show this page because the person asked for it** (Go to anything, NV-05, #382): not held
+    /// back by their idle clock, and not dropped by the key press that asked.
+    pub fn request_by_person(&mut self, operation: &str, shown: &Shown) {
+        self.queue.push_back(Request {
+            operation: operation.to_owned(),
+            shown: shown.clone(),
+            by_person: true,
+        });
+    }
+
+    /// **Whether the reveal that would be carried out next is one the person asked for.**
+    fn person_is_waiting(&self) -> bool {
+        match &self.in_flight {
+            Some(in_flight) => in_flight.request.by_person,
+            None => self.queue.front().is_some_and(|request| request.by_person),
+        }
     }
 
     /// How many reveals are waiting for their frame. The one in flight is not among them.
@@ -307,11 +343,32 @@ impl Revealing {
         self.in_flight.is_some()
     }
 
+    /// Take the places a reveal is leaving, so `nav` can push them. Empties the list.
+    pub fn take_leaving(&mut self) -> Vec<crate::nav::Place> {
+        std::mem::take(&mut self.leaving)
+    }
+
     /// **Forget the queue and the one in flight.** A project change makes them meaningless; a map
     /// change does not, because a page is a door and a row rather than a place in metres.
     pub fn clear(&mut self) {
         self.queue.clear();
         self.in_flight = None;
+        self.leaving.clear();
+    }
+
+    /// **The person reached for the view: forget what an agent's change had queued**, and keep what
+    /// the person themselves asked for.
+    ///
+    /// The Enter that chooses a Go to anything row is a key press, and
+    /// `follow::a_persons_input_takes_the_camera_back` drops the queue on every first key press — measured:
+    /// the finder closed, the index held the row, and nothing moved, because the person's own Enter
+    /// had cleared the reveal it made. The press that *asks* for a move is not the press that cancels
+    /// it (the Look chord's rule, one surface over).
+    pub fn drop_what_the_agent_queued(&mut self) {
+        self.queue.retain(|request| request.by_person);
+        if self.in_flight.as_ref().is_some_and(|in_flight| !in_flight.request.by_person) {
+            self.in_flight = None;
+        }
     }
 }
 
@@ -400,7 +457,10 @@ fn take_the_reveal(
     // **Nothing moves while the person is working.** The queue is untouched, so the reveal lands
     // once they stop rather than being thrown away: the change it names is still what the editor
     // promised to show.
-    if at.following.as_deref().is_some_and(crate::follow::Following::busy) {
+    // **A reveal the person asked for is not held back by their own key press** (NV-05, #382): the
+    // Enter that chose a Go to anything row is a gesture, and waiting out the idle clock after it
+    // reads as the finder being broken. Spent on the frame it is read.
+    if !revealing.person_is_waiting() && at.following.as_deref().is_some_and(crate::follow::Following::busy) {
         return;
     }
     let Some(in_flight) = revealing.in_flight.take() else {
@@ -456,6 +516,16 @@ fn take_the_reveal(
                         revealing.in_flight = None;
                         return;
                     }
+                    // **The place being left is recorded before the door is asked for** (NV-06,
+                    // #383), so a Back from the new page returns to the one the person was reading —
+                    // with its camera. It is recorded here and pushed by `nav`'s own system, because
+                    // this system is at Bevy's parameter cap and a second `ResMut` would not compile.
+                    revealing.leaving.push(crate::nav::Place::of(
+                        at.workspace.as_deref(),
+                        at.mode.as_deref(),
+                        at.rig.as_deref(),
+                        at.selection.as_deref(),
+                    ));
                     state.door_request = Some(DoorRequest {
                         workspace: *want_workspace,
                         tab: Some(*want_tab),
@@ -536,6 +606,11 @@ struct Where<'w, 's> {
     mode: Option<Res<'w, Mode>>,
     /// **The person's own work** — see `take_the_reveal`'s note on one idle clock.
     following: Option<Res<'w, crate::follow::Following>>,
+    /// **The camera and the selection**, read only to record the place a reveal is leaving (NV-06,
+    /// #383). Read-only on purpose: a reveal writes a selection and never the camera, so nothing here
+    /// can move the view.
+    rig: Option<Res<'w, crate::view::Rig>>,
+    selection: Option<Res<'w, crate::selection::Selection>>,
     _marker: std::marker::PhantomData<&'s ()>,
 }
 

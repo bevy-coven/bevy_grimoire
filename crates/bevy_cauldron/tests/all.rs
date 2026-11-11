@@ -17,6 +17,7 @@
 mod a_project_skin_previews_only_in_the_panel;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
 mod a_workspace_switch_keeps_the_map;
+mod back_and_forward_across_workspaces;
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;
@@ -98,6 +99,7 @@ mod a_note_on_picked_pieces_is_saved;
 mod a_palette_click_arms_the_piece;
 mod a_palette_click_leaves_the_rows_standing;
 mod a_person_finds_and_runs_a_command_in_the_palette;
+mod a_person_goes_to_anything;
 mod a_person_removes_a_box_and_undoes_it;
 mod a_person_removes_a_piece_and_undoes_it;
 mod a_fixture_projects_ron_files_become_yaml;
@@ -364,6 +366,7 @@ mod the_editor_and_the_game_agree;
 mod the_editor_follows_an_agents_change;
 mod the_follow_never_moves_a_persons_camera;
 mod the_follow_opens_the_page_a_change_is_on;
+mod reading_a_reference_opens_what_it_names;
 mod the_reveal_selects_a_row_a_person_can_see;
 mod the_follow_waits_for_a_person_using_the_view;
 mod the_person_is_never_yanked_review_two;

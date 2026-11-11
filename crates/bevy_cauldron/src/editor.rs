@@ -2598,6 +2598,14 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::piece_menu::PieceMenuPlugin);
         app.add_plugins(crate::palette_menu::PaletteMenuPlugin);
         app.add_plugins(crate::command_palette::CommandPalettePlugin);
+        // **Go to anything** (NV-05, #382): the index the everything-finder searches, and the `>` that
+        // swaps it to the command registry. The palette's own plugin is above it, because this one's
+        // source swap reads the field that plugin spawns.
+        app.add_plugins(crate::goto::GotoPlugin);
+        // **Back and Forward across every reveal** (NV-06, #383): the one history, pushed where a view
+        // is about to move for the person. Registered after `RevealPlugin` and `FollowPlugin`, whose
+        // systems are its writers.
+        app.add_plugins(crate::nav::NavPlugin);
         app.add_plugins(crate::toolbar::ToolbarPlugin);
         app.add_plugins(crate::empty_state::EmptyStatePlugin);
         app.add_plugins(crate::add_meshes::AddMeshesPlugin);
