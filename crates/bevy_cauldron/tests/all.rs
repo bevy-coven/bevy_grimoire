@@ -386,6 +386,7 @@ mod the_status_band_counts_the_set_in_hand;
 mod the_status_band_says_when_a_file_needs_attention;
 mod the_toolbar_arms_a_tool_through_its_key;
 mod the_layout_score_counts_crossings;
+mod the_left_dock_slides_and_peeks_under_the_pointer;
 mod the_library_seed_is_a_selection;
 mod the_lists_words_come_from_the_skin;
 mod the_look_command_frames_the_change;
@@ -461,6 +462,7 @@ fn every_test_file_is_a_module_here() {
     );
 }
 mod the_frames_regions_fit_the_window;
+mod the_shell_s_menus_and_toasts_move;
 mod the_shell_s_regions_are_labelled_and_the_divider_moves;
 mod a_dock_resize_never_covers_the_viewport;
 mod an_operation_that_writes_nothing_needs_no_log;

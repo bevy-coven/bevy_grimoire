@@ -10,22 +10,41 @@
 //!   toast says so when the mode begins, since nothing on screen could.
 //! - **View ▸ Show left panel** and **View ▸ Zen mode** are the same two, as ticks.
 //!
-//! # How a part goes
+//! # The left panel is the shell split's collapsed pane (UI-R06, #336)
 //!
-//! **`Display::None`, and the frame is left as it is.** A hidden node lays out to nothing, which is also how the badges and
-//! the census already tell a hidden control from a shown one (`chrome::Control`), and the viewport node (which the world is
-//! drawn through, `surface`) grows by flexbox into what the others leave. What each was before is kept on the node
+//! **Hiding the left panel collapses the shell's gooey split**, the way Enter on its divider does, and showing it restores
+//! it: the panes slide on gooey's spring ([`bevy_gooey::SplitGlide`]) instead of the viewport jumping a pane's width, and the
+//! collapsed pane **peeks** — the pointer resting on the divider floats the pane over the viewport at the width a restore would
+//! give it, with the viewport still (gooey's `SplitPeek`, #69). gooey has no call that collapses a split from code
+//! (`ToggleSplit` is the crate's own), so [`collapse_the_left_pane`] presses Enter on the divider, which is the divider's own,
+//! public input: a [`FocusedInput`] of the key, sent to the divider.
+//!
+//! **Two numbers are the shell's to hold while it is collapsed.** The pane's floor ([`SplitMin::first`], which keeps a dragged
+//! pane wide enough for a panel) is put to nothing so the pane can shut, and given back when a restore has landed; the
+//! fraction a restore returns to is raised to that floor first, so the pane opens to the width the panel needs and the
+//! glide has somewhere to go that the floor does not cut short.
+//!
+//! **A shut pane shows no dock.** Once the collapse has landed, nothing is peeking and the pane is as wide as nothing, the left
+//! dock is `Display::None` ([`Folded`]): a node that lays out to nothing is how the badges and the census already tell a
+//! hidden control from a shown one (`chrome::Control`), and a dock clipped to no width but still laid out would have its
+//! badges drawn over the world and its widgets in the Tab order. A peek shows it again for as long as it floats.
+//!
+//! # How the rest goes
+//!
+//! **`Display::None`, and the frame is left as it is.** A hidden node lays out to nothing and the viewport node (which the world
+//! is drawn through, `surface`) grows by flexbox into what the others leave. What each was before is kept on the node
 //! ([`Folded`]) and put back, so a part that was hidden for another reason (the collapsed terminal) stays hidden after Zen.
 //! **The view is enforced every frame it is on**: a part another system raises (the terminal's own chord) is folded again the
-//! next frame. The shell's split gives the first pane the left panel's share through [`SplitFraction`] and [`SplitMin`];
-//! hiding the pane alone would leave the viewport the rest of that share, so both are put to nothing while it is hidden and
-//! back to what they were when it returns.
+//! next frame. Zen also folds the split's first pane and its divider, so no sliver of either stands in a bare window.
 //!
 //! **Session state, not a setting.** A person who left Zen mode on would open the editor to a bare viewport and no menu; the
 //! left panel's state is likewise the session's. Neither is written to the user's file.
 
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input_focus::FocusedInput;
 use bevy::prelude::*;
-use bevy_gooey::{Modifiers, Role, Shortcut, SplitFraction, SplitMin};
+use bevy_gooey::{Modifiers, Role, Shortcut, SplitDivider, SplitFraction, SplitGlide, SplitMin, SplitPeek, SplitSaved};
 
 use crate::chrome::{Frame, FrameSystems, ShellSplit};
 use crate::confirm::Confirm;
@@ -88,7 +107,7 @@ impl Plugin for ShellViewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShellView>().add_systems(
             Update,
-            (toggle_on_the_chords, fold_the_shell.after(FrameSystems), tick_the_menu_rows)
+            (toggle_on_the_chords, collapse_the_left_pane.after(FrameSystems), fold_the_shell.after(FrameSystems), tick_the_menu_rows)
                 .chain()
                 .run_if(in_state(Screen::Editor)),
         );
@@ -125,6 +144,125 @@ fn toggle_on_the_chords(
     }
 }
 
+/// Where the shell's collapse of the left pane stands. The float is the pane's floor, [`SplitMin::first`], as the shell
+/// authored it.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+enum Collapse {
+    /// The pane is open, or collapsed by someone else.
+    #[default]
+    Open,
+    /// The shell pressed Enter on the divider to collapse, and gooey has not answered yet.
+    Asking(f32),
+    /// The shell's collapse stands (or is sliding in); the floor is given back at a restore.
+    Held(f32),
+    /// A restore is under way; the floor is given back when its glide has landed.
+    Giving(f32),
+}
+
+/// **Press Enter on the divider**: the split's own request to collapse its first pane or give it back, which gooey does not
+/// otherwise expose to a game. The key is read from the divider's observer and propagates no further.
+fn press_enter_on(commands: &mut Commands, divider: Entity) {
+    commands.trigger(FocusedInput::new(
+        divider,
+        KeyboardInput {
+            key_code: KeyCode::Enter,
+            logical_key: Key::Enter,
+            state: ButtonState::Pressed,
+            text: None,
+            repeat: false,
+            window: Entity::PLACEHOLDER,
+        },
+        Entity::PLACEHOLDER,
+    ));
+}
+
+/// What the shell reads of its split to collapse it.
+type ShellSplitRead = (
+    Entity,
+    &'static mut SplitFraction,
+    &'static mut SplitMin,
+    &'static ComputedNode,
+    &'static Children,
+    Has<SplitSaved>,
+    Has<SplitGlide>,
+);
+
+/// **Collapse the left pane while the view says it is hidden, restore it when it is not** — see the module's header.
+///
+/// One state per frame: [`Collapse`]. A person who docks the peek, or drags the divider, while the view says hidden has
+/// opened the pane by hand, and the view follows them (the tick and the chord agree) rather than collapsing it again.
+/// **A split that is not the one it last looked at starts over** (the frame is spawned on each door, with its own pane open
+/// and its own floor): the view is session state and stays, so the new split is collapsed to match it, not mistaken for one
+/// a person has opened.
+fn collapse_the_left_pane(
+    mut view: ResMut<ShellView>,
+    mut splits: Query<ShellSplitRead, With<ShellSplit>>,
+    roles: Query<&Role>,
+    dividers: Query<&ComputedNode, With<SplitDivider>>,
+    mut state: Local<Collapse>,
+    mut looked_at: Local<Option<Entity>>,
+    mut commands: Commands,
+) {
+    let Ok((split, mut fraction, mut min, node, kids, collapsed, gliding)) = splits.single_mut() else { return };
+    if *looked_at != Some(split) {
+        *looked_at = Some(split);
+        *state = Collapse::Open;
+    }
+    let Some(divider) = kids.iter().find(|kid| matches!(roles.get(*kid), Ok(Role::SplitDivider))) else { return };
+    let want = view.left_is_hidden();
+    match *state {
+        Collapse::Open if want => {
+            // Laid out, or there is no room to answer for: gooey's collapse reads the same room and does nothing without it.
+            let bar = dividers.get(divider).map_or(0.0, |d| d.size().x * d.inverse_scale_factor());
+            let extent = node.size().x * node.inverse_scale_factor() - bar;
+            if extent <= 0.0 || collapsed {
+                return;
+            }
+            let floor = min.first;
+            // What a restore gives back is never under the floor, so the pane opens to the width its panel needs.
+            let at_least = (floor / extent).clamp(0.0, 1.0);
+            if fraction.0 < at_least {
+                fraction.0 = at_least;
+            }
+            min.first = 0.0;
+            press_enter_on(&mut commands, divider);
+            *state = Collapse::Asking(floor);
+        }
+        Collapse::Open => {}
+        Collapse::Asking(floor) => {
+            if collapsed {
+                *state = Collapse::Held(floor);
+            } else {
+                // gooey did not take it (no room yet): the floor goes back and the next frame asks again.
+                min.first = floor;
+                *state = Collapse::Open;
+            }
+        }
+        Collapse::Held(floor) => {
+            if collapsed && !want {
+                press_enter_on(&mut commands, divider);
+                *state = Collapse::Giving(floor);
+            } else if !collapsed && !gliding {
+                // Docked by the person: the pane is open and the view says so.
+                if want && !view.zen {
+                    view.left_hidden = false;
+                }
+                *state = Collapse::Giving(floor);
+            }
+        }
+        Collapse::Giving(floor) => {
+            if collapsed && want {
+                // Hidden again before it opened: collapse from where it is drawn.
+                press_enter_on(&mut commands, divider);
+                *state = Collapse::Asking(floor);
+            } else if !collapsed && !gliding {
+                min.first = floor;
+                *state = Collapse::Open;
+            }
+        }
+    }
+}
+
 /// **Fold what the view hides, and unfold what it has let go of.** Every frame the view is on, the same answer, so a part
 /// another system raised is folded again; a settled shell costs one comparison per part.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -132,12 +270,10 @@ fn fold_the_shell(
     view: Res<ShellView>,
     frame: Option<Res<Frame>>,
     parts: Query<Entity, ZenParts>,
-    splits: Query<&Children, With<ShellSplit>>,
+    splits: Query<(&Children, Has<SplitSaved>, Has<SplitGlide>, &SplitPeek), With<ShellSplit>>,
     roles: Query<&Role>,
     folded: Query<(Entity, &Folded)>,
     mut nodes: Query<&mut Node>,
-    mut shares: Query<(&mut SplitFraction, &mut SplitMin), With<ShellSplit>>,
-    mut kept_share: Local<Option<(f32, f32)>>,
     mut commands: Commands,
 ) {
     let Some(frame) = frame else { return };
@@ -146,11 +282,15 @@ fn fold_the_shell(
         fold.extend(parts.iter());
         fold.extend([frame.chrome_bar, frame.door_strip, frame.status, frame.right]);
     }
-    if view.left_is_hidden() {
-        // **The first pane and the divider only**: the children come `[pane, divider, pane]`, and the second pane holds the viewport.
-        for kids in &splits {
+    for (kids, collapsed, gliding, peek) in &splits {
+        if view.zen {
+            // **The first pane and the divider only**: the children come `[pane, divider, pane]`, and the second pane holds the viewport.
             let own = |kid: &Entity| roles.get(*kid).is_ok_and(|role| matches!(role, Role::SplitPane | Role::SplitDivider));
             fold.extend(kids.iter().filter(own).take(2));
+        }
+        // **A shut pane shows no dock**: collapsed, landed, and nothing floating over the viewport.
+        if view.left_is_hidden() && collapsed && !gliding && !peek.is_open() {
+            fold.push(frame.left);
         }
     }
 
@@ -171,24 +311,6 @@ fn fold_the_shell(
             node.display = before.0;
         }
         commands.entity(entity).remove::<Folded>();
-    }
-
-    // The left pane's share of the split goes to the viewport while the pane is out of the layout.
-    for (mut fraction, mut min) in &mut shares {
-        if view.left_is_hidden() {
-            if kept_share.is_none() {
-                *kept_share = Some((fraction.0, min.first));
-            }
-            if fraction.0 != 0.0 {
-                fraction.0 = 0.0;
-            }
-            if min.first != 0.0 {
-                min.first = 0.0;
-            }
-        } else if let Some((was, least)) = kept_share.take() {
-            fraction.0 = was;
-            min.first = least;
-        }
     }
 }
 

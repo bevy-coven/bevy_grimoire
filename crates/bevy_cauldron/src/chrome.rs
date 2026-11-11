@@ -1146,6 +1146,7 @@ fn fit_docks_to_the_window(
     ui_scale: Res<UiScale>,
     mut panels: Query<(&PanelWidth, &mut Node, &ComputedNode), Without<ViewportSlot>>,
     owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
+    collapsed: Query<(), (With<ShellSplit>, With<bevy_gooey::SplitSaved>)>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -1161,8 +1162,14 @@ fn fit_docks_to_the_window(
     // lay out to nothing. Two per door are visible on no door, so the two slots below are exactly
     // the two docks.
     let mut widest = [0.0f32; 2];
+    // **A collapsed left pane still has the panel's room counted** (UI-R06, #336): the pane slides to nothing and a peek floats it
+    // back over the viewport, and a right dock that was re-fitted to the room the hidden panel gave up would jump with the
+    // collapse and move the viewport again when a peek showed the panel. The panel is out of the layout (its dock is
+    // `Display::None`) and is what the right dock's share was worked out against, so that is still the answer.
+    let left_stands = !collapsed.is_empty();
     for (want, node, computed) in &panels {
-        if node.display == Display::None || computed.size().x <= 0.0 {
+        let counted = node.display != Display::None && (computed.size().x > 0.0 || (left_stands && want.side == Side::Left));
+        if !counted {
             continue;
         }
         let side = usize::from(want.side == Side::Right);
@@ -3285,11 +3292,18 @@ fn paint_name_box(
 /// `[pane, divider, pane]`; the panes carry a `Node` and a `Role` and no `Pickable::IGNORE`, and the divider
 /// carries `Hovered` — all three forbidden under the frame, so both are corrected here.
 ///
+/// **While the split is collapsed, the divider has its `Hovered` back, and the first pane has its own** (UI-R06, #336).
+/// gooey's peek of a collapsed pane (#69) reads the pointer on the divider (the collapsed edge) and on the pane, and puts
+/// `Hovered` on the first pane for as long as the split is collapsed: that is what lets the pane be pointed at, so
+/// `Pickable::IGNORE` stays on a pane without it (an open split's panes must never mark the world as interface) and
+/// comes off the one that has it, so a floating pane's dock can be clicked. A collapsed split's divider is a sliver on
+/// the viewport's edge that is the interface, so it answers the pointer there; an open split's does not.
+///
 /// **Idempotent**, because the frame is spawned on each door.
 fn adopt_the_shell_split(
     mut commands: Commands,
     frame: Option<Res<Frame>>,
-    splits: Query<Entity, With<ShellSplit>>,
+    splits: Query<(Entity, Has<bevy_gooey::SplitSaved>), With<ShellSplit>>,
     roles: Query<&bevy_gooey::Role>,
     has_hover: Query<(), With<Hovered>>,
     pickable: Query<&bevy::picking::Pickable>,
@@ -3297,19 +3311,28 @@ fn adopt_the_shell_split(
 ) {
     let (children, parents) = tree;
     let Some(frame) = frame else { return };
-    for split in &splits {
+    for (split, collapsed) in &splits {
         let Some(kids) = children.get(split).ok() else { continue };
         for child in kids.iter() {
             match roles.get(child) {
                 Ok(bevy_gooey::Role::SplitDivider) => {
-                    if has_hover.get(child).is_ok() {
-                        commands.entity(child).remove::<Hovered>();
+                    if has_hover.get(child).is_ok() != collapsed {
+                        if collapsed {
+                            commands.entity(child).insert(Hovered::default());
+                        } else {
+                            commands.entity(child).remove::<Hovered>();
+                        }
                     }
                 }
-                Ok(bevy_gooey::Role::SplitPane)
-                    if !pickable.get(child).is_ok_and(|p| *p == bevy::picking::Pickable::IGNORE) =>
-                {
-                    commands.entity(child).insert(bevy::picking::Pickable::IGNORE);
+                Ok(bevy_gooey::Role::SplitPane) => {
+                    let want = if has_hover.get(child).is_ok() {
+                        bevy::picking::Pickable::default()
+                    } else {
+                        bevy::picking::Pickable::IGNORE
+                    };
+                    if pickable.get(child).ok() != Some(&want) {
+                        commands.entity(child).insert(want);
+                    }
                 }
                 _ => {}
             }
@@ -3395,6 +3418,9 @@ fn size_the_shell_split(
     }
 }
 
+/// The shell's split while its pane is collapsed, or sliding to or from it.
+type CollapsedOrGliding = (With<ShellSplit>, Or<(With<bevy_gooey::SplitSaved>, With<bevy_gooey::SplitGlide>)>);
+
 /// **Once a person drags the divider, the left panel is as wide as the pane they made** (#224).
 ///
 /// Before that, [`size_the_shell_split`] sizes the pane to the panel; after it the pane is the
@@ -3403,6 +3429,10 @@ fn size_the_shell_split(
 /// is the pane's less its margins, never under [`DOCK_MIN_W`] (the pane's own floor, `SplitMin`,
 /// keeps the two from disagreeing). [`fit_docks_to_the_window`] leaves the left panel to this once
 /// the split is the person's, so one system writes the number.
+///
+/// **Not while the split is collapsed or sliding** (UI-R06, #336): the pane is shrinking to nothing or growing back, and a panel that
+/// followed it would reflow every frame of the slide and be a different width when the peek floats it over the viewport.
+/// Collapsed, it keeps the width it had; a restore lands and this takes the number back from the pane, which is that width.
 fn the_left_panel_follows_its_pane(
     frame: Option<Res<Frame>>,
     owned: Query<(), (With<ShellSplit>, Without<SplitUnsized>)>,
@@ -3410,8 +3440,9 @@ fn the_left_panel_follows_its_pane(
     panes: Query<&ComputedNode>,
     mut panels: Query<(&PanelWidth, &mut Node)>,
     windows: Query<(), With<bevy::window::PrimaryWindow>>,
+    moving: Query<(), CollapsedOrGliding>,
 ) {
-    if owned.is_empty() || windows.is_empty() {
+    if owned.is_empty() || windows.is_empty() || !moving.is_empty() {
         return;
     }
     let Some(frame) = frame else { return };
