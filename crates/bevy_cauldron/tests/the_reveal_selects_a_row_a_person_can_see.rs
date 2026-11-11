@@ -224,7 +224,7 @@ fn the_data_row_the_reveal_selected_is_the_files_leaf_inside_the_table() {
     // names, so the answer is the leaf's file and path.
     let (file, path) = {
         let world = app.world_mut();
-        let mut q = world.query::<(&bevy_gooey::Table, &bevy_gooey::TableCursor)>();
+        let mut q = world.query_filtered::<(&bevy_gooey::Table, &bevy_gooey::TableCursor), Without<bevy_cauldron::editor::HistoryTree>>();
         let (table, cursor) = q.single(world).expect("the DATA panel has one table");
         let key = cursor.0.expect("the table's cursor was put on the file's first leaf");
         let rows = table.source::<bevy_cauldron::editor::DataRows>().expect("the DATA table's own rows");
@@ -256,7 +256,7 @@ fn the_data_row_the_reveal_selected_is_the_files_leaf_inside_the_table() {
 /// The key gooey derives for a row, asked of the table's own source.
 fn key_of(app: &mut App, file: &str, path: &str) -> u64 {
     let world = app.world_mut();
-    let mut q = world.query::<&bevy_gooey::Table>();
+    let mut q = world.query_filtered::<&bevy_gooey::Table, Without<bevy_cauldron::editor::HistoryTree>>();
     let table = q.single(world).expect("the DATA panel has one table");
     let rows = table.source::<bevy_cauldron::editor::DataRows>().expect("the DATA table's own rows");
     let at = (0..bevy_gooey::RowSource::len(rows))

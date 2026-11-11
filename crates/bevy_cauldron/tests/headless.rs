@@ -3337,14 +3337,16 @@ fn every_pane_that_clips_can_scroll() {
     }
 
     let mut clipping = 0;
-    let mut q = app.world_mut().query::<(Entity, &Node, Option<&ScrollArea>)>();
-    for (entity, node, area) in q.iter(app.world()) {
+    let mut q = app.world_mut().query::<(Entity, &Node, Option<&ScrollArea>, Has<bevy_cauldron::editor::OwnsItsWheel>)>();
+    for (entity, node, area, owns_its_wheel) in q.iter(app.world()) {
         if node.overflow.y != OverflowAxis::Scroll {
             continue;
         }
         clipping += 1;
+        // A list that takes its own wheel (`editor::OwnsItsWheel`, UI-53) carries the handler that makes it scrollable
+        // in `ScrollArea`'s place, so it does not clip without one.
         assert!(
-            area.is_some(),
+            area.is_some() || owns_its_wheel,
             "{entity} clips its overflow (overflow-y: scroll) but carries no ScrollArea, so the \
              wheel cannot reach what it clipped — spawn it through `chrome::scroll_list`"
         );

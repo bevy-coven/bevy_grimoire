@@ -2969,7 +2969,11 @@ impl Plugin for EditorPlugin {
                 // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
                 // gooey recycles its rows as the list scrolls, so a row can become the current line without
                 // `EditorState` changing at all — which is why this cannot be gated on the change flag.
-                (mark_the_current_line.after(bevy_gooey::GooeySystems::Style), hand_the_wheel_on),
+                (
+                    mark_the_current_line.after(bevy_gooey::GooeySystems::Style),
+                    hand_the_wheel_on,
+                    hold_the_history_tall,
+                ),
             )
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went
@@ -8210,10 +8214,10 @@ fn history_nodes(state: &EditorState) -> Vec<bevy_gooey::TreeNode> {
 #[derive(bevy::ecs::system::SystemParam)]
 struct HistoryJump<'w, 's> {
     commands: Commands<'w, 's>,
-    assets: Res<'w, AssetServer>,
+    assets: Option<Res<'w, AssetServer>>,
     project: Option<ResMut<'w, Project>>,
     open: Option<ResMut<'w, OpenMap>>,
-    state: ResMut<'w, EditorState>,
+    state: Option<ResMut<'w, EditorState>>,
     placed: Query<'w, 's, (Entity, &'static Placement)>,
     /// **A drawn piece's own transform**, which is how the sweep tells a piece standing where the
     /// map wants it from one that is not (B-048).
@@ -8245,7 +8249,11 @@ fn history_row_clicked(
     }
     let position = row.key as usize;
     let HistoryJump { commands, assets, project, open, state, placed, transforms } = &mut jump_to;
-    let (Some(project), Some(open)) = (project.as_deref_mut(), open.as_deref_mut()) else { return };
+    let (Some(assets), Some(project), Some(open), Some(state)) =
+        (assets.as_deref(), project.as_deref_mut(), open.as_deref_mut(), state.as_deref_mut())
+    else {
+        return;
+    };
     if state.leaving || position == state.undo_depth() {
         return;
     }
@@ -8428,6 +8436,27 @@ fn mark_the_current_line(
 /// swallow a notch that moved it by rounding.
 const LIST_WHEEL_MIN_MOVE_PX: f32 = 0.5;
 
+/// **This list takes its own wheel** ([`the_list_wheel`]) instead of carrying `ScrollArea`, which is the marker the
+/// "every pane that clips can scroll" census accepts in its place: the wheel handler exists, it is just not upstream's.
+#[derive(Component)]
+pub struct OwnsItsWheel;
+
+/// **The history list is as tall at the first line as at the hundredth** (UI-53).
+///
+/// gooey draws a table as tall as its rows, up to the rows it was asked to stand: one line is one row tall, two lines two.
+/// In the Map inspector that moved everything below the list down a row at the first edit and each of the next five, so
+/// the field an author had just typed into moved away from the pointer (`a_receipt_does_not_move_the_panel`). The old
+/// window was seven fixed rows; this holds the list at its screenful (`HISTORY_LIST_ROWS` of the skin's row pitch) from the
+/// start. Compared before written, so a settled frame writes nothing.
+fn hold_the_history_tall(skin: Res<bevy_gooey::GooeySkin>, mut trees: Query<&mut Node, With<HistoryTree>>) {
+    let want = Val::Px(HISTORY_LIST_ROWS * skin.table_pitch());
+    for mut node in &mut trees {
+        if node.min_height != want {
+            node.min_height = want;
+        }
+    }
+}
+
 /// **A list in the inspector hands the wheel on when it cannot use it** (UI-53, #239; UI-51, #237).
 ///
 /// gooey's table list carries `ScrollArea`, whose handler takes every notch over it and stops it there — even a notch
@@ -8448,7 +8477,7 @@ fn hand_the_wheel_on(
 ) {
     for list in &lists {
         if parents.iter_ancestors(list).any(|ancestor| owners.contains(ancestor)) {
-            commands.entity(list).remove::<bevy::ui_widgets::ScrollArea>().observe(the_list_wheel);
+            commands.entity(list).remove::<bevy::ui_widgets::ScrollArea>().insert(OwnsItsWheel).observe(the_list_wheel);
         }
     }
 }
