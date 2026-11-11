@@ -122,18 +122,21 @@ pub struct Suggestion {
 }
 
 impl Suggestion {
-    /// **The words this proposal offers as the piece's description**, and the only place that
-    /// decides which they are: the `note` when it holds anything, else [`Suggestion::what`].
+    /// **The words this proposal offers as the piece's description** — the `note` when it holds
+    /// anything, and **nothing otherwise**.
     ///
     /// Stated once so [`crate::labels::apply_fields`] writes exactly the words the panel showed. Two
     /// readers, one fact: a panel proposing one sentence and an apply that wrote another is the
     /// class of defect the whole "one value, never two" pass exists to end.
+    ///
+    /// **`what` is not a fallback, and it was one.** The decision path is the only producer now, and
+    /// it has nothing to put in `what` but the token list (`kind.join(", ")`), so falling back to it
+    /// meant every apply overwrote a piece's hand-written description with `"seating, light"`,
+    /// stamped `Axis::Note` as the model's, and showed that string in the detail pane as a proposed
+    /// description. A labeller that proposes tags proposes tags; it has no sentence to offer, and
+    /// saying so is a `None`.
     pub fn description(&self) -> Option<&str> {
-        [self.note.as_deref(), Some(self.what.as_str())]
-            .into_iter()
-            .flatten()
-            .map(str::trim)
-            .find(|s| !s.is_empty())
+        self.note.as_deref().map(str::trim).filter(|s| !s.is_empty())
     }
 }
 

@@ -2164,6 +2164,45 @@ mod tests {
         assert!(!q.running() && !q.paused());
     }
 
+    /// **A labelling proposal never writes a description, and never claims one.**
+    ///
+    /// The decision path has no sentence to offer — it answers a probability per token — so its
+    /// `Suggestion.what` is the token list and its `note` is `None`. `description()` used to fall
+    /// back to `what`, which meant every apply wrote `"seating, light"` over a piece's hand-written
+    /// description AND stamped `Axis::Note` as the model's, so the record said a machine had decided
+    /// a sentence no machine had written. Reported by review of #113.
+    ///
+    /// This is the producer's shape exactly: `decide_labels::suggest`'s own output.
+    #[test]
+    fn a_decision_path_suggestion_writes_no_description_and_claims_none() {
+        use bevy_grimoire_core::descriptor::{Axis, By};
+
+        let mut d = bevy_grimoire_core::descriptor::Descriptor {
+            note: Some("hand-written by the author".to_owned()),
+            ..Default::default()
+        };
+        let mut s = suggestion();
+        // What `suggest` builds: the token list in `what`, and nothing in `note`.
+        s.what = "light, emit".to_owned();
+        s.note = None;
+        apply_fields(&mut d, &s, &stamp(), &vocab());
+
+        assert_eq!(
+            d.note.as_deref(),
+            Some("hand-written by the author"),
+            "the author's description must survive a proposal that offers none"
+        );
+        let rec = d.labels.clone().expect("an apply leaves a record");
+        assert_ne!(
+            rec.by.get(Axis::Note),
+            Some(By::Model),
+            "and the record must not say a model wrote a description it never wrote"
+        );
+
+        // The preview agrees with the apply, because both ask `description()`.
+        assert_eq!(s.description(), None, "a tag list is not a description");
+    }
+
     /// Apply semantics: axis lists REPLACE (the model answered with the complete proposed state —
     /// union would make review a merge puzzle); `Some`-carrying scalars overwrite; everything the
     /// suggestion does not carry is untouched.

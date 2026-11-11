@@ -9993,10 +9993,11 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // question rather than an answer — one `apply_what_arrives` settles on its own a frame
             // later (`Cmd+Z` undoes it; `Shift+Y` abandons a batch with everything it staged). What
             // is being typed always wins over both, because that is the author speaking now.
-            // `description()` rather than `note`: the model answers `what` and leaves `note` null
-            // often enough that reading `note` alone left this box empty with a full identification
-            // printed underneath it. `label_suggestion::Suggestion::description` is where that choice is made,
-            // and `labels::apply_fields` writes whatever it returns.
+            // `description()` rather than `note`, so this box and `labels::apply_fields` cannot
+            // disagree about what a proposal offers. **Since the decision path is the only
+            // labeller, that is usually `None`** — it answers a probability per token and has no
+            // sentence to offer, and its `what` is the token list, which is not a description of
+            // anything. An empty box with a full identification beside it is the honest state.
             let (note_text, note_tint) = note_field_text(
                 note_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
                 d.note.as_deref(),

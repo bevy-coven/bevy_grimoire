@@ -240,7 +240,8 @@ pub fn label_with_decisions(
         .collect();
     let mut responses = Vec::new();
     for request in build_requests(vocab, ctx, &images) {
-        responses.push(ask(transport, &request).map_err(failure)?);
+        let endpoint = transport.endpoint();
+        responses.push(ask(transport, &request).map_err(|e| failure(&endpoint, e))?);
     }
     let model = responses
         .iter()
@@ -253,18 +254,38 @@ pub fn label_with_decisions(
     Ok((decided.suggestion, Provenance { model, date, attempts: 1 }))
 }
 
-fn failure(e: Error) -> LabelFailure {
+/// **Why a request produced none**, and what to do about it — where the remedy depends on where
+/// the endpoint is **not**.
+///
+/// A refusal against a machine on this LAN is about the process: start the service, or point the
+/// setting at the machine that has it. A refusal out on the internet folds DNS, TLS, a proxy and
+/// the remote's own health into one verdict, and local advice there sends the reader at the wrong
+/// layer — so a remote endpoint gets the transport's own words and nothing else. This is the same
+/// judgement [`probe`] makes when it declines to dial a remote address at all, and it is why
+/// [`remedy_for`] exists rather than one sentence for every failure.
+fn failure(endpoint: &str, e: Error) -> LabelFailure {
     match e {
         Error::Unreachable { .. } => LabelFailure::Unreachable {
             transport: e.to_string(),
-            remedy: Some(
-                "set GRIMOIRE_DECIDE_ENDPOINT to a running decision endpoint \
-                 (tools/decide/serve-clef-flash.sh)"
-                    .into(),
-            ),
+            remedy: remedy_for(endpoint),
         },
         other => LabelFailure::Refused(other.to_string()),
     }
+}
+
+/// **What to do about a refused connection to this URL**, or `None` when the answer would be a
+/// guess. `None` for an address [`is_near`] rejects: out there the transport's own words are the
+/// better message, and naming a local service would send the reader at the wrong layer.
+fn remedy_for(url: &str) -> Option<String> {
+    let (host, port) = host_port(url)?;
+    use std::net::ToSocketAddrs;
+    let ip = (host.as_str(), port).to_socket_addrs().ok()?.next()?.ip();
+    is_near(ip).then(|| {
+        format!(
+            "set GRIMOIRE_DECIDE_ENDPOINT to a running decision endpoint \
+             (tools/decide/serve-clef-flash.sh) — nothing is serving {host}:{port}"
+        )
+    })
 }
 
 /// **Is anybody home, and are they ready?**
@@ -370,7 +391,7 @@ fn is_near(ip: std::net::IpAddr) -> bool {
 /// answer, and the content is irrelevant to the point, which is to make the server load the model.
 pub fn warm(transport: &dyn Transport) -> Result<(), LabelFailure> {
     let request = Request::new("ready").with_question("ready", Question::noul("Answer yes."));
-    ask(transport, &request).map_err(failure)?;
+    ask(transport, &request).map_err(|e| failure(&transport.endpoint(), e))?;
     Ok(())
 }
 
@@ -654,6 +675,70 @@ mod tests {
         let e = warm(&Down).expect_err("a dead endpoint must refuse the warm-up");
         assert!(e.is_unreachable(), "so the batch stops rather than reporting it per mesh: {e}");
         assert!(e.to_string().contains("GRIMOIRE_DECIDE_ENDPOINT"), "{e}");
+    }
+
+    /// **A refusal against a remote endpoint must not be handed local advice.**
+    ///
+    /// Every `Error::Unreachable` used to get the same remedy — *"set GRIMOIRE_DECIDE_ENDPOINT to a
+    /// running decision endpoint (tools/decide/serve-clef-flash.sh)"* — and for a Cloudflare or
+    /// Ollama endpoint that is advice about a machine the reader is not on. It is the same judgement
+    /// [`probe`] already makes by refusing to dial a remote address at all: out there a refusal folds
+    /// DNS, TLS, proxies and the remote's own health together, and the transport's own words are the
+    /// better message.
+    ///
+    /// This was `vlm.rs`'s `a_refusal_names_its_remedy_wherever_it_is_met` — *"a cloud endpoint must
+    /// not be handed local advice"* — which went with the chat path although the rule is not about
+    /// chat at all.
+    #[test]
+    fn a_remote_endpoint_is_never_handed_local_advice() {
+        struct Down(&'static str);
+        impl Transport for Down {
+            fn endpoint(&self) -> String {
+                self.0.to_owned()
+            }
+            fn send(&self, _: &Request) -> Result<Response, Error> {
+                Err(Error::Unreachable { endpoint: self.0.to_owned(), detail: "Connection refused".into() })
+            }
+        }
+
+        // A local endpoint: the remedy names the setting and how to serve one.
+        let local = label_with_decisions(
+            &Down("http://127.0.0.1:8093/v1/systemone"),
+            &[vec![1u8], vec![2u8]],
+            &vocab(),
+            &ctx(),
+            DEFAULT_THRESHOLD,
+            "2026-11-11".to_owned(),
+        )
+        .expect_err("a dead endpoint labels nothing");
+        let LabelFailure::Unreachable { remedy: Some(remedy), .. } = &local else {
+            panic!("a local refusal is unreachable WITH a remedy, got {local:?}");
+        };
+        assert!(remedy.contains("GRIMOIRE_DECIDE_ENDPOINT"), "{remedy}");
+        assert!(remedy.contains("serve-clef-flash"), "{remedy}");
+
+        // A remote endpoint: the transport's own words, and no local advice at all.
+        let remote = label_with_decisions(
+            &Down("https://api.cloudflare.com/client/v4/accounts/x/ai/run/@cf/cloudflare/clef"),
+            &[vec![1u8], vec![2u8]],
+            &vocab(),
+            &ctx(),
+            DEFAULT_THRESHOLD,
+            "2026-11-11".to_owned(),
+        )
+        .expect_err("a dead endpoint labels nothing");
+        let LabelFailure::Unreachable { remedy, .. } = &remote else {
+            panic!("an unreachable is unreachable, got {remote:?}");
+        };
+        assert!(
+            remedy.is_none(),
+            "a remote endpoint was handed local advice: {remedy:?}"
+        );
+        assert!(
+            !remote.to_string().contains("serve-clef-flash")
+                && !remote.to_string().contains("GRIMOIRE_DECIDE_ENDPOINT"),
+            "and the sentence carries none either: {remote}"
+        );
     }
 
     #[test]

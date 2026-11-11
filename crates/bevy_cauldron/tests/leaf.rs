@@ -2,10 +2,11 @@
 //!
 //! Root `CLAUDE.md` asks every mirrored crate for a dependency ratchet *"so widening the boundary
 //! costs a deliberate edit rather than a passing build"*. This crate did not have one, and it is the
-//! crate where it matters most: it is the only place in the workspace that speaks HTTP. `update.rs`,
-//! `wish_view.rs`, `ops_play.rs` and `label_booth`'s decision requests reach the network over `ureq`
-//! and `bevy_oracle`, and the argument that this is safe rests entirely on the editor never shipping.
-//! That argument is worth exactly as much as the list below is enforced.
+//! crate where it matters most: it is the only place in the workspace that speaks HTTP. `update.rs`
+//! and `wish_view.rs` reach the network over `ureq`; `ops_play.rs` does too, and the labeller's
+//! decision requests go through `bevy_oracle` from `labels.rs` → `decide_labels.rs`. The argument
+//! that this is safe rests entirely on the editor never shipping. That argument is worth exactly as
+//! much as the list below is enforced.
 //!
 //! # Two things this deliberately does not do
 //!
