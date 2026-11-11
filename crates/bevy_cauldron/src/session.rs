@@ -301,7 +301,7 @@ impl Session {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
-        std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+        bevy_grimoire_core::atomic_file::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
     }
 }
 
