@@ -66,9 +66,11 @@ fn laid(app: &mut App, entity: Entity) -> Rect {
 }
 
 /// **The dock is the room the workbench can spare** (UI-61, #247). At the editor's reference window
-/// (the headless surface, 1536 x 864 texels) the workbench measured 357 texels with the terminal open and
-/// no bottom dock; the dock took 178 of them and left the inspector a 24-texel viewport, so it must give
-/// way there, entirely, and leave the workbench what it had.
+/// (the headless surface, 1536 x 864 texels, 1280 x 720 interface px at `UiScale` 1.2) the workbench
+/// measured 326 px with the terminal open and no bottom dock; a 148-px dock took nearly half of it and
+/// left the inspector a 24-px viewport (a note being typed was off the panel), so the dock must give
+/// way there, entirely, and leave the workbench what it had. Boxes here are in interface px, which is
+/// what `laid` reports.
 #[test]
 fn the_bottom_dock_gives_way_in_the_reference_window() {
     let mut app = editor("gives_way");
@@ -81,8 +83,8 @@ fn the_bottom_dock_gives_way_in_the_reference_window() {
     let body_box = laid(&mut app, body);
     assert!(dock.height() < 2.0, "a window with no room to spare has no dock row: {dock:?}");
     assert!(
-        body_box.height() > 340.0,
-        "the workbench keeps what it had before the dock existed (357 texels here): {body_box:?}"
+        body_box.height() >= 320.0,
+        "the workbench keeps what it had before the dock existed (326 px here): {body_box:?}"
     );
 }
 

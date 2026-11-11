@@ -1680,11 +1680,11 @@ pub const BOTTOM_DOCK_H: f32 = 148.0;
 
 /// **The least height the workbench keeps**, logical px: the row of the left dock, the viewport and the
 /// inspector. The editor's reference window (1280 x 720, which the headless harness's surface
-/// reproduces) measured 298 px of workbench with the terminal open and no bottom dock; the floor is
+/// reproduces) measured 326 px of workbench with the terminal open and no bottom dock; the floor is
 /// that, rounded up. At 148 px the bottom dock took half of it and left the inspector 24 px of
 /// visible height at the reference window — a note being typed was off the panel — so the dock is
 /// given room only above this floor.
-pub const WORKBENCH_FLOOR_H: f32 = 300.0;
+pub const WORKBENCH_FLOOR_H: f32 = 330.0;
 
 /// **How much faster than the workbench the bottom dock shrinks**, a flex shrink factor. A flex
 /// container takes a short window's overflow from its items in proportion to `flex_shrink` x basis;
