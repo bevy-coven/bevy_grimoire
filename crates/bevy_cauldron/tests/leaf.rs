@@ -2,9 +2,10 @@
 //!
 //! Root `CLAUDE.md` asks every mirrored crate for a dependency ratchet *"so widening the boundary
 //! costs a deliberate edit rather than a passing build"*. This crate did not have one, and it is the
-//! crate where it matters most: it is the only place in the workspace that speaks HTTP. `vlm.rs`
-//! reaches a vision model over `ureq`, and the argument that this is safe rests entirely on the editor
-//! never shipping. That argument is worth exactly as much as the list below is enforced.
+//! crate where it matters most: it is the only place in the workspace that speaks HTTP. `update.rs`,
+//! `wish_view.rs`, `ops_play.rs` and `label_booth`'s decision requests reach the network over `ureq`
+//! and `bevy_oracle`, and the argument that this is safe rests entirely on the editor never shipping.
+//! That argument is worth exactly as much as the list below is enforced.
 //!
 //! # Two things this deliberately does not do
 //!
@@ -47,8 +48,8 @@ const ALLOWED: &[(&str, &str)] = &[
     ("ron", "map and library serialization"),
     ("serde", "derives on every schema type this crate reads and writes"),
     ("dirs", "the platform's own data directory, where the user's recent-projects list lives (UI-11, #217); no family crate finds platform directories"),
-    ("serde_json", "the VLM chat request and reply bodies"),
-    ("ureq", "the VLM transport — one blocking POST from a task-pool thread"),
+    ("serde_json", "the body of the editor's own HTTP calls (`update.rs`'s releases, `wish_view.rs`'s search, `ops_play.rs`'s BRP) and the labeller's proposals"),
+    ("ureq", "the editor's own HTTP client — a release check, a wish search, a BRP call, each one blocking POST from a task-pool thread"),
     ("base64", "data-URI image parts for the booth renders"),
     ("image", "encodes the booth's RGBA readback to PNG"),
     ("semver", "the updater compares a release tag's version with this build's (`update.rs`); already in the lockfile through other crates"),

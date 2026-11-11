@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-11
+
+- **label-one-path** One labelling path: the decision model, and the chat path is gone *For you: The editor now labels pieces through one endpoint only, so there is one thing to configure and nothing to fall back to.* *No clip: not visible: the labeller is unchanged on screen, and the change is which code answers it; proved by bevy_cauldron label and decide unit tests (35) and the editor labeller tests a_vlm_label_is_suggested_then_applied (3), the_two_paths_read_one_judgement_the_same_way (2), the_wired_labelling_paths_agree_on_the_same_pieces (2), decision_labels_mount_front (2), every_refusal_is_in_a_problem (2)*
+
 ## 2026-11-10
 
 - **ui-80-overlay-ink** `c2a7773` The editor's skin carries the light map's two inks, and the map's grid and the seating lattice are drawn in the running skin's grid tone instead of the editor's own *For you: The light map and the grid now take their colours from the theme you choose, so a high-contrast or a project skin reaches the overlays you read the map by.* *No clip: visible, not yet recorded: fleet worker*

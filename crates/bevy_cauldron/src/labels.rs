@@ -1,12 +1,12 @@
-//! **VLM label suggestions** — the state between "photographed" and "a human applied it".
+//! **Label suggestions** — the state between "photographed" and "a human applied it".
 //!
-//! `label_booth` photographs a subject; this module ships the shots to the model (`vlm`) and holds
-//! the validated [`vlm::Suggestion`]s the review UI pre-stages — **for as long as the process lives
-//! and no longer**. Nothing here writes a descriptor: applying a suggestion is the review UI's
-//! verb, through the Tiles tab's own mutator idiom and commit door.
+//! `label_booth` photographs a subject; this module ships the shots to the decision model
+//! (`decide_labels`) and holds the validated [`Suggestion`]s the review UI pre-stages — **for as long
+//! as the process lives and no longer**. Nothing here writes a descriptor: applying a suggestion is
+//! the review UI's verb, through the Tiles tab's own mutator idiom and commit door.
 //!
 //! Async shape: the booth's `ShotsReady` message → one `AsyncComputeTaskPool` task per item
-//! (PNG-encode → fingerprint → request with one reprompt-on-rejection → validate) → a frame
+//! (PNG-encode → fingerprint → one `choice`/`noul` request per `MAX_QUESTIONS` tokens) → a frame
 //! system polls the task and lands the result — with the [`crate::tiles::EditTarget`] stale
 //! guards, because the selection can move, a rescan can drop a candidate, and a re-import can
 //! reuse an id while a request is in flight. A result whose target no longer matches is dropped
@@ -38,7 +38,7 @@ use crate::label_booth::{ShotRig, ShotsReady};
 use crate::project::Project;
 use crate::tiles::EditTarget;
 use crate::label_suggestion::{LabelFailure, PromptCtx, Provenance, Suggestion};
-use crate::vlm::{self, VlmConfig};
+use crate::decide_labels::{DEFAULT_THRESHOLD, endpoint_of, label_with_decisions};
 
 /// The suggestion key for a target — id for library entries, mesh path for candidates, NEVER an
 /// index (the thumbs lesson: indices shift under removal and the wrong item inherits the data).
@@ -181,17 +181,13 @@ pub struct LabelsPlugin;
 ///
 /// # The word "connected" is only written when something connected
 ///
-/// [`crate::vlm::probe`] is a TCP dial for a loopback or LAN endpoint and a **deliberate no-op for a
-/// remote one** (Ollama Cloud: "DNS and TLS make a refusal mean several different things"), so its
-/// `Ready` cannot be read as *"the endpoint is there"* — for the remote setup it means *"not asked"*.
-/// A status line that said `connected` off the back of it would be inventing a fact for exactly the
-/// configuration that can least afford one.
-///
-/// So the link is written from **round trips that really happened**, in [`poll_tasks`]: an answer
-/// makes it [`Link::Live`] and carries the model name off the answer's own provenance, which is the
-/// authoritative one; an unreachable-endpoint failure makes it [`Link::Down`]. A gate rejection is
-/// about the mesh, not the link, and moves nothing. Until something has been asked, the line names
-/// the configured model and claims nothing.
+/// There is one decision endpoint now, and its preflight ([`crate::decide_labels::endpoint_of`] plus
+/// a TCP dial) can only tell *"a socket is open"* — not *"the model is there"*. So it is not read as
+/// evidence for the band at all: the link is written from **round trips that really happened**, in
+/// [`poll_tasks`]: an answer makes it [`Link::Live`] and carries the model name off the answer's own
+/// provenance, which is the authoritative one; an unreachable-endpoint failure makes it
+/// [`Link::Down`]. A gate rejection is about the mesh, not the link, and moves nothing. Until
+/// something has been asked, the line names the configured model and claims nothing.
 #[derive(Resource, Default)]
 pub struct Labeler {
     /// **The project root whose `.env` this state was read for** — so a project with no `.env`
@@ -288,9 +284,10 @@ fn paint_labeler(
         && labeler.read_for.as_deref() != Some(project.root.as_path())
     {
         labeler.read_for = Some(project.root.clone());
-        labeler.model = crate::vlm::VlmConfig::load(&project.root)
-            .ok()
-            .map(|cfg| cfg.model);
+        // The model the request will name, if the endpoint config names one. A llama.cpp server has
+        // one model and names none, in which case the band says the configured endpoint and claims
+        // no model until an answer arrives carrying one.
+        labeler.model = endpoint_of(&project.root).model;
         // Evidence about a round trip belongs to the project the trip was made for.
         labeler.link = Link::Untried;
     }
@@ -442,14 +439,6 @@ pub(crate) fn suggest_labels(
         return;
     }
     let Some(project) = project else { return };
-    // The config check is the verb's gate: fail here, loudly, not after a photo shoot.
-    // **A refusal, so a problem** — the editor could not label anything, and the remedy has to
-    // outlive the next receipt.
-    if is_decide_path(&project.root) {
-    } else if let Err(remedy) = VlmConfig::load(&project.root) {
-        state.status.problem(remedy);
-        return;
-    }
     let Some(target) = state.target() else {
         state
             .status
@@ -464,12 +453,6 @@ pub(crate) fn suggest_labels(
         Asked::Said(said) => state.status.note(said),
         Asked::Refused(why) => state.status.problem(why),
     }
-}
-
-/// The decision path reads its own endpoint config at the request, so the chat path's config
-/// gate does not apply to it. A bad `GRIMOIRE_LABEL_PATH` is not decide here: the request names it.
-fn is_decide_path(root: &std::path::Path) -> bool {
-    matches!(crate::decide_labels::LabelPath::load(root), Ok(crate::decide_labels::LabelPath::Decide))
 }
 
 /// **Script driving, the devshot way**: `echo wall_light > labels.request` queues that library
@@ -507,12 +490,6 @@ pub(crate) fn watch_sentinel(
         return;
     }
     let Some(project) = project else { return };
-    if is_decide_path(&project.root) {
-    } else if let Err(remedy) = VlmConfig::load(&project.root) {
-        state.status.problem(remedy);
-        warn!("labels sentinel: {}", state.status.line());
-        return;
-    }
     let Some(d) = project.library.get(&content).cloned() else {
         state.status.problem(format!(
             "labels sentinel: no library entry named `{content}`"
@@ -552,34 +529,20 @@ pub(crate) fn spawn_request(
         let root = project.root.clone();
         let date = date_today();
         let task = AsyncComputeTaskPool::get().spawn(async move {
-            // **Prose becomes `LabelFailure` at this one boundary.** `VlmConfig::load` and
-            // `encode_png` answer with a `String` and the transport answers with a type; `?` folds
-            // the prose into `LabelFailure::Refused`, so nothing from outside the transport can be
-            // read as the endpoint being down — which is exactly what `poll_tasks`' substring match
-            // over one joined string could not tell apart. The turbofish states the error type
-            // rather than leaving it to be inferred back out of `InFlight`.
-            let path = crate::decide_labels::LabelPath::load(&root)?;
+            // **Prose becomes `LabelFailure` at this one boundary.** `encode_png` and the mesh read
+            // answer with a `String` and the transport answers with a type; `?` folds the prose into
+            // `LabelFailure::Refused`, so nothing from outside the transport can be read as the
+            // endpoint being down. The turbofish states the error type rather than leaving it to be
+            // inferred back out of `InFlight`.
             let bytes = std::fs::read(&mesh_abs)
                 .map_err(|e| format!("cannot read {}: {e}", mesh_abs.display()))?;
             let fingerprint = bevy_grimoire_core::glb::fnv1a(&bytes);
             let pngs = [encode_png(&images[0])?, encode_png(&images[1])?];
-            let (suggestion, provenance) = match path {
-                crate::decide_labels::LabelPath::Chat => {
-                    let cfg = VlmConfig::load(&root)?;
-                    vlm::label_with_retry(&cfg, &pngs, &vocab, &ctx, date)?
-                }
-                crate::decide_labels::LabelPath::Decide => {
-                    let http = bevy_oracle::Http::new(bevy_oracle::Config::from_env());
-                    crate::decide_labels::label_with_decisions(
-                        &http,
-                        &pngs,
-                        &vocab,
-                        &ctx,
-                        crate::decide_labels::DEFAULT_THRESHOLD,
-                        date,
-                    )?
-                }
-            };
+            // **One path.** The endpoint is read once per request from the project's own `.env` and
+            // the process environment, and there is nothing to fall back to.
+            let http = bevy_oracle::Http::new(endpoint_of(&root));
+            let (suggestion, provenance) =
+                label_with_decisions(&http, &pngs, &vocab, &ctx, DEFAULT_THRESHOLD, date)?;
             Ok::<_, LabelFailure>((suggestion, provenance, fingerprint))
         });
         tasks.0.push(InFlight {
@@ -665,11 +628,10 @@ pub(crate) fn poll_tasks(
                 // walk carries on to the next, which is the whole point of a batch.
                 //
                 // **Asked of the value, not of the sentence.** This was
-                // `e.contains("endpoint is unreachable")`, twice, against words built in two other
-                // places (`vlm::request_labels` and `vlm::warm`) — so the abort worked only while
-                // three copies of one string agreed, and a reword would have returned the batch to
-                // discovering a dead endpoint one mesh at a time. Asked once, here, about the LINK,
-                // which is true whether or not a batch is running.
+                // `e.contains("endpoint is unreachable")`, against words built in other places, so
+                // the abort worked only while every copy of one string agreed, and a reword would
+                // have returned the batch to discovering a dead endpoint one mesh at a time. Asked
+                // once, here, about the LINK, which is true whether or not a batch is running.
                 let down = e.is_unreachable();
                 if down {
                     labeler.unreachable();
@@ -680,7 +642,7 @@ pub(crate) fn poll_tasks(
                     queue.total = 0;
                     let dropped = rig.clear_queue();
                     state.status.problem(format!(
-                        "batch stopped at {done}/{total} ({dropped} unphotographed) — {e}. The model runs on `bmb`: bring the forward up and press Shift+L again"
+                        "batch stopped at {done}/{total} ({dropped} unphotographed) — {e}. Bring the decision endpoint up (GRIMOIRE_DECIDE_ENDPOINT) and press Shift+L again"
                     ));
                 } else {
                     state
@@ -926,14 +888,14 @@ pub struct LabelQueue {
     paused: bool,
     /// **The model being loaded, before the walk starts asking it anything.**
     ///
-    /// `Some` from the moment a batch is armed until [`vlm::warm`] answers. [`drive_batch`] will
-    /// not pump while it is set, so the queue stands full and still — see [`poll_warm`].
-    warming: Option<Warm>,
+    /// `Some` from the moment a batch is armed until [`warm`] answers. [`drive_batch`] will not pump
+    /// while it is set, so the queue stands full and still — see [`poll_warm`].
+    warming: Option<Warming>,
 }
 
 /// A warm-up request in flight, and when it started — the elapsed seconds are the whole point of
 /// showing it, since the wait is minutes and a status line that does not count looks like a hang.
-struct Warm {
+struct Warming {
     task: Task<Result<(), LabelFailure>>,
     since: f64,
     /// The last whole second already reported, so the count is written once a second rather than
@@ -946,15 +908,20 @@ struct Warm {
 /// scope with nothing judged, and `Enter`/`Esc` answering the overwrite question — and they had
 /// the same four assignments written twice. The warm-up is why that mattered: added to one tail
 /// only, half the batches would still pay the model load inside mesh 1.
+///
+/// **And it is the batch's preflight.** A warm-up that fails takes the batch with it before a single
+/// mesh is photographed, which is the cheapest place to learn the endpoint is down: the failure
+/// would otherwise be discovered by the first request, after a photo shoot, and reported once per
+/// queued mesh.
 fn arm_batch(queue: &mut LabelQueue, targets: Vec<EditTarget>, root: &std::path::Path, now: f64) {
     queue.total = targets.len();
     queue.queue = targets.into_iter().collect();
     queue.paused = false;
     let root = root.to_path_buf();
-    queue.warming = Some(Warm {
+    queue.warming = Some(Warming {
         task: AsyncComputeTaskPool::get().spawn(async move {
-            let cfg = VlmConfig::load(&root)?;
-            vlm::warm(&cfg)
+            let http = bevy_oracle::Http::new(endpoint_of(&root));
+            crate::decide_labels::warm(&http)
         }),
         since: now,
         said: 0,
@@ -995,7 +962,7 @@ pub(crate) fn needs_labels(d: &bevy_grimoire_core::descriptor::Descriptor) -> bo
 /// *"what you cannot build with yet"* were held to be the same fact so they could not drift. They
 /// are not the same fact, and the day that showed it was 2026-08-16, from two directions at once:
 ///
-/// - The batch's side: an empty `effects` is the **correct** answer for most props — `vlm.rs` tells
+/// - The batch's side: an empty `effects` is the **correct** answer for most props — the labeller asks
 ///   the model so in as many words — yet it counted as owing an answer, so every judged crate was
 ///   re-photographed for ever. Asked for at the keyboard: *"if anything is marked, then it shouldn't
 ///   be relabeled."*
@@ -1059,29 +1026,22 @@ pub(crate) fn suggest_all(
         return;
     }
     let Some(project) = project else { return };
-    let cfg = match VlmConfig::load(&project.root) {
-        Ok(cfg) => cfg,
-        Err(remedy) => {
-            state.status.problem(remedy);
-            return;
-        }
-    };
     // **Ask whether anybody is home before committing to a walk.**
     //
     // Configured and reachable are different questions, and only the first was being asked: with the
-    // SSH forward down, `Shift+L` queued 778 meshes and reported 778 identical failures, one per
-    // mesh, burning the whole queue to learn one fact. Reported from the keyboard, 2026-08-15.
+    // endpoint down, `Shift+L` queued 778 meshes and reported 778 identical failures, one per mesh,
+    // burning the whole queue to learn one fact. Reported from the keyboard, 2026-08-15.
     //
-    // A warming endpoint is NOT a refusal — `llama-swap` loads a cold model in tens of seconds, so
-    // the batch starts and says so rather than making the author retry until it happens to be up.
-    match crate::vlm::probe(&cfg) {
-        crate::vlm::Reach::Ready => {}
-        crate::vlm::Reach::Warming(why) => {
+    // A warming endpoint is NOT a refusal — a cold model load takes tens of seconds, so the batch
+    // starts and says so rather than making the author retry until it happens to be up.
+    match crate::decide_labels::probe(&endpoint_of(&project.root)) {
+        crate::decide_labels::Reach::Ready => {}
+        crate::decide_labels::Reach::Warming(why) => {
             state.status.note(format!(
                 "{why} — starting anyway, the first shot may take a while"
             ));
         }
-        crate::vlm::Reach::Unreachable(remedy) => {
+        crate::decide_labels::Reach::Unreachable(remedy) => {
             state.status.problem(format!("no batch: {remedy}"));
             return;
         }
@@ -1172,12 +1132,12 @@ pub(crate) fn suggest_all(
     arm_batch(&mut queue, targets, &project.root, time.elapsed_secs_f64());
     state.status.note(if scope.is_empty() {
         format!(
-            "labeling {} piece(s) — warming the model first... Shift+L holds it",
+            "labeling {} piece(s) — readying the endpoint first... Shift+L holds it",
             queue.total
         )
     } else {
         format!(
-            "labeling {} piece(s) matching `{scope}` — warming the model first... Shift+L holds it",
+            "labeling {} piece(s) matching `{scope}` — readying the endpoint first... Shift+L holds it",
             queue.total
         )
     });
@@ -1223,7 +1183,7 @@ pub(crate) fn answer_overwrite(
     }
     arm_batch(&mut queue, targets, &project.root, time.elapsed_secs_f64());
     state.status.note(format!(
-        "labeling {} piece(s) — warming the model first... Shift+L holds it",
+        "labeling {} piece(s) — readying the endpoint first... Shift+L holds it",
         queue.total
     ));
 }
@@ -1255,7 +1215,7 @@ pub(crate) fn poll_warm(
             let (_, total) = queue.progress();
             state
                 .status
-                .note(format!("warming the model... {waited}s ({total} queued)"));
+                .note(format!("readying the endpoint... {waited}s ({total} queued)"));
         }
         return;
     };
@@ -1386,8 +1346,9 @@ pub(crate) fn paint_labels_badge(
 ///
 /// Replacement semantics on the axis lists, not union: the model saw the current values in its
 /// prompt and its answer is the complete proposed state — a union would make every review a merge
-/// puzzle. The lists arrive already deduplicated and in vocabulary order ([`vlm::validate`]'s
-/// contract, the `on_tag_chip` sort rule), so diffs show real changes only. Fields the suggestion
+/// puzzle. The lists arrive already deduplicated and in vocabulary order
+/// (`decide_labels::suggest`'s contract, the `on_tag_chip` sort rule), so diffs show real changes
+/// only. Fields the suggestion
 /// does not carry stay untouched; undo covers regret like any other edit.
 /// **Recompute the derived half of `effects` from `kind`, using the vocabulary's own rule.**
 ///
@@ -1508,8 +1469,8 @@ pub fn apply_fields(
         // **A different model does not inherit the last one's attributions.** `origin.by = was.by`
         // was unconditional, and `AxisOrigin` is `Copy`, so every axis a previous run had stamped
         // came across whole — while `origin.model` and `origin.confidence` had already been replaced
-        // with THIS run's. Label with `qwen3-vl`, change `GRIMOIRE_VLM_MODEL`, press `L` again with a
-        // proposal carrying no mount, and the record read `mount: Model` beside the name of a model
+        // with THIS run's. Label with one model, change the endpoint's `GRIMOIRE_DECIDE_MODEL`, press
+        // `L` again with a proposal carrying no mount, and the record read `mount: Model` beside a model
         // that had said nothing about the mount.
         //
         // So when the answering model's name has changed, only what a PERSON put there carries
@@ -1562,8 +1523,8 @@ pub fn apply_fields(
     // **And a measured front stands.** This was `if let Some(front) = s.front { d.align.front =
     // Some(front) }` — set-only, so a model could overwrite a face `Glb::derive_front` had measured
     // off the vertex buffer, and could never CLEAR one: `Align::front`'s `None` *means* symmetric,
-    // and `vlm.rs` instructs the model to answer `null` for a symmetric mesh, so the one answer
-    // that could correct a wrong front was the one answer that could not land. Symmetry is a
+    // and a measured front is never re-asked, so the one answer that could correct a wrong front was
+    // the one answer that could not land. Symmetry is a
     // property of the vertex buffer and two renders cannot settle it, so the measurement wins.
     //
     // The disagreement is said out loud rather than swallowed: a proposal that silently did nothing
@@ -1668,11 +1629,10 @@ pub fn model_short(model: &str) -> &str {
 mod tests {
     /// **The band never says `connected` about something nothing has connected to.**
     ///
-    /// `vlm::probe` is a no-op for a remote endpoint by design, so "configured" and "reachable" are
-    /// different questions and only a completed round trip answers the second. This pins the four
-    /// states apart, because the tempting simplification — print `connected` as soon as a model is
-    /// configured — is a readout that is wrong exactly when the tunnel is down, which is the one
-    /// time an author is reading it.
+    /// A configured endpoint and a reachable one are different questions, and only a completed round
+    /// trip answers the second. This pins the states apart, because the tempting simplification —
+    /// print `connected` as soon as an endpoint is configured — is a readout that is wrong exactly
+    /// when the endpoint is down, which is the one time an author is reading it.
     #[test]
     fn the_labeler_line_claims_only_what_has_happened() {
         use super::{Labeler, Link};
@@ -2061,9 +2021,9 @@ mod tests {
     /// **Anything marked means judged — an empty axis is an answer, not a gap.**
     ///
     /// This was the opposite: *any* of the four fields being empty meant "needs labels". That put
-    /// the test in direct contradiction with what the labeler is told to return — `vlm.rs` instructs
-    /// the model that for `effects`, *"MOST OBJECTS HAVE NONE — a barrel, a crate, a chair, a table
-    /// do nothing to the world. Leave this EMPTY"*. So every correctly judged prop came back empty
+    /// the test in direct contradiction with what the labeler asks — the `effects` questions tell the
+    /// model that *"MOST OBJECTS HAVE NONE — a barrel, a crate, a chair, a table do nothing to the
+    /// world"*. So every correctly judged prop came back empty
     /// on that axis, failed the test, and was re-photographed on every walk, for ever.
     ///
     /// Reported at the keyboard, 2026-08-16: *"if anything is marked, then it shouldn't be
@@ -2360,8 +2320,8 @@ mod tests {
     ///
     /// The previous record's whole per-axis map was copied across unconditionally — `AxisOrigin` is
     /// `Copy`, so the copy was invisible — while `model` and `confidence` had already been replaced
-    /// with the new run's. Label with one model, change `GRIMOIRE_VLM_MODEL`, press `L` again with a
-    /// proposal carrying no mount, and the record read `mount: Model` beside the name of a model
+    /// with the new run's. Label with one model, change the endpoint's `GRIMOIRE_DECIDE_MODEL`, press
+    /// `L` again with a proposal carrying no mount, and the record read `mount: Model` beside a model
     /// that had said nothing about the mount: a provenance field actively misinforming the person
     /// reading it, which is the one failure worse than having no field at all.
     ///
@@ -2471,9 +2431,8 @@ mod tests {
     ///
     /// The write was set-only — `if let Some(front) = s.front { d.align.front = Some(front) }` — so
     /// a model could overwrite a face `Glb::derive_front` had measured off the vertex buffer, and
-    /// could never CLEAR one: `Align::front`'s `None` *means* symmetric and `vlm.rs` instructs the
-    /// model to answer `null` for a symmetric mesh, so the answer that mattered most was the one
-    /// answer that could not land. Symmetry is a property of the vertex buffer; two three-quarter
+    /// could never CLEAR one: `Align::front`'s `None` *means* symmetric, so the answer that mattered
+    /// most was the one answer that could not land. Symmetry is a property of the vertex buffer; two three-quarter
     /// renders cannot settle it, and `bevy_grimoire` turns the piece by `front.yaw_degrees()` — so a
     /// wrong front is a mesh standing the wrong way round in the world, not a cosmetic note.
     #[test]

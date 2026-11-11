@@ -90,20 +90,20 @@ Goal: set a piece's labels yourself.
 
 What you see: the labels row reads `by hand · <date>` once every axis is set and no model was used.
 
-## Label with the VLM labeller
+## Label with the decision labeller
 
-Goal: have a vision model propose labels for a piece, and check them.
+Goal: have a decision model propose labels for a piece, and check them.
 
-The labeller sends a photograph of a piece to a vision model. The model replies with tokens for each axis. The editor applies them as they arrive.
+The labeller sends two photographs of a piece to a decision model and asks one yes/no question per token in the project's vocabulary. The model answers with a probability for each, and the editor suggests every token at or above the threshold. Nothing is generated and nothing is parsed, so a word the project does not have can never come back.
 
-Set this up once. The labeller needs `GRIMOIRE_VLM_KEY`. Put it in the project root's `.env` file, which is gitignored, or set it in the environment. A value in the environment wins over the one in `.env`.
+Set this up once. Put the endpoint in the project root's `.env` file, which is gitignored, or set it in the environment. A value in the environment wins over the one in `.env`.
 
-- `GRIMOIRE_VLM_KEY`: required. An empty value is an error.
-- `GRIMOIRE_VLM_URL`: the chat-completions endpoint. The default is `http://127.0.0.1:9292/v1/chat/completions`.
-- `GRIMOIRE_VLM_MODEL`: the model to ask. The default is `qwen3.8-27b`.
-- `GRIMOIRE_VLM_TIMEOUT_SECS`: how long to wait for a reply. The default is 600.
-- `GRIMOIRE_VLM_THINK`: set to `1` or `true` to let the model reason before it answers. It is off by default.
-- `GRIMOIRE_VLM_MAX_TOKENS`: the reply's length limit. The default is 2000.
+- `GRIMOIRE_DECIDE_ENDPOINT`: the decision endpoint. The default is `http://127.0.0.1:8093/v1/systemone`; serve it with `tools/decide/serve-clef-flash.sh`.
+- `GRIMOIRE_DECIDE_MODEL`: the model to ask, when the endpoint serves more than one. A `llama.cpp` server names none and needs none.
+- `GRIMOIRE_DECIDE_KEY`: sent as a bearer token when the endpoint wants one. Cloudflare Workers AI needs it; a local server does not.
+- `GRIMOIRE_DECIDE_TIMEOUT_SECS`: how long to wait for an answer. The default is 60.
+
+There is one labelling path. There is no setting that chooses a second one and no fallback endpoint.
 
 Steps:
 
@@ -118,10 +118,9 @@ What you see: the labels row reads `confidence <level> · <model> · <date>` in 
 
 If it goes wrong:
 
-- If `GRIMOIRE_VLM_KEY` is not set, the labeller stops before it asks, and the message names the missing setting.
-- The editor checks a local or LAN endpoint before it asks. A remote endpoint is not checked in advance, so a failure shows only when the request runs.
-- The reply must use only tokens in the vocabulary. The editor refuses the whole suggestion if any token is outside it, and asks the model once more. If the second reply is still wrong, nothing is applied. To allow a word the vocabulary lacks, add it to `assets/grimoire/vocab.ron` by hand.
-- A reply that names no model is refused.
+- The editor dials a local or LAN endpoint before it starts a walk. A remote endpoint is not dialled in advance, so a failure shows only when the request runs.
+- Every token suggested is one the project's vocabulary has, because the questions are built from it. To allow a word the vocabulary lacks, add it to `assets/grimoire/vocab.ron` by hand, and it becomes a question.
+- An answer that names no model is refused.
 - A mesh that lies on its side is not turned for you. Turn it with `N` (X), `O` (Y) or `P` (Z) on the Meshes panel, then press `L` again.
 
 ## Confirm or correct a label
