@@ -15,13 +15,13 @@ fn entry() -> DataFile {
 }
 
 fn refused(text: &str) -> Refusal {
-    data_files::check("mob.ron", &entry(), text).expect_err("the file was accepted")
+    data_files::check("mob.yaml", &entry(), text).expect_err("the file was accepted")
 }
 
 #[test]
 fn a_file_that_holds_every_bounded_leaf_inside_its_bounds_reads() {
-    assert_eq!(data_files::check("mob.ron", &entry(), GOOD), Ok(()));
-    let leaves = data_files::read("mob.ron", GOOD).unwrap();
+    assert_eq!(data_files::check("mob.yaml", &entry(), GOOD), Ok(()));
+    let leaves = data_files::read("mob.yaml", GOOD).unwrap();
     assert!(leaves.contains(&("mob.speed".to_owned(), "1.5".to_owned())), "{leaves:?}");
 }
 
@@ -31,14 +31,14 @@ fn a_file_cut_off_is_refused_at_the_leaf_where_reading_stopped() {
     // YAML reads happily. A document cut off after `name: or` is the file that does not read, and the leaf it
     // stopped at is the one the refusal names.
     let r = refused("# tuning\nmob:\n  speed: 1.5\n  name: \"orc");
-    assert_eq!((r.kind, r.file.as_str(), r.field.as_deref()), ("game_data", "mob.ron", Some("mob.name")), "{r:?}");
+    assert_eq!((r.kind, r.file.as_str(), r.field.as_deref()), ("game_data", "mob.yaml", Some("mob.name")), "{r:?}");
     assert!(r.sentence().starts_with("mob.ron (mob.name): "), "{}", r.sentence());
 }
 
 #[test]
 fn text_that_is_not_yaml_is_refused_with_the_file_and_no_field() {
     let r = refused("this is not a tuning file");
-    assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.ron", None), "{r:?}");
+    assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.yaml", None), "{r:?}");
     assert!(r.sentence().starts_with("mob.ron: "), "{}", r.sentence());
     assert_eq!(refused("").field, None, "an empty file is not a tuning file");
 }
@@ -46,14 +46,14 @@ fn text_that_is_not_yaml_is_refused_with_the_file_and_no_field() {
 #[test]
 fn a_bounded_leaf_of_the_wrong_type_is_refused_by_its_path() {
     let r = refused("mob:\n  speed: fast\n  name: orc\n  hp: 7\nfast: false\n");
-    assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.ron", Some("mob.speed")), "{r:?}");
+    assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.yaml", Some("mob.speed")), "{r:?}");
     assert!(r.reason.contains("a string") && r.reason.contains("number"), "{}", r.reason);
 }
 
 #[test]
 fn a_bounded_leaf_the_file_lacks_is_refused_by_its_path_and_the_nearest_are_named() {
     let r = refused("mob:\n  speed: 1.5\n  name: orc\nfast: false\n");
-    assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.ron", Some("mob.hp")), "{r:?}");
+    assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.yaml", Some("mob.hp")), "{r:?}");
     assert!(r.reason.contains("no such leaf") && r.reason.contains("`mob.speed`"), "{}", r.reason);
 }
 
@@ -70,7 +70,7 @@ fn a_bounded_leaf_outside_its_bounds_is_refused_by_its_path_with_the_range() {
 #[test]
 fn only_the_leaves_the_registry_bounds_are_held_to_a_type() {
     // `name` and `fast` are the game's own business: this crate has no type for them.
-    assert_eq!(data_files::check("mob.ron", &entry(), "mob:\n  speed: 1.5\n  name: 3\n  hp: 7\nfast: \"yes\"\n"), Ok(()));
+    assert_eq!(data_files::check("mob.yaml", &entry(), "mob:\n  speed: 1.5\n  name: 3\n  hp: 7\nfast: \"yes\"\n"), Ok(()));
 }
 
 #[test]
