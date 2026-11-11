@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-11
+
+- **ui-73-live-text-resize** `dc536981` A label already on screen follows the text size: chrome::TypeRole plus chrome::resize_the_labels rewrite every drawn TextFont when the setting changes, and chrome::LinesRoom grows the room that holds it *For you: Changing the text size now enlarges the labels that are already on screen, not only the ones drawn after you changed it.* *No clip: visible, not yet recorded: fleet worker*
+
 ## 2026-11-10
 
 - **projects-home-one-press** `5dd407dc` One press on a project card opens it: the choose-then-open step is gone, so the card acts as every other control on the home does, and the accent rail marks the card the keyboard or the pointer is on (feedback-1794103491165, #344) *For you: One click on a project now opens it, instead of needing a second click you had no reason to expect.* *No clip: visible, not yet recorded: fleet worker*
