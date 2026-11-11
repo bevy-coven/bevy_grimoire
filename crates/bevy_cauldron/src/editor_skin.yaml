@@ -163,6 +163,16 @@ tones:
     green: 0.181
     blue: 0.158
     alpha: 1.0
+  overlay_dark: !LinearRgba
+    red: 0.05
+    green: 0.12
+    blue: 0.45
+    alpha: 0.35
+  overlay_lit: !LinearRgba
+    red: 1.0
+    green: 0.62
+    blue: 0.12
+    alpha: 0.85
   row_pressed: !Srgba
     red: 0.11
     green: 0.102
