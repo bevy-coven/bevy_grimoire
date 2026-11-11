@@ -290,6 +290,10 @@ fn the_current_line_is_not_a_pointer_target_and_no_rows_text_is() {
         .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
         .single(app.world())
         .expect("the INSPECTOR draws one history list");
+    // **One frame for the pool to settle**: gooey rebinds its rows in `GooeySystems::Style` and the marking system
+    // writes the `Pickable` from the same frame's commands, so the answer a person's pointer meets is the one after
+    // that flush.
+    app.update();
     let depth = state(&app).undo_depth();
     let selected = app.world().get::<bevy_gooey::TableSelection>(tree).cloned().unwrap_or_default();
     assert_eq!(
