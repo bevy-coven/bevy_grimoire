@@ -137,11 +137,16 @@ impl Operation for LabelSuggest {
         let (suggestion, provenance) =
             label_with_decisions(&http, &pngs, &project.vocab, &prompt, DEFAULT_THRESHOLD, date)
                 .map_err(|e| Refusal::new(e.to_string()))?;
+        // **The one-line receipt names what the proposal actually says.** `what` is the labeller's
+        // own sentence and the decision path has none, so the kinds carry the line instead — the
+        // same tokens a reader looks for on the piece, rather than an empty colon.
+        let says = if suggestion.what.trim().is_empty() {
+            suggestion.kind.join(", ")
+        } else {
+            suggestion.what.clone()
+        };
         Ok(Outcome {
-            summary: format!(
-                "`{}` proposed by {}: {}",
-                p.id, provenance.model, suggestion.what
-            ),
+            summary: format!("`{}` proposed by {}: {says}", p.id, provenance.model),
             affected: 0,
             saved: false,
             inverse: None,

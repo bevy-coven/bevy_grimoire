@@ -2164,33 +2164,51 @@ mod tests {
         assert!(!q.running() && !q.paused());
     }
 
-    /// **A labelling proposal never writes a description, and never claims one.**
+    /// **The decision path's proposal writes no description, and claims none.**
     ///
-    /// The decision path has no sentence to offer — it answers a probability per token — so its
-    /// `Suggestion.what` is the token list and its `note` is `None`. `description()` used to fall
-    /// back to `what`, which meant every apply wrote `"seating, light"` over a piece's hand-written
-    /// description AND stamped `Axis::Note` as the model's, so the record said a machine had decided
-    /// a sentence no machine had written. Reported by review of #113.
+    /// The defect was in the PRODUCER, not in [`Suggestion::description`]: `decide_labels::suggest`
+    /// set `what` to the token list (`kind.join(", ")`) with `note: None`, and `description()`'s
+    /// documented fallback to `what` then made every apply overwrite an author's description with
+    /// `"seating, light"` and stamp `Axis::Note` as the model's — the record said a machine decided
+    /// a sentence no machine had written, and the detail pane offered that string as a proposal.
     ///
-    /// This is the producer's shape exactly: `decide_labels::suggest`'s own output.
+    /// So this test drives the real producer and asserts what comes out of it, rather than building
+    /// the shape by hand: if `suggest` ever starts inventing prose again, this goes red.
     #[test]
     fn a_decision_path_suggestion_writes_no_description_and_claims_none() {
+        use crate::decide_labels::{DEFAULT_THRESHOLD, suggest};
         use bevy_grimoire_core::descriptor::{Axis, By};
+        use bevy_oracle::{Answer, Response};
+
+        let v = vocab();
+        let mut answers = std::collections::BTreeMap::new();
+        // A judgement naming a kind, which is what used to become `what: "light"`.
+        for id in ["kind:light", "look:metal"] {
+            answers.insert(id.to_owned(), Answer::Noul { noul: 0.97 });
+        }
+        let decided = suggest(
+            &v,
+            &[Response { model: Some("clef".into()), answers, usage: None }],
+            DEFAULT_THRESHOLD,
+        );
+        let s = decided.suggestion;
+        assert_eq!(s.kind, vec!["light".to_owned()], "the tokens land on `kind`");
+        assert!(
+            s.what.trim().is_empty(),
+            "the producer must not invent a description from the tag list: {:?}",
+            s.what
+        );
+        assert_eq!(s.description(), None, "and so it offers no description at all");
 
         let mut d = bevy_grimoire_core::descriptor::Descriptor {
             note: Some("hand-written by the author".to_owned()),
             ..Default::default()
         };
-        let mut s = suggestion();
-        // What `suggest` builds: the token list in `what`, and nothing in `note`.
-        s.what = "light, emit".to_owned();
-        s.note = None;
-        apply_fields(&mut d, &s, &stamp(), &vocab());
-
+        apply_fields(&mut d, &s, &stamp(), &v);
         assert_eq!(
             d.note.as_deref(),
             Some("hand-written by the author"),
-            "the author's description must survive a proposal that offers none"
+            "the author's description survives a proposal that offers none"
         );
         let rec = d.labels.clone().expect("an apply leaves a record");
         assert_ne!(
@@ -2198,9 +2216,6 @@ mod tests {
             Some(By::Model),
             "and the record must not say a model wrote a description it never wrote"
         );
-
-        // The preview agrees with the apply, because both ask `description()`.
-        assert_eq!(s.description(), None, "a tag list is not a description");
     }
 
     /// Apply semantics: axis lists REPLACE (the model answered with the complete proposed state —

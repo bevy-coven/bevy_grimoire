@@ -197,7 +197,13 @@ pub fn suggest(vocab: &Vocabularies, responses: &[Response], threshold: f64) -> 
         Confidence::High
     };
     let suggestion = Suggestion {
-        what: if kind.is_empty() { String::new() } else { kind.join(", ") },
+        // **No identification, because this path does not make one.** It answers a probability per
+        // token, so the only thing it could put here is the token list — and `what` is a SENTENCE
+        // that `Suggestion::description` offers as the piece's description when `note` is empty.
+        // Writing the tag list there meant every apply overwrote an author's description with
+        // `"seating, light"` and stamped `Axis::Note` as the model's; the tokens belong on `kind`,
+        // where a reader already looks for them, and this stays empty (review of #113).
+        what: String::new(),
         effects: picked("effects"),
         look: picked("look"),
         offers_surfaces: picked("surfaces"),
