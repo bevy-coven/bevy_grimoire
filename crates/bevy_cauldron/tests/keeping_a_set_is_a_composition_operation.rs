@@ -45,12 +45,22 @@ fn call(app: &mut App, method: &str, params: serde_json::Value) -> serde_json::V
         .unwrap_or_else(|e| panic!("{method}: {e:?}"))
 }
 
+/// **Frames that let an agent's apply finish being followed.** `composition_define` shows a composition, so the
+/// follow queues a reveal that crosses to the COMPOSE tab over the next frames (AF-03). A test that goes straight on
+/// to press `M` raced it: on a loaded host the crossing landed after the test set the Map tab, `M` was
+/// Map-only and did nothing, and `Enter` armed the composition from COMPOSE (#389).
+const FOLLOW_SETTLE_FRAMES: usize = 8;
+
 fn define(app: &mut App, parameters: serde_json::Value) -> serde_json::Value {
-    call(
+    let outcome = call(
         app,
         "grimoire/operation_apply",
         serde_json::json!({"operation": "composition_define", "parameters": parameters, "dry_run": false}),
-    )
+    );
+    for _ in 0..FOLLOW_SETTLE_FRAMES {
+        app.update();
+    }
+    outcome
 }
 
 fn comps(root: &std::path::Path) -> String {
