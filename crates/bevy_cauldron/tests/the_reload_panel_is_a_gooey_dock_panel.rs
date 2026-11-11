@@ -93,7 +93,7 @@ fn the_bottom_dock_is_gooeys_and_stands_under_the_body() {
     let mut app = editor("laid_out");
     // **A window with room to spare**: the dock is a real row only above the workbench's floor.
     harness::resize_surface(&mut app, 1536, 1500).unwrap_or_else(|e| panic!("{e}"));
-    for _ in 0..4 {
+    for _ in 0..8 {
         app.update();
     }
     let (bottom, body, status, arrangement) = {

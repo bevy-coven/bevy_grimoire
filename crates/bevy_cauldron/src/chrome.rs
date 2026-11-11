@@ -1495,9 +1495,6 @@ pub fn spawn_frame(
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Stretch,
                 flex_grow: 1.0,
-                // **The workbench's own floor, as its flex basis** ([`WORKBENCH_FLOOR_H`]): what the
-                // bottom dock may not take, so the dock is what gives way when the window is short.
-                flex_basis: Val::Px(WORKBENCH_FLOOR_H),
                 min_height: Val::Px(0.0),
                 ..default()
             },
@@ -1645,15 +1642,15 @@ pub fn spawn_frame(
         Node {
             width: Val::Percent(100.0),
             height: Val::Px(BOTTOM_DOCK_H),
-            // **It gives way first, and it may give way entirely** ([`BOTTOM_DOCK_YIELDS_FIRST`]): the
-            // dock is the room the workbench can spare, so a window too short for both has no dock
-            // rather than a viewport and an inspector squeezed to a sliver. Clipped, so a dock shrunk
-            // to nothing paints nothing over the terminal or the status band under it.
-            min_height: Val::Px(0.0),
-            flex_shrink: BOTTOM_DOCK_YIELDS_FIRST,
-            overflow: Overflow::clip(),
+            flex_shrink: 0.0,
+            // **Not shown until there is room** ([`crate::shell_view::give_the_bottom_dock_its_room`]
+            // opens it): a dock that is never laid out has no text for a label census to find drawn
+            // outside it, and takes nothing from the workbench.
+            display: Display::None,
+            border: UiRect::top(Val::Px(EDGE_W)),
             ..default()
         },
+        BorderColor::all(ink().panel_edge),
     ));
 
     commands
@@ -1674,23 +1671,17 @@ pub fn spawn_frame(
 }
 
 /// **The height of the bottom dock** (UI-61, #247), logical px: a panel's body at a comfortable
-/// reading size — a heading and six lines of the reload state. It is the dock's height only when the
-/// window has that room to spare ([`WORKBENCH_FLOOR_H`]); a shorter window gives it less, down to none.
+/// reading size — a heading and six lines of the reload state.
 pub const BOTTOM_DOCK_H: f32 = 148.0;
 
-/// **The least height the workbench keeps**, logical px: the row of the left dock, the viewport and the
-/// inspector. The editor's reference window (1280 x 720, which the headless harness's surface
-/// reproduces) measured 326 px of workbench with the terminal open and no bottom dock; the floor is
-/// that, rounded up. At 148 px the bottom dock took half of it and left the inspector 24 px of
-/// visible height at the reference window — a note being typed was off the panel — so the dock is
-/// given room only above this floor.
-pub const WORKBENCH_FLOOR_H: f32 = 330.0;
-
-/// **How much faster than the workbench the bottom dock shrinks**, a flex shrink factor. A flex
-/// container takes a short window's overflow from its items in proportion to `flex_shrink` x basis;
-/// this makes the dock's share so much the larger that it is spent (to zero) before the workbench
-/// loses a pixel of what it had when the dock was not there.
-pub const BOTTOM_DOCK_YIELDS_FIRST: f32 = 1000.0;
+/// **The least height the workbench keeps while the bottom dock is shown**, logical px: the row of
+/// the left dock, the viewport and the inspector. The dock is the room the workbench can spare, so it
+/// is shown only when the workbench would still have this much beside it. Set from the editor's
+/// reference window (1280 x 720, which the headless harness's surface reproduces): with the terminal
+/// open the Map workbench measures 326 px there, and a 148-px dock took nearly half of that and left
+/// the inspector 24 px of visible height — a note being typed was off the panel — and in the Kit tabs
+/// it covered their badge legends.
+pub const WORKBENCH_FLOOR_H: f32 = 420.0;
 
 /// **The dock that holds the workspace's arrangement** (UI-30, #224; a second dock since #247).
 ///
