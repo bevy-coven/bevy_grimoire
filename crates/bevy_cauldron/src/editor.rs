@@ -8186,11 +8186,17 @@ fn history_block(s: &mut ChildSpawnerCommands) {
     ));
 }
 
-/// **The words of the history's line for `position`**, or `None` past the end. `0` is before the first change,
-/// and the line the editor stands on says `now:`.
+/// The history's first line: the map before any change. Fits beside `now: ` in a list row at 200% text.
+const HISTORY_START_LINE: &str = "the original map";
+
+/// **The words of the history's line for `position`**, or `None` past the end. `0` is the map as it was before the first
+/// change, and the line the editor stands on says `now:`.
+///
+/// **The first line is short on purpose** ([`HISTORY_START_LINE`]): at 200% text a list row is about 22 characters wide, and
+/// "now: before the first change" was cut by its cell, which a person at that size could not read.
 fn history_line(state: &EditorState, position: usize, depth: usize) -> Option<String> {
     let (what, who) = if position == 0 {
-        ("before the first change".to_owned(), "")
+        (HISTORY_START_LINE.to_owned(), "")
     } else {
         let row = state.history_row(position)?;
         (row.label, if row.agent { "the Familiar" } else { "you" })
