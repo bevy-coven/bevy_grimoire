@@ -387,7 +387,13 @@ fn a_rigs_page_opens_on_the_rig_bench_with_that_rig_selected() {
     let text = std::fs::read_to_string(&rig).expect("the fixture copied rigs.yaml");
     let name = bevy_grimoire_core::yaml::to_json(&text, "rigs.yaml")
         .ok()
-        .and_then(|rigs| rigs["rigs"].as_object().and_then(|rigs| rigs.keys().next().cloned()))
+        .and_then(|rigs| {
+            rigs["rigs"].as_object().and_then(|rigs| {
+                rigs.iter()
+                    .find(|(_, rig)| rig["slots"].as_array().is_some_and(|slots| slots.iter().any(|slot| slot["playback"].get("Gait").is_some())))
+                    .map(|(name, _)| name.clone())
+            })
+        })
         .expect("rigs.yaml names a rig");
     let rig = name;
     let answer = apply(
