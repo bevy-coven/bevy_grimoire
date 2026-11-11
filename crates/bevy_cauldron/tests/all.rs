@@ -364,6 +364,7 @@ mod the_editor_and_the_game_agree;
 mod the_editor_follows_an_agents_change;
 mod the_follow_never_moves_a_persons_camera;
 mod the_follow_opens_the_page_a_change_is_on;
+mod the_reload_panel_is_a_gooey_dock_panel;
 mod the_reveal_selects_a_row_a_person_can_see;
 mod the_follow_waits_for_a_person_using_the_view;
 mod the_person_is_never_yanked_review_two;

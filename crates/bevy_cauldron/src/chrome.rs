@@ -1101,6 +1101,11 @@ pub struct Frame {
     /// The hole the world is drawn through. Carries [`ViewportSlot`].
     pub viewport: Entity,
     pub right: Entity,
+    /// **The bottom dock** (UI-61, #247): a gooey `Dock` across the foot of the workbench, under the
+    /// body and above the status band. It holds the panels that say what became of the work —
+    /// `docs/ui/vision.md`'s "bottom dock: history · problems · notes · log", of which the reload
+    /// panel is the first to move here.
+    pub bottom: Entity,
     /// One band at the foot of the window: what happened, what went wrong, what the keys are.
     pub status: Entity,
 }
@@ -1569,6 +1574,7 @@ pub fn spawn_frame(
     // dragged. Moving the two docks onto gooey's `Dock` as well is the rest of this issue.
     let dock = commands
         .spawn((
+            ArrangementDock,
             bevy_gooey::Dock(layout),
             // **The map is where a library piece may be let go** (UI-52, #238): the dock covers the viewport, so it is
             // the drop target, and `editor::drop_a_piece_on_the_map` places what lands on it.
@@ -1606,9 +1612,38 @@ pub fn spawn_frame(
     commands.entity(dock).add_child(silent_body);
     commands.entity(viewport).add_child(dock);
 
+    // **And the bottom dock** (UI-61, #247): a gooey `dock()` — the bundle, which brings its own real
+    // body, so its panels are built and laid out — across the foot of the workbench. A row of the root's
+    // own column between the body and the status band, so it takes its height from the window and every
+    // panel above it keeps the rest. It starts on the reload panel: what became of each file's last edit
+    // is the thing an author looks away from the map to read.
+    //
+    // **The `Node` is inserted after the spawn, not beside the bundle.** `bevy_gooey::dock()` brings a
+    // `Node` of its own (`dock()` is `Node { 100% x 100% }, Role::Dock, Dock(layout), children![..]`),
+    // and a bundle carrying the same component twice panics at spawn — every system that reads
+    // `Frame` then failed with "Resource does not exist", because `spawn_frame` never finished.
+    let bottom = commands
+        .spawn((
+            BottomDock,
+            bevy_gooey::dock(bevy_gooey::DockLayout::group(["reload"])),
+            bevy::picking::Pickable::IGNORE,
+        ))
+        .id();
+    commands.entity(bottom).insert((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(BOTTOM_DOCK_H),
+            min_height: Val::Px(BOTTOM_DOCK_MIN_H),
+            flex_shrink: 0.0,
+            border: UiRect::top(Val::Px(EDGE_W)),
+            ..default()
+        },
+        BorderColor::all(ink().panel_edge),
+    ));
+
     commands
         .entity(root)
-        .add_children(&[chrome_bar, door_strip, body, status]);
+        .add_children(&[chrome_bar, door_strip, body, bottom, status]);
 
     commands.insert_resource(Frame {
         root,
@@ -1618,9 +1653,32 @@ pub fn spawn_frame(
         left,
         viewport,
         right,
+        bottom,
         status,
     });
 }
+
+/// **The height of the bottom dock** (UI-61, #247), logical px: a panel's body at a comfortable
+/// reading size — a heading and six lines of the reload state — and small enough that the workbench
+/// above it keeps its own floors on a 1280 x 800 window.
+pub const BOTTOM_DOCK_H: f32 = 148.0;
+
+/// **The least the bottom dock may be dragged to**, logical px: gooey's own dock-pane floor, so a
+/// divider drag cannot shut the panel it holds.
+pub const BOTTOM_DOCK_MIN_H: f32 = bevy_gooey::DOCK_PANE_MIN_PX;
+
+/// **The dock that holds the workspace's arrangement** (UI-30, #224; a second dock since #247).
+///
+/// `ui::save_the_layout` and `ui::follow_the_saved_layout` write and read the *workspace's* layout, so
+/// they must reach this dock and no other: with a bottom dock in the frame, an unfiltered query
+/// would write the arrangement into the bottom dock and read the bottom dock's layout back as the
+/// workspace's.
+#[derive(Component)]
+pub struct ArrangementDock;
+
+/// **The bottom dock** (UI-61, #247): the panels that say what became of the work.
+#[derive(Component)]
+pub struct BottomDock;
 
 /// **A panel's heading.**
 ///
