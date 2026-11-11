@@ -23,7 +23,7 @@ use bevy_cauldron::agent_guide::UserGuideFile;
 use bevy_cauldron::familiar::FamiliarItem;
 use bevy_cauldron::harness;
 use bevy_cauldron::present::Lessons;
-use bevy_cauldron::wish_view::{LessonDiscard, LessonKeep};
+use bevy_cauldron::wish_view::{LessonDiscard, LessonKeep, WishUnfold};
 use bevy_grimoire_core::agent_guide::PROJECT_PATH;
 use bevy_grimoire_core::lesson::{LESSON_MAX_CHARS, LESSONS_HEADING};
 use bevy_grimoire_core::trust::{self, TrustStore};
@@ -149,7 +149,25 @@ fn lessons(app: &mut App) -> Vec<serde_json::Value> {
     state["lessons"].as_array().unwrap_or_else(|| panic!("lessons is a list: {}", state["lessons"])).clone()
 }
 
+/// **Unfold the row**, which is where its two answers live: a row is a one-line fold until a person
+/// presses it, exactly as a wish's is.
+fn unfold(app: &mut App, id: &str) {
+    let entity = {
+        let world = app.world_mut();
+        let mut query = world.query::<(Entity, &bevy_cauldron::wish_view::WishOf)>();
+        query
+            .iter(world)
+            .filter(|(entity, of)| of.0 == id && world.entity(*entity).contains::<bevy_cauldron::wish_view::WishUnfold>())
+            .map(|(entity, _)| entity)
+            .next()
+            .unwrap_or_else(|| panic!("the AGENT block shows no row for `{id}`"))
+    };
+    app.world_mut().commands().trigger(Activate { entity });
+    updates(app, 6);
+}
+
 fn press<T: Component>(app: &mut App, id: &str) {
+    unfold(app, id);
     let entity = {
         let world = app.world_mut();
         let mut query = world.query::<(Entity, &T, &bevy_cauldron::wish_view::WishOf)>();

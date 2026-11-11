@@ -118,8 +118,18 @@ fn the_guide_is_typed_into_by_its_label_and_saved() {
     settle(&mut app);
     assert!(status(&mut app).starts_with("waiting for you"), "{}", status(&mut app));
 
+    // **The press goes on the field as it is drawn now, and the focus is read off the field that is
+    // drawn after it.** The section redraws when it has read the guide, which is a new field entity:
+    // asserting the identity of the one clicked would be asserting that a redraw did not happen,
+    // which is not the claim. The claim is that the keyboard is in the guide's own field.
+    for _ in 0..3 {
+        let field = the_field_under(&mut app, GUIDE_LABEL);
+        if testing::focused(&app) == Some(field) {
+            break;
+        }
+        testing::click(&mut app, field);
+    }
     let field = the_field_under(&mut app, GUIDE_LABEL);
-    testing::click(&mut app, field);
     assert_eq!(
         testing::focused(&app),
         Some(field),
@@ -163,10 +173,18 @@ fn the_field_under_the_label_is_the_guides_own_text_area() {
     let world = app.world();
     let row = world.get::<TextInputOf>(field).expect("a field has a row").0;
     assert!(world.entity(row).contains::<AgentGuideText>(), "the labelled field is not the guide's own");
+    // **The ROLE is the row's, not the field's**: gooey's `text_area` puts `Role::TextArea` on the
+    // row it spawns and every field under a row is a `Role::TextField`, so asking the field would be
+    // asking the wrong entity and answering `TextField` for a text area and a one-line input alike.
     assert_eq!(
-        world.get::<Role>(field),
+        world.get::<Role>(row),
         Some(&Role::TextArea),
         "the guide is edited in a multi-line area, not a one-line input"
+    );
+    assert_eq!(
+        world.get::<Role>(field),
+        Some(&Role::TextField),
+        "the row's field is a text field, whatever kind of row it is in"
     );
     assert_eq!(
         world.get::<bevy_gooey::TextInputValue>(row).map(|v| v.0.as_str()),
