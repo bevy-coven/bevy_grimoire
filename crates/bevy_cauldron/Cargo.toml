@@ -135,14 +135,16 @@ dirs = "6"
 # The OS's own folder and file chooser (`picker.rs`, #298). `xdg-portal` is the Linux backend: D-Bus to the desktop's
 # portal, no GTK in the build. macOS and Windows use the system dialogs and need no feature.
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
-# The VLM labeler's transport (`vlm.rs`): one blocking OpenAI-style POST, made from a task-pool
-# thread, never the UI thread. The editor is dev-only tooling, so a network client here does not
-# leak toward the game — the game keeps zero HTTP deps (`docs/llm_rule_authoring.md`: the LLM
-# authors metadata, it never runs in the sim).
+# The editor's own HTTP client (`update.rs`'s release check, `wish_view.rs`'s GitHub search,
+# `ops_play.rs`'s BRP call): a blocking request made from a task-pool thread, never the UI thread.
+# The editor is dev-only tooling, so a network client here does not leak toward the game — the game
+# keeps zero HTTP deps (`docs/llm_rule_authoring.md`: the LLM authors metadata, it never runs in the
+# sim). The labeller's decision requests go through `bevy_oracle`, below.
 ureq = { version = "3", features = ["json"] }
 serde_json.workspace = true
-# Base64 data-URI image parts for the chat request; `image` encodes the booth's RGBA readback to
-# PNG. Both already in the build graph (serde_json via bevy_grimoire_core, base64/image via bevy).
+# Base64 data-URI image parts for a decision request (`decide_labels`); `image` encodes the booth's
+# RGBA readback to PNG. Both already in the build graph (serde_json via bevy_grimoire_core,
+# base64/image via bevy).
 base64 = "0.22"
 image.workspace = true
 # The snip's crop and its two files, shared with the MCP reader so both read one format.

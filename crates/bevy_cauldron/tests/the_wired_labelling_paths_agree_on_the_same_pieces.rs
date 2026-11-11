@@ -1,28 +1,28 @@
-//! **The two labelling paths the editor actually uses agree on the same pieces** (D5, #113).
+//! **The wired labelling path suggests exactly what the recorded judgement names** (D5, #113).
 //!
-//! Pass 277 "measured" a decision path that was never wired, against a closed-question stand-in for
-//! the old one; pass 278 withdrew it. This is the measurement the issue actually asks for: **`chat`
-//! (`vlm::label_with_retry`'s parse of JSON) against `decide` (`decide_labels::label_with_decisions`)**
-//! over the same pieces, through the functions `labels.rs` really calls.
+//! There was a second path here until 2026-11-11: `chat` (`vlm::label_with_retry`'s parse of JSON)
+//! beside `decide` (`decide_labels::label_with_decisions`) over the same pieces, through the
+//! functions `labels.rs` really called. The owner approved removing the chat path on 2026-11-11, so
+//! the assertions below — which were always about the decision path — are the whole of this file.
 //!
-//! The model is replayed, never called. Both paths are driven from recorded answers, so what is
-//! compared is the **interpretation** — which vocabulary tokens each path ends up suggesting from the
-//! same judgement. That is the part that differs between "parse generated JSON" and "read a
-//! probability per token", and it is the part a person's labels are about.
+//! Owner exception (2026-11-11):
+//! `the_wired_labelling_paths_agree_on_the_same_pieces.rs::the_decision_path_suggests_every_token_the_recorded_judgement_names`
+//! — only its NAME changed (it used to say both paths agree); its assertions are the same and it is
+//! the only path left to assert.
+//!
+//! The model is replayed, never called, so what is compared is the **interpretation**: which
+//! vocabulary tokens the path ends up suggesting from a judgement. That is the part a person's
+//! labels are about.
 
 use std::collections::BTreeMap;
 
 use bevy_cauldron::decide_labels::{DEFAULT_THRESHOLD, label_with_decisions};
-use bevy_cauldron::vlm::PromptCtx;
+use bevy_cauldron::label_suggestion::PromptCtx;
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
 use bevy_oracle::{Answer, Error, Request, Response, Transport};
 
-/// **The recorded judgement**, in the shape each path is handed it.
-///
-/// The decision path asks one `noul` per `axis:token` and wants P(yes). The chat path's answer is the
-/// JSON a model would write; `parse_reply` turns that into a `Suggestion`. Both come from the same
-/// judgement here — the tokens a person's label names — so a disagreement is the *interpretation*,
-/// not the model being asked a different question.
+/// **The recorded judgement**, in the shape the path is handed it: one `noul` per `axis:token`,
+/// answered with P(yes) from the tokens a person's label names.
 struct Recorded {
     /// The tokens this judgement names.
     yes_tokens: Vec<&'static str>,
@@ -127,9 +127,9 @@ fn the_decision_path_suggests_every_token_the_recorded_judgement_names() {
     assert_eq!(suggestion.offers_surfaces, vec!["seat"]);
     assert_eq!(suggestion.look, vec!["brown"]);
 
-    // **The provenance names the model and the day**, exactly as the chat path's does, so a
-    // reviewer reading `library.ron` can tell which judgements came from a model and when — the
-    // reason `vlm::Provenance` carries `model` rather than the requested `VlmConfig::model`.
+    // **The provenance names the model and the day**, so a reviewer reading `library.ron` can tell
+    // which judgements came from a model and when — the reason `label_suggestion::Provenance`
+    // carries `model`, off the answer, rather than the endpoint's configured model name.
     assert_eq!(provenance.model, "recorded", "the model that answered is the one recorded");
     assert_eq!(provenance.date, "2026-11-03");
 

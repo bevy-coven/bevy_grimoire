@@ -9357,7 +9357,7 @@ fn a_walk_rights_the_piece_it_asked_about_and_then_stops() {
     use bevy_cauldron::labels::{Entry, Suggestions};
     use bevy_cauldron::project::Project;
     use bevy_cauldron::tiles::{EditTarget, ImportState};
-    use bevy_cauldron::vlm::NeedsTurn;
+    use bevy_cauldron::label_suggestion::NeedsTurn;
 
     let root = Fixture::new("righting")
         .descriptor("on_its_head", "alpha")

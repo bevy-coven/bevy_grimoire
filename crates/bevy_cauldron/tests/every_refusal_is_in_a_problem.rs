@@ -104,13 +104,22 @@ const REFUSALS: &[Site] = &[
         file: "tiles.rs",
         marker: "it named no mesh, so nothing came back",
     },
+    // **The labeller's three refusals**, and the two rows above used to name the chat path's config
+    // load — a gate that went with the path (#113, owner 2026-11-11). These are the refusals
+    // `labels.rs` still files: an endpoint that is not answering before a walk is armed, a walk
+    // whose warm-up failed with nothing sent, and a walk stopped because the endpoint went away
+    // mid-batch.
     Site {
         file: "labels.rs",
-        marker: "if let Err(remedy) = VlmConfig::load(&project.root) {",
+        marker: "no batch: {remedy}",
     },
     Site {
         file: "labels.rs",
-        marker: "let cfg = match VlmConfig::load(&project.root) {",
+        marker: "nothing was sent to the model",
+    },
+    Site {
+        file: "labels.rs",
+        marker: "Bring the decision endpoint up (GRIMOIRE_DECIDE_ENDPOINT) and press Shift+L again",
     },
     Site {
         file: "build.rs",
