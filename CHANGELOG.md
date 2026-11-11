@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-10
 
+- **gd-03-editor-owned-files-are-yaml** `1c056fc1` The editor and its crates no longer depend on RON: the checks, settings, family settings, forests, people, scripts, trees and the shipped skin are YAML, and a family setting is one YAML value *No clip: visible, not yet recorded: fleet worker; proved by the bevy_cauldron editor suite, bevy_grimoire_core/tests/family.rs and bevy_oracle/tests/checks.rs*
 - **gd-03-game-reads-yaml** `f18dcd26` A game loads every project file as YAML, and a damaged one is refused by name with the field *No clip: the format cutover, not a screen; proved by bevy_grimoire/tests/live_verdicts.rs and the game crate's 97 tests*
 - **gd-03-editor-reads-yaml** `711cc582` The editor reads and writes every project file it owns as YAML, at the same .yaml paths the game does *No clip: the format cutover, not a screen; proved by bevy_cauldron_mcp/tests/an_agent_calls_the_server.rs and the core suite*
 - **gd-03-every-kind-is-yaml** `9961769b` Every project file kind reads and writes YAML through one reader and one writer, and a RON project is refused at open naming the migrate command *No clip: the format cutover, not a screen; proved by bevy_grimoire_core/tests/every_project_root_kind_is_yaml.rs and the whole core suite*
