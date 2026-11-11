@@ -4811,6 +4811,23 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
     ]
 }
 
+/// **Whether this operation proposes something rather than making it** (AF-05, #361): a plan the
+/// person can keep or throw away, with the map still untouched until they say so.
+///
+/// **One predicate, because the callers must not disagree.** The pause refuses *writes*, and a
+/// proposal is not one; the follow draws a proposal in the preview colour and says so in its receipt.
+/// The follow held its own `== "layout_propose"` before this existed and the pause had no test at
+/// all, which is how the one proposal a person can answer came to be refused by the switch whose own
+/// doc says previews still work.
+///
+/// **A list of names, not a reading of `writes()`.** Empty `writes()` with `Undo::None` also
+/// describes `brush_arm`, `door_open`, `piece_select` and `map_open` — view verbs and crossings that
+/// propose nothing — so the trait cannot answer this one and the names are stated here. A new
+/// proposal joins this list, in a diff a reader can see, the way `PINNED_NOWHERE` is joined.
+pub fn proposes(name: &str) -> bool {
+    matches!(name, "layout_propose")
+}
+
 /// **The operation with this name.**
 pub fn find(name: &str) -> Option<Box<dyn Operation>> {
     registry().into_iter().find(|op| op.name() == name)

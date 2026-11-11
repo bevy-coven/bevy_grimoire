@@ -241,7 +241,7 @@ Cmd+Z in the editor undoes the newest change on the door you are on. The keys pa
 Goal: stop an agent changing the map while you look, think or take over, without disconnecting it.
 
 1. Choose **View ▸ Pause agent writes**. The row is ticked while the pause is on.
-2. While it is on, an agent's `grimoire_apply_operation` and `grimoire_undo_operation` are refused. The answer says `refused` and why, the status line shows the same sentence as a problem, and nothing is changed or logged. A `dry_run` preview still answers, so the agent can keep planning.
+2. While it is on, an agent's `grimoire_apply_operation` and `grimoire_undo_operation` are refused. The answer says `refused` and why, the status line shows the same sentence as a problem, and nothing is changed or logged. A `dry_run` preview and a `layout_propose` still answer — neither writes the map, so neither has anything to refuse — so the agent can keep planning, and a proposal is framed for you as it is made. Keeping it (`layout_accept`) is a write and waits for the pause to end.
 3. Choose the row again to let it write.
 
 Your own edits are not affected, and the pause is not saved: the next session starts with the agent free to write.

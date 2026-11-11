@@ -216,3 +216,77 @@ fn a_layout_proposal_is_followed_as_a_preview() {
         "the ring is not the proposed area's footprint, so the preview was drawn as an applied change"
     );
 }
+
+/// **A proposal is followed while agent writes are paused** (AF-05, #361; review of #361, item (e)).
+///
+/// The issue's own Decisions say *"Previews are followed while agent writes are paused: planning is
+/// exactly what the person may want to watch"*, and AF-04's say *"While writes are paused there are
+/// no applied changes to follow, but previews still are (AF-05)"*. `operation_preview` and
+/// `dry_run: true` honour that, and `layout_propose` did not: the pause gate refused it before
+/// anything was planned, so the one proposal an agent can make that the person can then keep or
+/// throw away was the one the pause hid.
+///
+/// # Why the pause must not refuse it
+///
+/// The pause exists to stop the agent **writing** the map (`AgentPause`'s own doc: *"a way to say
+/// not now"*). `layout_propose` writes nothing — `writes()` is `&[]` and `undo()` is `Undo::None` —
+/// so there is nothing for the pause to protect: refusing it withholds the plan and leaves the
+/// person further from being able to answer it.
+#[test]
+fn a_layout_proposal_is_followed_while_writes_are_paused() {
+    let root = room("proposal_paused");
+    let mut app = editor(&root);
+    app.world_mut()
+        .resource_mut::<bevy_cauldron::familiar::AgentPause>()
+        .0 = true;
+    point_away(&mut app);
+    let before = rig(&app);
+    let before_files = map_files(&root);
+
+    let answer = apply(
+        &mut app,
+        "layout_propose",
+        serde_json::json!({"source": "learned", "seed": 7, "area": AREA}),
+    );
+    assert_ne!(
+        answer["outcome"], "refused",
+        "`layout_propose` writes nothing, so a paused editor has nothing to refuse: {answer}"
+    );
+    for _ in 0..frames_of(bevy_cauldron::follow::FOLLOW_EASE_S + FRAME) {
+        app.update();
+    }
+
+    // **Followed as a preview**, through the same queue and idle wait: the pause is about writing,
+    // not about watching, so a paused editor shows the proposal exactly as an unpaused one does.
+    assert_eq!(
+        app.world().resource::<Following>().shown_manner(),
+        Manner::Preview,
+        "a proposal made while writes are paused was not followed as a proposal"
+    );
+    let corners = area_corners(&app);
+    let filled = fill(&mut app, &corners);
+    assert!(
+        filled >= FRAMED_MIN_FILL,
+        "a paused editor did not frame the proposal: it fills {:.0}% of the viewport",
+        filled * 100.0
+    );
+    assert_ne!(rig(&app), before, "the camera did not go to the proposal");
+    // **And still nothing was written**, which is why the pause had nothing to refuse.
+    assert_eq!(
+        map_files(&root),
+        before_files,
+        "a proposal made while writes are paused wrote to the map"
+    );
+    // **The next press is still the person's**: keeping the proposal is a write, and a write is
+    // exactly what the pause refuses until they say otherwise.
+    let kept = apply(&mut app, "layout_accept", serde_json::json!({}));
+    assert_eq!(
+        kept["outcome"], "refused",
+        "keeping a proposal writes the map, so a paused editor must refuse it: {kept}"
+    );
+    assert_eq!(
+        map_files(&root),
+        before_files,
+        "a refused `layout_accept` wrote to the map"
+    );
+}

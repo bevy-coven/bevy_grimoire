@@ -657,7 +657,7 @@ impl Gates<'_> {
         // **The words are the operation's own** — its `Outcome::summary` is `proposed: 12 piece(s)
         // … — Enter keeps it, Esc throws it away` — so the chip and the receipt cannot describe one
         // proposal two ways, and no second sentence is written for the follow to overwrite them.
-        if operation == "layout_propose" {
+        if crate::ops::proposes(operation) {
             if let Some(request) = crate::follow::request_of(shown)
                 && let Some(following) = self.following.as_mut()
             {
@@ -1752,7 +1752,15 @@ fn operation_apply(
     gates.hear("operation_apply");
     // **Paused: a write is refused before anything is planned, and a preview still answers.** The refusal is the
     // editor's own sentence, on the status line as a problem and in the answer; nothing is changed or logged.
-    if !p.dry_run && gates.pause.as_deref().is_some_and(|pause| pause.0) {
+    //
+    // **A proposal is not a write** (AF-05, #361): `layout_propose` leaves the map untouched and stands
+    // as an offer the person keeps or throws away, so the pause has nothing to refuse. It is asked
+    // through `ops::proposes`, which is the same answer the follow reads — a pause and a follow that
+    // disagreed about what a proposal is would be the bug this fixes, one layer along.
+    if !p.dry_run
+        && !ops::proposes(&p.operation)
+        && gates.pause.as_deref().is_some_and(|pause| pause.0)
+    {
         let why = crate::familiar::refusal(&p.operation);
         if let Some(state) = state.as_mut() {
             state.problem_agent_refusal(&p.operation, &why);

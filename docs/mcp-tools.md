@@ -28,7 +28,7 @@ The server speaks the Model Context Protocol over **stdio**, and reaches the run
 
 ## When the person says wait
 
-**View ▸ Pause agent writes refuses every write with one sentence.** The answer reads: the agent's writes are paused, so `<operation>` changed nothing; a person turned them off with View > Pause agent writes; turn that off to let the agent write again; previews still work. That is not an error to work around and not a reason to retry: a person asked for it. **Read it and wait**, keep planning with `grimoire_preview_operation` and `grimoire_state`, and tell them in one line what you would do when they unpause.
+**View ▸ Pause agent writes refuses every write with one sentence.** The answer reads: the agent's writes are paused, so `<operation>` changed nothing; a person turned them off with View > Pause agent writes; turn that off to let the agent write again; previews still work. That is not an error to work around and not a reason to retry: a person asked for it. **Read it and wait**, keep planning with `grimoire_preview_operation`, `dry_run` and `layout_propose` — none of those is a write, so none is refused, and a proposal is framed for the person as it is made — and tell them in one line what you would do when they unpause. Keeping what you proposed (`layout_accept`) is a write, so it waits for the pause to end.
 
 ## Show your work
 

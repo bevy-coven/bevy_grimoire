@@ -12,6 +12,9 @@
 //!   nothing and log nothing. The agent can read what the sentence says and wait, which is what a person asking
 //!   a colleague to hold on would expect.
 //! - **A preview is not a write.** `dry_run` answers as it always does, so an agent can keep planning.
+//! - **Neither is a proposal.** `layout_propose` writes nothing — its `writes()` is empty and its `undo()`
+//!   is `Undo::None` — so the pause lets it through and the follow frames it as the preview it is
+//!   (AF-05, #361). `layout_accept`, which is what puts that layout in the map, is a write and waits.
 //! - **A person's own edits are untouched.** The switch is about the agent's writes, not the editor's.
 //!
 //! The row in the View menu is ticked while the switch is on, and takes the tick off when it is turned off by
