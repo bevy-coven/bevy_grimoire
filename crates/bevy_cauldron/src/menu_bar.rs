@@ -207,6 +207,8 @@ enum Slot {
     LeftPanel,
     /// View ▸ Zen mode (feedback-1794146831022).
     Zen,
+    /// View ▸ Show reload panel (UI-61, #247): the bottom dock, shown whatever the window's room.
+    ReloadPanel,
     /// Window ▸ Reset layout (UI-33, #227).
     ResetLayout,
     /// View ▸ Light map (UI-80, #254): a tick that shows or hides the viewport overlay. Only built in a
@@ -297,6 +299,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::Statistics);
         slots.push(Slot::LeftPanel);
         slots.push(Slot::Zen);
+        slots.push(Slot::ReloadPanel);
         slots.push(Slot::Outliner);
         slots.push(Slot::Library);
         slots.push(Slot::GameUi);
@@ -410,6 +413,13 @@ fn spawn_slot(menu: &mut bevy::ecs::relationship::RelatedSpawner<ChildOf>, slot:
                 crate::shell_view::ZenItem,
                 bevy_gooey::check_item("Zen mode", false),
                 bevy_gooey::observe(crate::shell_view::toggle_zen),
+            ));
+        }
+        Slot::ReloadPanel => {
+            menu.spawn((
+                crate::shell_view::ReloadPanelItem,
+                bevy_gooey::check_item("Show reload panel", false),
+                bevy_gooey::observe(crate::shell_view::toggle_the_reload_panel),
             ));
         }
         Slot::Outliner => {
