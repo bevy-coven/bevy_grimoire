@@ -2,6 +2,10 @@
 
 What each change added, newest first. A visible change has a clip: click the still to play it. `python3 tools/changelog/changelog.py page --open` plays them all in one page.
 
+## 2026-11-11
+
+- **nav-04-session-reset** A project with no session file, or one that will not read, starts with no tabs and never writes over the file it could not read (#381, review) *No clip: a fix to what a project switch does to the session, with no picture of its own; proved by crates/bevy_cauldron/tests/the_open_documents_come_back.rs (a_project_with_no_session_starts_without_the_last_projects_tabs, an_unreadable_session_file_is_never_overwritten)*
+
 ## 2026-11-10
 
 - **nav-04-document-tabs** `2b5f7122` Document tabs: maps and files you open are tabs, kept per person and restored with the project (#381) *For you: Maps you have open now show as tabs along the top, with a dot while a map has unsaved changes and a close button; Command+W closes one, Command+Shift+T brings back the last closed, and your open tabs come back next time you open the project.* *No clip: visible, not yet recorded: fleet worker*

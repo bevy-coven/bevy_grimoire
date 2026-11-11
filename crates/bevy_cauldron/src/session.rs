@@ -338,6 +338,13 @@ pub struct SessionFile {
     pub path: PathBuf,
     /// What the file holds, so a frame where nothing changed writes nothing.
     written: Session,
+    /// **This project has no file yet**: the editor following its own open map into the tabs is not a
+    /// change the person made, so the first session is written on their first real change, not on the
+    /// frame the project opens.
+    fresh: bool,
+    /// **The file exists and would not read**: it is left byte for byte as it is, and nothing is saved
+    /// over it for as long as this project is open.
+    unreadable: bool,
 }
 
 /// Names a notice's first words, so a test can tell it from any other status line.
@@ -360,6 +367,10 @@ pub fn restore(
     if file.is_some_and(|f| f.path == path) {
         return;
     }
+    // **Whatever the last project had open is not this one's** (`Session` is `Ownership::Project`): a
+    // project with no file, or one whose file will not read, starts empty rather than inheriting tabs.
+    let mut fresh = false;
+    let mut unreadable = false;
     let written = if path.is_file() {
         match Session::read(&path) {
             Ok(read) => {
@@ -367,26 +378,34 @@ pub fn restore(
                 read
             }
             Err(e) => {
+                // **The file is not read, so it is never written over**: it may be a newer editor's, and
+                // its tabs must not be lost to this one's empty session. `written` is the session as it
+                // now stands *after* the reset, and the flag holds [`save`] off for good.
+                *session = Session::default();
+                unreadable = true;
                 if let Some(state) = state.as_deref_mut() {
-                    state.status.problem(format!("NOT RESTORED: {e}"));
+                    state.status.problem(format!("NOT RESTORED: {e}; this project's tabs are not saved while its session file will not read"));
                 }
-                // The file stays as it is until the person's tabs change, which writes over it.
-                Session::default()
+                session.clone()
             }
         }
     } else {
+        // **Nothing on disk, nothing carried over**: the new project starts with no tabs, and its file
+        // is written on the person's first change rather than by the editor opening its own map.
+        *session = Session::default();
+        fresh = true;
         Session::default()
     };
-    commands.insert_resource(SessionFile { path, written });
+    commands.insert_resource(SessionFile { path, written, fresh, unreadable });
 }
 
 /// **The active map tab is the open map.** Every map the editor opens — from the project page, an
 /// agent's `map_open`, a tab — gets a tab in each workspace that holds maps, and it is the active one.
 /// Nothing else chooses which map tab is active, so a restored session whose active tab names a map the
 /// editor did not open follows the editor, not the file.
-pub fn follow_the_open_map(open: Option<Res<OpenMap>>, mut session: ResMut<Session>, file: Option<Res<SessionFile>>) {
+pub fn follow_the_open_map(open: Option<Res<OpenMap>>, mut session: ResMut<Session>, file: Option<ResMut<SessionFile>>) {
     // **Not before the file has been read**: the tabs would be written over by the first map.
-    let (Some(open), Some(_)) = (open, file) else {
+    let (Some(open), Some(mut file)) = (open, file) else {
         return;
     };
     let doc = Doc::map(open.map.name.clone());
@@ -400,6 +419,13 @@ pub fn follow_the_open_map(open: Option<Res<OpenMap>>, mut session: ResMut<Sessi
             let _ = session.open(workspace, doc.clone());
         }
     }
+    if file.fresh {
+        // **A project that has never been saved is not given a file by its own opening map.** `restore`
+        // reset the session and this ran in the same frame, so every tab here is the editor's own
+        // doing, not the person's: the file is written on their first change instead.
+        file.written = session.clone();
+        file.fresh = false;
+    }
 }
 
 /// **A tab whose document is gone closes, and the notice names it.** A map whose file is not on disk
@@ -411,7 +437,7 @@ pub fn close_the_missing(
     mut state: Option<ResMut<EditorState>>,
     mut tick: Local<u32>,
 ) {
-    // Twice a second is plenty for a file deleted by hand, and costs nothing when settled.
+    // Every 30th frame is plenty for a file deleted by hand, and costs nothing when settled.
     *tick = tick.wrapping_add(1);
     if !(*tick).is_multiple_of(30) {
         return;
@@ -444,7 +470,7 @@ pub fn save(session: Res<Session>, file: Option<ResMut<SessionFile>>, mut state:
     let Some(mut file) = file else {
         return;
     };
-    if file.written == *session {
+    if file.unreadable || file.written == *session {
         return;
     }
     match session.write(&file.path) {

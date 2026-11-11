@@ -568,6 +568,13 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::tiles::Mode", Ownership::Project),
     // **The documents each workspace has open** (NV-04, #381) are the person's tabs *for this project*:
     // a switch between workspaces keeps them, and another project reads its own session file.
+    //
+    // **The store and the file record are not listed**, for the reason `RecentProjects` and
+    // `UserSettingsFile` are not: only the binary names the data directory, so a stepped editor has no
+    // `SessionStore`, and `SessionFile` exists only once `session::restore` has one to read from. The
+    // table lists what a boot of this editor registers — `every_resource_is_classified` compares it
+    // against a booted World in both directions — so a type that only a real launch ever inserts
+    // belongs beside the other launch-only resources, not here.
     ("bevy_cauldron::session::Session", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),

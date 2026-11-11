@@ -15,7 +15,7 @@ use bevy::prelude::*;
 
 use bevy_cauldron::editor::EditorState;
 use bevy_cauldron::harness;
-use bevy_cauldron::project::OpenMap;
+use bevy_cauldron::project::{OpenMap, Project};
 use bevy_cauldron::session::{self, Doc, DocumentName, DirtyDot, Kind, Session, SessionStore};
 use bevy_cauldron::workspace::Workspace;
 
@@ -214,6 +214,11 @@ fn a_dirty_map_is_asked_about_before_its_tab_is_left() {
     let state = app.world().resource::<EditorState>();
     assert!(state.leaving, "the leaving question is up");
     assert_eq!(state.map_request.as_deref(), Some("n"), "and it remembers which map was asked for");
+
+    // **Agreeing opens the other map**: the question is a refusal to lose work, not a refusal to go.
+    chord(&mut app, &[KeyCode::KeyY]);
+    assert_eq!(open_map(&app), "n", "agreeing opens the map that was asked for");
+    assert!(!app.world().resource::<EditorState>().leaving, "and the question is down");
 }
 
 /// **The strip names every tab when there are two or more**, and none when there is one.
@@ -252,5 +257,91 @@ fn a_tab_whose_file_is_gone_closes_with_a_notice() {
         app.world().resource::<EditorState>().status.note_text().contains("c.md"),
         "the notice names it: {:?}",
         app.world().resource::<EditorState>().status.note_text()
+    );
+}
+
+/// **What a door change does to the editor**, as far as the session goes: the project and its open map
+/// are replaced, and the session must follow the new project (`restore` sees the new root).
+fn move_to(app: &mut App, root: &std::path::Path, map: &str) {
+    let project = Project::open(root, None).unwrap_or_else(|e| panic!("{e}"));
+    let open = OpenMap::open(&project, map).unwrap_or_else(|e| panic!("{e}"));
+    app.world_mut().insert_resource(project);
+    app.world_mut().insert_resource(open);
+    settle(app, 70);
+}
+
+/// A second project with one map, `q`, and one file, `b.md`.
+fn project_b(tag: &str) -> std::path::PathBuf {
+    let root = fixtures::Fixture::new(&format!("docs_{tag}_b_{}", std::process::id())).descriptor("alpha/floor", "alpha").build("q");
+    std::fs::write(root.join("b.md"), "# b\n").unwrap_or_else(|e| panic!("{e}"));
+    root
+}
+
+/// **Another project's tabs never carry into a project that has no session file**, and the file is not
+/// written until the person changes something — the editor following its own open map is not a change.
+#[test]
+fn a_project_with_no_session_starts_without_the_last_projects_tabs() {
+    let a = world("carry");
+    let b = project_b("carry");
+    let mut app = editor(&a, "m");
+    session::choose_map(app.world_mut(), "n");
+    settle(&mut app, SETTLE);
+    app.world_mut().resource_mut::<Session>().open(Workspace::Files, Doc::new(Kind::File, "a.md")).unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app, SETTLE);
+    assert_eq!(tabs(&app, Workspace::Map).0, ["m", "n"], "A has two map tabs");
+    assert_eq!(tabs(&app, Workspace::Files).0, ["a.md"], "and one file tab");
+    let b_file = session::path_for(&a.store, &b);
+    assert!(!b_file.exists(), "B has never had a session");
+
+    move_to(&mut app, &b, "q");
+    assert_eq!(tabs(&app, Workspace::Map), (vec!["q".to_owned()], Some("q".to_owned())), "only B's map is found");
+    assert!(tabs(&app, Workspace::Files).0.is_empty(), "and none of A's files carried over");
+    let note = app.world().resource::<EditorState>().status.note_text().to_owned();
+    assert!(!note.contains("closed the tab"), "no tab of A's is closed for being gone from B: {note:?}");
+    assert!(
+        !b_file.exists(),
+        "B is given no session file by the editor opening its own map: {}",
+        b_file.display()
+    );
+
+    // **A real change is what writes it**, and what it holds is B's alone.
+    app.world_mut().resource_mut::<Session>().open(Workspace::Files, Doc::new(Kind::File, "b.md")).unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app, SETTLE);
+    let written = Session::read(&b_file).unwrap_or_else(|e| panic!("B's session is written once the person opens a tab: {e}"));
+    assert_eq!(written.tabs(Workspace::Map).open.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), ["q"], "and holds only B's map");
+    assert_eq!(written.tabs(Workspace::Files).open.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), ["b.md"], "and only B's own file");
+}
+
+/// **A session file that will not read is left byte for byte as it is**, and A's tabs do not carry over.
+#[test]
+fn an_unreadable_session_file_is_never_overwritten() {
+    let a = world("unreadable");
+    let b = project_b("unreadable");
+    let mut app = editor(&a, "m");
+    session::choose_map(app.world_mut(), "n");
+    settle(&mut app, SETTLE);
+    assert_eq!(tabs(&app, Workspace::Map).0, ["m", "n"], "A has two map tabs");
+
+    let b_file = session::path_for(&a.store, &b);
+    std::fs::create_dir_all(b_file.parent().unwrap_or_else(|| panic!("a parent"))).unwrap_or_else(|e| panic!("{e}"));
+    // A newer editor's file: a version this one refuses by name.
+    let newer = "version: 99\nworkspaces: {}\n";
+    std::fs::write(&b_file, newer).unwrap_or_else(|e| panic!("{e}"));
+
+    move_to(&mut app, &b, "q");
+    assert_eq!(tabs(&app, Workspace::Map).0, ["q"], "A's tabs did not carry into B");
+    assert!(
+        app.world().resource::<EditorState>().status.problems().iter().any(|p| p.line().contains("NOT RESTORED")),
+        "and the person is told it was not read"
+    );
+
+    // **Even a real change does not write over it**: the tabs are the person's, the file is not this
+    // editor's to replace.
+    app.world_mut().resource_mut::<Session>().open(Workspace::Files, Doc::new(Kind::File, "b.md")).unwrap_or_else(|e| panic!("{e}"));
+    settle(&mut app, SETTLE);
+    assert_eq!(
+        std::fs::read_to_string(&b_file).unwrap_or_else(|e| panic!("{e}")),
+        newer,
+        "the file a newer editor wrote is byte-identical, even after the tabs change"
     );
 }
