@@ -93,10 +93,12 @@ fn the_scale_a_label_is_drawn_at_is_the_range_a_file_may_hold() {
 /// **A settings file's text size reaches the stored scale through the running editor.**
 ///
 /// **What this proves, and what it does not.** `follow_the_text_size` copies the setting into the atomic
-/// `chrome::font` reads, and this is that copy, made by the running editor from a file. It does **not**
-/// prove a label already on screen resized: gooey and this crate write a `TextFont` once, when a widget
-/// is spawned, so a label built in `OnEnter(Editor)` keeps the size it was made at. Live resize needs a
-/// marker on every label and a system that rewrites its `TextFont`, which is owed (see #251).
+/// `chrome::font` reads, and this is that copy, made by the running editor from a file. What it does
+/// **not** prove is that a label already on screen resized — that is the other half, and it arrived with
+/// `chrome::TypeRole`: every label is spawned through `chrome::typed`, which carries the role beside the
+/// `TextFont`, and `chrome::resize_the_labels` rewrites each one when the setting changes.
+/// `tests/a_drawn_label_follows_the_text_size_live.rs` is that half, and it sets the file **after** the
+/// editor is built so a label spawned at build time has to move.
 #[test]
 fn the_settings_files_text_size_reaches_the_stored_scale() {
     let root = fixtures::Fixture::new(&format!("text_scale_{}", std::process::id()))

@@ -492,7 +492,7 @@ pub(crate) fn shown_folder(path: &Path) -> String {
 
 /// A quiet line under a name: the skin's muted ink ([`quiet_ink`], painted by [`paint_the_quiet_lines`]).
 pub(crate) fn quiet(text: impl Into<String>) -> impl Bundle {
-    (Text::new(text), crate::chrome::font(crate::chrome::text::LABEL), TextColor(crate::chrome::ink().label), Quiet)
+    (Text::new(text), crate::chrome::typed(crate::chrome::text::LABEL), TextColor(crate::chrome::ink().label), Quiet)
 }
 
 /// A line of muted words (a card's folder, a count).
@@ -870,7 +870,7 @@ fn welcome(body: &mut ChildSpawnerCommands, launcher: &Launcher, art: &Art) {
             for (number, step) in WELCOME_STEPS.iter().enumerate() {
                 steps.spawn((
                     Text::new(format!("{}. {step}", number + 1)),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                     TextColor(quiet_ink(None)),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));

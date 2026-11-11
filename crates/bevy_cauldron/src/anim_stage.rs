@@ -829,12 +829,12 @@ pub(crate) fn spawn_chips(
     p.spawn((
         Text::new("click: solo · mod-click: mix in/out"),
         TextColor(ink.label),
-        crate::chrome::font(crate::chrome::text::HINT),
+        crate::chrome::typed(crate::chrome::text::HINT),
     ));
     p.spawn((
         Text::new(String::new()),
         TextColor(crate::chrome::ink().dim),
-        crate::chrome::font(crate::chrome::text::HINT),
+        crate::chrome::typed(crate::chrome::text::HINT),
         ScrubLine,
     ));
 }

@@ -340,6 +340,17 @@ impl Plugin for EditorUiPlugin {
             Update,
             follow_the_text_size.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
+        // **And a label that was already drawn follows it** (UI-73, #251): `follow_the_text_size`
+        // moves the atomic `chrome::font` reads, which is every label spawned *after* the change. A
+        // label spawned before it keeps the size it was built at, so this rewrites every `TypeRole`
+        // from its role the frame the setting differs from the one last drawn. After
+        // `follow_the_text_size`, so the two agree about the scale being applied.
+        app.add_systems(
+            Update,
+            crate::chrome::resize_the_labels
+                .after(follow_the_text_size)
+                .before(bevy_gooey::GooeySystems::Style),
+        );
         // **The player's Reduced motion reaches gooey** (UI-R01): travel lands, colours and fades still ease.
         app.add_systems(
             Update,

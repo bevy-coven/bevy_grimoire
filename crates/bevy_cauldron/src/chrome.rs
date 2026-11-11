@@ -661,6 +661,86 @@ pub fn font(role: text::Role) -> TextFont {
     TextFont::from_font_size(role.px() * text_scale())
 }
 
+/// **The role a drawn label was made at, so a change of text size can redraw it** (UI-73, #251).
+///
+/// A `TextFont` is written once, when a widget is spawned. [`font`] reads the running
+/// [`text_scale`] at that moment, so a label spawned after a person chose 175% is drawn at 175% —
+/// and one that was **already on screen** keeps the size it was built at, which is exactly what the
+/// review of #251 measured and what this component exists to fix.
+///
+/// The marker is the role, not the size: a role is a fact of the type scale and does not go stale,
+/// and [`resize_the_labels`] can therefore recompute every label from `role.px() * scale` when the
+/// person's multiple changes, without knowing what any of them says.
+///
+/// **Spawn through [`typed`]**, which puts this beside the `TextFont` in one bundle. A label that
+/// calls [`font`] alone is drawn at the size it was made and never follows the setting.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct TypeRole(text::Role);
+
+impl TypeRole {
+    /// The role this label is drawn at.
+    pub fn role(self) -> text::Role {
+        self.0
+    }
+}
+
+/// **A hand-drawn label's type: the `TextFont` it is drawn with *and* the role to redraw it at.**
+///
+/// The pair is one bundle because they are one fact — a label's size — stated twice on purpose: the
+/// `TextFont` is what `bevy_text` lays out, and the [`TypeRole`] is what [`resize_the_labels`] reads
+/// when the person's text size changes. Every `chrome::font` call site in this crate spawns through
+/// this, so no label can carry the one without the other.
+pub fn typed(role: text::Role) -> impl Bundle {
+    (font(role), TypeRole(role))
+}
+
+/// **A label already on screen is redrawn when the text size changes** (UI-73, #251).
+///
+/// `chrome::font` reads [`text_scale`] when it builds a `TextFont`, so a label spawned after the
+/// setting changed is already right; a label spawned before it is not, and a person who chose 175%
+/// would have half an editor at 175% and the chrome they read most at 100%. This rewrites every
+/// [`TypeRole`]'s `TextFont` from its role the frame the resolved setting differs from the one last
+/// applied, and does nothing at all on a settled editor (one float comparison).
+///
+/// **It reads the resolved `EditorSettings`, not the atomic**: the atomic exists so a spawn closure
+/// with no system parameters can read the scale, while this needs the value the settings file
+/// resolved to and a place to remember what it last drew.
+///
+/// **A `TextSpan` child is not rewritten.** No `TextSpan` in this editor is spawned through
+/// [`typed`]; a span carries its own `TextFont` and would need its own marker, and nothing asks for
+/// one today.
+pub fn resize_the_labels(
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    mut applied: Local<Option<f32>>,
+    mut labels: Query<(&TypeRole, &mut TextFont)>,
+    mut rooms: Query<(&LinesRoom, &mut Node), Without<TypeRole>>,
+) {
+    let Some(settings) = settings else { return };
+    if applied.is_some_and(|last| (last - settings.text_scale).abs() < f32::EPSILON) {
+        return;
+    }
+    *applied = Some(settings.text_scale);
+    let scale = settings.text_scale;
+    for (role, mut font) in &mut labels {
+        let want = FontSize::Px(role.0.px() * scale);
+        if font.font_size != want {
+            font.font_size = want;
+        }
+    }
+    // **The room the labels are drawn in follows them**, or the label that grew is clipped by the
+    // box that did not. Same one comparison, same frame.
+    for (room, mut node) in &mut rooms {
+        let want = Val::Px(room.at(scale));
+        if room.fixed {
+            if node.height != want {
+                node.height = want;
+            }
+        } else if node.min_height != want {
+            node.min_height = want;
+        }
+    }
+}
+
 /// **The person's text size, as every `chrome::font` call sees it** (UI-73, #251).
 ///
 /// `chrome::font` has 117 call sites, every one of them a label the editor draws by hand, and none of
@@ -714,6 +794,45 @@ pub const BODY_CHAR_W: f32 = 6.6;
 /// for text that comes and goes, so its arrival does not move what sits below it. A metric, beside
 /// [`BODY_CHAR_W`], for the same reason that one is not a type role.
 pub const BODY_LINE_H: f32 = text::BODY.px() * 1.2;
+
+/// **One line of [`text::BODY`] at the person's text size** — [`BODY_LINE_H`] times [`text_scale`].
+///
+/// A box that reserves room for text has to reserve it at the size the text is drawn, or a person
+/// at 200% gets a row one line tall holding a two-line-tall label: the text is clipped, and
+/// `every_label_fits_its_panel_at_two_hundred_percent_text` measures exactly that. Spawn sites use
+/// this; a box that has to follow a *live* change carries [`LinesRoom`] and [`resize_the_labels`]
+/// rewrites it.
+pub fn body_line_h() -> f32 {
+    BODY_LINE_H * text_scale()
+}
+
+/// **A box that reserves room for `lines` lines of [`text::BODY`]** (UI-73, #251).
+///
+/// [`body_line_h`] is read when the box is spawned; a person who changes the text size afterwards
+/// would leave the box the height it was built at, and the label inside it — which *does* resize,
+/// because it carries a [`TypeRole`] — would be clipped by its own room. So the reserve is a
+/// component too, and [`resize_the_labels`] rewrites it from the role-like numbers it holds.
+///
+/// **The padding is a number of its own**, because spacing does not follow the text size: a row
+/// inset is the interface's rhythm (`interface_scale`'s job), and scaling it with the type would
+/// double-thicken a row a person only asked to read better.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct LinesRoom {
+    /// How many lines of [`text::BODY`] the box reserves.
+    pub lines: f32,
+    /// Vertical padding added to the reserve, in logical pixels — not scaled with the text.
+    pub pad: f32,
+    /// Fill `Node::height` (a clipped row that keeps one height) rather than `Node::min_height`
+    /// (a box that may grow past its reserve).
+    pub fixed: bool,
+}
+
+impl LinesRoom {
+    /// The height this room is worth at `scale`.
+    pub fn at(self, scale: f32) -> f32 {
+        (self.lines * BODY_LINE_H * scale + self.pad).ceil()
+    }
+}
 
 // ── spacing ──────────────────────────────────────────────────────────────────────────────────────
 //
@@ -804,7 +923,7 @@ pub fn section<'a>(parent: &'a mut ChildSpawnerCommands, label: &str) -> EntityC
     parent.spawn((
         Text::new(label.to_owned()),
         TextColor(ink().label),
-        font(text::HEADING),
+        typed(text::HEADING),
         Node {
             margin: UiRect::top(Val::Px(GAP_GROUP)).with_bottom(Val::Px(GAP_TIGHT)),
             ..default()
@@ -1468,7 +1587,7 @@ pub fn title(parent: &mut ChildSpawnerCommands, text: &str) {
     parent.spawn((
         Text::new(text.to_owned()),
         TextColor(ink().text),
-        font(text::TITLE),
+        typed(text::TITLE),
         Node {
             margin: UiRect::bottom(Val::Px(GAP_ROW)),
             ..default()
@@ -2006,7 +2125,7 @@ pub fn journal_panel(mut commands: Commands, frame: Res<Frame>) {
                 keys::chord(keys::Action::CopyInfo)
             )),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
         ));
         // Asks the project's after-edit checks about the picture on screen now. A person's click only:
         // nothing runs while they are simply editing.
@@ -2069,7 +2188,7 @@ pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: C
             row.spawn((
                 Text::new("•"),
                 TextColor(colour),
-                font(text::LABEL),
+                typed(text::LABEL),
                 TextLayout::new(Justify::Left, LineBreak::NoWrap),
             ));
             row.spawn((
@@ -2084,7 +2203,7 @@ pub fn problem_log_line(parent: &mut ChildSpawnerCommands, text: &str, colour: C
                 },
                 Text::new(text.to_owned()),
                 TextColor(colour),
-                font(text::LABEL),
+                typed(text::LABEL),
             ));
         });
 }
@@ -2494,7 +2613,7 @@ pub fn list_heading_in(parent: &mut ChildSpawnerCommands, text: &str, ink: ListH
     parent.spawn((
         Text::new(text.to_owned()),
         TextColor(ink.0),
-        font(text::HEADING),
+        typed(text::HEADING),
     ));
 }
 
@@ -2573,7 +2692,7 @@ pub fn row_label_with(
         },
         Text::new(label.to_owned()),
         TextColor(ink().label),
-        font(text::LABEL),
+        typed(text::LABEL),
         TextLayout::new(Justify::Left, LineBreak::NoWrap),
         marker,
     ))
@@ -2586,7 +2705,7 @@ pub fn row_value(row: &mut ChildSpawnerCommands, text: impl Into<String>, colour
     row.spawn((
         Text::new(text.into()),
         TextColor(colour),
-        font(text::BODY),
+        typed(text::BODY),
         marker,
     ));
 }
@@ -2634,7 +2753,7 @@ pub fn chip<'a>(
         chip.spawn((
             Text::new(label.to_owned()),
             TextColor(ink),
-            font(role),
+            typed(role),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
     });
@@ -2880,7 +2999,7 @@ pub fn button<'a>(
         b.spawn((
             Text::new(label.to_owned()),
             TextColor(severity.ink()),
-            font(text::CONTROL),
+            typed(text::CONTROL),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
     });
@@ -3003,7 +3122,7 @@ pub fn text_field<'a>(
         f.spawn((
             Text::new(initial.0),
             TextColor(initial.1),
-            font(role),
+            typed(role),
             readout,
         ));
     });
@@ -3133,19 +3252,19 @@ fn spawn_name_box(mut commands: Commands) {
             .with_children(|b| {
                 b.spawn((
                     Text::new(String::new()),
-                    font(text::BODY),
+                    typed(text::BODY),
                     TextColor(ink().label),
                     NameBoxTitle,
                 ));
                 b.spawn((
                     Text::new(String::new()),
-                    font(text::TITLE),
+                    typed(text::TITLE),
                     TextColor(ink().accent),
                     NameBoxValue,
                 ));
                 b.spawn((
                     Text::new(String::new()),
-                    font(text::BODY),
+                    typed(text::BODY),
                     TextColor(ink().dim),
                     NameBoxHint,
                 ));
@@ -3945,14 +4064,14 @@ pub fn spawn_chrome_bar(
             b.spawn((
                 Text::new(format!("\u{2039} {back}")),
                 TextColor(ink().key),
-                font(text::BODY),
+                typed(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
             b.spawn((
                 BackChord,
                 Text::new(keys::chord(keys::Action::MainMenu)),
                 TextColor(ink().label),
-                font(text::BODY),
+                typed(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
         });
@@ -3974,7 +4093,7 @@ pub fn spawn_chrome_bar(
                 Control(keys::ControlId::Title),
                 Text::new(here),
                 TextColor(ink().dim),
-                font(text::BODY),
+                typed(text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
         }
@@ -4056,21 +4175,21 @@ pub fn spawn_status_band(mut commands: Commands, frame: Res<Frame>, project: Opt
             bevy_gooey::StatusKind::Info,
             Text::new(String::new()),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
             SelectionCount,
             Text::new(String::new()),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
             LabelerLine,
             Text::new(String::new()),
             TextColor(ink().dim),
-            font(text::LABEL),
+            typed(text::LABEL),
             bevy::picking::Pickable::IGNORE,
         ));
         band.spawn((
@@ -4328,7 +4447,7 @@ pub fn shortcut_hint(parent: &mut ChildSpawnerCommands, back: &str) {
             keys::chord(keys::Action::MainMenu),
         )),
         TextColor(ink().label),
-        font(text::LABEL),
+        typed(text::LABEL),
         // **And holding it puts that key's own badge on this line.** The one control whose verb is
         // "show me the verbs" — ExposeHK's admitted weakness is that a modifier-triggered overlay
         // *"has no visual representation to aid discovery until the user … presses its trigger"*, and

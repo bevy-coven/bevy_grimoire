@@ -399,7 +399,7 @@ fn rebuild_picker(
                     row.spawn((
                         Text::new(c.id.clone()),
                         TextColor(ink.read),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     if is_armed {
                         // **The armed mark in its own ink** — the same `*` the COMPOSE tab's rows
@@ -408,7 +408,7 @@ fn rebuild_picker(
                         row.spawn((
                             Text::new("  *"),
                             TextColor(ink.accent),
-                            crate::chrome::font(crate::chrome::text::BODY),
+                            crate::chrome::typed(crate::chrome::text::BODY),
                         ));
                     }
                 })
@@ -628,7 +628,7 @@ fn spawn_compose_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>)
             ComposeReceipt,
             Text::new(""),
             TextColor(crate::chrome::ink().accent),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
     });
 }
@@ -1900,7 +1900,7 @@ fn rebuild_labels(
             Text::new(if armed { format!("{} *", c.id) } else { c.id.clone() }),
             // The miniatures name themselves in smaller type, so the strip reads as one focal group
             // among neighbours rather than as five equal things.
-            crate::chrome::font(if slot.offset == 0 { LABEL_PX.0 } else { LABEL_PX.1 }),
+            crate::chrome::typed(if slot.offset == 0 { LABEL_PX.0 } else { LABEL_PX.1 }),
             TextColor(if slot.offset == 0 { ink.accent } else { ink.quiet }),
             Node {
                 // PLACES-ITSELF-OK: a world-space slot label, put where `place_labels` projects it. Flow
@@ -2540,7 +2540,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                             row.spawn((
                                 Text::new(text),
                                 TextColor(ink.read),
-                                crate::chrome::font(ROW_PX),
+                                crate::chrome::typed(ROW_PX),
                             ));
                             if armed {
                                 // The armed mark in its own ink — the same `*` the stage labels
@@ -2548,7 +2548,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                                 row.spawn((
                                     Text::new("  *"),
                                     TextColor(ink.accent),
-                                    crate::chrome::font(ROW_PX),
+                                    crate::chrome::typed(ROW_PX),
                                 ));
                             }
                         },
@@ -2560,7 +2560,7 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                             row.spawn((
                                 Text::new(text),
                                 TextColor(ink.read),
-                                crate::chrome::font(ROW_PX),
+                                crate::chrome::typed(ROW_PX),
                             ));
                         },
                     );
@@ -2715,7 +2715,7 @@ fn spawn_line(p: &mut ChildSpawnerCommands, text: &str, colour: Color) {
             },
             Text::new(content.to_owned()),
             TextColor(colour),
-            crate::chrome::font(ROW_PX),
+            crate::chrome::typed(ROW_PX),
             // The default, stated: this is the column that wraps, against the spacer that never
             // does.
             TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),

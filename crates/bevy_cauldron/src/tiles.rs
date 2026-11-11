@@ -1618,7 +1618,7 @@ fn header_button(row: &mut ChildSpawnerCommands, header: FillHeader, glyph: &str
         b.spawn((
             Text::new(glyph.to_owned()),
             TextColor(crate::chrome::ink().label),
-            crate::chrome::font(crate::chrome::text::HINT),
+            crate::chrome::typed(crate::chrome::text::HINT),
         ));
     });
 }
@@ -4201,7 +4201,7 @@ fn spawn_tab_strip(
                         tab.spawn((
                             Text::new(chord),
                             TextColor(crate::chrome::ink().label),
-                            crate::chrome::font(crate::chrome::text::LABEL),
+                            crate::chrome::typed(crate::chrome::text::LABEL),
                             Node {
                                 margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
                                 ..default()
@@ -4212,7 +4212,7 @@ fn spawn_tab_strip(
                     tab.spawn((
                         Text::new(mode.label()),
                         TextColor(crate::chrome::ink().label),
-                        crate::chrome::font(crate::chrome::text::TAB),
+                        crate::chrome::typed(crate::chrome::text::TAB),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                         TabLabel,
                     ));
@@ -4220,7 +4220,7 @@ fn spawn_tab_strip(
                     tab.spawn((
                         Text::new(String::new()),
                         TextColor(crate::chrome::ink().danger),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                         Node {
                             margin: UiRect::left(Val::Px(crate::chrome::GAP_ROW)),
@@ -4269,7 +4269,7 @@ fn spawn_tab_strip(
                 m.spawn((
                     Text::new(SWITCH_TO),
                     TextColor(crate::chrome::ink().muted),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
                 m.spawn((
                     // Written every frame by [`name_the_other_door`], which says the other workspace's name.
@@ -4279,7 +4279,7 @@ fn spawn_tab_strip(
                     // `TAB`'s 13 — so at `LABEL` the phrase is a whisper beside a shout. `BODY` is
                     // 11 px, the readable default, and it is still a step below the panels: **the
                     // panels are the strip's subject, and the cue is a sentence beside them.**
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                     Node {
                         margin: UiRect::right(Val::Px(crate::chrome::GAP_ROW)),
                         ..default()
@@ -4621,7 +4621,7 @@ fn spawn_tiles_panel(
         p.spawn((
             Text::new(""),
             TextColor(crate::chrome::ink().dim),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
             // No `Node` of its own any more: `chrome::title` carries the gap below itself and
             // `panel_root`'s `row_gap` carries the rest. The bare 6 that stood here was one of the
             // four different margins the audit counted above a heading, one per file (F8).
@@ -4652,7 +4652,7 @@ fn spawn_tiles_panel(
         p.spawn((
             Text::new(""),
             TextColor(crate::chrome::ink().accent),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
             ActionLine,
         ));
     });
@@ -4696,7 +4696,7 @@ fn spawn_tiles_panel(
             b.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().accent),
-                crate::chrome::font(crate::chrome::text::LABEL),
+                crate::chrome::typed(crate::chrome::text::LABEL),
                 LabelProgressText,
             ));
             // The bar: a dim trough with a bright fill whose WIDTH is the fraction. Two nodes,
@@ -4725,7 +4725,7 @@ fn spawn_tiles_panel(
             b.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::HINT),
+                crate::chrome::typed(crate::chrome::text::HINT),
                 LabelProgressNow,
             ));
         });
@@ -8500,7 +8500,7 @@ fn shelf_strip(
         row.spawn((
             Text::new("right: meshes / left: tiles"),
             TextColor(crate::chrome::ink().label),
-            crate::chrome::font(crate::chrome::text::HINT),
+            crate::chrome::typed(crate::chrome::text::HINT),
             TextLayout::new(Justify::Left, LineBreak::NoWrap),
         ));
     });
@@ -8645,7 +8645,7 @@ pub(crate) fn count_cell(row: &mut ChildSpawnerCommands, text: String, ink: Colo
         },
         Text::new(text),
         TextColor(ink),
-        crate::chrome::font(crate::chrome::text::LABEL),
+        crate::chrome::typed(crate::chrome::text::LABEL),
         TextLayout::new(Justify::Left, LineBreak::NoWrap),
     ));
 }
@@ -9069,7 +9069,7 @@ fn draw_ink(
                             Some(s) => crate::chrome::severity_style(*s).0,
                             None => crate::chrome::ink().label,
                         }),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     row.spawn((
                         Node {
@@ -9085,7 +9085,7 @@ fn draw_ink(
                         // times.
                         Text::new(leaf.clone()),
                         TextColor(words.read),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                 });
             }
@@ -9130,7 +9130,7 @@ fn draw_ink(
                         },
                         Text::new(id.clone()),
                         TextColor(if *judged { crate::chrome::ink().labeled } else { crate::chrome::ink().text }),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                 });
             }
@@ -9171,7 +9171,7 @@ fn draw_ink(
                         } else {
                             crate::chrome::ink().muted
                         }),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     if *openable {
                         count_cell(row, format!("{members} member(s)"), crate::chrome::ink().label);
@@ -9193,7 +9193,7 @@ fn draw_ink(
                         row.spawn((
                             Text::new("+ New Tile"),
                             TextColor(words.accent),
-                            crate::chrome::font(crate::chrome::text::BODY),
+                            crate::chrome::typed(crate::chrome::text::BODY),
                         ));
                     })
                     .observe(on_new_tile_click);
@@ -9202,7 +9202,7 @@ fn draw_ink(
                 p.spawn((
                     Text::new(say.clone()),
                     TextColor(words.quiet),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
             }
             RowInk::AddMeshes => {
@@ -9254,7 +9254,7 @@ fn draw_pack_band(
             },
             Text::new(if folded { ">" } else { "v" }),
             TextColor(crate::chrome::ink().label),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
         // **The pack's name, and — when it is excluded — the way back.**
         //
@@ -9274,7 +9274,7 @@ fn draw_pack_band(
                 pack.to_owned()
             }),
             TextColor(if excluded { crate::chrome::ink().muted } else { crate::chrome::ink().label }),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
         // **The count, and nothing else.** A folded pack used to say "{n} hidden — click to
         // open"; removed at the keyboard, 2026-08-18: that is a whole sentence on every folded
@@ -9319,7 +9319,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
             },
             Text::new(if open { "v" } else { ">" }),
             TextColor(crate::chrome::ink().muted),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
         // **The name column wraps within itself; the tally does not.** The state and the way
         // out of it both stay on the band (`docs/ui.md` §1.4) — what changed is that they now
@@ -9337,7 +9337,7 @@ fn draw_excluded_band(p: &mut ChildSpawnerCommands, packs: usize, meshes: usize,
                 keys::chord(Action::ExcludePack)
             )),
             TextColor(crate::chrome::ink().muted),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
         ));
         count_cell(row, format!("{packs} pack(s), {meshes} mesh(es)"), crate::chrome::ink().muted);
     });
@@ -9565,7 +9565,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
                 text: String,
                 colour: Color,
                 role: crate::chrome::text::Role| {
-        p.spawn((Text::new(text), TextColor(colour), crate::chrome::font(role)));
+        p.spawn((Text::new(text), TextColor(colour), crate::chrome::typed(role)));
     };
 
     // **The TILE heading is spawned once, above the branches**, because every branch opens with
@@ -9711,7 +9711,7 @@ fn build_detail(p: &mut ChildSpawnerCommands, build: &crate::build::Build, proje
                 },
                 Text::new(what),
                 TextColor(crate::chrome::ink().text),
-                crate::chrome::font(crate::chrome::text::LABEL),
+                crate::chrome::typed(crate::chrome::text::LABEL),
             ));
             count_cell(
                 row,
@@ -9899,7 +9899,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
     let accent_ink = skin.as_deref().map_or(crate::chrome::ink().accent, |s| s.accent);
     let unchecked_ink = unchecked_ink(skin.as_deref());
     // **A quiet note's ink** (UI-02, #210, slice 5): the "m up the wall", the size note, a remedy under
-    // a warning, a layer's label. All five used `chrome::ink().label` beside `chrome::font(text::LABEL)` — a
+    // a warning, a layer's label. All five used `chrome::ink().label` beside `chrome::typed(text::LABEL)` — a
     // colour and a *font size* that share a name, which is what made the colour table's ratchet count
     // them twice. `quiet` is the skin's `text_muted`, falling back to the constant.
     let quiet_ink = skin.as_deref().map_or(crate::chrome::ink().label, |s| s.text_muted);
@@ -9937,7 +9937,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 p.spawn((
                     Text::new("no mesh selected — walk NOT IMPORTED and press Enter to bring one in"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
                 return;
             };
@@ -9966,7 +9966,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             p.spawn((
                 Text::new(id_text),
                 TextColor(id_tint),
-                crate::chrome::font(crate::chrome::text::TAB),
+                crate::chrome::typed(crate::chrome::text::TAB),
                 Node {
                     margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
                     ..default()
@@ -10041,7 +10041,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         p_.date, s.confidence
                     )),
                     TextColor(suggest_ink),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
                 // **The identification is not a second line here.** It used to be, in a third
                 // colour between the header and the proposed note — *"you have proposal in light
@@ -10063,7 +10063,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             turn.why
                         )),
                         TextColor(suggest_ink),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
                 // Vocabulary the model wanted and could not have — a human's decision, elsewhere.
@@ -10078,7 +10078,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             t.token, t.axis, t.why
                         )),
                         TextColor(suggest_ink),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
             }
@@ -10178,7 +10178,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 row.spawn((
                     Text::new(size_note),
                     TextColor(quiet_ink),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             });
 
@@ -10208,7 +10208,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             col.spawn((
                                 Text::new(line),
                                 TextColor(danger_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         }
                     });
@@ -10260,7 +10260,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             col.spawn((
                                 Text::new(line),
                                 TextColor(danger_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         }
                     });
@@ -10469,7 +10469,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     row.spawn((
                         Text::new("  m up the wall, from the map floor"),
                         TextColor(quiet_ink),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                 });
             }
@@ -10566,7 +10566,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     p.spawn((
                         Text::new(line),
                         TextColor(crate::chrome::ink().dim),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
                             ..default()
@@ -10650,7 +10650,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             chips.spawn((
                                 Text::new("-"),
                                 TextColor(quiet_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         }
                         for (ix, name) in kept.iter().map(|(i, n)| (*i, n.as_str())) {
@@ -10792,7 +10792,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 p.spawn((
                     Text::new("what the importer noticed about this mesh"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::HINT),
+                    crate::chrome::typed(crate::chrome::text::HINT),
                     Node {
                         margin: UiRect::bottom(Val::Px(crate::chrome::GAP_ROW)),
                         ..default()
@@ -10804,12 +10804,12 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                         block.spawn((
                             Text::new(word),
                             TextColor(tint),
-                            crate::chrome::font(crate::chrome::text::HINT),
+                            crate::chrome::typed(crate::chrome::text::HINT),
                         ));
                         block.spawn((
                             Text::new(f.message.clone()),
                             TextColor(crate::chrome::ink().text),
-                            crate::chrome::font(crate::chrome::text::LABEL),
+                            crate::chrome::typed(crate::chrome::text::LABEL),
                             // Wrapped prose at 10 px needs the leading; the 1.2 default packs these
                             // into the block of text the screenshot showed.
                             bevy::text::LineHeight::RelativeToFont(1.35),
@@ -10820,7 +10820,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             block.spawn((
                                 Text::new(fix.clone()),
                                 TextColor(quiet_ink),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                                 bevy::text::LineHeight::RelativeToFont(1.35),
                                 Node {
                                     margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
@@ -10849,7 +10849,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     p.spawn((
                         Text::new(why),
                         TextColor(crate::chrome::ink().accent),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                     return;
                 }
@@ -10869,7 +10869,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             p.spawn((
                 Text::new(format!("{dx} x {dy} x {dz} cells of {subunit_mm:.0} mm")),
                 TextColor(crate::chrome::ink().text),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
                 DivReadout,
             ));
             p.spawn((
@@ -10883,7 +10883,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     bevy_grimoire_core::grid::SNAP,
                 )),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::HINT),
+                crate::chrome::typed(crate::chrome::text::HINT),
                 Node {
                     margin: UiRect::top(Val::Px(crate::chrome::GAP_TIGHT)),
                     ..default()
@@ -10930,7 +10930,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             col.spawn((
                                 Text::new(layer_label(y, dy)),
                                 TextColor(quiet_ink),
-                                crate::chrome::font(crate::chrome::text::HINT),
+                                crate::chrome::typed(crate::chrome::text::HINT),
                             ));
 
                             // The column headers, with the layer header in the corner above the row
@@ -11021,7 +11021,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                                                     } else {
                                                         crate::chrome::ink().label
                                                     }),
-                                                    crate::chrome::font(crate::chrome::text::BODY),
+                                                    crate::chrome::typed(crate::chrome::text::BODY),
                                                     CellGlyph(x, z),
                                                     CellLayer(y),
                                                 ));
@@ -11058,7 +11058,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 } else {
                     crate::chrome::ink().dim
                 }),
-                crate::chrome::font(crate::chrome::text::HINT),
+                crate::chrome::typed(crate::chrome::text::HINT),
                 SelectedCellLine,
                 Node {
                     margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
@@ -11157,7 +11157,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     chips.spawn((
                         Text::new(format!("{} tris", c.triangles)),
                         TextColor(crate::chrome::ink().dim),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::left(Val::Px(crate::chrome::GAP_GROUP)),
                             ..default()
