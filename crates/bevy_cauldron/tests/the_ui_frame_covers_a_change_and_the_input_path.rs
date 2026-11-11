@@ -35,12 +35,12 @@ const HISTORY_ROWS: usize = 5_000;
 const OUTLINER_NODES: usize = 10_000;
 /// How many changes the frame-after-a-change measurement takes the best of, so a frame that met another build, a page
 /// fault or the gate on this machine cannot decide the answer.
-const CHANGES: usize = 5;
+const CHANGES: usize = 15;
 /// **The most the panels may cost on the frame a change lands on, milliseconds.** The measured floor on `bmb` (2026-11-10,
 /// the optimized test profile) is 3.8 ms: 2.7 ms the outliner's rebuild (a fingerprint 0.35 ms, `nodes_for` 1.5 ms, gooey's
 /// `set_nodes` 0.7 ms), 1.0 ms the history's 5,000 labels, 0.1 ms gooey's own drawing. It was 5.4 ms before this pass took
 /// three descriptor lookups, a haystack, a label and a kind copy per unfiltered piece out of the outliner (4.3 ms there).
-/// On `big`, a 24-thread Linux box shared with other agents, the best of five changes measured 6.6 ms (2026-11-11, the gate
+/// On `big`, a 24-thread Linux box shared with other agents, the best of five changes measured 6.6 ms and 12.6 ms beside other builds, which is why it is now the best of fifteen (2026-11-11, the gate
 /// run). 12 ms is the larger floor with headroom for a loaded machine; a rebuild that went quadratic in the content fails
 /// it by far.
 const MAX_CHANGE_FRAME_MS: f64 = 12.0;
