@@ -3069,7 +3069,7 @@ fn spawn_cost_readout(mut commands: Commands, frame: Res<crate::chrome::Frame>) 
             p.spawn((
                 Text::new(""),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
                 TriangleTotal,
             ));
         });
@@ -3755,13 +3755,16 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                         // Rounded up to a whole pixel: the text's measured box is rounded up, and
                         // an exact reserve laid out one pixel short of a two-line receipt.
                         min_height: match field {
-                            Field::Last => {
-                                Val::Px((RECEIPT_LINES * crate::chrome::BODY_LINE_H).ceil())
-                            }
+                            Field::Last => Val::Px(crate::chrome::LinesRoom { lines: RECEIPT_LINES, pad: 0.0, fixed: false }.at(crate::chrome::text_scale())),
                             _ => Val::Auto,
                         },
                         ..default()
                     });
+                    if field == Field::Last {
+                        // The receipt's two-line room follows the text size, or a receipt at 200%
+                        // is clipped by the reserve that did not grow (UI-73, #251).
+                        spawned.insert(crate::chrome::LinesRoom { lines: RECEIPT_LINES, pad: 0.0, fixed: false });
+                    }
                     if let Some(id) = field.control() {
                         spawned.insert(crate::chrome::Control(id));
                     }
@@ -4284,7 +4287,7 @@ fn rebuild_palette(
                         },
                         Text::new(if folded { ">" } else { "v" }),
                         TextColor(crate::chrome::ink().label),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
                         Node {
@@ -4295,7 +4298,7 @@ fn rebuild_palette(
                         },
                         Text::new(category.to_uppercase()),
                         TextColor(crate::chrome::ink().label),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     // The count in a non-wrapping column of its own, through the one builder — F6
                     // was this same defect on the Kit door's pack headings.
@@ -4370,7 +4373,7 @@ fn rebuild_palette(
                                 },
                                 Text::new(bevy_grimoire_core::naming::display_name(&d.id)),
                                 TextColor(crate::chrome::ink().text),
-                                crate::chrome::font(crate::chrome::text::BODY),
+                                crate::chrome::typed(crate::chrome::text::BODY),
                                 // **A word longer than the column breaks inside itself** (#289): with
                                 // the default word-boundary break, `toilet_roll_holder` was one word
                                 // the row could not wrap, and it drew over the count beside it.
@@ -6676,7 +6679,7 @@ fn refresh_scripts_list(
                 p.spawn((
                     Text::new("no triggers on this map"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             }
             for t in &rows {
@@ -6694,7 +6697,7 @@ fn refresh_scripts_list(
                         row.spawn((
                             Text::new(format!("{} · {}{}", t.id, t.on, who)),
                             TextColor(crate::chrome::ink().text),
-                            crate::chrome::font(crate::chrome::text::BODY),
+                            crate::chrome::typed(crate::chrome::text::BODY),
                         ));
                     });
             }
@@ -6735,7 +6738,7 @@ fn refresh_data_list(
                 p.spawn((
                     Text::new("no data files registered (data.ron)"),
                     TextColor(ink.quiet),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             });
         } else if let Ok(mut table) = tables.single_mut() {
@@ -7013,7 +7016,7 @@ fn refresh_reload_list(
                     Tone::Danger => crate::chrome::ink().danger,
                 };
                 let size = if *tone == Tone::Dim { crate::chrome::text::LABEL } else { crate::chrome::text::BODY };
-                p.spawn((Text::new(line.clone()), TextColor(colour), crate::chrome::font(size)));
+                p.spawn((Text::new(line.clone()), TextColor(colour), crate::chrome::typed(size)));
             }
         });
     }
@@ -7047,14 +7050,14 @@ fn refresh_plan_list(
         commands.entity(list).with_children(|p| {
             let lines = crate::ops_plan::plan_text(&now);
             if now.items.is_empty() {
-                p.spawn((Text::new(lines.join("\n")), TextColor(crate::chrome::ink().dim), crate::chrome::font(crate::chrome::text::LABEL)));
+                p.spawn((Text::new(lines.join("\n")), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::LABEL)));
                 return;
             }
             let mut lines = lines.into_iter();
             p.spawn((
                 Text::new(lines.next().unwrap_or_default()),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::LABEL),
+                crate::chrome::typed(crate::chrome::text::LABEL),
             ));
             for (item, line) in now.items.iter().zip(lines) {
                 let colour = match item.status {
@@ -7062,7 +7065,7 @@ fn refresh_plan_list(
                     Status::Doing => crate::chrome::ink().accent,
                     Status::Done | Status::Skipped => crate::chrome::ink().dim,
                 };
-                p.spawn((Text::new(line), TextColor(colour), crate::chrome::font(crate::chrome::text::BODY)));
+                p.spawn((Text::new(line), TextColor(colour), crate::chrome::typed(crate::chrome::text::BODY)));
             }
         });
     }
@@ -7146,7 +7149,7 @@ fn refresh_notes_list(
                 p.spawn((
                     Text::new("no notes"),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             }
             for (id, status, text, waiting, review, auto) in rows {
@@ -7160,7 +7163,7 @@ fn refresh_notes_list(
                     row.spawn((
                         Text::new(format!("{id} [{status}] {text}")),
                         TextColor(crate::chrome::ink().text),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     // **An auto note says so on its row** (E-070): the agent decides its minor
                     // choices itself instead of asking. A label, not a button: Tab in the note box
@@ -7179,13 +7182,13 @@ fn refresh_notes_list(
                             chip.spawn((
                                 Text::new("auto"),
                                 TextColor(crate::chrome::ink().suggest),
-                                crate::chrome::font(crate::chrome::text::LABEL),
+                                crate::chrome::typed(crate::chrome::text::LABEL),
                             ));
                         });
                     }
                 });
                 for line in &review.lines {
-                    p.spawn((Text::new(line.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::font(crate::chrome::text::LABEL)));
+                    p.spawn((Text::new(line.clone()), TextColor(crate::chrome::ink().dim), crate::chrome::typed(crate::chrome::text::LABEL)));
                 }
                 let loaded: Vec<Handle<Image>> = review
                     .pictures

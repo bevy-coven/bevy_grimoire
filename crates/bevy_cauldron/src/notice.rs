@@ -758,7 +758,7 @@ fn paint_journal(
                 p.spawn((
                     bevy::prelude::Text::new("no steps and nothing has gone wrong yet".to_owned()),
                     bevy::prelude::TextColor(ink.quiet),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                     crate::chrome::ProblemLogLine,
                 ));
                 return;

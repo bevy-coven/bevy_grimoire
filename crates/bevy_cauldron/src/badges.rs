@@ -2422,7 +2422,7 @@ fn one_badge(
             TextColor(ink.key),
             // The chord is the one thing a badge exists to have read, so it gets the reading
             // size — the descriptions stay at `HINT`, quieter on both axes.
-            chrome::font(chrome::text::BODY),
+            chrome::typed(chrome::text::BODY),
             TextLayout::new(Justify::Left, if boxed { LineBreak::WordBoundary } else { LineBreak::NoWrap }),
             bevy::picking::Pickable::IGNORE,
         );
@@ -2477,7 +2477,7 @@ fn one_badge(
                     // Quieter than the chord: the chord is what the eye scans
                     // for, the words are what tell it whether to stop.
                     TextColor(ink.dim),
-                    chrome::font(chrome::text::HINT),
+                    chrome::typed(chrome::text::HINT),
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     bevy::picking::Pickable::IGNORE,
                 ));

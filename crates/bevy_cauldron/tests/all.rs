@@ -45,6 +45,7 @@ mod a_click_outside_the_viewport_places_nothing;
 mod a_tool_arms_the_same_from_a_button_and_a_key;
 mod a_toolbar_tooltip_sits_on_its_button;
 mod a_theme_edit_reaches_every_list_row;
+mod a_drawn_label_follows_the_text_size_live;
 mod a_command_runs_by_id_through_the_agents_door;
 mod a_composed_proposal_draws_its_members;
 mod a_composition_can_be_renamed;

@@ -468,7 +468,7 @@ pub fn snip_overlay(
         .with_children(|p| {
             p.spawn((
                 Text::new(label),
-                chrome::font(chrome::text::LABEL),
+                chrome::typed(chrome::text::LABEL),
                 TextColor(chrome::ink().text),
                 // One line, so a narrow drag cannot wrap the label down across the box's top edge.
                 TextLayout::default().with_no_wrap(),

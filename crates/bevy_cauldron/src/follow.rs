@@ -1166,7 +1166,7 @@ fn draw_the_look_chip(
             chip_node.spawn((
                 Text::new(sentence),
                 TextColor(crate::chrome::ink().text),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
                 bevy::picking::Pickable::IGNORE,
             ));
             // **Look**, the button the issue names: show the oldest change now rather than waiting out

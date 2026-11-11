@@ -373,7 +373,7 @@ fn spawn_panels(
         p.spawn((
             Text::new(""),
             TextColor(crate::chrome::ink().dim),
-            crate::chrome::font(crate::chrome::text::LABEL),
+            crate::chrome::typed(crate::chrome::text::LABEL),
             // No `Node` of its own: `chrome::title` carries the gap below itself and `panel_root`'s
             // `row_gap` carries the rest. The bare 6 that stood here was one of the four different
             // margins the audit counted above a heading, one per file (F8).
@@ -964,7 +964,7 @@ fn rebuild_list(
                     row.spawn((
                         Text::new((*name).to_owned()),
                         TextColor(read),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                 });
             }
@@ -1056,7 +1056,7 @@ fn rebuild_slots(
                         }
                     )),
                     TextColor(if bad > 0 { danger } else { read }),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
                 for (ix, n) in names.iter().enumerate() {
                     let Some(report) = reports.as_ref().and_then(|r| r.by_rig.get(*n)) else {
@@ -1108,18 +1108,18 @@ fn rebuild_slots(
                             head.spawn((
                                 Text::new((*n).to_owned()),
                                 TextColor(read),
-                                crate::chrome::font(crate::chrome::text::BODY),
+                                crate::chrome::typed(crate::chrome::text::BODY),
                             ));
                             head.spawn((
                                 Text::new(word),
                                 TextColor(tint),
-                                crate::chrome::font(crate::chrome::text::HINT),
+                                crate::chrome::typed(crate::chrome::text::HINT),
                             ));
                         });
                         row.spawn((
                             Text::new(first),
                             TextColor(quiet),
-                            crate::chrome::font(crate::chrome::text::HINT),
+                            crate::chrome::typed(crate::chrome::text::HINT),
                         ));
                     });
                 }
@@ -1130,14 +1130,14 @@ fn rebuild_slots(
                 p.spawn((
                     Text::new("no rig selected"),
                     TextColor(quiet),
-                    crate::chrome::font(crate::chrome::text::BODY),
+                    crate::chrome::typed(crate::chrome::text::BODY),
                 ));
                 return;
             };
             p.spawn((
                 Text::new(rig.mesh.clone()),
                 TextColor(accent),
-                crate::chrome::font(crate::chrome::text::BODY),
+                crate::chrome::typed(crate::chrome::text::BODY),
             ));
             // **The staged figure's controls, directly under the rig they belong to.**
             //
@@ -1159,7 +1159,7 @@ fn rebuild_slots(
                     p.spawn((
                         Text::new("measuring..."),
                         TextColor(quiet),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
                 Some(report) => {
@@ -1175,13 +1175,13 @@ fn rebuild_slots(
                         p.spawn((
                             Text::new(line),
                             TextColor(colour),
-                            crate::chrome::font(crate::chrome::text::HINT),
+                            crate::chrome::typed(crate::chrome::text::HINT),
                         ));
                         for d in &report.diff {
                             p.spawn((
                                 Text::new(d.clone()),
                                 TextColor(danger),
-                                crate::chrome::font(crate::chrome::text::HINT),
+                                crate::chrome::typed(crate::chrome::text::HINT),
                                 Node {
                                     // One panel inset of indent — `PAD`, not a bare 12, so the
                                     // provenance block steps in by the same unit the panel does.
@@ -1232,7 +1232,7 @@ fn rebuild_slots(
                         },
                         Text::new(format!("{i} - clip {}", slot.clip)),
                         TextColor(label),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                         TextLayout::new(Justify::Left, LineBreak::NoWrap),
                     ));
                     row.spawn((
@@ -1245,7 +1245,7 @@ fn rebuild_slots(
                         // A gait is the only kind carrying measured numbers, so it is the only one
                         // worth picking out of the column.
                         TextColor(if kind == "gait" { accent } else { quiet }),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     row.spawn((
                         Text::new(detail),
@@ -1253,7 +1253,7 @@ fn rebuild_slots(
                         // **The value, not the label** — this is the measured number the author came
                         // to the bench to check. The audit found this pairing rendered inverted,
                         // the declared half larger than the measured one.
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                     ));
                     // The transient adopt-exclude chip — gaits only, since adopt writes nothing
                     // else. The durable form is `keep:` in the manifest; this is "not this once".
@@ -1293,7 +1293,7 @@ fn rebuild_slots(
                     p.spawn((
                         Text::new(sub.join(" | ")),
                         TextColor(quiet),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::left(Val::Px(SLOT_COL)),
                             ..default()
@@ -1314,7 +1314,7 @@ fn rebuild_slots(
                     p.spawn((
                         Text::new(line),
                         TextColor(quiet),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::left(Val::Px(SLOT_COL)),
                             ..default()
@@ -1337,7 +1337,7 @@ fn rebuild_slots(
                     p.spawn((
                         Text::new(format!("{ok} measurement(s) agree with the manifest")),
                         TextColor(quiet),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
                 for f in findings.iter().filter(|f| f.level != Level::Ok) {
@@ -1347,7 +1347,7 @@ fn rebuild_slots(
                             Level::Note => label,
                             _ => danger,
                         }),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                     ));
                 }
             }
@@ -1387,7 +1387,7 @@ fn rebuild_slots(
                         legend.spawn((
                             Text::new(label),
                             TextColor(crate::anim_plots::slot_ui_color(rank)),
-                            crate::chrome::font(crate::chrome::text::HINT),
+                            crate::chrome::typed(crate::chrome::text::HINT),
                         ));
                         rank += 1;
                     }
@@ -1401,7 +1401,7 @@ fn rebuild_slots(
                     p.spawn((
                         Text::new(caption),
                         TextColor(label),
-                        crate::chrome::font(crate::chrome::text::HINT),
+                        crate::chrome::typed(crate::chrome::text::HINT),
                         Node {
                             margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
                             ..default()
@@ -1451,13 +1451,13 @@ fn rebuild_slots(
                 p.spawn((
                     Text::new(String::new()),
                     TextColor(quiet),
-                    crate::chrome::font(crate::chrome::text::HINT),
+                    crate::chrome::typed(crate::chrome::text::HINT),
                     crate::anim_plots::PlotReadout,
                 ));
                 p.spawn((
                     Text::new("top-down trace (fwd = up; arrow = declared cycle along measured travel; dim arrow = measured, G)"),
                     TextColor(label),
-                    crate::chrome::font(crate::chrome::text::HINT),
+                    crate::chrome::typed(crate::chrome::text::HINT),
                     Node {
                         margin: UiRect::top(Val::Px(crate::chrome::GAP_ROW)),
                         ..default()

@@ -397,14 +397,14 @@ fn spawn_a_row(
                     line.spawn((
                         Text::new(RowKind::Wish.label()),
                         TextColor(crate::chrome::ink().dim),
-                        crate::chrome::font(crate::chrome::text::LABEL),
+                        crate::chrome::typed(crate::chrome::text::LABEL),
                     ));
                     line.spawn((
                         WishTitle,
                         WishOf(id.clone()),
                         Text::new(title_of(queued, client)),
                         TextColor(crate::chrome::ink().text),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                         Node { flex_grow: 1.0, min_width: Val::Px(0.0), ..default() },
                         TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                     ));
@@ -418,7 +418,7 @@ fn spawn_a_row(
                     WishOf(id.clone()),
                     Text::new(format!("you {} it", answered.as_str())),
                     TextColor(crate::chrome::ink().dim),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                 ));
             }
         });
@@ -444,7 +444,7 @@ fn spawn_a_row(
                 WishOf(id.clone()),
                 Text::new(queued.search.sentence()),
                 TextColor(crate::chrome::ink().dim),
-                crate::chrome::font(crate::chrome::text::LABEL),
+                crate::chrome::typed(crate::chrome::text::LABEL),
                 Node { flex_shrink: 0.0, ..default() },
                 TextLayout::new(Justify::Left, LineBreak::WordBoundary),
             ));
@@ -452,7 +452,7 @@ fn spawn_a_row(
                 body.spawn((
                     Text::new(format!("GitHub did not open: {note}")),
                     TextColor(crate::chrome::ink().danger),
-                    crate::chrome::font(crate::chrome::text::LABEL),
+                    crate::chrome::typed(crate::chrome::text::LABEL),
                     Node { flex_shrink: 0.0, ..default() },
                     TextLayout::new(Justify::Left, LineBreak::WordBoundary),
                 ));
@@ -487,7 +487,7 @@ fn line_of(parent: &mut ChildSpawnerCommands, name: &'static str, id: &str, word
                     col.spawn((
                         Text::new(words.to_owned()),
                         TextColor(crate::chrome::ink().text),
-                        crate::chrome::font(crate::chrome::text::BODY),
+                        crate::chrome::typed(crate::chrome::text::BODY),
                         WishField { name },
                         WishOf(id.to_owned()),
                         TextLayout::new(Justify::Left, LineBreak::WordBoundary),
