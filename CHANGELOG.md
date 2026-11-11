@@ -4,6 +4,7 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-11
 
+- **panels4-review-fixes** `44bc6840` Reset layout and a staged panel touch only the arrangement dock, and the rig bench's slot column is wide enough to show the clip index instead of clipping it *No clip: visible, not yet recorded: fleet worker*
 - **ui-59-kit-gooey-rows** `fd6eb166` The Compose pane's label/value lines and indents, and the Tiles panel's strips, lattice columns and rows, are `bevy_gooey` rows, columns and cells; 43 raw `Node` literals remain in `tiles.rs` and 2 in `compose.rs`, each waiting on a layout that can carry its own margin, and a ratchet holds the count *No clip: visible, not yet recorded: fleet worker*
 - **ui-58-rig-bench-gooey** `cab916e7` The rig bench is built from `bevy_gooey` widgets — rows, cells, columns, image boxes and overlays — with no raw `Node` literal left in anim_tab.rs or anim_plots.rs *For you: The animation bench's slot table and its plots now use the same widgets as the rest of the interface, so they grow with your text size and stay lined up at any size.* *No clip: visible, not yet recorded: fleet worker*
 - **ui-61-reload-dock** `47f94a17` The reload panel is a `bevy_gooey` panel in a bottom dock across the foot of the workbench, with its own tab, instead of a block in the INSPECTOR *For you: What became of each file you edit now has its own panel along the bottom of the window, so it is there whichever workspace you are in.* *No clip: visible, not yet recorded: fleet worker*
