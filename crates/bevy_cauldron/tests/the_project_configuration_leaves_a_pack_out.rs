@@ -71,7 +71,7 @@ fn a_switch_leaves_a_pack_out_through_the_operation_and_the_same_switch_brings_i
     click(&mut app, aaa);
     settle(&mut app);
     assert_eq!(excluded(&app), ["aaa"], "the editor's policy holds the exclusion");
-    assert!(policy_file(&app).contains("\"aaa\""), "and project.yaml does: {}", policy_file(&app));
+    assert!(policy_file(&app).contains("aaa"), "and project.yaml does: {}", policy_file(&app));
     assert!(app.world().resource::<Project>().policy.excludes("aaa/a1.glb"), "the pack's meshes are no longer offered");
     let lines = log(&app);
     assert_eq!(lines.len(), before + 1, "one switch is one log line");

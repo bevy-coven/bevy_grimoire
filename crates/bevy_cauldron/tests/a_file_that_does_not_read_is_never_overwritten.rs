@@ -61,7 +61,7 @@ fn cases() -> Vec<Case> {
             marker: Some("first"),
             bad: [
                 ("corrupt", "{triggers: [{id: \"first\", on: \"!Activity work\"", None),
-                ("wrong type", "{triggers: [{id: 5, on: \"x\", then: \"y\"}]}", Some("triggers[0].id")),
+                ("wrong type", "{triggers: [{id: [5], on: \"x\", then: \"y\"}]}", Some("triggers[0].id")),
                 ("missing field", "{triggers: [{id: \"first\", on: \"x\"}]}", Some("triggers[0].then")),
             ],
         },

@@ -153,6 +153,6 @@ fn a_new_file_is_written_with_its_version() {
         ("people", bevy_grimoire_core::yaml::to_string(&People::default()).unwrap()),
         ("scripts", bevy_grimoire_core::yaml::to_string(&Scripts::default()).unwrap()),
     ] {
-        assert!(text.starts_with("{version: 1") || text.starts_with("{version: 1"), "`{kind}` is written with its version first: {text}");
+        assert!(text.starts_with("version: 1"), "`{kind}` is written with its version first: {text}");
     }
 }

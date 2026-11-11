@@ -138,7 +138,7 @@ fn a_rule_weight_changes_on_disk_and_in_memory() {
     );
     let text = rules_text(&app);
     assert!(
-        text.contains("// houses should outnumber the road") && text.starts_with("// the block rules"),
+        text.contains("# houses should outnumber the road") && text.starts_with("# the block rules"),
         "the write deleted the author's comments, which is the whole reason this is text surgery: {text}"
     );
 }

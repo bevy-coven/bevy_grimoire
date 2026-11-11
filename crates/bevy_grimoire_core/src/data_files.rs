@@ -304,5 +304,8 @@ pub fn leaf_json(token: &str) -> Option<serde_json::Value> {
 #[allow(clippy::result_large_err)]
 pub fn restore_leaf(text: &str, path: &str, token: &str) -> Result<String, String> {
     let json = crate::yaml::to_json(token, "a restored value").map_err(|p| p.line())?;
-    set_leaf(text, path, &json, None)
+    // The kind check is `set_leaf`'s (a token that does not spell the leaf's kind is refused here); the bytes
+    // that land are the token's own, so `1.50` comes back as `1.50` and not as the `1.5` a write would make.
+    set_leaf(text, path, &json, None)?;
+    crate::yaml_surgery::replace_value(text, path, token).map(|(text, _)| text).map_err(|p| p.line())
 }

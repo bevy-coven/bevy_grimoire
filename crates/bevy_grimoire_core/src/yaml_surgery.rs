@@ -677,9 +677,20 @@ pub fn replace_value(text: &str, path: &str, value: &str) -> Result<(String, Str
         block.push('\n');
     } else {
         block.push('\n');
+        // **A list keeps the dash column it had**, and one that had none (a `null`) is written the way this
+        // repository's writer writes a list under a key: at the key's own column. Anything else goes one
+        // step in, which is what a mapping under a key needs.
+        let indent = if node.kind == NodeKind::Sequence && !is_flow(text, node) {
+            let first = walk.nodes.iter().find(|n| is_item_of(&n.path, &node.path)).map_or(node.span.0, |n| n.span.0);
+            column_of(text, dash_on_line(text, first).unwrap_or(first))
+        } else if value.trim_start().starts_with("- ") {
+            column
+        } else {
+            column + yaml::INDENT_SPACES
+        };
         for line in value.trim_end().lines() {
             if !line.trim().is_empty() {
-                block.push_str(&" ".repeat(column + yaml::INDENT_SPACES));
+                block.push_str(&" ".repeat(indent));
                 block.push_str(line);
             }
             block.push('\n');

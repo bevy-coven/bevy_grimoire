@@ -385,14 +385,10 @@ fn a_rigs_page_opens_on_the_rig_bench_with_that_rig_selected() {
         .root
         .join("assets/grimoire/rigs.yaml");
     let text = std::fs::read_to_string(&rig).expect("the fixture copied rigs.yaml");
-    let name = text
-        .lines()
-        .find_map(|l| {
-            let line = l.trim();
-            let (key, rest) = line.split_once(":")?;
-            (rest.trim_start().starts_with('(') && key.starts_with('"')).then(|| key.trim_matches('"').to_owned())
-        })
-        .expect("rigs.yaml names one rig a line");
+    let name = bevy_grimoire_core::yaml::to_json(&text, "rigs.yaml")
+        .ok()
+        .and_then(|rigs| rigs["rigs"].as_object().and_then(|rigs| rigs.keys().next().cloned()))
+        .expect("rigs.yaml names a rig");
     let rig = name;
     let answer = apply(
         &mut app,

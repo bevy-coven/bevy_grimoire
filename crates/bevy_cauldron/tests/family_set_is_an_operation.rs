@@ -44,7 +44,7 @@ fn an_unlisted_crate_or_a_bad_value_changes_nothing() {
     };
     assert!(e.contains("not listed in family.yaml"), "{e}");
     let (mut ctx2, file2) = project("badvalue", "bevy_elements");
-    assert!(matches!(set(&mut ctx2, "(1.0"), Err(_) | Ok(Applied::Refused(_))));
+    assert!(matches!(set(&mut ctx2, "[1.0"), Err(_) | Ok(Applied::Refused(_))));
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
     assert_eq!(std::fs::read_to_string(&file2).unwrap(), before);
     let _ = &ctx2;

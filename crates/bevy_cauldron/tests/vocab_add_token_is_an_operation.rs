@@ -136,7 +136,7 @@ fn an_agent_adds_a_token_and_the_editor_holds_it_at_once() {
 }
 
 /// **A name the vocabulary does not allow, an axis the editor does not draw, a token the axis already
-/// holds, a note with a quote, no note, a typo'd field and an undo of an addition are refused or
+/// holds, no note, a typo'd field and an undo of an addition are refused or
 /// unavailable, and nothing is written.**
 #[test]
 fn a_bad_request_is_refused_and_writes_nothing() {
@@ -149,7 +149,6 @@ fn a_bad_request_is_refused_and_writes_nothing() {
         ("a name with a space", serde_json::json!({"axis": "kind", "name": "big crate", "note": "a crate"})),
         ("an axis the editor does not draw", serde_json::json!({"axis": "edge", "name": "crate", "note": "a crate"})),
         ("a token the axis holds", serde_json::json!({"axis": "kind", "name": "prop", "note": "again"})),
-        ("a note with a quote", serde_json::json!({"axis": "kind", "name": "crate", "note": "a \"crate\""})),
         ("no note", serde_json::json!({"axis": "kind", "name": "crate", "note": ""})),
         ("a typo'd field", serde_json::json!({"axes": "kind", "name": "crate", "note": "a crate"})),
         ("a missing field", serde_json::json!({"axis": "kind", "name": "crate"})),
