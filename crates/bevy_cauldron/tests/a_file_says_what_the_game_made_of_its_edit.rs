@@ -30,6 +30,14 @@ fn editor(tag: &str, live: bool) -> App {
     for _ in 0..4 {
         app.update();
     }
+    // **A window with room for the bottom dock** (UI-61, #247). The Reload panel is gooey's bottom
+    // dock now, and the dock is shown only where the workbench can spare it (`chrome::WORKBENCH_FLOOR_H`):
+    // at the 1280 x 720 reference window with the terminal open it is not, or it would leave the
+    // inspector 24 px. These tests are about what the panel says, so they are given a taller window.
+    bevy_cauldron::harness::resize_surface(&mut app, 1536, 1500).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..12 {
+        app.update();
+    }
     app
 }
 

@@ -188,7 +188,9 @@ fn stage_a_dock_panel(world: &mut World, panel: &str, now: Screen) -> Result<Sta
         return Err(format!("`{panel}` is a workbench panel and the editor is not open (the screen is {now:?})"));
     }
     let mut docked = false;
-    let mut docks = world.query_filtered::<&mut Dock, ()>();
+    // **The arrangement's dock, and only it** (review of #247): a tab is selected in the dock that
+    // arranges the shell, never in the bottom dock, whose one panel (`reload`) no capture stages.
+    let mut docks = world.query_filtered::<&mut Dock, With<crate::chrome::ArrangementDock>>();
     for mut dock in docks.iter_mut(world) {
         if let Some(next) = select(&dock.0, panel) {
             dock.0 = next;

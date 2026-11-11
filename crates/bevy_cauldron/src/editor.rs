@@ -1599,8 +1599,16 @@ struct PlanList;
 struct NotesList;
 
 /// **The Reload panel's list** (#203): whether a game is connected, then a line per file with news.
+///
+/// `pub` since UI-61 (#247): the panel is a `bevy_gooey` dock panel now, so the column the lines go in
+/// is spawned by `ui::register_the_shell_panels` — a different module, on a different path.
 #[derive(Component, Clone, Copy)]
-struct ReloadList;
+pub struct ReloadList;
+
+/// **The Reload panel itself** (UI-61, #247): the page gooey's bottom dock builds, so a test can say
+/// "the reload panel is in the dock" rather than "some column holds these words".
+#[derive(Component, Clone, Copy)]
+pub struct ReloadPanel;
 
 /// **One row of the Notes list**, by the id the map's `.notes.ron` names it.
 ///
@@ -4030,25 +4038,10 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 s.spawn((NotesEditor, Node { flex_direction: FlexDirection::Column, ..default() }));
             });
 
-            // **Reload (#203).** What became of each file's latest edit: whether a game is connected, and
-            // for every file a game or the editor has news on, applied, refused (with why), pending or
-            // needs restart, and how long ago.
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                ..default()
-            })
-            .with_children(|s| {
-                crate::chrome::section(s, "RELOAD");
-                s.spawn((
-                    ReloadList,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                        ..default()
-                    },
-                ));
-            });
+            // **Reload (#203) has moved to the bottom dock** (UI-61, #247): the panel is
+            // `ui::register_the_shell_panels`' `reload` entry now, a `bevy_gooey` dock panel across the
+            // foot of the workbench. Its heading is the dock tab's and its column is the panel's own, so
+            // nothing of it is left here — a second copy would be two panels for one question.
 
             // **Plan (E-069).** What the agent means to do on this map and how far it has got: the
             // `.plan.ron` that `plan_set` writes, read like the notes are.

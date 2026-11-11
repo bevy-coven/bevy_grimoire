@@ -848,6 +848,15 @@ impl LinesRoom {
 // crowded panel is spacing and grouping, not deletion.
 
 /// Between items that belong to each other — chips in one axis, cells in one row.
+/// **One step of a gooey layout's gap**, as `bevy_gooey::row(1.0)` / `column(1.0)` ask for: a
+/// multiple of the running skin's `gap` (5 px in `editor_skin.ron`), so an interface-size change
+/// moves every row's rhythm together (UI-58/#244, UI-59/#245).
+pub const GOOEY_GAP_ONE: f32 = 1.0;
+
+/// **The skin's `gap`**, from `editor_skin.ron`: the pixel unit [`GOOEY_GAP_ONE`] is a multiple of,
+/// and the divisor a hand-built pixel gap is turned into one (`GAP_TIGHT / SKIN_GAP_PX` is 0.6).
+pub const SKIN_GAP_PX: f32 = 5.0;
+
 pub const GAP_TIGHT: f32 = 3.0;
 /// Between the rows of one block.
 pub const GAP_ROW: f32 = 5.0;
@@ -1101,6 +1110,11 @@ pub struct Frame {
     /// The hole the world is drawn through. Carries [`ViewportSlot`].
     pub viewport: Entity,
     pub right: Entity,
+    /// **The bottom dock** (UI-61, #247): a gooey `Dock` across the foot of the workbench, under the
+    /// body and above the status band. It holds the panels that say what became of the work —
+    /// `docs/ui/vision.md`'s "bottom dock: history · problems · notes · log", of which the reload
+    /// panel is the first to move here.
+    pub bottom: Entity,
     /// One band at the foot of the window: what happened, what went wrong, what the keys are.
     pub status: Entity,
 }
@@ -1569,6 +1583,7 @@ pub fn spawn_frame(
     // dragged. Moving the two docks onto gooey's `Dock` as well is the rest of this issue.
     let dock = commands
         .spawn((
+            ArrangementDock,
             bevy_gooey::Dock(layout),
             // **The map is where a library piece may be let go** (UI-52, #238): the dock covers the viewport, so it is
             // the drop target, and `editor::drop_a_piece_on_the_map` places what lands on it.
@@ -1606,9 +1621,41 @@ pub fn spawn_frame(
     commands.entity(dock).add_child(silent_body);
     commands.entity(viewport).add_child(dock);
 
+    // **And the bottom dock** (UI-61, #247): a gooey `dock()` — the bundle, which brings its own real
+    // body, so its panels are built and laid out — across the foot of the workbench. A row of the root's
+    // own column between the body and the status band, so it takes its height from the window and every
+    // panel above it keeps the rest. It starts on the reload panel: what became of each file's last edit
+    // is the thing an author looks away from the map to read.
+    //
+    // **The `Node` is inserted after the spawn, not beside the bundle.** `bevy_gooey::dock()` brings a
+    // `Node` of its own (`dock()` is `Node { 100% x 100% }, Role::Dock, Dock(layout), children![..]`),
+    // and a bundle carrying the same component twice panics at spawn — every system that reads
+    // `Frame` then failed with "Resource does not exist", because `spawn_frame` never finished.
+    let bottom = commands
+        .spawn((
+            BottomDock,
+            bevy_gooey::dock(bevy_gooey::DockLayout::group(["reload"])),
+            bevy::picking::Pickable::IGNORE,
+        ))
+        .id();
+    commands.entity(bottom).insert((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(BOTTOM_DOCK_H),
+            flex_shrink: 0.0,
+            // **Not shown until there is room** ([`crate::shell_view::give_the_bottom_dock_its_room`]
+            // opens it): a dock that is never laid out has no text for a label census to find drawn
+            // outside it, and takes nothing from the workbench.
+            display: Display::None,
+            border: UiRect::top(Val::Px(EDGE_W)),
+            ..default()
+        },
+        BorderColor::all(ink().panel_edge),
+    ));
+
     commands
         .entity(root)
-        .add_children(&[chrome_bar, door_strip, body, status]);
+        .add_children(&[chrome_bar, door_strip, body, bottom, status]);
 
     commands.insert_resource(Frame {
         root,
@@ -1618,9 +1665,36 @@ pub fn spawn_frame(
         left,
         viewport,
         right,
+        bottom,
         status,
     });
 }
+
+/// **The height of the bottom dock** (UI-61, #247), logical px: a panel's body at a comfortable
+/// reading size — a heading and six lines of the reload state.
+pub const BOTTOM_DOCK_H: f32 = 148.0;
+
+/// **The least height the workbench keeps while the bottom dock is shown**, logical px: the row of
+/// the left dock, the viewport and the inspector. The dock is the room the workbench can spare, so it
+/// is shown only when the workbench would still have this much beside it. Set from the editor's
+/// reference window (1280 x 720, which the headless harness's surface reproduces): with the terminal
+/// open the Map workbench measures 326 px there, and a 148-px dock took nearly half of that and left
+/// the inspector 24 px of visible height — a note being typed was off the panel — and in the Kit tabs
+/// it covered their badge legends.
+pub const WORKBENCH_FLOOR_H: f32 = 420.0;
+
+/// **The dock that holds the workspace's arrangement** (UI-30, #224; a second dock since #247).
+///
+/// `ui::save_the_layout` and `ui::follow_the_saved_layout` write and read the *workspace's* layout, so
+/// they must reach this dock and no other: with a bottom dock in the frame, an unfiltered query
+/// would write the arrangement into the bottom dock and read the bottom dock's layout back as the
+/// workspace's.
+#[derive(Component)]
+pub struct ArrangementDock;
+
+/// **The bottom dock** (UI-61, #247): the panels that say what became of the work.
+#[derive(Component)]
+pub struct BottomDock;
 
 /// **A panel's heading.**
 ///

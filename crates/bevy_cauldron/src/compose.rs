@@ -1570,6 +1570,7 @@ const LABEL_PX: (crate::chrome::text::Role, crate::chrome::text::Role) =
 /// belongs to. See [`crate::chrome::BODY_CHAR_W`] for why it lives there.
 const LABEL_CHAR_W: f32 = crate::chrome::BODY_CHAR_W;
 
+
 /// **Stand the focal group up, with its neighbours either side, each through `composition::expand`.**
 ///
 /// The same three calls `editor::redraw_stamps` makes — build a scratch map, expand a stamp of the
@@ -2566,14 +2567,9 @@ fn rebuild(input: ComposeInput<'_, '_>) {
                     );
                 }
                 Line::Face { name, band } => {
-                    p.spawn((
-                        Node {
-                            flex_direction: FlexDirection::Row,
-                            column_gap: Val::Px(crate::chrome::GAP_ROW),
-                            ..default()
-                        },
-                        ComposeLine,
-                    ))
+                    // **A gooey row** (UI-59, #245): the label column and its value, with the skin's
+                    // own spacing step between them.
+                    p.spawn((bevy_gooey::row(crate::chrome::GOOEY_GAP_ONE), ComposeLine))
                     .with_children(|row| {
                         crate::chrome::row_label(row, crate::chrome::COL_LABEL, name);
                         crate::chrome::row_value(row, band, ink.read, ());
@@ -2687,28 +2683,27 @@ fn spawn_line(p: &mut ChildSpawnerCommands, text: &str, colour: Color) {
     // No stated width: the body is a column whose default `align_items: Stretch` already hands
     // every row the pane's full width. `Val::Percent` here is worse than redundant — inside the
     // scroll pane's measure pass a percent can resolve against nothing and collapse the row.
-    p.spawn((
-        Node {
-            flex_direction: FlexDirection::Row,
-            ..default()
-        },
-        ComposeLine,
-    ))
+    p.spawn((bevy_gooey::row(0.0), ComposeLine))
     .with_children(|row| {
         if indent > 0 {
-            row.spawn(Node {
-                min_width: Val::Px(indent as f32 * LABEL_CHAR_W * ROW_PX.px() / LABEL_PX.0.px()),
-                flex_shrink: 0.0,
-                ..default()
-            });
+            // **The indent is a `cell`** (UI-59, #245), whose width is in body text sizes: the px it
+            // stood for is divided by the row's own type size, so the gutter keeps its share of the
+            // row and grows with the person's text size rather than falling short of it.
+            // **The indent, as a cell** (review of #245): the character advance over the row's own
+            // type size is the ratio the old expression reduced to (0.6), written as what it is.
+            row.spawn(bevy_gooey::cell(indent as f32 * LABEL_CHAR_W / ROW_PX.px()));
         }
+        // **The line itself, with no `Node` of its own** (UI-59, #245). `flex_grow` hands the text the
+        // row's remaining width as a DEFINITE size and `min_width: 0` lets it shrink below its longest
+        // line — the pair that was measured in the live window on 2026-08-17 (without them the text's
+        // flex base resolved to zero width and every row laid out one glyph per line, clipped, over 38
+        // healthy rows). Neither is reachable from a bundle: `row`'s `align_items` is the row's, and a
+        // text item's grow is not a widget's look. So this is the one `Node` left in the module, and the
+        // marker says why it is not a second layout path.
         row.spawn((
+            // CHROME-OK: a flex item's own measure (grow and a zero minimum), which no widget's bundle
+            // carries; the 2026-08-17 measurement above is what chose it.
             Node {
-                // `flex_grow` hands the text the row's remaining width as a DEFINITE size, and
-                // `min_width: 0` lets it shrink below its longest line. Measured in the live
-                // window (uidump, 2026-08-17): without the grow, the text item's flex base
-                // resolved to zero width and every row laid out one glyph per line, clipped —
-                // an empty-looking pane over 38 healthy rows.
                 flex_grow: 1.0,
                 min_width: Val::Px(0.0),
                 ..default()
