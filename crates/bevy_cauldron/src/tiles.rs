@@ -11654,11 +11654,16 @@ mod write_library_tests {
 mod the_other_workspace_tests {
     use super::*;
 
-    /// The cue is a way across: Map and Kit lead to each other, never to themselves, and Rigs leads nowhere.
+    /// The cue is a way across: Map and Kit lead to each other, never to themselves. The Rigs door
+    /// led nowhere; it is the Animation workspace now, and its cue leads to the Map (every workspace
+    /// that is neither has the level for its other side, so the mark is never a dead control).
     #[test]
     fn the_cue_leads_across_and_never_to_itself() {
         use crate::workspace::Workspace;
         assert_eq!(the_other_workspace(Workspace::Map), Some(Workspace::Kit));
         assert_eq!(the_other_workspace(Workspace::Kit), Some(Workspace::Map));
+        // Owner exception (2026-11-10): the old `other_door(Door::Rigs) == None` follows the
+        // deliberate change of #379 (nine workspaces, no door with no other side).
+        assert_eq!(the_other_workspace(Workspace::Animation), Some(Workspace::Map));
     }
 }

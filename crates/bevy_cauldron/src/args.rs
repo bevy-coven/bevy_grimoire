@@ -140,6 +140,11 @@ pub fn open_staged(args: &[String], at: &mut dyn FnMut(crate::project::Stage)) -
             )
         })?,
     };
+    // **An unbuilt workspace is refused as `door_open` refuses it**, with the sentence that names the
+    // issue bringing it, rather than opening an editor on a screen that has nothing to show.
+    if let Some(missing) = workspace.missing() {
+        return Err(format!("cannot open the {} workspace: {missing}", workspace.title().to_lowercase()));
+    }
 
     let mut project = Project::open_staged(&root, kit, at)
         .map_err(|e| format!("cannot open {}: {e}", root.display()))?;

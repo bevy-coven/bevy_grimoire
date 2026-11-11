@@ -4742,6 +4742,10 @@ mod tests {
             // would delete those checks rather than follow a rename, which the re-pin exception
             // forbids outright ("never delete a check"). So the four stay, the pin is the *measured*
             // 28, and the acceptance item is recorded unmet on the issue.
+            // Owner exception (2026-11-10): `no_context_gains_a_key` Global 19 -> 28 (+9). The owner
+            // chose Cmd/Ctrl+1..9 on 2026-11-09 (issue #379); the issue's matching removal of the four
+            // `view.*` rows (-4) is not done here because removing them deletes checks the re-pin
+            // exception forbids deleting (see above), so the pin is the measured 28, not 24.
             (Context::Global, 28),
             // 16 -> 17: `FocusFilter`, on `Cmd+F`. **The filter box was mouse-only on every tab
             // but one.** `FocusFilter` was `Context::Tiles`, so the Map tab's PLACE palette and the

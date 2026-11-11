@@ -257,8 +257,9 @@ pub fn cross(world: &mut World, to: crate::workspace::Workspace) -> Result<(), S
         let Some(name) = project.open_map_name.clone() else {
             return Err("the Map workspace needs a map, and none has been open".to_owned());
         };
-        let open = crate::project::OpenMap::open(project, &name)?;
-        world.insert_resource(open);
+        // **Through the `map_open` operation**, as the project page and an agent open a map: the same
+        // read and refusal, and the project remembers which map it is on.
+        crate::session::open_map_now(world, &name)?;
     }
     // **The map stays open in every workspace that shows the world** (NV-02, #379,
     // `docs/ui/vision.md` §4). It used to be taken away when the Kit door was entered, because a
@@ -727,6 +728,9 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::toolbar::ToolbarAtlas", Ownership::Session),
     ("bevy_cauldron::editor::Folded", Ownership::Workspace),
     ("bevy_cauldron::editor::StampPicture", Ownership::Workspace),
+    // **`Workspace`, except across a switch**: a leave empties the lock, but `close_the_door` keeps it
+    // when a workspace switch is in flight (NV-02, #379), because the selection follows the lock and a
+    // switch never drops the selection.
     ("bevy_cauldron::editor::TargetLock", Ownership::Workspace),
     ("bevy_cauldron::editor::UnderCursor", Ownership::Workspace),
     // The palette's own order, rewritten whenever it rebuilds: what the booth bakes first is a fact

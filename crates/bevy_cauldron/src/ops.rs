@@ -4988,9 +4988,10 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // operation rather than calling `fill::flood` / `OpenMap::save` themselves.
     ("fill", "fill_at("),
     ("map_save", "save_map("),
-    // **The Map door's switching** — `screen::cross` re-reads the map through `map_open`, so a person
-    // switching to the Map door and an agent opening one by name are one operation.
-    ("map_open", "map_open"),
+    // **The Map workspace's switch** — `screen::cross` opens a map that is not open through
+    // `session::open_map_now`, which dispatches `map_open`, so a person switching to the Map
+    // workspace, a map tab and an agent opening one by name are one operation.
+    ("map_open", "\"map_open\", &serde_json::json!"),
     // **The placement click** — `place_one` calls `plan_placement` and dispatches
     // `placement_add`, so a click and an agent put a piece down the same way (S2.1).
     ("placement_add", "place_one("),
@@ -8710,7 +8711,9 @@ pub mod door_open {
     impl Params {
         /// **The JSON schema**, which is what an agent reads.
         pub fn schema() -> serde_json::Value {
-            let workspaces: Vec<&str> = Workspace::ALL.iter().map(|w| w.id()).collect();
+            let mut workspaces: Vec<&str> = Workspace::ALL.iter().map(|w| w.id()).collect();
+            // `rigs` is read as `animation` (`Workspace::from_flag`), so the schema offers it.
+            workspaces.push("rigs");
             json!({
                 "type": "object",
                 "additionalProperties": false,

@@ -419,6 +419,12 @@ pub struct SettingsLayer {
     /// layout is the way back to the current workspace's default.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub workspace_layout: BTreeMap<String, bevy_gooey::DockLayout>,
+    /// **The one arrangement files had before the workspaces** (UI-33, #227), read so no existing
+    /// settings file is refused for it: [`SettingsLayer::read`] moves it into
+    /// `workspace_layout["map"]` (the arrangement was the Map's) unless that entry exists. Never
+    /// written back.
+    #[serde(default, skip_serializing)]
+    pub shell_layout: Option<bevy_gooey::DockLayout>,
 }
 
 impl Default for SettingsLayer {
@@ -443,6 +449,7 @@ impl Default for SettingsLayer {
             terminal_shell: None,
             terminal_shell_args: None,
             workspace_layout: BTreeMap::new(),
+            shell_layout: None,
         }
     }
 }
@@ -451,7 +458,10 @@ impl SettingsLayer {
     /// **Reads a file's text as a layer**, refusing with the file and the field when it does not read,
     /// is another version, or holds a value no editor can use.
     pub fn read(file: &str, text: &str) -> Result<SettingsLayer, Refusal> {
-        let layer: SettingsLayer = reload_check::read(KIND, file, text)?;
+        let mut layer: SettingsLayer = reload_check::read(KIND, file, text)?;
+        if let Some(old) = layer.shell_layout.take() {
+            layer.workspace_layout.entry(crate::workspace::Workspace::Map.id().to_owned()).or_insert(old);
+        }
         let refuse = |field: &str, reason: String| Refusal { kind: KIND, file: file.to_owned(), field: Some(field.to_owned()), reason };
         if layer.version != SETTINGS_VERSION {
             return Err(refuse(

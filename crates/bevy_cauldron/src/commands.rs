@@ -241,7 +241,8 @@ pub fn identity(action: Action) -> (&'static str, &'static str) {
         Action::Save => ("file.save", "Save"),
         Action::Snip => ("tools.snip", "Snip an area of the editor"),
         Action::MainMenu => ("file.main_menu", "Close project"),
-        Action::SwitchDoor => ("view.switch_workspace", "Switch to the other workspace"),
+        // The id stays `view.switch_door`: a keymap file that rebound it must keep reading.
+        Action::SwitchDoor => ("view.switch_door", "Switch to the other workspace"),
         Action::ShowErrors => ("view.show_errors", "Show this session's errors"),
         Action::CopyInfo => ("edit.copy_tab_text", "Copy this tab's text"),
         Action::Cancel => ("edit.cancel", "Back out"),
