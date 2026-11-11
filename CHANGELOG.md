@@ -4,6 +4,8 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-11
 
+- **ag-06-lessons** `46de85f8a32d` An agent proposes one line for the project's guide after a hand-back, and the person keeps or discards it in the AGENT block; only Keep writes .dark_factory/AGENTS.md *No clip: visible, not yet recorded: fleet worker*
+- **ag-05-edit-by-label** `8758619867a1` The agent guide on the project page is edited the way a person edits it: the field under its label takes the keystrokes and Save writes and grants what was typed *No clip: visible, not yet recorded: fleet worker*
 - **nv-06-back-and-forward** `53797d3a` Back and Forward across workspaces and cameras, bounded at 100 places *No clip: visible, not yet recorded: fleet worker*
 - **nv-05-go-to-anything** `53797d3a` Go to anything: one finder over everything a project names, commands with a leading `>` *No clip: visible, not yet recorded: fleet worker*
 - **gooey-pin-9ae6c95** `9785850c` The bevy_gooey pin moves to 9ae6c95 (virtual lists, layout primitives, host-placed docks), and the shell's dock no longer builds its placeholder pages over the map *No clip: a dependency pin and the regression it caused in the shell's dock, with no intended change on screen; proved by crates/bevy_cauldron/tests/the_shell_dock_builds_nothing_over_the_viewport.rs (3) and the shell tests that already read the dock (the_shell_is_a_gooey_dock, a_saved_arrangement_is_the_one_the_editor_shows, the_workspaces_keep_their_promises, a_workspace_switch_keeps_the_map: 21)*
