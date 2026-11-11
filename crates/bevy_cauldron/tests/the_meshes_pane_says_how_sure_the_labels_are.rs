@@ -182,7 +182,7 @@ fn the_labels_row_shows_the_models_file_stem_not_its_path() {
 /// **An entity's ancestors, nearest first.**
 fn ancestors(world: &World, mut e: Entity) -> Vec<Entity> {
     let mut out = Vec::new();
-    while let parent = world.get::<ChildOf>(e).map(|c| c.parent()) {
+    while let Some(parent) = world.get::<ChildOf>(e).map(|c| c.parent()) {
         out.push(parent);
         e = parent;
     }

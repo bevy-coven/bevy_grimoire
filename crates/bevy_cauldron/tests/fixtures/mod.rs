@@ -280,6 +280,16 @@ fn parse_record(by: AxisOrigin, rest: &str) -> LabelOrigin {
     LabelOrigin { by, model: rest.model, model_at: rest.model_at, at: rest.at, confidence: rest.confidence }
 }
 
+/// **A `Confidence` from the variant name a test writes**: `High`, `Medium` or `Low`.
+fn confidence_of(name: &str) -> Confidence {
+    match name.trim() {
+        "High" => Confidence::High,
+        "Medium" => Confidence::Medium,
+        "Low" => Confidence::Low,
+        other => panic!("`{other}` is not a confidence (High, Medium or Low)"),
+    }
+}
+
 /// **Write a fixture file through the one YAML writer**, which is the writer the editor itself uses. A
 /// fixture written any other way is a second spelling, and a project file has one.
 fn write_yaml<T: serde::Serialize>(path: &Path, value: &T) {
