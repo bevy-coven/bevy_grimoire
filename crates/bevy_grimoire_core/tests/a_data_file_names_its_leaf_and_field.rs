@@ -7,7 +7,7 @@
 use bevy_grimoire_core::data_files::{self, DataFile, DataFiles};
 use bevy_grimoire_core::reload_check::Refusal;
 
-const REGISTRY: &str = "version: 1\nfiles:\n- id: tuning/mob\n  path: mob.ron\n  bounds:\n    mob.speed:\n      min: 0.0\n      max: 9.0\n    mob.hp:\n      min: 1.0\n";
+const REGISTRY: &str = "version: 1\nfiles:\n- id: tuning/mob\n  path: mob.yaml\n  bounds:\n    mob.speed:\n      min: 0.0\n      max: 9.0\n    mob.hp:\n      min: 1.0\n";
 const GOOD: &str = "# tuning\nmob:\n  speed: 1.5\n  name: orc\n  hp: 7\nfast: false\n";
 
 fn entry() -> DataFile {
@@ -32,14 +32,14 @@ fn a_file_cut_off_is_refused_at_the_leaf_where_reading_stopped() {
     // stopped at is the one the refusal names.
     let r = refused("# tuning\nmob:\n  speed: 1.5\n  name: \"orc");
     assert_eq!((r.kind, r.file.as_str(), r.field.as_deref()), ("game_data", "mob.yaml", Some("mob.name")), "{r:?}");
-    assert!(r.sentence().starts_with("mob.ron (mob.name): "), "{}", r.sentence());
+    assert!(r.sentence().starts_with("mob.yaml (mob.name): "), "{}", r.sentence());
 }
 
 #[test]
 fn text_that_is_not_yaml_is_refused_with_the_file_and_no_field() {
     let r = refused("this is not a tuning file");
     assert_eq!((r.file.as_str(), r.field.as_deref()), ("mob.yaml", None), "{r:?}");
-    assert!(r.sentence().starts_with("mob.ron: "), "{}", r.sentence());
+    assert!(r.sentence().starts_with("mob.yaml: "), "{}", r.sentence());
     assert_eq!(refused("").field, None, "an empty file is not a tuning file");
 }
 
