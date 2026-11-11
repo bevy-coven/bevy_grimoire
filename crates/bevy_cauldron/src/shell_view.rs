@@ -72,6 +72,9 @@ pub struct ShellView {
     pub left_hidden: bool,
     /// Zen mode: everything but the viewport is hidden.
     pub zen: bool,
+    /// **The bottom dock is asked for** (View ▸ Show reload panel): shown whatever the room, which is
+    /// what a person on a short window with the terminal open (the default) has to do to read the reload state.
+    pub reload_shown: bool,
 }
 
 impl ShellView {
@@ -97,6 +100,10 @@ pub struct LeftPanelItem;
 /// The View menu's tick for Zen mode.
 #[derive(Component)]
 pub struct ZenItem;
+
+/// The View menu's tick for the reload panel: the bottom dock, asked for.
+#[derive(Component)]
+pub struct ReloadPanelItem;
 
 /// Everything Zen mode folds that has no field in the [`Frame`]: found by what it is.
 type ZenParts = Or<(With<EditorMenuBar>, With<Toolbar>, With<TerminalPaneRoot>, With<EmptyMapPrompt>)>;
@@ -269,29 +276,42 @@ fn collapse_the_left_pane(
     }
 }
 
-/// **The bottom dock is shown when the workbench can spare the room, and only then** (UI-61, #247).
+/// **The bottom dock: asked for, or given the room** (UI-61, #247). The one writer of its `display`.
 ///
 /// A 148-px row under the body is taken from the body, and at the editor's reference window (1280 x
 /// 720, terminal open) that left the inspector 24 px of visible height and the Kit tabs' badge legends
-/// under the dock. So the dock is a row only when the workbench keeps [`WORKBENCH_FLOOR_H`] beside it:
-/// `Display::None` otherwise, which lays out to nothing and leaves no text for the census to find
-/// drawn outside a clip. **The room is the body plus the dock's own row, whether it is shown or not**,
-/// so showing it does not change the answer the next frame (no flicker at the threshold). Not while
-/// the view has folded the shell: Zen mode owns the dock then ([`fold_the_shell`]).
+/// under the dock. So, unless the person has asked for it (View ▸ Show reload panel, [`ShellView::reload_shown`]),
+/// the dock is a row only when the workbench keeps [`WORKBENCH_FLOOR_H`] beside it: `Display::None`
+/// otherwise, which lays out to nothing and leaves no text for the census to find drawn outside a
+/// clip. **The room is the body plus the dock's own row, whether it is shown or not**, so showing it
+/// does not change the answer the next frame (no flicker at the threshold).
+///
+/// **Zen mode hides it, and the frame Zen ends on does not read the room.** [`fold_the_shell`] does not
+/// touch the dock, so there is no stored display to put back (that put back a stale `Flex` for one frame
+/// when the window had shrunk in Zen); and on that frame the layout is still Zen's, whose body is the
+/// whole window, so a dock nobody asked for stays hidden until the next frame has measured the real one.
 fn give_the_bottom_dock_its_room(
     view: Res<ShellView>,
     frame: Option<Res<Frame>>,
     laid: Query<&ComputedNode>,
-    mut docks: Query<&mut Node, (With<BottomDock>, Without<Folded>)>,
+    mut docks: Query<&mut Node, With<BottomDock>>,
+    mut zen_last_frame: Local<bool>,
 ) {
     let Some(frame) = frame else { return };
-    if view.the_rest_is_hidden() {
-        return;
-    }
-    let (Ok(mut dock), Ok(body)) = (docks.get_mut(frame.bottom), laid.get(frame.body)) else { return };
-    let interface_px = |node: &ComputedNode| node.size().y * node.inverse_scale_factor();
-    let own_row = if dock.display == Display::None { 0.0 } else { laid.get(frame.bottom).map_or(0.0, interface_px) };
-    let display = if interface_px(body) + own_row >= WORKBENCH_FLOOR_H + BOTTOM_DOCK_H { Display::Flex } else { Display::None };
+    let Ok(mut dock) = docks.get_mut(frame.bottom) else { return };
+    let just_left_zen = std::mem::replace(&mut *zen_last_frame, view.the_rest_is_hidden()) && !view.the_rest_is_hidden();
+    let display = if view.the_rest_is_hidden() {
+        Display::None
+    } else if view.reload_shown {
+        Display::Flex
+    } else if just_left_zen {
+        Display::None
+    } else {
+        let Ok(body) = laid.get(frame.body) else { return };
+        let interface_px = |node: &ComputedNode| node.size().y * node.inverse_scale_factor();
+        let own_row = if dock.display == Display::None { 0.0 } else { laid.get(frame.bottom).map_or(0.0, interface_px) };
+        if interface_px(body) + own_row >= WORKBENCH_FLOOR_H + BOTTOM_DOCK_H { Display::Flex } else { Display::None }
+    };
     if dock.display != display {
         dock.display = display;
     }
@@ -314,7 +334,7 @@ fn fold_the_shell(
     let mut fold: Vec<Entity> = Vec::new();
     if view.the_rest_is_hidden() {
         fold.extend(parts.iter());
-        fold.extend([frame.chrome_bar, frame.door_strip, frame.status, frame.right, frame.bottom]);
+        fold.extend([frame.chrome_bar, frame.door_strip, frame.status, frame.right]);
     }
     for (kids, collapsed, gliding, peek) in &splits {
         if view.zen {
@@ -353,6 +373,7 @@ fn tick_the_menu_rows(
     view: Res<ShellView>,
     left: Query<(Entity, Has<bevy_gooey::Checked>), With<LeftPanelItem>>,
     zen: Query<(Entity, Has<bevy_gooey::Checked>), With<ZenItem>>,
+    reload: Query<(Entity, Has<bevy_gooey::Checked>), With<ReloadPanelItem>>,
     mut commands: Commands,
 ) {
     let mut tick = |item: Entity, ticked: bool, want: bool| match (want, ticked) {
@@ -370,11 +391,19 @@ fn tick_the_menu_rows(
     for (item, ticked) in &zen {
         tick(item, ticked, view.zen);
     }
+    for (item, ticked) in &reload {
+        tick(item, ticked, view.reload_shown);
+    }
 }
 
 /// **View ▸ Show left panel**: the tick is the panel shown.
 pub fn toggle_the_left_panel(change: On<bevy_gooey::ValueChange<bool>>, mut view: ResMut<ShellView>) {
     view.left_hidden = !change.value;
+}
+
+/// **View ▸ Show reload panel**: the tick is the bottom dock asked for.
+pub fn toggle_the_reload_panel(change: On<bevy_gooey::ValueChange<bool>>, mut view: ResMut<ShellView>) {
+    view.reload_shown = change.value;
 }
 
 /// **View ▸ Zen mode.**
@@ -391,7 +420,7 @@ mod tests {
     fn the_view_says_what_is_hidden() {
         for left_hidden in [false, true] {
             for zen in [false, true] {
-                let view = ShellView { left_hidden, zen };
+                let view = ShellView { left_hidden, zen, ..ShellView::default() };
                 assert_eq!(view.left_is_hidden(), left_hidden || zen, "{view:?}");
                 assert_eq!(view.the_rest_is_hidden(), zen, "{view:?}");
             }
