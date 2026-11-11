@@ -34,11 +34,6 @@ use bevy_gooey::{Dock, DockPanel};
 use crate::fixtures;
 
 /// The editor on a one-piece fixture, settled, with a window a pointer can be injected into.
-/// **The least viewport height this test can put a pointer in**, logical px. The editor's own viewport
-/// is 148 px shorter than the workbench it had before the bottom dock (`chrome::BOTTOM_DOCK_H`), which
-/// is the design; what the click test below needs is only a centre that is inside the world's hole.
-const VIEWPORT_LEAST_H: f32 = 80.0;
-
 fn editor(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("shell_dock_paints_{tag}_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
@@ -178,15 +173,7 @@ fn the_viewport_is_uncovered_and_a_click_in_it_still_places_a_piece() {
     let mut app = editor("clickable");
     let rect = viewport(&mut app);
     let centre = rect.center();
-    // **A real area, measured against the frame the bottom dock leaves** (UI-61, #247): the dock is a
-    // 148-px row of the root's column, so the viewport is `BOTTOM_DOCK_H` shorter than the workbench it
-    // had. What this test needs of it is somewhere honest to put a pointer — wide enough that a click
-    // is not on a panel's edge, and tall enough that its centre is inside the world's hole — so the
-    // floor is the map's own minimum, [`VIEWPORT_LEAST_H`], not the tallest the editor ever draws.
-    assert!(
-        rect.width() > 200.0 && rect.height() > VIEWPORT_LEAST_H,
-        "the viewport is a real area: {rect:?}"
-    );
+    assert!(rect.width() > 200.0 && rect.height() > 200.0, "the viewport is a real area: {rect:?}");
 
     // The editor's own answer to "is a panel under the pointer", which is what gates every map verb.
     step(&mut app, Some(centre), None);

@@ -65,9 +65,35 @@ fn laid(app: &mut App, entity: Entity) -> Rect {
     Rect::from_center_size(at.translation * scale, node.size() * scale)
 }
 
+/// **The dock is the room the workbench can spare** (UI-61, #247). At the editor's reference window
+/// (the headless surface, 1536 x 864 texels) the workbench measured 357 texels with the terminal open and
+/// no bottom dock; the dock took 178 of them and left the inspector a 24-texel viewport, so it must give
+/// way there, entirely, and leave the workbench what it had.
+#[test]
+fn the_bottom_dock_gives_way_in_the_reference_window() {
+    let mut app = editor("gives_way");
+    let (bottom, body) = {
+        let world = app.world_mut();
+        let bottom = world.query_filtered::<Entity, With<BottomDock>>().single(world).expect("the frame has a bottom dock");
+        (bottom, world.resource::<Frame>().body)
+    };
+    let dock = laid(&mut app, bottom);
+    let body_box = laid(&mut app, body);
+    assert!(dock.height() < 2.0, "a window with no room to spare has no dock row: {dock:?}");
+    assert!(
+        body_box.height() > 340.0,
+        "the workbench keeps what it had before the dock existed (357 texels here): {body_box:?}"
+    );
+}
+
 #[test]
 fn the_bottom_dock_is_gooeys_and_stands_under_the_body() {
     let mut app = editor("laid_out");
+    // **A window with room to spare**: the dock is a real row only above the workbench's floor.
+    harness::resize_surface(&mut app, 1536, 1500).unwrap_or_else(|e| panic!("{e}"));
+    for _ in 0..4 {
+        app.update();
+    }
     let (bottom, body, status, arrangement) = {
         let world = app.world_mut();
         let bottom = world.query_filtered::<Entity, With<BottomDock>>().single(world).expect("the frame has a bottom dock");
