@@ -110,8 +110,10 @@ impl Plugin for NoticePlugin {
                     paint_journal.after(record_problems).after(record_steps),
                     // After the verbs, so a problem raised this frame is on screen this frame.
                     paint_notices.after(keys::Phase::Act),
-                    // And after the paint, so a toast is raised in the frame its refusal is.
-                    (raise_toast, mark_the_words).chain().after(paint_notices),
+                    // And after the paint, so a toast is raised in the frame its refusal is. **Before gooey's style set** (UI-R06, #336):
+                    // gooey gives a toast its entrance (the slide in from its edge, `begin_entrances`) in the frame it first sees it, and a
+                    // toast raised after that set stood at its place for one drawn frame and then jumped to where the slide begins.
+                    (raise_toast, mark_the_words).chain().after(paint_notices).before(bevy_gooey::GooeySystems::Style),
                     finish_show,
                 ),)
                     .run_if(in_state(crate::screen::Screen::Editor)),
