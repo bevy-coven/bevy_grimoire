@@ -11,13 +11,21 @@
 //!    it. That is the honest form of the route until those workspaces exist, and it is the same walk
 //!    either way — the stack does not know what a page is.
 //! 2. **One Back after a follow restores the person's camera**: the follow's own steps are not places.
+//! 3. **A place is a workspace, a panel, a selection and a camera**: Back puts the selection back too.
+//! 4. **A place whose thing is gone is skipped with a notice**, and the walk carries on to the next.
+//! 5. **Back and Forward are the editor's keys only while the tab has the keys**: with a text field
+//!    focused (the palette's, a shell's) `Ctrl+[` is the field's.
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
+use bevy_cauldron::editor::{EditorState, TargetLock, lock_on_placement};
 use bevy_cauldron::harness;
+use bevy_cauldron::keys::{Context, Live};
 use bevy_cauldron::nav::{History, NAV_HISTORY_MAX};
+use bevy_cauldron::selection::Selection;
 use bevy_cauldron::tiles::Mode;
 use bevy_cauldron::view::Rig;
 use bevy_cauldron::workspace::Workspace;
@@ -198,4 +206,96 @@ fn the_history_keeps_the_last_hundred_places() {
         Some(format!("p{}", 25).as_str()),
         "the oldest is what falls off, so the newest hundred are kept"
     );
+}
+
+/// **A place holds the selection too**: Back puts back the piece that was selected, not only the page and
+/// the camera.
+#[test]
+fn back_restores_the_selection_the_place_held() {
+    let mut app = editor("selection");
+    assert!(lock_on_placement(app.world_mut(), "lamp@7"), "the fixture places `lamp@7`");
+    settle(&mut app);
+    assert_eq!(app.world().resource::<Selection>().ids(), ["lamp@7"], "the piece is selected before the walk");
+
+    chord(&mut app, KeyCode::Digit4);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit);
+    // **Nothing selected where the person went**, so a Back that only moved the page would leave it so.
+    *app.world_mut().resource_mut::<TargetLock>() = TargetLock::default();
+    settle(&mut app);
+    assert!(app.world().resource::<Selection>().is_empty(), "the selection is cleared on the Kit page");
+
+    chord(&mut app, KeyCode::BracketLeft);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Map, "Back reaches the Map");
+    assert_eq!(
+        app.world().resource::<Selection>().ids(),
+        ["lamp@7"],
+        "the place the person left held `lamp@7` selected, and Back must put it back"
+    );
+}
+
+/// **A place whose thing is gone is skipped, with a notice, and the walk carries on.** Two places are
+/// behind the person: an older one that can be gone to, and a newer one that names a placement no map
+/// holds. One Back must land on the older, and say what it skipped.
+#[test]
+fn a_place_whose_thing_is_gone_is_skipped_and_the_walk_carries_on() {
+    let mut app = editor("gone");
+    let mut wanted = bevy_cauldron::nav::Camera::of(app.world().resource::<Rig>());
+    wanted.focus = Vec3::new(20.0, 0.0, -20.0);
+    wanted.height = 12.0;
+    {
+        let mut history = app.world_mut().resource_mut::<History>();
+        history.push(bevy_cauldron::nav::Place {
+            workspace: Workspace::Map,
+            mode: Mode::Map,
+            selection: None,
+            camera: Some(wanted),
+        });
+        history.push(bevy_cauldron::nav::Place {
+            workspace: Workspace::Map,
+            mode: Mode::Map,
+            selection: Some("ghost@9".to_owned()),
+            camera: None,
+        });
+    }
+    chord(&mut app, KeyCode::BracketLeft);
+    let now = camera(&app);
+    assert!(
+        now.0.abs_diff_eq(wanted.focus, 1e-3) && (now.1 - wanted.height).abs() <= 1e-3,
+        "Back skipped the gone place and landed on the one before it: wanted {:?}, now {now:?}",
+        (wanted.focus, wanted.height)
+    );
+    let told = app
+        .world()
+        .resource::<EditorState>()
+        .status
+        .problems()
+        .iter()
+        .any(|p| p.text.contains("ghost@9"));
+    assert!(told, "the notice names the thing that is gone");
+}
+
+/// **With a text field holding the keys, `Ctrl+[` is the field's.** The finder's own field is the
+/// nearest: it takes the keys the moment it opens, so Back must not walk the editor away under it.
+#[test]
+fn back_is_not_the_editors_while_a_text_field_has_the_keys() {
+    let mut app = editor("typing");
+    app.world_mut().spawn((Window::default(), PrimaryWindow));
+    for _ in 0..8 {
+        app.update();
+    }
+    chord(&mut app, KeyCode::Digit4);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit);
+    assert!(app.world().resource::<History>().behind() >= 1, "the Map is behind the person");
+
+    chord(&mut app, KeyCode::KeyP);
+    assert_eq!(
+        app.world().resource::<Live>().0,
+        Context::Typing,
+        "the premise: the open finder's field has the keys"
+    );
+    let behind = app.world().resource::<History>().behind();
+
+    chord(&mut app, KeyCode::BracketLeft);
+    assert_eq!(*app.world().resource::<Workspace>(), Workspace::Kit, "Back did not walk away under the field");
+    assert_eq!(app.world().resource::<History>().behind(), behind, "and the history was not touched");
 }

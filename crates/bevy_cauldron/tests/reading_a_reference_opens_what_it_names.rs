@@ -1,18 +1,15 @@
 //! **A reference opens what it names** (NV-07, #384; series getting around, #377).
 //!
-//! Three claims, and each is measured on what a person reads or on where the editor lands:
+//! Two claims, and each is measured on what a person reads or on where the editor lands:
 //!
 //! 1. **A piece's `Used by` names the maps that place it**, from the project's own `maps/` reader —
 //!    the same one `placement_remove` asks, so a second scan cannot disagree with it.
-//! 2. **`Open file` on a placement asks the one reveal for its map's file**, and the answer is the
-//!    sentence `reveal::page_of` writes for a file: the Files workspace is GD-11 (#373), so the
-//!    reference is refused **with what is missing** rather than doing nothing. That is the honest half
-//!    of the issue's first acceptance item today, and the test pins the sentence rather than a
-//!    destination.
-//! 3. **Two references to one thing are two answers to one question**, and the second one — the cue —
-//!    says so: no map in `bevy_grimoire_core::map` carries a cue, so `uses_the_cue` answers the maps
-//!    the index holds and the panel's sentence says nothing names it yet. A test that invented a cue
-//!    would be measuring a field the schema does not have.
+//! 2. **A reference to a file asks the one reveal for it**, and the answer is the sentence
+//!    `reveal::page_of` writes for a file: the Files workspace is GD-11 (#373), so the reference is
+//!    refused **with what is missing** rather than doing nothing. That is the honest half of the
+//!    issue's first acceptance item today, and the test pins the sentence rather than a destination.
+//!    The cue half (Sound's `Used by`, NV-08 #385) and Cmd-click (GD-11) are not built, and nothing
+//!    here pretends otherwise.
 
 use bevy::prelude::*;
 
@@ -60,17 +57,22 @@ fn a_piece_no_map_places_says_so() {
     );
 }
 
-/// **`Open file` on a placement names its map's file**, and the reveal refuses it with the page that is
-/// missing — GD-11 (#373) — rather than doing nothing.
+/// **A reference to a map's file is refused with the page that is missing** — GD-11 (#373) — rather than
+/// doing nothing.
 #[test]
-fn open_file_on_a_placement_names_its_map_and_the_reveal_says_what_is_missing() {
+fn a_file_reference_is_refused_with_the_page_that_is_missing() {
     let app = editor("open_file");
     let project = app.world().resource::<bevy_cauldron::project::Project>().clone();
     let open = app.world().resource::<OpenMap>().clone();
-    let path = crosslinks::file_of(&project, Some(&open), "bed@0").expect("a placement is authored in its map");
+    let path = open
+        .map_path
+        .strip_prefix(&project.root)
+        .expect("the open map is inside the project")
+        .to_string_lossy()
+        .replace('\\', "/");
     assert_eq!(path, "assets/grimoire/maps/m.map.ron", "the file a person edits for `bed@0`");
 
-    let shown = bevy_cauldron::ops::Shown::File { path: path.clone(), lines: None };
+    let shown = bevy_cauldron::ops::Shown::File { path, lines: None };
     let why = match bevy_cauldron::reveal::page_of(&shown, Some(&project)) {
         Ok(_) => panic!("the Files workspace does not exist yet, so this must have no page"),
         Err(why) => why,

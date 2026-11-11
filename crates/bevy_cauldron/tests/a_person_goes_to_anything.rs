@@ -287,6 +287,19 @@ fn a_placement_id_opens_the_map_with_the_placement_framed() {
     );
 }
 
+/// **The keymap names Cmd/Ctrl+P for what it does.** The chord opens the finder over everything, and a
+/// person rebinding a command onto it is told what they would be taking it from.
+#[test]
+fn the_keymap_names_cmd_p_go_to_anything() {
+    let taken = bevy_cauldron::keymap_screen::taken_by(
+        &std::collections::BTreeMap::new(),
+        "edit.undo",
+        bevy_gooey::Shortcut::primary(KeyCode::KeyP),
+    );
+    let titles: Vec<&str> = taken.iter().map(|t| t.title).collect();
+    assert_eq!(titles, ["Go to anything"], "Cmd/Ctrl+P answers to the finder, and says so");
+}
+
 /// **`>` followed by a command's name runs that command.** The undo depth is the measurement: a
 /// command that ran once leaves exactly one step waiting to be redone, as the palette's own test
 /// pins it.

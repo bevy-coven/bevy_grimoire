@@ -36,15 +36,17 @@ use crate::keys::{Context, Live};
 
 /// The chords that open (and, while it is open, close) the palette.
 ///
-/// **`Cmd`/`Ctrl`+`P` is the third, and it opens the finder over everything the project names**
+/// **`Cmd`/`Ctrl`+`P` is the odd one out, and it opens the finder over everything the project names**
 /// (NV-05, #382): `goto.rs` is the same widget with a second source, and the `>` in front of a query
 /// swaps between them. One chord for "go somewhere", one for "run something", which is what
 /// `Cmd`+`P` means in every editor a person already uses.
-pub fn chords() -> [Shortcut; 3] {
+///
+/// Each chord is paired with the source it opens the palette on.
+pub fn chords() -> [(Source, Shortcut); 3] {
     [
-        Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyP),
-        Shortcut::new(Modifiers::PRIMARY, KeyCode::KeyP),
-        Shortcut::new(Modifiers::PRIMARY, KeyCode::KeyK),
+        (Source::Commands, Shortcut::new(Modifiers::PRIMARY | Modifiers::SHIFT, KeyCode::KeyP)),
+        (Source::Everything, Shortcut::new(Modifiers::PRIMARY, KeyCode::KeyP)),
+        (Source::Commands, Shortcut::new(Modifiers::PRIMARY, KeyCode::KeyK)),
     ]
 }
 
@@ -86,11 +88,9 @@ fn toggle(
     history: Res<bevy_gooey::PaletteHistory>,
     mut commands: Commands,
 ) {
-    let pressed = chords().iter().position(|chord| chord.just_pressed(&keys));
-    let Some(which) = pressed else { return };
     // **Which source the chord asks for**: `Cmd`+`P` is everything, the other two are the command
     // palette (NV-05, #382). One widget, one spawn, two lists.
-    let ask = if which == 1 { Source::Everything } else { Source::Commands };
+    let Some((ask, _)) = chords().into_iter().find(|(_, chord)| chord.just_pressed(&keys)) else { return };
     if let Some((palette, leaving)) = open.iter().next() {
         // It leaves on gooey's presence (a fade, then despawned), not in one frame; asked again while it
         // is leaving, it comes back from where it is drawn.

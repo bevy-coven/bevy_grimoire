@@ -11,8 +11,12 @@
 //!
 //! A workspace, a panel of it, what is selected there, and the camera. Four fields because those are
 //! the four things a person can be looking at when they say *"put me back"*. [`Place::of`] reads them
-//! off the world once, and [`Place::restore`] writes them back; there is no second builder, so a
-//! place can never be a partial snapshot of an edit site's choosing.
+//! off the world once, and [`settle_the_place`] writes them back once the door has landed — the camera
+//! through [`Camera::restore`], the selection through the editor's one lock — so there is no second
+//! builder, and a place can never be a partial snapshot of an edit site's choosing.
+//!
+//! **A place that held no selection leaves the selection as it is.** A follow records a place without
+//! reading one, and clearing what a person has selected to undo a camera move would be a second yank.
 //!
 //! # Back undoes a yank, and a follow's own steps are not places
 //!
@@ -31,14 +35,16 @@
 //!
 //! # A place whose thing is gone is skipped, with a notice
 //!
-//! A placement an agent deleted, a rig renamed on disk: [`Place::restore`] answers `Err` with the
-//! sentence, the walk carries on to the next place, and the person reads what went. Skipping silently
-//! would leave Back doing nothing with no answer, which is the dead end this series exists to remove.
+//! A placement an agent deleted: [`go`] answers `Err` with the sentence, [`History::walk`] drops that
+//! place and carries on to the next one, and `walk_on_the_chords` raises each sentence as a problem so
+//! the person reads what went. Skipping silently would leave Back doing nothing with no answer, which
+//! is the dead end this series exists to remove. (A rig renamed on disk is not checked: a place holds a
+//! rig's name only as a selection on the Map, and the Animation bench has no row to restore.)
 
 use bevy::prelude::*;
 use bevy::prelude::Vec3;
 
-use crate::ops::Shown;
+use crate::keys::{Context, Holder, Live};
 use crate::tiles::Mode;
 use crate::workspace::Workspace;
 
@@ -47,9 +53,10 @@ use crate::workspace::Workspace;
 /// selection id and four floats.
 pub const NAV_HISTORY_MAX: usize = 100;
 
-/// **Notices a person has raised but the status line has not drawn yet**, so the walk does not need an
-/// `EditorState` to skip a place whose thing is gone.
-pub type Notice = String;
+/// **How near two cameras must be to be the same view**: a tenth of a millimetre for the focus and
+/// the height (metres) and the same figure for the angles (radians). A camera restored to within this
+/// is where it was, and `Camera::restore` writes nothing for it.
+const SAME_VIEW: f32 = 1e-4;
 
 /// **Where a person was looking**: the two axes of navigation, the selection, and the camera.
 ///
@@ -88,11 +95,11 @@ impl Camera {
 
     /// Write this camera back into `rig`, and answer whether it moved.
     pub fn restore(&self, rig: &mut crate::view::Rig) -> bool {
-        let same = rig.focus.abs_diff_eq(self.focus, 1e-4)
-            && (rig.height - self.height).abs() <= 1e-4
-            && (rig.yaw - self.yaw).abs() <= 1e-4
-            && (rig.goal_yaw - self.goal_yaw).abs() <= 1e-4
-            && (rig.elevation - self.elevation).abs() <= 1e-4;
+        let same = rig.focus.abs_diff_eq(self.focus, SAME_VIEW)
+            && (rig.height - self.height).abs() <= SAME_VIEW
+            && (rig.yaw - self.yaw).abs() <= SAME_VIEW
+            && (rig.goal_yaw - self.goal_yaw).abs() <= SAME_VIEW
+            && (rig.elevation - self.elevation).abs() <= SAME_VIEW;
         if same {
             return false;
         }
@@ -150,6 +157,30 @@ pub fn still_there(place: &Place, open: Option<&crate::project::OpenMap>) -> Res
         return Err(format!("`{id}` is no longer on this map"));
     }
     Ok(())
+}
+
+/// **Which way a walk goes.**
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Back,
+    Forward,
+}
+
+impl Direction {
+    /// The word a sentence says it with.
+    pub const fn word(self) -> &'static str {
+        match self {
+            Direction::Back => "back",
+            Direction::Forward => "forward",
+        }
+    }
+}
+
+/// **What a walk found**: the place to go to, and a sentence for each place it skipped on the way.
+#[derive(Debug)]
+pub struct Walked {
+    pub to: Option<Place>,
+    pub skipped: Vec<String>,
 }
 
 /// **The places a person has left, and the ones they walked back through.**
@@ -212,21 +243,43 @@ impl History {
         self.behind.len()
     }
 
-    /// **Walk back from `now`**, answering the place to go to. `None` when there is nothing behind.
-    pub fn back(&mut self, now: Place) -> Option<Place> {
-        let target = self.behind.pop()?;
-        self.ahead.push(now);
-        Some(target)
-    }
-
-    /// **Walk forward from `now`**, answering the place to go to. `None` at the present.
-    pub fn forward(&mut self, now: Place) -> Option<Place> {
-        let target = self.ahead.pop()?;
-        self.behind.push(now);
-        if self.behind.len() > NAV_HISTORY_MAX {
-            self.behind.remove(0);
+    /// **Walk from `now` to the nearest place `usable` accepts**, in `direction`.
+    ///
+    /// A place `usable` refuses — its thing is gone — is dropped from the history and its sentence is
+    /// kept, and the walk carries on to the next one. `now` goes onto the opposite stack once, and only
+    /// when a place was found, so a walk that finds nothing leaves the history as it was but for the
+    /// places that were gone.
+    pub fn walk(
+        &mut self,
+        direction: Direction,
+        now: Place,
+        usable: impl Fn(&Place) -> Result<(), String>,
+    ) -> Walked {
+        let mut skipped = Vec::new();
+        loop {
+            let from = match direction {
+                Direction::Back => &mut self.behind,
+                Direction::Forward => &mut self.ahead,
+            };
+            let Some(target) = from.pop() else {
+                return Walked { to: None, skipped };
+            };
+            if let Err(why) = usable(&target) {
+                skipped.push(why);
+                continue;
+            }
+            match direction {
+                Direction::Back => self.ahead.push(now),
+                Direction::Forward => {
+                    self.behind.push(now);
+                    if self.behind.len() > NAV_HISTORY_MAX {
+                        // Oldest first, so the front is what falls off.
+                        self.behind.remove(0);
+                    }
+                }
+            }
+            return Walked { to: Some(target), skipped };
         }
-        Some(target)
     }
 
     /// **The place a walk is waiting to settle on**, for a test and for [`settle_the_place`].
@@ -257,21 +310,6 @@ impl History {
 /// two-step `reveal::take_the_reveal` takes for a row, one value over.
 pub fn go(place: &Place, open: Option<&crate::project::OpenMap>) -> Result<(), String> {
     still_there(place, open)
-}
-
-/// **A place, as a `Shown` the reveal can carry**, so restoring one goes through the one function that
-/// decides a page rather than a second switch here.
-///
-/// `None` for a place whose page is not a `Shown` (a workspace with no selection, the map alone): those
-/// are restored by [`go`] and need no row selected.
-pub fn shown_of(place: &Place) -> Option<Shown> {
-    let id = place.selection.clone()?;
-    Some(match place.workspace {
-        Workspace::Map => Shown::Map { rect: [0.0, 0.0, 0.0, 0.0], placements: vec![id] },
-        Workspace::Kit => Shown::Piece { id },
-        Workspace::Animation => Shown::Rig { id },
-        _ => return None,
-    })
 }
 
 /// **A workspace or panel key leaves the place behind** (NV-06, #383).
@@ -325,6 +363,7 @@ fn settle_the_place(
     mut rig: Option<ResMut<crate::view::Rig>>,
     mut framing: Option<ResMut<crate::editor::MapFraming>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
+    mut commands: Commands,
 ) {
     let Some((place, asked)) = history.pending.clone() else { return };
     if go(&place, open.as_deref()).is_err() {
@@ -355,8 +394,7 @@ fn settle_the_place(
         }
         return;
     }
-    // **The camera, once the door has landed.** Nothing else is written here: a place's *row* is a
-    // `Shown` and the reveal owns it.
+    // **The camera and the selection, once the door has landed.** The page itself is the door's.
     if let (Some(camera), Some(rig)) = (place.camera, rig.as_deref_mut()) {
         camera.restore(rig);
         // **The map's own entry frame must not take the camera back**: it is one shot per door and
@@ -366,6 +404,15 @@ fn settle_the_place(
         if let Some(framing) = framing.as_mut() {
             framing.settle();
         }
+    }
+    // **The selection is the Map's** (a placement id), so it is restored where the Map is edited, and
+    // by the editor's one lock: the selection follows it a frame later, so the two cannot disagree.
+    if place.workspace.edits_the_map()
+        && let Some(id) = place.selection
+    {
+        commands.queue(move |world: &mut World| {
+            crate::editor::lock_on_placement(world, &id);
+        });
     }
     history.pending = None;
 }
@@ -415,13 +462,19 @@ impl Plugin for NavPlugin {
 
 /// **Cmd/Ctrl+[ back, Cmd/Ctrl+] forward**, and the mouse's two side buttons — as `bevy_input` names
 /// them (`MouseButton::Back`, `MouseButton::Forward`).
-// **Eleven reads and one write, and every read is a fact a place is made of** — the crate's own
-// `reveal::take_the_reveal` takes twenty and says the same. Bundling them would be a second type for
-// "where the editor is", which is exactly what a `Place` is.
+///
+/// **Only while the tab has the keys.** With a text field focused (the finder's, a filter box, a
+/// shell's) `Ctrl+[` is the field's — it is Esc in a shell on Linux — and a question on screen has the
+/// keys too; the guard is the command palette's own (`command_palette::toggle`).
+// **Thirteen reads and one write, and every read is a fact a place is made of or a gate on the keys**
+// — the crate's own `reveal::take_the_reveal` takes twenty and says the same. Bundling them would be a
+// second type for "where the editor is", which is exactly what a `Place` is.
 #[allow(clippy::too_many_arguments)]
 fn walk_on_the_chords(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
+    live: Res<Live>,
+    confirm: Option<Res<crate::confirm::Confirm>>,
     mut history: ResMut<History>,
     mut revealing: Option<ResMut<crate::reveal::Revealing>>,
     mut following: Option<ResMut<crate::follow::Following>>,
@@ -442,6 +495,9 @@ fn walk_on_the_chords(
     if !back && !forward {
         return;
     }
+    if live.0 == Context::Typing || live.2 != Holder::Tab || confirm.as_deref().is_some_and(|c| c.is_open()) {
+        return;
+    }
     // **The person reached for the view**: whatever the finder or the follow had queued is theirs now,
     // and a walk that landed on a page while a reveal was crossing it would be two moves for one press.
     if let Some(revealing) = revealing.as_mut() {
@@ -459,21 +515,22 @@ fn walk_on_the_chords(
         rig.as_deref(),
         selection.as_deref(),
     );
-    let place = if back { history.back(now) } else { history.forward(now) };
-    let Some(place) = place else {
-        if let Some(state) = state.as_mut() {
-            state.status.note(if back { "nothing behind to go back to" } else { "nothing ahead to go forward to" });
+    let direction = if back { Direction::Back } else { Direction::Forward };
+    // **A place whose thing is gone is skipped, with a notice** — and the walk carries on.
+    let walked = history.walk(direction, now, |place| go(place, open.as_deref()));
+    if let Some(state) = state.as_mut() {
+        for why in &walked.skipped {
+            state.status.problem(format!("cannot go {}: {why}. The place is skipped.", direction.word()));
         }
-        return;
-    };
-    match go(&place, open.as_deref()) {
-        Ok(()) => history.walk_to(place),
-        Err(why) => {
-            // **A place whose thing is gone is skipped, with a notice** — and the walk carries on.
-            if let Some(state) = state.as_mut() {
-                state.status.problem(format!("cannot go {}: {why}. The place is skipped.", if back { "back" } else { "forward" }));
-            }
+        if walked.to.is_none() && walked.skipped.is_empty() {
+            state.status.note(match direction {
+                Direction::Back => "nothing behind to go back to",
+                Direction::Forward => "nothing ahead to go forward to",
+            });
         }
+    }
+    if let Some(place) = walked.to {
+        history.walk_to(place);
     }
 }
 

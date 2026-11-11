@@ -97,7 +97,13 @@ pub struct Taker {
 /// anywhere.
 fn reserved() -> Vec<(Taker, Shortcut)> {
     let mut out = vec![(Taker { id: "settings.open", title: "Open the settings" }, Shortcut::primary(KeyCode::Comma))];
-    out.extend(crate::command_palette::chords().into_iter().map(|c| (Taker { id: "palette.open", title: "Open the command palette" }, c)));
+    out.extend(crate::command_palette::chords().into_iter().map(|(source, chord)| {
+        let taker = match source {
+            crate::goto::Source::Everything => Taker { id: "goto.open", title: "Go to anything" },
+            crate::goto::Source::Commands => Taker { id: "palette.open", title: "Open the command palette" },
+        };
+        (taker, chord)
+    }));
     out
 }
 

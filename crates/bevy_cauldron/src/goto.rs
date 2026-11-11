@@ -22,9 +22,11 @@
 //! one type here**, for two reasons that are each a field the other lacks: `Location` carries no page
 //! (a workspace, a panel, a row) and `Shown` carries no fault, so a fused type would carry half of
 //! each on every use, and `Location` lives in `bevy_grimoire_core`, which is engine-free and knows
-//! nothing about workspaces. What is shared is the *mapping*, in one function
-//! ([`shown_of_location`]), so the problem list's Go to and this finder arrive at the same page — the
-//! acceptance item that asks for one path is met by one function rather than by one type.
+//! nothing about workspaces. **Nothing maps one to the other yet**: the problem list's Go to does not
+//! ask the reveal for a page, so there is no second path to unify, and a mapping with no caller would
+//! be a function that answers a question nobody asks (a `Location` carries an entity id and not the
+//! footprint a `Shown::Map` frames). The day the problem list reveals, that mapping is written where
+//! it is first called. This part of the issue is `Part of #382`'s remainder.
 //!
 //! # Rebuilt from the reload events, so a piece an agent adds is findable at once
 //!
@@ -220,26 +222,6 @@ impl GotoIndex {
     pub fn of_kind(&self, kind: Kind) -> impl Iterator<Item = &Entry> {
         self.entries.iter().filter(move |e| e.kind == kind)
     }
-}
-
-/// **A `Shown` as a problem's `Location` names it**, so a fault and a change arrive at the same page.
-///
-/// The one function that reads one vocabulary as the other. It answers `None` for what a `Location`
-/// cannot name — a setting, a job — rather than inventing a placement id for them.
-pub fn shown_of_location(location: &bevy_grimoire_core::problem::Location) -> Option<Shown> {
-    if let Some(file) = &location.file {
-        return Some(Shown::File {
-            path: file.clone(),
-            lines: location.line.map(|line| [line as u32, line as u32]),
-        });
-    }
-    // **An entity with no file is a placement on the open map**, and the box is its own: a `Location`
-    // carries the id and not the footprint, so the caller that knows the map builds the rect (see
-    // `crate::ops::row_box`, which is what this finder uses for the same row).
-    location.entity.clone().map(|id| Shown::Map {
-        rect: crate::ops::point_box((0.0, 0.0)),
-        placements: vec![id],
-    })
 }
 
 /// **Build the palette rows**, taking the recents under their own heading.
