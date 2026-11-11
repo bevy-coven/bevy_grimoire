@@ -544,6 +544,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::present::HandBacks", Ownership::Session),
     ("bevy_cauldron::present::Wishes", Ownership::Session),
     ("bevy_cauldron::ui_budget::UiFrame", Ownership::Session),
+    ("bevy_cauldron::ui_budget::GooeySpan", Ownership::Session),
     // **`Session`**: whether this run opens no addresses (it records them instead) is the run's own fact, true for as long as the app runs.
     // **`Session`**: whether this run opens a browser is the run's own fact, true for as long as the
     // app runs. The harness inserts it so a stepped editor records an address instead of launching

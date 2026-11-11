@@ -2913,7 +2913,7 @@ impl Plugin for EditorPlugin {
                             .after(apply_proposal),
                         draw_proposal,
                     ),
-                    (refresh_status, refresh_history),
+                    (refresh_status, refresh_history, keep_now_in_view),
                     // Nested — the tuple is at its twenty-system cap, and these are one rule: what
                     // the keys move must be on screen (the palette's row, the note box's text).
                     (
@@ -2977,6 +2977,19 @@ impl Plugin for EditorPlugin {
                     .run_if(in_state(crate::screen::Screen::Editor))
                     .run_if(crate::workspace::Workspace::map_is_open),
             )
+            // **After gooey has rebound its pool** (UI-53, #239, M4): the rows are reused as the list scrolls, so the
+            // line the editor stands on must be named on whichever row carries it *after* that rebind, not before.
+            .add_systems(
+                Update,
+                // **Every frame, and the body costs a comparison per drawn row.** A settled list has about eight, and
+                // gooey recycles its rows as the list scrolls, so a row can become the current line without
+                // `EditorState` changing at all — which is why this cannot be gated on the change flag.
+                (
+                    mark_the_current_line.after(bevy_gooey::GooeySystems::Style),
+                    hand_the_wheel_on,
+                    hold_the_history_tall,
+                ),
+            )
             // **Paint follows the map, not the edit.** A piece's drawn paint can change when a
             // different piece is laid, so this runs on every map change and redraws only what went
             // stale. Gated like the rest of the Map door, because it takes `Res<OpenMap>`.
@@ -3005,7 +3018,8 @@ impl Plugin for EditorPlugin {
             .add_observer(on_terrain_field_click)
             .add_observer(on_crowd_field_click)
             .add_observer(on_script_row_click)
-            .add_observer(on_notes_click);
+            .add_observer(on_notes_click)
+            .add_observer(history_row_clicked);
     }
 }
 
@@ -8160,203 +8174,367 @@ fn stack_row(next: Option<String>, depth: usize) -> (String, Color) {
     }
 }
 
-/// **How many history rows show on each side of the current position (E-018).** The list is
-/// `2 * HISTORY_EACH_WAY + 1` rows, always, so it never changes height and the rows below stay put.
-const HISTORY_EACH_WAY: isize = 3;
+/// **How many lines of the history the list stands tall (E-018, UI-53).** A half row is cut at the foot, which is
+/// gooey's own sign that there is more below, and `HISTORY_LIST_ROWS` rather than a count of rows means the panel
+/// keeps one height whatever the session holds: the rows below it never move.
+///
+/// **A screenful, where seven hand-spawned rows were.** The seven-row window had no scroll and no way to reach a
+/// line more than three steps either side of where the editor stood, so a session of 5,000 entries was a list a
+/// person could not read (UI-53's "5,000 log lines scroll within the UI frame budget").
+const HISTORY_LIST_ROWS: f32 = 6.5;
 
-/// **One row of the history list (E-018 option C).** `offset` is the row's distance from the
-/// current position, fixed at spawn. `refresh_history` writes the rest each time the history
-/// changes. A click jumps to `position` as one undo group (`jump`). The keyboard route to the same
-/// row is `|offset|` presses of Cmd+Z (rows behind) or Cmd+Shift+Z (rows ahead); see
-/// `docs/guide/building-maps.md`.
+/// **One line of the history, as gooey's virtualized `tree` draws it** (E-018, UI-53).
+///
+/// The tree holds one node per position — `0` is *before the first change*, then every entry of the session
+/// oldest-first — and its rows are gooey's pool: the rows in view and one more, rebound as the list scrolls.
+/// So a session of 5,000 entries is 5,000 nodes and about eight entities, instead of 5,000 labels rebuilt per
+/// change.
 #[derive(Component)]
-pub struct HistorySlot {
-    pub offset: isize,
-    /// The history position this row jumps to; `None` when the row is spare.
-    pub position: Option<usize>,
-    /// The row for the position the stacks are at now. A click on it does nothing.
-    pub current: bool,
+pub struct HistoryTree;
+
+/// **What the history list was last built from**: the two stack lengths. A change that alters the words
+/// of a line also moves one of these — every recorded, forgotten, grouped, undone, redone or jumped entry pushes
+/// or pops a stack — so two numbers are the fingerprint, and a settled frame costs two comparisons.
+#[derive(Component, Default)]
+struct HistoryBuilt {
+    seen: Option<(usize, usize)>,
 }
 
-/// The text of one history row.
-#[derive(Component)]
-struct HistoryText;
-
-/// **The history list under REDO (E-018).** Rows run from the redo side at the top to the undo side
-/// at the bottom.
+/// **The history list under REDO (E-018, UI-53): gooey's virtualized `tree` over the session's lines.**
+///
+/// Rows run oldest-first, from *before the first change* at the top to the line the editor stands on, and on to
+/// anything undone. `refresh_history` sets the nodes and the selection; `keep_now_in_view` scrolls the list so
+/// the line the person stands on is the one they see.
 fn history_block(s: &mut ChildSpawnerCommands) {
-    for offset in (-HISTORY_EACH_WAY..=HISTORY_EACH_WAY).rev() {
-        // **Exactly one line, clipped (E-018).** A label that wrapped grew its row, and every row
-        // below it, MAP SIZE included, moved down: `a_receipt_does_not_move_the_panel` caught it.
-        // So the row is one line tall, its text does not wrap, and what runs past the panel is
-        // clipped rather than pushing anything. The wrapper holds the row's own top and bottom inset
-        // as well as its line, or the line's far edge is cut.
-        s.spawn(Node {
-            height: Val::Px((crate::chrome::BODY_LINE_H + 2.0 * crate::chrome::GAP_TIGHT).ceil()),
-            overflow: bevy::ui::Overflow::clip(),
-            ..default()
-        })
-        .with_children(|wrap| {
-            let mut row = crate::chrome::quiet_row(
-                wrap,
-                false,
-                HistorySlot {
-                    offset,
-                    position: None,
-                    current: false,
-                },
-            );
-            row.observe(history_row_clicked);
-            // A spare or current row is not a pointer target: `refresh_history` sets this on each change.
-            row.insert(bevy::picking::Pickable::default());
-            row.with_children(|line| {
-                line.spawn((
-                    Text::new(""),
-                    TextColor(crate::chrome::ink().text),
-                    crate::chrome::font(crate::chrome::text::BODY),
-                    bevy::text::TextLayout::new(
-                        bevy::text::Justify::Left,
-                        bevy::text::LineBreak::NoWrap,
-                    ),
-                    HistoryText,
-                    // Ignored, so the pointer hits the row and not its text (see `refresh_history`).
-                    bevy::picking::Pickable::IGNORE,
-                ));
-            });
-        });
-    }
+    s.spawn((
+        bevy_gooey::tree(Vec::<bevy_gooey::TreeNode>::new()),
+        HistoryTree,
+        HistoryBuilt::default(),
+        bevy_gooey::TableRows(HISTORY_LIST_ROWS),
+        // **The selection stays on the line the editor stands on**, whoever moved it: a click jumps
+        // (`history_row_clicked`), and everything else gooey sends from the table is a look.
+        bevy_gooey::observe(history_selection_moved),
+    ));
 }
 
-/// What a history row needs to jump: the same resources the keyboard's undo system takes.
+/// The history's first line: the map before any change. Fits beside `now: ` in a list row at 200% text.
+const HISTORY_START_LINE: &str = "the original map";
+
+/// **The words of the history's line for `position`**, or `None` past the end. `0` is the map as it was before the first
+/// change, and the line the editor stands on says `now:`.
+///
+/// **The first line is short on purpose** ([`HISTORY_START_LINE`]): at 200% text a list row is about 22 characters wide, and
+/// "now: before the first change" was cut by its cell, which a person at that size could not read.
+fn history_line(state: &EditorState, position: usize, depth: usize) -> Option<String> {
+    let (what, who) = if position == 0 {
+        (HISTORY_START_LINE.to_owned(), "")
+    } else {
+        let row = state.history_row(position)?;
+        (row.label, if row.agent { "the Familiar" } else { "you" })
+    };
+    let now = if position == depth { "now: " } else { "" };
+    let who = if who.is_empty() { String::new() } else { format!("  \u{b7} {who}") };
+    Some(format!("{now}{what}{who}"))
+}
+
+/// **Every line of the session as tree nodes**, oldest first, with the position as the key so a row's identity
+/// survives a rebuild.
+fn history_nodes(state: &EditorState) -> Vec<bevy_gooey::TreeNode> {
+    let depth = state.undo_depth();
+    (0..=depth + state.redo_depth())
+        .filter_map(|position| history_line(state, position, depth).map(|line| bevy_gooey::TreeNode::new(position as u64, line)))
+        .collect()
+}
+
+/// What a history row needs to jump: the same resources the keyboard's undo system takes. The map's two are
+/// `Option`s because the click observer is global and a click can land where no map is open.
 #[derive(bevy::ecs::system::SystemParam)]
 struct HistoryJump<'w, 's> {
     commands: Commands<'w, 's>,
-    assets: Res<'w, AssetServer>,
-    project: ResMut<'w, Project>,
-    open: ResMut<'w, OpenMap>,
-    state: ResMut<'w, EditorState>,
+    assets: Option<Res<'w, AssetServer>>,
+    project: Option<ResMut<'w, Project>>,
+    open: Option<ResMut<'w, OpenMap>>,
+    state: Option<ResMut<'w, EditorState>>,
     placed: Query<'w, 's, (Entity, &'static Placement)>,
     /// **A drawn piece's own transform**, which is how the sweep tells a piece standing where the
     /// map wants it from one that is not (B-048).
     transforms: Query<'w, 's, &'static Transform>,
 }
 
-/// **A click on a history row jumps there, as one group (E-018).** Refused while the leaving
-/// question is up, as the undo chord is: a jump edits the map the question is asking about.
+/// **A click on a line of the history jumps there, as one group (E-018, UI-53).** The jump is the *click's*: it
+/// reads the row the pointer clicked (`TableRow.key` is the line's position) and nothing gooey sends from the table.
+///
+/// **Not the selection change, which a key also makes** (N4, N-M2). gooey's own keyboard walk — an arrow, a Page key,
+/// Home, End, a type-ahead character, `*`, a held key's auto-repeat, a pad's D-pad — sends the very same
+/// `ValueChange<TableSelection>` a click does, and jumping for each would walk the map back a line at a time while a
+/// person merely read down the list. A `PointerClick` has no keyboard form, so a jump taken from it cannot be one.
+///
+/// Refused while the leaving question is up, as the undo chord is: a jump edits the map the question is asking
+/// about. A click on the line the editor already stands on is no jump either.
 fn history_row_clicked(
     click: On<bevy::picking::events::PointerClick>,
-    slots: Query<&HistorySlot>,
+    rows: Query<&bevy_gooey::TableRow>,
+    trees: Query<(), With<HistoryTree>>,
     mut jump_to: HistoryJump,
 ) {
-    let Ok(slot) = slots.get(click.entity) else {
-        return;
-    };
-    if jump_to.state.leaving || slot.current {
+    if click.button != bevy::picking::pointer::PointerButton::Primary {
         return;
     }
-    let Some(position) = slot.position else {
+    let Ok(row) = rows.get(click.entity) else { return };
+    if !trees.contains(row.table) {
+        return;
+    }
+    let position = row.key as usize;
+    let HistoryJump { commands, assets, project, open, state, placed, transforms } = &mut jump_to;
+    let (Some(assets), Some(project), Some(open), Some(state)) =
+        (assets.as_deref(), project.as_deref_mut(), open.as_deref_mut(), state.as_deref_mut())
+    else {
         return;
     };
-    let j = &mut jump_to;
-    jump(
-        &mut j.commands,
-        &j.assets,
-        &mut j.project,
-        &mut j.open,
-        &mut j.state,
-        &j.placed,
-        &j.transforms,
-        position,
-    );
+    if state.leaving || position == state.undo_depth() {
+        return;
+    }
+    jump(commands, assets, project, open, state, placed, transforms, position);
 }
 
-/// **The history list's text (E-018).** Runs on the same change as the UNDO and REDO rows. Each row
-/// reads the history as it stands now, so a click means the row's current position.
+/// **The history's selection is the line the editor stands on, and a selection that is not a click puts it back**
+/// (N5, N-M2).
+///
+/// gooey moves the selection to the row a key walked onto or a pointer clicked, and sends the change. A click that
+/// jumped has just made that row the current line, so there is nothing to undo; any other change — a key walk, or a
+/// click the jump refused — would leave a row lit that the map is not at, which says the click happened and the
+/// history did not. The answer is read when the command runs, after a jump has moved the stacks.
+fn history_selection_moved(picked: On<bevy_gooey::ValueChange<bevy_gooey::TableSelection>>, mut commands: Commands) {
+    let tree = picked.source;
+    commands.queue(move |world: &mut World| {
+        let Some(depth) = world.get_resource::<EditorState>().map(|state| state.undo_depth() as u64) else { return };
+        let want = bevy_gooey::TableSelection::of(depth);
+        let Ok(mut tree) = world.get_entity_mut(tree) else { return };
+        if tree.get::<bevy_gooey::TableSelection>() != Some(&want) {
+            tree.insert(want);
+        }
+    });
+}
+
+/// **The history list's lines (E-018, UI-53).** Runs on the same change as the UNDO and REDO rows: the tree's
+/// nodes are the session's lines, rebuild only when a stack moved, and the line the editor stands on is the one
+/// selected and the one in view.
+///
+/// **A settled frame costs two numbers and nothing else.** A frame where no stack moved is where the budget is
+/// measured (UI-93, #259), so the depth pair is compared before anything is built: the 5,000 labels a session
+/// used to hold are built on the frame a change lands on and never again.
 fn refresh_history(
     state: Res<EditorState>,
     open: Res<OpenMap>,
-    mut slots: Query<(
-        &mut HistorySlot,
-        &Children,
-        &mut bevy::picking::Pickable,
-        &mut Visibility,
-    )>,
-    mut texts: Query<(&mut Text, &mut TextColor), With<HistoryText>>,
+    built: Query<(&HistoryBuilt, Entity)>,
+    mut tables: Query<&mut bevy_gooey::Table, With<HistoryTree>>,
+    mut commands: Commands,
     mut budget: ResMut<crate::ui_budget::UiFrame>,
 ) {
     // **This system's cost, into the frame's total** (UI-93, #259). The guard writes on drop, so the early return below
     // and every path after it are measured without the body having to remember to.
-    let _spent = crate::ui_budget::measure(&mut budget);
+    let spent = crate::ui_budget::measure(&mut budget);
+    let Ok((mark, tree)) = built.single() else { return };
     if !state.is_changed() && !open.is_changed() {
         return;
     }
     let depth = state.undo_depth();
-    // **The window, not the whole list** (UI-53): only the rows on screen are labelled, so a session
-    // with 5,000 entries costs seven labels a refresh rather than five thousand. The window is the
-    // same `2 * HISTORY_EACH_WAY + 1` the block spawns, around the current position.
-    let rows = state.history_window(
-        (depth as isize - HISTORY_EACH_WAY).max(1) as usize,
-        (depth as isize + HISTORY_EACH_WAY).max(1) as usize,
-    );
-    let first = rows.first().map_or(0, |r| r.position);
-    for (mut slot, children, mut pickable, mut visibility) in &mut slots {
-        let position = usize::try_from(depth as isize + slot.offset)
-            .ok()
-            .filter(|&p| p <= rows.len());
-        slot.position = position;
-        // **A spare row draws nothing, and still holds its height** (#302). The list is always
-        // `2 * HISTORY_EACH_WAY + 1` rows tall so nothing below it moves as the history grows; a
-        // row with no entry behind it was a blank bar. `Hidden`, not `Display::None`, keeps the room.
-        let shown = if position.is_some() {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        if *visibility != shown {
-            *visibility = shown;
+    let redo = state.redo_depth();
+    if mark.seen == Some((depth, redo)) {
+        return;
+    }
+    // **From here it is a rebuild of the history's nodes**, which the budget reports apart from a settled frame: 5,000
+    // labels are built on the frame a stack moves and never on one where nothing did.
+    let _rebuild = spent.rebuilding();
+    let Ok(mut table) = tables.get_mut(tree) else { return };
+    let Some(nodes) = table.source_mut::<bevy_gooey::Tree>() else { return };
+    nodes.set_nodes(history_nodes(&state));
+    // **The line the editor stands on is the selected one**, and gooey keeps that row where the person is
+    // reading: a selection it did not see change is not scrolled to, so a rebuild leaves the view alone.
+    commands
+        .entity(tree)
+        .insert(bevy_gooey::TableSelection::of(depth as u64));
+    commands.entity(tree).insert(HistoryBuilt { seen: Some((depth, redo)) });
+}
+
+/// **The line the editor stands on is the one in view** (E-018, UI-53).
+///
+/// gooey scrolls to its cursor only for a key or a click (`table::pick` arms the cache flag `update_tables`
+/// reads), so a cursor written from code names a row the list never brings into view. The scroll is computed here
+/// from the viewport's own numbers: a tree's content is exactly its rows, so the pitch is `content / nodes` — no
+/// measured row, no layout from the frame before.
+///
+/// **It scrolls once per new position, and then leaves the list alone.** The layout needs a frame or two to report
+/// the rebuilt list's content, so the scroll is attempted until it lands; after that the list is the person's, and
+/// a wheel or a drag that moved it stays where they put it. A reveal that re-aimed every frame would snap the list
+/// back under the pointer, which is exactly what this had to stop doing.
+#[allow(clippy::too_many_arguments)]
+fn keep_now_in_view(
+    state: Res<EditorState>,
+    trees: Query<Entity, With<HistoryTree>>,
+    rows: Query<(Entity, &bevy_gooey::TableRow)>,
+    row_node: Query<&ComputedNode>,
+    mut cursors: Query<&mut bevy_gooey::TableCursor>,
+    mut viewports: Query<(&ComputedNode, &bevy_gooey::ListView, &mut ScrollPosition)>,
+    children: Query<&Children>,
+    mut aimed: Local<(Option<usize>, bool)>,
+) {
+    let Ok(tree) = trees.single() else { return };
+    let depth = state.undo_depth();
+    // **A moved position re-aims the list**; a settled one has landed and is the person's now.
+    if aimed.0 != Some(depth) {
+        *aimed = (Some(depth), false);
+    }
+    if aimed.1 {
+        return;
+    }
+    let Some(viewport) = children.iter_descendants(tree).find(|e| viewports.contains(*e)) else { return };
+    let Ok((node, view, mut scroll)) = viewports.get_mut(viewport) else { return };
+    let inv = node.inverse_scale_factor();
+    let height = node.size().y;
+    if view.rows <= 0.0 || height <= 0.0 || inv <= 0.0 {
+        return;
+    }
+    // **One row's pitch, measured off a drawn row.** The list's content includes the room it reserves for the rows
+    // it has not drawn, so `content / drawn` is not a pitch; a `TableRow`'s own node is exactly one, which is the
+    // number `update_tables` lays every row out at.
+    //
+    // **Both in LOGICAL pixels**, which is what `ScrollPosition` holds: `ComputedNode` geometry is physical, and
+    // `inverse_scale_factor` is the conversion (the same one every follower in this crate makes, `chrome::scroll_bounds`
+    // included).
+    let Some(pitch) = rows
+        .iter()
+        .filter(|(_, row)| row.table == tree)
+        .filter_map(|(entity, _)| row_node.get(entity).ok().map(|node| node.size().y * inv))
+        .find(|pitch| *pitch > 0.0)
+    else {
+        return;
+    };
+    let height = height * inv;
+    let (_, max) = crate::chrome::scroll_bounds(node);
+    // **The line in the middle of the list**, which is where a reader's eye is on arriving, and never past either
+    // end.
+    let want = ((depth as f32 + 0.5) * pitch - height * 0.5).clamp(0.0, max.max(0.0));
+    if (scroll.0.y - want).abs() > 0.5 {
+        scroll.0.y = want;
+        return;
+    }
+    // **Landed**, so the list is the person's from the next frame: a wheel or a drag stays where they put it. A list
+    // whose content has not been laid out yet reports `max` zero and a target of zero, which is not a landing — the
+    // depth is still a screenful away and the next frame will say so.
+    if max <= 0.0 && depth > 0 {
+        return;
+    }
+    aimed.1 = true;
+    // The cursor sits on the same line, so the list's own keyboard steps start from where the person is.
+    if let Ok(mut cursor) = cursors.get_mut(tree)
+        && cursor.0 != Some(depth as u64)
+    {
+        cursor.0 = Some(depth as u64);
+    }
+}
+
+/// **The line the editor stands on is not a pointer target** (E-018, UI-53, M4).
+///
+/// The window's rule, kept on the list: a click on the line you are already on does nothing, so that row must not
+/// light up under the pointer either — `Hovered` is read from the pointer's hit, and an entity with
+/// `Pickable::IGNORE` is never hit. Every other row is a jump target and stays hoverable.
+///
+/// **The rows are a pool**, so the answer is written on every drawn row: a row rebound from the current line onto
+/// another gets its hover back, and one rebound onto the current line loses it. A settled frame compares and
+/// writes nothing.
+fn mark_the_current_line(
+    state: Res<EditorState>,
+    trees: Query<Entity, With<HistoryTree>>,
+    mut rows: Query<(Entity, &bevy_gooey::TableRow, Option<&bevy::picking::Pickable>)>,
+    mut commands: Commands,
+) {
+    let Ok(tree) = trees.single() else { return };
+    let depth = state.undo_depth() as u64;
+    // **The pool's rows are reused**, so the answer has to move with the key: a row rebound off the current line gets
+    // its hover back, and one rebound onto it loses it. gooey spawns a row with no `Pickable` at all, which is the
+    // same hit as `Pickable::default()`, so a missing component on a target row is already right and costs nothing.
+    for (entity, row, pickable) in &mut rows {
+        if row.table != tree {
+            continue;
         }
-        // **A spare or current row is not a pointer target** (the click observer refuses it), so it
-        // must not light up on hover either. `Hovered` is read from the pointer's hit, and an ignored
-        // entity is never hit, so the row goes non-pickable here and stays pickable when it is live.
-        let target = slot.position.is_some() && !slot.current;
-        let pick = if target {
-            bevy::picking::Pickable::default()
-        } else {
-            bevy::picking::Pickable::IGNORE
-        };
-        if *pickable != pick {
-            *pickable = pick;
-        }
-        let (want, tint) = match position {
-            None => (String::new(), crate::chrome::ink().text),
-            Some(p) => {
-                let (what, who) = if p == 0 {
-                    ("before the first change".to_owned(), "")
-                } else {
-                    match rows.get(p.saturating_sub(first)) {
-                        Some(row) => (row.label.clone(), if row.agent { "the Familiar" } else { "you" }),
-                        None => (String::new(), ""),
-                    }
-                };
-                let now = if slot.current { "now: " } else { "" };
-                let who = if who.is_empty() {
-                    String::new()
-                } else {
-                    format!("  \u{b7} {who}")
-                };
-                let tint = if p > depth { crate::chrome::ink().dim } else { crate::chrome::ink().text };
-                (format!("{now}{what}{who}"), tint)
+        let now = pickable.copied();
+        if row.key == depth {
+            if now != Some(bevy::picking::Pickable::IGNORE) {
+                commands.entity(entity).insert(bevy::picking::Pickable::IGNORE);
             }
-        };
-        for child in children.iter() {
-            if let Ok((mut text, mut colour)) = texts.get_mut(child) {
-                if text.0 != want {
-                    text.0 = want.clone();
-                }
-                colour.0 = tint;
-            }
+        } else if now == Some(bevy::picking::Pickable::IGNORE) {
+            commands.entity(entity).insert(bevy::picking::Pickable::default());
         }
     }
+}
+
+/// **The fewest pixels a wheel notch must move a list for the list to keep it**, so a list resting on an end does not
+/// swallow a notch that moved it by rounding.
+const LIST_WHEEL_MIN_MOVE_PX: f32 = 0.5;
+
+/// **This list takes its own wheel** ([`the_list_wheel`]) instead of carrying `ScrollArea`, which is the marker the
+/// "every pane that clips can scroll" census accepts in its place: the wheel handler exists, it is just not upstream's.
+#[derive(Component)]
+pub struct OwnsItsWheel;
+
+/// **The history list is as tall at the first line as at the hundredth** (UI-53).
+///
+/// gooey draws a table as tall as its rows, up to the rows it was asked to stand: one line is one row tall, two lines two.
+/// In the Map inspector that moved everything below the list down a row at the first edit and each of the next five, so
+/// the field an author had just typed into moved away from the pointer (`a_receipt_does_not_move_the_panel`). The old
+/// window was seven fixed rows; this holds the list at its screenful (`HISTORY_LIST_ROWS` of the skin's row pitch) from the
+/// start. Compared before written, so a settled frame writes nothing.
+fn hold_the_history_tall(skin: Res<bevy_gooey::GooeySkin>, mut trees: Query<&mut Node, With<HistoryTree>>) {
+    let want = Val::Px(HISTORY_LIST_ROWS * skin.table_pitch());
+    for mut node in &mut trees {
+        if node.min_height != want {
+            node.min_height = want;
+        }
+    }
+}
+
+/// **A list in the inspector hands the wheel on when it cannot use it** (UI-53, #239; UI-51, #237).
+///
+/// gooey's table list carries `ScrollArea`, whose handler takes every notch over it and stops it there — even a notch
+/// that moves nothing. The history list and the outliner sit in the middle of the Map inspector, so a wheel over one
+/// of them never reached the inspector: sixty notches down the pane left TERRAIN, DATA, PROBLEMS and NOTES unseen
+/// (`navigation::every_destination_is_measured_and_the_baseline_says_so` counted four destinations lost).
+///
+/// So these two lists take their own wheel ([`the_list_wheel`]) in place of `ScrollArea`'s: a notch the list can
+/// use moves it and stops there, and one it cannot — a list that fits its window, or one resting on the end the notch
+/// pushes toward — bubbles to the inspector, as a wheel over plain text does. Taken once: the marker is the missing
+/// `ScrollArea`.
+#[allow(clippy::type_complexity)]
+fn hand_the_wheel_on(
+    lists: Query<Entity, (With<bevy_gooey::ListView>, With<bevy::ui_widgets::ScrollArea>)>,
+    parents: Query<&ChildOf>,
+    owners: Query<(), Or<(With<HistoryTree>, With<crate::outliner::OutlinerTree>)>>,
+    mut commands: Commands,
+) {
+    for list in &lists {
+        if parents.iter_ancestors(list).any(|ancestor| owners.contains(ancestor)) {
+            commands.entity(list).remove::<bevy::ui_widgets::ScrollArea>().insert(OwnsItsWheel).observe(the_list_wheel);
+        }
+    }
+}
+
+/// **One wheel notch over a list the editor owns the wheel of**: the list moves if it can, else the notch goes on up.
+fn the_list_wheel(
+    mut scroll: On<bevy::picking::events::PointerScroll>,
+    mut lists: Query<(&ComputedNode, &mut ScrollPosition), With<bevy_gooey::ListView>>,
+    ratio: Res<bevy::input::mouse::MouseScrollPixelsPerLine>,
+) {
+    let Ok((computed, mut position)) = lists.get_mut(scroll.entity) else { return };
+    let scale = computed.inverse_scale_factor();
+    let range = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
+    let moved_to = (position.y - scroll.to_pixels(&ratio).y).clamp(0.0, range);
+    if (moved_to - position.y).abs() < LIST_WHEEL_MIN_MOVE_PX {
+        // Nowhere to go: the notch is the inspector's.
+        return;
+    }
+    position.y = moved_to;
+    scroll.propagate(false);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -12227,6 +12405,77 @@ pub fn plant_history_entry_for_test(state: &mut EditorState) {
         line: String::new(),
         phrase: "a change no log holds".to_owned(),
         agent: false,
+    });
+}
+
+/// **Put one of the agent's entries on the history stack**, so a test can read what a row says about who made
+/// the change without driving the whole agent door (UI-53, #239). The entry is the one `record_logged` writes for
+/// an agent's turn, by the same path every edit site uses.
+pub fn record_agent_history_entry_for_test(state: &mut EditorState) {
+    state.record(Undo::Logged {
+        line: String::new(),
+        phrase: "a change the Familiar made".to_owned(),
+        agent: true,
+    });
+}
+
+/// **Click the history line for `position`, the way a click on the row gooey drew it does** (UI-53, #239).
+///
+/// The row is found by the component gooey names its pool rows with — `TableRow.key` is the line's identity, the
+/// same key the list's nodes use — and the click goes through the real `PointerClick` a mouse sends, so the
+/// observer, gooey's own selection and the jump are the ones an author meets.
+///
+/// **A line the list is not showing is scrolled to first**, which is what a person does: the wheel travels to it,
+/// the pool rebinds, and the row under the pointer is the line they want.
+pub fn click_history_line_for_test(world: &mut World, position: usize) {
+    use bevy::ecs::system::RunSystemOnce;
+    /// The key `position`'s row carries, if the pool is showing it.
+    fn shown_row(world: &mut World, position: usize) -> Option<(Entity, Entity)> {
+        world
+            .run_system_once(move |rows: Query<(Entity, &bevy_gooey::TableRow)>, trees: Query<Entity, With<HistoryTree>>| {
+                let Ok(tree) = trees.single() else { return None };
+                rows.iter().find(|(_, row)| row.table == tree && row.key == position as u64).map(|(entity, _)| (entity, tree))
+            })
+            .unwrap_or_else(|e| panic!("click_history_line_for_test: {e}"))
+    }
+    let mut row = shown_row(world, position);
+    if row.is_none() {
+        // **The cursor is the list's own way to a line it is not showing**: written from code it is the row the
+        // panel brings into view on the next frame (`keep_now_in_view`).
+        if let Some(tree) = world
+            .run_system_once(|trees: Query<Entity, With<HistoryTree>>| trees.single().ok())
+            .unwrap_or_else(|e| panic!("click_history_line_for_test: {e}"))
+        {
+            world.entity_mut(tree).insert(bevy_gooey::TableCursor(Some(position as u64)));
+        }
+        for _ in 0..6 {
+            world.run_schedule(bevy::app::Update);
+            row = shown_row(world, position);
+            if row.is_some() {
+                break;
+            }
+        }
+    }
+    let (entity, _) = row.unwrap_or_else(|| panic!("the history list draws no row for position {position}"));
+    use bevy::picking::backend::HitData;
+    use bevy::picking::events::{Pointer, PointerClick};
+    use bevy::picking::pointer::{Location, PointerButton, PointerId};
+    world.trigger(PointerClick {
+        entity,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: bevy::camera::NormalizedRenderTarget::Image(bevy::camera::ImageRenderTarget {
+                    handle: Default::default(),
+                    scale_factor: 1.0,
+                }),
+                position: Vec2::ZERO,
+            },
+        ),
+        button: PointerButton::Primary,
+        hit: HitData { camera: Entity::PLACEHOLDER, depth: 0.0, position: None, normal: None, extra: None },
+        duration: std::time::Duration::ZERO,
+        count: 1,
     });
 }
 

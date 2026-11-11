@@ -529,15 +529,45 @@ fn an_inspector_section(what: &'static str, label: &'static str, tag: &'static s
 fn the_history() -> Destination {
     let mut d = Driver::cold_start("history");
     assert!(d.showing("UNDO") && d.showing("REDO"), "the undo and redo history is not on the Map panel: {:#?}", d.words());
-    // **The rows themselves**, which is what "the history" means: one per step either way.
-    let rows = {
+    // **The rows themselves**, which is what "the history" means. UI-53 made it gooey's virtualized list, so
+    // what is counted is the list's nodes — one per line of the session — and the rows it draws of them.
+    let (lines, drawn) = {
         let world = d.app.world_mut();
-        world.query::<&bevy_cauldron::editor::HistorySlot>().iter(world).count()
+        let tree = world
+            .query_filtered::<Entity, With<bevy_cauldron::editor::HistoryTree>>()
+            .single(world)
+            .ok();
+        let lines = tree
+            .and_then(|tree| world.get::<bevy_gooey::Table>(tree))
+            .and_then(|table| table.source::<bevy_gooey::Tree>())
+            .map_or(0, bevy_gooey::Tree::node_count);
+        let drawn = tree.map_or(0, |tree| {
+            world.query::<&bevy_gooey::TableRow>().iter(world).filter(|row| row.table == tree).count()
+        });
+        (lines, drawn)
     };
-    assert!(rows > 1, "the history list drew {rows} row(s), so the undo list is not there");
+    // **A cold start has no edits, so the list is one line and one row is drawn** (gooey's pool is
+    // `(rows tall).ceil() + 1`, capped at the lines it holds): the list is there, and it draws exactly what it holds.
+    let pool = {
+        let world = d.app.world_mut();
+        world
+            .query_filtered::<&bevy_gooey::TableRows, With<bevy_cauldron::editor::HistoryTree>>()
+            .single(world)
+            .map_or(0, |rows| rows.0.ceil() as usize + 1)
+    };
+    assert!(lines >= 1 && drawn >= 1, "the history list holds {lines} line(s) and drew {drawn} row(s), so the undo list is not there");
+    assert_eq!(
+        drawn,
+        lines.min(pool),
+        "the history list drew {drawn} row(s) of its {lines} line(s); a pool of {pool} draws {} of them",
+        lines.min(pool)
+    );
     Destination {
         what: "The history",
-        steps: vec![format!("it is drawn beside UNDO and REDO, on screen at a cold start ({rows} rows)")],
+        steps: vec![format!(
+            "it is drawn beside UNDO and REDO, on screen at a cold start ({lines} {}, {drawn} drawn)",
+            plural(lines, "line", "lines")
+        )],
         cost: d.cost,
         reach: Reach::Arrived,
     }

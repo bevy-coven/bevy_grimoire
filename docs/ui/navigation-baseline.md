@@ -40,7 +40,7 @@ did, in order.
 | A game data file | wheel down to `DATA` | 0 | 5 | yes |
 | The problems list | wheel down to `PROBLEMS` | 0 | 8 | yes |
 | The notes | wheel down to `NOTES` | 0 | 7 | yes |
-| The history | it is drawn beside UNDO and REDO, on screen at a cold start (7 rows) | 0 | 0 | yes |
+| The history | it is drawn beside UNDO and REDO, on screen at a cold start (1 line, 1 drawn) | 0 | 0 | yes |
 | The AGENT block | click `View`, click `Show agent` | 0 | 2 | yes |
 | The settings | Cmd+, | 1 | 0 | yes |
 | The running game's log | Cmd+O (close project) | 1 | 0 | **no** — no panel or screen draws the running game's output: the workbench and the project page both read no log, and the game's output goes to stdout and cauldron.log |

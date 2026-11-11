@@ -437,7 +437,7 @@ fn a_data_files_page_opens_on_the_data_panel_at_that_file() {
         "a data file's page is the Map door's DATA panel"
     );
     let world = app.world_mut();
-    let mut q = world.query::<(&bevy_gooey::Table, &bevy_gooey::TableCursor)>();
+    let mut q = world.query_filtered::<(&bevy_gooey::Table, &bevy_gooey::TableCursor), Without<bevy_cauldron::editor::HistoryTree>>();
     let (_, cursor) = q.single(world).expect("the DATA panel has one table");
     assert!(
         cursor.0.is_some(),

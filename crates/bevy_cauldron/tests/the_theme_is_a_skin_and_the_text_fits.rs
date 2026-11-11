@@ -408,7 +408,8 @@ fn clipped_text(app: &mut App) -> Vec<String> {
             // **A scroller is where the walk ends, not a box to check past.** It clips first, and what
             // it holds past its edge is reached with the wheel; a panel above it that also clips would
             // report a label the person can bring into view. So the scroller is the final answer.
-            if world.get::<bevy::ui_widgets::ScrollArea>(at).is_some() {
+            // A list that takes its own wheel (`editor::OwnsItsWheel`, UI-53) is a scroller as `ScrollArea` is.
+            if world.get::<bevy::ui_widgets::ScrollArea>(at).is_some() || world.get::<bevy_cauldron::editor::OwnsItsWheel>(at).is_some() {
                 break;
             }
             let (Some(computed), Some(transform)) =

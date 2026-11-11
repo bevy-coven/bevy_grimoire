@@ -121,7 +121,7 @@ pub struct Params {
     pub put_back: Option<PutBack>,
 }
 
-fn path_of(project: &crate::project::Project, map: &str) -> Result<std::path::PathBuf, Refusal> {
+pub(crate) fn path_of(project: &crate::project::Project, map: &str) -> Result<std::path::PathBuf, Refusal> {
     if map.is_empty() || map.contains(['/', '\\', '.']) {
         return Err(Refusal::new(format!("`{map}` is not a map name. Nothing was written.")));
     }

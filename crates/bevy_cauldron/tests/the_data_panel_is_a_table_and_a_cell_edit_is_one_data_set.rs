@@ -41,9 +41,10 @@ fn settle(app: &mut App) {
     }
 }
 
+/// **The DATA panel's tables**: the history list (UI-53) is a gooey table too, in the same Map inspector, so it is left out.
 fn tables(app: &mut App) -> Vec<Entity> {
     let world = app.world_mut();
-    world.query_filtered::<Entity, With<Table>>().iter(world).collect()
+    world.query_filtered::<Entity, (With<Table>, Without<bevy_cauldron::editor::HistoryTree>)>().iter(world).collect()
 }
 
 fn texts(app: &mut App) -> Vec<String> {
