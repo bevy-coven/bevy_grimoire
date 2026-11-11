@@ -579,7 +579,7 @@ fn the_toggle_row_is_ticked_from_the_setting_and_writes_the_users_layer() {
         )
     });
     assert!(
-        text.contains("follow_agent: Some(false)"),
+        text.contains("follow_agent: false"),
         "the row did not write the person's own layer: {text}"
     );
     // **And the project's file is untouched**, because this is not this project's preference.

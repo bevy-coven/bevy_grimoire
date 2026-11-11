@@ -73,7 +73,13 @@ impl RigDoc {
         } else {
             format!("{field}: {value}")
         };
-        self.full = yaml_surgery::set_entry(&self.full, &parent, &entry).map_err(|p| p.line())?;
+        // **A field that is already there is replaced whatever it holds**, a `null` included: the stamp of a
+        // rig that has none is `provenance: null`, and a null leaf takes only a null through `set`.
+        let path = format!("{parent}.{field}");
+        self.full = match yaml_surgery::replace_value(&self.full, &path, value) {
+            Ok((text, _)) => text,
+            Err(_) => yaml_surgery::set_entry(&self.full, &parent, &entry).map_err(|p| p.line())?,
+        };
         Ok(())
     }
 

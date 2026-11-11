@@ -413,37 +413,33 @@ fn a_preview_and_its_apply_name_the_same_place() {
     // refuses a list it cannot find.
     std::fs::write(
         root.join("assets/grimoire/vocab.yaml"),
-        r#"(
-    // what a thing is
-    kind: (
-        tokens: [
-            ( name: "prop", note: "a thing" ),
-        ],
-    ),
-    effects: (
-        tokens: [
-            ( name: "inert", note: "does nothing" ),
-        ],
-    ),
-    // how it looks
-    look: (
-        tokens: [
-            ( name: "plain", note: "unremarkable" ),
-        ],
-    ),
-    surfaces: (
-        tokens: [
-            ( name: "worktop", note: "a top" ),
-        ],
-    ),
-    capabilities: (tokens: []),
-    edge: (
-        tokens: [
-            ( name: "wall", note: "a solid run-face" ),
-        ],
-    ),
-    slot: (tokens: []),
-)"#,
+        r#"# what a thing is
+kind:
+  tokens:
+  - name: prop
+    note: a thing
+effects:
+  tokens:
+  - name: inert
+    note: does nothing
+# how it looks
+look:
+  tokens:
+  - name: plain
+    note: unremarkable
+surfaces:
+  tokens:
+  - name: worktop
+    note: a top
+capabilities:
+  tokens: []
+edge:
+  tokens:
+  - name: wall
+    note: a solid run-face
+slot:
+  tokens: []
+"#,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let mut app = editor(&root);

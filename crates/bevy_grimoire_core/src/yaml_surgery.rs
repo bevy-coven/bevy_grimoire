@@ -654,10 +654,13 @@ pub fn replace_value(text: &str, path: &str, value: &str) -> Result<(String, Str
     };
     let line_start = text[..key.span.0].rfind('\n').map_or(0, |at| at + 1);
     let column = column_of(text, key.span.0);
-    let end = end_of_last_line(text, content_end(text, node, &walk));
+    let key_line_end = text[key.span.1..].find('\n').map_or(text.len(), |at| key.span.1 + at + 1);
+    // **An empty null (`key:` and nothing) owns only its key's line**: the parser places its span at the
+    // next token, so asking where it ends would take the next entry with it.
+    let empty = node.kind == NodeKind::Scalar && node.scalar.as_ref().is_some_and(|leaf| leaf.style == Style::Plain && leaf.text.is_empty());
+    let end = if empty { key_line_end } else { end_of_last_line(text, content_end(text, node, &walk)) };
     // What the entry's value was, as text a later call can put back: the lines after the key's own line,
     // dedented, or what follows `key:` on it when the value is on that line.
-    let key_line_end = text[key.span.1..].find('\n').map_or(text.len(), |at| key.span.1 + at + 1);
     let old = if inline_old {
         text[node.span.0..node.span.1].to_owned()
     } else {

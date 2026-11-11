@@ -83,8 +83,10 @@ pub fn read_or_empty<T: DeserializeOwned + Default + serde::de::DeserializeOwned
     // **A `forest`, `people` or `scripts` file is its own crate's type** (`bevy_flora`, `bevy_society`), whose
     // serde derives are read through the one YAML door, so a refusal names the file and the field as every
     // other kind's does.
-    let _ = kind;
-    bevy_grimoire_core::yaml::from_str::<T>(&text, &file_name(project, path)).map_err(|p| {
-        Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", p.line()))
+    reload_check::read::<T>(kind, &file_name(project, path), &text, |t| {
+        bevy_grimoire_core::yaml::from_str::<T>(t, "").map_err(|p| p.why.unwrap_or(p.what))
+    })
+    .map_err(|r| {
+        Refusal::new(format!("{}. The file is left as it is: fix it or remove it, then try again. Nothing was changed.", r.sentence()))
     })
 }

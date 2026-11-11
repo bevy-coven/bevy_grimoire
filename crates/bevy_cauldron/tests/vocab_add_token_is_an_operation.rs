@@ -24,37 +24,33 @@ fn editor(name: &str) -> App {
     // edits. The fixture writes each axis on a single line, which no real project's file is.
     std::fs::write(
         root.join("assets/grimoire/vocab.yaml"),
-        r#"(
-    // what a thing is
-    kind: (
-        tokens: [
-            ( name: "prop", note: "a thing" ),
-        ],
-    ),
-    effects: (
-        tokens: [
-            ( name: "inert", note: "does nothing" ),
-        ],
-    ),
-    // how it looks
-    look: (
-        tokens: [
-            ( name: "plain", note: "unremarkable" ),
-        ],
-    ),
-    surfaces: (
-        tokens: [
-            ( name: "worktop", note: "a top" ),
-        ],
-    ),
-    capabilities: (tokens: []),
-    edge: (
-        tokens: [
-            ( name: "wall", note: "a solid run-face" ),
-        ],
-    ),
-    slot: (tokens: []),
-)"#,
+        r#"# what a thing is
+kind:
+  tokens:
+  - name: prop
+    note: a thing
+effects:
+  tokens:
+  - name: inert
+    note: does nothing
+# how it looks
+look:
+  tokens:
+  - name: plain
+    note: unremarkable
+surfaces:
+  tokens:
+  - name: worktop
+    note: a top
+capabilities:
+  tokens: []
+edge:
+  tokens:
+  - name: wall
+    note: a solid run-face
+slot:
+  tokens: []
+"#,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let mut app =
@@ -118,13 +114,13 @@ fn an_agent_adds_a_token_and_the_editor_holds_it_at_once() {
     let mut app = editor("vocab-token-agent");
     assert_eq!(kinds(&app), vec!["prop".to_owned()], "the fixture's vocabulary");
     let lines_before = log(&app).len();
-    let comments_before = vocab_file(&app).matches("//").count();
+    let comments_before = vocab_file(&app).matches("#").count();
 
     let a = add(&mut app, "kind", "crate-stack", "a stack of crates");
     assert_eq!(a["outcome"], "applied", "the addition was not applied: {a}");
     assert_eq!(kinds(&app), vec!["prop".to_owned(), "crate-stack".to_owned()], "the editor's vocabulary is stale");
     assert!(vocab_file(&app).contains("crate-stack"), "the file never took it: {}", vocab_file(&app));
-    assert_eq!(vocab_file(&app).matches("//").count(), comments_before, "the splice dropped a comment");
+    assert_eq!(vocab_file(&app).matches("#").count(), comments_before, "the splice dropped a comment");
     let lines = log(&app);
     assert_eq!(lines.len(), lines_before + 1, "an addition is one log line");
     assert_eq!(lines.last().map(|l| l.op.as_str()), Some("vocab_add_token"));
