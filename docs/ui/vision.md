@@ -103,6 +103,22 @@ layouts are per workspace rather than one shared one:
 | Game | viewport and inspector | the running game (NV-09) |
 | Agent | inspector and viewport | the Familiar (NV-10) |
 
+**Document tabs** (NV-04, #381) are the third thing, beside the workspace and the layout: *what you are
+working on*. Inside a workspace the things you open are tabs: maps in Map and World, files in Files,
+meshes, tiles and compositions in Kit, rigs and clips in Animation, cue tables and music scores in Sound.
+A tab shows the thing's name, a dot while it has unsaved edits and a close button, and the strip is drawn
+from two tabs up (one document is the title the chrome already prints). `Cmd/Ctrl+W` closes the active
+tab, `Cmd/Ctrl+Shift+T` reopens the last one closed, and `Ctrl+Tab` (with Shift, backwards) cycles.
+
+- **One map is live at a time.** Choosing another map's tab opens that map, as the project page does; a map
+  with unsaved edits asks first, with the question the workspace switch already asks. The active map tab is
+  always the open map, and nothing else chooses it.
+- **Session state is the person's, not the project's.** The open tabs are saved in
+  `<data_dir>/Grimoire/projects/<hash of root>/session.yaml`, so committing a project never commits
+  somebody's tabs, and they come back when the project is opened again.
+- **A tab whose thing no longer exists** (a file deleted outside the editor) closes, and the status line
+  names it.
+
 - The **viewport** is the `surface.rs` image and is a *host* focus region: arrow keys and Enter act on
   the map, as today. F6 and Shift+F6 cycle regions, Esc returns to the viewport.
 - The docks hold **panels**. Each panel has an id, a title and a spawn function in a `PanelRegistry`.

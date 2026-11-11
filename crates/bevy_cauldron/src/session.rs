@@ -670,7 +670,7 @@ pub struct Drawn {
 
 /// **Draw the tab strip when the workspace has tabs to choose between** ([`STRIP_FROM`]), and take it
 /// away when it has not. Rebuilt only when what it shows changed.
-pub fn draw_the_strip(
+pub fn draw_the_tabs(
     mut commands: Commands,
     workspace: Option<Res<Workspace>>,
     session: Res<Session>,
@@ -726,7 +726,7 @@ pub fn draw_the_strip(
                     column_gap: Val::Px(crate::chrome::GAP_ROW),
                     // CHROME-OK: a document tab's own inset, the same box the workspace strip's tabs are.
                     padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
-                    border: UiRect::bottom(Val::Px(3.0)),
+                    border: UiRect::bottom(Val::Px(3.0)), // CHROME-OK: the active-tab marker's thickness, as the workspace tabs'.
                     ..default()
                 },
                 BorderColor::all(if active { ink.accent } else { Color::NONE }),
@@ -801,7 +801,7 @@ impl Plugin for SessionPlugin {
         app.init_resource::<Session>().add_systems(
             Update,
             (
-                (restore, follow_the_open_map, close_the_missing, save, draw_the_strip).chain(),
+                (restore, follow_the_open_map, close_the_missing, save, draw_the_tabs).chain(),
                 tab_keys,
             )
                 .run_if(in_state(crate::screen::Screen::Editor)),

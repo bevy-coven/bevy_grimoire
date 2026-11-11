@@ -568,7 +568,6 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **The documents each workspace has open** (NV-04, #381) are the person's tabs *for this project*:
     // a switch between workspaces keeps them, and another project reads its own session file.
     ("bevy_cauldron::session::Session", Ownership::Project),
-    ("bevy_cauldron::session::SessionFile", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),
     (
