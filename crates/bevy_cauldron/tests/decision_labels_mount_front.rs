@@ -5,7 +5,7 @@ use bevy_grimoire_core::descriptor::{mount_label, Face, Mount};
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
 use bevy_oracle::{Answer, Response};
 use bevy_cauldron::decide_labels::{build_requests, suggest, DEFAULT_THRESHOLD};
-use bevy_cauldron::vlm::PromptCtx;
+use bevy_cauldron::label_suggestion::PromptCtx;
 use std::collections::BTreeMap;
 
 fn vocab() -> Vocabularies {

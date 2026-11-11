@@ -22,7 +22,8 @@ use serde_json::json;
 
 use crate::ops::{Ctx, Operation, Outcome, Refusal, Shown, Undo};
 use crate::project::Project;
-use crate::vlm::{Provenance, Suggestion, VlmConfig};
+use crate::label_suggestion::{Provenance, Suggestion};
+use crate::vlm::VlmConfig;
 
 fn piece<'a>(project: &'a Project, id: &str) -> Result<&'a Descriptor, Refusal> {
     project

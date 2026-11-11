@@ -5869,7 +5869,7 @@ fn apply_what_arrives(
 ///
 /// Two, because one is the answer and the second is the correction: an odd turn taken the wrong way
 /// round comes back as "still not upright" and the second attempt fixes it (see
-/// [`crate::vlm::NeedsTurn::turns`] for why the direction is not asked for). A third means the model
+/// [`crate::label_suggestion::NeedsTurn::turns`] for why the direction is not asked for). A third means the model
 /// and the mesh disagree about which way is up, and four quarter turns is where it started.
 pub(crate) const MAX_RIGHTINGS: u8 = 2;
 
@@ -9995,7 +9995,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             // is being typed always wins over both, because that is the author speaking now.
             // `description()` rather than `note`: the model answers `what` and leaves `note` null
             // often enough that reading `note` alone left this box empty with a full identification
-            // printed underneath it. `vlm::Suggestion::description` is where that choice is made,
+            // printed underneath it. `label_suggestion::Suggestion::description` is where that choice is made,
             // and `labels::apply_fields` writes whatever it returns.
             let (note_text, note_tint) = note_field_text(
                 note_edit.active.as_ref().map(|(_, raw)| raw.as_str()),
@@ -10047,7 +10047,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 // colour between the header and the proposed note — *"you have proposal in light
                 // blue, and then you have the old text description in white, and the more proposal
                 // below it… there's no intuition to be drawn."* `what` is now what the description
-                // box says when the model offered nothing better (`vlm::Suggestion::description`),
+                // box says when the model offered nothing better (`label_suggestion::Suggestion::description`),
                 // so printing it again here would be the same sentence twice.
                 // The proposed note as a ghost line — never in the editable buffer.
                 // A righting turn changes what U does: it turns the piece (the same re-measure
@@ -11367,7 +11367,7 @@ mod righting_tests {
 
     /// **A turn count steps ninety degrees at a time, and two of them is upside down.**
     ///
-    /// The count is what the labeler now sends (`vlm::NeedsTurn::turns`), and this is the whole of
+    /// The count is what the labeler now sends (`label_suggestion::NeedsTurn::turns`), and this is the whole of
     /// what it means: `bumped` is the only place `align.rotate` moves, so a wrong step here is a
     /// mesh stored at an orientation it does not have — the invariant `rotate_mesh` exists to hold.
     #[test]
@@ -11395,7 +11395,7 @@ mod righting_tests {
     /// **The ceiling is two, and the second attempt is the one that has to be allowed.**
     ///
     /// An odd turn taken the wrong way round comes back as "still not upright" — the direction is
-    /// not asked for (`vlm::NeedsTurn::turns`) — so a ceiling of one would leave every 3-turn piece
+    /// not asked for (`label_suggestion::NeedsTurn::turns`) — so a ceiling of one would leave every 3-turn piece
     /// unrighted and blame the model.
     #[test]
     fn the_righting_ceiling_leaves_room_for_the_correction() {

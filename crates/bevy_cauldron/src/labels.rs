@@ -37,7 +37,8 @@ use bevy::tasks::{AsyncComputeTaskPool, Task};
 use crate::label_booth::{ShotRig, ShotsReady};
 use crate::project::Project;
 use crate::tiles::EditTarget;
-use crate::vlm::{self, Provenance, Suggestion, VlmConfig};
+use crate::label_suggestion::{LabelFailure, PromptCtx, Provenance, Suggestion};
+use crate::vlm::{self, VlmConfig};
 
 /// The suggestion key for a target — id for library entries, mesh path for candidates, NEVER an
 /// index (the thumbs lesson: indices shift under removal and the wrong item inherits the data).
@@ -91,7 +92,7 @@ impl Entry {
                 note: None,
                 rooms: vec![],
                 group: None,
-                confidence: crate::vlm::Confidence::Low,
+                confidence: bevy_grimoire_core::descriptor::Confidence::Low,
                 token_proposals: vec![],
             },
             provenance: Provenance {
@@ -151,8 +152,8 @@ struct InFlight {
     /// **A typed failure, not a sentence.** [`poll_tasks`] decides from this whether the link is
     /// down and whether to stop a running batch, and it used to recover that by searching the text
     /// for `"endpoint is unreachable"` — words spelled in two other places. See
-    /// [`vlm::LabelFailure`].
-    task: Task<Result<(Suggestion, Provenance, u64), vlm::LabelFailure>>,
+    /// [`LabelFailure`].
+    task: Task<Result<(Suggestion, Provenance, u64), LabelFailure>>,
 }
 
 /// The requests currently at the model.
@@ -579,7 +580,7 @@ pub(crate) fn spawn_request(
                     )?
                 }
             };
-            Ok::<_, vlm::LabelFailure>((suggestion, provenance, fingerprint))
+            Ok::<_, LabelFailure>((suggestion, provenance, fingerprint))
         });
         tasks.0.push(InFlight {
             target: shot.target.clone(),
@@ -724,7 +725,7 @@ pub(crate) fn prompt_ctx(
     d: &bevy_grimoire_core::descriptor::Descriptor,
     mesh: &str,
     project: &Project,
-) -> vlm::PromptCtx {
+) -> PromptCtx {
     let mut rooms_in_use: Vec<String> = Vec::new();
     let mut groups_in_use: Vec<String> = Vec::new();
     for other in &project.measured.descriptors {
@@ -741,7 +742,7 @@ pub(crate) fn prompt_ctx(
     }
     rooms_in_use.sort();
     groups_in_use.sort();
-    vlm::PromptCtx {
+    PromptCtx {
         id: d.id.clone(),
         mesh: mesh.to_owned(),
         footprint: bevy_grimoire_core::descriptor::placed_footprint(d),
@@ -815,7 +816,7 @@ struct ProposalRow {
 /// notes it exists to collect.
 fn merge_proposals(
     existing: Option<&str>,
-    incoming: &[crate::vlm::TokenProposal],
+    incoming: &[crate::label_suggestion::TokenProposal],
     asset: &str,
     model: &str,
     date: &str,
@@ -933,7 +934,7 @@ pub struct LabelQueue {
 /// A warm-up request in flight, and when it started — the elapsed seconds are the whole point of
 /// showing it, since the wait is minutes and a status line that does not count looks like a hang.
 struct Warm {
-    task: Task<Result<(), vlm::LabelFailure>>,
+    task: Task<Result<(), LabelFailure>>,
     since: f64,
     /// The last whole second already reported, so the count is written once a second rather than
     /// once a frame — `status.note` is read by a change-detected painter, and sixty identical
@@ -1745,7 +1746,8 @@ mod tests {
     }
 
     use super::*;
-    use crate::vlm::{Confidence, Suggestion};
+    use crate::label_suggestion::Suggestion;
+    use bevy_grimoire_core::descriptor::Confidence;
 
     fn workspace_root() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -1995,7 +1997,7 @@ mod tests {
     /// refused rather than overwritten, and nothing at all is written for an empty proposal set.
     #[test]
     fn proposal_merging_dedups_and_refuses_a_mangled_file() {
-        let hob = crate::vlm::TokenProposal {
+        let hob = crate::label_suggestion::TokenProposal {
             axis: "surfaces".to_owned(),
             token: "hob".to_owned(),
             why: "cooktops are not worktops".to_owned(),
@@ -2044,7 +2046,7 @@ mod tests {
         // A hand-mangled file is refused, never overwritten.
         let refused = merge_proposals(
             Some("this is not ron ("),
-            &[crate::vlm::TokenProposal {
+            &[crate::label_suggestion::TokenProposal {
                 axis: "look".to_owned(),
                 token: "rusty".to_owned(),
                 why: "".to_owned(),
@@ -2262,7 +2264,7 @@ mod tests {
         // through `rotate_mesh` (the same re-measure the N/P keys run), and re-asks the model.
         let mut s = suggestion();
         s.front = Some(bevy_grimoire_core::descriptor::Face::South);
-        s.needs_turn = Some(crate::vlm::NeedsTurn {
+        s.needs_turn = Some(crate::label_suggestion::NeedsTurn {
             axis: "x".to_owned(),
             turns: 2,
             why: "standing on its head".to_owned(),

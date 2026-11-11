@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 
 use bevy_cauldron::decide_labels::{DEFAULT_THRESHOLD, label_with_decisions};
-use bevy_cauldron::vlm::PromptCtx;
+use bevy_cauldron::label_suggestion::PromptCtx;
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
 use bevy_oracle::{Answer, Error, Request, Response, Transport};
 

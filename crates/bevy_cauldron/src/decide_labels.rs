@@ -10,8 +10,7 @@
 //! The chat path in [`crate::vlm`] stays until a measurement on a labelled kit (see [`agreement`])
 //! says this one is equal or better; [`LabelPath`] selects between them by configuration.
 
-use crate::vlm::{LabelFailure, PromptCtx, Provenance, Suggestion};
-use crate::vlm::{face_token, mount_meaning};
+use crate::label_suggestion::{LabelFailure, PromptCtx, Provenance, Suggestion, face_token, mount_meaning};
 use bevy_grimoire_core::descriptor::{Confidence, Face, Mount, mount_label, mount_options};
 use bevy_grimoire_core::vocab::{Vocabularies, Vocabulary};
 use bevy_oracle::{Error, MAX_QUESTIONS, Question, Request, Response, Transport, ask};
@@ -42,7 +41,7 @@ impl LabelPath {
 impl LabelPath {
     /// The process environment first, then the project root's `.env`, as [`crate::vlm::VlmConfig::load`] reads it.
     pub fn load(root: &std::path::Path) -> Result<LabelPath, String> {
-        let file = crate::vlm::dotenv(root);
+        let file = crate::label_suggestion::dotenv(root);
         Self::from_lookup(|k| std::env::var(k).ok().filter(|v| !v.is_empty()).or_else(|| file.get(k).cloned()))
     }
 }
