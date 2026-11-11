@@ -915,8 +915,14 @@ pub fn arm_tool(state: &mut EditorState, tool: Tool, chord: &str) -> String {
 /// The view travels in `Ctx::view` and the operation's answer is written back; a refusal is said where a
 /// refused key already is. Nothing here restates the arming rule — `tool_arm` calls the same
 /// [`arm_tool_in`] this file does.
-fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> String {
+///
+/// **The project's root travels too**, because the operation is logged and a log with no place to be
+/// written is a refusal that takes the change back (#224): the clone and run keys said "the operation could
+/// not be logged" over the editor while the tool was armed all the same. The sentence is the key's own
+/// ([`arm_sentence`] with its chord), so what the person reads has not changed.
+fn arm_through_operation(state: &mut EditorState, project: &Project, tool: Tool, chord: &str) -> String {
     let mut ctx = crate::ops::Ctx {
+        root: Some(project.root.clone()),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
         view: Some(crate::ops_view::View { tool: state.tool, ..Default::default() }),
@@ -924,16 +930,12 @@ fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> St
     };
     let params = serde_json::json!({ "tool": crate::ops_view::tool_name(tool) });
     let outcome = crate::ops::dispatch(&mut ctx, "tool_arm", &params);
-    if let Some(view) = ctx.view {
-        state.tool = view.tool;
-    }
     match outcome {
-        Ok(crate::ops::Applied::Done { outcome, .. }) => {
-            if outcome.summary.is_empty() {
-                crate::editor::arm_tool_in(&mut state.tool, tool, chord)
-            } else {
-                outcome.summary
+        Ok(crate::ops::Applied::Done { .. }) => {
+            if let Some(view) = ctx.view {
+                state.tool = view.tool;
             }
+            arm_sentence(tool, state.tool == tool, chord)
         }
         Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
             state.status.problem(e.0);
@@ -947,12 +949,18 @@ fn arm_through_operation(state: &mut EditorState, tool: Tool, chord: &str) -> St
 pub fn arm_tool_in(slot: &mut Tool, tool: Tool, chord: &str) -> String {
     let was = *slot;
     *slot = if was == tool { Tool::Place } else { tool };
-    let on = *slot == tool;
+    arm_sentence(tool, *slot == tool, chord)
+}
+
+/// **What arming a tool, or putting it down, says.** `chord` is how the caller stops the tool; an agent has
+/// none, so the sentence then names `Esc` alone instead of leaving a gap where the key would be.
+fn arm_sentence(tool: Tool, on: bool, chord: &str) -> String {
+    let stop = if chord.is_empty() { "Esc".to_owned() } else { format!("{chord} or Esc") };
     match (tool, on) {
-        (Tool::Remove, true) => format!("removal mode: click a piece, or drag a box. {chord} or Esc to stop."),
+        (Tool::Remove, true) => format!("removal mode: click a piece, or drag a box. {stop} to stop."),
         (Tool::Remove, false) => "removal mode off".to_owned(),
         (Tool::Move, true) => format!(
-            "move mode: click a piece to pick it up, click again to put it down. {chord} or Esc to stop."
+            "move mode: click a piece to pick it up, click again to put it down. {stop} to stop."
         ),
         (Tool::Move, false) => "move mode off".to_owned(),
         (Tool::Clone, true) => {
@@ -12502,7 +12510,7 @@ fn keys(
     if keys::just_pressed(&keyboard, *live, Action::Remove) {
         // Toggles against `Remove` specifically, not against "any tool": pressing X while the move
         // tool is armed should reach removal, not return to placing.
-        let said = arm_tool(&mut state, Tool::Remove, keys::binding(Action::Remove).chord);
+        let said = arm_through_operation(&mut state, &project, Tool::Remove, keys::binding(Action::Remove).chord);
         state.status.note(said);
         // Arming one tool puts down whatever the other was holding, rather than leaving a piece in
         // hand that no click can now drop.
@@ -12530,7 +12538,8 @@ fn keys(
     // clears what was armed to place — an author who means to move something is not also asking to
     // drop a copy of the brush on their first click, and `drive_place` refuses while this is live.
     if keys::just_pressed(&keyboard, *live, Action::MoveMode) {
-        let said = arm_tool(&mut state, Tool::Move, keys::binding(Action::MoveMode).chord);
+        // **The key dispatches the operation an agent calls** (E-002, #129), as the clone and run keys do.
+        let said = arm_through_operation(&mut state, &project, Tool::Move, keys::binding(Action::MoveMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -12542,7 +12551,7 @@ fn keys(
     if keys::just_pressed(&keyboard, *live, Action::CloneMode) {
         // **The key dispatches the operation an agent calls** (E-002, #129). `tool_arm` is the one place
         // that decides what arming means; this carries the view in and applies the answer.
-        let said = arm_through_operation(&mut state, Tool::Clone, keys::binding(Action::CloneMode).chord);
+        let said = arm_through_operation(&mut state, &project, Tool::Clone, keys::binding(Action::CloneMode).chord);
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;
@@ -12560,7 +12569,7 @@ fn keys(
     // repeats along it, at **its own pitch** — not the project's lattice, which is the whole
     // reason the tool exists.
     if keys::just_pressed(&keyboard, *live, Action::RunMode) {
-        let said = arm_through_operation(&mut state, Tool::Run, &crate::keys::chord(Action::RunMode));
+        let said = arm_through_operation(&mut state, &project, Tool::Run, &crate::keys::chord(Action::RunMode));
         state.status.note(said);
         move_drag.held = None;
         clone_drag.held = None;

@@ -41,6 +41,9 @@ const PINNED_NOWHERE: &[&str] = &[
     // A person's own view: a panel, a rung, the next click's tool, the shelf's selection, the door.
     "view_cycle_grid",
     "view_toggle_journal",
+    // Owner exception (2026-11-10): the list grows by the operation #129 slice 21 registers, an overlay on the
+    // rig bench that a person's own view toggles, like the journal above.
+    "view_toggle_ghost",
     "tool_arm",
     "snip_arm",
     "brush_arm",

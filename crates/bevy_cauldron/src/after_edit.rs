@@ -540,7 +540,7 @@ impl Plugin for AfterEditPlugin {
             .init_resource::<crate::settings::EditorSettings>()
             .add_systems(
                 Update,
-                (crate::checks_view::sync_checks_view, crate::oplog_view::sync_oplog_view, crate::data_view::sync_data_view, crate::reference_view::sync_reference_view, crate::settings::sync_settings, queue_after_edit, start_checks, launch_shot_checks, collect_reports).chain(),
+                (crate::checks_view::sync_checks_view, crate::oplog_view::sync_oplog_view, crate::data_view::sync_data_view, crate::reference_view::sync_reference_view, crate::settings::sync_settings, crate::agent_guide::sync_guide_reload, queue_after_edit, start_checks, launch_shot_checks, collect_reports).chain(),
             );
     }
 }

@@ -249,7 +249,24 @@ pub enum Shown {
     MapWhole,
     /// **One library piece**, by the id the Meshes shelf names it.
     Piece { id: String },
-    /// **One tile** — a library piece's own lattice, on the Tiles tab.
+    /// **One tile** — a library piece's own lattice.
+    ///
+    /// **Its page is the Meshes panel, not the Tiles tab** (AF-03, #359), which is not what the name
+    /// suggests and was measured rather than guessed: `tiles::rebuild_detail` returns into
+    /// `build_detail` for `Mode::Tiles`, and that function draws the open *composition* — the TILE
+    /// heading, the envelope, the members. The `SUBGRID` block a lattice is edited in, and
+    /// `draw_subgrid`, `pick_lattice` and `click_lattice` with it, all run on the Meshes panel, whose
+    /// pane follows the focused library piece. Opening the Tiles tab for a lattice change would put
+    /// the person in front of a different subject and call it the one that changed.
+    ///
+    /// **Assumed decision (owner may override):** the issue text lists the three tabs as Meshes,
+    /// Tiles and Compose; the editor's Tiles tab shows a composition, so a `Tile` change goes to
+    /// Meshes, where its row and its lattice are both drawn. Moving it to Tiles needs a lattice on
+    /// that tab first, which is a change to what Tiles is for rather than to this page.
+    ///
+    /// It is listed apart from `Piece` in the enum because the two are different subjects even where
+    /// they share a page, and [`crate::reveal`] is the one place that decides which page a subject is
+    /// on.
     Tile { id: String },
     /// **One composition**, on the Compose tab.
     Composition { id: String },
@@ -862,6 +879,15 @@ pub trait Operation: 'static {
     /// kit's policy beside it. Its logged change joins the Meshes history, so one Cmd+Z there takes
     /// back the newest library change, whoever made it (cycle 9 gap 1). `false` unless it does.
     fn writes_library(&self) -> bool {
+        false
+    }
+
+    /// **Whether this operation changes a view** (`Ctx::view`): what a person is looking through, not what the
+    /// project keeps. A front end that dispatches it carries the view in and applies the answer out; the BRP
+    /// door does the same for an agent (E-002, #129), so a view verb is one an agent can call and not only a
+    /// key. `false` unless it does, and `the_view_verbs_reach_an_agent` fails a verb that refuses for want of
+    /// a view and does not say so.
+    fn changes_view(&self) -> bool {
         false
     }
 
@@ -2196,6 +2222,9 @@ pub mod snip_arm {
         fn name(&self) -> &'static str {
             "snip_arm"
         }
+        fn changes_view(&self) -> bool {
+            true
+        }
         fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             Shown::Nowhere
         }
@@ -2265,6 +2294,9 @@ pub mod tool_arm {
     impl Operation for ToolArm {
         fn name(&self) -> &'static str {
             "tool_arm"
+        }
+        fn changes_view(&self) -> bool {
+            true
         }
         fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             Shown::Nowhere
@@ -2353,6 +2385,9 @@ pub mod view_toggle_journal {
         fn name(&self) -> &'static str {
             "view_toggle_journal"
         }
+        fn changes_view(&self) -> bool {
+            true
+        }
         fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             Shown::Nowhere
         }
@@ -2398,6 +2433,77 @@ pub mod view_toggle_journal {
     }
 }
 
+/// **The rig bench's ghost, up or down** (E-002, #129): the translucent second figure that plays the
+/// *measured* gait over the declared one, which `G` and the ghost chip toggle.
+///
+/// View state, like the journal: the toggle is the operation's and the front end applies what comes back, so
+/// the key, the chip and an agent's call decide what "toggle" means in one place. It writes nothing the
+/// project keeps and has no undo step, for the journal's reason: `Cmd+Z` must take back the last change to
+/// the grimoire, not hide an overlay the person put up on purpose.
+pub mod view_toggle_ghost {
+    use super::*;
+    use serde_json::json;
+
+    #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Params {}
+
+    pub struct ViewToggleGhost;
+
+    impl Operation for ViewToggleGhost {
+        fn name(&self) -> &'static str {
+            "view_toggle_ghost"
+        }
+        fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
+            Shown::Nowhere
+        }
+        fn writes(&self) -> &'static [&'static str] {
+            // An overlay on the bench is not project data: no map, no file, no undo step.
+            &[]
+        }
+        fn changes_view(&self) -> bool {
+            true
+        }
+
+        fn undo(&self) -> Undo {
+            Undo::None
+        }
+
+        fn schema(&self) -> serde_json::Value {
+            json!({"type": "object", "additionalProperties": false, "properties": {}})
+        }
+
+        fn plan(&self, ctx: &Ctx, _params: &serde_json::Value) -> Result<serde_json::Value, Refusal> {
+            let Some(view) = ctx.view.as_ref() else {
+                return Err(Refusal::new(
+                    "no view is in hand, so there is no ghost to toggle. An editor front end carries one \
+                     in `Ctx::view`.",
+                ));
+            };
+            Ok(json!({ "now": if view.ghost { "off" } else { "on" } }))
+        }
+
+        fn commit(&self, ctx: &mut Ctx, params: &serde_json::Value) -> Result<Outcome, Refusal> {
+            self.plan(ctx, params)?;
+            let Some(view) = ctx.view.as_mut() else {
+                return Err(Refusal::new("no view is in hand, so there is no ghost to toggle."));
+            };
+            let on = view.toggle_ghost();
+            Ok(Outcome {
+                summary: if on {
+                    "ghost on: the measured gait plays over the declared one".to_owned()
+                } else {
+                    "ghost off".to_owned()
+                },
+                affected: 0,
+                saved: false,
+                inverse: None,
+                after: Some(json!({ "ghost": if on { "on" } else { "off" } })),
+            })
+        }
+    }
+}
+
 pub mod view_cycle_grid {
     use super::*;
     use serde_json::json;
@@ -2411,6 +2517,9 @@ pub mod view_cycle_grid {
     impl Operation for ViewCycleGrid {
         fn name(&self) -> &'static str {
             "view_cycle_grid"
+        }
+        fn changes_view(&self) -> bool {
+            true
         }
         fn shows(&self, _ctx: &Ctx, _params: &serde_json::Value) -> Shown {
             Shown::Nowhere
@@ -4697,6 +4806,7 @@ pub fn registry() -> Vec<Box<dyn Operation>> {
     vec![
         Box::new(view_cycle_grid::ViewCycleGrid),
         Box::new(view_toggle_journal::ViewToggleJournal),
+        Box::new(view_toggle_ghost::ViewToggleGhost),
         Box::new(tool_arm::ToolArm),
         Box::new(snip_arm::SnipArm),
         Box::new(map_create::MapCreate),
@@ -4948,6 +5058,9 @@ pub const UI_ENTRY_POINTS: &[(&str, &str)] = &[
     // **The journal key**, `Cmd+E`, which dispatches `view_toggle_journal` (E-002, #129). The panel's
     // `Display` is what changes; the operation decides up or down and the front end applies it.
     ("view_toggle_journal", "\"view_toggle_journal\", &serde_json"),
+    // **The ghost key and chip**, `G`, which dispatch `view_toggle_ghost` (E-002, #129). The bench's overlay is what
+    // changes; the operation decides on or off and the front end applies it.
+    ("view_toggle_ghost", "\"view_toggle_ghost\""),
     // **The clone and run keys**, which dispatch `tool_arm` through `arm_tool` (E-002, #129). Two keys,
     // one rule: press to arm, press again to return to `Tool::Place`.
     ("tool_arm", "\"tool_arm\""),
