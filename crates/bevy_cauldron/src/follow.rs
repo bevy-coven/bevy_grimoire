@@ -219,6 +219,10 @@ pub struct Following {
     /// **Whether the Map has been asked for on this request's behalf.** A `Workspace::Map` that does not
     /// follow drops the request instead of asking again every frame.
     asked_for_the_map: bool,
+    /// **The places a follow has moved the camera away from and `nav` has not yet pushed** (NV-06,
+    /// #383). Recorded here because this is the system that writes the camera; drained by `nav`
+    /// because this system is at Bevy's parameter cap.
+    leaving: Vec<crate::nav::Place>,
 }
 
 impl Following {
@@ -322,6 +326,11 @@ impl Following {
     /// the two disagree about whether the person is working.
     pub fn busy(&self) -> bool {
         self.busy
+    }
+
+    /// **Take the places a follow is leaving**, so `nav` can push them. Empties the list.
+    pub fn take_leaving(&mut self) -> Vec<crate::nav::Place> {
+        std::mem::take(&mut self.leaving)
     }
 
     /// **Whether the camera is on its way somewhere.**
@@ -906,9 +915,16 @@ fn take_the_follow_request(
         FrameTarget::Rect(rect) => *rect,
         _ => framed_rect(&settled),
     };
-    // **Where the ease starts from**, read before `apply_frame` writes the rig.
+    // **Where the ease starts from**, read before `apply_frame` writes the rig — and the place the
+    // person was reading is pushed first, for the same reason: `Place::of` reads the rig this frame's
+    // camera is still the person's.
     let from_focus = rig.focus;
     let from_height = rig.height;
+    // **The person's place goes onto the Back history before the camera moves** (NV-06, #383): one Back
+    // undoes one yank. Recorded here and pushed by `nav`'s own system — this system is at Bevy's
+    // parameter cap. The follow's own steps are not places: the ease writes `Rig` every frame, and a
+    // push per frame would make one arrival a hundred Backs.
+    following.leaving.push(crate::nav::Place::of(door.as_deref(), None, Some(&rig), None));
     let (to_focus, to_height) = apply_frame(&mut rig, &settled, aspect, open, FOLLOW_MARGIN_FRAC);
     // **The map's own open-frame must not fight this one.** `frame_map_on_open` frames the whole map
     // once per door entry; a change that arrives just after a switching would be framed by the follow

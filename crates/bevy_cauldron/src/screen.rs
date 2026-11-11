@@ -715,6 +715,17 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // editor to open the Map, and the switching that answers it resets the door's own state — so a
     // request kept in a `Door` resource would be erased by the very switching it asked for. AF-03, #359.
     ("bevy_cauldron::reveal::Revealing", Ownership::Session),
+    // **The finder's index is the session's** (NV-05, #382): it is built from the project's files and
+    // from the open map, both of which are read off disk, so a door change keeps it rather than
+    // empties it — and a rebuild on the next frame costs one comparison.
+    ("bevy_cauldron::goto::GotoIndex", Ownership::Session),
+    // **Which finder is open is this session's too**: the palette is a modal over every workspace, as
+    // `confirm` is, and a switch made with it open must not be forgotten while it is still drawn.
+    ("bevy_cauldron::goto::Finder", Ownership::Session),
+    // **The Back history is the session's** (NV-06, #383): it is the places this sitting has stood in,
+    // bounded at `nav::NAV_HISTORY_MAX` and deliberately not saved. A door change is one of the moves a
+    // person wants back, so carrying it across is the whole point.
+    ("bevy_cauldron::nav::History", Ownership::Session),
     // **`Session`**: which inspector heading was last brought into view is where the person's eye
     // was sent, not a fact about this door's documents.
     ("bevy_cauldron::reveal::InspectorReveal", Ownership::Session),

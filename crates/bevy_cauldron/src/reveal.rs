@@ -256,6 +256,13 @@ pub fn registered_data_file(project: &Project, relative: &str) -> Option<String>
 pub struct Revealing {
     queue: VecDeque<Request>,
     in_flight: Option<InFlight>,
+    /// **The places a reveal has left and `nav` has not yet pushed** (NV-06, #383).
+    ///
+    /// Recorded here because this is the one system that knows a view is about to move for the person,
+    /// and drained by `nav` because this system is at Bevy's parameter cap. The follow records its own
+    /// place the same way and for the same reason: **the person's place is pushed where their view
+    /// moves, never once per interpolation frame**.
+    leaving: Vec<crate::nav::Place>,
 }
 
 /// One thing to show, with the operation that made it — what the refusal names.
@@ -307,11 +314,17 @@ impl Revealing {
         self.in_flight.is_some()
     }
 
+    /// **Take the places a reveal is leaving**, so `nav` can push them. Empties the list.
+    pub fn take_leaving(&mut self) -> Vec<crate::nav::Place> {
+        std::mem::take(&mut self.leaving)
+    }
+
     /// **Forget the queue and the one in flight.** A project change makes them meaningless; a map
     /// change does not, because a page is a door and a row rather than a place in metres.
     pub fn clear(&mut self) {
         self.queue.clear();
         self.in_flight = None;
+        self.leaving.clear();
     }
 }
 
@@ -456,6 +469,16 @@ fn take_the_reveal(
                         revealing.in_flight = None;
                         return;
                     }
+                    // **The place being left is recorded before the door is asked for** (NV-06,
+                    // #383), so a Back from the new page returns to the one the person was reading —
+                    // with its camera. It is recorded here and pushed by `nav`'s own system, because
+                    // this system is at Bevy's parameter cap and a second `ResMut` would not compile.
+                    revealing.leaving.push(crate::nav::Place::of(
+                        at.workspace.as_deref(),
+                        at.mode.as_deref(),
+                        at.rig.as_deref(),
+                        at.selection.as_deref(),
+                    ));
                     state.door_request = Some(DoorRequest {
                         workspace: *want_workspace,
                         tab: Some(*want_tab),
@@ -536,6 +559,11 @@ struct Where<'w, 's> {
     mode: Option<Res<'w, Mode>>,
     /// **The person's own work** — see `take_the_reveal`'s note on one idle clock.
     following: Option<Res<'w, crate::follow::Following>>,
+    /// **The camera and the selection**, read only to record the place a reveal is leaving (NV-06,
+    /// #383). Read-only on purpose: a reveal writes a selection and never the camera, so nothing here
+    /// can move the view.
+    rig: Option<Res<'w, crate::view::Rig>>,
+    selection: Option<Res<'w, crate::selection::Selection>>,
     _marker: std::marker::PhantomData<&'s ()>,
 }
 
