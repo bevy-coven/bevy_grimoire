@@ -296,12 +296,18 @@ impl Source {
     }
 }
 
-/// **Which finder is open**, so the source swap runs for the everything-finder and for nothing else.
+/// **Whether the everything-finder is open, and the context it was opened from**, so the source swap
+/// runs for the everything-finder and for nothing else: the command palette's own chords open the same
+/// widget on the command list and must not have it swapped under them.
 ///
-/// Written by `command_palette::toggle` when Cmd/Ctrl+P spawns the palette, so the two chords are one
-/// spawn of one widget.
+/// Written by `command_palette::toggle` when Cmd/Ctrl+P spawns the palette.
+///
+/// **The context is the one the person was in when they pressed the chord.** While the palette's field
+/// has focus the editor's [`Live`] is `Typing` and every command would be judged "a text field is taking
+/// the keys"; a `>` typed later swaps in the command list, and it has to be judged by the context the
+/// finder was opened from, exactly as the palette's own list is (`command_palette`'s module note).
 #[derive(Resource, Default, Debug)]
-pub struct Finder(pub Option<Source>);
+pub struct Finder(Option<Live>);
 
 impl Finder {
     /// Whether the open palette is the everything-finder.
@@ -309,14 +315,19 @@ impl Finder {
         self.0.is_some()
     }
 
+    /// **The context the open finder was opened from**, which the command list is judged by.
+    pub fn judged_in(&self) -> Option<Live> {
+        self.0
+    }
+
     /// **The finder closed** — the palette is gone, so the next chord may open either source again.
     pub fn closed(&mut self) {
         self.0 = None;
     }
 
-    /// **The finder opened on `source`.**
-    pub fn opened(&mut self, source: Source) {
-        self.0 = Some(source);
+    /// **The finder opened**, from `live`.
+    pub fn opened(&mut self, live: Live) {
+        self.0 = Some(live);
     }
 }
 
@@ -518,7 +529,6 @@ pub fn first_line(text: &str) -> String {
 fn show_the_chosen_row(
     chosen: On<RunCommand>,
     index: Res<GotoIndex>,
-    live: Option<Res<crate::keys::Live>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut revealing: Option<ResMut<crate::reveal::Revealing>>,
     mut following: Option<ResMut<crate::follow::Following>>,
@@ -526,7 +536,6 @@ fn show_the_chosen_row(
     let Some(entry) = index.find(&chosen.id).cloned() else {
         return;
     };
-    let _ = &live;
     // **The workspace row is where you are**, so it is asked for as the chord asks for it.
     if let Some(workspace) = entry.opens {
         if let Some(state) = state.as_mut()
@@ -555,10 +564,9 @@ fn show_the_chosen_row(
         return;
     }
     if let Some(revealing) = revealing.as_mut() {
-        revealing.request("go_to", &entry.shown);
         // **The person asked for this page by pressing Enter**, so it is not held back by the idle
-        // clock their own key set — one flag, read at the one gate.
-        revealing.show_now();
+        // clock their own key set, and the key that asked does not cancel it.
+        revealing.request_by_person("go_to", &entry.shown);
     }
 }
 
@@ -567,17 +575,16 @@ fn show_the_chosen_row(
 /// their ranking and their Enter are the widget's rather than a second implementation's.
 fn choose_the_source(
     finder: Res<Finder>,
-    live: Res<Live>,
     index: Res<GotoIndex>,
     history: Res<PaletteHistory>,
     open: Query<(&bevy_gooey::PaletteInput, &bevy_gooey::TextInputValue)>,
     mut list: ResMut<CommandList>,
     mut shown: Local<Option<Source>>,
 ) {
-    if !finder.is_open() {
+    let Some(live) = finder.judged_in() else {
         *shown = None;
         return;
-    }
+    };
     // **The palette's field carries the query**, and it is the only place it exists.
     let Some((_, query)) = open.iter().next() else {
         *shown = None;
@@ -589,7 +596,7 @@ fn choose_the_source(
     }
     *shown = Some(want);
     list.0 = match want {
-        Source::Commands => command_rows(*live),
+        Source::Commands => command_rows(live),
         Source::Everything => rows(&index, &history.0),
     };
 }

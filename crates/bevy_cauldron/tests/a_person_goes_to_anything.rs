@@ -90,6 +90,8 @@ fn key_for(c: char) -> KeyCode {
         't' => KeyCode::KeyT,
         'u' => KeyCode::KeyU,
         '>' => KeyCode::Period,
+        '@' => KeyCode::Digit2,
+        '3' => KeyCode::Digit3,
         other => panic!("no key for `{other}`"),
     }
 }
@@ -126,14 +128,14 @@ fn ctrl_p(app: &mut App) {
     settle(app);
 }
 
-/// **Type `text` as a hand types it.** `>` is Shift+Period on a US keyboard, and the character is what
+/// **Type `text` as a hand types it.** `>` is Shift+Period and `@` Shift+2 on a US keyboard, and the character is what
 /// the palette's field reads — a bare `KeyCode::Period` produces no `>` at all, which is why the first
 /// version's `>` never reached the source swap. The modifier goes down with the key and up after it,
 /// the way [`crate::fixtures`]' own chord helper does it.
 fn type_str(app: &mut App, text: &str) {
     for c in text.chars() {
         let s = c.to_string();
-        let shift = c == '>';
+        let shift = matches!(c, '>' | '@');
         for state in [ButtonState::Pressed, ButtonState::Released] {
             if shift {
                 send(app, KeyCode::ShiftLeft, Key::Unidentified(NativeKey::Unidentified), None, state);
@@ -186,6 +188,13 @@ fn framed(app: &App, rect: [f32; 4]) -> Result<f32, String> {
         let p = camera
             .world_to_viewport(transform, Vec3::new(x, floor, z))
             .map_err(|e| format!("corner ({x}, {z}) is not in view: {e}"))?;
+        // **Inside the viewport, which is what "framed" means**: the camera is orthographic, so a
+        // box covers the same share of the view wherever it stands, and a share alone cannot tell a
+        // box in the picture from one a street away. `world_to_viewport` is relative to the
+        // window's logical pixels, as `logical_viewport_rect` is.
+        if !view.contains(p) {
+            return Err(format!("corner ({x}, {z}) projects to {p}, outside the {view:?} viewport"));
+        }
         lo = (lo.0.min(p.x), lo.1.min(p.y));
         hi = (hi.0.max(p.x), hi.1.max(p.y));
     }
@@ -228,10 +237,14 @@ fn typing_part_of_a_pieces_name_opens_the_kit_workspace_with_it_selected() {
 #[test]
 fn a_placement_id_opens_the_map_with_the_placement_framed() {
     let mut app = editor("placement");
-    // **Somewhere else entirely, so a finder that did nothing cannot pass.** The entry frame frames the
-    // whole 64 m map, which already holds a 2 m piece at nearly a third of the viewport — the first
-    // version's own guard proved it (`Ok(0.29532656)`). So the camera is put on the *opposite* corner at
-    // 8 m across: the piece at (28, -28) is outside that box, and only a real go-to brings it in.
+    // **Let the map's one-shot entry frame happen first**: it frames the whole map once the viewport
+    // has stopped changing size, and a camera written before it would be overwritten by it, so the
+    // precondition below would measure the entry frame and not the camera this test sets.
+    settle(&mut app);
+    // **Somewhere else entirely, so a finder that did nothing cannot pass.** The camera is put on the
+    // *opposite* corner at 8 m across: the piece at (28, -28) is outside that view, and only a real
+    // go-to brings it in. (The camera is orthographic, so a share of the viewport says nothing about
+    // where the box is: `framed` also requires every corner inside it.)
     {
         let mut rig = app.world_mut().resource_mut::<Rig>();
         rig.focus = Vec3::new(-28.0, 0.0, 28.0);

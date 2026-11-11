@@ -115,7 +115,12 @@ fn toggle(
             crate::goto::rows(&index, &history.0)
         }
     };
-    finder.opened(ask);
+    // **Only the everything-finder swaps its list** when a `>` is typed: the command palette's own
+    // chords open the same widget on the command list and keep it. The context the chord was pressed
+    // in is kept with it, because the list a `>` swaps in is judged by it (see [`Finder`]).
+    if ask == Source::Everything {
+        finder.opened(*live);
+    }
     commands.spawn(command_palette());
 }
 

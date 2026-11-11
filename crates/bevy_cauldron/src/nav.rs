@@ -299,8 +299,13 @@ fn note_when_the_workspace_moves(
     // (`screen::door_state!` names it), so a place read on the frame the switch lands carries the
     // default camera rather than the one the person was looking through. The copy taken before the
     // crossing is the only honest answer to *where I was*.
+    //
+    // **Not while a walk is settling**: Back and Forward cross doors themselves, and pushing the place
+    // a walk leaves would put the step just taken back on the stack — Back twice would then land where
+    // Back once did.
     if let Some((last_workspace, last_mode, last_place)) = was.as_ref()
         && (*last_workspace, *last_mode) != (workspace, mode)
+        && history.pending.is_none()
     {
         history.push(last_place.clone());
     }
@@ -314,13 +319,12 @@ fn note_when_the_workspace_moves(
 #[allow(clippy::too_many_arguments)]
 fn settle_the_place(
     mut history: ResMut<History>,
-    project: Option<Res<crate::project::Project>>,
     open: Option<Res<crate::project::OpenMap>>,
     workspace: Option<Res<Workspace>>,
     mode: Option<Res<Mode>>,
     mut rig: Option<ResMut<crate::view::Rig>>,
+    mut framing: Option<ResMut<crate::editor::MapFraming>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
-    mut revealing: Option<ResMut<crate::reveal::Revealing>>,
 ) {
     let Some((place, asked)) = history.pending.clone() else { return };
     if go(&place, open.as_deref()).is_err() {
@@ -355,8 +359,14 @@ fn settle_the_place(
     // `Shown` and the reveal owns it.
     if let (Some(camera), Some(rig)) = (place.camera, rig.as_deref_mut()) {
         camera.restore(rig);
+        // **The map's own entry frame must not take the camera back**: it is one shot per door and
+        // runs a frame or two after the door lands, once the viewport has stopped changing size — so
+        // it would put the whole map over the camera just restored. The follow settles it for the
+        // same reason (`MapFraming::settle`).
+        if let Some(framing) = framing.as_mut() {
+            framing.settle();
+        }
     }
-    let _ = (&project, &mut revealing);
     history.pending = None;
 }
 

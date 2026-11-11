@@ -452,7 +452,7 @@ fn a_persons_input_takes_the_camera_back(
     following.asked_for_the_map = false;
     following.waiting = None;
     if let Some(revealing) = revealing.as_mut() {
-        revealing.clear();
+        revealing.drop_what_the_agent_queued();
     }
 }
 
