@@ -66,7 +66,7 @@ fn the_viewport_has_its_own_pane_in_the_dock_layout() {
     let (_root, mut app) = editor("shell-viewport");
     let docks = app
         .world_mut()
-        .query::<&bevy_gooey::Dock>()
+        .query_filtered::<&bevy_gooey::Dock, With<bevy_cauldron::chrome::ArrangementDock>>()
         .iter(app.world())
         .map(|d| d.0.clone())
         .collect::<Vec<_>>();

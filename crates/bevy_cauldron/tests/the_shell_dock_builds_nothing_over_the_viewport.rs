@@ -102,7 +102,7 @@ fn the_shells_dock_still_holds_the_workspaces_arrangement() {
     let mut app = editor("holds");
     let world = app.world_mut();
     let shown = world
-        .query::<&Dock>()
+        .query_filtered::<&Dock, (With<Dock>, With<bevy_cauldron::chrome::ArrangementDock>)>()
         .iter(world)
         .next()
         .map(|dock| dock.0.clone())

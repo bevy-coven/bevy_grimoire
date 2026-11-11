@@ -65,7 +65,7 @@ fn rig(tag: &str) -> Rig {
 /// The layout the editor is showing.
 fn shown(app: &mut App) -> DockLayout {
     let world = app.world_mut();
-    let mut q = world.query::<&bevy_gooey::Dock>();
+    let mut q = world.query_filtered::<&bevy_gooey::Dock, With<bevy_cauldron::chrome::ArrangementDock>>();
     q.iter(world).next().expect("the shell is a gooey Dock").0.clone()
 }
 
@@ -137,7 +137,8 @@ fn a_layout_change_gooey_reports_reaches_the_file() {
     let Rig { mut app, user } = rig("drag");
     let dock = {
         let world = app.world_mut();
-        let mut q = world.query_filtered::<Entity, With<bevy_gooey::Dock>>();
+        let mut q = world
+            .query_filtered::<Entity, (With<bevy_gooey::Dock>, With<bevy_cauldron::chrome::ArrangementDock>)>();
         q.iter(world).next().expect("the shell's dock")
     };
     app.world_mut().trigger(bevy_gooey::DockLayoutChanged { entity: dock, layout: moved() });

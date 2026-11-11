@@ -49,7 +49,7 @@ fn shown_tabs(layout: &DockLayout) -> Vec<(Vec<String>, String)> {
 /// The dock's arrangement as the editor holds it, or the default one when no dock has been built yet.
 fn dock_here(app: &mut App) -> DockLayout {
     app.world_mut()
-        .query_filtered::<&Dock, ()>()
+        .query_filtered::<&Dock, With<bevy_cauldron::chrome::ArrangementDock>>()
         .iter(app.world())
         .next()
         .map_or_else(|| bevy_cauldron::ui::shell_layout(bevy_cauldron::workspace::Workspace::Map), |dock| dock.0.clone())

@@ -402,6 +402,7 @@ mod the_meshes_pane_says_how_sure_the_labels_are;
 mod the_compose_panel_draws_in_the_skins_ink;
 mod the_model_written_ink_comes_from_the_skin;
 mod the_rig_bench_draws_in_the_skins_ink;
+mod the_rig_bench_is_built_from_gooey_widgets;
 mod the_benchs_labels_and_the_journal_take_the_skins_ink;
 mod the_wheel_scrolls_a_panel;
 mod the_window_fits_the_screen_and_is_remembered;
