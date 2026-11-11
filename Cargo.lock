@@ -1275,6 +1275,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_grimoire_rhai"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_grimoire_core",
+ "rhai",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bevy_grimoire_rng"
 version = "0.1.0"
 dependencies = [
@@ -2665,6 +2676,7 @@ dependencies = [
  "castaway",
  "cfg-if",
  "itoa",
+ "serde",
  "static_assertions",
  "zmij",
 ]
@@ -5978,6 +5990,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "rhai_codegen",
+ "serde",
  "smallvec",
  "smartstring",
  "thin-vec",

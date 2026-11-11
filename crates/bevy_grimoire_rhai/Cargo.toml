@@ -1,0 +1,26 @@
+[package]
+name = "bevy_grimoire_rhai"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "Rhai scripts on entities, reloaded live: the one Rhai host a bevy_grimoire game runs its scripts on."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bevy-coven/bevy_grimoire"
+keywords = ["bevy", "gamedev", "scripting"]
+categories = ["game-development"]
+
+[dependencies]
+# **`serialize` for `Name`**, which is how a script names another entity: `find("guard")` resolves
+# through the engine's own name, not a second table this crate would have to keep in step.
+bevy = { workspace = true, features = ["serialize"] }
+# **For `Problem`, and nothing else.** It is the workspace's one refusal shape, so a script's fault reaches a
+# game's log the way a refused project file does. Engine-free, so nothing new is drawn in.
+bevy_grimoire_core = { path = "../bevy_grimoire_core", version = "0.10.0" }
+# **The one Rhai host** (GD-06, #368). The owner decided it lives in this workspace rather than in
+# `bevy_society`: that crate's `ScriptEngine` registers only society types and keeps its entry points
+# `pub(crate)`, so it is not a general host, and building a second one beside it is the two-paths shape
+# `AGENTS.md` forbids. `sync` is on because a Bevy `Resource` holding an `Engine` must be `Send + Sync`;
+# `serde` is on because a reflected value crosses into a script as data.
+rhai = { version = "1.27", features = ["serde", "sync"] }
+serde.workspace = true
+serde_json.workspace = true

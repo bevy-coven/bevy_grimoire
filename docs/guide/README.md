@@ -10,6 +10,7 @@ Read these in order the first time through. The editor opens every page below fr
 - [Keys](keys.md): every key, by context.
 - [Data files](data-files.md): the files a project keeps and a game loads.
 - [Behaviours](behaviours.md): the components a game gets from `bevy_grimoire` — triggers, doors, health, countdowns, paths and state machines — and the YAML that sets them.
+- [Scripts](scripts.md): behaviour a component's fields cannot describe, as a `.rhai` file a game runs on an entity, reloaded when you save it.
 - [The reload contract](reload-contract.md): every kind of file the editor writes, and what a running program does when one changes.
 
 Reference:

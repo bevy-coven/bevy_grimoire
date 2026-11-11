@@ -39,9 +39,18 @@ name, a key a type does not have is refused at its line, and a refusal changes n
 read it**: a `Trigger` a body **enters** and a `Countdown` that rings each write a `Signal` named by their own
 `signal` field. A volume signals the way in and not the way out — a `Switch` toggles, so signalling an exit
 would close the door the person just walked through. `Triggered` still reports both crossings, with `entered`
-saying which; the signal is the one-way reading of the same event, once per volume per frame, so a switch and
-a state machine agree about one crossing when two bodies cross together. So a volume and a bell press a `Switch` or step a `StateMachine` that names them, with no
-game's code in between:
+saying which; the signal is the one-way reading of the same event. So a volume and a bell press a `Switch` or
+step a `StateMachine` that names them, with no game's code in between:
+
+**One name in one frame is one event, however many things wrote it.** A tripwire a body crosses and a bell that
+rings on the same frame are one `crowd` happening, not two: the switch flips once and the machine steps once,
+whichever of the two wrote first. That is settled on the **consumer** side, because a game's own input writes this
+message too and no producer can know what another wrote.
+
+**A body already inside a volume is not a crossing.** A save that puts someone in a doorway is a state, not
+something that happened, so the first look at a volume-and-body pair records where it is and reports nothing; only a
+change after that is a crossing. That holds whether the volume was there first or the body was — a save that writes a
+walker into a yard that already exists does not press the switch of the door in that yard either.
 
 ```yaml
 entities:

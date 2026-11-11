@@ -2626,6 +2626,10 @@ pub fn draw_build_grid(
     if *mode != crate::tiles::Mode::Tiles {
         return;
     }
+    // **One colour for the whole pane's lattice work** (UI-80, #254): the envelope's snap ladder and
+    // the seating lattice are the same grid to an author, so both read the running skin's `grid_line`
+    // through `chrome::grid_ink`, and neither can drift from the other.
+    let grid = crate::chrome::grid_ink(skin.as_deref());
     let Some((centre, size)) = tile_envelope(&build) else {
         return;
     };
@@ -2685,7 +2689,7 @@ pub fn draw_build_grid(
                     gizmos.line(
                         stage + Vec3::new(x, 0.0, -size.2 * 0.5),
                         stage + Vec3::new(x, 0.0, size.2 * 0.5),
-                        crate::chrome::ink().grid_line,
+                        grid,
                     );
                 }
                 if f.1 > ON_STOP {
@@ -2699,7 +2703,7 @@ pub fn draw_build_grid(
                     gizmos.line(
                         stage + Vec3::new(-size.0 * 0.5, 0.0, z),
                         stage + Vec3::new(size.0 * 0.5, 0.0, z),
-                        crate::chrome::ink().grid_line,
+                        grid,
                     );
                 }
             }
@@ -2733,7 +2737,7 @@ pub fn draw_build_grid(
             Isometry3d::new(stage, Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
             UVec2::new(nx, nz),
             Vec2::splat(unit),
-            crate::chrome::grid_ink(skin.as_deref()),
+            grid,
         );
     }
 }

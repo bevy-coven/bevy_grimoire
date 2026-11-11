@@ -201,7 +201,7 @@ impl Ink {
             overlay_bg: skin.card(),
             focus_bg: tone("focus_bg"),
             header_bg: skin.surface_at(HEADER_STEP),
-            grid_line: tone("grid_line"),
+            grid_line: tone(GRID_TONE),
             bounds_line: tone("bounds_line"),
             void: skin.background,
             bar_bg: scaled(slot_bg, BAR_STEP_BACK),
@@ -321,8 +321,13 @@ pub const RADIUS_ROW: f32 = 3.0;
 /// both lattices together. A test reads it, which is why it is a function and not a line inside a
 /// `Gizmos` call — a headless app renders no gizmos, so nothing else can ask what colour they are.
 pub fn grid_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
-    skin.and_then(|skin| skin.tone("grid_line")).unwrap_or_else(|| ink().grid_line)
+    skin.and_then(|skin| skin.tone(GRID_TONE)).unwrap_or_else(|| ink().grid_line)
 }
+
+/// **The skin tone a lattice's colour is kept under.** One name for the two places it is read — the
+/// lookup in [`grid_ink`] and the `Ink::grid_line` field's own read of it in `Ink::of` — so a rename in
+/// `src/editor_skin.ron` cannot leave one of them asking for a tone that no longer exists.
+pub const GRID_TONE: &str = "grid_line";
 
 /// **The rail that says "this one"** — `Ink::accent` down the leading edge of the selected row.
 ///

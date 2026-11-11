@@ -195,6 +195,10 @@ pub const KINDS: &[FileKind] = &[
         "Read at each `people_run`; nothing holds it."),
     kind("scripts", Grimoire, "<kit>/scripts/<name>.ron", "Scripts", Live, PerMap, "",
         "The map's triggers, read when they are run; nothing holds it."),
+    kind("scripts_rhai", Root, "scripts/<name>.rhai", "a Rhai script", Live, Global,
+        "by hand, and any tool that edits a text file",
+        // **The script host's name is spelled around on purpose**: this crate is engine-free, and a test here refuses any source line naming an engine crate, which every `bevy_*` name is. The host is the workspace sibling that runs a game's scripts (GD-06), and this row is its file.
+        "**A script a game runs on an entity**, by the workspace's script host (GD-06): saving it recompiles it in the running game and the state the script kept in `this.state` carries across; a file that does not compile leaves the last good version running and raises a problem naming the file and the line, and a call that runs past the step limit is stopped rather than freezing the game."),
     // ---- shared by maps ----
     kind("trees", Grimoire, "<kit>/trees/<name>.tree.ron", "TreeParams", Respawn, Global, "",
         "A species a forest uses: the editor regrows every tree of it when the file's modification time moves, and a file that does not read leaves them as the last good one drew them."),

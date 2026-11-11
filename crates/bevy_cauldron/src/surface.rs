@@ -469,9 +469,10 @@ fn fit_surface_to_window(
     mut events: MessageWriter<bevy::asset::AssetEvent<Image>>,
 ) {
     // **The interface's scale is the window's business, not the surface's**, and it is answered
-    // first: a window with no surface yet — a headless harness, the frame before the target is made —
-    // still gets the scale it should lay out at, and that is what lets a test of the person's
-    // interface-size setting read `UiScale` without a render target.
+    // first. A harness **does** have a `Surface` — `harness::resize_surface` makes one — so what is
+    // missing there is the *mirror* and the window's physical size, not the surface. Splitting the two
+    // is what lets a test of the interface-size setting read `UiScale` at a size it stated, without a
+    // render target behind it.
     let Some(window) = windows.single().ok() else {
         // No window is a headless run with no size: nothing is fitted and nothing is scaled.
         return;
