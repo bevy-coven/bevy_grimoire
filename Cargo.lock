@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "bevy",
  "bevy_grimoire_core",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_core"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "bevy_grimoire_rng",
  "bevy_grimoire_solver",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_grimoire_solver"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "batsat",
 ]
