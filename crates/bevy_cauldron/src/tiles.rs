@@ -861,6 +861,10 @@ pub struct ScaleReadout;
 /// in `library.ron` as an authored fact where there is none — the same rule `rotate_mesh` follows when
 /// it writes `(want != (0,0,0)).then_some(want)`. The bound is a tenth of a millimetre on a 1 m piece,
 /// which is finer than anything the importer can measure.
+/// **A row's rhythm at half the skin's step**: what `bevy_gooey::row(0.5)` asks for, and the
+/// [`crate::chrome::GAP_TIGHT`] the hand-built strips used (UI-59, #245).
+const GAP_HALF: f32 = 0.5;
+
 const SCALE_EPS: f32 = 1e-4;
 
 
@@ -4040,13 +4044,10 @@ fn spawn_tab_strip(
     // a strip that had to out-rank the thing beneath it because both were competing for the same
     // ground. In the frame nothing overlaps, so neither number is needed.
     let strip = commands
+        // **A gooey row** (UI-59, #245). `AlignItems::Stretch` was the default it names; the strip's
+        // half-step gap is `row(0.5)`.
         .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                align_items: AlignItems::Stretch,
-                ..default()
-            },
+            bevy_gooey::row(GAP_HALF),
             // **The editor's first accessibility, and the strip is the right place to start.**
             //
             // There was none at all — `AccessibilityNode` appeared zero times in `src/`. A screen
@@ -4651,13 +4652,8 @@ fn spawn_tiles_panel(
         });
         crate::filter::spawn(p, crate::filter::Pane::Candidates, None);
         // The strip sits OUTSIDE the scroll container, so it cannot scroll away — see [`ListHeader`].
-        p.spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            ListHeader,
-        ));
+        // **A gooey column** (UI-59, #245).
+        p.spawn((bevy_gooey::column(0.0), ListHeader));
         crate::chrome::scroll_list(
             p,
             (
@@ -10121,10 +10117,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 })
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "standards");
-                    row.spawn(Node {
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    })
+                    row.spawn(bevy_gooey::column(0.0))
                     .with_children(|col| {
                         for line in standards_lines {
                             col.spawn((
@@ -10173,10 +10166,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                 })
                 .with_children(|row| {
                     crate::chrome::row_label(row, crate::chrome::COL_LABEL, "dead ends");
-                    row.spawn(Node {
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    })
+                    row.spawn(bevy_gooey::column(0.0))
                     .with_children(|col| {
                         for line in dead {
                             col.spawn((
@@ -10660,10 +10650,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                     crate::chrome::section(p, "PLACEMENT");
                 }
                 let mut line = |label: &str, now: String, prop: Option<String>| {
-                    p.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        ..default()
-                    })
+                    p.spawn(bevy_gooey::row(0.0))
                     .with_children(|row| {
                         crate::chrome::row_label(row, 48.0, label);
                         // 11 px like every other value beside a label — this pane rendered 10/10
@@ -10843,11 +10830,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
             .with_children(|layers| {
                 for y in 0..dy {
                     layers
-                        .spawn(Node {
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                            ..default()
-                        })
+                        .spawn(bevy_gooey::column(GAP_HALF))
                         .with_children(|col| {
                             col.spawn((
                                 Text::new(layer_label(y, dy)),
@@ -10858,11 +10841,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             // The column headers, with the layer header in the corner above the row
                             // ones — the spreadsheet arrangement, because that is where a hand
                             // already looks for them.
-                            col.spawn(Node {
-                                flex_direction: FlexDirection::Row,
-                                column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                                ..default()
-                            })
+                            col.spawn(bevy_gooey::row(GAP_HALF))
                             .with_children(|row| {
                                 header_button(
                                     row,
@@ -10885,11 +10864,7 @@ fn rebuild_detail(detail: DetailInputs<'_, '_>) {
                             });
 
                             for z in 0..dz {
-                                col.spawn(Node {
-                                    flex_direction: FlexDirection::Row,
-                                    column_gap: Val::Px(crate::chrome::GAP_TIGHT),
-                                    ..default()
-                                })
+                                col.spawn(bevy_gooey::row(GAP_HALF))
                                 .with_children(|row| {
                                     header_button(
                                         row,

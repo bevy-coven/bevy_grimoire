@@ -82,7 +82,7 @@ fn press(app: &mut App, action: Action) {
 
 fn shown(app: &mut App) -> DockLayout {
     let world = app.world_mut();
-    let mut q = world.query_filtered::<(&bevy_gooey::Dock, ()), With<bevy_cauldron::chrome::ArrangementDock>>();
+    let mut q = world.query_filtered::<&bevy_gooey::Dock, With<bevy_cauldron::chrome::ArrangementDock>>();
     q.iter(world).next().expect("the shell is a gooey Dock").0.clone()
 }
 
