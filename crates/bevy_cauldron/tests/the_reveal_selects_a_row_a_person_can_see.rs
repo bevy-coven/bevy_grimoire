@@ -29,7 +29,8 @@ use bevy::ui::{ComputedNode, UiGlobalTransform};
 
 use bevy_cauldron::harness;
 use bevy_cauldron::project::Project;
-use bevy_cauldron::tiles::{Door, Mode};
+use bevy_cauldron::tiles::Mode;
+use bevy_cauldron::workspace::Workspace;
 
 use crate::fixtures;
 
@@ -197,7 +198,7 @@ fn the_rigs_row_the_reveal_selected_is_inside_the_bench() {
     let answer = apply(&mut app, "rig_adopt_measured", serde_json::json!({"rig": "valkyrie"}));
     assert_eq!(answer["outcome"], "applied", "{answer}");
     settle(&mut app);
-    assert_eq!((*app.world().resource::<Door>(), app.world().resource::<Mode>().label()), (Door::Rigs, "ANIM"));
+    assert_eq!((*app.world().resource::<Workspace>(), app.world().resource::<Mode>().label()), (Workspace::Animation, "ANIM"));
 
     // The row is the one the bench says is selected, and it is inside the list that scrolls it.
     let row = selected_row_drawing(&mut app, "valkyrie");
@@ -377,8 +378,8 @@ fn a_persons_key_press_stops_a_queued_reveal() {
     settle(&mut app);
 
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Map,
+        *app.world().resource::<Workspace>(),
+        Workspace::Map,
         "a queued reveal crossed the door while the person was working"
     );
     assert_eq!(
@@ -441,8 +442,8 @@ fn a_reveal_waits_while_the_person_is_working() {
         app.update();
     }
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Map,
+        *app.world().resource::<Workspace>(),
+        Workspace::Map,
         "a reveal crossed the door while the person was working the view"
     );
     assert_eq!(
@@ -461,8 +462,8 @@ fn a_reveal_waits_while_the_person_is_working() {
     }
     settle(&mut app);
     assert_eq!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the reveal never landed after the person stopped"
     );
 }

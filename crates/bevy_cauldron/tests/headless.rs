@@ -3300,8 +3300,8 @@ fn the_tab_badge_is_its_own_node_and_boots_empty() {
     // door now (`Door::tabs`), so `Mode::ALL` counted a five-tab strip nothing draws — the fixed
     // count outlived the shape it described. Derived from the same `Mode::default()`
     // `build_headless` passes, so the two cannot disagree about which door is standing.
-    let door = bevy_cauldron::tiles::Door::showing(bevy_cauldron::tiles::Mode::default());
-    let tabs = door.tabs().len();
+    let door = bevy_cauldron::workspace::Workspace::showing(bevy_cauldron::tiles::Mode::default());
+    let tabs = door.panels().len();
     assert_eq!(badges.len(), tabs, "one badge per tab, found {}", badges.len());
     assert!(
         badges.iter().all(String::is_empty),
@@ -11664,7 +11664,7 @@ fn expected_badges(
     // **The door trims before the home resolves**, in that order, because that is the order
     // `badges::rebuild_badges` does it in — `2` and `3` are `Context::Global` but the strip they act
     // on is the door's, so on a one-panel door they are not live at all.
-    let panels = bevy_cauldron::tiles::Door::showing(mode).tabs().len();
+    let panels = bevy_cauldron::workspace::Workspace::showing(mode).panels().len();
     bevy_cauldron::keys::badges(mode.context(), stance)
         .into_iter()
         .chain(bevy_cauldron::keys::badges(
@@ -11811,7 +11811,7 @@ fn every_control_the_census_homes_a_verb_at_is_on_screen() {
             // resolving is the step this must happen before — see the note above. The door trim and
             // the `Context::Global` chain are `rebuild_badges`' own, in its order.
             let stance = app.world().resource::<bevy_cauldron::keys::Live>().1;
-            let panels = bevy_cauldron::tiles::Door::showing(mode).tabs().len();
+            let panels = bevy_cauldron::workspace::Workspace::showing(mode).panels().len();
             let named: Vec<Home> = bevy_cauldron::keys::badges(mode.context(), stance)
                 .into_iter()
                 .chain(bevy_cauldron::keys::badges(
@@ -15288,8 +15288,8 @@ fn arriving_on_the_tiles_tab_twice_lands_on_the_page_both_times() {
 
     // Through the strip's own keys, which is what clears `browsing` on the way out (`enter_tab`).
     let slot = |mode: Mode| {
-        let i = bevy_cauldron::tiles::Door::showing(Mode::Tiles)
-            .tabs()
+        let i = bevy_cauldron::workspace::Workspace::showing(Mode::Tiles)
+            .panels()
             .iter()
             .position(|m| *m == mode)
             .unwrap_or_else(|| panic!("the mode is on the kit door"));

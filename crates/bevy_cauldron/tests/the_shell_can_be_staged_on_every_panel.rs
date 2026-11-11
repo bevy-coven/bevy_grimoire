@@ -52,7 +52,7 @@ fn dock_here(app: &mut App) -> DockLayout {
         .query_filtered::<&Dock, ()>()
         .iter(app.world())
         .next()
-        .map_or_else(bevy_cauldron::ui::shell_layout, |dock| dock.0.clone())
+        .map_or_else(|| bevy_cauldron::ui::shell_layout(bevy_cauldron::workspace::Workspace::Map), |dock| dock.0.clone())
 }
 
 /// **The catalog names every panel the shell has, and each name is a screen or a registered panel.** A dock panel in the

@@ -472,28 +472,28 @@ fn show(world: &mut World, id: &str) {
     let on_map = world.get_resource::<crate::project::OpenMap>().is_some_and(|o| o.map.placements.iter().any(|p| p.id == id));
     let in_library = world.get_resource::<crate::project::Project>().is_some_and(|p| p.library.get(id).is_some());
     let (door, tab) = if on_map {
-        (crate::tiles::Door::Map, None)
+        (crate::workspace::Workspace::Map, None)
     } else if in_library {
-        (crate::tiles::Door::Kit, Some(Mode::Meshes))
+        (crate::workspace::Workspace::Kit, Some(Mode::Meshes))
     } else {
         world.resource_mut::<crate::editor::EditorState>().status.note(format!("`{id}` is not on this map or in the library any more"));
         return;
     };
-    let here = world.get_resource::<crate::tiles::Door>() == Some(&door) && tab.is_none_or(|t| world.get_resource::<Mode>() == Some(&t));
+    let here = world.get_resource::<crate::workspace::Workspace>() == Some(&door) && tab.is_none_or(|t| world.get_resource::<Mode>() == Some(&t));
     if !here {
         crate::editor::open_door(world, door, tab);
     }
     world.spawn(ShowAfterDoor(id.to_owned()));
 }
 
-/// **What Show is waiting to do once the door it asked for is crossed.** A door crossing resets the
+/// **What Show is waiting to do once the door it asked for is crossed.** A door switching resets the
 /// state a selection lives in (`ImportState`, `TargetLock` and the status line are the door's own), so
 /// the selection is made on the far side. A component and not a resource: a resource would need a
 /// classification of what a door does to it, and this is gone in a frame or two.
 #[derive(Component)]
 struct ShowAfterDoor(String);
 
-/// **Select what Show named, once no door is waiting.** A crossing that was asked for and did not
+/// **Select what Show named, once no door is waiting.** A switching that was asked for and did not
 /// happen (the person answered "stay" to the leaving question) leaves nothing selected and says nothing:
 /// they chose to stay.
 fn finish_show(world: &mut World) {
@@ -508,10 +508,10 @@ fn finish_show(world: &mut World) {
     }
     for (entity, id) in waiting {
         world.entity_mut(entity).despawn();
-        let door = world.get_resource::<crate::tiles::Door>().copied();
-        if door == Some(crate::tiles::Door::Map) && crate::editor::lock_on_placement(world, &id) {
+        let door = world.get_resource::<crate::workspace::Workspace>().copied();
+        if door == Some(crate::workspace::Workspace::Map) && crate::editor::lock_on_placement(world, &id) {
             world.resource_mut::<crate::editor::EditorState>().status.note(format!("targeting `{id}`, which the refusal was about"));
-        } else if door == Some(crate::tiles::Door::Kit) && world.get_resource::<Mode>() == Some(&Mode::Meshes) {
+        } else if door == Some(crate::workspace::Workspace::Kit) && world.get_resource::<Mode>() == Some(&Mode::Meshes) {
             world.resource_scope(|world, mut import: Mut<crate::tiles::ImportState>| {
                 if let Some(project) = world.get_resource::<crate::project::Project>() {
                     crate::editor::select_piece(&mut import, project, &id);

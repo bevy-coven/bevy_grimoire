@@ -19,7 +19,7 @@ use bevy::prelude::*;
 use bevy_cauldron::editor::EditorState;
 use bevy_cauldron::harness;
 use bevy_cauldron::project::OpenMap;
-use bevy_cauldron::tiles::Door;
+use bevy_cauldron::workspace::Workspace;
 use serde_json::json;
 
 use crate::fixtures;
@@ -76,8 +76,8 @@ fn a_dirty_map_asked_to_leave_is_answered_as_waiting_for_the_person() {
         "the answer says what the person is being asked about: {answer}"
     );
     assert_eq!(
-        app.world().resource::<EditorState>().door_request.as_ref().map(|r| r.door),
-        Some(Door::Kit),
+        app.world().resource::<EditorState>().door_request.as_ref().map(|r| r.workspace),
+        Some(Workspace::Kit),
         "the request is stored, so the editor asks the leaving question"
     );
 }

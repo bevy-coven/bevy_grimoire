@@ -1235,7 +1235,20 @@ const BAR_H: f32 = 26.0;
 /// The `Frame` resource is how [`panel_root`] finds the dock to put a panel in; BSN-style name
 /// lookup does not exist here and a marker query would need a flush between the frame and the first
 /// panel. Ordering is [`FrameSystems`], which every panel spawner runs `after`.
-pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings::EditorSettings>>) {
+pub fn spawn_frame(
+    mut commands: Commands,
+    settings: Option<Res<crate::settings::EditorSettings>>,
+    workspace: Option<Res<crate::workspace::Workspace>>,
+) {
+    // **The workspace's own arrangement, else its default** (UI-33, #227; per workspace since
+    // NV-02, #379). `sync_settings` has read the files by the time a frame is built, so this is the
+    // layout the editor opens on — and it is keyed by the workspace, so Map's inspector being wide
+    // says nothing about Kit's.
+    let workspace = workspace.as_deref().copied().unwrap_or_default();
+    let layout = settings
+        .as_deref()
+        .and_then(|s| s.workspace_layout.get(workspace.id()).cloned())
+        .unwrap_or_else(|| crate::ui::shell_layout(workspace));
     let bar = |extra: Node| -> Node {
         Node {
             width: Val::Percent(100.0),
@@ -1437,9 +1450,7 @@ pub fn spawn_frame(mut commands: Commands, settings: Option<Res<crate::settings:
     // dragged. Moving the two docks onto gooey's `Dock` as well is the rest of this issue.
     let dock = commands
         .spawn((
-            // **The person's arrangement, else the default** (UI-33, #227). `sync_settings` has read
-            // the files by the time a frame is built, so this is the layout the editor opens on.
-            bevy_gooey::Dock(settings.and_then(|s| s.shell_layout.clone()).unwrap_or_else(crate::ui::shell_layout)),
+            bevy_gooey::Dock(layout),
             // **The map is where a library piece may be let go** (UI-52, #238): the dock covers the viewport, so it is
             // the drop target, and `editor::drop_a_piece_on_the_map` places what lands on it.
             bevy_gooey::DropTarget::<crate::editor::PieceDrag>::new(),
@@ -3941,7 +3952,7 @@ pub fn subject(
 pub fn spawn_chrome_bar(
     mut commands: Commands,
     frame: Res<Frame>,
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     open_map: Option<Res<crate::project::OpenMap>>,
     project: Option<Res<crate::project::Project>>,
 ) {
@@ -4028,7 +4039,7 @@ pub struct WhereYouAre;
 /// Compared before writing, per the standing rule — `Text` is change-detected and this runs every
 /// frame.
 pub fn repaint_where_you_are(
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     open_map: Option<Res<crate::project::OpenMap>>,
     project: Option<Res<crate::project::Project>>,
     mut bar: Query<&mut Text, With<WhereYouAre>>,

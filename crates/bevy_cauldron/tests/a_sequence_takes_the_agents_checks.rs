@@ -10,7 +10,8 @@ use bevy::app::App;
 use bevy_cauldron::harness;
 use bevy_cauldron::project::Project;
 use bevy_cauldron::sequencer::{Operation, SequenceParams, Sequencer};
-use bevy_cauldron::tiles::{Door, ImportState, Mode};
+use bevy_cauldron::tiles::{ImportState, Mode};
+use bevy_cauldron::workspace::Workspace;
 use serde_json::{Value, json};
 
 use crate::fixtures;
@@ -86,13 +87,13 @@ fn run_sequence(app: &mut App, name: &str, operation: Operation, watch: &str) ->
 #[test]
 fn a_sequence_refuses_a_piece_the_shelf_is_not_showing() {
     let mut app = editor_at("seq_piece_refused");
-    *app.world_mut().resource_mut::<Door>() = Door::Map;
+    *app.world_mut().resource_mut::<Workspace>() = Workspace::Map;
     for _ in 0..4 {
         app.update();
     }
     assert_ne!(
-        *app.world().resource::<Door>(),
-        Door::Kit,
+        *app.world().resource::<Workspace>(),
+        Workspace::Kit,
         "the test starts off the kit door, so the shelf is not on screen"
     );
     let (result, _) = run_sequence(
@@ -119,7 +120,7 @@ fn a_sequence_refuses_a_piece_the_shelf_is_not_showing() {
 #[test]
 fn a_sequence_selects_a_piece_on_the_shelf_as_an_agent_call_does() {
     let mut app = editor_at("seq_piece_applied");
-    *app.world_mut().resource_mut::<Door>() = Door::Kit;
+    *app.world_mut().resource_mut::<Workspace>() = Workspace::Kit;
     for _ in 0..4 {
         app.update();
     }

@@ -29,7 +29,8 @@ use bevy::prelude::*;
 use bevy::ui::ComputedNode;
 use bevy_cauldron::harness;
 use bevy_cauldron::keys::ControlId;
-use bevy_cauldron::tiles::{Door, Tab};
+use bevy_cauldron::tiles::Tab;
+use bevy_cauldron::workspace::Workspace;
 
 use crate::fixtures;
 
@@ -80,7 +81,7 @@ fn strip_count(app: &mut App) -> usize {
         .filter(|e| {
             world
                 .get::<bevy_cauldron::chrome::Control>(*e)
-                .is_some_and(|c| c.0 == ControlId::DoorStrip)
+                .is_some_and(|c| c.0 == ControlId::WorkspaceStrip)
         })
         .count()
 }
@@ -99,7 +100,7 @@ fn crossing_a_door_leaves_one_strip_with_that_doors_tabs() {
     assert_eq!(before, 1, "the Map door draws one tab strip (found {before})");
     assert_eq!(
         shown_tabs(&mut app),
-        Door::Map.tabs().iter().map(|m| m.label()).collect::<Vec<_>>(),
+        Workspace::Map.panels().iter().map(|m| m.label()).collect::<Vec<_>>(),
         "the Map door's strip holds its own tabs"
     );
 
@@ -110,7 +111,7 @@ fn crossing_a_door_leaves_one_strip_with_that_doors_tabs() {
         world.resource_mut::<bevy_cauldron::project::Project>().open_map_name = Some("m".to_owned());
     }
     app.update();
-    bevy_cauldron::screen::cross(app.world_mut(), Door::Kit)
+    bevy_cauldron::screen::cross(app.world_mut(), Workspace::Kit)
         .unwrap_or_else(|e| panic!("the crossing to the Kit door must succeed: {e}"));
     // Two updates: the first applies the pending transition, the second lets the editor settle.
     app.update();
@@ -130,7 +131,7 @@ fn crossing_a_door_leaves_one_strip_with_that_doors_tabs() {
     );
     assert_eq!(
         shown_tabs(&mut app),
-        Door::Kit.tabs().iter().map(|m| m.label()).collect::<Vec<_>>(),
+        Workspace::Kit.panels().iter().map(|m| m.label()).collect::<Vec<_>>(),
         "the one strip must hold the door's own tabs — the Kit door is Meshes, Tiles and Compose, and it \
          explicitly does not offer the Map"
     );

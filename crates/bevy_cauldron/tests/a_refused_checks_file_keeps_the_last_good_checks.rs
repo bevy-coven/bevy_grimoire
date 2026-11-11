@@ -207,7 +207,7 @@ fn an_edit_is_decided_in_every_door() {
     let mut app = editor("checks_view_doors");
     write(&app, &good(0.5));
     until(&mut app, "the good file applied", |a| verdict(a)["outcome"] == json!("applied"));
-    for door in [bevy_cauldron::tiles::Door::Kit, bevy_cauldron::tiles::Door::Rigs] {
+    for door in [bevy_cauldron::workspace::Workspace::Kit, bevy_cauldron::workspace::Workspace::Animation] {
         app.world_mut().insert_resource(door);
         write(&app, "(checks: 7)");
         until(&mut app, &format!("{door:?}: the bad edit refused"), |a| verdict(a)["outcome"] == json!("refused"));

@@ -37,7 +37,7 @@
 //! the process boundary went — the design doc had rejected it when it meant a relaunch — and it was
 //! declined anyway: with full teardown the saving is the menu round-trip rather than the reload."*
 //! **The relaunch is gone** — the menu and the editor are one application — and so is the reload it
-//! was weighed against: a crossing **keeps the project** (see [`cross`]), which is what the
+//! was weighed against: a switching **keeps the project** (see [`cross`]), which is what the
 //! [`Ownership`] table has always said a same-kit door change should do.
 //!
 //! Measured on 2026-10-21: the round trip was **three keystrokes and a full project reload** each
@@ -47,7 +47,7 @@
 //! to the other to look at the thing they just made.
 //!
 //! **And the two are different acts**, which is why they are different actions: the menu *opens* a
-//! door, and the crossing *changes* one. A second way to do one thing is the pattern this crate
+//! door, and the switching *changes* one. A second way to do one thing is the pattern this crate
 //! spends its refusals on; this is not that.
 
 use bevy::prelude::*;
@@ -65,7 +65,7 @@ pub enum Screen {
     Loading,
     /// The project page: a project's maps and kits (`project_page.rs`), where a project opened from the home lands before a door opens.
     Project,
-    /// A door, with a [`crate::project::Project`] loaded and a [`crate::tiles::Door`] chosen.
+    /// A door, with a [`crate::project::Project`] loaded and a [`crate::workspace::Workspace`] chosen.
     Editor,
 }
 
@@ -154,15 +154,15 @@ fn open_the_door(world: &mut World) {
 /// does a door change do to this resource?"* without standing up a second application.
 pub fn close_the_door(world: &mut World) {
     despawn_scene(world);
-    // **A crossing is in flight: the door's own resources stay.**
+    // **A switch is in flight: the project, the map and the workspace stay.**
     //
-    // The crossing has *already* put the new door's `Project`, `OpenMap`, `Door` and `Mode` into
-    // the world — it is a state change, not a place the project is kept. So the teardown must not
-    // take them away, or it would undo the crossing.
+    // [`cross`] has *already* put the new workspace and (when the panel had to follow) the new mode
+    // into the world, and it deliberately leaves `Project` and `OpenMap` alone — see its note. So
+    // the teardown must not take them away, or it would undo the switch.
     //
-    // **What the teardown still does, unchanged:** the entity sweep and the door's own working
-    // state. The teardown is a teardown; only the *door's own* resources are spared, and they are
-    // spared because they now belong to the *next* door.
+    // **What the teardown still does, unchanged:** the entity sweep and the workspace's own working
+    // state. The teardown is a teardown; only the resources that now belong to the *next* workspace
+    // are spared.
     if world.remove_resource::<Crossing>().is_some() {
         // **The receipt is carried over the reset (cycle 8, gap 7).** The reset puts `EditorState`
         // back empty, which erased the receipt of whoever asked for this door: the window changed
@@ -171,7 +171,15 @@ pub fn close_the_door(world: &mut World) {
         let receipt = world
             .get_resource::<crate::editor::EditorState>()
             .map(|state| state.status.note_text().to_owned());
+        // **The lock crosses with the map it points into.** `TargetLock` is `Ownership::Workspace`
+        // for a *leave*, which empties it with the rest; a *switch* keeps the map open (NV-02,
+        // #379), and the selection follows the lock (`selection::follow_the_lock`), so emptying it
+        // here would drop the selection the decision says a switch never drops.
+        let lock = world.remove_resource::<crate::editor::TargetLock>();
         reset_door_state(world);
+        if let Some(lock) = lock {
+            world.insert_resource(lock);
+        }
         if let Some(receipt) = receipt.filter(|r| !r.is_empty())
             && let Some(mut state) = world.get_resource_mut::<crate::editor::EditorState>()
         {
@@ -183,7 +191,7 @@ pub fn close_the_door(world: &mut World) {
     reset_door_state(world);
 }
 
-/// **A door change is in flight** — the teardown is part of a crossing, not of a leave.
+/// **A door change is in flight** — the teardown is part of a switching, not of a leave.
 ///
 /// The mark is what tells [`close_the_door`] that the `Project` and the `OpenMap` in the world are
 /// already the **new** door's, and must survive the teardown that is about to run.
@@ -201,7 +209,7 @@ pub struct Crossing;
 /// Nothing in any of that changes when the author walks from one door to the other.
 ///
 /// The [`crate::screen::Ownership`] table already says so: `Project` is *"reloaded when the kit is
-/// not"*. **This is the crossing that obeys the table.**
+/// not"*. **This is the switching that obeys the table.**
 ///
 /// # How it crosses
 ///
@@ -215,148 +223,71 @@ pub struct Crossing;
 /// run. The author sees the editor tear down and the other door build, in one frame.
 ///
 /// The alternative — hopping through `Screen::Project` — would build the whole page's UI and tear it
-/// down, which is a flash of the wrong screen on every crossing.
+/// down, which is a flash of the wrong screen on every switching.
 ///
 /// # The `Project` never leaves the world
 ///
 /// **The first version of this took the `Project` out of the world** and put it back in
 /// `Chosen` — which is what `close_the_door` removes and `open_the_door` restores. **And the live
 /// test found it in one frame:** twenty editor systems ran with no `Project` to read, and Bevy 0.19
-/// **panics a system whose `Res<T>` is missing** rather than skipping it. The crossing tore the
+/// **panics a system whose `Res<T>` is missing** rather than skipping it. The switching tore the
 /// door down and left the editor without a project for the rest of the frame.
 ///
 /// So the `Project` is **moved, not copied** — it is not `Clone` — and it is moved **into the new
-/// door's place**: the crossing takes it out and puts it straight back, so the world holds a
-/// project at every moment of the crossing, and the *teardown* is what removes it, exactly as it
+/// door's place**: the switching takes it out and puts it straight back, so the world holds a
+/// project at every moment of the switching, and the *teardown* is what removes it, exactly as it
 /// does today.
 ///
-/// The crossing therefore does the swap itself, rather than letting `close_the_door` and
+/// The switching therefore does the swap itself, rather than letting `close_the_door` and
 /// `open_the_door` do it in two schedules with a gap between them.
-pub fn cross(world: &mut World, to: crate::tiles::Door) -> Result<(), String> {
-    // **The project is TAKEN, not copied** — it is not `Clone`.
-    let Some(mut project) = world.remove_resource::<crate::project::Project>() else {
-        return Err("there is no project open to carry across".to_owned());
+pub fn cross(world: &mut World, to: crate::workspace::Workspace) -> Result<(), String> {
+    let Some(workspace) = world.get_resource::<crate::workspace::Workspace>().copied() else {
+        return Err("there is no workspace to switch from".to_owned());
     };
-    // **The map's name, carried across.** The Kit door has no map — so without this, crossing back
-    // to the Map door has nothing to open, and the refusal it gives is *true* and useless: the
-    // author was on a map a moment ago.
+    if workspace == to {
+        return Ok(());
+    }
+    // **The Map workspace needs a map**: the one already open, or the one the project last had.
+    // A switch that has neither would show an empty level and say nothing, so it is refused here
+    // and the screen stays where it was.
+    if to == crate::workspace::Workspace::Map && world.get_resource::<crate::project::OpenMap>().is_none() {
+        let Some(project) = world.get_resource::<crate::project::Project>() else {
+            return Err("there is no project open to carry across".to_owned());
+        };
+        let Some(name) = project.open_map_name.clone() else {
+            return Err("the Map workspace needs a map, and none has been open".to_owned());
+        };
+        // **Through the `map_open` operation**, as the project page and an agent open a map: the same
+        // read and refusal, and the project remembers which map it is on.
+        crate::session::open_map_now(world, &name)?;
+    }
+    // **The map stays open in every workspace that shows the world** (NV-02, #379,
+    // `docs/ui/vision.md` §4). It used to be taken away when the Kit door was entered, because a
+    // door that did not show the Map had no map. Now Map, World, Kit and Animation share one
+    // viewport, so the map and the selection cross with the person — and the *only* thing a switch
+    // changes is which panels are on screen.
     //
-    // **The name is the project's own**, because it is the author's intent about which map they are
-    // working on, and it outlives the door it was opened in — the same argument the armed
-    // composition makes.
-    let carried = world
-        .get_resource::<crate::project::OpenMap>()
-        .map(|m| m.map.name.clone())
-        .or_else(|| project.open_map_name.clone());
-    // **The target's resources, built from the project that is already loaded.** The Kit door needs
-    // a project and no map; the Map door needs a project and a map — and the *map* is re-read,
-    // because a map is a map and the Map door's subject is the one the author is editing.
-    let (open_map, mode) = match to {
-        crate::tiles::Door::Map => {
-            let Some(name) = carried else {
-                world.insert_resource(project);
-                return Err("the Map door needs a map, and none has been open".to_owned());
-            };
-            // **Through the registry, and that is what makes an agent's `map_open` and a person's
-            // crossing one thing.** This read the file itself (`OpenMap::open`) while `map_open`
-            // did the same — two answers to "what does opening a map mean", which is the second
-            // front end the parity rule forbids. The context is built from clones and the result is
-            // written back, the way `ops_brp::take`/`put_back` do it: a crossing is not a place to
-            // move the `Project` into a context and hope.
-            let mut ctx = crate::ops::Ctx {
-                project: Some(project.clone()),
-                root: None,
-                open: None,
-                source: crate::ops::Source::Human,
-                session: crate::ops::session_id(),
-                ..crate::ops::Ctx::default()
-            };
-            match crate::ops::dispatch(&mut ctx, "map_open", &serde_json::json!({"name": name})) {
-                Ok(crate::ops::Applied::Done { outcome, .. })
-                    if outcome.after.as_ref().is_some_and(|a| a.get("map").is_some()) =>
-                {
-                    // **And the project remembers it**, so the next crossing back knows.
-                    project.open_map_name = Some(name.clone());
-                    let fresh = ctx.open.clone();
-                    (fresh, crate::tiles::Mode::Map)
-                }
-                Ok(crate::ops::Applied::Done { .. }) => {
-                    world.insert_resource(project);
-                    return Err(format!("`{name}` could not be opened"));
-                }
-                Ok(crate::ops::Applied::Refused(e)) | Err(e) => {
-                    // **The project goes back.** The crossing failed and the editor is untouched.
-                    world.insert_resource(project);
-                    return Err(e.0);
-                }
-            }
-        }
-        other => {
-            // **The project keeps the name when no map is open.** A rename changes the open map's
-            // name and not the project's, so without this a Kit → Map crossing asks for the old
-            // name — and `OpenMap::open` makes a new, empty map under a name it cannot find.
-            project.open_map_name = carried;
-            (None, other.opens_on())
-        }
-    };
-    // **And it goes straight back in.** The world holds a project at every instant of the
-    // crossing: the editor's systems run in the same frame as the keypress, and **twenty** of
-    // them take a `Res<Project>`, and Bevy 0.19 **panics a system whose `Res<T>` is missing**
-    // rather than skipping it. The first version of this function left the world without a
-    // project for the rest of the frame, and the live test found it in one frame.
-    world.insert_resource(project);
-    match open_map {
-        Some(m) => {
-            world.insert_resource(m);
-        }
-        None => {
-            world.remove_resource::<crate::project::OpenMap>();
-        }
+    // **The panel follows the workspace** when the one that was open is not shown there: Kit shows
+    // Meshes/Tiles/Compose, Animation shows `ANIM`, Map and World show `MAP`. A panel the workspace
+    // does not show would draw no strip entry and no content.
+    let mode = world.get_resource::<crate::tiles::Mode>().copied().unwrap_or_default();
+    if !to.shows(mode) {
+        world.insert_resource(to.opens_on());
     }
     world.insert_resource(to);
-    world.insert_resource(mode);
-    // **And a `Chosen` for the teardown to give back.**
-    //
-    // `close_the_door` — which the transition runs — **removes** the `Project`, and something has
-    // to put the new door's back. `install_the_door` is that something, and it reads a `Chosen`.
-    //
-    // **But the `Project` is not `Clone`, and it is already in the world.** So the `Chosen` cannot
-    // hold it as well.
-    //
-    // **The answer is that the teardown does not need to take the project away at all.** The
-    // crossing has *already* put the new door's resources in the world — the project, the map, the
-    // door and the mode. What the teardown has to do is take away everything else the old door
-    // made, and reset the door's own working state. The project and the map are **the new door's**
-    // by then, and taking them away would be undoing the crossing.
-    //
-    // So the crossing **marks** the transition, and `close_the_door` reads the mark: a crossing is
-    // in flight, so the door's *own* resources stay and only the old door's entities and working
-    // state go.
-    world.insert_resource(crate::screen::Crossing);
-    // **And the transition does the teardown and the rebuild.**
-    //
-    // **`NextState::set(Screen::Editor)`, while already in `Screen::Editor`.** Bevy 0.20 runs
-    // `OnExit` and `OnEnter` for a same-state transition — `NextState::set` is `Pending`, and only
-    // `PendingIfDifferent` suppresses the schedules. So `OnExit(Editor)` runs [`close_the_door`] —
-    // the teardown, unchanged — and `OnEnter(Editor)` runs the spawns.
-    //
-    // **The project is put back by `install_the_door`**, which reads the `Chosen` the crossing
-    // left behind. That is the one thing `close_the_door` cannot do on its own: it *removes* the
-    // project, and something has to put the new door's back.
-    //
-    // **The project page never appears.** A same-state transition runs neither `OnExit(Project)` nor
-    // `OnEnter(Project)`, so the project page's `build_page` / `fill_page`
-    // never run. The author sees the editor tear down and the other door build, in one frame.
-    //
-    // **The alternative — hopping through `Screen::Project` — would build the whole page's UI and
-    // tear it down**, which is a flash of the wrong screen on every crossing.
+    // **`Crossing` marks the transition as a switch rather than a leave.** `close_the_door` reads
+    // it and spares the workspace's own resources — the project, the map, the selection — while
+    // still sweeping every entity the old workspace made and resetting its working panels. The
+    // transition is what rebuilds the frame and the strip, so a switch is one frame rather than a
+    // reload.
+    world.insert_resource(Crossing);
     if let Some(mut next) = world.get_resource_mut::<NextState<Screen>>() {
         next.set(Screen::Editor);
     }
     Ok(())
 }
 
-/// **Put every [`Ownership::Door`] resource back to its opening value.**
+/// **Put every [`Ownership::Workspace`] resource back to its opening value.**
 ///
 /// # This is the fix for the worst bug on the 2026-09-03 list
 ///
@@ -382,7 +313,7 @@ pub fn cross(world: &mut World, to: crate::tiles::Door) -> Result<(), String> {
 ///
 /// A hand-written list of forty types is exactly the thing that goes stale, which is the failure
 /// this whole file is about. `the_door_resets_what_it_says_it_owns` compares this macro's types
-/// against every `Ownership::Door` row in [`OWNERSHIP`] and fails on either half of a drift — a type
+/// against every `Ownership::Workspace` row in [`OWNERSHIP`] and fails on either half of a drift — a type
 /// classified `Door` and not reset, or reset and not classified.
 ///
 /// A type only one cargo feature registers carries that feature's `#[cfg]`, here and on its
@@ -585,8 +516,8 @@ type NotTheGuideCard = ();
 pub enum Ownership {
     /// Derived from files on disk. Kept while the kit is unchanged, reloaded when it is not.
     Project,
-    /// This door's own working state — selections, drags, edit buffers, undo stacks. **Reset.**
-    Door,
+    /// This workspace's own working state — selections, drags, edit buffers, undo stacks. **Reset.**
+    Workspace,
     /// True for as long as the application runs: caches, generations, input, the surface. Kept.
     Session,
 }
@@ -594,7 +525,7 @@ pub enum Ownership {
 /// **Every resource the editor's own plugins register, and what a door does to it.**
 ///
 /// Keyed by the full type path, because two crates may name a type alike and the ratchet compares
-/// against what the world reports. Unsure cases are classified [`Ownership::Door`] on purpose: it is
+/// against what the world reports. Unsure cases are classified [`Ownership::Workspace`] on purpose: it is
 /// the class that matches what a full teardown would do, so a wrong guess here is conservative
 /// rather than a stale value nobody looks for.
 pub const OWNERSHIP: &[(&str, Ownership)] = &[
@@ -620,21 +551,31 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::app_verbs::LinksOff", Ownership::Session),
     // **`Session`, for the queue's own reason**: which rows the person has unfolded, and what GitHub
     // said about the wishes in them, are facts about this sitting's wishes — the queue outlives a door
-    // change, so the rows that read it must too or a wish would be folded again on every crossing.
+    // change, so the rows that read it must too or a wish would be folded again on every switching.
     ("bevy_cauldron::wish_view::WishOpenRows", Ownership::Session),
     ("bevy_cauldron::wish_view::WishSearches", Ownership::Session),
     // **`Session`**: whether this run asks GitHub nothing is the run's own fact, true for as long as
     // the app runs (a test inserts it once and every row reads it).
     ("bevy_cauldron::wish_view::WishSearchOff", Ownership::Session),
     // **`Door`, like the job it reports** (UI-22): a build is this door's project's work, and its
-    // record names a map and a camera of a project nobody is looking at after a crossing.
-    ("bevy_cauldron::build_view::BuildState", Ownership::Door),
+    // record names a map and a camera of a project nobody is looking at after a switching.
+    ("bevy_cauldron::build_view::BuildState", Ownership::Workspace),
     ("bevy_cauldron::project_assets::ProjectRoot", Ownership::Session),
     // The editor's face is installed over the default font id once and lives as long as the app does (`harness::install_font_in`).
     ("bevy_cauldron::harness::EditorFont", Ownership::Session),
     ("bevy_cauldron::project::OpenMap", Ownership::Project),
-    ("bevy_cauldron::tiles::Door", Ownership::Project),
+    ("bevy_cauldron::workspace::Workspace", Ownership::Project),
     ("bevy_cauldron::tiles::Mode", Ownership::Project),
+    // **The documents each workspace has open** (NV-04, #381) are the person's tabs *for this project*:
+    // a switch between workspaces keeps them, and another project reads its own session file.
+    //
+    // **The store and the file record are not listed**, for the reason `RecentProjects` and
+    // `UserSettingsFile` are not: only the binary names the data directory, so a stepped editor has no
+    // `SessionStore`, and `SessionFile` exists only once `session::restore` has one to read from. The
+    // table lists what a boot of this editor registers — `every_resource_is_classified` compares it
+    // against a booted World in both directions — so a type that only a real launch ever inserts
+    // belongs beside the other launch-only resources, not here.
+    ("bevy_cauldron::session::Session", Ownership::Project),
     // Derived from the kit's meshes: a different kit means different thumbnails.
     ("bevy_cauldron::thumbs::Thumbnails", Ownership::Project),
     (
@@ -692,35 +633,35 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // ── The door's own working state ────────────────────────────────────────────────────────────
     // The undo stack is the one this list was written for: `docs/2026-08-17-one-application.md` §1
     // names it as the value that survives into the next kit today.
-    ("bevy_cauldron::build::TileHistory", Ownership::Door),
-    ("bevy_cauldron::build::Build", Ownership::Door),
-    ("bevy_cauldron::editor::EditorState", Ownership::Door),
-    ("bevy_cauldron::editor::MapFraming", Ownership::Door),
-    ("bevy_cauldron::editor::CloneDrag", Ownership::Door),
-    ("bevy_cauldron::editor::MoveDrag", Ownership::Door),
-    ("bevy_cauldron::editor::PlaceDrag", Ownership::Door),
-    ("bevy_cauldron::editor::RemovalDrag", Ownership::Door),
-    ("bevy_cauldron::editor::NoteBox", Ownership::Door),
-    ("bevy_cauldron::editor::SelectedNote", Ownership::Door),
-    ("bevy_cauldron::editor::NotesFilter", Ownership::Door),
+    ("bevy_cauldron::build::TileHistory", Ownership::Workspace),
+    ("bevy_cauldron::build::Build", Ownership::Workspace),
+    ("bevy_cauldron::editor::EditorState", Ownership::Workspace),
+    ("bevy_cauldron::editor::MapFraming", Ownership::Workspace),
+    ("bevy_cauldron::editor::CloneDrag", Ownership::Workspace),
+    ("bevy_cauldron::editor::MoveDrag", Ownership::Workspace),
+    ("bevy_cauldron::editor::PlaceDrag", Ownership::Workspace),
+    ("bevy_cauldron::editor::RemovalDrag", Ownership::Workspace),
+    ("bevy_cauldron::editor::NoteBox", Ownership::Workspace),
+    ("bevy_cauldron::editor::SelectedNote", Ownership::Workspace),
+    ("bevy_cauldron::editor::NotesFilter", Ownership::Workspace),
     // **The eye of the outliner** (UI-51, #237): the pieces a person hid are rows of the map that was open.
-    ("bevy_cauldron::outliner::Eyes", Ownership::Door),
-    ("bevy_cauldron::editor::RunDrag", Ownership::Door),
-    ("bevy_cauldron::editor::RunGhostDrag", Ownership::Door),
-    ("bevy_cauldron::editor::FineAnchor", Ownership::Door),
-    ("bevy_cauldron::editor::Proposal", Ownership::Door),
+    ("bevy_cauldron::outliner::Eyes", Ownership::Workspace),
+    ("bevy_cauldron::editor::RunDrag", Ownership::Workspace),
+    ("bevy_cauldron::editor::RunGhostDrag", Ownership::Workspace),
+    ("bevy_cauldron::editor::FineAnchor", Ownership::Workspace),
+    ("bevy_cauldron::editor::Proposal", Ownership::Workspace),
     // **`Session`, and that is the entire reason the resource exists.** `EditorState` — where the
-    // counter used to live as `seed` — is rebuilt on every door crossing, while the thing comparing
+    // counter used to live as `seed` — is rebuilt on every door switching, while the thing comparing
     // against it (`sync_proposal_ghosts`' `Local`) is not. A counter that a door can reset is a
     // counter that eventually reports a proposal as already drawn. See `ProposalClock`'s own doc.
     ("bevy_cauldron::editor::ProposalClock", Ownership::Session),
-    ("bevy_cauldron::editor::Rung", Ownership::Door),
-    ("bevy_cauldron::editor::SizeEdit", Ownership::Door),
-    ("bevy_cauldron::editor::FamilyEdit", Ownership::Door),
-    ("bevy_cauldron::editor::DataEdit", Ownership::Door),
-    ("bevy_cauldron::editor::TerrainEdit", Ownership::Door),
-    ("bevy_cauldron::editor::CrowdEdit", Ownership::Door),
-    ("bevy_cauldron::balloon::BalloonPreview", Ownership::Door),
+    ("bevy_cauldron::editor::Rung", Ownership::Workspace),
+    ("bevy_cauldron::editor::SizeEdit", Ownership::Workspace),
+    ("bevy_cauldron::editor::FamilyEdit", Ownership::Workspace),
+    ("bevy_cauldron::editor::DataEdit", Ownership::Workspace),
+    ("bevy_cauldron::editor::TerrainEdit", Ownership::Workspace),
+    ("bevy_cauldron::editor::CrowdEdit", Ownership::Workspace),
+    ("bevy_cauldron::balloon::BalloonPreview", Ownership::Workspace),
     // The game's newest verdict on a reload, read from `.live/game.ron`: true for as long as the app runs.
     ("bevy_cauldron::live::LiveGame", Ownership::Session),
     // **The editor's own verdicts on the files it draws from** (#200): true for as long as the app runs, like the
@@ -739,7 +680,7 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     ("bevy_cauldron::family_host::FamilySettings", Ownership::Session),
     // **`Session`, for `FamilySettings`' reason**: the project's `family/bevy_gooey.ron` read as the game
     // skin the Game UI preview draws (UI-03, #211). It is a fact about the open project that the panel
-    // reads, never the door's working state; a crossing keeps it and the file watch fills it again.
+    // reads, never the door's working state; a switching keeps it and the file watch fills it again.
     ("bevy_cauldron::ui_skin::GameSkin", Ownership::Session),
     // **The editor's settings** (UI-70): the defaults, the user's file and the project's laid over them. The user's layer is the app's and the project's layer follows the open project's path (`sync_settings` starts afresh when it moves), so both are true for as long as the app runs.
     ("bevy_cauldron::settings::EditorSettings", Ownership::Session),
@@ -748,30 +689,30 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // hold the preview at (#98). It is a view of the open project, never written to its file, so a
     // door change lets the next project's own clock run.
     #[cfg(feature = "bevy_elements")]
-    ("bevy_cauldron::environment::ClockScrub", Ownership::Door),
+    ("bevy_cauldron::environment::ClockScrub", Ownership::Workspace),
     #[cfg(feature = "bevy_light_grid")]
-    ("bevy_cauldron::light_overlay::LightOverlay", Ownership::Door),
+    ("bevy_cauldron::light_overlay::LightOverlay", Ownership::Workspace),
     // **`Door`, like the selection it mirrors**: the entity the inspector edits belongs to the open
     // project's map, and another door's map is another selection.
-    ("bevy_cauldron::inspector_view::PoseInspector", Ownership::Door),
+    ("bevy_cauldron::inspector_view::PoseInspector", Ownership::Workspace),
     // **`Session`**: where the person is looking, not this door's state. A door change keeps it, and the
     // pieces that are not on the new map are dropped the next frame.
     // **`Session`**: whether the agent may write is the person's call about the whole sitting, not a door's.
     ("bevy_cauldron::familiar::AgentPause", Ownership::Session),
     ("bevy_cauldron::familiar::AgentActivity", Ownership::Session),
     // **`Session`**: which client is talking is true for the whole sitting, not for one door — the
-    // agent that made a wish about the last map is still the agent after a crossing.
+    // agent that made a wish about the last map is still the agent after a switching.
     ("bevy_cauldron::present::AgentClient", Ownership::Session),
     // **`Session`**: whether hand-backs are answered in the AGENT block is the person's choice for the sitting, like the pause.
     ("bevy_cauldron::familiar::HandBackHere", Ownership::Session),
     // **`Session`, and it has to be**: a follow raised while the Kit door is open asks for the Map,
-    // and the crossing that answers it resets the door's own state — so a request kept in a `Door`
-    // resource would be erased by the very crossing it asked for. `Camera state only`, like `Rig`,
+    // and the switching that answers it resets the door's own state — so a request kept in a `Door`
+    // resource would be erased by the very switching it asked for. `Camera state only`, like `Rig`,
     // but it outlives the door for that one reason.
     ("bevy_cauldron::follow::Following", Ownership::Session),
     // **`Session`, and for `Following`'s exact reason**: a reveal raised on the Kit door asks the
-    // editor to open the Map, and the crossing that answers it resets the door's own state — so a
-    // request kept in a `Door` resource would be erased by the very crossing it asked for. AF-03, #359.
+    // editor to open the Map, and the switching that answers it resets the door's own state — so a
+    // request kept in a `Door` resource would be erased by the very switching it asked for. AF-03, #359.
     ("bevy_cauldron::reveal::Revealing", Ownership::Session),
     // **`Session`**: which inspector heading was last brought into view is where the person's eye
     // was sent, not a fact about this door's documents.
@@ -787,94 +728,97 @@ pub const OWNERSHIP: &[(&str, Ownership)] = &[
     // **`Door`, like the light map**: the audio panel's buses, cue names and selection are read from
     // this door's `family/bevy_siren.ron`, and another project's sound is another file.
     #[cfg(feature = "bevy_siren")]
-    ("bevy_cauldron::audio_panel::AudioPanel", Ownership::Door),
+    ("bevy_cauldron::audio_panel::AudioPanel", Ownership::Workspace),
     // **`Session`, not `Door`**: the icon sheet is decoded from the binary (`icons::ATLAS_PNG`) once and
-    // its handles live in `Assets`, which outlives a door crossing. Decoding it again on every door
-    // would leak one image per crossing.
+    // its handles live in `Assets`, which outlives a door switching. Decoding it again on every door
+    // would leak one image per switching.
     ("bevy_cauldron::toolbar::ToolbarAtlas", Ownership::Session),
-    ("bevy_cauldron::editor::Folded", Ownership::Door),
-    ("bevy_cauldron::editor::StampPicture", Ownership::Door),
-    ("bevy_cauldron::editor::TargetLock", Ownership::Door),
-    ("bevy_cauldron::editor::UnderCursor", Ownership::Door),
+    ("bevy_cauldron::editor::Folded", Ownership::Workspace),
+    ("bevy_cauldron::editor::StampPicture", Ownership::Workspace),
+    // **`Workspace`, except across a switch**: a leave empties the lock, but `close_the_door` keeps it
+    // when a workspace switch is in flight (NV-02, #379), because the selection follows the lock and a
+    // switch never drops the selection.
+    ("bevy_cauldron::editor::TargetLock", Ownership::Workspace),
+    ("bevy_cauldron::editor::UnderCursor", Ownership::Workspace),
     // The palette's own order, rewritten whenever it rebuilds: what the booth bakes first is a fact
     // about what this door is showing, not about the kit.
-    ("bevy_cauldron::thumbs::ThumbOrder", Ownership::Door),
+    ("bevy_cauldron::thumbs::ThumbOrder", Ownership::Workspace),
     // **`Door`, because a job is this door's work** (UI-22, #223). A bake carried across a door change
     // would name a portrait of a project nobody is looking at, and a stop request would land on a job
     // that is no longer the one holding the booth.
-    ("bevy_cauldron::jobs::Jobs", Ownership::Door),
-    ("bevy_cauldron::editor::EdgeFaults", Ownership::Door),
-    ("bevy_cauldron::tiles::ImportState", Ownership::Door),
-    ("bevy_cauldron::tiles::CellEdit", Ownership::Door),
-    ("bevy_cauldron::tiles::DerivedEdges", Ownership::Door),
-    ("bevy_cauldron::tiles::HeightEdit", Ownership::Door),
-    ("bevy_cauldron::tiles::LatticePick", Ownership::Door),
-    ("bevy_cauldron::present::Presenting", Ownership::Door),
-    ("bevy_cauldron::present::PresentationReply", Ownership::Door),
-    ("bevy_cauldron::tiles::MapView", Ownership::Door),
-    ("bevy_cauldron::tiles::NoteEdit", Ownership::Door),
-    ("bevy_cauldron::tiles::ScaleEdit", Ownership::Door),
-    ("bevy_cauldron::tiles::StagedLift", Ownership::Door),
+    ("bevy_cauldron::jobs::Jobs", Ownership::Workspace),
+    ("bevy_cauldron::editor::EdgeFaults", Ownership::Workspace),
+    ("bevy_cauldron::tiles::ImportState", Ownership::Workspace),
+    ("bevy_cauldron::tiles::CellEdit", Ownership::Workspace),
+    ("bevy_cauldron::tiles::DerivedEdges", Ownership::Workspace),
+    ("bevy_cauldron::tiles::HeightEdit", Ownership::Workspace),
+    ("bevy_cauldron::tiles::LatticePick", Ownership::Workspace),
+    ("bevy_cauldron::present::Presenting", Ownership::Workspace),
+    ("bevy_cauldron::present::PresentationReply", Ownership::Workspace),
+    ("bevy_cauldron::tiles::MapView", Ownership::Workspace),
+    ("bevy_cauldron::tiles::NoteEdit", Ownership::Workspace),
+    ("bevy_cauldron::tiles::ScaleEdit", Ownership::Workspace),
+    ("bevy_cauldron::tiles::StagedLift", Ownership::Workspace),
     // The library row you were last on. `Door`, because a different kit's ids mean nothing here —
     // a remembered `furniture/sofa` pointing into `site` would land the cursor on nothing.
-    ("bevy_cauldron::tiles::LibraryCursor", Ownership::Door),
+    ("bevy_cauldron::tiles::LibraryCursor", Ownership::Workspace),
     // What the automatic scan has done and what the list is drawn from: both keyed by mesh path
     // or row text, and two kits sharing either would have the second one's first frame silently
     // skipped — the `badges::ShowingFor` hazard, one panel over.
-    ("bevy_cauldron::tiles::AutoScanned", Ownership::Door),
-    ("bevy_cauldron::tiles::DrawnRows", Ownership::Door),
-    ("bevy_cauldron::compose::ComposeState", Ownership::Door),
-    ("bevy_cauldron::compose::Budget", Ownership::Door),
+    ("bevy_cauldron::tiles::AutoScanned", Ownership::Workspace),
+    ("bevy_cauldron::tiles::DrawnRows", Ownership::Workspace),
+    ("bevy_cauldron::compose::ComposeState", Ownership::Workspace),
+    ("bevy_cauldron::compose::Budget", Ownership::Workspace),
     (
         "bevy_cauldron::compose::StagedCarousel",
-        Ownership::Door,
+        Ownership::Workspace,
     ),
-    ("bevy_cauldron::anim_tab::BenchState", Ownership::Door),
+    ("bevy_cauldron::anim_tab::BenchState", Ownership::Workspace),
     (
         "bevy_cauldron::anim_tab::AdoptExclude",
-        Ownership::Door,
+        Ownership::Workspace,
     ),
-    ("bevy_cauldron::anim_stage::BenchAb", Ownership::Door),
+    ("bevy_cauldron::anim_stage::BenchAb", Ownership::Workspace),
     (
         "bevy_cauldron::anim_stage::BenchCamera",
-        Ownership::Door,
+        Ownership::Workspace,
     ),
     (
         "bevy_cauldron::anim_stage::BenchScrub",
-        Ownership::Door,
+        Ownership::Workspace,
     ),
     (
         "bevy_cauldron::anim_watch::MeasureQueue",
-        Ownership::Door,
+        Ownership::Workspace,
     ),
-    ("bevy_cauldron::labels::LabelQueue", Ownership::Door),
-    ("bevy_cauldron::filter::Filters", Ownership::Door),
-    ("bevy_cauldron::snip::SnipEdit", Ownership::Door),
+    ("bevy_cauldron::labels::LabelQueue", Ownership::Workspace),
+    ("bevy_cauldron::filter::Filters", Ownership::Workspace),
+    ("bevy_cauldron::snip::SnipEdit", Ownership::Workspace),
     // **A report cannot survive the door change it may be reporting on.** It holds a frozen frame
     // of the old door and entity ids from its layout, so carrying it across would record the screen
     // a person has already left.
-    ("bevy_cauldron::report::ReportEdit", Ownership::Door),
-    ("bevy_cauldron::notice::Showing", Ownership::Door),
+    ("bevy_cauldron::report::ReportEdit", Ownership::Workspace),
+    ("bevy_cauldron::notice::Showing", Ownership::Workspace),
     // **`Door`, because it is what is on screen right now.** A toast is an event's tail — carrying
     // one into the next kit would announce a refusal about a door the author has already left.
-    ("bevy_cauldron::notice::Toast", Ownership::Door),
+    ("bevy_cauldron::notice::Toast", Ownership::Workspace),
     // Holds entity ids from the frame this screen spawned, so it is meaningless the moment those
     // are despawned — and `chrome::spawn_frame` replaces it on every entry.
-    ("bevy_cauldron::chrome::Frame", Ownership::Door),
+    ("bevy_cauldron::chrome::Frame", Ownership::Workspace),
     // The badge layer's entities go with the door, so the key that says which tab they were
     // built for has to go with them — a stale key would suppress the first rebuild on the next
     // kit and the badges would simply never appear.
-    ("bevy_cauldron::badges::ShowingFor", Ownership::Door),
+    ("bevy_cauldron::badges::ShowingFor", Ownership::Workspace),
     // What the live tab is drawing into the viewport, re-derived every frame in `Phase::Sense` —
     // so a stale value survives no frame and this classification changes nothing. `Door` all the
     // same: it describes the door's own world, and a resource that says "the Map's cube is here"
     // while the Kit door is open would be a lie for exactly as long as it took to notice.
-    ("bevy_cauldron::view::Rig", Ownership::Door),
+    ("bevy_cauldron::view::Rig", Ownership::Workspace),
     // A half-typed token draft is the door's working state — a draft naming a token for one
     // kit's vocabulary is meaningless standing in another.
     (
         "bevy_cauldron::token_prompt::TokenPrompt",
-        Ownership::Door,
+        Ownership::Workspace,
     ),
     // ── True for as long as the application runs ────────────────────────────────────────────────
     // The surface is how this application DRAWS — see `crate::surface`, and `scene_roots`, which

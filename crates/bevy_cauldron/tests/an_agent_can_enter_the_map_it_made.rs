@@ -25,7 +25,7 @@ use bevy::prelude::*;
 use bevy_cauldron::harness;
 use bevy_cauldron::project::Project;
 use bevy_cauldron::screen::Screen;
-use bevy_cauldron::tiles::Door;
+use bevy_cauldron::workspace::Workspace;
 
 use crate::fixtures;
 
@@ -106,8 +106,8 @@ fn map_open_on_the_project_page_enters_the_editor_on_that_map() {
         "and the map it entered is the one it named"
     );
     assert_eq!(
-        *world.resource::<Door>(),
-        Door::Map,
+        *world.resource::<Workspace>(),
+        Workspace::Map,
         "it arrived through the Maps door"
     );
     assert_eq!(

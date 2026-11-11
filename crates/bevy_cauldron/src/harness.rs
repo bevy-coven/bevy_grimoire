@@ -372,7 +372,7 @@ pub fn build_headless(root: &Path, map: &str, kit: Option<&str>) -> Result<App, 
 
 /// **The same editor, opened on a named panel.**
 ///
-/// The caller names the **panel** it wants and the door follows (`Door::showing`), because every
+/// The caller names the **panel** it wants and the door follows (`Workspace::showing`), because every
 /// `Mode` belongs to exactly one door — asking for both would be two facts that can disagree. A test
 /// that wants the Tiles panel gets the Kit door with Tiles showing.
 pub fn build_headless_at(
@@ -381,12 +381,12 @@ pub fn build_headless_at(
     kit: Option<&str>,
     mode: crate::tiles::Mode,
 ) -> Result<App, String> {
-    let door = crate::tiles::Door::showing(mode);
+    let workspace = crate::workspace::Workspace::showing(mode);
     let mut project = crate::project::Project::open(root, kit)?;
     // **The map is its own resource**, because four of the five doors do not have one — see
     // `project::OpenMap`. The headless harness stands up the Maps door, which does.
     let open_map = crate::project::OpenMap::open(&project, map)?;
-    // **And the project remembers the map's name**, so a crossing from the Kit door back to the Map
+    // **And the project remembers the map's name**, so a switching from the Kit door back to the Map
     // door knows which map to open. See `Project::open_map_name`.
     project.open_map_name = Some(open_map.map.name.clone());
     let mut app = App::new();
@@ -449,12 +449,12 @@ pub fn build_headless_at(
     .insert_resource(project)
     .insert_resource(open_map)
     // **Before the plugins**, so `TilesPlugin`'s `init_resource` leaves both alone. The panel is
-    // derived rather than passed: a door opens on its first tab (`Door::opens_on`), so there is no
-    // second place to state where the Kit door starts.
-    .insert_resource(door)
+    // derived rather than passed: a workspace opens on its first panel (`Workspace::opens_on`), so
+    // there is no second place to state where the Kit workspace starts.
+    .insert_resource(workspace)
     .insert_resource(mode)
-    // **Straight into the door.** This entry point IS a door — the menu is the other screen, and it
-    // is what `Screen::default()` gives. Inserting the state rather than initialising it runs
+    // **Straight into the workspace.** This entry point IS a workspace — the launcher is the other
+    // screen, and it is what `Screen::default()` gives. Inserting the state rather than initialising it runs
     // `OnEnter(Editor)` on the first transition, which is where every former `Startup` spawn lives.
     .insert_state(crate::screen::Screen::Editor)
     .insert_resource(ClearColor(crate::chrome::ink().void))
@@ -481,7 +481,7 @@ pub fn build_headless_at(
     // The harness stands up a door by inserting the state directly, and it did **not** register
     // `ScreenPlugin` — so `OnExit(Editor)` never ran and `close_the_door` was unreachable. That was
     // found on 2026-10-21, when the door switch's own test went green while the door's working
-    // state **survived** the crossing: the teardown had not run at all.
+    // state **survived** the switching: the teardown had not run at all.
     //
     // **Registering it is safe for the other tests**, because `ScreenPlugin` only adds `OnExit` and
     // `OnEnter` schedules for `Screen`, and the harness's state is `Screen::Editor` — so `OnEnter`

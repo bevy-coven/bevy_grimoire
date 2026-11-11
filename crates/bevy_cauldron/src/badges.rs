@@ -688,9 +688,9 @@ fn rebuild_badges(
     // because the strip is, but the strip's chips come from `Door::tabs()` — so on the Map and Rigs
     // doors `2` and `3` were badges for panels that do not exist. `Action::fires_on_a_door_of` is the
     // one place that answers it, and `tiles::tab_shortcuts` derives the same fact from the same
-    // mapping. The door is read off the tab rather than taken as a resource: `Door::showing` is
+    // mapping. The door is read off the tab rather than taken as a resource: `Workspace::showing` is
     // total, and `ShowingFor` already keys on the tab, so the layer rebuilds when the door changes.
-    let panels = crate::tiles::Door::showing(tab).tabs().len();
+    let panels = crate::workspace::Workspace::showing(tab).panels().len();
     let live_badges: Vec<keys::Badge> = keys::badges(tab.context(), stance)
         .into_iter()
         .chain(keys::badges(keys::Context::Global, stance))

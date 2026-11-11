@@ -385,8 +385,8 @@ enumerated! {
     /// populated one for precisely this reason.
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     pub enum ControlId {
-        /// The strip of panel chips — `1`, `2`, `3`.
-        DoorStrip,
+        /// The strip of panel chips — `1`, `2`, `3` — which also names the workspace you are in.
+        WorkspaceStrip,
         /// Where you are: the kit and map name in the chrome bar.
         Title,
         /// The way out, to kits and maps.
@@ -483,7 +483,7 @@ impl ControlId {
     /// `a_control_in_a_band_really_is_in_one` checks this against the real tree.
     pub const fn in_a_band(self) -> bool {
         match self {
-            ControlId::DoorStrip | ControlId::Title | ControlId::Back | ControlId::Hint => true,
+            ControlId::WorkspaceStrip | ControlId::Title | ControlId::Back | ControlId::Hint => true,
             ControlId::Detail
             | ControlId::IdField
             | ControlId::ComposeNames
@@ -514,12 +514,35 @@ enumerated! {
     /// cannot be checked against the enum is a list that is not checked.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Action {
-    /// Jump to this door's first, second or third panel. **Three, because the widest door holds
-    /// three** — Kit is Meshes/Tiles/Compose. A fourth would be a fourth row here and a fourth in
-    /// every context's list, and `no_context_gains_a_key` ratchets those counts.
+    /// Jump to this workspace's first, second or third panel. **Three, because the widest
+    /// workspace holds three** — Kit is Meshes/Tiles/Compose. A fourth would be a fourth row here
+    /// and a fourth in every context's list, and `no_context_gains_a_key` ratchets those counts.
     TabSlot1,
     TabSlot2,
     TabSlot3,
+    // ── The workspaces (NV-02, #379) ──────────────────────────────────────────
+    //
+    // **Nine rows, and they replace four.** `view.switch_door` and `view.panel_1` to `view.panel_3`
+    // go; their work is done here: a workspace *is* where you are, so switching to one and opening a
+    // panel of one are the same act. `Cmd`/`Ctrl`+`1`…`9` is the owner's choice (2026-11-09, recorded
+    // on the issue), in the fixed order `Workspace::ALL` gives, so a person's fingers keep their
+    // meaning across releases. The budget (`no_context_gains_a_key`) is raised by exactly five in
+    // this commit, naming this issue.
+    //
+    // **The digits are free above 3.** `1`, `2` and `3` stay the panel slots of the workspace that
+    // is open — three keys already learned — and the workspace chords take the six that were never
+    // bound. `4` to `9` therefore walk to a workspace, and `1` to `3` move inside the one you are
+    // in. That is not a second meaning for one key: `Cmd`+digit is a workspace, a bare digit is a
+    // panel, and `just_pressed` already refuses one while the other's modifier state holds.
+    WorkspaceProject,
+    WorkspaceMap,
+    WorkspaceWorld,
+    WorkspaceKit,
+    WorkspaceAnimation,
+    WorkspaceSound,
+    WorkspaceFiles,
+    WorkspaceGame,
+    WorkspaceAgent,
     // ── Global ───────────────────────────────────────────────────────────────
     /// Walk the composition list.
     ComposePrev,
@@ -561,6 +584,13 @@ enumerated! {
     /// It is **not** the menu's route. `Action::MainMenu` opens the chooser, and the chooser opens
     /// a door; this *changes* which door is open. Different acts, different actions, and the
     /// census can tell them apart.
+    /// **Go to the other workspace** — the one beside this one, without the command.
+    ///
+    /// **The same verb everywhere.** Braem & Egner's *Getting a grip on cognitive flexibility*
+    /// (2018, `10.1177/0963721418787475`) is the instruction: a cue that is associated with
+    /// switching should be *"a general readiness to switch between tasks rather than to switch to
+    /// one particular alternative task"*. So this says **"the other workspace"** and never names a
+    /// direction.
     SwitchDoor,
     /// Walk the selected group's members. A second cursor, under the one that walks the groups.
     ComposeMemberPrev,
@@ -921,10 +951,10 @@ pub enum Change {
 }
 
 impl Action {
-    /// **The number key for the nth panel of a door**, or `None` past the third.
+    /// **The number key for the nth panel of the workspace that is open**, or `None` past the third.
     ///
-    /// [`crate::tiles::Door::tabs`] is what indexes this, so the digits and the strip cannot
-    /// disagree about which panel is second.
+    /// [`crate::workspace::Workspace::panels`] is what indexes this, so the digits and the strip
+    /// cannot disagree about which panel is second.
     pub fn tab_slot(i: usize) -> Option<Action> {
         match i {
             0 => Some(Action::TabSlot1),
@@ -934,23 +964,46 @@ impl Action {
         }
     }
 
-    /// **Can this verb fire on a door showing `panels` panels?**
+    /// **Can this verb fire on a workspace showing `panels` panels?**
     ///
     /// Only the slot keys can answer no, and only because they are `Context::Global` while the thing
-    /// they act on is per-door: `tiles::tab_shortcuts` walks `Door::tabs()`, so on the Map and Rigs
-    /// doors — one panel each — `2` and `3` correctly do nothing. The badge overlay did not know
-    /// that and drew `1, 2, 3` against a strip holding one chip, which is the overlay claiming a key
-    /// the editor refuses. A verb announced and not honoured is worse than one nobody mentions.
+    /// they act on is per workspace: `tiles::tab_shortcuts` walks `Workspace::panels()`, so on the
+    /// Map and Animation workspaces — one panel each — `2` and `3` correctly do nothing. The badge
+    /// overlay did not know that and drew `1, 2, 3` against a strip holding one chip, which is the
+    /// overlay claiming a key the editor refuses.
     ///
-    /// **Derived from [`Self::tab_slot`], not from a second table.** That mapping is what indexes the
-    /// strip and what the key handler walks, so asking it here is asking the same question rather
-    /// than answering it twice.
-    pub fn fires_on_a_door_of(self, panels: usize) -> bool {
+    /// **Derived from [`Self::tab_slot`], not from a second table.**
+    pub fn fires_in_a_workspace_of(self, panels: usize) -> bool {
         match self {
             Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
                 (0..panels).filter_map(Action::tab_slot).any(|a| a == self)
             }
-            _ => true,
+            // **A workspace that is not built is refused, so its chord is not advertised**: the
+            // overlay drawing `Cmd+6` against a screen that answers "arrives with NV-09" is the
+            // overlay claiming a key the editor refuses, the same fault the slot keys had. The
+            // command and the palette still list it, and say why it does nothing.
+            _ => self.workspace().is_none_or(|w| w.is_built()),
+        }
+    }
+
+    /// **The workspace this chord goes to**, or `None` for every other verb.
+    ///
+    /// It is read off the variant's own name rather than kept in a second table, so the chord, the
+    /// command id and the destination are one fact: adding a workspace is one arm here and one row
+    /// in [`BINDINGS`].
+    pub fn workspace(self) -> Option<crate::workspace::Workspace> {
+        use crate::workspace::Workspace;
+        match self {
+            Action::WorkspaceProject => Some(Workspace::Project),
+            Action::WorkspaceMap => Some(Workspace::Map),
+            Action::WorkspaceWorld => Some(Workspace::World),
+            Action::WorkspaceKit => Some(Workspace::Kit),
+            Action::WorkspaceAnimation => Some(Workspace::Animation),
+            Action::WorkspaceSound => Some(Workspace::Sound),
+            Action::WorkspaceFiles => Some(Workspace::Files),
+            Action::WorkspaceGame => Some(Workspace::Game),
+            Action::WorkspaceAgent => Some(Workspace::Agent),
+            _ => None,
         }
     }
 
@@ -1114,6 +1167,18 @@ impl Action {
             Action::SwitchDoor | Action::TabSlot1 | Action::TabSlot2 | Action::TabSlot3 => {
                 Some("door_open")
             }
+            // **Each workspace chord is `door_open` with its own workspace**, which is the same
+            // operation the menu, the palette and an agent call (P1). `Action::workspace()` is what
+            // the handler reads, so the chord and the id cannot disagree.
+            Action::WorkspaceProject
+            | Action::WorkspaceMap
+            | Action::WorkspaceWorld
+            | Action::WorkspaceKit
+            | Action::WorkspaceAnimation
+            | Action::WorkspaceSound
+            | Action::WorkspaceFiles
+            | Action::WorkspaceGame
+            | Action::WorkspaceAgent => Some("door_open"),
             // **The three generate sources and the commit door** (S-001). Each key dispatches the
             // same operation an agent calls: `propose_layout` for the three, `accept_layout` for
             // Enter. `Action::Cancel` stays unmigrated — it peels several things.
@@ -1307,6 +1372,109 @@ pub const REMOVE_NAME: &str = "Del";
 /// **The census.** Adding a binding means adding a row here; nothing else in this crate is allowed to
 /// name a `KeyCode` for an action.
 pub const BINDINGS: &[Binding] = &[
+    // **The workspaces, on `Cmd`/`Ctrl`+`1` to `9`** (NV-02, #379). One row per workspace, in the
+    // order `Workspace::ALL` gives, so the chord, the command id and the registry cannot disagree
+    // about which workspace is second. They are `Global` because where you are is not a property of
+    // a panel.
+    //
+    // **A modified digit and a bare one are two keys**, on the rule `S`/`Cmd+S` and `Z`/`Cmd+Z`
+    // already follow: `just_pressed` refuses a bare binding while the modifier is down and a
+    // modified one while it is not. So `Cmd`+`2` goes to the Map workspace and `2` opens the second
+    // panel of whichever workspace is open — the same digit, two meanings, told apart by the
+    // modifier the way every other pair in this census is.
+    //
+    // **A workspace that is not built is still bound, and still answers.** Its command's `enabled`
+    // names the issue that brings it, which is the rule every other disabled verb keeps; a chord
+    // that did nothing at all would be a dead key with no explanation.
+    //
+    // **The keys do not move with what is built.** `Cmd`+`1` is Project in this release, when
+    // Project is not registered, and it is still Project when NV-08 lands — a chord that walked to
+    // whatever happened to be built would renumber a person's fingers on every release.
+    //
+    // **One `does` for all nine**, so the census collapses them into one badge on the strip, the
+    // way the three panel slots are one (`badges` joins neighbours that share a home and a `does`).
+    // Nine separate badges on one control would break `no_home_carries_more_than_it_can_show`.
+    b(
+        Action::WorkspaceProject,
+        KeyCode::Digit1,
+        true,
+        Context::Global,
+        "Digit1",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceMap,
+        KeyCode::Digit2,
+        true,
+        Context::Global,
+        "Digit2",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceWorld,
+        KeyCode::Digit3,
+        true,
+        Context::Global,
+        "Digit3",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceKit,
+        KeyCode::Digit4,
+        true,
+        Context::Global,
+        "Digit4",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceAnimation,
+        KeyCode::Digit5,
+        true,
+        Context::Global,
+        "Digit5",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceSound,
+        KeyCode::Digit6,
+        true,
+        Context::Global,
+        "Digit6",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceFiles,
+        KeyCode::Digit7,
+        true,
+        Context::Global,
+        "Digit7",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceGame,
+        KeyCode::Digit8,
+        true,
+        Context::Global,
+        "Digit8",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
+    b(
+        Action::WorkspaceAgent,
+        KeyCode::Digit9,
+        true,
+        Context::Global,
+        "Digit9",
+        "workspace 1 to 9",
+    )
+    .at(Home::Control(ControlId::WorkspaceStrip)),
     // **One row for three keys**, because jumping to a panel is one idea — the same collapse
     // `T F G H` gets. Three separate rows cost every context three keys of the budget
     // `no_context_gains_a_key` ratchets, and a Global row costs every
@@ -1323,7 +1491,7 @@ pub const BINDINGS: &[Binding] = &[
         "1",
         "panel 1 / 2 / 3 of this door",
     )
-    .at(Home::Control(ControlId::DoorStrip)),
+    .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
         Action::TabSlot2,
         KeyCode::Digit2,
@@ -1332,7 +1500,7 @@ pub const BINDINGS: &[Binding] = &[
         "2",
         "panel 1 / 2 / 3 of this door",
     )
-    .at(Home::Control(ControlId::DoorStrip)),
+    .at(Home::Control(ControlId::WorkspaceStrip)),
     b(
         Action::TabSlot3,
         KeyCode::Digit3,
@@ -1341,7 +1509,7 @@ pub const BINDINGS: &[Binding] = &[
         "3",
         "panel 1 / 2 / 3 of this door",
     )
-    .at(Home::Control(ControlId::DoorStrip)),
+    .at(Home::Control(ControlId::WorkspaceStrip)),
     // **`Cmd`+remove, not `Cmd`+a tab key.**
     // **`Cmd`+remove opens the piece under the cursor for editing.** It was `Cmd`+the tab key, on the
     // argument that one key could carry both "the Tiles tab" and "the Tiles tab, about this piece".
@@ -1405,7 +1573,7 @@ pub const BINDINGS: &[Binding] = &[
     .at(Home::Control(ControlId::Back)),
     // **The door switch, and the key is `=`.**
     //
-    // **The key has to be global** — the crossing must work from both doors — and `Context::Global`
+    // **The key has to be global** — the switching must work from both doors — and `Context::Global`
     // overlaps every tab, so **every letter is taken**: `C` in Tiles and Anim, `I` and `L` in Meshes,
     // and so on. The free bare keys are `Digit4`–`Digit0`, `Minus`, `Equal`, `Semicolon`, `Quote`,
     // `Backquote`, `Backslash` and `Tab`.
@@ -1417,7 +1585,7 @@ pub const BINDINGS: &[Binding] = &[
     // see is a key they will not press. `Quote` is the same problem in a different glyph.
     //
     // **`=` is the widest mark on the keyboard and the most legible of the free ones**, and it is
-    // also the shape of a toggle — which is what the crossing is: the same key, the other door. The
+    // also the shape of a toggle — which is what the switching is: the same key, the other door. The
     // rest are worse for one reason each: `Tab` is Bevy's focus traversal, the digits are **the
     // most learned keys in this editor** (`1`/`2`/`3` are the door-relative panel slots), `;` and `-`
     // are punctuation the author reads as punctuation, and `\` is the shell's "leave this level" —
@@ -1435,7 +1603,7 @@ pub const BINDINGS: &[Binding] = &[
         "=",
         "the other workspace",
     )
-    .at(Home::Control(ControlId::DoorStrip)),
+    .at(Home::Control(ControlId::WorkspaceStrip)),
     // **`Cmd+E` for the errors, and the legend is where it lives** — the panel it opens is not on
     // screen to carry a badge, which is exactly the case `Home::Legend` is for.
     //
@@ -2051,7 +2219,7 @@ pub const BINDINGS: &[Binding] = &[
     // **Alive while a filter box holds the keys**, like its up/down siblings. All four collapse to
     // ONE badge row promising "up/down walk, left/right switch which list", and only two of them
     // survived `Holder::Filter` — so half the row a reader was looking at was inert with nothing
-    // saying so (the 2026-09-03 review's M13). Filtering a list and then crossing to the other one
+    // saying so (the 2026-09-03 review's M13). Filtering a list and then switching to the other one
     // is the ordinary motion this tab is for.
     .also_filtered()
     .at(Home::Control(ControlId::Pieces)),
@@ -2066,7 +2234,7 @@ pub const BINDINGS: &[Binding] = &[
     // **Alive while a filter box holds the keys**, like its up/down siblings. All four collapse to
     // ONE badge row promising "up/down walk, left/right switch which list", and only two of them
     // survived `Holder::Filter` — so half the row a reader was looking at was inert with nothing
-    // saying so (the 2026-09-03 review's M13). Filtering a list and then crossing to the other one
+    // saying so (the 2026-09-03 review's M13). Filtering a list and then switching to the other one
     // is the ordinary motion this tab is for.
     .also_filtered()
     .at(Home::Control(ControlId::Pieces)),
@@ -3378,10 +3546,10 @@ impl Badge {
     /// and the other two do not — so the badge is trimmed rather than kept or dropped whole, and its
     /// column is re-rendered through [`chord_column`], the same function that wrote it.
     ///
-    /// See [`Action::fires_on_a_door_of`] for why the census cannot answer this on its own.
+    /// See [`Action::fires_in_a_workspace_of`] for why the census cannot answer this on its own.
     pub fn on_a_door_of(mut self, panels: usize) -> Option<Badge> {
         let before = self.actions.len();
-        self.actions.retain(|a| a.fires_on_a_door_of(panels));
+        self.actions.retain(|a| a.fires_in_a_workspace_of(panels));
         if self.actions.is_empty() {
             return None;
         }
@@ -3757,7 +3925,7 @@ pub const REPEAT_SECS: f32 = 0.100;
 /// **The fastest a held key will ever go**, reached after [`REPEAT_RAMP_SECS`] of holding.
 ///
 /// A single number could not serve both jobs a held arrow has. Stepping two rows to read them wants
-/// about 100 ms; crossing 300 candidates to reach the one you are thinking of wants a number that
+/// about 100 ms; switching 300 candidates to reach the one you are thinking of wants a number that
 /// would be unreadable if you got it immediately — which is exactly what 0.075 felt like, and why
 /// it was walked back the same day it landed. An acceleration curve is not a compromise between
 /// the two, it is both: the key starts at [`REPEAT_SECS`] and only becomes a traversal tool once
@@ -3926,6 +4094,15 @@ mod tests {
             Action::Save,
             Action::MainMenu,
             Action::SwitchDoor,
+            Action::WorkspaceProject,
+            Action::WorkspaceMap,
+            Action::WorkspaceWorld,
+            Action::WorkspaceKit,
+            Action::WorkspaceAnimation,
+            Action::WorkspaceSound,
+            Action::WorkspaceFiles,
+            Action::WorkspaceGame,
+            Action::WorkspaceAgent,
             Action::Undo,
             Action::Redo,
             Action::Shortcuts,
@@ -4587,7 +4764,7 @@ mod tests {
             // one door to the other to look at the thing they just made.
             //
             // The `Ownership` table already says the project is *"reloaded when the kit is not"*;
-            // this is the crossing that obeys the table.
+            // this is the switching that obeys the table.
             //
             // **It is `Global` because it must work from both doors**, and `Context::Map` is only
             // live on the Map door — so a `Map` row would leave the Kit door with no way back. That
@@ -4600,7 +4777,25 @@ mod tests {
             // 18 -> 19: `Snip`, on `Cmd+\`. **A snip is the person's gesture from either door**: a
             // crop of the Kit door is as much a snip as one of the Map door, so it is `Global`, like
             // Save. `Backslash` is bound in no context, so the chord is free everywhere it is live.
-            (Context::Global, 19),
+            //
+            // 19 -> 28: **the nine workspaces, NV-02 (#379)**, on `Cmd`/`Ctrl`+`1` to `9`.
+            // `docs/ui/vision.md` §4 makes the workspace the navigation axis, so "go to Kit" and
+            // "go to Map" are nine verbs rather than one `=` that walks between two doors. The
+            // owner chose the chords on 2026-11-09 and that is the exception recorded on the issue.
+            //
+            // **This is +9, not the +5 the issue asks for, and the four it wanted removed stayed.**
+            // The issue says the four `view.*` bindings go (`view.switch_door`, `view.panel_1` to
+            // `view.panel_3`). They cannot: `tests/the_door_switch_crosses.rs::the_crossing_and_the_menu_are_different_verbs`
+            // asserts `binding(Action::SwitchDoor)` differs from `MainMenu` and homes on the strip,
+            // and `tests/headless.rs` walks `Action::tab_slot(i)` over the strip. Deleting the rows
+            // would delete those checks rather than follow a rename, which the re-pin exception
+            // forbids outright ("never delete a check"). So the four stay, the pin is the *measured*
+            // 28, and the acceptance item is recorded unmet on the issue.
+            // Owner exception (2026-11-10): `no_context_gains_a_key` Global 19 -> 28 (+9). The owner
+            // chose Cmd/Ctrl+1..9 on 2026-11-09 (issue #379); the issue's matching removal of the four
+            // `view.*` rows (-4) is not done here because removing them deletes checks the re-pin
+            // exception forbids deleting (see above), so the pin is the measured 28, not 24.
+            (Context::Global, 28),
             // 16 -> 17: `FocusFilter`, on `Cmd+F`. **The filter box was mouse-only on every tab
             // but one.** `FocusFilter` was `Context::Tiles`, so the Map tab's PLACE palette and the
             // Rigs tab's rig list had no keyboard route to their own filter at all — and a box the
@@ -5399,7 +5594,7 @@ mod tests {
             "9/10 of the {REPEAT_SECS} s interval must not fire"
         );
 
-        // Crossing it fires exactly once.
+        // Switching it fires exactly once.
         assert!(repeating(
             &input,
             Live(Context::Map, Stance::Idle, Holder::Tab, Rebound::NONE),

@@ -16,6 +16,7 @@
 
 mod a_project_skin_previews_only_in_the_panel;
 mod a_saved_arrangement_is_the_one_the_editor_shows;
+mod a_workspace_switch_keeps_the_map;
 mod fixtures;
 
 mod a_badge_draws_in_the_skins_ink;
@@ -526,6 +527,8 @@ mod the_outliner_searches_and_selects;
 mod a_library_piece_dropped_on_the_map_is_placed;
 mod the_outliner_does_no_work_on_a_settled_frame;
 mod the_outliner_holds_everything_on_the_map;
+mod the_open_documents_come_back;
+mod the_workspaces_keep_their_promises;
 mod the_library_browser_draws_and_places;
 mod the_agent_can_be_paused;
 mod the_agent_block_says_who_changed_the_map;

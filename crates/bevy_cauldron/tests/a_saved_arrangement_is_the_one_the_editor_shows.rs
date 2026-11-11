@@ -69,24 +69,28 @@ fn shown(app: &mut App) -> DockLayout {
     q.iter(world).next().expect("the shell is a gooey Dock").0.clone()
 }
 
-/// What the next start would read: the layout in the user's file, if it has one.
+/// What the next start would read: the Map workspace's layout in the user's file, if it has one.
+///
+/// **Per workspace since NV-02 (#379)**: the key is a map of workspace id to layout, and this file
+/// is about the arrangement Map opens on, so it reads Map's entry.
 fn saved(path: &Path) -> Option<DockLayout> {
     let text = std::fs::read_to_string(path).ok()?;
     bevy_cauldron::settings::SettingsLayer::read(&path.to_string_lossy(), &text)
         .unwrap_or_else(|r| panic!("the editor's own write must read back: {}: {}", r.field.unwrap_or_default(), r.reason))
-        .shell_layout
+        .workspace_layout
+        .remove("map")
 }
 
 /// **A saved arrangement is the one the editor opens on**, which is what "survives a restart" means.
 #[test]
 fn a_saved_arrangement_is_the_one_the_editor_shows() {
     let Rig { mut app, user } = rig("saved");
-    assert_eq!(shown(&mut app), bevy_cauldron::ui::shell_layout(), "a new person starts on the default");
+    assert_eq!(shown(&mut app), bevy_cauldron::ui::shell_layout(bevy_cauldron::workspace::Workspace::Map), "a new person starts on the default");
     assert_eq!(saved(&user), None, "and has no layout in their file");
 
     // A person's arrangement, as their file would hold it after a drag.
     bevy_cauldron::setting_catalogue::edit_layer(&user, |layer| {
-        layer.shell_layout = Some(moved());
+        layer.workspace_layout.insert("map".to_owned(), moved());
         Ok(())
     })
     .unwrap_or_else(|e| panic!("{e}"));
@@ -101,7 +105,7 @@ fn a_saved_arrangement_is_the_one_the_editor_shows() {
 fn reset_puts_the_default_back_and_the_file_agrees() {
     let Rig { mut app, user } = rig("reset");
     bevy_cauldron::setting_catalogue::edit_layer(&user, |layer| {
-        layer.shell_layout = Some(moved());
+        layer.workspace_layout.insert("map".to_owned(), moved());
         Ok(())
     })
     .unwrap_or_else(|e| panic!("{e}"));
@@ -114,10 +118,10 @@ fn reset_puts_the_default_back_and_the_file_agrees() {
     for _ in 0..4 {
         app.update();
     }
-    assert_eq!(shown(&mut app), bevy_cauldron::ui::shell_layout(), "Reset is the default, on screen");
+    assert_eq!(shown(&mut app), bevy_cauldron::ui::shell_layout(bevy_cauldron::workspace::Workspace::Map), "Reset is the default, on screen");
     assert_eq!(saved(&user), None, "and the key is gone, so the next start is the default too");
     assert_eq!(
-        app.world().resource::<EditorSettings>().shell_layout,
+        app.world().resource::<EditorSettings>().workspace_layout.get("map").cloned(),
         None,
         "and the running settings agree with the file"
     );

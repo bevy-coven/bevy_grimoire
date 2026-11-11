@@ -82,7 +82,7 @@ pub struct UndoParams {
     /// change.
     ///
     /// **A flag rather than making the id-less form follow the stack.** An undo on the *log* is well
-    /// defined with no presentation, survives a door crossing, and is what `grimoire_read_oplog`
+    /// defined with no presentation, survives a door switching, and is what `grimoire_read_oplog`
     /// lists; making it silently depend on a UI resource would make one call mean two things on two
     /// screens. The person's Cmd+Z has always meant "the turn", so this gives the agent's door the
     /// same verb rather than changing what its existing one says.
@@ -489,7 +489,7 @@ fn project_root(
         return Err("no project is open.".to_owned());
     };
     // **The open map's name, while a map is open.** A rename changes the open map and not the
-    // project's name; the project's is only brought up to date on a crossing. Without this an agent
+    // project's name; the project's is only brought up to date on a switching. Without this an agent
     // asking which map is open is told the name the author has already replaced.
     let map = open
         .map(|o| o.map.name.clone())
@@ -816,7 +816,7 @@ fn editor_state(
     state: Option<Res<crate::editor::EditorState>>,
     tiles: Option<Res<crate::tiles::ImportState>>,
     armed: Option<Res<crate::compose::Armed>>,
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     mode: Option<Res<crate::tiles::Mode>>,
     presenting: Option<Res<crate::present::Presenting>>,
     // **The agent's wishes this session** (#353): what it found hard, waiting to be read.
@@ -970,7 +970,7 @@ fn editor_state(
             // the door it would cross to, so a waiting door is not invisible to the agent that asked.
             "leaving": s.leaving,
             "door_waiting": s.door_request.map(|r| json!({
-                "door": r.door.label(),
+                "door": r.workspace.label(),
                 "tab": r.tab.map(|m| m.label()),
             })),
         })
@@ -1099,7 +1099,7 @@ fn editor_state(
 /// `grimoire/run_command`: a command is refused when the region that holds the keys is not its own.
 fn ui_json(
     screen: Option<&State<crate::screen::Screen>>,
-    door: Option<&crate::tiles::Door>,
+    door: Option<&crate::workspace::Workspace>,
     live: Option<&crate::keys::Live>,
 ) -> Value {
     use crate::keys::{Context, Holder};
@@ -1116,7 +1116,7 @@ fn ui_json(
     json!({
         "screen": "workbench",
         "workspace": door.map(|d| d.label()),
-        "panels": door.map_or_else(Vec::new, |d| d.tabs().iter().map(|m| m.label()).collect()),
+        "panels": door.map_or_else(Vec::new, |d| d.panels().iter().map(|m| m.label()).collect()),
         "focus": focus,
     })
 }
@@ -1718,14 +1718,15 @@ fn operation_preview(
 /// The plan reads the library and nothing else. The door, the job and the shelf filter are editor
 /// state, so they are read here, where the editor's resources are in hand.
 pub(crate) fn piece_select_refusal(
-    door: Option<crate::tiles::Door>,
+    door: Option<crate::workspace::Workspace>,
     mode: Option<crate::tiles::Mode>,
     project: Option<&crate::project::Project>,
     filters: Option<&crate::filter::Filters>,
     id: &str,
 ) -> Option<String> {
-    use crate::tiles::{Door, Mode};
-    if door != Some(Door::Kit) || mode != Some(Mode::Meshes) {
+    use crate::tiles::Mode;
+use crate::workspace::Workspace;
+    if door != Some(Workspace::Kit) || mode != Some(Mode::Meshes) {
         return Some(
             "the Meshes shelf is not on screen. Open the kit door on its meshes panel first (door_open with door kit and tab meshes), then select the piece."
                 .to_string(),
@@ -1774,7 +1775,7 @@ fn operation_apply(
     mut due: Option<ResMut<crate::watch::Due>>,
     mut state: Option<ResMut<crate::editor::EditorState>>,
     mut gates: Gates,
-    door: Option<Res<crate::tiles::Door>>,
+    door: Option<Res<crate::workspace::Workspace>>,
     mode: Option<Res<crate::tiles::Mode>>,
     filters: Option<Res<crate::filter::Filters>>,
     mut import: Option<ResMut<crate::tiles::ImportState>>,
@@ -1783,7 +1784,7 @@ fn operation_apply(
     mut clock: Option<ResMut<crate::editor::ProposalClock>>,
     // **Which screen the operation is being applied on (E-078).** `map_open` means two different
     // things and only the screen tells them apart: from a door it asks for the Map door, and from the
-    // menu it is an *entry* — the same crossing the MAPS column's Enter makes. **Read the state, not
+    // menu it is an *entry* — the same switching the MAPS column's Enter makes. **Read the state, not
     // the presence of a resource**: `PointedAt` is inserted when a project is opened and stays on every screen,
     // and `EditorState`'s absence is a fact about the editor, not a name for the menu.
     screen: Option<Res<State<crate::screen::Screen>>>,
@@ -1972,7 +1973,7 @@ fn operation_apply(
     // **On the menu, `map_open` enters the editor (E-078)** — and it does it the way the MAPS
     // column's Enter does, not by installing resources and hoping the screen follows.
     //
-    // `Chosen` is what a crossing carries: `screen::open_the_door` consumes it on the project page's transition into the editor and
+    // `Chosen` is what a switching carries: `screen::open_the_door` consumes it on the project page's transition into the editor and
     // installs the project and the map through `Opened::insert_into`, an exclusive system, so
     // `OnEnter(Editor)` — the very next schedule — finds them. Inserting `Project` here instead would
     // put a loaded project on a screen that has no door, and a `NextState` read one pass late would
@@ -1987,14 +1988,14 @@ fn operation_apply(
     if entering {
         match (loaded, opened) {
             (Some(mut fresh), Some(map)) => {
-                // **The project remembers the map's name**, mirroring `args::open`: a crossing from
+                // **The project remembers the map's name**, mirroring `args::open`: a switching from
                 // the Kit door back to Maps reads it to know which map to reopen.
                 fresh.open_map_name = Some(map.map.name.clone());
                 commands.insert_resource(crate::screen::Chosen(crate::args::Opened {
                     project: fresh,
                     open_map: Some(map),
-                    door: crate::tiles::Door::Map,
-                    mode: crate::tiles::Door::Map.opens_on(),
+                    workspace: crate::workspace::Workspace::Map,
+                    mode: crate::workspace::Workspace::Map.opens_on(),
                 }));
                 if let Some(next) = screen_next.as_deref_mut() {
                     next.set(crate::screen::Screen::Editor);
@@ -2046,7 +2047,7 @@ fn operation_apply(
     {
         crate::editor::apply_composition_armed(armed, outcome.after.as_ref());
     }
-    // **An agent's door is crossed by the editor in the next frame (`door_open`)**, the same crossing
+    // **An agent's door is crossed by the editor in the next frame (`door_open`)**, the same switching
     // the keys make. It is stored here and carried out by `editor::apply_pending_door`, because the
     // leaving question may need the author's answer first.
     if let (Ok(ops::Applied::Done { outcome, .. }), Some(state)) = (&applied, state.as_deref_mut())
@@ -2061,7 +2062,7 @@ fn operation_apply(
         && !on_menu
     {
         state.door_request = Some(crate::editor::DoorRequest {
-            door: crate::tiles::Door::Map,
+            workspace: crate::workspace::Workspace::Map,
             tab: None,
         });
     }
@@ -3072,7 +3073,7 @@ fn editor_present(
     block: Query<(), With<crate::familiar::Familiar>>,
     here: Option<Res<crate::familiar::HandBackHere>>,
     // **The hand-back's first place to check is a follow** (AF-02, #358): one camera, one ease, one
-    // crossing. A presentation that framed through a mechanism of its own would fight the follow for
+    // switching. A presentation that framed through a mechanism of its own would fight the follow for
     // the camera the moment an agent placed something and then handed back.
     mut following: Option<ResMut<crate::follow::Following>>,
 ) -> Result<Value, String> {
@@ -3139,7 +3140,7 @@ fn editor_present(
         );
     }
     // **The first place to check is framed before the question goes up**, as a follow (AF-02, #358):
-    // one camera, one ease, one crossing, so a hand-back and a follow cannot fight over it. The ids
+    // one camera, one ease, one switching, so a hand-back and a follow cannot fight over it. The ids
     // are the ones the person will read under the camera, so the ring lasts as it does for a change.
     if let (Some(first), Some(following)) = (p.check.first(), following.as_mut())
         && !first.placements.is_empty()

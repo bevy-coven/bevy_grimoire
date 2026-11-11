@@ -283,7 +283,7 @@ struct Operated<'w> {
     state: Option<ResMut<'w, crate::editor::EditorState>>,
     confirm: Option<Res<'w, crate::confirm::Confirm>>,
     import: Option<ResMut<'w, crate::tiles::ImportState>>,
-    door: Option<Res<'w, crate::tiles::Door>>,
+    door: Option<Res<'w, crate::workspace::Workspace>>,
     mode: Option<Res<'w, crate::tiles::Mode>>,
     filters: Option<Res<'w, crate::filter::Filters>>,
 }

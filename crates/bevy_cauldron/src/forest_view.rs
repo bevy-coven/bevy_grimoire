@@ -58,7 +58,7 @@ impl Plugin for ForestViewPlugin {
         }
         app.add_systems(
             Update,
-            sync_forest_view.run_if(in_state(crate::screen::Screen::Editor)).run_if(crate::tiles::Door::map_door_is_open),
+            sync_forest_view.run_if(in_state(crate::screen::Screen::Editor)).run_if(crate::workspace::Workspace::map_is_open),
         );
     }
 }

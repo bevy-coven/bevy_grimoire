@@ -313,8 +313,8 @@ impl Plugin for ThumbsPlugin {
         // A run condition, not a build-time read: the door is chosen at runtime now.
         app.add_systems(
             OnEnter(crate::screen::Screen::Editor),
-            setup.run_if(|door: Option<Res<crate::tiles::Door>>| {
-                door.is_some_and(|d| *d != crate::tiles::Door::Map)
+            setup.run_if(|door: Option<Res<crate::workspace::Workspace>>| {
+                door.is_some_and(|d| *d != crate::workspace::Workspace::Map)
             }),
         );
         app.init_resource::<ThumbGeneration>()

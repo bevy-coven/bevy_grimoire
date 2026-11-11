@@ -32,7 +32,7 @@ use crate::editor::EditorState;
 use crate::launcher::TourRequested;
 use crate::project::{OpenMap, Project};
 use crate::screen::Screen;
-use crate::tiles::Door;
+use crate::workspace::Workspace;
 
 /// The script the tour posts: the file an agent could post, compiled in so an app bundle has it.
 pub const SCRIPT: &str = include_str!("../guides/first_map.json");
@@ -109,7 +109,7 @@ pub fn why_not(world: &World) -> Option<&'static str> {
     if world.get_resource::<State<Screen>>().is_none_or(|s| *s.get() != Screen::Editor) {
         return Some("The tour is on a map: open a project first.");
     }
-    if world.get_resource::<Door>().is_none_or(|d| *d != Door::Map) || world.get_resource::<OpenMap>().is_none() {
+    if world.get_resource::<Workspace>().is_none_or(|d| *d != Workspace::Map) || world.get_resource::<OpenMap>().is_none() {
         return Some("The tour is on a map: switch to the Map first.");
     }
     if world.get_resource::<Project>().is_none_or(|p| p.library.descriptors.is_empty()) {
