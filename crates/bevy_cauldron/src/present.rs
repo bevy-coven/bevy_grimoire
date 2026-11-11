@@ -155,6 +155,7 @@ impl Plugin for PresentPlugin {
             .init_resource::<PresentationReply>()
             .init_resource::<HandBacks>()
             .init_resource::<Wishes>()
+            .init_resource::<Lessons>()
             .init_resource::<AgentClient>()
             .add_systems(
                 Update,
@@ -288,6 +289,106 @@ impl QueuedWish {
     /// The word the row shows for its kind, so a lesson of AG-06's can name its own.
     pub fn kind_label(&self) -> &'static str {
         crate::wish_view::RowKind::Wish.label()
+    }
+}
+
+/// **The lessons an agent has proposed this session, in the order they arrived** (AG-06, #351).
+///
+/// A lesson is one line for the project's guide, learned from a task: the thing the next agent
+/// should know. **The editor holds them and the MCP server holds none**, for the same reason it holds
+/// the wishes — a lesson cites a hand-back, and hand-backs live here.
+///
+/// **The agent's call writes nothing.** A proposal waits as a row beside the wishes, and only a
+/// person's **Keep** appends the line to `.dark_factory/AGENTS.md`. **`Session`, not `Door`**: a lesson
+/// learned on one map is about the project, and the guide it lands in is the project's.
+#[derive(Resource, Default)]
+pub struct Lessons {
+    /// **Every lesson this session proposed**, oldest first, with the answer the person gave it.
+    pub queued: Vec<QueuedLesson>,
+    /// The next lesson's number. Monotonic for the life of the process, so ids are never reused.
+    next: u32,
+}
+
+/// **What the person did with a lesson** (#351).
+///
+/// `Kept` means the line is in the guide: the editor wrote it on the button press, so unlike a wish's
+/// `opened` this is a fact about the file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LessonState {
+    /// Nobody has answered it yet.
+    #[default]
+    Waiting,
+    /// The person kept it, and the line is in the guide.
+    Kept,
+    /// The person dropped it.
+    Discarded,
+}
+
+impl LessonState {
+    /// The word `grimoire_state.lessons` reports.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LessonState::Waiting => "waiting",
+            LessonState::Kept => "kept",
+            LessonState::Discarded => "discarded",
+        }
+    }
+}
+
+/// **One proposed lesson, and what the person has done with it.**
+#[derive(Clone, Debug, PartialEq)]
+pub struct QueuedLesson {
+    /// The lesson the agent wrote, with the id the editor gave it.
+    pub lesson: bevy_grimoire_core::lesson::Lesson,
+    /// **What the one-lesson rule compares**: the hand-back's [`HandBack::key`], as a wish's.
+    pub key: String,
+    /// **The project the hand-back was made in**, so a lesson kept on another project's guide is
+    /// refused rather than written into the wrong file.
+    pub root: std::path::PathBuf,
+    /// What the person has done with it.
+    pub state: LessonState,
+    /// **Why Keep did not write**, when it did not. The row says it and the lesson stays waiting: a
+    /// guide that could not be written is not an answer.
+    pub note: Option<String>,
+}
+
+impl Lessons {
+    /// **The lessons as `grimoire_state` reports them**: `{id, after, state}` each, oldest first.
+    pub fn state_json(&self) -> serde_json::Value {
+        serde_json::Value::Array(
+            self.queued
+                .iter()
+                .map(|q| {
+                    serde_json::json!({
+                        "id": q.lesson.id,
+                        "after": q.lesson.after,
+                        "state": q.state.as_str(),
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    /// **How many lessons are waiting for the person**: the count the AGENT block and the activity
+    /// bar's Agent badge show.
+    pub fn waiting(&self) -> usize {
+        self.queued.iter().filter(|q| q.state == LessonState::Waiting).count()
+    }
+
+    /// **Whether this hand-back has a lesson already.** An answered lesson still counts, as an
+    /// answered wish does: the person has read that hand-back's lesson, and a second one is the same
+    /// lesson twice.
+    pub fn has_lesson_for(&self, key: &str) -> bool {
+        self.queued.iter().any(|q| q.key == key)
+    }
+
+    /// **Take a lesson**, numbering it and keeping it waiting behind the ones already there.
+    pub fn take(&mut self, mut lesson: bevy_grimoire_core::lesson::Lesson, key: String, root: std::path::PathBuf) -> String {
+        self.next += 1;
+        let id = format!("lesson-{}", self.next);
+        lesson.id = id.clone();
+        self.queued.push(QueuedLesson { lesson, key, root, state: LessonState::Waiting, note: None });
+        id
     }
 }
 

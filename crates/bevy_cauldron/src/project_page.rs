@@ -1123,12 +1123,34 @@ fn the_guide_section(
 /// hole AG-02's reader closed, in the paths this page writes through (`SaveGuide`, `ReloadGuide`,
 /// `AllowGuide`). The core reader refuses a non-regular file and reads at most `GUIDE_MAX_BYTES + 1`; a file
 /// that is not there is an `Err` here, because every caller is acting on a file the section believes exists.
-fn read_guide(path: &Path) -> Result<String, String> {
+pub(crate) fn read_guide(path: &Path) -> Result<String, String> {
     match bevy_grimoire_core::agent_guide::read_layer(bevy_grimoire_core::agent_guide::Source::Project, path) {
         Ok(Some(text)) => Ok(text),
         Ok(None) => Err(format!("{} is no longer there", path.display())),
         Err(problem) => Err(problem.line()),
     }
+}
+
+/// **The guide's text, read the one bounded way**, for a caller outside this module that needs to
+/// append to it (AG-06's Keep, `#351`). The same reader the section writes through, so a lesson is
+/// kept in a file the page would also read.
+pub(crate) fn guide_on_disk(path: &Path) -> Result<String, String> {
+    read_guide(path)
+}
+
+/// **Whether the store serves this text of this project's guide**, which is what decides whether a
+/// kept lesson's new content may be granted: content that was allowed before an append was reviewed
+/// by the person, and content that was not stays withheld however many lines they keep (AG-06).
+pub(crate) fn guide_is_allowed(
+    store_root: Option<&crate::trusted::StoreRoot>,
+    store: Option<&Path>,
+    root: &Path,
+    text: &str,
+) -> bool {
+    matches!(
+        crate::trusted::load_at(store_root, store).and_then(|store| store.guide_decision(root, text)),
+        Ok(trust::Decision::Trusted(_))
+    )
 }
 
 /// **Whether the section can show the whole file**, which is what Save, Allow and Revert require.
@@ -1154,7 +1176,7 @@ pub fn fully_shown(text: &str) -> bool {
 
 /// **Grant one text of this project's guide**, in the person's store: the override when a test named one,
 /// and `crate::trusted::store_path(None)` — the user's own `trusted.ron` — when it did not.
-fn grant_in_store(
+pub(crate) fn grant_in_store(
     store_root: Option<&crate::trusted::StoreRoot>,
     store: Option<&Path>,
     root: &Path,
