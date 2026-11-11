@@ -1576,6 +1576,34 @@ pub fn spawn_frame(
             Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
         ))
         .id();
+    // **The dock's own body is the host's, and it is not laid out** (bevy-coven/bevy_gooey#85).
+    //
+    // The dock here is the arrangement's *data*: what `ui::save_the_layout` saves, what
+    // `ui::follow_the_saved_layout` restores, what `stage_panels::arrange` selects a tab in, and the node a
+    // library piece is let go on. The panels themselves are still drawn by this file's own spawners into
+    // `Frame`'s nodes — what `ui::register_the_shell_panels` registers is a placeholder that carries the
+    // panel's id, not its contents.
+    //
+    // **That was silently true until gooey #85.** `update_docks` used to return early when a dock the host
+    // had spawned had no `Role::DockBody` child, which is what this bare `Dock` was: it built nothing. Since
+    // #85 a host-placed dock grows its body, its landing and its ghost, and builds every page its layout
+    // names — so the shell grew three `panel()` cards (INSPECTOR at 22%, VIEWPORT, PLACE) filled with the
+    // skin's surface, stacked over the map between the author and the level. Measured before this: the
+    // viewport's own node was under a card, and `crate::view::OverUi` answered *yes* at its centre.
+    //
+    // gooey has no opt-out, and the path it does document is this one — *"a host that made one of them
+    // itself keeps it"* (`docs/guide/docks.md`) — so the body is the frame's, a `Display::None` node the
+    // layout is built into. A `Display::None` node has a zero rect, so nothing under it is laid out, drawn
+    // or picked: the pages exist and are inert. **When the panels themselves move into this dock** (the rest
+    // of UI-30, #224) this node becomes the real body and this paragraph goes with the change.
+    let silent_body = commands
+        .spawn((
+            Node { display: Display::None, ..default() },
+            Visibility::Hidden,
+            bevy_gooey::Role::DockBody,
+        ))
+        .id();
+    commands.entity(dock).add_child(silent_body);
     commands.entity(viewport).add_child(dock);
 
     commands
