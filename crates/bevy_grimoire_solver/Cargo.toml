@@ -1,6 +1,6 @@
 [package]
 name = "bevy_grimoire_solver"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.97.1"
 description = "A Boolean satisfiability back-end that answers the same way every run, on every machine: no clock, no threads, no entropy, and a give-up budget counted in conflicts rather than seconds."
