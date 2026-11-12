@@ -40,6 +40,7 @@ mod audio_panel_reads_the_crates_file;
 mod a_capture_sequence_takes_one_frame_at_a_time;
 mod a_clock_edit_walks_the_hour;
 mod a_change_says_what_it_broke;
+mod a_change_to_the_map_reaches_the_lists_row_by_row;
 mod a_change_whose_log_line_cannot_be_written_is_taken_back;
 mod a_chip_click_writes_the_library_once;
 mod a_click_outside_the_viewport_places_nothing;
@@ -476,6 +477,7 @@ fn every_test_file_is_a_module_here() {
         "add `mod <name>;` to crates/bevy_cauldron/tests/all.rs (and `use crate::fixtures;` in the file) for: {missing:?}"
     );
 }
+mod the_frame_a_change_lands_on_stays_inside_two_milliseconds;
 mod the_frames_regions_fit_the_window;
 mod the_shell_s_menus_and_toasts_move;
 mod the_shell_s_regions_are_labelled_and_the_divider_moves;

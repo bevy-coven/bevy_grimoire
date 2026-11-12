@@ -7,5 +7,5 @@
 # test every slot, so nothing else of this run is executing while it measures. Nothing is loosened: each budget is the
 # number its test asserts. Add a test here when it asserts elapsed time against a budget or waits on the wall clock.
 [[profile.default.overrides]]
-filter = 'test(/the_uis_budget_is_two_milliseconds_a_frame|the_ui_frame_covers_a_change_and_the_input_path|scrolling_five_thousand_lines_stays_inside_the_ui_frame_budget|a_slow_load_shows_a_spinner_then_progress_then_the_editor/)'
+filter = 'test(/the_uis_budget_is_two_milliseconds_a_frame|the_ui_frame_covers_a_change_and_the_input_path|the_frame_a_change_lands_on_stays_inside_two_milliseconds|scrolling_five_thousand_lines_stays_inside_the_ui_frame_budget|a_slow_load_shows_a_spinner_then_progress_then_the_editor/)'
 threads-required = "num-cpus"

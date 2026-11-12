@@ -48,7 +48,9 @@ use std::collections::{BTreeSet, HashMap};
 use serde::{Deserialize, Serialize};
 
 use bevy::prelude::*;
-use bevy_grimoire_core::map::Map;
+use bevy_grimoire_core::descriptor::{Descriptor, Mount};
+use bevy_grimoire_core::library::Library;
+use bevy_grimoire_core::map::{Map, Placed};
 use bevy_grimoire_core::stack::descriptor_of;
 use bevy_gooey::{Checked, SelectMode, Table, TableSelection, Tree, TreeNode, ValueChange, observe, text_input, tree};
 
@@ -131,9 +133,24 @@ pub struct Outliner {
     /// The stat of the two side files the tree was last built from, so a write to `people/` or `scripts/` is
     /// noticed even though no resource in the editor changed.
     built_files: Vec<FileStat>,
-    /// A fingerprint of what the tree was last built from (the query and every piece's id and
-    /// descriptor), so a map edit that changes no piece's identity (a turn, a nudge) is not a rebuild.
-    built_from: u64,
+    /// Whether the tree has been built from the map at all.
+    built: bool,
+    /// **What each placement was when its row was drawn**, in the map's order: the facts its row and its group are drawn
+    /// from. A change to the map is read against this, so a piece that arrived or left is found by walking the two lists
+    /// together (UI-93, #259) and the tree is told about that one row, where it used to be built whole.
+    seen: Vec<Seen>,
+    /// The map's stamps (`(id, of)`) the tree was last built from: they are rows of their own.
+    stamps_seen: Vec<(String, String)>,
+    /// The library the layers and kinds were read from, one entry per descriptor: a library edit that moves a mount or a
+    /// kind moves rows no placement shows.
+    library_seen: Vec<DescriptorSeen>,
+    /// The eye and the locks the labels were written from.
+    marks_seen: (Eyes, Locks),
+    /// **Every layer the map had when the tree was built**, kept or not: a piece in one of them can join its group without
+    /// the tree changing shape.
+    layers_seen: BTreeSet<&'static str>,
+    /// Whether the tree has the layer level (the map has more than one layer).
+    nested: bool,
     /// The query the tree was last built for, so a settled frame compares two short strings and nothing else.
     built_for: String,
     /// How many times the tree has been built from the map. A settled map and search cost none: this is the
@@ -142,6 +159,8 @@ pub struct Outliner {
     /// How many times every piece has been read to decide whether to build: the cost that grows with the map. A settled
     /// frame adds none.
     looks: u32,
+    /// How many of [`Outliner::rebuilds`] touched the rows a change named and left the rest of the tree alone.
+    patches: u32,
 }
 
 impl Outliner {
@@ -153,6 +172,11 @@ impl Outliner {
     /// How many times every piece has been read to decide whether to build, since the section opened.
     pub fn looks(&self) -> u32 {
         self.looks
+    }
+
+    /// **How many of those changes were patched into the tree row by row** rather than built whole (UI-93, #259).
+    pub fn patches(&self) -> u32 {
+        self.patches
     }
 
     /// **The rows drawn under the group `key`**, in the order they are drawn.
@@ -373,14 +397,6 @@ pub const HIDDEN_MARK: &str = " (hidden)";
 /// What a row says after its name when its piece is locked against the viewport's clicks.
 pub const LOCKED_MARK: &str = " (locked)";
 
-/// The byte before a hidden piece's id in [`fingerprint`]; none of these three, nor `\x1f`/`\x1e`/`\x1c`/`\x1b`, is a
-/// byte an id or a name carries, so the fields cannot be read into one another.
-const SEP_HIDDEN_PIECE: &[u8] = b"\x18";
-/// The byte before a hidden layer's name in [`fingerprint`].
-const SEP_HIDDEN_LAYER: &[u8] = b"\x17";
-/// The byte before a locked piece's id in [`fingerprint`].
-const SEP_LOCKED_PIECE: &[u8] = b"\x16";
-
 /// **The tree, built from the map, the map's other contents and the search.** Returns the nodes, the piece
 /// behind each key, and the rows drawn under each group.
 ///
@@ -393,12 +409,34 @@ const SEP_LOCKED_PIECE: &[u8] = b"\x16";
 #[allow(clippy::type_complexity)]
 pub fn nodes_for(
     map: &Map,
-    library: &bevy_grimoire_core::library::Library,
+    library: &Library,
     contents: &Contents,
     query: &str,
     marks: (&Eyes, &Locks),
     group_open: impl Fn(u64) -> Option<bool>,
 ) -> (Vec<TreeNode>, HashMap<u64, String>, HashMap<u64, Vec<u64>>) {
+    let built = build_nodes(map, library, contents, query, marks, group_open);
+    (built.nodes, built.rows, built.children)
+}
+
+/// **What a whole build of the tree made**: [`nodes_for`]'s three answers, and the two facts about the map's shape the
+/// tree is patched against afterwards.
+struct Built {
+    nodes: Vec<TreeNode>,
+    rows: HashMap<u64, String>,
+    children: HashMap<u64, Vec<u64>>,
+    layers_seen: BTreeSet<&'static str>,
+    nested: bool,
+}
+
+fn build_nodes(
+    map: &Map,
+    library: &Library,
+    contents: &Contents,
+    query: &str,
+    marks: (&Eyes, &Locks),
+    group_open: impl Fn(u64) -> Option<bool>,
+) -> Built {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
     let searching = !words.is_empty();
     let kept = |haystack: &str, group: &str| {
@@ -438,13 +476,7 @@ pub fn nodes_for(
             Some(group) => group,
             None => kinds.entry(kind.to_owned()).or_default(),
         };
-        let mut label = format!("{} \u{b7} {}", placed.id, placed.descriptor);
-        if marks.0.is_hidden(&placed.id) || marks.0.layer_hidden(layer) {
-            label.push_str(HIDDEN_MARK);
-        }
-        if marks.1.is_locked(&placed.id) {
-            label.push_str(LOCKED_MARK);
-        }
+        let label = piece_label(placed, layer, marks);
         group.push((key, label));
     }
     // **The map's other contents, four groups of their own** (UI-51, #237), after the pieces' groups.
@@ -522,83 +554,207 @@ pub fn nodes_for(
             nodes.push(leaf_group(group_key(&kind), &kind, rows_here, &mut children));
         }
     }
-    (nodes, rows, children)
+    Built { nodes, rows, children, layers_seen, nested }
 }
 
-/// Whether the tree needs building again: a fingerprint of the query, every piece's identity, the map's stamps, the
-/// notes' generation, and **the stat of each side file** the map's other contents live in.
-///
-/// **Hashed as it is read, with no string built.** It used to append every piece's id and descriptor to a `String` — a few
-/// hundred kilobytes for ten thousand pieces, allocated and filled on the frame a change lands on — and hash that. The hash
-/// is the same one ([`fnv`]), taken over the pieces' own bytes as they are walked, so a build allocates nothing. The two
-/// separator bytes are the ones the old text used, so a piece that gained or lost a character still moves the fingerprint.
-///
-/// **Two stats, and no file's contents.** `people/<map>.ron` and `scripts/<map>.ron` are the two facts the map cannot
-/// show: `person_set` and `trigger_set` write them and change no pixel of the map, and a hand edit is the same. Each
-/// contributes its path, its modification time and its length — one `metadata` call each — so a write is a rebuild
-/// while a settled frame still opens nothing. Parsing them is [`contents_of`]'s work, after this has said a rebuild
-/// is due.
-fn fingerprint(
-    map: &Map,
-    library: &bevy_grimoire_core::library::Library,
-    notes: u64,
-    files: &[FileStat],
-    query: &str,
-    marks: (&Eyes, &Locks),
-) -> u64 {
-    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0100_0000_01b3;
-    fn fold(mut hash: u64, bytes: &[u8]) -> u64 {
-        for byte in bytes {
-            hash = (hash ^ u64::from(*byte)).wrapping_mul(PRIME);
+/// **The label of a piece's row**: its id and descriptor, and a mark for each thing the eye or the locks say about it.
+/// One function for a whole build and for a row relabelled alone, so the two can never read a piece differently.
+fn piece_label(placed: &Placed, layer: &str, marks: (&Eyes, &Locks)) -> String {
+    let mut label = format!("{} \u{b7} {}", placed.id, placed.descriptor);
+    if marks.0.is_hidden(&placed.id) || marks.0.layer_hidden(layer) {
+        label.push_str(HIDDEN_MARK);
+    }
+    if marks.1.is_locked(&placed.id) {
+        label.push_str(LOCKED_MARK);
+    }
+    label
+}
+
+/// **The most pieces a change may take out of the tree before the tree is built whole.** `Tree::remove` reads the whole
+/// tree's order again, so a handful of them costs what a whole build does.
+const MOST_PIECES_PATCHED_OUT: usize = 2;
+/// **The most pieces a change may add to the tree before it is built whole.** `Tree::insert` shifts what stands after
+/// the new row, so it is cheap for the few a click or an agent's step adds and not for a fill of hundreds.
+const MOST_PIECES_PATCHED_IN: usize = 16;
+/// **The most rows a change of the eye or the locks may relabel one by one** before the tree is built whole.
+const MOST_ROWS_RELABELLED: usize = 32;
+
+/// **What a placement was when its row was drawn**: every field a row, or the group the row stands in, is drawn from. The
+/// patch is boxed because a descriptor is large and nearly every piece has none.
+#[derive(Clone, PartialEq)]
+struct Seen {
+    id: String,
+    descriptor: String,
+    /// Whether it took a surface (a two-way mount's layer depends on it).
+    on: bool,
+    patch: Option<Box<Descriptor>>,
+}
+
+impl Seen {
+    fn of(placed: &Placed) -> Seen {
+        Seen {
+            id: placed.id.clone(),
+            descriptor: placed.descriptor.clone(),
+            on: placed.on.is_some(),
+            patch: placed.patch.clone().map(Box::new),
         }
-        hash
     }
-    let mut hash = fold(BASIS, query.as_bytes());
-    // **What the eye and the locks hold**, because the rows say so (` (hidden)`, ` (locked)`): the sets are folded in
-    // name order with bytes no id carries between them, so a hide is a different fingerprint.
-    for id in marks.0.hidden.iter() {
-        hash = fold(fold(hash, SEP_HIDDEN_PIECE), id.as_bytes());
+
+    /// Whether `placed` is the placement this was, as far as its row is concerned: a turn or a nudge is.
+    fn is(&self, placed: &Placed) -> bool {
+        self.id == placed.id && self.descriptor == placed.descriptor && self.on == placed.on.is_some() && self.patch.as_deref() == placed.patch.as_ref()
     }
-    for layer in marks.0.layers.iter() {
-        hash = fold(fold(hash, SEP_HIDDEN_LAYER), layer.as_bytes());
+}
+
+/// What a descriptor's row and group are drawn from: its id, its first kind and its mount.
+type DescriptorSeen = (String, Option<String>, Option<Mount>);
+
+fn library_seen_of(library: &Library) -> Vec<DescriptorSeen> {
+    library.descriptors.iter().map(|d| (d.id.clone(), d.kind.first().cloned(), d.mount.clone())).collect()
+}
+
+/// Whether `library` still says what `seen` was read from.
+fn library_is(seen: &[DescriptorSeen], library: &Library) -> bool {
+    seen.len() == library.descriptors.len()
+        && seen.iter().zip(&library.descriptors).all(|((id, kind, mount), d)| *id == d.id && kind.as_ref() == d.kind.first() && *mount == d.mount)
+}
+
+/// **What a frame the tree may have to follow asks of it** (UI-93, #259).
+enum Plan<'m> {
+    /// The map moved in no way a row shows (a turn, a nudge): the tree is as it should be.
+    Nothing,
+    /// A few rows came, went or were relabelled, and the rest of the tree is left alone.
+    Patch(Edits<'m>),
+    /// The change is too big, or too odd, to name row by row: build the tree again.
+    Whole,
+}
+
+/// The rows a change touched.
+struct Edits<'m> {
+    /// Indexes into [`Outliner::seen`] of the pieces that are gone.
+    removed: Vec<usize>,
+    /// The pieces that arrived, in the map's order: each is the last of its group.
+    added: &'m [Placed],
+    /// The pieces whose label the eye or the locks changed.
+    relabel: Vec<&'m Placed>,
+}
+
+/// What a plan reads: everything the tree is built from, as it is now.
+struct Now<'a> {
+    map: &'a Map,
+    library: &'a Library,
+    /// Whether the project was touched this frame, so the library may have been.
+    library_moved: bool,
+    notes: u64,
+    files: &'a [FileStat],
+    marks: (&'a Eyes, &'a Locks),
+}
+
+impl Outliner {
+    /// **Decide what the tree needs to follow the map as it is now**, reading the map against [`Outliner::seen`] and
+    /// nothing else of the tree.
+    ///
+    /// **Pieces are read by walking the two lists together.** A piece that is gone is one the walk steps over; the pieces
+    /// left at the end of the map's list are the ones that arrived, and each is the last child of its group, which is
+    /// where `Tree::insert` puts a node and where a whole build puts a piece the map lists last. A piece put in the middle
+    /// of the map is therefore a few removals and the same piece added again, which is the order a whole build draws.
+    /// More than a few of either is [`Plan::Whole`].
+    fn plan<'m>(&self, now: &Now<'m>) -> Plan<'m> {
+        // A search draws what matches and not the rest, so it is always a whole build, and so is its change.
+        if !self.built || self.built_for != self.query || self.query.split_whitespace().next().is_some() {
+            return Plan::Whole;
+        }
+        if self.built_notes != now.notes || self.built_files != now.files {
+            return Plan::Whole;
+        }
+        let stamps = now.map.stamps.iter().map(|s| (s.id.as_str(), s.of.as_str()));
+        if !self.stamps_seen.iter().map(|(id, of)| (id.as_str(), of.as_str())).eq(stamps) {
+            return Plan::Whole;
+        }
+        if now.library_moved && !library_is(&self.library_seen, now.library) {
+            return Plan::Whole;
+        }
+        // A hidden layer marks every row of it, which is not a few rows.
+        if self.marks_seen.0.layers != now.marks.0.layers {
+            return Plan::Whole;
+        }
+        let placements = &now.map.placements;
+        let mut removed = Vec::new();
+        let mut at = 0;
+        for (i, was) in self.seen.iter().enumerate() {
+            if placements.get(at).is_some_and(|placed| was.is(placed)) {
+                at += 1;
+            } else {
+                removed.push(i);
+                if removed.len() > MOST_PIECES_PATCHED_OUT {
+                    return Plan::Whole;
+                }
+            }
+        }
+        let added = &placements[at..];
+        if added.len() > MOST_PIECES_PATCHED_IN {
+            return Plan::Whole;
+        }
+        let mut marked: BTreeSet<&str> = BTreeSet::new();
+        marked.extend(self.marks_seen.0.hidden.symmetric_difference(&now.marks.0.hidden).map(String::as_str));
+        marked.extend(self.marks_seen.1.locked.symmetric_difference(&now.marks.1.locked).map(String::as_str));
+        if marked.len() > MOST_ROWS_RELABELLED {
+            return Plan::Whole;
+        }
+        let relabel: Vec<&Placed> = marked.iter().filter_map(|id| placements.iter().find(|placed| placed.id == *id)).collect();
+        if removed.is_empty() && added.is_empty() && relabel.is_empty() {
+            return Plan::Nothing;
+        }
+        Plan::Patch(Edits { removed, added, relabel })
     }
-    for id in marks.1.locked.iter() {
-        hash = fold(fold(hash, SEP_LOCKED_PIECE), id.as_bytes());
+
+    /// **Put a patch's rows into the tree**, and `false` when one of them cannot be put there (a group that would be
+    /// left empty, a layer or a kind the tree has no group for, a key that is taken), which is the caller's cue to build
+    /// the tree whole. A build replaces every field this has touched, so a patch that stopped halfway leaves nothing
+    /// behind.
+    fn patch(&mut self, tree: &mut Tree, edits: &Edits, library: &Library, marks: (&Eyes, &Locks)) -> bool {
+        for &at in &edits.removed {
+            let key = placement_key(&self.seen[at].id);
+            let Some(group) = self.children.iter().find(|(_, under)| under.contains(&key)).map(|(group, _)| *group) else { return false };
+            if !tree.remove(key) {
+                return false;
+            }
+            let Some(under) = self.children.get_mut(&group) else { return false };
+            under.retain(|child| *child != key);
+            if under.is_empty() {
+                return false;
+            }
+            self.rows.remove(&key);
+        }
+        for &at in edits.removed.iter().rev() {
+            self.seen.remove(at);
+        }
+        for placed in edits.added {
+            let descriptor = descriptor_of(library, placed);
+            let layer = layer_in(descriptor.as_deref(), placed);
+            if !self.layers_seen.contains(layer) {
+                return false;
+            }
+            let kind = descriptor.as_deref().and_then(|d| d.kind.first()).map_or(OTHER_GROUP, String::as_str);
+            let group = if self.nested { layer_kind_key(layer, kind) } else { group_key(kind) };
+            if !self.children.contains_key(&group) {
+                return false;
+            }
+            let key = placement_key(&placed.id);
+            if !tree.insert(Some(group), TreeNode::new(key, piece_label(placed, layer, marks))) {
+                return false;
+            }
+            self.children.entry(group).or_default().push(key);
+            self.rows.insert(key, placed.id.clone());
+            self.seen.push(Seen::of(placed));
+        }
+        for placed in &edits.relabel {
+            let layer = layer_in(descriptor_of(library, placed).as_deref(), placed);
+            tree.relabel(placement_key(&placed.id), piece_label(placed, layer, marks));
+        }
+        self.marks_seen = (marks.0.clone(), marks.1.clone());
+        true
     }
-    for placed in &map.placements {
-        hash = fold(hash, b"\x1f");
-        hash = fold(hash, placed.id.as_bytes());
-        hash = fold(hash, b"\x1e");
-        hash = fold(hash, placed.descriptor.as_bytes());
-        // **The layer and the kind the row is drawn under** (UI-51, #237): both are facts about the descriptor, so a mount
-        // or a kind edited in the library, or a piece moved onto a table, is a rebuild. They are the static names the
-        // tree groups by, so nothing is allocated; `\x1c` and `\x1b` are bytes the other fields never carry, so the
-        // fields cannot be read into one another.
-        let descriptor = descriptor_of(library, placed);
-        hash = fold(hash, b"\x1c");
-        hash = fold(hash, layer_in(descriptor.as_deref(), placed).as_bytes());
-        hash = fold(hash, b"\x1b");
-        hash = fold(hash, descriptor.as_deref().and_then(|d| d.kind.first()).map_or(OTHER_GROUP, String::as_str).as_bytes());
-    }
-    // **The map's own stamps**, which are rows of the tree too.
-    for stamped in &map.stamps {
-        hash = fold(hash, b"\x1d");
-        hash = fold(hash, stamped.id.as_bytes());
-        hash = fold(hash, stamped.of.as_bytes());
-    }
-    // **The notes' generation**, because the notes view marks itself changed every frame and its own count of
-    // replacements is what says they moved.
-    hash = fold(hash, &notes.to_le_bytes());
-    // **Each side file's identity**, so a write to `people/` or `scripts/` is a rebuild even though the map did not
-    // move. The path is folded too, so opening another map is a different fingerprint whatever its stats are.
-    for FileStat { path, modified, len } in files {
-        hash = fold(hash, b"\x19");
-        hash = fold(hash, path.as_bytes());
-        hash = fold(hash, &modified.unwrap_or(0).to_le_bytes());
-        hash = fold(hash, &len.unwrap_or(0).to_le_bytes());
-    }
-    hash
 }
 
 /// **A side file as cheaply as it can be told apart**: its path, and its modification time and length (both `None`
@@ -677,7 +833,45 @@ fn first_words(text: &str, chars: usize) -> String {
     out
 }
 
-/// **The tree is rebuilt when the map or the search moved**, and the groups a person closed stay closed.
+impl Outliner {
+    /// **Build the tree whole from the map** and remember what it was built from, so the next change can be read against it.
+    #[allow(clippy::too_many_arguments)]
+    fn build_whole(
+        &mut self,
+        tree: &mut Tree,
+        open: &OpenMap,
+        project: &Project,
+        notes: Option<&crate::notes_view::NotesView>,
+        notes_now: u64,
+        files: Vec<FileStat>,
+        marks: (&Eyes, &Locks),
+    ) {
+        // **The two files are read here and nowhere earlier**: the plan has already said the tree must be built, so opening
+        // `people/` and `scripts/` is work that reaches the screen in this frame.
+        let contents = contents_of(open, project, notes);
+        let built = build_nodes(&open.map, &project.library, &contents, &self.query, marks, |key| tree.is_open(key));
+        tree.set_nodes(built.nodes);
+        self.rows = built.rows;
+        self.children = built.children;
+        self.layers_seen = built.layers_seen;
+        self.nested = built.nested;
+        self.seen = open.map.placements.iter().map(Seen::of).collect();
+        self.stamps_seen = open.map.stamps.iter().map(|s| (s.id.clone(), s.of.clone())).collect();
+        self.library_seen = library_seen_of(&project.library);
+        self.marks_seen = (marks.0.clone(), marks.1.clone());
+        self.built_notes = notes_now;
+        self.built_files = files;
+        self.built_for = self.query.clone();
+        self.built = true;
+    }
+}
+
+/// **The tree follows the map, the search and the marks**, and the groups a person closed stay closed.
+///
+/// **A change names the rows it touched** (UI-93, #259): [`Outliner::plan`] reads the map against what the tree was built
+/// from, and a piece that arrived, a piece that left or a row the eye or the locks relabelled is put into the tree one
+/// node at a time. A search, a change in a layer, a stamp, a side file, the notes or the library, and a change of more than
+/// a few rows, is built whole, as every change used to be.
 #[allow(clippy::too_many_arguments)]
 fn rebuild_the_tree(
     open: Option<Res<OpenMap>>,
@@ -694,7 +888,7 @@ fn rebuild_the_tree(
     // below is measured without a call of its own.
     let spent = crate::ui_budget::measure(&mut budget);
     let (Some(open), Some(project)) = (open, project) else { return };
-    // **The marks on the rows are part of what the tree is built from** (UI-51, #237): a hide or a lock is a rebuild.
+    // **The marks on the rows are part of what the tree is built from** (UI-51, #237): a hide or a lock is a relabelled row.
     let (eyes_changed, locks_changed) = (eyes.is_changed(), locks.is_changed());
     let (eyes, locks) = (&*eyes, &*locks);
     let (Ok(mut outliner), Ok(mut table)) = (outliners.single_mut(), tables.single_mut()) else { return };
@@ -703,12 +897,11 @@ fn rebuild_the_tree(
     // `metadata` call each is the whole cost of noticing, and they are taken **before** the gate below, because a
     // change in either is precisely a reason the gate has to open.
     let files = side_files(&project, &open.map);
-    // **A settled frame does no work that grows with the map.** The fingerprint reads every piece, so it is taken
-    // only when the map, the library, the notes, the search or one of those two files moved, or the tree has not
-    // been built yet: ten thousand pieces at sixty frames a second was a second of string building for a tree
-    // nobody touched.
+    // **A settled frame does no work that grows with the map.** The plan reads every piece, so it is made only when the
+    // map, the library, the notes, the search or one of those two files moved, or the tree has not been built yet: ten
+    // thousand pieces at sixty frames a second was a second of work for a tree nobody touched.
     let notes_now = notes.as_ref().map(|n| n.generation()).unwrap_or(0);
-    let moved = outliner.built_from == 0
+    let moved = !outliner.built
         || open.is_changed()
         || project.is_changed()
         || outliner.built_for != outliner.query
@@ -720,28 +913,36 @@ fn rebuild_the_tree(
         return;
     }
     outliner.looks += 1;
-    let now = fingerprint(&open.map, &project.library, notes_now, &files, &outliner.query, (eyes, locks));
-    if outliner.built_from == now && outliner.built_notes == notes_now {
-        let query = outliner.query.clone();
-        outliner.built_for = query;
+    let now = Now {
+        map: &open.map,
+        library: &project.library,
+        library_moved: project.is_changed(),
+        notes: notes_now,
+        files: &files,
+        marks: (eyes, locks),
+    };
+    let edits = match outliner.plan(&now) {
+        Plan::Nothing => {
+            // A mark on a piece that is not on the map moves no row, but it is what the next change is read against.
+            if outliner.marks_seen.0 != *eyes || outliner.marks_seen.1 != *locks {
+                outliner.marks_seen = (eyes.clone(), locks.clone());
+            }
+            return;
+        }
+        Plan::Patch(edits) => Some(edits),
+        Plan::Whole => None,
+    };
+    // **From here the tree changes**, which the budget reports apart from a settled frame.
+    let _rebuild = spent.rebuilding();
+    let Some(tree) = table.source_mut::<Tree>() else { return };
+    if let Some(edits) = &edits
+        && outliner.patch(tree, edits, &project.library, (eyes, locks))
+    {
+        outliner.rebuilds += 1;
+        outliner.patches += 1;
         return;
     }
-    // **From here it is a rebuild**, which the budget reports apart from a settled frame.
-    let _rebuild = spent.rebuilding();
-    // **The two files are read here and nowhere earlier**: the cheap fingerprint has already said a rebuild is due,
-    // so opening `people/` and `scripts/` is work that reaches the screen in this frame.
-    let contents = contents_of(&open, &project, notes.as_deref());
-    let Some(tree) = table.source_mut::<Tree>() else { return };
-    let (nodes, rows, children) =
-        nodes_for(&open.map, &project.library, &contents, &outliner.query, (eyes, locks), |key| tree.is_open(key));
-    tree.set_nodes(nodes);
-    outliner.rows = rows;
-    outliner.children = children;
-    outliner.built_from = now;
-    outliner.built_notes = notes_now;
-    outliner.built_files = files;
-    let query = outliner.query.clone();
-    outliner.built_for = query;
+    outliner.build_whole(tree, &open, &project, notes.as_deref(), notes_now, files, (eyes, locks));
     outliner.rebuilds += 1;
 }
 
