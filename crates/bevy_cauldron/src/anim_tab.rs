@@ -796,7 +796,7 @@ fn keep_selection_visible(filters: Res<crate::filter::Filters>, mut bench: ResMu
 
 impl BenchState {
     /// **The bench's list and cursor as a value**, which is what `rig_walk` moves (E-002, #129 slice 24).
-    pub fn cursor(&self) -> crate::ops_view::RigCursor {
+    pub(crate) fn cursor(&self) -> crate::ops_view::RigCursor {
         crate::ops_view::RigCursor {
             names: self.names().into_iter().map(str::to_owned).collect(),
             selected: self.selected,
@@ -806,12 +806,12 @@ impl BenchState {
 
     /// **Whether the bench is already where an operation answered.** Compared first by the caller, because a write through
     /// a `ResMut` marks the bench changed and every system gated on a change redoes its work for a call that moved nothing.
-    pub fn is_at(&self, cursor: &crate::ops_view::RigCursor) -> bool {
+    pub(crate) fn is_at(&self, cursor: &crate::ops_view::RigCursor) -> bool {
         self.selected == cursor.selected && (self.view == View::All) == cursor.all
     }
 
     /// **Put the bench where an operation answered**: the rig, and one rig's face rather than the summary.
-    pub fn set_cursor(&mut self, cursor: &crate::ops_view::RigCursor) {
+    pub(crate) fn set_cursor(&mut self, cursor: &crate::ops_view::RigCursor) {
         self.selected = cursor.selected;
         self.view = if cursor.all { View::All } else { View::One };
     }
@@ -830,29 +830,33 @@ fn move_selection(
     // helper the aim keys ride, so every held key in the editor has one rhythm. Shift is the long
     // stride, five at a time, the same bargain the tiles lists strike.
     let dt = time.delta_secs();
-    let by = if crate::keys::repeating(
-        &keyboard, *live, crate::keys::Action::NextRig, &mut repeat, dt,
-    ) {
-        "next"
-    } else if crate::keys::repeating(
-        &keyboard, *live, crate::keys::Action::PrevRig, &mut repeat, dt,
-    ) {
-        "prev"
-    } else {
-        return;
+    // **A press and a repeat are told apart here** (E-002, #129 review M2): the press writes the log's one line, a
+    // held key's repeats move the same cursor without one.
+    let down = crate::keys::repeating_fire(&keyboard, *live, crate::keys::Action::NextRig, &mut repeat, dt);
+    let up = crate::keys::repeating_fire(&keyboard, *live, crate::keys::Action::PrevRig, &mut repeat, dt);
+    let (by, when) = match (down, up) {
+        (Some(fire), _) => ("next", fire),
+        (None, Some(fire)) => ("prev", fire),
+        (None, None) => return,
     };
-    let Some(project) = project else { return };
     let rows = if crate::keys::SHIFT_KEYS.iter().any(|k| keyboard.pressed(*k)) { crate::ops::list_walk::STRIDE_ROWS } else { 1 };
     // **The key dispatches the operation an agent calls** (E-002, #129 slice 24), and the rule — the list is a ring, and a
     // stride is clamped below its length — lives there once. A refusal (no rigs) leaves the bench where it was, as the key did.
+    //
+    // **A door with no project still walks.** This returned early when the project was absent (E-002, #129 review), which
+    // was a regression: the rig list is the bench's own, read from `rigs.ron` when the bench was built, and the arrows
+    // worked here before the migration. `rig_walk` needs the project for nothing, so `None` travels and the walk happens.
     let mut ctx = crate::ops::Ctx {
-        project: Some(project.clone()),
+        project: project.as_deref().cloned(),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
         view: Some(crate::ops_view::View { rig: bench.cursor(), ..Default::default() }),
         ..crate::ops::Ctx::default()
     };
-    let _ = crate::ops::dispatch(&mut ctx, "rig_walk", &serde_json::json!({ "by": by, "rows": rows }));
+    let _ = match when {
+        crate::keys::Fire::Press => crate::ops::dispatch(&mut ctx, "rig_walk", &serde_json::json!({ "by": by, "rows": rows })),
+        crate::keys::Fire::Repeat => crate::ops::dispatch_repeat(&mut ctx, "rig_walk", &serde_json::json!({ "by": by, "rows": rows })),
+    };
     if let Some(view) = ctx.view.take()
         && !bench.is_at(&view.rig)
     {
@@ -864,12 +868,16 @@ fn on_rig_click(
     activate: On<Activate>,
     rows: Query<&RigRow>,
     mut bench: ResMut<BenchState>,
+    project: Option<Res<crate::project::Project>>,
 ) {
-    let Ok(row) = rows.get(activate.entity) else {
+    // **`Option`, because this is a GLOBAL observer** — it fires for any `Activate` anywhere in the application, and in
+    // Bevy 0.19 a missing resource panics at param validation rather than skipping.
+    let (Ok(row), Some(project)) = (rows.get(activate.entity), project) else {
         return;
     };
-    bench.selected = row.0;
-    bench.view = View::One;
+    // **Through the operation the arrows and an agent use** (E-002, #129 review): a click that wrote `selected` itself was
+    // a second path to the same state, and `rig_walk` is where "landing on a rig is looking at one" is stated.
+    walk_through_operation(&project, &mut bench, &serde_json::json!({ "to": row.0 }));
 }
 
 /// A summary row click: land on the rig it names.
@@ -877,12 +885,35 @@ fn on_jump_click(
     activate: On<Activate>,
     rows: Query<&JumpRow>,
     mut bench: ResMut<BenchState>,
+    project: Option<Res<crate::project::Project>>,
 ) {
-    let Ok(row) = rows.get(activate.entity) else {
+    // **`Option`, because this is a GLOBAL observer**, as [`on_rig_click`] is.
+    let (Ok(row), Some(project)) = (rows.get(activate.entity), project) else {
         return;
     };
-    bench.selected = row.0;
-    bench.view = View::One;
+    // **Through the operation**, as [`on_rig_click`] is: the summary's rows land on the same cursor.
+    walk_through_operation(&project, &mut bench, &serde_json::json!({ "to": row.0 }));
+}
+
+/// **Dispatch `rig_walk` with the bench's cursor in `Ctx::view`, and write the answer back only when it moved.**
+///
+/// The arrows, a rig row's click and a summary row's click all come through here (E-002, #129 slice 24), so the rule
+/// that landing on a rig is looking at one is stated once, in the operation. Compared before writing, because a write
+/// through a `ResMut` marks the bench changed and every system gated on that rebuilds.
+fn walk_through_operation(project: &crate::project::Project, bench: &mut BenchState, params: &serde_json::Value) {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { rig: bench.cursor(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let _ = crate::ops::dispatch(&mut ctx, "rig_walk", params);
+    if let Some(view) = ctx.view.take()
+        && !bench.is_at(&view.rig)
+    {
+        bench.set_cursor(&view.rig);
+    }
 }
 
 /// C, in the Anim context: measure every rig through the one queue and show the summary. The audit

@@ -3946,13 +3946,41 @@ pub fn repeating(
     repeat: &mut Repeat,
     dt: f32,
 ) -> bool {
-    countdown(
+    repeating_fire(keys, live, action, repeat, dt).is_some()
+}
+
+/// **Whether a held key fired, and whether this was the press or one of its repeats.**
+///
+/// [`repeating`] answers "did it fire" for every list walk. The three list walks that go through an operation need the
+/// second half as well, and for a reason the log cares about: a press is one change a person made, and the twenty steps
+/// before they let go are the same change continuing. `ops::dispatch_repeat` writes no log line, so which of the two this
+/// frame is decides whether the project's log grows — see [`crate::ops::dispatch_repeat`].
+pub fn repeating_fire(
+    keys: &ButtonInput<KeyCode>,
+    live: Live,
+    action: Action,
+    repeat: &mut Repeat,
+    dt: f32,
+) -> Option<Fire> {
+    let fired = countdown(
         repeat,
         RepeatId::Action(action),
         pressed(keys, live, action),
         just_pressed(keys, live, action),
         dt,
-    )
+    );
+    // **`countdown` is the only thing that knows**, and it already distinguishes the two: a fresh press is the branch
+    // that starts the countdown, every other `true` is a repeat off it.
+    fired.then(|| if just_pressed(keys, live, action) { Fire::Press } else { Fire::Repeat })
+}
+
+/// **One fire of a held key**: the press, or a repeat off it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fire {
+    /// The key went down this frame: one change, logged as one.
+    Press,
+    /// The key is still down and its countdown came round: the same change again, not a second line in the log.
+    Repeat,
 }
 
 /// **The same cadence, for a screen with no key census.**

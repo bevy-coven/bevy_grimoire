@@ -1392,9 +1392,15 @@ pub fn build_keys(
         // One `repeating` call per direction: each key owns its own countdown and has to ramp on
         // its own hold (`keys::Repeat` is a `Vec<Countdown>` keyed by id). It was `just_pressed`
         // and `±1` while every other list in the editor repeats and strides (N8).
-        let down = crate::keys::repeating(&keyboard, *live, Action::TileNext, &mut repeat, dt);
-        let up = crate::keys::repeating(&keyboard, *live, Action::TilePrev, &mut repeat, dt);
-        if down || up {
+        // **A press and a repeat are told apart here** (E-002, #129 review M2): a press is the change the log records,
+        // and a held arrow's repeats are that same change continuing.
+        let down = crate::keys::repeating_fire(&keyboard, *live, Action::TileNext, &mut repeat, dt);
+        let up = crate::keys::repeating_fire(&keyboard, *live, Action::TilePrev, &mut repeat, dt);
+        if let Some((by, when)) = match (down, up) {
+            (Some(fire), _) => Some(("next", fire)),
+            (None, Some(fire)) => Some(("prev", fire)),
+            (None, None) => None,
+        } {
             // **The key dispatches the operation an agent calls** (E-002, #129 slice 24), and the rule — an author holding an
             // arrow at the end of a list stops there rather than wrapping to the other end of it — lives there once.
             let mut ctx = crate::ops::Ctx {
@@ -1407,8 +1413,12 @@ pub fn build_keys(
                 }),
                 ..crate::ops::Ctx::default()
             };
-            let by = if down { "next" } else { "prev" };
-            let _ = crate::ops::dispatch(&mut ctx, "tile_page_walk", &serde_json::json!({ "by": by, "rows": rows }));
+            let _ = match when {
+                crate::keys::Fire::Press => crate::ops::dispatch(&mut ctx, "tile_page_walk", &serde_json::json!({ "by": by, "rows": rows })),
+                crate::keys::Fire::Repeat => {
+                    crate::ops::dispatch_repeat(&mut ctx, "tile_page_walk", &serde_json::json!({ "by": by, "rows": rows }))
+                }
+            };
             if let Some(landed) = ctx.view.take().and_then(|v| v.tile_page)
                 && build.browsing != Some(landed.row)
             {

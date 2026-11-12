@@ -450,7 +450,7 @@ fn select_group(state: &mut ComposeState, ix: usize) {
 
 impl ComposeState {
     /// **The tab's cursors as a value**, which is what an operation moves (E-002, #129 slice 23).
-    pub fn cursor(&self) -> crate::ops_view::ComposeCursor {
+    pub(crate) fn cursor(&self) -> crate::ops_view::ComposeCursor {
         crate::ops_view::ComposeCursor {
             selected: self.selected,
             member: self.member,
@@ -460,7 +460,7 @@ impl ComposeState {
 
     /// **Put the cursors where an operation answered.** The caller compares first, because a write through a `ResMut`
     /// marks the resource changed and `restage_group` and `rebuild` redo their work for a call that moved nothing.
-    pub fn set_cursor(&mut self, cursor: crate::ops_view::ComposeCursor) {
+    pub(crate) fn set_cursor(&mut self, cursor: crate::ops_view::ComposeCursor) {
         self.selected = cursor.selected;
         self.member = cursor.member;
         self.focus = if cursor.members_focused { Pane::Members } else { Pane::Groups };
@@ -475,6 +475,7 @@ fn dispatch_cursor(
     state: &mut ResMut<ComposeState>,
     operation: &str,
     params: &serde_json::Value,
+    when: keys::Fire,
 ) -> Result<String, String> {
     let mut ctx = crate::ops::Ctx {
         project: Some(project.clone()),
@@ -483,7 +484,10 @@ fn dispatch_cursor(
         view: Some(crate::ops_view::View { compose: state.cursor(), ..Default::default() }),
         ..crate::ops::Ctx::default()
     };
-    let outcome = crate::ops::dispatch(&mut ctx, operation, params);
+    let outcome = match when {
+        keys::Fire::Press => crate::ops::dispatch(&mut ctx, operation, params),
+        keys::Fire::Repeat => crate::ops::dispatch_repeat(&mut ctx, operation, params),
+    };
     if let Some(view) = ctx.view.take()
         && state.cursor() != view.compose
     {
@@ -817,7 +821,7 @@ fn cycle_focus(
         return;
     };
     // **The key dispatches the operation an agent calls** (E-002, #129 slice 23); its sentence is the note.
-    match dispatch_cursor(&project, &mut state, "compose_focus", &serde_json::json!({ "by": by })) {
+    match dispatch_cursor(&project, &mut state, "compose_focus", &serde_json::json!({ "by": by }), keys::Fire::Press) {
         Ok(said) => state.status.note(said),
         Err(why) => state.status.problem(why),
     }
@@ -858,19 +862,19 @@ fn walk(
     // down every composition (N9). One `repeating` call per direction: each key owns its own
     // countdown in `keys::Repeat` and has to ramp on its own hold.
     let dt = time.delta_secs();
-    let down = keys::repeating(&input, *keys, Action::ComposeNext, &mut repeat, dt);
-    let up = keys::repeating(&input, *keys, Action::ComposePrev, &mut repeat, dt);
-    let by = if down {
-        "next"
-    } else if up {
-        "prev"
-    } else {
-        return;
+    // **A press and a repeat are told apart here** (E-002, #129 review M2): the press is the change the log records,
+    // and a held key's repeats are that same change continuing, so they change the cursor without a line each.
+    let down = keys::repeating_fire(&input, *keys, Action::ComposeNext, &mut repeat, dt);
+    let up = keys::repeating_fire(&input, *keys, Action::ComposePrev, &mut repeat, dt);
+    let (by, when) = match (down, up) {
+        (Some(fire), _) => ("next", fire),
+        (None, Some(fire)) => ("prev", fire),
+        (None, None) => return,
     };
     // **The key dispatches the operation an agent calls** (E-002, #129 slice 23), and the rules — clamp at the ends,
     // choosing a group puts the member cursor back — live there once.
     let focus = state.focus;
-    if let Err(why) = dispatch_cursor(&project, &mut state, "compose_walk", &serde_json::json!({ "by": by, "rows": rows }))
+    if let Err(why) = dispatch_cursor(&project, &mut state, "compose_walk", &serde_json::json!({ "by": by, "rows": rows }), when)
         // **Guidance, not silence.** An empty MEMBERS list can hold the focus (see `cycle_focus`), and an arrow that
         // answers nothing at all is the defect. The groups list needs nothing here: `rebuild` states *that* empty case in
         // prose that stays on screen, which is the right lifetime for a fact about the file rather than about a keypress.
@@ -2319,7 +2323,7 @@ fn step_carousel(
     };
     // **The key dispatches the operation an agent calls** (E-002, #129 slice 23): the ring, and the member cursor going
     // back to the first member, live there once. A refusal (no compositions) leaves the cursors where they were, as the key did.
-    let _ = dispatch_cursor(&project, &mut state, "compose_carousel_step", &serde_json::json!({ "by": by }));
+    let _ = dispatch_cursor(&project, &mut state, "compose_carousel_step", &serde_json::json!({ "by": by }), keys::Fire::Press);
 }
 
 /// **Click a miniature to bring it to the middle** — the strip lies on the ground plane, so this is
@@ -2644,10 +2648,19 @@ fn on_comp_row_click(
         }
         return;
     }
-    select_group(&mut state, row.0);
-    // The click hands the arrows to the list it landed in. `select_group` deliberately leaves focus
-    // alone, because `step_carousel` has to move the group cursor without disturbing it.
-    state.focus = Pane::Groups;
+    // **The click goes through the operations the arrows and an agent use** (E-002, #129 review): `compose_carousel_step`
+    // with `to` makes the clicked row focal and resets the member cursor — the rule `select_group` states — and
+    // `compose_focus` with `list` hands the arrows to the list the click landed in. Writing the two fields here was a
+    // second path to the same state, and a click and a key that disagree are what E-002 exists to stop.
+    let Some(project) = project.as_deref() else {
+        return;
+    };
+    let focal = dispatch_cursor(project, &mut state, "compose_carousel_step", &serde_json::json!({ "to": row.0 }), keys::Fire::Press);
+    if let Err(why) = focal.and_then(|_| {
+        dispatch_cursor(project, &mut state, "compose_focus", &serde_json::json!({ "list": "compositions" }), keys::Fire::Press)
+    }) {
+        state.status.problem(why);
+    }
 }
 
 /// A click puts the seating cursor on a member and hands the arrows to the member list.
@@ -2655,19 +2668,28 @@ fn on_member_row_click(
     activate: On<bevy::ui_widgets::Activate>,
     rows: Query<&MemberRow>,
     state: Option<ResMut<ComposeState>>,
+    project: Option<Res<Project>>,
 ) {
     // **`Option`, because this is a GLOBAL observer** — it fires for any `Activate` anywhere in
     // the application, and in Bevy 0.19 a missing resource panics at param validation rather
     // than skipping. See [`on_cell_verb`] for the whole argument; the ratchet is
     // `every_resource_says_what_a_door_does_to_it.rs`.
-    let Some(mut state) = state else {
+    // **`Option` on the project too**: the operations carry one, and a door with none leaves the click alone rather than
+    // panicking — the same rule the state follows, for the same reason.
+    let (Some(mut state), Some(project)) = (state, project) else {
         return;
     };
     let Ok(row) = rows.get(activate.entity) else {
         return;
     };
-    state.member = row.0;
-    state.focus = Pane::Members;
+    // **Through the operations**, for the reason the group row click is (E-002, #129 review): land the member cursor on
+    // the row the click landed on, then hand the arrows to the members list.
+    let walked = dispatch_cursor(&project, &mut state, "compose_walk", &serde_json::json!({ "to": row.0 }), keys::Fire::Press);
+    if let Err(why) = walked.and_then(|_| {
+        dispatch_cursor(&project, &mut state, "compose_focus", &serde_json::json!({ "list": "members" }), keys::Fire::Press)
+    }) {
+        state.status.problem(why);
+    }
 }
 
 /// The body's one font size. Named because [`spawn_line`] derives an advance from it.

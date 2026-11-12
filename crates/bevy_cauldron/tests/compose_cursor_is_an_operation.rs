@@ -166,6 +166,32 @@ fn the_carousel_keys_and_an_agent_step_one_ring() {
     assert_eq!(refused["outcome"], "refused", "{refused}");
 }
 
+/// **A press writes one line; holding the key writes no more, and the cursor still moves every repeat** (E-002, #129
+/// review M2). The walks drive `keys::repeating` at `REPEAT_SECS`, so ten seconds on `↓` used to be about a hundred
+/// `compose_walk` lines in the project's own log, and `oplog` re-parses the whole file for every Cmd+Z. `oplog.jsonl`
+/// records the changes a person and an agent made; "I held the key down" is one act.
+#[test]
+fn a_held_arrow_writes_one_line_and_still_walks_every_repeat() {
+    let mut app = editor("held");
+    // **Held for a little over three repeat intervals**: the press, then three or four repeats.
+    let frames = (bevy_cauldron::keys::REPEAT_SECS * 3.5 / (1.0 / 60.0)).ceil() as usize;
+    send(&mut app, KeyCode::ArrowDown, ButtonState::Pressed);
+    for _ in 0..frames {
+        app.update();
+    }
+    let walked = cursor(&app).0;
+    send(&mut app, KeyCode::ArrowDown, ButtonState::Released);
+    app.update();
+    assert!(walked > 1, "the hold walked the cursor more than the press alone: it reached {walked}");
+    let lines = logged(&app, "compose_walk");
+    assert_eq!(
+        lines.len(),
+        1,
+        "one press and {walked} steps, and the log holds the press alone: {lines:?}"
+    );
+    assert_eq!(lines[0].0, "human", "{:?}", lines[0]);
+}
+
 /// **The six actions name the operations they dispatch**, which is what takes them off the allowlist.
 #[test]
 fn the_six_actions_name_the_operations_they_dispatch() {

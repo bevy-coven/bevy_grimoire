@@ -3737,9 +3737,20 @@ impl Axis {
 #[derive(Component, Clone, Copy)]
 pub struct CandidateRow(pub usize);
 
-/// A pack heading in the candidate list. Clicking it folds the pack away.
+/// **The pack a heading band in the candidate list stands for**, by its folder. Clicking it folds the pack away.
+///
+/// Public so a test can trigger the heading's own `Activate`: the click is a front end of `pack_fold` and has to be
+/// exercised as one (E-002, #129 review). The field stays closed, so nothing outside can rename a heading.
 #[derive(Component, Clone)]
-struct PackHeader(String);
+pub struct PackHeader(String);
+
+impl PackHeader {
+    /// **The pack this heading stands for.** A reader, for the test that triggers a heading's own `Activate`: the
+    /// field stays closed, so nothing outside can rename a heading.
+    pub fn pack(&self) -> &str {
+        &self.0
+    }
+}
 
 /// One row for a tile already in the library, carrying its id.
 #[derive(Component, Clone)]
@@ -4361,25 +4372,27 @@ fn focus_filter(
         };
         // **The Files workspace has no filter box at all** (GD-11, #373): the key takes nothing there, rather than focusing a
         // box of the Map's that is not on screen.
-        if *mode != Mode::Files
-            && let Some(project) = project.as_deref()
-        {
-            focus_through_operation(project, &mut filters, pane);
+        if *mode != Mode::Files {
+            focus_through_operation(project.as_deref(), &mut filters, pane);
         }
     }
-    if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusTagFilter)
-        && let Some(project) = project.as_deref()
-    {
-        focus_through_operation(project, &mut filters, crate::filter::Pane::Tags);
+    if crate::keys::just_pressed(&keyboard, *live, crate::keys::Action::FocusTagFilter) {
+        focus_through_operation(project.as_deref(), &mut filters, crate::filter::Pane::Tags);
     }
 }
 
 /// **Put the keyboard in a filter box through the operation an agent calls** (E-002, #129 slice 25), and take focus only
 /// when the answer names a box other than the one that has it: a write through a `ResMut` marks the filters changed.
 /// `take_focus` itself starts the search fresh, as a click on the box does.
-fn focus_through_operation(project: &Project, filters: &mut ResMut<crate::filter::Filters>, pane: crate::filter::Pane) {
+fn focus_through_operation(
+    project: Option<&Project>,
+    filters: &mut ResMut<crate::filter::Filters>,
+    pane: crate::filter::Pane,
+) {
+    // **A door with no project still takes the box.** `filter_focus` reads the view and writes the view; the project is
+    // travel, not a requirement (E-002, #129 review), and this took a `&Project` before only because its callers had one.
     let mut ctx = crate::ops::Ctx {
-        project: Some(project.clone()),
+        project: project.cloned(),
         source: crate::ops::Source::Human,
         session: crate::ops::session_id(),
         view: Some(crate::ops_view::View { filter_pane: filters.focus_name(), ..Default::default() }),
@@ -4391,7 +4404,7 @@ fn focus_through_operation(project: &Project, filters: &mut ResMut<crate::filter
         &serde_json::json!({ "pane": crate::ops_view::pane_name(pane) }),
     );
     if let Some(view) = ctx.view.take()
-        && let Some(landed) = filters.wants_focus(view.filter_pane.as_deref())
+        && let Some(landed) = filters.box_to_clear(view.filter_pane.as_deref(), view.filter_fresh)
     {
         filters.take_focus(landed);
     }
@@ -4422,7 +4435,7 @@ fn fold_through_operation(project: &Project, state: &mut ResMut<ImportState>, pa
 
 impl ImportState {
     /// **The candidate list's folds as a value**, which is what `pack_fold` moves.
-    pub fn folds(&self) -> crate::ops_view::PackFold {
+    pub(crate) fn folds(&self) -> crate::ops_view::PackFold {
         crate::ops_view::PackFold {
             folded: self.folded_packs.iter().cloned().collect(),
             excluded_open: self.excluded_open,
@@ -4431,14 +4444,14 @@ impl ImportState {
 
     /// **Whether the list is already folded as an operation answered.** Compared first by the caller, because a write
     /// through a `ResMut` marks the state changed and every system gated on a change redraws for a call that moved nothing.
-    pub fn folds_are(&self, folds: &crate::ops_view::PackFold) -> bool {
+    pub(crate) fn folds_are(&self, folds: &crate::ops_view::PackFold) -> bool {
         self.excluded_open == folds.excluded_open
             && self.folded_packs.len() == folds.folded.len()
             && folds.folded.iter().all(|pack| self.folded_packs.iter().any(|p| p == pack))
     }
 
     /// **Fold the list as an operation answered.**
-    pub fn set_folds(&mut self, folds: &crate::ops_view::PackFold) {
+    pub(crate) fn set_folds(&mut self, folds: &crate::ops_view::PackFold) {
         self.folded_packs = folds.folded.iter().cloned().collect();
         self.excluded_open = folds.excluded_open;
     }

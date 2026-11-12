@@ -4,9 +4,9 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
-- **pack-fold-filter-focus-operations** `c9b16cfc2` Space on a candidate-list heading and the F and / filter keys are operations an agent calls too (pack_fold, filter_focus) *No clip: an operation behind existing keys, no new picture; proved by pack_fold_and_filter_focus_are_operations*
-- **rig-tile-walk-operations** `c9b16cfc2` The rig bench's and the Tiles page's up and down keys are operations an agent calls too (rig_walk, tile_page_walk) *No clip: an operation behind existing keys, no new picture; proved by rig_and_tile_walks_are_operations*
-- **compose-cursor-operations** `c9b16cfc2` The COMPOSE tab's arrow keys and O/P are operations an agent calls too (compose_walk, compose_focus, compose_carousel_step) *No clip: an operation behind existing keys, no new picture; proved by compose_cursor_is_an_operation*
+- **pack-fold-filter-focus-operations** `2f8a26d1` Space on a candidate-list heading and the F and / filter keys are operations an agent calls too (pack_fold, filter_focus) *No clip: an operation behind existing keys, no new picture; proved by pack_fold_and_filter_focus_are_operations*
+- **rig-tile-walk-operations** `2f8a26d1` The rig bench's and the Tiles page's up and down keys are operations an agent calls too (rig_walk, tile_page_walk) *No clip: an operation behind existing keys, no new picture; proved by rig_and_tile_walks_are_operations*
+- **compose-cursor-operations** `2f8a26d1` The COMPOSE tab's arrow keys and O/P are operations an agent calls too (compose_walk, compose_focus, compose_carousel_step) *No clip: an operation behind existing keys, no new picture; proved by compose_cursor_is_an_operation*
 - **nv-11-forest-list** `b25d4d5f9` NV-11: the World workspace lists a map's forest *For you: The World workspace now lists how many trees your map has and how many of each kind.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-water-list** `345402870` NV-11: the World workspace lists a map's water *For you: The World workspace now lists the springs, sinks and lakes placed on your map.* *No clip: visible, not yet recorded: fleet worker*
 - **nv-11-lights-list** `603092e0e` NV-11: the World workspace lists the map's lights in every build *For you: The World workspace now lists the light fixtures on your map, even in an editor built without the lights crate.* *No clip: visible, not yet recorded: fleet worker*

@@ -98,6 +98,12 @@ pub struct View {
     /// **Which filter box has the keyboard**, by the name `pane_name` gives it (E-002, #129 slice 25). `None` is no box.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter_pane: Option<String>,
+    /// **Whether this answer means the named box's search to start fresh** (E-002, #129 review M1). The clear travels
+    /// with the answer, so `filter_focus` on the box that already has the keyboard still clears it, as the key and a
+    /// click do — the operation's own sentence is "its search starts fresh", and a comparison against which box has
+    /// the keyboard cannot say that. Not serialised while false: most answers touch no box.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub filter_fresh: bool,
 }
 
 /// **Where the COMPOSE tab's cursors are**, as a value an operation can move (E-002, #129 slice 23).
@@ -346,9 +352,10 @@ mod tests {
             // Assumed owner exception (2026-11-12): the literal names the two fields #129 slice 24 adds (their defaults); the round trip is unchanged.
             rig: Default::default(),
             tile_page: None,
-            // Assumed owner exception (2026-11-12): the literal names the two fields #129 slice 25 adds (their defaults); the round trip is unchanged.
+            // Assumed owner exception (2026-11-12): the literal names the fields #129 slice 25 adds (their defaults); the round trip is unchanged.
             packs: Default::default(),
             filter_pane: None,
+            filter_fresh: false,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

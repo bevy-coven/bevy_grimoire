@@ -12,7 +12,7 @@ use bevy::window::{PrimaryWindow, Window};
 use bevy_cauldron::filter::{Filters, Pane};
 use bevy_cauldron::keys::{Action, MOD_KEYS, binding};
 use bevy_cauldron::project::Project;
-use bevy_cauldron::tiles::{ImportState, Mode};
+use bevy_cauldron::tiles::{ImportState, Mode, PackHeader};
 use serde_json::{Value, json};
 
 use crate::fixtures;
@@ -175,6 +175,66 @@ fn the_filter_keys_and_an_agent_take_the_keyboard_into_a_box() {
     let refused = apply(&mut app, "filter_focus", json!({"pane": "nowhere"}));
     assert_eq!(refused["outcome"], "refused", "a box that is not one is refused: {refused}");
     assert_eq!(focus(&app), Some(Pane::Palette), "and nothing moved");
+}
+
+/// **A call to `filter_focus` naming the box that already has the keyboard still starts its search fresh** (E-002, #129
+/// review M1). The schema promises `Its search starts fresh`, and the guide prints the same sentence, so the clear has to
+/// be the operation's answer rather than a comparison against which box has the keyboard — that comparison is why an
+/// agent naming the focused box used to answer `applied` and clear nothing.
+#[test]
+fn a_call_names_the_box_already_focused_and_the_search_starts_fresh() {
+    let mut app = editor("filter-again", Mode::Meshes);
+    // **A box with the keyboard and half a search typed into it**, as a person leaves one.
+    {
+        let mut filters = app.world_mut().resource_mut::<Filters>();
+        filters.take_focus(Pane::Candidates);
+        filters.push_for_test(Pane::Candidates, 'w');
+        filters.push_for_test(Pane::Candidates, 'a');
+    }
+    app.update();
+    assert_eq!(focus(&app), Some(Pane::Candidates), "setup: the candidates box has the keyboard");
+    assert_eq!(app.world().resource::<Filters>().text(Pane::Candidates), "wa", "setup: and two characters");
+
+    let said = apply(&mut app, "filter_focus", json!({"pane": "candidates"}));
+    assert_eq!(said["outcome"], "applied", "{said}");
+    assert_eq!(focus(&app), Some(Pane::Candidates), "the box keeps the keyboard");
+    assert_eq!(
+        app.world().resource::<Filters>().text(Pane::Candidates),
+        "",
+        "and its search started fresh: a call naming the focused box is not a no-op"
+    );
+}
+
+/// **A click on a pack heading folds it away through the operation** (E-002, #129 review): the heading has its own
+/// `Activate`, and it dispatches `pack_fold` rather than writing `folded_packs` itself, so a click, `Space` and an
+/// agent's call are one path with one log line each.
+#[test]
+fn a_click_on_a_pack_heading_folds_it_through_the_operation() {
+    let mut app = editor("heading-click", Mode::Meshes);
+    {
+        let mut s = app.world_mut().resource_mut::<ImportState>();
+        s.folded_packs.remove("bbb");
+    }
+    app.update();
+    assert!(!state(&app).folded_packs.contains("bbb"), "setup: bbb is open");
+
+    let heading = {
+        let mut q = app.world_mut().query::<(Entity, &PackHeader)>();
+        q.iter(app.world())
+            .find(|(_, h)| h.pack() == "bbb")
+            .map(|(e, _)| e)
+            .unwrap_or_else(|| panic!("a heading is drawn for bbb"))
+    };
+    app.world_mut().commands().trigger(bevy_gooey::Activate { entity: heading });
+    for _ in 0..4 {
+        app.update();
+    }
+    assert!(state(&app).folded_packs.contains("bbb"), "the click folded the pack");
+
+    let lines = logged(&app, "pack_fold");
+    assert_eq!(lines.len(), 1, "one click, one logged operation: {lines:?}");
+    assert_eq!(lines[0].0, "human", "a click is the person's own line: {:?}", lines[0]);
+    assert_eq!(lines[0].1["params"], json!({"pack": "bbb"}), "{:?}", lines[0]);
 }
 
 /// **The three actions name the operations they dispatch**, which is what takes them off the allowlist.

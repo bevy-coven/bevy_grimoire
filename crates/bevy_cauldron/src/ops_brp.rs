@@ -780,8 +780,11 @@ impl Gates<'_, '_> {
         {
             import.set_folds(&view.packs);
         }
+        // **An answer that names a box starts that box's search fresh, wherever the keyboard was before** (E-002, #129
+        // review M1). This compared the name against the box that had the keyboard, so `filter_focus` aimed at the box
+        // already focused answered `applied` and cleared nothing — against its own sentence and the guide's.
         if let Some(filters) = filters
-            && let Some(pane) = filters.wants_focus(view.filter_pane.as_deref())
+            && let Some(pane) = filters.box_to_clear(view.filter_pane.as_deref(), view.filter_fresh)
         {
             filters.take_focus(pane);
         }
