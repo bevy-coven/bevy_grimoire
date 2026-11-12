@@ -844,7 +844,7 @@ fn bodies<'a>(map: &'a Map, library: &'a Library) -> Option<Vec<Option<Body<'a>>
 ///   piece shorter than the floor it stands on cannot be. Vertical is read because a doorway is the
 ///   one case where it can be: the hole's floor and height both come from the map and the descriptor.
 /// - **An opening whose `clear` is `None`.** "Nobody has measured it" is not "zero wide" — the shipped
-///   `furniture_kenney.ron` door is exactly this row, and flagging every crate near it is the false
+///   `furniture_kenney.yaml` door is exactly this row, and flagging every crate near it is the false
 ///   positive that teaches an author to ignore the field.
 /// - **A map that does not resolve.** Bases come from [`resolve_y`], which is the same answer the
 ///   spawner uses; when it errs the map has a defect that other code reports by name, and inventing

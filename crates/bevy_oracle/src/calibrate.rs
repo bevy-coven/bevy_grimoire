@@ -21,7 +21,7 @@ pub struct Calibration {
     pub date: String,
     /// **The counts the agreement is made of** (#112). `agreement` alone is a number beside nothing:
     /// the record is what a test and a gate read, and two typed numbers that disagree are
-    /// indistinguishable from a measurement. Defaulted so a hand-written `checks.ron` that predates
+    /// indistinguishable from a measurement. Defaulted so a hand-written `checks.yaml` that predates
     /// this field still loads; a calibration run always fills both.
     #[serde(default)]
     pub correct: usize,

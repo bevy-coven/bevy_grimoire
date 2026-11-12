@@ -61,7 +61,7 @@ pub fn write_file(root: &Path) -> Result<PathBuf, String> {
 
 /// **Write the template into `root` and grant it**, which is one act: a person who made the project has
 /// written this text, so it is allowed. `store` is the **override**: `None` is the person's own
-/// `<data_dir>/Grimoire/trusted.ron` ([`crate::trusted::store_path`]), which is what a real editor has, and a
+/// `<data_dir>/Grimoire/trusted.yaml` ([`crate::trusted::store_path`]), which is what a real editor has, and a
 /// test names a file of its own. A store that cannot be read or written is an `Err` naming it, never a
 /// silent grant-less guide.
 pub fn write(root: &Path, store_root: Option<&crate::trusted::StoreRoot>, store: Option<&Path>) -> Result<PathBuf, String> {

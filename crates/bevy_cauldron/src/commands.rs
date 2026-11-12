@@ -126,7 +126,7 @@ pub fn by_id(id: &str) -> Option<Command> {
 
 /// **The command ids that went away with the doors** (#379), as a saved keymap spells them.
 ///
-/// A person's `settings.ron` may still rebind one, and a file is not refused for naming a command that
+/// A person's `settings.yaml` may still rebind one, and a file is not refused for naming a command that
 /// no longer exists: `settings` reads past these, drops the entry, and binds nothing. Every other
 /// unknown id is still refused, so a typo is caught — only an id that *was* a command is forgiven. An
 /// id joins this list in the commit that removes its action, and never leaves it.

@@ -719,7 +719,7 @@ pub struct SubCell {
 pub struct Placement {
     /// Room-type tokens this piece suits — *a toilet suits a bathroom*. Cross-validated against the
     /// project's room types, the way `mycelia::validate_damp_coverage` already checks its own table
-    /// against `config.ron:dungeon.room_types`.
+    /// against `config.yaml:dungeon.room_types`.
     pub rooms: Vec<String>,
     /// Pieces sharing a token are drawn together (a toilet and a basin), as a soft relation rather
     /// than a hard constraint — a room that cannot fit both should still get one.
@@ -1099,7 +1099,7 @@ pub enum Mount {
     /// mesh's own height, since jambs and a lintel sit inside its bounding box.
     ///
     /// `None` means **nobody has measured it**, which is the honest state of the shipped
-    /// `furniture_kenney.ron` door: it carries `role: Anchor(host: Opening)` and no opening size,
+    /// `furniture_kenney.yaml` door: it carries `role: Anchor(host: Opening)` and no opening size,
     /// because the manifest schema has no field for one. The Site kit does record it
     /// (`DoorPiece::opening`, measured off the POSITION accessors), so a converted kit piece carries
     /// `Some`. Making this required would have forced the converter to invent a number for a row that

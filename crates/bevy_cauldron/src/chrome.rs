@@ -61,7 +61,7 @@ use crate::keys::{self};
 ///
 /// This module used to declare 28 `pub const … : Color` — a table the 2026-08-17 audit had already
 /// caught drifting against itself twice. They are gone: every colour the chrome paints is a field
-/// here, and every field is read from **the editor's own skin** (`src/editor_skin.ron`, through
+/// here, and every field is read from **the editor's own skin** (`src/editor_skin.yaml`, through
 /// [`crate::ui::editor_skin`]), which is the same data `bevy_gooey` restyles the widgets from and
 /// the same data `GooeySkin::problems()` measures. One palette, one file, one check.
 ///
@@ -156,7 +156,7 @@ const BAR_STEP_BACK: f32 = 0.78;
 const UNCHECKED_LIFT: f32 = 1.45;
 
 /// The ladder's step for a selected row: `background, surface, header, raised, slot, hover,
-/// selected, edge`, lowest first (`src/editor_skin.ron`).
+/// selected, edge`, lowest first (`src/editor_skin.yaml`).
 const ROW_SELECTED_STEP: u8 = 6;
 /// The ladder's step for an inspector slot.
 const SLOT_STEP: u8 = 4;
@@ -211,7 +211,7 @@ impl Ink {
         }
     }
 
-    /// **The editor's own ink**, from `src/editor_skin.ron` — what every painter in this crate uses.
+    /// **The editor's own ink**, from `src/editor_skin.yaml` — what every painter in this crate uses.
     ///
     /// Built once and handed out by [`ink`]: the file is compiled in, so the value cannot change
     /// under a running editor, and parsing it per call site would be work with no answer at the end
@@ -326,7 +326,7 @@ pub fn grid_ink(skin: Option<&bevy_gooey::GooeySkin>) -> Color {
 
 /// **The skin tone a lattice's colour is kept under.** One name for the two places it is read — the
 /// lookup in [`grid_ink`] and the `Ink::grid_line` field's own read of it in `Ink::of` — so a rename in
-/// `src/editor_skin.ron` cannot leave one of them asking for a tone that no longer exists.
+/// `src/editor_skin.yaml` cannot leave one of them asking for a tone that no longer exists.
 pub const GRID_TONE: &str = "grid_line";
 
 /// **The rail that says "this one"** — `Ink::accent` down the leading edge of the selected row.
@@ -849,11 +849,11 @@ impl LinesRoom {
 
 /// Between items that belong to each other — chips in one axis, cells in one row.
 /// **One step of a gooey layout's gap**, as `bevy_gooey::row(1.0)` / `column(1.0)` ask for: a
-/// multiple of the running skin's `gap` (5 px in `editor_skin.ron`), so an interface-size change
+/// multiple of the running skin's `gap` (5 px in `editor_skin.yaml`), so an interface-size change
 /// moves every row's rhythm together (UI-58/#244, UI-59/#245).
 pub const GOOEY_GAP_ONE: f32 = 1.0;
 
-/// **The skin's `gap`**, from `editor_skin.ron`: the pixel unit [`GOOEY_GAP_ONE`] is a multiple of,
+/// **The skin's `gap`**, from `editor_skin.yaml`: the pixel unit [`GOOEY_GAP_ONE`] is a multiple of,
 /// and the divisor a hand-built pixel gap is turned into one (`GAP_TIGHT / SKIN_GAP_PX` is 0.6).
 pub const SKIN_GAP_PX: f32 = 5.0;
 
@@ -1199,8 +1199,8 @@ pub struct BandGround;
 /// **The fills a panel and a band take from the running skin** (UI-02, #210, slice 4b).
 ///
 /// `panel_root` used to spawn `Ink::panel_bg` and `Ink::bar_bg` — constants — so every panel in the editor was
-/// painted once, at spawn, and never asked the skin again. A project's `editor_skin.ron`, or a
-/// `family/bevy_gooey.ron` edit at run time, therefore reached the list rows and the migrated ink but
+/// painted once, at spawn, and never asked the skin again. A project's `editor_skin.yaml`, or a
+/// `family/bevy_gooey.yaml` edit at run time, therefore reached the list rows and the migrated ink but
 /// **not the largest surface on screen**.
 ///
 /// One function, called by the spawn and by [`dim_the_ground`] alike, the way [`RowFills::of`] is

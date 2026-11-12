@@ -7,7 +7,7 @@
 //!
 //! `destructible_hit` previews a hit on the cached chunks and reports which break loose and whether
 //! each is a closed solid, by the crate's own audit. The violence dials (`GorePolicy`) are the crate's
-//! own settings, `family/bevy_carnage.ron`, written through `family_set`; the editor ships no gore.
+//! own settings, `family/bevy_carnage.yaml`, written through `family_set`; the editor ships no gore.
 
 use bevy::prelude::*;
 use bevy_carnage::{CutSettings, ProxyCell, audit_cell, fracture_mesh};

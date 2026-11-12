@@ -64,7 +64,7 @@ const CONSTRAINT_AFFORDANCES: &[&str] = &["sit", "back_to_wall"];
 /// Affordance tokens with no reader anywhere in `src/` outside `#[cfg(test)]`.
 ///
 /// `support` is here for a different reason and it is worth stating: it *was* an affordance, and the
-/// split that gave surfaces their own axis left `furniture_kenney.ron:15,18` still authoring
+/// split that gave surfaces their own axis left `furniture_kenney.yaml:15,18` still authoring
 /// `affordances: ["support"]`. The audit calls that "dead config post-split" — the same word in the
 /// `surfaces` field is the live one. Migrating it onto `effects` would resurrect a spelling that was
 /// deliberately retired.
@@ -92,7 +92,7 @@ pub fn descriptor_from_manifest(item: &ManifestItem, policy: Policy) -> Result<D
             host: Host::Ceiling,
         } => Some(Mount::OnCeiling),
         // **`Host::Opening` is not dead after all.** The audit lists it as having no spawn branch in
-        // `furnish_region`, which is true — but `furniture_kenney.ron` ships a `door` row using it, so
+        // `furnish_region`, which is true — but `furniture_kenney.yaml` ships a `door` row using it, so
         // there IS data to migrate even though nothing places it. Refusing here would have made kit B
         // unmigratable to protect an assumption about kit B.
         //
@@ -367,7 +367,7 @@ mod tests {
     }
 
     /// **`Host::Opening` is not in that category, and finding out cost a failing gate.** The audit
-    /// lists it as having no spawn branch, which is true — but `furniture_kenney.ron` ships a `door`
+    /// lists it as having no spawn branch, which is true — but `furniture_kenney.yaml` ships a `door`
     /// row using it, so there is data to migrate. The opening size is `None` because the manifest
     /// schema has no field for one.
     #[test]

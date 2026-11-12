@@ -1211,7 +1211,7 @@ pub fn fully_shown(text: &str) -> bool {
 }
 
 /// **Grant one text of this project's guide**, in the person's store: the override when a test named one,
-/// and `crate::trusted::store_path(None)` — the user's own `trusted.ron` — when it did not.
+/// and `crate::trusted::store_path(None)` — the user's own `trusted.yaml` — when it did not.
 pub(crate) fn grant_in_store(
     store_root: Option<&crate::trusted::StoreRoot>,
     store: Option<&Path>,

@@ -165,7 +165,7 @@ fn each_workspace_keeps_its_own_arrangement() {
         .descriptor("alpha/floor", "alpha")
         .place("alpha/floor", (0.0, 0.0))
         .build("m");
-    let user = root.join(format!("user_{}/settings.ron", std::process::id()));
+    let user = root.join(format!("user_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(user.parent().unwrap()).unwrap();
 
     // **The arrangement no default has**: the docks and the viewport swap sides.

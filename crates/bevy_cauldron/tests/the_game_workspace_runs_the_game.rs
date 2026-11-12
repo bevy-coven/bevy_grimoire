@@ -95,7 +95,7 @@ fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0").unwrap_or_else(|e| panic!("{e}")).local_addr().unwrap_or_else(|e| panic!("{e}")).port()
 }
 
-/// **A project whose `play.ron` starts `script`**, and whose BRP port is `port`.
+/// **A project whose `play.yaml` starts `script`**, and whose BRP port is `port`.
 fn project(tag: &str, script: &str, port: u16) -> PathBuf {
     let root = fixtures::Fixture::new(&format!("game_ws_{tag}_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
@@ -103,8 +103,8 @@ fn project(tag: &str, script: &str, port: u16) -> PathBuf {
         .build("m");
     std::fs::write(root.join("game.py"), script).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(
-        root.join("play.ron"),
-        format!(r#"(version: 1, command: ["{py}", "game.py", "{port}"], port: {port})"#, py = python()),
+        root.join("play.yaml"),
+        format!(r#"{{version: 1, command: ["{py}", "game.py", "{port}"], port: {port}}}"#, py = python()),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     root

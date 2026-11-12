@@ -2,7 +2,7 @@
 //!
 //! A map carries a name, and that name becomes a file on disk, a key in a manifest, and something a
 //! person types into a terminal. Those have different tolerances: a filesystem will happily accept
-//! `My Map (final) v2.ron`, a shell will not without quoting, and two of them differing only by case
+//! `My Map (final) v2.yaml`, a shell will not without quoting, and two of them differing only by case
 //! are the same file on one platform and two on another.
 //!
 //! So there is one spelling and it is **snake_case**: lowercase ASCII letters, digits, and single

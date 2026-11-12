@@ -1,6 +1,6 @@
 //! **The project's own checks, as the editor holds them** (#200, H3).
 //!
-//! `Checks::for_project` reads `assets/grimoire/checks.ron` fresh on every run, so one bad edit (a hand
+//! `Checks::for_project` reads `assets/grimoire/checks.yaml` fresh on every run, so one bad edit (a hand
 //! edit, a truncated write, an agent's mistake) made every after-edit check silently not run: the
 //! journal said "not run" with the parser's position and nothing said which field was wrong, and the
 //! second reader dropped the error altogether. Now one system looks at the file, decides each edit
@@ -58,7 +58,7 @@ pub struct ChecksView {
     good: Option<Checks>,
 }
 
-/// `<project root>/assets/grimoire/checks.ron`, the path `Checks::for_project` reads.
+/// `<project root>/assets/grimoire/checks.yaml`, the path `Checks::for_project` reads.
 fn path_in(root: &Path) -> PathBuf {
     root.join("assets").join("grimoire").join(PROJECT_CHECKS_FILE)
 }

@@ -426,7 +426,7 @@ fn answer_by_activate(
 /// gooey's [`dialog`]: the scrim, the centring, the opaque framed card and the modal tab group are
 /// the library's, in the skin's colours. The card used to be `chrome::modal_card`, which the modals
 /// shared so that none of them could dim, pad or stack differently; gooey's `dialog` is that one
-/// contract now, and the editor's skin (`src/editor_skin.ron`) is what colours it. Only the z-order
+/// contract now, and the editor's skin (`src/editor_skin.yaml`) is what colours it. Only the z-order
 /// is the editor's own: [`crate::chrome::MODAL_Z`], in front of every panel, which gooey's default
 /// of 100 is not.
 ///

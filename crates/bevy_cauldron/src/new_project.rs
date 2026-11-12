@@ -393,7 +393,7 @@ fn spawn_the_card(
                                     // the project still opens — the guide is simply withheld until the
                                     // project page can allow it.
                                     // **The grant is part of making the project**, and its store is
-                                    // resolved here: `None` is the person's own `trusted.ron`
+                                    // resolved here: `None` is the person's own `trusted.yaml`
                                     // (`crate::trusted::store_path`), so a real editor always writes one.
                                     // There is no silent "no store, no grant" arm: a guide nobody allowed
                                     // is the state this whole slice exists to prevent.

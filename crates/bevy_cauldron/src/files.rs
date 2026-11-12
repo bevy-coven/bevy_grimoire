@@ -214,7 +214,7 @@ impl Files {
     /// **The JSON Schema of the kind `rel` is**, generated from the type the loader reads
     /// ([`bevy_grimoire_core::schema`]) and kept: generating one is a `schemars` walk.
     pub fn schema_for(&mut self, rel: &str) -> Option<Arc<Value>> {
-        let (kind, _) = bevy_grimoire_core::reload_check::kind_of_path(rel)?;
+        let kind = bevy_grimoire_core::reload_check::kind_of_path(rel)?;
         self.schemas
             .entry(kind.id)
             .or_insert_with(|| bevy_grimoire_core::schema::for_kind(kind.id).ok().map(Arc::new))

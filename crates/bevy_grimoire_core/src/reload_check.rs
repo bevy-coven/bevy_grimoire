@@ -41,7 +41,7 @@ pub struct Refusal {
 }
 
 impl Refusal {
-    /// `site/forest/yard.ron (trees[2].yaw): 1:47: Expected float`: the file, the field when the file
+    /// `site/forest/yard.yaml (trees[2].yaw): 1:47: Expected float`: the file, the field when the file
     /// got that far, and why. The same sentence `KindVerdict::sentence` says.
     pub fn sentence(&self) -> String {
         match &self.field {

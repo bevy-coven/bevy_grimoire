@@ -826,8 +826,8 @@ const BED_AT: (f32, f32) = (28.0, -28.0);
 /// How near the camera's focus must come to the bed for the finder to have framed it, in metres.
 const FRAMED_WITHIN_M: f32 = 6.0;
 /// The registered data file the finder fixture holds, and its id.
-const DATA_REGISTRY: &str = "(version: 1, files: [(id: \"tuning\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])";
-const DATA_FILE: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+const DATA_REGISTRY: &str = "version: 1\nfiles:\n- id: tuning\n  path: mob.yaml\n  bounds:\n    mob.speed:\n      min: 0.0\n      max: 9.0\n";
+const DATA_FILE: &str = "# tuning\nmob:\n  speed: 1.50\n  name: orc\n  hp: 7\nfast: false\n";
 
 /// **What typing into the finder asks for, per destination**: the thing's own name as a person types it.
 const FINDER_ASKS: [(&str, &str); 7] = [
@@ -853,8 +853,8 @@ fn finder_editor(tag: &str) -> App {
         .build("meadow");
     // **Where the project reads its registry from** is its authoring kit's directory, which the project says.
     let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
-    std::fs::write(dir.join("mob.ron"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(dir.join("data.ron"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("mob.yaml"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("data.yaml"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
     let mut app = bevy_cauldron::harness::build_headless(&root, "meadow", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));

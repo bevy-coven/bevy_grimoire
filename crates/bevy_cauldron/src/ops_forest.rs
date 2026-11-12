@@ -3,7 +3,7 @@
 //! The trees are `bevy_flora`'s own [`Scatter`](bevy_flora::Scatter): its Poisson-disc trunks, its
 //! species weights and groves, its seed. The editor only masks the scatter to the stroke (a trunk
 //! stays only within `radius_m` of the stroke's polyline), stands each tree on the map's terrain and
-//! writes the result to `<grimoire_dir>/forest/<map>.ron`. The game reads the same file and spawns the
+//! writes the result to `<grimoire_dir>/forest/<map>.yaml`. The game reads the same file and spawns the
 //! trees through the crate's pools and LOD; the editor never builds one entity per leaf.
 //!
 //! A stroke is a gesture: it arrives whole and makes one change and one undo. The inverse is the same
@@ -43,7 +43,7 @@ pub struct Tree {
 /// The format version of a forest file (#202). A file with no `version` is the first.
 pub const FOREST_VERSION: u32 = 1;
 
-/// A map's planted forest: `<grimoire_dir>/forest/<map>.ron`.
+/// A map's planted forest: `<grimoire_dir>/forest/<map>.yaml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Forest {

@@ -53,7 +53,7 @@ pub fn skin_for(theme: crate::settings::Theme) -> GooeySkin {
 /// against (UI-73, #251).
 ///
 /// **Why a theme needs measuring at all.** `chrome.rs` draws its headings, rows, hints, chips and
-/// status band with `chrome::Ink`, which is the *editor's own* skin (`src/editor_skin.ron`) rather
+/// status band with `chrome::Ink`, which is the *editor's own* skin (`src/editor_skin.yaml`) rather
 /// than the running one, so those colours do not move with a theme. So Parchment — whose `surface` is
 /// cream and whose `text` is dark brown —
 /// would paint every panel cream while each `chrome::ink().text` label over it stayed near-white:
@@ -123,7 +123,7 @@ pub fn unreadable_pairs(theme_skin: &GooeySkin) -> Vec<String> {
 /// **The running skin this theme can be honoured as, and why not when it cannot** (UI-73, #251).
 ///
 /// The editor has one set of inks it can paint — [`editor_inks`], which are `chrome::Ink`'s, and
-/// `chrome::Ink` reads the editor's own `editor_skin.ron` rather than the theme. So a theme is applied
+/// `chrome::Ink` reads the editor's own `editor_skin.yaml` rather than the theme. So a theme is applied
 /// only when the ground it would
 /// paint still leaves those inks readable, and one that would not is refused here naming the pair that
 /// failed — **one path, and a real validation rather than a fallback**: the alternative, painting
@@ -176,7 +176,7 @@ pub fn theme_name(theme: crate::settings::Theme) -> &'static str {
 /// editor's own skin in as the running one, so a run that has only ever seen the default leaves it
 /// exactly as it was found. A *return* to Tool dark after another theme is still an application.
 ///
-/// **A project's `family/bevy_gooey.ron` is not this system's business** (UI-03, #211). That file is a
+/// **A project's `family/bevy_gooey.yaml` is not this system's business** (UI-03, #211). That file is a
 /// *game's* palette: it lives in [`crate::ui_skin::GameSkin`] and reaches the window only through the
 /// Game UI preview panel's `SkinScope`, so the running skin here is always the person's theme whatever
 /// a project ships.
@@ -357,7 +357,7 @@ impl Plugin for EditorUiPlugin {
             follow_the_motion_setting.after(crate::settings::sync_settings).before(bevy_gooey::GooeySystems::Style),
         );
         // **The theme reaches the running skin** (UI-73, #251), after the settings are read. A project's
-        // `family/bevy_gooey.ron` is not consulted: it is the *game's* palette and lives in `GameSkin`
+        // `family/bevy_gooey.yaml` is not consulted: it is the *game's* palette and lives in `GameSkin`
         // for the Game UI preview (UI-03, #211), so the running skin here is always the person's theme.
         app.add_systems(
             Update,

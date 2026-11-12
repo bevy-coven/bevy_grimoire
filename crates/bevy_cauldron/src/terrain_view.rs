@@ -320,7 +320,7 @@ fn adopt<T: PartialEq>(slot: &mut Option<T>, read: Option<(Option<T>, KindVerdic
 
 /// **One file the view reads**, decided: `None` when it does not exist; otherwise its value when it
 /// reads, and the verdict either way. A refusal names the file as the project's directory sees it
-/// (`site/terrain/yard.ron`) and the field the file is wrong at.
+/// (`site/terrain/yard.yaml`) and the field the file is wrong at.
 fn read_kind<T>(
     kind: &'static str,
     project: &Project,

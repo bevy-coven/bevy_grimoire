@@ -144,7 +144,7 @@ pub fn insert_for_the_running_binary(app: &mut App) {
 ///
 /// The self-test card and the bar's status chip drew four `chrome.rs` colours — the heading, a check
 /// that passed, one that failed, one still waiting — read straight from the constants. That made the
-/// tab the last panel a project's `family/bevy_gooey.ron` could not reach: a high-contrast theme or a
+/// tab the last panel a project's `family/bevy_gooey.yaml` could not reach: a high-contrast theme or a
 /// parchment one left the card in the editor's darks and its greens.
 ///
 /// The shape is [`crate::editor::StatusInk`]'s and [`crate::tiles::ListInk`]'s: one expression the

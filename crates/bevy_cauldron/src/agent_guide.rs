@@ -76,7 +76,7 @@ pub struct Composed {
 }
 
 /// **The guide as the person has allowed it.** `trust_file` is the store's **override**: `None` is the
-/// person's own `<data_dir>/Grimoire/trusted.ron`, resolved by [`crate::trusted::store_path`], which is what
+/// person's own `<data_dir>/Grimoire/trusted.yaml`, resolved by [`crate::trusted::store_path`], which is what
 /// a real editor always has. A test names a file of its own so nothing reads or writes the real one.
 pub fn compose(project: Option<&Project>, user: Option<&UserGuideFile>, store_root: Option<&crate::trusted::StoreRoot>, trust_file: Option<&Path>) -> Composed {
     let mut composed = Composed::default();

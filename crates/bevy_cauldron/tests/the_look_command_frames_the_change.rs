@@ -192,8 +192,8 @@ fn running_look_frames_the_change_the_follow_is_holding_back() {
     let root = room("look_command");
     let mut app = editor(&root);
     // **The person's setting**, written where the editor reads it: the follow never moves on its own.
-    let settings = app.world().resource::<Project>().project_dir.join("editor.ron");
-    std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.ron");
+    let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
+    std::fs::write(&settings, "{version: 1, follow_agent: false}").expect("editor.yaml");
     for _ in 0..frames_of(1.5) {
         app.update();
     }
@@ -276,8 +276,8 @@ fn send_chord(app: &mut App, state: bevy::input::ButtonState) {
 fn holding_the_look_chord_is_one_look_and_is_not_read_as_a_gesture() {
     let root = room("look_held");
     let mut app = editor(&root);
-    let settings = app.world().resource::<Project>().project_dir.join("editor.ron");
-    std::fs::write(&settings, "(version: 1, follow_agent: Some(false))").expect("editor.ron");
+    let settings = app.world().resource::<Project>().project_dir.join("editor.yaml");
+    std::fs::write(&settings, "{version: 1, follow_agent: false}").expect("editor.yaml");
     for _ in 0..frames_of(1.5) {
         app.update();
     }

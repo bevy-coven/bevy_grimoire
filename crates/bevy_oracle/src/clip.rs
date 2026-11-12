@@ -35,7 +35,7 @@ pub const FRAMES: usize = 3;
 /// The question id, so the answer is named in one place.
 pub const QUESTION_ID: &str = "shows";
 
-/// **The clip check**, as a [`Check`] a project's `checks.ron` carries.
+/// **The clip check**, as a [`Check`] a project's `checks.yaml` carries.
 ///
 /// `name` is the check's own name (`clip_shows_its_title`); the images it needs are named by
 /// [`still`] and [`frame`], so a capture directory holds `still.png`, `frame0.png`, `frame1.png` and

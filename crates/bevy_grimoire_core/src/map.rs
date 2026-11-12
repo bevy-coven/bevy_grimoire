@@ -25,8 +25,8 @@
 //! Every addressable thing here carries an optional `note:`. That is deliberate and it is what lets a
 //! map be written by an ordinary serializer.
 //!
-//! This project already knows what happens otherwise. `assets/site/site67.ron` is 15% comments and its
-//! props list carries more prose than data; `assets/config/config.ron` carries ~563 comment lines, and
+//! This project already knows what happens otherwise. `assets/site/site67.yaml` is 15% comments and its
+//! props list carries more prose than data; `assets/config/config.yaml` carries ~563 comment lines, and
 //! on 2026-07-16 a `to_string_pretty` bake deleted 279 of them. The response there was
 //! a surgical text rewrite of the file so the comments survive. That is the right answer
 //! for a file a human authored and a tool visits.
@@ -38,7 +38,7 @@
 //! generalises it.
 //!
 //! So: an grimoire map is serialized normally and **never** text-spliced. The surgical writer stays for
-//! `site67.ron` and `config.ron`, whose prose is a 48-line ASCII floor plan and paragraphs introducing
+//! `site67.yaml` and `config.yaml`, whose prose is a 48-line ASCII floor plan and paragraphs introducing
 //! blocks of records — none of it attached to a record, so none of it with a field to live in.
 //!
 //! # Versioning: refuse what you cannot understand
@@ -1388,7 +1388,7 @@ enclosure:
     }
 
     /// **The reason `note:` is a field.** The same `to_string_pretty` that deleted 279 lines of
-    /// rationale from `config.ron` on 2026-07-16 carries these through untouched, because they are
+    /// rationale from `config.yaml` on 2026-07-16 carries these through untouched, because they are
     /// data. No surgical writer, no comment-preserving pass, nothing to forget.
     ///
     /// The assertion is deliberately on the *serialized text* as well as the parsed value: a

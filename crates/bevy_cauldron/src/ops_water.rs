@@ -1,6 +1,6 @@
 //! **Placing water, as one registered operation** (#100): `water_place`.
 //!
-//! The plan is `<grimoire_dir>/water/<map>.ron`, the engine-free `bevy_grimoire_core::water::WaterPlan`
+//! The plan is `<grimoire_dir>/water/<map>.yaml`, the engine-free `bevy_grimoire_core::water::WaterPlan`
 //! as RON, saved beside the map and the terrain. One call places one spring, sink or lake, or clears
 //! the plan; either is one undo. Placing never runs the simulation.
 

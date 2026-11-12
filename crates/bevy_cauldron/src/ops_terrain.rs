@@ -1,6 +1,6 @@
 //! **Sculpting the map's ground, as one registered operation** (#99): `terrain_stroke`.
 //!
-//! The heightfield is `<grimoire_dir>/terrain/<map>.ron`, the engine-free `bevy_grimoire_core::heightfield`
+//! The heightfield is `<grimoire_dir>/terrain/<map>.yaml`, the engine-free `bevy_grimoire_core::heightfield`
 //! type as RON, saved beside the map. A stroke is a gesture: its points arrive whole and make one
 //! change and one undo. The inverse is the same operation carrying the heights the stroke replaced
 //! (`restore`), which only an undo may send.

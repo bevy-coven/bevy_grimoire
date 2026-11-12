@@ -36,7 +36,7 @@ impl fmt::Display for StandardsError {
 
 impl std::error::Error for StandardsError {}
 
-/// Reads a `.ron` as [`Standards`] with `Standards::parse`, the reader `load_standards` uses.
+/// Reads a `.yaml` as [`Standards`] with `Standards::parse`, the reader `load_standards` uses.
 #[derive(Default, TypePath)]
 pub struct StandardsLoader;
 

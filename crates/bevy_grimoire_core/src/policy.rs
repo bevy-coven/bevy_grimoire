@@ -18,7 +18,7 @@
 //! ```text
 //! library.yaml   the measurements          — shared, portable, true anywhere
 //! project.yaml   this game's policy        — stretch_y, and anything else that is an opinion
-//! map.ron       this instance's overrides — Placed::patch
+//! map.yaml       this instance's overrides — Placed::patch
 //! ```
 //!
 //! Each layer is a `Descriptor` and each is applied with [`Descriptor::patched_with`], which is the

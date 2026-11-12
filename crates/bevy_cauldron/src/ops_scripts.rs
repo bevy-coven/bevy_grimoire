@@ -3,7 +3,7 @@
 //! A trigger is `bevy_society`'s own: an event it listens to (`on`, the crate's `TriggerOn` in RON), an
 //! optional Rhai `if`, and Rhai `then`, written against the crate's `ctx` reader and `fx` writer. The editor
 //! adds no scripting language. What it adds is where the trigger is kept and who it is for: the file is
-//! `<grimoire_dir>/scripts/<map>.ron`, beside the map and the people, and a trigger may be **bound** to named
+//! `<grimoire_dir>/scripts/<map>.yaml`, beside the map and the people, and a trigger may be **bound** to named
 //! people, to a faction, or to an area of the map. A binding is folded into the Rhai condition when the
 //! trigger is compiled (`ctx.name(actor)` and `ctx.member(actor, ..)`), so the crate sees nothing but
 //! its own trigger type.
@@ -71,7 +71,7 @@ fn is_default_bind(b: &Bind) -> bool {
 /// The format version of a triggers file (#202). A file with no `version` is the first.
 pub const SCRIPTS_VERSION: u32 = 1;
 
-/// A map's triggers: `<grimoire_dir>/scripts/<map>.ron`.
+/// A map's triggers: `<grimoire_dir>/scripts/<map>.yaml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scripts {
@@ -397,7 +397,7 @@ impl Operation for TriggerSet {
     fn shows(&self, ctx: &Ctx, params: &serde_json::Value) -> Shown {
         // **The file the write goes to**, named by [`path_of`] itself, so the answer and the write
         // cannot name two places: the triggers live in the authoring kit's own folder,
-        // `<grimoire_dir>/scripts/<map>.ron`, and not beside `assets/grimoire` where nothing is
+        // `<grimoire_dir>/scripts/<map>.yaml`, and not beside `assets/grimoire` where nothing is
         // written.
         match params.get("map").and_then(serde_json::Value::as_str) {
             Some(map) => shown_scripts(ctx, map),

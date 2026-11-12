@@ -3,7 +3,7 @@
 //! A person is a marker: a name, where they stand, a faction, and the buildings that are their home and
 //! their workplace. Their behaviour is `bevy_society`'s, never the editor's; the marker is only what the
 //! game needs to spawn them (`Home(entity)`, a faction membership). The file is
-//! `<grimoire_dir>/people/<map>.ron`, beside the map, so the game reads it and the editor reloads it.
+//! `<grimoire_dir>/people/<map>.yaml`, beside the map, so the game reads it and the editor reloads it.
 //!
 //! A home or workplace names a placement that is on the map, and **a placement that someone lives or works
 //! in cannot be removed** (`tenant_of`, called by `placement_remove`): the refusal names the person.
@@ -55,7 +55,7 @@ pub struct Tie {
 /// The format version of a people file (#202). A file with no `version` is the first.
 pub const PEOPLE_VERSION: u32 = 1;
 
-/// A map's people: `<grimoire_dir>/people/<map>.ron`.
+/// A map's people: `<grimoire_dir>/people/<map>.yaml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct People {

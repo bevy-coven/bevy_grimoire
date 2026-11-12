@@ -19,7 +19,7 @@
 //!   paper's 4-fold `m_wa`; and `w_wall` adds a **wall-proximity pull** (no analogue in the paper, which in
 //!   fact critiques wall-hugging for large items) — both are deliberate Backrooms choices, not Merrell terms.
 //!
-//! Weights live in the `placement.metropolis` slice of `assets/config/config.ron` so layout is re-tunable with no code change
+//! Weights live in the `placement.metropolis` slice of `assets/config/config.yaml` so layout is re-tunable with no code change
 //! (Merrell 2011 reports robustness to ~2× weight perturbation).
 
 use std::f32::consts::{FRAC_PI_2, TAU};

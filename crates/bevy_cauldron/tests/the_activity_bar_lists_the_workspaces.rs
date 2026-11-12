@@ -157,7 +157,7 @@ fn a_refused_file_is_a_badge_of_one_on_map_and_it_clears() {
     assert!(badges(&mut app).iter().all(Option::is_none), "a bar with nothing to say is silent");
     app.world_mut()
         .resource_mut::<bevy_cauldron::live::EditorReloads>()
-        .decide(vec![KindVerdict::refused("kit", "kit.ron", Some("pieces[3].yaw".to_owned()), "not a number")]);
+        .decide(vec![KindVerdict::refused("kit", "kit.yaml", Some("pieces[3].yaw".to_owned()), "not a number")]);
     settle(&mut app);
     let map = activity_bar::registered().iter().position(|w| *w == Workspace::Map).unwrap_or_else(|| panic!("map is registered"));
     let said = badges(&mut app);
@@ -167,7 +167,7 @@ fn a_refused_file_is_a_badge_of_one_on_map_and_it_clears() {
             assert_eq!(badge, &None, "only Map carries the problems count");
         }
     }
-    app.world_mut().resource_mut::<bevy_cauldron::live::EditorReloads>().decide(vec![KindVerdict::applied("kit", "kit.ron")]);
+    app.world_mut().resource_mut::<bevy_cauldron::live::EditorReloads>().decide(vec![KindVerdict::applied("kit", "kit.yaml")]);
     settle(&mut app);
     assert!(badges(&mut app).iter().all(Option::is_none), "the badge clears when the file is applied");
 }
@@ -203,8 +203,8 @@ fn until(app: &mut App, what: &str, mut done: impl FnMut(&mut App) -> bool) {
 fn the_view_menu_collapses_the_bar_and_the_choice_is_saved() {
     let root = std::env::temp_dir().join(format!("activity_collapse_{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap_or_else(|e| panic!("{e}"));
-    let user = root.join("settings.ron");
-    std::fs::write(&user, "(version: 1)").unwrap_or_else(|e| panic!("{e}"));
+    let user = root.join("settings.yaml");
+    std::fs::write(&user, "{version: 1}").unwrap_or_else(|e| panic!("{e}"));
     let mut app = editor("collapse", Some(&user));
     assert!(the_bar_is_there(&mut app), "the bar is on by default");
     let item = |app: &mut App| {
@@ -285,9 +285,9 @@ fn the_bar_takes_its_width_from_the_docks_and_the_viewport_keeps_its_own() {
         ));
         if !bar {
             // The way a person turns it off: the user's settings file says so, and the editor reads it.
-            let file = std::env::temp_dir().join(format!("activity_width_{}/settings.ron", std::process::id()));
+            let file = std::env::temp_dir().join(format!("activity_width_{}/settings.yaml", std::process::id()));
             std::fs::create_dir_all(file.parent().unwrap_or_else(|| panic!("a folder"))).unwrap_or_else(|e| panic!("{e}"));
-            std::fs::write(&file, "(version: 1, show_activity_bar: Some(false))").unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(&file, "{version: 1, show_activity_bar: false}").unwrap_or_else(|e| panic!("{e}"));
             app.insert_resource(UserSettingsFile(file));
             until(&mut app, "the setting read", |app| !app.world().resource::<bevy_cauldron::settings::EditorSettings>().show_activity_bar);
         }

@@ -42,9 +42,9 @@ fn a_label_already_drawn_follows_the_text_size_when_it_changes() {
         .descriptor("site/wall", "alpha")
         .place("site/wall", (1.5, 1.5))
         .build("m");
-    let settings_file = root.join(format!("user_config_live_text_{}/settings.ron", std::process::id()));
+    let settings_file = root.join(format!("user_config_live_text_{}/settings.yaml", std::process::id()));
     std::fs::create_dir_all(settings_file.parent().expect("a settings folder")).expect("a settings folder");
-    std::fs::write(&settings_file, "(version: 1)").expect("a settings file");
+    std::fs::write(&settings_file, "{version: 1}").expect("a settings file");
 
     let was = chrome::text_scale();
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
@@ -68,7 +68,7 @@ fn a_label_already_drawn_follows_the_text_size_when_it_changes() {
     }
 
     // **After the build**, the person asks for larger text.
-    std::fs::write(&settings_file, "(version: 1, text_scale: Some(1.75))").expect("a settings file");
+    std::fs::write(&settings_file, "{version: 1, text_scale: 1.75}").expect("a settings file");
     for _ in 0..12 {
         app.update();
     }

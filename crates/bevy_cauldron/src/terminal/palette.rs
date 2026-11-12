@@ -12,7 +12,7 @@
 //! warning"), and they are the ones a person actually sees all day. Mapping them onto
 //! [`crate::chrome`]'s palette is what makes a shell in this window look like part of this window
 //! rather than like somebody else's terminal pasted in — the same argument `ui.rs` makes for
-//! `editor_skin.ron`, one layer down.
+//! `editor_skin.yaml`, one layer down.
 //!
 //! Indices 16–255 are not a style choice. The 6×6×6 colour cube and the 24-step grey ramp are a
 //! *standard*: `cargo`, `ls --color` and every TUI compute against those exact values, and remapping
@@ -38,7 +38,7 @@ use crate::chrome;
 /// **The ANSI slots 0–15**, in the standard's order: eight normal, then the same eight bright.
 ///
 /// **A function and not a `const`** (UI-02, #210): four of the sixteen are the editor's own ink, and
-/// the ink is the skin's now — read from `src/editor_skin.ron` at run time, so the table cannot be a
+/// the ink is the skin's now — read from `src/editor_skin.yaml` at run time, so the table cannot be a
 /// compile-time constant any more. The twelve that are nobody's word are still written here, each
 /// with the reason it has no palette name.
 fn ansi() -> [Color; 16] {

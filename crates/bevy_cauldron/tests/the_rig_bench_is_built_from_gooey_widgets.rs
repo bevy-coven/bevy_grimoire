@@ -48,14 +48,14 @@ fn the_bench_modules_lay_themselves_out_with_no_raw_node() {
 /// **A manifest with one rig and one slot**, whose GLB is not on disk — the bench draws the slot
 /// table from the manifest alone, and the measured half is simply absent (`anim_watch` has nothing to
 /// measure), so this is enough to lay the table out.
-const ONE_RIG: &str = "(version: 3, rigs: {\"probe\": (mesh: \"probe.glb\", scale: 1.0, slots: [(clip: 0, playback: Free(speed: 1.0))])})";
+const ONE_RIG: &str = "{version: 3, rigs: {probe: {mesh: probe.glb, scale: 1.0, slots: [{clip: 0, playback: !Free {speed: 1.0}}]}}}";
 
 /// The anim bench open on its tab, with a manifest to draw, settled.
 fn bench(tag: &str) -> App {
     let root = fixtures::Fixture::new(&format!("rig_bench_gooey_{tag}_{}", std::process::id()))
         .descriptor("site/wall", "alpha")
         .build("m");
-    std::fs::write(root.join("assets/grimoire/rigs.ron"), ONE_RIG)
+    std::fs::write(root.join("assets/grimoire/rigs.yaml"), ONE_RIG)
         .unwrap_or_else(|e| panic!("the fixture must take the manifest: {e}"));
     let mut app = harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
     // The tab reads the manifest the first time it is entered, as `a_rigs_edit_says_what_became_of_it` does.

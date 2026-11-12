@@ -33,7 +33,7 @@
 //! The index is not read once at open. [`rebuild_the_index`] watches the watcher's own adopter
 //! ([`crate::watch::Due::adopted`], the reload contract's record of *this file was taken again*) and
 //! rebuilds when that count, the project, the open map, the library's size or the notes' generation
-//! changes. A piece an agent writes into `library.ron` is in the finder on the frame the editor adopts
+//! changes. A piece an agent writes into `library.yaml` is in the finder on the frame the editor adopts
 //! the file.
 //!
 //! # The rest never reorder by use
@@ -428,7 +428,7 @@ fn collect_the_rest(
         }
     }
     // **A registered data file's page is the DATA table**, which is where the reveal puts
-    // `Shown::File` when `data.ron` lists it — the same resolution, so the two cannot disagree.
+    // `Shown::File` when `data.yaml` lists it — the same resolution, so the two cannot disagree.
     if let Ok(Some(reg)) = bevy_grimoire_core::data_files::DataFiles::load(&project.grimoire_dir) {
         for file in &reg.files {
             let absolute = reg.resolve(file);

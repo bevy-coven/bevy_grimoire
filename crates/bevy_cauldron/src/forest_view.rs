@@ -1,6 +1,6 @@
 //! **The planted forest, drawn in the viewport with the crate's own trees** (#102).
 //!
-//! `forest_scatter` writes `<grimoire_dir>/forest/<map>.ron` and `tree_edit` writes
+//! `forest_scatter` writes `<grimoire_dir>/forest/<map>.yaml` and `tree_edit` writes
 //! `<grimoire_dir>/trees/<name>.tree.yaml`; until now nothing showed either, so an author planted blind.
 //! This draws the forest from those files, the way a game reads them, and follows them when they
 //! change on disk (a stroke, a placed tree, a tree edit, an undo, an agent's edit): they are polled

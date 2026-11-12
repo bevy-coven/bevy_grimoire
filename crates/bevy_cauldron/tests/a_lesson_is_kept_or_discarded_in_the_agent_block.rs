@@ -74,7 +74,7 @@ fn write_guide(root: &Path, text: &str, allowed: bool) -> PathBuf {
     let path = guide_path(root);
     std::fs::create_dir_all(path.parent().expect("a folder")).expect("the folder is made");
     std::fs::write(&path, text).expect("the guide is written");
-    let store = root.join("trusted.ron");
+    let store = root.join("trusted.yaml");
     let mut trusted = TrustStore::default();
     if allowed {
         trusted.trust_guide(root, text).expect("the text resolves");
@@ -89,7 +89,7 @@ fn ready(name: &str, guide: Option<&str>, allowed: bool) -> (App, PathBuf) {
     let store = match guide {
         Some(text) => write_guide(&root, text, allowed),
         None => {
-            let store = root.join("trusted.ron");
+            let store = root.join("trusted.yaml");
             TrustStore::default().save(&store).expect("an empty store");
             store
         }

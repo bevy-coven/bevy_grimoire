@@ -7,7 +7,7 @@
 //! # The file is the crate's, and there is no second schema
 //!
 //! A project's `family.yaml` lists the family crates it uses; each one's settings are its own serde type
-//! written as RON in `<project>/family/<crate>.ron` — the file `family_set` writes (`ops_family.rs`) and
+//! written as RON in `<project>/family/<crate>.yaml` — the file `family_set` writes (`ops_family.rs`) and
 //! a running game's copy of the plugin reads. [`ElementsSettings`] is the one settings type this build
 //! holds, and it is the editor's thin wrapper around the crate's own types (`WorldClock`, `Climate`,
 //! `GeoLocation`): the panel's fields are that file's fields, at the dot-paths `family_set` already takes
@@ -53,7 +53,7 @@
 //! its settings live under), [`FamilySettings`] (the text the watch last saw good), and the preview's
 //! held [`ClockScrub`] for the hour — so it re-reads on a change in one of those and on nothing else.
 //!
-//! **The first cut did not.** It loaded `family.yaml`, read every `family/<crate>.ron` and parsed its RON
+//! **The first cut did not.** It loaded `family.yaml`, read every `family/<crate>.yaml` and parsed its RON
 //! every frame, and it read from disk even when [`FamilySettings`] already held the text: sixty file
 //! reads a second to be told what the panel was already showing (`#243` review). A settled panel now
 //! costs one comparison, and the disk is the *fallback* for the first frames before the watch has polled
@@ -126,7 +126,7 @@ pub struct FamilyPanel {
     /// moved, and none in the frames between.
     ///
     /// A count of reads rather than of frames, on purpose. The first cut read `family.yaml` and every
-    /// `family/<crate>.ron` sixty times a second to be told what it already showed (`#243` review), and
+    /// `family/<crate>.yaml` sixty times a second to be told what it already showed (`#243` review), and
     /// a number that only goes up on a read is the cheapest thing that can hold it to *"a settled panel
     /// reads nothing"* — `a_settled_panel_reads_nothing` is the test.
     reads: u64,
@@ -369,7 +369,7 @@ fn listed_stamp(root: &std::path::Path) -> Option<Stamp> {
 /// settings live under), `family.yaml` itself (the switches write it without touching the project),
 /// [`FamilySettings`] (the text the watch last took as good), and the preview's held [`ClockScrub`]
 /// (the hour). A frame in which none of them moved returns here on one `stat`, two change ticks and a
-/// look at the view entities — the first cut loaded `family.yaml`, read every `family/<crate>.ron` and
+/// look at the view entities — the first cut loaded `family.yaml`, read every `family/<crate>.yaml` and
 /// parsed its RON on **every** frame, sixty times a second, to be told what the panel already showed.
 ///
 /// **The view entities are part of the gate** because a door change sweeps them without touching these

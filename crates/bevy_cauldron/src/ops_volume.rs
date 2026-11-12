@@ -1,6 +1,6 @@
 //! **Carving and adding volume, as one registered operation** (#101): `volume_edit`.
 //!
-//! The volume is `<grimoire_dir>/volume/<map>.ron`, the engine-free `bevy_grimoire_core::volume::Volume`
+//! The volume is `<grimoire_dir>/volume/<map>.yaml`, the engine-free `bevy_grimoire_core::volume::Volume`
 //! (its edit list, not voxels) as RON, saved beside the map. One call adds or carves one primitive,
 //! or clears the list; either is one undo. The inverse is the same operation carrying the file as it was.
 

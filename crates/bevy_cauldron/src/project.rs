@@ -960,7 +960,7 @@ impl Project {
             .map_err(|e| format!("cannot read the maps: {e}"))?
             .filter_map(|entry| {
                 let path = entry.ok()?.path();
-                // **A map file is YAML**, so a scan that only looked at `.ron` read no map at all — and a
+                // **A map file is YAML**, so a scan that only looked at `.yaml` read no map at all — and a
                 // rename reached the composition's own file and stopped.
                 if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
                     return None;

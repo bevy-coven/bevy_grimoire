@@ -2594,7 +2594,7 @@ impl Plugin for EditorPlugin {
         #[cfg(feature = "bevy_elements")]
         app.add_observer(on_environment_click);
         // **A family crate's own settings, as a panel** (UI-57, #243): gooey's reflect inspector over a
-        // view of `family/bevy_elements.ron`, an edit dispatched as `family_set`.
+        // view of `family/bevy_elements.yaml`, an edit dispatched as `family_set`.
         #[cfg(feature = "bevy_elements")]
         app.add_plugins(crate::family_panel::FamilyPanelPlugin);
         // **The light map (#103):** shown by its button, re-baked when the map changes, drawn over the floor.
@@ -6623,7 +6623,7 @@ struct ScriptRow {
     line: String,
 }
 
-/// **The Scripts panel's list** (#105): one row per trigger in `scripts/<map>.ron`.
+/// **The Scripts panel's list** (#105): one row per trigger in `scripts/<map>.yaml`.
 #[derive(Component, Clone, Copy)]
 struct ScriptsList;
 

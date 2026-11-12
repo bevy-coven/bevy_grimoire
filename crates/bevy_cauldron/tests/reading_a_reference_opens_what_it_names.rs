@@ -70,7 +70,7 @@ fn a_file_reference_is_refused_with_the_page_that_is_missing() {
         .expect("the open map is inside the project")
         .to_string_lossy()
         .replace('\\', "/");
-    assert_eq!(path, "assets/grimoire/maps/m.map.ron", "the file a person edits for `bed@0`");
+    assert_eq!(path, "assets/grimoire/maps/m.map.yaml", "the file a person edits for `bed@0`");
 
     let shown = bevy_cauldron::ops::Shown::File { path, lines: None };
     let why = match bevy_cauldron::reveal::page_of(&shown, Some(&project)) {

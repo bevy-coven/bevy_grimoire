@@ -5,13 +5,12 @@
 //! 1. **An unknown key typed into a project file shows a diagnostic on its line**, [`DIAGNOSE_IDLE_S`] after
 //!    the last key and not before; fixed and saved (Cmd/Ctrl+S) the file on disk is the person's text and
 //!    **the map in the editor shows the saved value**, as a save from an outside editor would (no operation).
-//!    This is proved on the map's own file (`m.map.ron`, which the editor still loads) and, for the YAML
-//!    spelling a converted project holds (GD-03), on `m.map.yaml`.
+//!    This is proved on the map's own file (`m.map.yaml`, the one the editor loads) and on a second map.
 //! 2. **Completion on a reference field lists the library's pieces** (a placement's `descriptor` is the field the
 //!    schema marks `x-dark-factory-ref: library`); the field names come from the schema too.
 //! 3. **A change from outside while the tab has unsaved edits offers Reload or Keep mine, and overwrites
 //!    nothing**: not the person's text, not the disk's.
-//! 4. **`agent.ron`, `play.ron` and the guide open read-only**, so an edit cannot bypass a trust check.
+//! 4. **`agent.yaml`, `play.yaml` and the guide open read-only**, so an edit cannot bypass a trust check.
 //! 5. **The tree lists the project's files** except `target/` and what `.gitignore` names.
 //! 6. **The languages**: colours by role, `x-dark-factory-ref` fields drawn as links, the loader's own errors,
 //!    folds by structure.
@@ -41,13 +40,17 @@ use crate::fixtures;
 
 const SETTLE: usize = 12;
 
-const MAP_RON: &str = "assets/grimoire/maps/m.map.ron";
+const MAP: &str = "assets/grimoire/maps/m.map.yaml";
 const MAP_YAML: &str = "assets/grimoire/maps/draft.map.yaml";
 
-/// A map file with one field a line, so a diagnostic has a line of its own.
-const MAP_TEXT: &str = "(\n    version: 3,\n    name: \"m\",\n    origin: (0.0, 0.0, 0.0),\n    bounds: (10.0, 3.0, 10.0),\n    bash: None,\n    placements: [\n        (\n            id: \"floor@0\",\n            descriptor: \"alpha/floor\",\n            at: (0.0, 0.0),\n            yaw: 0.0,\n            tip: (0, 0),\n            lift: 0.0,\n            on: None,\n            owned: false,\n            owned_because: None,\n            note: None,\n            patch: None,\n        ),\n    ],\n    stamps: [],\n    locations: [],\n)";
+/// A map file with one field a line, so a diagnostic has a line of its own: the project's own map, as the YAML a project holds.
+const MAP_TEXT: &str = "version: 3\nname: m\norigin:\n- 0.0\n- 0.0\n- 0.0\nbounds:\n- 10.0\n- 3.0\n- 10.0\nplacements:\n- id: floor@0\n  descriptor: alpha/floor\n  at:\n  - 0.0\n  - 0.0\n  yaw: 0.0\nstamps: []\nlocations: []\n";
 
-/// The same map as the YAML a converted project holds, with one placement.
+/// The line `yaw: 0.0` is on in [`MAP_TEXT`], and its text, so a test types after it.
+const YAW_LINE: usize = 16;
+const YAW_TEXT: &str = "  yaw: 0.0";
+
+/// The same map under another name, for the tests that open a second one.
 const MAP_YAML_TEXT: &str = "version: 3\nname: draft\norigin:\n- 0.0\n- 0.0\n- 0.0\nbounds:\n- 10.0\n- 3.0\n- 10.0\nplacements:\n- id: floor@0\n  descriptor: alpha/floor\n  at:\n  - 0.0\n  - 0.0\n  yaw: 0.0\nstamps: []\nlocations: []\n";
 
 fn project(tag: &str) -> PathBuf {
@@ -56,7 +59,7 @@ fn project(tag: &str) -> PathBuf {
         .descriptor("alpha/wall", "alpha")
         .place_as("floor@0", "alpha/floor", (0.0, 0.0))
         .build("m");
-    std::fs::write(root.join(MAP_RON), MAP_TEXT).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join(MAP), MAP_TEXT).unwrap_or_else(|e| panic!("{e}"));
     root
 }
 
@@ -155,27 +158,26 @@ fn findings(app: &mut App) -> Vec<(usize, String)> {
 /// text, saved, is what is on disk and what the editor's map shows.
 #[test]
 fn an_unknown_key_is_a_diagnostic_on_its_line_after_the_idle_and_a_save_reloads_the_map() {
-    let root = project("ron");
-    let mut app = files_editor(&root, MAP_RON);
+    let root = project("map");
+    let mut app = files_editor(&root, MAP);
     assert_eq!(text(&mut app), MAP_TEXT, "the file's own text is what the editor shows");
     assert!(findings(&mut app).is_empty(), "a map that reads has nothing wrong with it: {:?}", findings(&mut app));
 
-    // Type an unknown key at the start of the `yaw` line (line 11, the twelfth).
-    caret_at(&mut app, 11, 12);
-    bevy_gooey::testing::type_text(&mut app, "bogus: 7, ");
+    // Type an unknown key on the line after `yaw`.
+    type_a_key(&mut app, "bogus: 7");
     assert!(findings(&mut app).is_empty(), "no error is drawn on text the person is still typing");
     idle(&mut app);
     let found = findings(&mut app);
     assert_eq!(found.len(), 1, "one finding: {found:?}");
-    assert_eq!(found[0].0, 11, "on the line the key was typed on: {found:?}");
+    assert_eq!(found[0].0, YAW_LINE + 1, "on the line the key was typed on: {found:?}");
     assert!(found[0].1.contains("bogus"), "and it names the key: {found:?}");
-    assert!(app.world().resource::<Files>().is_dirty(MAP_RON), "the tab says it has unsaved edits");
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), MAP_TEXT, "nothing is written until a save");
+    assert!(app.world().resource::<Files>().is_dirty(MAP), "the tab says it has unsaved edits");
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), MAP_TEXT, "nothing is written until a save");
 
     // Fix it: take the key away and turn the yaw, then save.
-    select(&mut app, CodePos::new(11, 12), CodePos::new(11, 22));
+    select(&mut app, CodePos::new(YAW_LINE, YAW_TEXT.len()), CodePos::new(YAW_LINE + 1, "  bogus: 7".len()));
     bevy_gooey::testing::press(&mut app, KeyCode::Backspace);
-    select(&mut app, CodePos::new(11, 17), CodePos::new(11, 20));
+    select(&mut app, CodePos::new(YAW_LINE, YAW_TEXT.len() - 3), CodePos::new(YAW_LINE, YAW_TEXT.len()));
     bevy_gooey::testing::type_text(&mut app, "90.0");
     idle(&mut app);
     assert!(findings(&mut app).is_empty(), "the fixed file reads: {:?}", findings(&mut app));
@@ -183,8 +185,8 @@ fn an_unknown_key_is_a_diagnostic_on_its_line_after_the_idle_and_a_save_reloads_
     assert_eq!(text(&mut app), want, "the editor holds the fixed text");
 
     chord_ctrl(&mut app, KeyCode::KeyS, "s");
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), want, "Ctrl+S wrote the person's text, byte for byte");
-    assert!(!app.world().resource::<Files>().is_dirty(MAP_RON), "and the tab is clean");
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), want, "Ctrl+S wrote the person's text, byte for byte");
+    assert!(!app.world().resource::<Files>().is_dirty(MAP), "and the tab is clean");
     let leftovers: Vec<_> = std::fs::read_dir(root.join("assets/grimoire/maps"))
         .unwrap_or_else(|e| panic!("{e}"))
         .filter_map(Result::ok)
@@ -275,20 +277,19 @@ fn completion_on_a_reference_field_lists_the_librarys_pieces() {
 #[test]
 fn a_change_from_outside_under_unsaved_edits_asks_and_overwrites_nothing() {
     let root = project("conflict");
-    let mut app = files_editor(&root, MAP_RON);
-    caret_at(&mut app, 11, 12);
-    bevy_gooey::testing::type_text(&mut app, "lift: 0.5, ");
+    let mut app = files_editor(&root, MAP);
+    type_a_key(&mut app, "lift: 0.5");
     let mine = text(&mut app);
 
     let outside = MAP_TEXT.replace("yaw: 0.0", "yaw: 45.0");
-    bevy_grimoire_core::atomic_file::write(&root.join(MAP_RON), &outside).unwrap_or_else(|e| panic!("{e}"));
+    bevy_grimoire_core::atomic_file::write(&root.join(MAP), &outside).unwrap_or_else(|e| panic!("{e}"));
     std::thread::sleep(Duration::from_secs_f64(POLL_S + 0.1));
     settle(&mut app);
 
-    let waiting = app.world().resource::<Files>().get(MAP_RON).and_then(|f| f.external.clone());
+    let waiting = app.world().resource::<Files>().get(MAP).and_then(|f| f.external.clone());
     assert_eq!(waiting.as_deref(), Some(outside.as_str()), "the disk's text waits for an answer");
     assert_eq!(text(&mut app), mine, "the person's text is untouched");
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), outside, "and so is the file");
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), outside, "and so is the file");
     let bar: Vec<ConflictAnswer> = {
         let world = app.world_mut();
         world.query::<&ConflictAnswer>().iter(world).copied().collect()
@@ -298,38 +299,44 @@ fn a_change_from_outside_under_unsaved_edits_asks_and_overwrites_nothing() {
 
     // **Saving while the question is open writes nothing.**
     chord_ctrl(&mut app, KeyCode::KeyS, "s");
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), outside, "a save does not overwrite a change the person has not seen");
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), outside, "a save does not overwrite a change the person has not seen");
 
     // Keep mine: the text stays, the question goes, and a save is now the person's own decision.
     click_answer(&mut app, ConflictAnswer::KeepMine);
     assert_eq!(text(&mut app), mine, "Keep mine keeps the person's text");
-    assert!(app.world().resource::<Files>().get(MAP_RON).is_some_and(|f| f.external.is_none()), "and the question is answered");
+    assert!(app.world().resource::<Files>().get(MAP).is_some_and(|f| f.external.is_none()), "and the question is answered");
     chord_ctrl(&mut app, KeyCode::KeyS, "s");
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), mine, "then a save is theirs");
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), mine, "then a save is theirs");
 }
 
 /// **Reload** takes the disk's text.
 #[test]
 fn reload_takes_the_disks_text_and_a_file_nobody_edited_reloads_by_itself() {
     let root = project("reload");
-    let mut app = files_editor(&root, MAP_RON);
+    let mut app = files_editor(&root, MAP);
 
     // Nobody has typed: an outside change is simply what the editor shows.
     let first = MAP_TEXT.replace("yaw: 0.0", "yaw: 10.0");
-    bevy_grimoire_core::atomic_file::write(&root.join(MAP_RON), &first).unwrap_or_else(|e| panic!("{e}"));
+    bevy_grimoire_core::atomic_file::write(&root.join(MAP), &first).unwrap_or_else(|e| panic!("{e}"));
     std::thread::sleep(Duration::from_secs_f64(POLL_S + 0.1));
     settle(&mut app);
     assert_eq!(text(&mut app), first, "a file with no unsaved edits reloads without asking");
 
-    caret_at(&mut app, 11, 12);
-    bevy_gooey::testing::type_text(&mut app, "lift: 0.5, ");
+    type_a_key(&mut app, "lift: 0.5");
     let second = MAP_TEXT.replace("yaw: 0.0", "yaw: 20.0");
-    bevy_grimoire_core::atomic_file::write(&root.join(MAP_RON), &second).unwrap_or_else(|e| panic!("{e}"));
+    bevy_grimoire_core::atomic_file::write(&root.join(MAP), &second).unwrap_or_else(|e| panic!("{e}"));
     std::thread::sleep(Duration::from_secs_f64(POLL_S + 0.1));
     settle(&mut app);
     click_answer(&mut app, ConflictAnswer::Reload);
     assert_eq!(text(&mut app), second, "Reload takes what the disk holds");
-    assert!(!app.world().resource::<Files>().is_dirty(MAP_RON), "and the tab is clean");
+    assert!(!app.world().resource::<Files>().is_dirty(MAP), "and the tab is clean");
+}
+
+/// Type a new key on a line of its own after `yaw`, the way a person adds one.
+fn type_a_key(app: &mut App, key: &str) {
+    caret_at(app, YAW_LINE, YAW_TEXT.len());
+    bevy_gooey::testing::press(app, KeyCode::Enter);
+    bevy_gooey::testing::type_text(app, key);
 }
 
 fn click_answer(app: &mut App, answer: ConflictAnswer) {
@@ -346,26 +353,26 @@ fn click_answer(app: &mut App, answer: ConflictAnswer) {
 #[test]
 fn the_command_files_and_the_guide_open_read_only() {
     let root = project("readonly");
-    std::fs::write(root.join("agent.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(root.join("play.ron"), "(version: 1)\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("agent.yaml"), "version: 1\n").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(root.join("play.yaml"), "version: 1\n").unwrap_or_else(|e| panic!("{e}"));
     std::fs::create_dir_all(root.join(".dark_factory")).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(root.join(".dark_factory/AGENTS.md"), "# rules\n").unwrap_or_else(|e| panic!("{e}"));
-    for rel in ["agent.ron", "play.ron", ".dark_factory/AGENTS.md", "AGENTS.md"] {
+    for rel in ["agent.yaml", "play.yaml", ".dark_factory/AGENTS.md", "AGENTS.md"] {
         assert!(files_lang::is_command_file(rel), "{rel} is read-only here");
     }
-    assert!(!files_lang::is_command_file(MAP_RON), "a map is not");
+    assert!(!files_lang::is_command_file(MAP), "a map is not");
     assert!(!files_lang::is_command_file("scripts/agent.rhai"), "and a script merely named like one is not");
 
-    let mut app = files_editor(&root, "agent.ron");
-    assert!(app.world().resource::<Files>().get("agent.ron").is_some_and(|f| f.read_only), "agent.ron opens read-only");
+    let mut app = files_editor(&root, "agent.yaml");
+    assert!(app.world().resource::<Files>().get("agent.yaml").is_some_and(|f| f.read_only), "agent.yaml opens read-only");
     let editor = editor_of(&mut app);
     assert!(app.world().get::<bevy::ui::InteractionDisabled>(editor).is_some(), "the widget does not take keys");
     bevy_gooey::testing::type_text(&mut app, "x");
-    assert_eq!(text(&mut app), "(version: 1)\n", "typing changes nothing");
+    assert_eq!(text(&mut app), "version: 1\n", "typing changes nothing");
     let mut files = app.world_mut().resource_mut::<Files>();
-    let refused = files::save_file(&mut files, &root, "agent.ron").expect_err("a save of a command file refuses");
+    let refused = files::save_file(&mut files, &root, "agent.yaml").expect_err("a save of a command file refuses");
     assert!(refused.contains("Read-only"), "{refused}");
-    assert_eq!(std::fs::read_to_string(root.join("agent.ron")).unwrap_or_default(), "(version: 1)\n");
+    assert_eq!(std::fs::read_to_string(root.join("agent.yaml")).unwrap_or_default(), "version: 1\n");
 }
 
 /// **Acceptance 5**: the tree lists the project's files, without `target/` and what `.gitignore` names, and
@@ -385,7 +392,7 @@ fn the_tree_lists_the_projects_files_and_a_click_opens_one() {
 
     let listed = files::listed_files(&root);
     assert!(listed.contains(&"notes.md".to_owned()) && listed.contains(&"scripts/door.rhai".to_owned()), "{listed:?}");
-    assert!(listed.contains(&MAP_RON.to_owned()), "the map's file is a file: {listed:?}");
+    assert!(listed.contains(&MAP.to_owned()), "the map's file is a file: {listed:?}");
     assert!(!listed.iter().any(|f| f.starts_with("target/")), "target/ is not listed: {listed:?}");
     assert!(!listed.contains(&"secret.log".to_owned()), "a glob in .gitignore hides a file: {listed:?}");
     assert!(!listed.iter().any(|f| f.starts_with("cache/")), "an anchored folder in .gitignore hides it: {listed:?}");
@@ -447,7 +454,7 @@ fn the_languages_are_coloured_by_role_and_references_are_links() {
     assert_eq!(role_of(&s, MAP_YAML_TEXT, "alpha/floor"), Some(SyntaxRole::Reference), "a placement's descriptor names a library piece");
     assert_eq!(role_of(&s, MAP_YAML_TEXT, "floor@0"), Some(SyntaxRole::String), "and its id is only a string");
 
-    // RON and Rhai and Markdown.
+    // RON (a game's own file: no project file is RON now), Rhai and Markdown.
     let ron = "// a comment\n(version: 3, name: \"m\", bash: None, at: (1.0, -2))\n";
     let s = spans(Lang::Ron, ron, None);
     assert_eq!(role_of(&s, ron, "// a comment"), Some(SyntaxRole::Comment));
@@ -470,7 +477,7 @@ fn the_languages_are_coloured_by_role_and_references_are_links() {
 }
 
 /// **Errors are the loader's**: a duplicate key, a tab and a second document are named by the event walk; a
-/// RON file that does not parse by `ron`; a Rhai bracket that never closes by the scan.
+/// RON or Rhai bracket that never closes by the scan.
 #[test]
 fn errors_are_the_loaders_own_with_the_line_they_stand_on() {
     let on = |path: &str, text: &str| files_lang::diagnose(path, text).into_iter().map(|f| (text[..f.range.start].matches('\n').count(), f.message)).collect::<Vec<_>>();
@@ -481,7 +488,9 @@ fn errors_are_the_loaders_own_with_the_line_they_stand_on() {
     assert!(on("scratch/a.yaml", "a: 1\nb: [1, 2]\n").is_empty(), "a file that reads has no findings");
     assert_eq!(on("scratch/a.yaml", "a: &x 1\nb: *x\n").len(), 1, "an anchor is refused where it stands");
 
-    let ron = on("scratch/a.ron", "(a: 1,\n b: ,\n)");
+    // Owner exception (2026-11-12): no project file is RON and the `ron` crate is out of the editor (#365), so a RON file's
+    // errors are what a bracket scan is sure of, as a Rhai file's are: a bracket that never closes, on the line it opened.
+    let ron = on("scratch/a.ron", "(a: 1,\n b: (2,\n)");
     assert_eq!(ron.len(), 1, "{ron:?}");
     assert_eq!(ron[0].0, 1, "{ron:?}");
     assert!(on("scratch/a.ron", "(a: 1)").is_empty());
@@ -490,8 +499,8 @@ fn errors_are_the_loaders_own_with_the_line_they_stand_on() {
     assert!(!rhai.is_empty(), "an unclosed bracket is found: {rhai:?}");
     assert!(on("scripts/a.rhai", "fn a() {\n  let x = (1 + 2);\n}\n").is_empty());
 
-    // A project file of a known kind is read by its kind's reader: a RON map with a missing field.
-    let missing = on(MAP_RON, &MAP_TEXT.replace("            yaw: 0.0,\n", ""));
+    // A project file of a known kind is read by its kind's reader: a map with a missing field.
+    let missing = on(MAP, &MAP_TEXT.replace("  yaw: 0.0\n", ""));
     assert_eq!(missing.len(), 1, "{missing:?}");
     assert!(missing[0].1.contains("yaw"), "the missing field is named: {missing:?}");
 }
@@ -522,7 +531,7 @@ fn folds_follow_the_structure_of_each_language() {
 #[test]
 fn the_colours_are_for_the_text_that_is_showing() {
     let root = project("colour");
-    let mut app = files_editor(&root, MAP_RON);
+    let mut app = files_editor(&root, MAP);
     let editor = editor_of(&mut app);
     let revision = |app: &App| app.world().get::<CodeEditorValue>(editor).map(CodeEditorValue::revision).unwrap_or(0);
     let drawn = |app: &App| app.world().get::<Highlights>(editor).map(|h| (h.revision(), h.spans().len()));
@@ -608,7 +617,7 @@ fn a_folded_mapping_moves_the_lines_below_up_by_its_height_and_unfolding_brings_
 #[test]
 fn the_editor_has_a_minimap_and_a_change_of_the_familiars_is_marked_on_it() {
     let root = project("minimap");
-    let mut app = files_editor(&root, MAP_RON);
+    let mut app = files_editor(&root, MAP);
     let editor = editor_of(&mut app);
     assert!(app.world().get::<bevy_gooey::CodeMinimap>(editor).is_some(), "the editor carries a minimap");
     let marks = bevy_cauldron::files::agent_marks_for_test(MAP_TEXT, &[[11, 12]]);
@@ -672,12 +681,12 @@ fn a_path_out_of_the_project_a_non_text_file_a_huge_one_and_a_vanished_one_are_r
 #[test]
 fn a_dirty_tab_keeps_its_place_and_a_clean_save_writes_nothing() {
     let root = project("dirtytab");
-    let mut app = files_editor(&root, MAP_RON);
+    let mut app = files_editor(&root, MAP);
     caret_at(&mut app, 0, 0);
     bevy_gooey::testing::type_text(&mut app, "x");
-    assert!(app.world().resource::<Files>().is_dirty(MAP_RON));
-    bevy_cauldron::session::close_tab(app.world_mut(), Workspace::Files, &bevy_cauldron::session::Doc::new(bevy_cauldron::session::Kind::File, MAP_RON));
-    assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(MAP_RON), "the tab is still there");
+    assert!(app.world().resource::<Files>().is_dirty(MAP));
+    bevy_cauldron::session::close_tab(app.world_mut(), Workspace::Files, &bevy_cauldron::session::Doc::new(bevy_cauldron::session::Kind::File, MAP));
+    assert_eq!(files::active_file(app.world().resource::<Session>()).as_deref(), Some(MAP), "the tab is still there");
 
     std::fs::write(root.join("notes.md"), "# n\n").unwrap_or_else(|e| panic!("{e}"));
     files::open_file(app.world_mut(), "notes.md").unwrap_or_else(|e| panic!("{e}"));
@@ -692,7 +701,7 @@ fn a_dirty_tab_keeps_its_place_and_a_clean_save_writes_nothing() {
 #[test]
 fn a_file_with_unsaved_edits_makes_leaving_ask_and_save_all_and_discard_all_do_what_they_say() {
     let root = project("unsaved");
-    let mut app = files_editor(&root, MAP_RON);
+    let mut app = files_editor(&root, MAP);
     assert!(!files::any_unsaved(), "nothing is unsaved yet");
     caret_at(&mut app, 0, 0);
     bevy_gooey::testing::type_text(&mut app, "# mine\n");
@@ -711,12 +720,12 @@ fn a_file_with_unsaved_edits_makes_leaving_ask_and_save_all_and_discard_all_do_w
     }
     settle(&mut app);
     assert_ne!(text(&mut app), typed, "discard lets the typed text go");
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), MAP_TEXT);
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), MAP_TEXT);
     caret_at(&mut app, 0, 0);
     bevy_gooey::testing::type_text(&mut app, "# kept\n");
     let typed = text(&mut app);
     app.world_mut().resource_mut::<Files>().save_all(&root).unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(std::fs::read_to_string(root.join(MAP_RON)).unwrap_or_default(), typed, "save all writes the typed text");
+    assert_eq!(std::fs::read_to_string(root.join(MAP)).unwrap_or_default(), typed, "save all writes the typed text");
     assert!(!files::any_unsaved());
 }
 
@@ -731,16 +740,16 @@ fn only_the_roots_gitignore_is_read() {
 }
 
 /// **A YAML map the loader refuses is an error in the editor** (review M6): the file reads as YAML, and the map's own
-/// validation (its name must be snake_case) is what refuses it, the same as for the RON spelling.
+/// validation (its name must be snake_case) is what refuses it, for any map the project holds.
 #[test]
-fn a_yaml_map_the_loader_refuses_is_an_error_in_the_editor_and_so_is_its_ron_twin() {
+fn a_yaml_map_the_loader_refuses_is_an_error_in_the_editor_and_so_is_the_projects_own_map() {
     let bad_yaml = MAP_YAML_TEXT.replace("name: draft", "name: BadName");
     let found = files_lang::diagnose(MAP_YAML, &bad_yaml);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].message.contains("snake_case"), "{found:?}");
-    let bad_ron = MAP_TEXT.replace("name: \"m\"", "name: \"BadName\"");
-    let found = files_lang::diagnose(MAP_RON, &bad_ron);
-    assert_eq!(found.len(), 1, "the RON spelling is refused the same way: {found:?}");
+    let bad_map = MAP_TEXT.replace("name: m", "name: BadName");
+    let found = files_lang::diagnose(MAP, &bad_map);
+    assert_eq!(found.len(), 1, "the project's own map is refused the same way: {found:?}");
     assert!(found[0].message.contains("snake_case"));
     assert!(files_lang::diagnose(MAP_YAML, MAP_YAML_TEXT).is_empty(), "and the good one reads");
 }

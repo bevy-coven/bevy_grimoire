@@ -8,7 +8,7 @@
 //!
 //! - **YAML** is scanned line by line in the one shape the project's writer emits (block style, a key a
 //!   line, an item a line: `bevy_grimoire_core::yaml`'s "written style"), and *its errors are the
-//!   loader's*: a file of a known kind is refused by [`bevy_grimoire_core::reload_check::check_yaml`], the
+//!   loader's*: a file of a known kind is refused by [`bevy_grimoire_core::reload_check::check`], the
 //!   reader the game loads it with, and any other file by the event walk
 //!   ([`bevy_grimoire_core::yaml::to_json`]) that refuses a duplicate key, an anchor, a tab and a second
 //!   document. A key colour is the key the walk would name.
@@ -22,10 +22,10 @@
 //! # Not a parser, and why that is a decision and not a shortcut
 //!
 //! The colours of RON, Rhai and Markdown come from a small tokenizer each (no new dependency: the
-//! owner's call of 2026-11-12). Their *errors* are not guessed by it: RON is read by `ron` (and by the
-//! kind's own reader when the path is a project file), Rhai's are only what a scan can be sure of (a
-//! bracket that never closes, a string that never ends: the engine's own compile is a crate the editor
-//! does not link), and Markdown has none.
+//! owner's call of 2026-11-12). Their *errors* are not guessed by it: RON (no project file is RON any more, so
+//! it is only a file a game keeps of its own) and Rhai's are only what a scan can be sure of (a bracket that
+//! never closes, a string that never ends: the engine's own compile is a crate the editor does not link), and
+//! Markdown has none.
 
 use std::ops::Range;
 
@@ -33,7 +33,7 @@ use std::collections::HashMap;
 
 use bevy_gooey::{CodeSeverity, SyntaxRole};
 use bevy_grimoire_core::yaml::SpanKind;
-use bevy_grimoire_core::reload_check::{self, Check, Format};
+use bevy_grimoire_core::reload_check::{self, Check};
 use serde_json::Value;
 
 /// **The languages the editor colours**, by the file's extension.
@@ -1066,7 +1066,7 @@ fn finding_on(lines: &Lines<'_>, text: &str, line: usize, message: String, sever
 }
 
 /// **What is wrong with a file**, read the way the game reads it (see the module note): a project file by
-/// its kind's own reader, any other YAML by the event walk, RON by `ron`, Rhai by a bracket scan.
+/// its kind's own reader, any other YAML by the event walk, RON and Rhai by a bracket scan.
 ///
 /// `path` is the file's path under the project, with `/`.
 pub fn diagnose(path: &str, text: &str) -> Vec<Finding> {
@@ -1075,12 +1075,12 @@ pub fn diagnose(path: &str, text: &str) -> Vec<Finding> {
     match Lang::of(path) {
         Lang::Yaml => {
             let refused = match reload_check::kind_of_path(path) {
-                Some((kind, Format::Yaml)) => match reload_check::check_yaml(kind, path, text) {
+                Some(kind) => match reload_check::check(kind, path, text) {
                     Check::Refused(r) => Some((r.reason, r.field)),
                     Check::Valid => None,
                     Check::Unchecked => walk_refusal(path, text),
                 },
-                _ => walk_refusal(path, text),
+                None => walk_refusal(path, text),
             };
             let Some((reason, field)) = refused else { return Vec::new() };
             let (line, message) = split_position(&reason);
@@ -1089,20 +1089,8 @@ pub fn diagnose(path: &str, text: &str) -> Vec<Finding> {
                 .unwrap_or(1);
             vec![error(line, message)]
         }
-        Lang::Ron => {
-            let refused = match reload_check::kind_of_path(path) {
-                Some((kind, Format::Ron)) => match reload_check::check(kind, path, text) {
-                    Check::Refused(r) => Some(r.reason),
-                    Check::Valid => None,
-                    Check::Unchecked => ron_refusal(text),
-                },
-                _ => ron_refusal(text),
-            };
-            let Some(reason) = refused else { return Vec::new() };
-            let (line, message) = split_position(&reason);
-            vec![error(line.unwrap_or(1), message)]
-        }
-        Lang::Rhai => rhai_findings(text),
+        Lang::Ron => bracket_findings(text, Code::Ron),
+        Lang::Rhai => bracket_findings(text, Code::Rhai),
         Lang::Markdown | Lang::Plain => Vec::new(),
     }
 }
@@ -1120,12 +1108,8 @@ fn walk_refusal(path: &str, text: &str) -> Option<(String, Option<String>)> {
     Some((reason, field))
 }
 
-fn ron_refusal(text: &str) -> Option<String> {
-    ron::Options::default().from_str::<ron::Value>(text).err().map(|e| e.to_string())
-}
-
 /// **The line a reason names and the sentence without its position**: `line 5, column 3: …` from the YAML
-/// reader, `5:3: …` from `ron`, and `map: 12:13-12:18: …` from a kind's reader (a word, then a span), each
+/// reader, and `map: 12:13-12:18: …` from a kind's reader (a word, then a span), each
 /// 1-based. The finding is already *on* that line, so the sentence says only what is wrong.
 fn split_position(reason: &str) -> (Option<usize>, String) {
     let digits = |s: &str| s.bytes().take_while(u8::is_ascii_digit).count();
@@ -1157,8 +1141,10 @@ fn split_position(reason: &str) -> (Option<usize>, String) {
     (None, reason.to_owned())
 }
 
-fn rhai_findings(text: &str) -> Vec<Finding> {
-    let (_, scan) = code_highlights(text, Code::Rhai);
+/// **What a bracket scan can be sure of** in a RON or Rhai file: a bracket that closes nothing or never closes, a
+/// string that never ends.
+fn bracket_findings(text: &str, code: Code) -> Vec<Finding> {
+    let (_, scan) = code_highlights(text, code);
     let mut out = Vec::new();
     let mut stack: Vec<Bracket> = Vec::new();
     let error = |at: usize, message: String| Finding { range: at..at + 1, severity: CodeSeverity::Error, message };

@@ -9,7 +9,7 @@
 //! | reference | destination | state |
 //! |---|---|---|
 //! | a piece's **Used by** | the maps that place it | the query and its sentence are here ([`used_by`], [`used_by_line`], from `Project::maps_that_place`); **no panel draws them yet** |
-//! | a placement's **Open file** | its map's `.map.ron`, at that row | **not yet**: the Files workspace is GD-11 (#373), so a `Shown::File` is refused with the sentence `reveal::page_of` already writes for a file |
+//! | a placement's **Open file** | its map's `.map.yaml`, at that row | **not yet**: the Files workspace is GD-11 (#373), so a `Shown::File` is refused with the sentence `reveal::page_of` already writes for a file |
 //! | a cue's **Used by** in Sound | the files and maps that name it | **not yet**: the Sound workspace is NV-08 (#385), and no map, script or file carries a cue to name |
 //! | Cmd/Ctrl+click a `cue:` value in the file editor | the cue in Sound | **not yet**: the file editor is GD-11 (#373) |
 //!

@@ -104,16 +104,21 @@ fn the_bare_keys_the_four_sat_on_move_nothing() {
 
 #[test]
 fn a_saved_keymap_that_names_a_retired_command_still_reads_and_binds_nothing() {
-    let chord = ron::ser::to_string(&Shortcut::new(Modifiers::NONE, KeyCode::Backquote)).unwrap_or_else(|e| panic!("{e}"));
+    let chord = Shortcut::new(Modifiers::NONE, KeyCode::Backquote);
+    // Owner exception (2026-11-12): the settings text is YAML now (a layer written by the editor's own writer), not RON.
+    let saved = |ids: &[&str]| {
+        let layer = SettingsLayer { version: SETTINGS_VERSION, keymap: ids.iter().map(|id| ((*id).to_owned(), chord)).collect(), ..SettingsLayer::default() };
+        bevy_grimoire_core::yaml::to_string(&layer).unwrap_or_else(|p| panic!("{}", p.line()))
+    };
     for id in RETIRED {
-        let text = format!("(version: {SETTINGS_VERSION}, keymap: {{\"{id}\": {chord}}})");
-        let layer = SettingsLayer::read("old/settings.ron", &text)
+        let text = saved(&[id]);
+        let layer = SettingsLayer::read("old/settings.yaml", &text)
             .unwrap_or_else(|r| panic!("a keymap that rebound `{id}` was refused: {}: {}", r.field.unwrap_or_default(), r.reason));
         assert!(!layer.keymap.contains_key(id), "`{id}` names no command, so the entry is dropped rather than kept");
     }
     // **A retired entry does not hide a real one**: the file's other rebinding survives the read.
-    let text = format!("(version: {SETTINGS_VERSION}, keymap: {{\"view.switch_door\": {chord}, \"file.save\": {chord}}})");
-    let layer = SettingsLayer::read("old/settings.ron", &text).unwrap_or_else(|r| panic!("{}", r.reason));
+    let text = saved(&["view.switch_door", "file.save"]);
+    let layer = SettingsLayer::read("old/settings.yaml", &text).unwrap_or_else(|r| panic!("{}", r.reason));
     assert!(layer.keymap.contains_key("file.save"));
     assert_eq!(layer.keymap.len(), 1);
 }

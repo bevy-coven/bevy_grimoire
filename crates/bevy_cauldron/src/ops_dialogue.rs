@@ -1,7 +1,7 @@
 //! **Walk a conversation without playing it, as one registered operation** (#106): `dialogue_preview`.
 //!
 //! A read: it loads the project's `DialogueScript` (the crate's own type, from
-//! `family/bevy_speech_bubbles.ron`), follows one path through a conversation taking the named
+//! `family/bevy_speech_bubbles.yaml`), follows one path through a conversation taking the named
 //! options at each choice, and answers with the lines said, where the walk stopped, and which nodes
 //! no path from the start reaches. It changes no document, so it has no undo.
 

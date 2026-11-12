@@ -67,7 +67,7 @@ impl Rect2 {
 /// `solvers::metropolis`: an `Obj` struct plus `aabb_overlap_area`, scored as built-in energy terms
 /// rather than as [`Constraint`]s. That worked for the dungeon, whose furniture is *solved*.
 ///
-/// It left the **Site** unprotected, because Site-67 is hand-authored: `site67.ron` types positions
+/// It left the **Site** unprotected, because Site-67 is hand-authored: `site67.yaml` types positions
 /// directly and never enters a solver, so nothing checked them. The first pass at furnishing the
 /// living half put three bunks 15 cm through a wall, ran a 3.68 m control desk a metre out into a
 /// corridor, and sat three bedside tables inside their own bunks — none of it visible in a

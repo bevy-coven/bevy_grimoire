@@ -112,7 +112,7 @@ pub struct Snapshot {
 pub struct GameView {
     /// The project this describes.
     pub root: Option<PathBuf>,
-    /// **The game's process, while it runs.** It is the pid of what `play.ron` started — the launcher when the command is
+    /// **The game's process, while it runs.** It is the pid of what `play.yaml` started — the launcher when the command is
     /// `cargo run` — so the memory read and Show window act on that process and its window, which is the game's only when the
     /// command runs the game itself.
     pub pid: Option<u32>,
@@ -132,7 +132,7 @@ pub struct GameView {
     pub build_errors: Vec<crate::build_view::BuildError>,
     /// The last build's sentence.
     pub build_said: String,
-    /// BRP's port, from the project's `play.ron`.
+    /// BRP's port, from the project's `play.yaml`.
     pub port: u16,
     pub(crate) arrived: Arc<Mutex<Option<Snapshot>>>,
     pub(crate) in_flight: Arc<AtomicBool>,

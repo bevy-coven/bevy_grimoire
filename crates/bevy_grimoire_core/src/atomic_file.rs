@@ -20,7 +20,7 @@
 //! 4. A flush of the directory.
 //!
 //! **The temp name is never a watched pattern.** It starts with `.` and ends in `.tmp`, so it is not
-//! a `.ron` file and [`crate::live::FileWatch`] skips every dotfile: a reader that scans a project
+//! a `.yaml` file and [`crate::live::FileWatch`] skips every dotfile: a reader that scans a project
 //! never sees a half-written file under any name it loads. [`is_temp`] says which names these are.
 //!
 //! # What is claimed, and what is tested
@@ -96,7 +96,7 @@ pub fn write_cache(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
     put(path, contents.as_ref(), Flush::None, Land::Replace)
 }
 
-/// The temp name a write of `target` uses for `serial`: beside the target, hidden, and not `.ron`.
+/// The temp name a write of `target` uses for `serial`: beside the target, hidden, and not `.yaml`.
 pub fn temp_path(target: &Path, serial: u64) -> PathBuf {
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let temp = format!(".{name}.{}-{serial}.{TEMP_EXTENSION}", std::process::id());

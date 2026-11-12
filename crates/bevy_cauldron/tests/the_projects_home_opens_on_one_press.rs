@@ -66,7 +66,7 @@ fn on_the_home(tag: &str, scratch: &Scratch, projects: &[&Path]) -> App {
         .descriptor("site/wall", "alpha")
         .build("m");
     let mut app = bevy_cauldron::harness::build_headless(&root, "m", None).unwrap_or_else(|e| panic!("{e}"));
-    let file = scratch.0.join("recent.ron");
+    let file = scratch.0.join("recent.yaml");
     for p in projects {
         recent::record(&file, p).unwrap_or_else(|e| panic!("{e}"));
     }

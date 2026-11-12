@@ -142,7 +142,7 @@ fn boundary_initial(protos: &[Prototype], width: usize, height: usize) -> Vec<u3
 /// and an unconvergeable generation is a bug to surface, not to paper over. (This is the *substrate*
 /// pass; the placement-grammar furniture pass degrades to `Outcome::Partial` instead — see
 /// `crate::placement::solvers::wfc`.) `base_weights` is the shape distribution (rock, dead_end,
-/// corridor, corner, tee, cross) from the `dungeon:` slice of `assets/config/config.ron`.
+/// corridor, corner, tee, cross) from the `dungeon:` slice of `assets/config/config.yaml`.
 pub fn generate(
     width: usize,
     height: usize,
