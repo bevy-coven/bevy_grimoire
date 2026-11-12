@@ -63,11 +63,35 @@ pub enum Check {
 /// The type's own reader on `text`, and on a refusal the field it is wrong at.
 fn run<T: DeserializeOwned>(
     text: &str,
-    parse: fn(&str) -> Result<T, String>,
+    parse: impl Fn(&str) -> Result<T, String>,
 ) -> Result<(), (Option<String>, String)> {
     match parse(text) {
         Ok(_) => Ok(()),
         Err(reason) => Err((field_of::<T>(text), reason)),
+    }
+}
+
+/// **The type's own reader on `text`, in the format the file is written in**, with the field a refusal is at.
+///
+/// **One table of kinds serves both formats** ([`check_as`]), and both end in the same type's `parse`, which is where
+/// its validators live (`Map::parse` runs `validate`, the rules arm runs `validate_numbers`): a YAML file is read by
+/// the YAML reader into the type ([`crate::yaml::from_str`], the one a load uses), and the value is then handed to
+/// `parse` as the RON text of that value, so a file the loader refuses is refused here whichever way it is spelled.
+fn read_as<T: serde::Serialize + DeserializeOwned>(
+    format: Format,
+    text: &str,
+    file: &str,
+    parse: impl Fn(&str) -> Result<T, String>,
+) -> Result<(), (Option<String>, String)> {
+    match format {
+        Format::Ron => run(text, parse),
+        Format::Yaml => {
+            let value: T = crate::yaml::from_str(text, file).map_err(|problem| {
+                (problem.where_.as_ref().and_then(|at| at.field.clone()), problem.why.clone().unwrap_or_else(|| problem.what.clone()))
+            })?;
+            let as_ron = ron::ser::to_string(&value).map_err(|e| (None, format!("{file} did not read back: {e}")))?;
+            parse(&as_ron).map(|_| ()).map_err(|reason| (None, reason))
+        }
     }
 }
 
@@ -171,6 +195,16 @@ fn line_as<T: DeserializeOwned>(line: &str) -> Result<T, (Option<String>, String
 
 /// **Parse `text` as `kind`.** `file` is only what a refusal names.
 pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
+    check_as(kind, file, text, Format::Ron)
+}
+
+/// **Parse `text` as `kind`, read as YAML** (GD-11, #373): the file editor's check of a converted project's files. The
+/// same table and the same validators as [`check`], through the reader a load uses ([`crate::yaml::from_str`]).
+pub fn check_yaml(kind: &FileKind, file: &str, text: &str) -> Check {
+    check_as(kind, file, text, Format::Yaml)
+}
+
+fn check_as(kind: &FileKind, file: &str, text: &str, format: Format) -> Check {
     use crate::{
         composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family,
         heightfield::Heightfield,
@@ -180,36 +214,36 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
         vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
     };
     let result = match kind.id {
-        "kits" => run(text, Kits::parse),
-        "vocab" => run(text, Vocabularies::parse),
-        "library" => run(text, Library::parse),
-        "policy" => run(text, Policy::parse),
-        "rules" => run(text, |t| {
+        "kits" => read_as(format, text, file, Kits::parse),
+        "vocab" => read_as(format, text, file, Vocabularies::parse),
+        "library" => read_as(format, text, file, Library::parse),
+        "policy" => read_as(format, text, file, Policy::parse),
+        "rules" => read_as(format, text, file, |t| {
             // `Rules::parse` only reads RON. What the editor refuses to open (a version it does not read, a
             // number no block can use) is `validate_numbers`, so a reload that said `applied` for a file the
             // project open refuses was telling the author the edit had landed.
             let rules = Rules::parse(t)?;
             rules.validate_numbers().map(|()| rules)
         }),
-        "compositions" => run(text, Compositions::parse),
-        "standards" => run(text, Standards::parse),
-        "repetition" => run(text, RepetitionRules::parse),
-        "rigs" => run(text, Rigs::parse),
-        "notes" => run(text, Notes::from_ron),
-        "plan" => run(text, Plan::from_ron),
-        "references" => run(text, References::from_ron),
-        "relations" => run(text, Relations::parse),
-        "map" => run(text, Map::parse),
-        "terrain" => run(text, Heightfield::parse),
-        "water_plan" => run(text, WaterPlan::parse),
-        "water_field" => run(text, WaterField::parse),
-        "volume" => run(text, Volume::parse),
-        "data_registry" => run(text, DataFiles::parse),
-        "family_list" => run(text, Family::from_ron),
-        "agent" => run(text, AgentSettings::from_ron),
-        "play" => run(text, PlayConfig::from_ron),
-        "destructible_marks" => run(text, Marks::parse),
-        "destructible_bake" => run(text, Bake::parse),
+        "compositions" => read_as(format, text, file, Compositions::parse),
+        "standards" => read_as(format, text, file, Standards::parse),
+        "repetition" => read_as(format, text, file, RepetitionRules::parse),
+        "rigs" => read_as(format, text, file, Rigs::parse),
+        "notes" => read_as(format, text, file, Notes::from_ron),
+        "plan" => read_as(format, text, file, Plan::from_ron),
+        "references" => read_as(format, text, file, References::from_ron),
+        "relations" => read_as(format, text, file, Relations::parse),
+        "map" => read_as(format, text, file, Map::parse),
+        "terrain" => read_as(format, text, file, Heightfield::parse),
+        "water_plan" => read_as(format, text, file, WaterPlan::parse),
+        "water_field" => read_as(format, text, file, WaterField::parse),
+        "volume" => read_as(format, text, file, Volume::parse),
+        "data_registry" => read_as(format, text, file, DataFiles::parse),
+        "family_list" => read_as(format, text, file, Family::from_ron),
+        "agent" => read_as(format, text, file, AgentSettings::from_ron),
+        "play" => read_as(format, text, file, PlayConfig::from_ron),
+        "destructible_marks" => read_as(format, text, file, Marks::parse),
+        "destructible_bake" => read_as(format, text, file, Bake::parse),
         _ => return Check::Unchecked,
     };
     match result {
@@ -221,7 +255,9 @@ pub fn check(kind: &FileKind, file: &str, text: &str) -> Check {
 /// **How a project file is written**: the format its text is read in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
+    /// A RON file (`kits.ron`, `maps/town.map.ron`): what a project is written in until GD-03's cutover.
     Ron,
+    /// A YAML file (`kits.yaml`, `maps/town.map.yaml`): what [`crate::migrate`] writes.
     Yaml,
 }
 
@@ -243,65 +279,6 @@ pub fn kind_of_path(rel: &str) -> Option<(&'static FileKind, Format)> {
     }
     let inside = ron_path.strip_prefix(crate::migrate::GRIMOIRE_DIR)?.strip_prefix('/')?;
     kind_of(Base::Grimoire, inside).map(|kind| (kind, format))
-}
-
-/// The type's own YAML reader on `text`, and on a refusal the field it is wrong at and why (which carries
-/// the line and the column, as [`crate::yaml::from_str`] words them).
-fn run_yaml<T: DeserializeOwned>(text: &str, file: &str) -> Result<(), (Option<String>, String)> {
-    match crate::yaml::from_str::<T>(text, file) {
-        Ok(_) => Ok(()),
-        Err(problem) => {
-            let field = problem.where_.as_ref().and_then(|at| at.field.clone());
-            let reason = problem.why.clone().unwrap_or_else(|| problem.what.clone());
-            Err((field, reason))
-        }
-    }
-}
-
-/// **Parse `text` as `kind`, read as YAML** (GD-11, #373): the file editor's check of a converted project's
-/// files, through the one reader a load uses ([`crate::yaml::from_str`]), so an unknown key, a key given
-/// twice and a value of the wrong type are refused with the line they stand on. [`Check::Unchecked`] for a
-/// kind this crate has no type for, exactly as [`check`] is.
-pub fn check_yaml(kind: &FileKind, file: &str, text: &str) -> Check {
-    use crate::{
-        composition::Compositions, data_files::DataFiles, destructible::{Bake, Marks}, family::Family,
-        heightfield::Heightfield,
-        kits::Kits, library::Library, map::Map, note_agent::AgentSettings, notes::Notes, plan::Plan,
-        play::PlayConfig, policy::Policy, references::References, relations::Relations,
-        repetition::RepetitionRules, rigs::Rigs, rules::Rules, standards::Standards,
-        vocab::Vocabularies, volume::Volume, water::{WaterField, WaterPlan},
-    };
-    let result = match kind.id {
-        "kits" => run_yaml::<Kits>(text, file),
-        "vocab" => run_yaml::<Vocabularies>(text, file),
-        "library" => run_yaml::<Library>(text, file),
-        "policy" => run_yaml::<Policy>(text, file),
-        "rules" => run_yaml::<Rules>(text, file),
-        "compositions" => run_yaml::<Compositions>(text, file),
-        "standards" => run_yaml::<Standards>(text, file),
-        "repetition" => run_yaml::<RepetitionRules>(text, file),
-        "rigs" => run_yaml::<Rigs>(text, file),
-        "notes" => run_yaml::<Notes>(text, file),
-        "plan" => run_yaml::<Plan>(text, file),
-        "references" => run_yaml::<References>(text, file),
-        "relations" => run_yaml::<Relations>(text, file),
-        "map" => run_yaml::<Map>(text, file),
-        "terrain" => run_yaml::<Heightfield>(text, file),
-        "water_plan" => run_yaml::<WaterPlan>(text, file),
-        "water_field" => run_yaml::<WaterField>(text, file),
-        "volume" => run_yaml::<Volume>(text, file),
-        "data_registry" => run_yaml::<DataFiles>(text, file),
-        "family_list" => run_yaml::<Family>(text, file),
-        "agent" => run_yaml::<AgentSettings>(text, file),
-        "play" => run_yaml::<PlayConfig>(text, file),
-        "destructible_marks" => run_yaml::<Marks>(text, file),
-        "destructible_bake" => run_yaml::<Bake>(text, file),
-        _ => return Check::Unchecked,
-    };
-    match result {
-        Ok(()) => Check::Valid,
-        Err((field, reason)) => Check::Refused(Refusal { kind: kind.id, file: file.to_owned(), field, reason }),
-    }
 }
 
 /// **The kinds [`check`] cannot read**, so a reader knows which refusals it has to find another way.

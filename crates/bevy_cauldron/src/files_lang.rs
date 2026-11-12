@@ -29,7 +29,10 @@
 
 use std::ops::Range;
 
+use std::collections::HashMap;
+
 use bevy_gooey::{CodeSeverity, SyntaxRole};
+use bevy_grimoire_core::yaml::SpanKind;
 use bevy_grimoire_core::reload_check::{self, Check, Format};
 use serde_json::Value;
 
@@ -113,7 +116,7 @@ impl<'a> Lines<'a> {
 // ── YAML ─────────────────────────────────────────────────────────────────────
 
 /// **One step of a path into a document**: a key, or the index of a list item.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Seg {
     Key(String),
     Index(usize),
@@ -503,6 +506,9 @@ fn first_sentence(doc: &str) -> String {
 /// **The spans a file's text is coloured in**, by byte range. `schema` is the file's kind's JSON Schema
 /// when it has one: YAML values it marks as references are links.
 pub fn highlights(lang: Lang, text: &str, schema: Option<&Value>) -> Vec<(Range<usize>, SyntaxRole)> {
+    if text.len() > COLOUR_LIMIT_BYTES {
+        return Vec::new();
+    }
     match lang {
         Lang::Yaml => yaml_highlights(text, schema.map(Schema::new)),
         Lang::Ron => code_highlights(text, Code::Ron).0,
@@ -533,7 +539,35 @@ fn scalar_role(value: &str) -> Option<SyntaxRole> {
 }
 
 fn yaml_highlights(text: &str, schema: Option<Schema<'_>>) -> Vec<(Range<usize>, SyntaxRole)> {
+    // **The keys, dashes and scalars come from the loader's own walk** ([`bevy_grimoire_core::yaml::spans`]: the
+    // event parser the reader refuses a file by), so a colour is a node the loader reads. The walk speaks for the
+    // text before the construct it refused; from that line on, and for what its events do not carry (comments, tags),
+    // the line scanner above colours as best it can.
+    let (parsed, fault) = bevy_grimoire_core::yaml::spans(text);
+    let lines = Lines::new(text);
+    let cutoff = fault.map_or(text.len(), |line| lines.range(line.saturating_sub(1).min(lines.count().saturating_sub(1))).start);
+    let mut links: HashMap<Vec<Seg>, bool> = HashMap::new();
+    let mut is_link = |path: &[Seg]| -> bool {
+        let Some(schema) = schema.as_ref() else { return false };
+        let shape: Vec<Seg> = path.iter().map(|s| if let Seg::Index(_) = s { Seg::Index(0) } else { s.clone() }).collect();
+        *links.entry(shape.clone()).or_insert_with(|| schema.reference_of(&shape).is_some())
+    };
     let mut spans = Vec::new();
+    for span in parsed.iter().filter(|s| s.range.end <= cutoff) {
+        let role = match &span.kind {
+            SpanKind::Key => Some(SyntaxRole::Key),
+            SpanKind::Dash => Some(SyntaxRole::Operator),
+            SpanKind::Quoted | SpanKind::Block => Some(SyntaxRole::String),
+            SpanKind::Plain(value) => scalar_role(value),
+        };
+        let role = match role {
+            Some(SyntaxRole::String) if !matches!(span.kind, SpanKind::Block) && is_link(&segs_of(&span.path)) => Some(SyntaxRole::Reference),
+            other => other,
+        };
+        if let Some(role) = role {
+            spans.push((span.range.clone(), role));
+        }
+    }
     let mut tracker = PathTracker::default();
     for line in scan_yaml(text) {
         if let Some(comment) = &line.comment {
@@ -542,18 +576,21 @@ fn yaml_highlights(text: &str, schema: Option<Schema<'_>>) -> Vec<(Range<usize>,
         if line.blank {
             continue;
         }
+        let parsed_line = line.start < cutoff;
         if line.block_body {
-            if let Some(value) = &line.value {
+            if let (false, Some(value)) = (parsed_line, &line.value) {
                 spans.push((value.clone(), SyntaxRole::String));
             }
             continue;
         }
         tracker.feed(&line);
-        for &col in &line.dashes {
-            spans.push((line.start + col..line.start + col + 1, SyntaxRole::Operator));
-        }
-        if let Some((range, _)) = &line.key {
-            spans.push((range.clone(), SyntaxRole::Key));
+        if !parsed_line {
+            for &col in &line.dashes {
+                spans.push((line.start + col..line.start + col + 1, SyntaxRole::Operator));
+            }
+            if let Some((range, _)) = &line.key {
+                spans.push((range.clone(), SyntaxRole::Key));
+            }
         }
         let Some(value) = &line.value else { continue };
         let value_text = &text[value.clone()];
@@ -570,12 +607,14 @@ fn yaml_highlights(text: &str, schema: Option<Schema<'_>>) -> Vec<(Range<usize>,
         } else {
             (value.clone(), value_text)
         };
+        if parsed_line {
+            continue;
+        }
         if value_text.starts_with('&') || value_text.starts_with('*') {
             spans.push((value_range, SyntaxRole::Reference));
             continue;
         }
-        let is_reference = schema.as_ref().is_some_and(|s| s.reference_of(&tracker.path()).is_some());
-        match (is_reference, scalar_role(value_text)) {
+        match (is_link(&tracker.path()), scalar_role(value_text)) {
             (true, Some(SyntaxRole::String)) => spans.push((value_range, SyntaxRole::Reference)),
             (_, Some(role)) => spans.push((value_range, role)),
             (_, None) => {}
@@ -584,6 +623,27 @@ fn yaml_highlights(text: &str, schema: Option<Schema<'_>>) -> Vec<(Range<usize>,
     spans
 }
 
+/// **A path as the loader spells it** (`placements[3].descriptor`), as steps.
+fn segs_of(path: &str) -> Vec<Seg> {
+    let mut out = Vec::new();
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        let (name, mut rest) = part.split_once('[').map_or((part, ""), |(n, r)| (n, r));
+        if !name.is_empty() {
+            out.push(Seg::Key(name.to_owned()));
+        }
+        while let Some((index, tail)) = rest.split_once(']') {
+            if let Ok(i) = index.parse() {
+                out.push(Seg::Index(i));
+            }
+            rest = tail.trim_start_matches('[');
+        }
+    }
+    out
+}
+
+/// **The largest text the editor colours and folds**, in bytes. Past this a file is data a program wrote: it is shown
+/// plain, because the colours are recomputed on every revision.
+pub const COLOUR_LIMIT_BYTES: usize = 1024 * 1024;
 // ── RON and Rhai ─────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -654,6 +714,17 @@ fn code_highlights(text: &str, code: Code) -> (Vec<(Range<usize>, SyntaxRole)>, 
                 spans.push((at..end.min(text.len()), SyntaxRole::Comment));
                 at = end.min(text.len());
             }
+            // **A character literal is a string of one character** (`'"'`, `'('`, `'\n'`): its quote and what is inside it
+            // open no string and no bracket. A lone `'` (a lifetime in a RON enum name, an apostrophe) is only itself.
+            b'\'' => {
+                match char_literal_end(text, at) {
+                    Some(end) => {
+                        spans.push((at..end, SyntaxRole::String));
+                        at = end;
+                    }
+                    None => at += 1,
+                }
+            }
             b'"' | b'`' => {
                 let quote = b;
                 let begin = at;
@@ -661,7 +732,13 @@ fn code_highlights(text: &str, code: Code) -> (Vec<(Range<usize>, SyntaxRole)>, 
                 let mut closed = false;
                 while at < bytes.len() {
                     match bytes[at] {
-                        b'\\' if quote == b'"' => at += 2,
+                        // A backslash takes the next byte with it, and a line break it takes is still a line.
+                        b'\\' if quote == b'"' => {
+                            if bytes.get(at + 1) == Some(&b'\n') {
+                                line += 1;
+                            }
+                            at += 2;
+                        }
                         c if c == quote => {
                             at += 1;
                             closed = true;
@@ -734,10 +811,9 @@ fn code_highlights(text: &str, code: Code) -> (Vec<(Range<usize>, SyntaxRole)>, 
     (spans, scan)
 }
 
-/// The fold ranges of the brackets that open on one line and close on a later one: the header is the line
-/// with the opener, and the closing line stays drawn.
 fn bracket_folds(scan: &Scan) -> Vec<Range<usize>> {
     let mut stack: Vec<Bracket> = Vec::new();
+    let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
     let mut out: Vec<Range<usize>> = Vec::new();
     for bracket in &scan.brackets {
         match bracket.ch {
@@ -745,7 +821,7 @@ fn bracket_folds(scan: &Scan) -> Vec<Range<usize>> {
             _ => {
                 if let Some(open) = stack.pop()
                     && open.line < bracket.line
-                    && !out.iter().any(|r| r.start == open.line && r.end == bracket.line)
+                    && seen.insert((open.line, bracket.line))
                 {
                     out.push(open.line..bracket.line);
                 }
@@ -756,6 +832,26 @@ fn bracket_folds(scan: &Scan) -> Vec<Range<usize>> {
     out
 }
 
+/// **Where a character literal that starts at `at` (a `'`) ends**, past its closing quote, or `None` when what follows
+/// is not one: `'x'`, `'"'`, `'\n'`, `'\u{1F600}'` are; a lone quote is not.
+fn char_literal_end(text: &str, at: usize) -> Option<usize> {
+    let rest = &text[at + 1..];
+    let mut chars = rest.char_indices();
+    let (_, first) = chars.next()?;
+    if first == '\'' || first == '\n' {
+        return None;
+    }
+    if first == '\\' {
+        // An escape: up to the next quote, within a `\u{...}`'s length.
+        let close = rest[1..].find('\'')?;
+        return (close <= CHAR_ESCAPE_BYTES).then_some(at + 1 + 1 + close + 1);
+    }
+    let (next, c) = chars.next()?;
+    (c == '\'').then_some(at + 1 + next + 1)
+}
+
+/// The longest an escaped character literal is, in bytes between its backslash and its closing quote (`\u{10FFFF}`).
+const CHAR_ESCAPE_BYTES: usize = 10;
 // ── Markdown ─────────────────────────────────────────────────────────────────
 
 fn fence_of(line: &str) -> Option<&str> {
@@ -839,6 +935,9 @@ fn markdown_highlights(text: &str) -> Vec<(Range<usize>, SyntaxRole)> {
 /// **Where a file can fold**, as `start..end` over lines (the header stays drawn, `start + 1..end` hides):
 /// every YAML mapping and sequence, every Rhai or RON block, every Markdown section and code fence.
 pub fn folds(lang: Lang, text: &str) -> Vec<Range<usize>> {
+    if text.len() > COLOUR_LIMIT_BYTES {
+        return Vec::new();
+    }
     match lang {
         Lang::Yaml => yaml_folds(text),
         Lang::Ron => bracket_folds(&code_highlights(text, Code::Ron).1),
@@ -996,7 +1095,7 @@ pub fn diagnose(path: &str, text: &str) -> Vec<Finding> {
             let (line, message) = split_position(&reason);
             vec![error(line.unwrap_or(1), message)]
         }
-        Lang::Rhai => rhai_findings(text, &lines),
+        Lang::Rhai => rhai_findings(text),
         Lang::Markdown | Lang::Plain => Vec::new(),
     }
 }
@@ -1051,16 +1150,11 @@ fn split_position(reason: &str) -> (Option<usize>, String) {
     (None, reason.to_owned())
 }
 
-fn rhai_findings(text: &str, lines: &Lines<'_>) -> Vec<Finding> {
+fn rhai_findings(text: &str) -> Vec<Finding> {
     let (_, scan) = code_highlights(text, Code::Rhai);
     let mut out = Vec::new();
     let mut stack: Vec<Bracket> = Vec::new();
-    let error = |at: usize, message: String| {
-        let line = lines.line_of(at);
-        let range = at..at + 1;
-        let _ = line;
-        Finding { range, severity: CodeSeverity::Error, message }
-    };
+    let error = |at: usize, message: String| Finding { range: at..at + 1, severity: CodeSeverity::Error, message };
     for bracket in &scan.brackets {
         match bracket.ch {
             b'(' | b'[' | b'{' => stack.push(*bracket),
@@ -1184,24 +1278,3 @@ pub fn hover(lang: Lang, text: &str, offset: usize, schema: Option<&Value>) -> O
     None
 }
 
-/// **The path of the key a line holds**, for a test and for the reference check: `placements[0].descriptor`.
-pub fn path_at_line(text: &str, line: usize) -> String {
-    let lines = Lines::new(text);
-    let mut tracker = PathTracker::default();
-    let mut block = None;
-    for n in 0..=line.min(lines.count().saturating_sub(1)) {
-        tracker.feed(&parse_line(lines.text(n), lines.range(n).start, &mut block));
-    }
-    let mut out = String::new();
-    for seg in tracker.path() {
-        match seg {
-            Seg::Key(k) if out.is_empty() => out.push_str(&k),
-            Seg::Key(k) => {
-                out.push('.');
-                out.push_str(&k);
-            }
-            Seg::Index(i) => out.push_str(&format!("[{i}]")),
-        }
-    }
-    out
-}
