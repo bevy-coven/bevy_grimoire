@@ -7,21 +7,19 @@
 
 use std::path::PathBuf;
 
-#[allow(unused_imports)]
 use crate::fixtures;
 
 use bevy_cauldron::loading::{LoadRequest, migrate_now, migrate_offer};
 
 fn project(tag: &str, with_ron: bool) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("migrate_offer_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join("assets/grimoire/maps")).unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(root.join("assets/grimoire/kits.yaml"), "version: 3\nbind: []\nbash: []\nauthoring: null\n").unwrap_or_else(|e| panic!("{e}"));
-    std::fs::write(root.join("assets/grimoire/maps/m.map.yaml"), "version: 9\nname: m\nplacements: []\n").unwrap_or_else(|e| panic!("{e}"));
+    // **A real fixture project**, which binds a kit and holds a map: a hand-made folder with `bind: []` is refused for a
+    // different reason ("binds no kit"), and this file is about the migration one.
+    let root = fixtures::Fixture::new(&format!("migrate_offer_{tag}_{}", std::process::id()))
+        .descriptor("alpha/floor", "alpha")
+        .place("alpha/floor", (1.0, 1.0))
+        .build("m");
     if with_ron {
         std::fs::write(root.join("assets/grimoire/editor.ron"), "(version: 1, text_scale: Some(1.25))").unwrap_or_else(|e| panic!("{e}"));
-    } else {
-        std::fs::write(root.join("assets/grimoire/editor.yaml"), "version: 1\ntext_scale: 1.25\n").unwrap_or_else(|e| panic!("{e}"));
     }
     root
 }

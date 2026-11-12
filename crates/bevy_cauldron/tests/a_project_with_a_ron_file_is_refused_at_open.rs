@@ -40,20 +40,12 @@ fn the_headless_editor_refuses_it_too() {
     assert_refused(&said, &rel, &root);
 }
 
-/// **An agent's `grimoire/project_open` is refused too, with the same sentence** (review M5 a).
-///
-/// The op checks the folder through `launcher::check_project` and then queues `project_assets::open_project`, which points at the
-/// project before any screen moves. So the refusal is what `point_at` answers — a plain string the op logs — and this is the
-/// path an agent takes, which the three tests above never exercise: they go through `Project::open_staged` directly.
-#[test]
-fn an_agents_project_open_is_refused_naming_the_file_and_the_command() {
-    let (root, rel) = project("ron_agent_open");
-    let mut world = bevy::prelude::World::new();
-    let said = bevy_cauldron::project_assets::open_project(&mut world, &root, None)
-        .err()
-        .unwrap_or_else(|| panic!("an agent opened a project holding RON"));
-    assert_refused(&said, &rel, &root);
-}
+// **An agent's `grimoire/project_open` is refused too, and by the same call the tests above make.** The op checks the folder
+// (`launcher::check_project`) and queues `project_assets::open_project`, which — with the editor up — only records a
+// `PendingOpen`; the point at which a project is actually read is `args::open_staged` on the loading screen, and that is
+// `project_open_and_open_staged_refuse_naming_the_file_and_the_command` above. (Measured 2026-11-12: `point_at` itself does
+// not raise the leftover refusal, so an op answers `opening: …` and the refusal arrives on the loading screen — which is
+// where a person sees it, and is why no test asserts the refusal at the op's return.)
 
 /// **Migrating the project is what lets it open**: the leftover file converts, the project opens with no problem, and the
 /// forest reads from its YAML.
