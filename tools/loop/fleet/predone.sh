@@ -26,6 +26,8 @@ export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cargo-target-fleet/$cluster}
 # The same build mode as the worker's own iteration (brief rule 2), so the incremental cache is reused, not rebuilt.
 export CARGO_INCREMENTAL=${CARGO_INCREMENTAL:-1}
 export RUSTC_WRAPPER=${RUSTC_WRAPPER-}
+# Bounded parallelism: big is swap-bound and a 24-job build plus 24 test threads was OOM-killed (2026-11-12: three whole-suite runs).
+export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-6} NEXTEST_TEST_THREADS=${NEXTEST_TEST_THREADS:-12}
 # /home on big is 97% full (2026-11-12) and a target dir is 15-20 GB: refuse to start a build that could fill it.
 free_gb=$(df -Pk "$HOME" | awk 'NR==2 {print int($4/1048576)}')
 [ "$free_gb" -ge "${PREDONE_MIN_FREE_GB:-30}" ] || { echo "predone: only ${free_gb} GB free under $HOME (need ${PREDONE_MIN_FREE_GB:-30}); delete a finished cluster's ~/.cargo-target-fleet/<cluster> and rerun" >&2; exit 1; }
