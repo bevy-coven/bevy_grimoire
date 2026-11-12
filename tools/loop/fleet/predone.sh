@@ -9,8 +9,16 @@
 # Appends `FLEET-PREDONE <cluster> PASS|FAIL <sha>` to /tmp/fleet/result-<cluster>.md and exits with the suite's code.
 # The timing tests (a UI frame budget, a slow-load spinner) are wall-clock and fail on a loaded host; a FAIL naming only
 # those is rerun alone once before it counts.
+#
+# One whole-suite run at a time per host: big is swap-bound (its /tmp is a 16 GB tmpfs that lives in swap), and two
+# overlapping workspace builds, or one beside the push gate, are killed by systemd-oomd or the kernel (2026-11-11: the
+# gate was killed seven times in a row). The lock is /tmp/fleet/big-heavy.lock; the gate runner holds it too.
 set -uo pipefail
 cluster=${1:?usage: predone.sh <cluster>}
+if [ -z "${FLEET_HEAVY_LOCKED:-}" ] && command -v flock >/dev/null 2>&1; then
+  mkdir -p /tmp/fleet
+  FLEET_HEAVY_LOCKED=1 exec flock /tmp/fleet/big-heavy.lock bash "$0" "$@"
+fi
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cargo-target-shared/global}
 result=/tmp/fleet/result-$cluster.md
 log=/tmp/fleet/predone-$cluster.log
