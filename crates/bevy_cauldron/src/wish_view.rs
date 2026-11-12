@@ -1041,7 +1041,7 @@ fn follow_the_chip(
     let Some(wishes) = wishes else { return };
     let hiding = blocks.is_empty();
     // **Wishes and lessons are one count**: both are rows in the block, and both wait for the person.
-    let waiting = wishes.waiting() + lessons.as_deref().map_or(0, crate::present::Lessons::waiting);
+    let waiting = crate::activity_bar::waiting(Some(&wishes), lessons.as_deref());
     let said = if hiding { chip_says(waiting) } else { String::new() };
     for (mut node, mut shown) in &mut chips {
         let display = if said.is_empty() { Display::None } else { Display::Flex };

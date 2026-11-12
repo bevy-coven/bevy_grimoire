@@ -1,22 +1,22 @@
 # Kits and labels
 
-A kit is the set of meshes a map draws from. You bring meshes into a kit, label each one, and the labels tell the editor what each piece is for. This page covers the kit door from start to finish, and ends with an agent labelling a piece for you.
+A kit is the set of meshes a map draws from. You bring meshes into a kit, label each one, and the labels tell the editor what each piece is for. This page covers the Kit workspace from start to finish, and ends with an agent labelling a piece for you.
 
 ## What a kit is
 
 A **kit** is a folder of meshes and the `library.ron` file that lists them. Each entry in that file is a **piece**: one mesh, its size, and its labels. The file lives beside the meshes, for example at `assets/grimoire/kit/library.ron`.
 
-A **door** is one of the editor's three screens: Map, Kit and Rigs. Press `=` to switch to the other door. The kit door has three panels, and you switch between them with `1`, `2` and `3`:
+A **workspace** is one of the editor's jobs: Map, Kit, Animation and more. Press `Cmd+4` (`Ctrl+4` on Windows and Linux) to go to the Kit workspace. It has three panels, and you switch between them by clicking their chips on the strip:
 
-- `1` **Meshes**: bring meshes in, and label the pieces you have.
-- `2` **Tiles**: the kit's tiles, and placing pieces on them.
-- `3` **Compose**: saved groups of pieces, called **compositions**.
+- **Meshes**: bring meshes in, and label the pieces you have.
+- **Tiles**: the kit's tiles, and placing pieces on them.
+- **Compose**: saved groups of pieces, called **compositions**.
 
 ## Bring a mesh into a kit
 
 Goal: add a mesh from the kit's folder to the library as a piece.
 
-1. Press `1` to open the Meshes panel.
+1. Click MESHES on the strip to open the Meshes panel.
 2. Read the two shelves. `NOT IMPORTED (n)` lists meshes on disk that are not pieces yet. `MESHES (n)` lists the pieces.
 3. Press `Left` to walk the NOT IMPORTED list, or `Right` to walk MESHES. Up and Down move one row; Shift with an arrow moves five.
 4. On a mesh in NOT IMPORTED, press `Enter`. The mesh becomes a piece and moves to MESHES.
@@ -107,7 +107,7 @@ There is one labelling path. There is no setting that chooses a second one and n
 
 Steps:
 
-1. Press `1`, then `Right`, and highlight a piece on MESHES.
+1. Click MESHES on the strip, press `Right`, and highlight a piece on MESHES.
 2. Press `L`. The editor photographs the piece and asks the model.
 3. Watch the description. It shows `PROPOSED` while the suggestion is pending.
 4. Read the chips. The model's tokens appear as they arrive. There is no review step: the labels stay marked as the model's until you change them.

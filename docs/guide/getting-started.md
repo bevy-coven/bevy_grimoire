@@ -36,19 +36,19 @@ A **map** is a file that holds your placements. It is saved as `<name>.map.ron` 
 3. Type `first_map`. Use lowercase letters, digits and underscores. Start with a letter.
 4. Press Enter. The map `first_map` is made **and opens in the editor**, in that one press.
 
-**What you see:** the editor opens on the MAP door. A door is one of the editor's three workspaces. The MAP door shows your map. A new map's bounds start at `10 x 4 x 10`.
+**What you see:** the editor opens on the MAP workspace, which shows your map. A workspace is one of the editor's jobs: Map, Kit, Animation and more. A new map's bounds start at `10 x 4 x 10`.
 
 **If the map is made but does not open:** the door refused it, and the reason is on the status line (`\`first_map\` will not open: …`). The map is still in the MAPS column, so pressing Enter on it tries again.
 
 **If it goes wrong:** if Enter on `+ new map` does nothing, check that the form is open under MAPS. If you press Enter with the name blank, the message reads `a map needs a name — snake_case, starting with a letter`. Type a name first.
 
-## Look at the kit door
+## Look at the Kit workspace
 
-1. Press `=`. The editor switches to the other door, KIT.
+1. Press `Cmd+4` (`Ctrl+4` on Windows and Linux). The editor switches to the KIT workspace.
 
-**What you see:** the KIT door opens on the MESHES tab.
+**What you see:** the KIT workspace opens on the MESHES tab.
 
-2. Press `=` again. You are back on the MAP door.
+2. Press `Cmd+2` (`Ctrl+2`). You are back on the MAP workspace.
 
 ## Arm a piece and place it
 

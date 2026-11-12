@@ -33,6 +33,7 @@
 //! A badge cannot be changed on a gooey tab once spawned, so the bar is rebuilt when what it shows changes
 //! (a workspace registered, a count moved): rare, and the selection is carried across in the rebuild.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_gooey::{FocusRegion, IconSource, IconTab, SideTab, TabsValue, Tooltip, ValueChange};
 
@@ -106,6 +107,16 @@ pub fn waiting(wishes: Option<&crate::present::Wishes>, lessons: Option<&crate::
     wishes.map_or(0, crate::present::Wishes::waiting) + lessons.map_or(0, crate::present::Lessons::waiting)
 }
 
+/// What [`keep_the_activity_bar`] reads, bundled so the system stays under clippy's argument limit.
+#[derive(SystemParam)]
+struct Wants<'w> {
+    settings: Option<Res<'w, crate::settings::EditorSettings>>,
+    view: Option<Res<'w, crate::shell_view::ShellView>>,
+    reloads: Option<Res<'w, crate::live::EditorReloads>>,
+    wishes: Option<Res<'w, crate::present::Wishes>>,
+    lessons: Option<Res<'w, crate::present::Lessons>>,
+}
+
 /// **Spawn the bar while it is wanted, and keep it what it should show.**
 ///
 /// A system rather than `OnEnter` for the menu bar's reason: the bar is a child of the frame's body, which
@@ -114,18 +125,17 @@ pub fn waiting(wishes: Option<&crate::present::Wishes>, lessons: Option<&crate::
 fn keep_the_activity_bar(
     mut commands: Commands,
     frame: Option<Res<Frame>>,
-    settings: Option<Res<crate::settings::EditorSettings>>,
     workspace: Option<Res<Workspace>>,
     atlas: Option<Res<crate::toolbar::ToolbarAtlas>>,
-    reloads: Option<Res<crate::live::EditorReloads>>,
-    wishes: Option<Res<crate::present::Wishes>>,
-    lessons: Option<Res<crate::present::Lessons>>,
+    wants: Wants,
     bars: Query<(Entity, &ActivityBar)>,
 ) {
     let Some(frame) = frame else { return };
-    let wanted = settings.is_none_or(|s| s.show_activity_bar);
-    let problems = problems(reloads.as_deref());
-    let waiting = waiting(wishes.as_deref(), lessons.as_deref());
+    // **Zen mode takes the bar with everything else** (`shell_view::ZenParts`): it is not drawn, so it is
+    // not spawned, rather than hidden.
+    let wanted = wants.settings.is_none_or(|s| s.show_activity_bar) && !wants.view.is_some_and(|v| v.zen);
+    let problems = problems(wants.reloads.as_deref());
+    let waiting = waiting(wants.wishes.as_deref(), wants.lessons.as_deref());
     let shown: Vec<(Workspace, usize)> = registered().into_iter().map(|w| (w, badge(w, problems, waiting))).collect();
 
     let mut current = false;

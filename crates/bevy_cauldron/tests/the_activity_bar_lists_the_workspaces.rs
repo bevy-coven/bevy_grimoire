@@ -13,7 +13,8 @@
 //!    clears it (`badge` and `waiting` are the bar's own functions, and Agent has no tab until NV-10, so
 //!    this is measured on them rather than on a pill that is not drawn).
 //! 4. **View ▸ Show activity bar takes the bar away, and the choice is saved** in the user's settings.
-//! 5. **F6 reaches the bar**: it is a focus region. (The arrows and Enter are gooey's `TabList`; no headless test of them is kept here because the harness's layout gave `AutoDirectionalNavigation` nothing to move to.)
+//! 5. **Zen mode takes the bar away** (spawned on demand, so it is gone and not hidden).
+//! 6. **F6 reaches the bar**: it is a focus region. (The arrows and Enter are gooey's `TabList`; no headless test of them is kept here because the harness's layout gave `AutoDirectionalNavigation` nothing to move to.)
 
 use std::path::PathBuf;
 
@@ -126,7 +127,7 @@ fn a_click_on_each_icon_lands_in_its_workspace_and_the_map_and_selection_stay() 
         assert_eq!(app.world().resource::<Selection>().ids(), selected.as_slice(), "{} dropped the selection", order[index].title());
         let on = {
             let world = app.world_mut();
-            world.query::<&bevy_gooey::TabsValue>().iter(world).next().map(|v| v.0)
+            world.query_filtered::<&bevy_gooey::TabsValue, With<ActivityStrip>>().iter(world).next().map(|v| v.0)
         };
         assert_eq!(on, Some(index), "the indicator is on the workspace that is open");
     }
@@ -144,7 +145,7 @@ fn the_indicator_follows_a_workspace_reached_by_its_key() {
     let index = activity_bar::registered().iter().position(|w| *w == Workspace::Kit).unwrap_or_else(|| panic!("kit is registered"));
     let on = {
         let world = app.world_mut();
-        world.query::<&bevy_gooey::TabsValue>().iter(world).next().map(|v| v.0)
+        world.query_filtered::<&bevy_gooey::TabsValue, With<ActivityStrip>>().iter(world).next().map(|v| v.0)
     };
     assert_eq!(on, Some(index));
 }
@@ -226,7 +227,7 @@ fn the_view_menu_collapses_the_bar_and_the_choice_is_saved() {
 
     let row = item(&mut app);
     app.world_mut().commands().trigger(bevy_gooey::Activate { entity: row });
-    until(&mut app, "the bar back after choosing the row again", |app| the_bar_is_there(app));
+    until(&mut app, "the bar back after choosing the row again", the_bar_is_there);
     assert!(ticked(&mut app) || { app.update(); ticked(&mut app) }, "and the tick is back");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -254,4 +255,17 @@ fn the_bar_is_a_focus_region_before_the_docks() {
     };
     let region = app.world().get::<bevy_gooey::FocusRegion>(bar).copied();
     assert_eq!(region, Some(bevy_gooey::FocusRegion::navigate()), "the bar navigates with the arrows");
+}
+
+/// **Zen mode takes the bar with everything else**, and leaving it brings the bar back.
+#[test]
+fn zen_mode_takes_the_bar_away_and_leaving_it_brings_it_back() {
+    let mut app = editor("zen", None);
+    assert!(the_bar_is_there(&mut app));
+    app.world_mut().resource_mut::<bevy_cauldron::shell_view::ShellView>().zen = true;
+    settle(&mut app);
+    assert!(!the_bar_is_there(&mut app), "Zen mode leaves only the viewport, so the bar is gone");
+    app.world_mut().resource_mut::<bevy_cauldron::shell_view::ShellView>().zen = false;
+    settle(&mut app);
+    assert!(the_bar_is_there(&mut app), "and it is back when Zen mode ends");
 }
