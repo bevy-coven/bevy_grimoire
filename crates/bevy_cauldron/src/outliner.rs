@@ -661,10 +661,13 @@ impl Outliner {
     /// of the map is therefore a few removals and the same piece added again, which is the order a whole build draws.
     /// More than a few of either is [`Plan::Whole`].
     fn plan<'m>(&self, now: &Now<'m>) -> Plan<'m> {
-        // A search draws what matches and not the rest, so it is always a whole build, and so is its change.
-        if !self.built || self.built_for != self.query || self.query.split_whitespace().next().is_some() {
+        // A tree that was not built, or was built for another search, is built whole. **A held search is read like any other
+        // frame**: the snapshot is of the whole map, so a turn or a nudge under a search is [`Plan::Nothing`] and costs no
+        // rebuild (the deleted fingerprint answered the same).
+        if !self.built || self.built_for != self.query {
             return Plan::Whole;
         }
+        let searching = self.query.split_whitespace().next().is_some();
         if self.built_notes != now.notes || self.built_files != now.files {
             return Plan::Whole;
         }
@@ -694,6 +697,10 @@ impl Outliner {
         }
         let added = &placements[at..];
         if added.len() > MOST_PIECES_PATCHED_IN {
+            return Plan::Whole;
+        }
+        // A search draws only what matches, so a piece that arrived or left may or may not be a row: that is its build's to say.
+        if searching && (!removed.is_empty() || !added.is_empty()) {
             return Plan::Whole;
         }
         let mut marked: BTreeSet<&str> = BTreeSet::new();

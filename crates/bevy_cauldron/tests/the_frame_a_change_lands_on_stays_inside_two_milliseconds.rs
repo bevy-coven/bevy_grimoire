@@ -65,14 +65,19 @@ fn rig(tag: &str) -> App {
     app
 }
 
-/// **What the UI systems cost on each frame from a change to the settled frame, the worst of them**, milliseconds, and the
-/// frames in which the editor's lists did their work.
+/// **What the UI systems cost on each frame from a change to the settled frame, the worst of them**, milliseconds.
+///
+/// `UiFrame::last_ms` is the frame that finished before the one that has just run (it rolls at the start of a frame), so
+/// reading it after update `k` reads frame `k - 1`: one more update than there are frames is run, and the first reading (the
+/// frame before the change) is not counted.
 fn worst_frame_after_a_change(app: &mut App, change: impl FnOnce(&mut World)) -> f64 {
     change(app.world_mut());
     let mut worst = 0.0_f64;
-    for _ in 0..FRAMES_AFTER_A_CHANGE {
+    for frame in 0..=FRAMES_AFTER_A_CHANGE {
         app.update();
-        worst = worst.max(app.world().resource::<UiFrame>().last_ms);
+        if frame > 0 {
+            worst = worst.max(app.world().resource::<UiFrame>().last_ms);
+        }
     }
     worst
 }
@@ -111,6 +116,7 @@ fn an_undo_and_a_redo_cost_the_ui_under_two_milliseconds_a_frame_at_ten_thousand
     let mut app = rig("the_frame_a_change_lands_on_undo");
     editor::place_for_test(app.world_mut(), "site/wall", (500.0, 500.0));
     updates(&mut app, 4);
+    let before = patches(&mut app);
     let mut best_undo = f64::INFINITY;
     let mut best_redo = f64::INFINITY;
     for _ in 0..CHANGES {
@@ -119,6 +125,7 @@ fn an_undo_and_a_redo_cost_the_ui_under_two_milliseconds_a_frame_at_ten_thousand
         best_redo = best_redo.min(worst_frame_after_a_change(&mut app, editor::redo_for_test));
         updates(&mut app, 3);
     }
+    assert_eq!(patches(&mut app) - before, 2 * CHANGES as u32, "every undo and every redo reached the outliner as a patch");
     // An undo takes the piece out of the tree, and `Tree::remove` reads the tree's order again: gooey's own cost, which is
     // what this is allowed beyond the history's two relabelled lines. The redo puts it back as an insert.
     assert!(best_redo < MAX_MS_PER_FRAME, "a redo cost the UI {best_redo:.3} ms on its worst frame, over {MAX_MS_PER_FRAME} ms");

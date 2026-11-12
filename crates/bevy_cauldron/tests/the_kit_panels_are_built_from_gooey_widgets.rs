@@ -12,11 +12,12 @@
 //!
 //! # Why a count and not zero
 //!
-//! A `bevy_gooey::row` carries no margin, and about twenty of `tiles.rs`'s remaining literals are rows
-//! whose whole reason for existing is a block or half-step gap above them (`margin: top(GAP_GROUP)`).
-//! Converting those would silently close the spacing between a panel's blocks, which is a visible
-//! regression in a commit whose subject is "no raw `Node`". They wait for a gooey that can say a
-//! layout's own margin, and this file says how many there are so the number cannot grow.
+//! A `bevy_gooey::row` carries no margin of its own, but the skin writes only a row's gap and its floor width, so a margin, an
+//! alignment or a wrap set over the bundle (`chrome::spaced_row`, `chrome::wrapping_row`) is kept: the margin-carrying rows
+//! are gooey rows now. What stays raw is what gooey has no widget for (a hit target's floor, a tab's inset, a band that is
+//! also a button, a fixed-pixel column), and this file says how many there are so the number cannot grow. **The helpers'
+//! own literals are counted too**, in `the_chrome_helpers_keep_their_raw_nodes_counted.rs`, so raw layout cannot move into
+//! `chrome.rs` to leave this count.
 
 use bevy::prelude::*;
 use bevy_cauldron::harness;

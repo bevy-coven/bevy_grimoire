@@ -866,6 +866,8 @@ pub const GAP_GROUP: f32 = 16.0;
 pub const GAP_TIGHT_STEPS: f32 = GAP_TIGHT / SKIN_GAP_PX;
 /// [`GAP_GROUP`] in steps of the skin's gap (3.2).
 pub const GAP_GROUP_STEPS: f32 = GAP_GROUP / SKIN_GAP_PX;
+/// [`GAP_ROW`] in steps of the skin's gap (1.0: the editor skin's gap is the row gap).
+pub const GAP_ROW_STEPS: f32 = GAP_ROW / SKIN_GAP_PX;
 
 /// **A chip's (and a compact list row's) inset.** The 6 × 3 pair was an undeclared constant at
 /// twelve sites in five files before it had this name — the exact drift this module's header

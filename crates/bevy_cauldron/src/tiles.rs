@@ -4130,7 +4130,7 @@ fn spawn_tab_strip(
             // **The name is here; the keys are the workspace chords'.** `=` was this cue's key
             // until #379 replaced it with `Cmd`/`Ctrl`+`1`…`9`, which are on the strip's badge
             // already, so this prints the *name* of where a click goes and the badge prints the keys.
-            crate::chrome::gapped_row(p, 1.0, UiRect::left(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
+            crate::chrome::gapped_row(p, crate::chrome::GAP_ROW_STEPS, UiRect::left(Val::Px(crate::chrome::GAP_GROUP)), AlignItems::Center)
                 .insert(OtherWorkspaceMark)
             // **A click on the name crosses.** The mark says where it goes, and a name that names
             // a place is a name that gets clicked (#288). The Rigs door hides the mark, so a click
@@ -8258,7 +8258,7 @@ fn shelf_strip(
     // the panel edge, which is the same class of defect as the kit row that wrapped into its own value column — a fixed
     // width and content that outgrew it. The hint drops to a second line rather than being cut, and on a wider panel it stays
     // where it was.
-    crate::chrome::wrapping_row(p, 1.0, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
+    crate::chrome::wrapping_row(p, crate::chrome::GAP_ROW_STEPS, crate::chrome::GAP_TIGHT, UiRect::ZERO, AlignItems::Center)
     .with_children(|row| {
         // A tab shows the two shelves its own keys reach: `Meshes` imports (candidates <-> library),
         // `Tiles` composes (library <-> kit). Drawing all three everywhere would offer a chip whose
@@ -8892,19 +8892,17 @@ fn draw_ink(
                     .entry::<Node>()
                     .and_modify(|mut n| n.align_items = AlignItems::Center);
                 library_row.with_children(|row| {
-                    // **A gooey `image_box` of the slot's size**, holding its room while the thumbnail is baked: an image that has
-                    // not loaded draws nothing and keeps the box, and the slot's fill shows through it.
+                    // **A gooey `image_box` of the slot's size**, holding its room while the thumbnail is baked. The ink carries only
+                    // `portrait: bool` — a `Handle<Image>` in a compared value would make the comparison about handle identity — so
+                    // the handle is looked up here, by id, never by index. **Until a portrait exists the slot holds Bevy's
+                    // transparent image**, which the UI renderer skips: the default handle is a real white pixel and would paint
+                    // white over the slot's fill.
+                    let image = if *portrait { thumbs.and_then(|t| t.image(id)) } else { None };
                     let mut slot = row.spawn((
-                        bevy_gooey::image_box(Handle::default(), Vec2::splat(crate::chrome::THUMB_SLOT)),
+                        bevy_gooey::image_box(image.unwrap_or(bevy::image::TRANSPARENT_IMAGE_HANDLE), Vec2::splat(crate::chrome::THUMB_SLOT)),
                         BackgroundColor(crate::chrome::ink().slot_bg),
                     ));
                     slot.entry::<Node>().and_modify(|mut n| n.margin = UiRect::right(Val::Px(crate::chrome::GAP_ROW)));
-                    // The ink carries only `portrait: bool` — a `Handle<Image>` in a compared
-                    // value would make the comparison about handle identity — so the handle is
-                    // looked up here, by id, never by index.
-                    if *portrait && let Some(image) = thumbs.and_then(|t| t.image(id)) {
-                        slot.insert(ImageNode::new(image));
-                    }
                     crate::chrome::fill_text(
                         row,
                         id.clone(),

@@ -8278,7 +8278,10 @@ fn patch_history(nodes: &mut bevy_gooey::Tree, state: &EditorState, was: (usize,
         }
         return nodes.insert(None, bevy_gooey::TreeNode::new(depth as u64, last));
     }
-    if was_depth + was_redo == depth + redo && was_depth.abs_diff(depth) < MOST_HISTORY_ROWS_RELABELLED {
+    // **Only while something is left to redo.** Recording an entry clears the redo stack, so a move that ends with nothing to
+    // redo and the same number of lines may be an undo of two and two new entries as well as a redo of everything: the lines
+    // between the positions are not all what they were, and the list is built whole.
+    if redo > 0 && was_depth + was_redo == depth + redo && was_depth.abs_diff(depth) < MOST_HISTORY_ROWS_RELABELLED {
         for position in was_depth.min(depth)..=was_depth.max(depth) {
             let Some(line) = history_line(state, position, depth) else { return false };
             nodes.relabel(position as u64, line);
@@ -8391,7 +8394,9 @@ fn refresh_history(
     let Ok(mut table) = tables.get_mut(tree) else { return };
     let Some(nodes) = table.source_mut::<bevy_gooey::Tree>() else { return };
     // **A stack that moved by one entry or by the current line touches the rows it names** and leaves the other 5,000 alone.
-    if !mark.seen.is_some_and(|was| patch_history(nodes, &state, was, (depth, redo))) {
+    // **A patch that leaves the list a different length than the stacks say has drifted**, and the list is built whole.
+    let patched = mark.seen.is_some_and(|was| patch_history(nodes, &state, was, (depth, redo))) && nodes.node_count() == depth + redo + 1;
+    if !patched {
         nodes.set_nodes(history_nodes(&state));
     }
     // **The line the editor stands on is the selected one**, and gooey keeps that row where the person is

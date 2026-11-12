@@ -16,7 +16,9 @@
 
 use bevy::prelude::*;
 use bevy_cauldron::editor::{self, EditorState, HistoryTree};
-use bevy_cauldron::outliner::{Contents, Eyes, Locks, Outliner, OutlinerItem, OutlinerTree, nodes_for, placement_key};
+use bevy_cauldron::outliner::{
+    Contents, Eyes, Locks, Outliner, OutlinerItem, OutlinerSearch, OutlinerTree, nodes_for, placement_key,
+};
 use bevy_cauldron::project::{OpenMap, Project};
 use bevy_gooey::{RowSource, Table, Tree, ValueChange};
 
@@ -256,4 +258,48 @@ fn a_piece_placed_taken_back_or_marked_is_a_patch_not_a_build() {
     updates(&mut app, FRAMES_PER_CHANGE);
     assert_eq!(counts(&mut app), (built + 3, patched + 3), "a placement taken back is one change, and a patch");
     assert!(!the_outliners_tree(&mut app).contains(placement_key(&id)), "its row is gone");
+}
+
+/// **A nudge under a held search is not a rebuild**: nothing a row shows moved, so the snapshot says so and the tree is left
+/// as it is, search or no search.
+#[test]
+fn a_nudge_under_a_held_search_rebuilds_nothing() {
+    let mut app = rig("a_change_reaches_the_lists_row_by_row_search_nudge");
+    let search = {
+        let world = app.world_mut();
+        world.query_filtered::<Entity, With<OutlinerSearch>>().single(world).expect("one search box")
+    };
+    app.world_mut().commands().trigger(ValueChange { source: search, value: "crate".to_owned(), is_final: false });
+    updates(&mut app, FRAMES_PER_CHANGE);
+    let rebuilds = |app: &mut App| {
+        let world = app.world_mut();
+        world.query::<&Outliner>().single(world).expect("the outliner is open").rebuilds()
+    };
+    let built = rebuilds(&mut app);
+    let held = rows_of(&the_outliners_tree(&mut app));
+    app.world_mut().resource_mut::<OpenMap>().map.placements[0].at.0 += 0.5;
+    updates(&mut app, FRAMES_PER_CHANGE);
+    assert_eq!(rebuilds(&mut app), built, "a piece nudged under a held search is no change to any row");
+    assert_eq!(rows_of(&the_outliners_tree(&mut app)), held, "and the tree stands as it did");
+}
+
+/// **Entries recorded after an undo of two, in the frame that follows it, leave the history reading as the session's lines**:
+/// the stacks end with the same number of lines and nothing to redo, which a redo of everything also does, so the list is not
+/// patched from the two stack lengths alone.
+#[test]
+fn entries_recorded_after_an_undo_of_two_leave_the_history_as_the_sessions_lines() {
+    let mut app = rig("a_change_reaches_the_lists_row_by_row_history_drift");
+    for n in 0..3 {
+        editor::place_for_test(app.world_mut(), "crate", (4.0 + n as f32 * CELL_M, 4.0));
+        updates(&mut app, FRAMES_PER_CHANGE);
+    }
+    editor::undo_for_test(app.world_mut());
+    editor::undo_for_test(app.world_mut());
+    updates(&mut app, FRAMES_PER_CHANGE);
+    for n in 0..2 {
+        editor::place_for_test(app.world_mut(), "lamp", (4.0 + n as f32 * CELL_M, 10.0));
+    }
+    updates(&mut app, FRAMES_PER_CHANGE);
+    the_history_reads_as_the_sessions_lines(&mut app, "an undo of two and two new entries");
+    the_outliner_reads_as_a_whole_build(&mut app, "an undo of two and two new entries");
 }
