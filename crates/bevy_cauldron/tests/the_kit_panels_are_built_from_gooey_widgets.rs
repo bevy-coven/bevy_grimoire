@@ -26,7 +26,8 @@ use crate::fixtures;
 
 /// The number of raw `Node {` literals `tiles.rs` may carry. Every one that goes is a step of #245;
 /// nothing may raise it.
-const TILES_NODES_LEFT: usize = 43;
+// 43 -> 42: #379 removed the strip chips' digit label (a `Node` margin), with the slot keys it printed.
+const TILES_NODES_LEFT: usize = 42;
 /// The number `compose.rs` may carry: a world-space slot label, the flex item the 2026-08-17
 /// measurement sized, and one `Node::default()` that is a bundle's own direction.
 const COMPOSE_NODES_LEFT: usize = 3;
