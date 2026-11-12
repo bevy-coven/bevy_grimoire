@@ -659,12 +659,23 @@ struct Gates<'w, 's> {
     /// **The composition picker's cursor** (E-002, #129 slice 22): what `composition_picker_walk` and
     /// `composition_picker_toggle` change, carried by the same view.
     picker: Option<ResMut<'w, crate::compose::picker::Picker>>,
+    /// **The COMPOSE tab's cursors** (E-002, #129 slice 23): what `compose_walk`, `compose_focus` and
+    /// `compose_carousel_step` change, carried by the same view.
+    compose: Option<ResMut<'w, crate::compose::ComposeState>>,
+    /// **The rig bench and the Tiles page's cursor** (E-002, #129 slice 24): what `rig_walk` and `tile_page_walk` change,
+    /// carried by the same view.
+    bench: Option<ResMut<'w, crate::anim_tab::BenchState>>,
+    build: Option<ResMut<'w, crate::build::Build>>,
+    /// **The candidate list's folds and the filter boxes' keyboard** (E-002, #129 slice 25): what `pack_fold` and
+    /// `filter_focus` change, carried by the same view.
+    import: Option<ResMut<'w, crate::tiles::ImportState>>,
+    filters: Option<ResMut<'w, crate::filter::Filters>>,
 }
 
 impl Gates<'_, '_> {
     /// **The view an agent's call to a view operation changes**, as the editor holds it now: the tool from
     /// the editor's state, the rest from the resources a person's key reads.
-    fn view_in(&self, state: Option<&crate::editor::EditorState>) -> crate::ops_view::View {
+    fn view_in(&self, state: Option<&crate::editor::EditorState>, project: Option<&crate::project::Project>) -> crate::ops_view::View {
         crate::ops_view::View {
             tool: state.map(|s| s.tool).unwrap_or_default(),
             rung: self.rung.as_deref().map(|r| r.0).unwrap_or_default(),
@@ -675,6 +686,14 @@ impl Gates<'_, '_> {
             locks: self.locks.as_deref().cloned().unwrap_or_default(),
             picker_selected: self.picker.as_deref().map(|p| p.selected).unwrap_or_default(),
             picker_active: self.picker.as_deref().is_some_and(|p| p.active),
+            compose: self.compose.as_deref().map(|c| c.cursor()).unwrap_or_default(),
+            rig: self.bench.as_deref().map(|b| b.cursor()).unwrap_or_default(),
+            // **The page is "up" when `browsing` holds a row**, and its length is the page's own (`build::page_len`).
+            tile_page: self.build.as_deref().zip(project).and_then(|(build, project)| {
+                build.browsing.map(|row| crate::ops_view::TilePage { row, rows: crate::build::page_len(project, build) })
+            }),
+            packs: self.import.as_deref().map(|i| i.folds()).unwrap_or_default(),
+            filter_pane: self.filters.as_deref().and_then(|f| f.focus_name()),
             ..Default::default()
         }
     }
@@ -725,6 +744,35 @@ impl Gates<'_, '_> {
         {
             picker.selected = view.picker_selected;
             picker.active = view.picker_active;
+        }
+        // **The COMPOSE tab's cursors** (E-002, #129 slice 23), written only when they moved.
+        if let Some(state) = self.compose.as_deref_mut()
+            && state.cursor() != view.compose
+        {
+            state.set_cursor(view.compose);
+        }
+        // **The rig bench's cursor and the Tiles page's**, written only when they moved.
+        if let Some(bench) = self.bench.as_deref_mut()
+            && !bench.is_at(&view.rig)
+        {
+            bench.set_cursor(&view.rig);
+        }
+        if let Some(page) = view.tile_page
+            && let Some(build) = self.build.as_deref_mut()
+            && build.browsing.is_some_and(|row| row != page.row)
+        {
+            build.browsing = Some(page.row);
+        }
+        // **The candidate list's folds and the filter box that has the keyboard** (E-002, #129 slice 25), written only when they moved.
+        if let Some(import) = self.import.as_deref_mut()
+            && !import.folds_are(&view.packs)
+        {
+            import.set_folds(&view.packs);
+        }
+        if let Some(filters) = self.filters.as_deref_mut()
+            && let Some(pane) = filters.wants_focus(view.filter_pane.as_deref())
+        {
+            filters.take_focus(pane);
         }
     }
 
@@ -1938,7 +1986,7 @@ fn operation_apply(
         let read_project = project.as_deref();
         let read_open = open.as_deref();
         let ctx = Ctx {
-        view: op.changes_view().then(|| gates.view_in(state.as_deref())), trust_file: None,
+        view: op.changes_view().then(|| gates.view_in(state.as_deref(), read_project)), trust_file: None,
             root: menu.as_ref().map(|m| m.root.clone()),
             project: read_project.cloned(),
             open: read_open.cloned(),
@@ -1968,7 +2016,7 @@ fn operation_apply(
     let mut ctx = take(&project, &open);
     // **The menu's root, when the menu is up**, so `map_create` has a directory before any door.
     ctx.root = menu.as_ref().map(|m| m.root.clone());
-    ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref()));
+    ctx.view = op.changes_view().then(|| gates.view_in(state.as_deref(), ctx.project.as_ref()));
     // **The proposal travels by value**, in and out, because it is not map data.
     ctx.proposal = proposal.as_deref_mut().and_then(|r| r.0.take());
     // **A proposal with no seed named gets the editor's own next one.** This is what makes two

@@ -1016,7 +1016,20 @@ impl Action {
             // migrated to `composition_picker_toggle` and `composition_picker_walk`.
             | Action::PickComposition
             | Action::CompositionPrev
-            | Action::CompositionNext => Change::View,
+            | Action::CompositionNext
+            // **The COMPOSE tab's cursors** (E-002, #129 slice 23): view state, migrated to `compose_walk`, `compose_focus`
+            // and `compose_carousel_step`.
+            | Action::ComposePrev
+            | Action::ComposeNext
+            | Action::ComposeMemberPrev
+            | Action::ComposeMemberNext
+            | Action::CarouselPrev
+            | Action::CarouselNext
+            // **The rig bench's list** (E-002, #129 slice 24): view state, migrated to `rig_walk`.
+            | Action::PrevRig
+            | Action::NextRig
+            // **The candidate list's fold** (E-002, #129 slice 25): view state, migrated to `pack_fold`.
+            | Action::FoldPack => Change::View,
 
             // **Held, not pressed.** The effect is the hold: things fade, a pick is live, the overlay is
             // up. An operation whose effect reverses when a key is released is not a value an agent can
@@ -1117,6 +1130,19 @@ impl Action {
             // and Shift+up and Shift+down walk it, through the operations an agent calls.
             Action::PickComposition => Some("composition_picker_toggle"),
             Action::CompositionPrev | Action::CompositionNext => Some("composition_picker_walk"),
+            // **The COMPOSE tab's cursors are view state** (E-002, #129 slice 23): up and down walk the focused list, left and
+            // right choose it, and `O` and `P` step the carousel, through the operations an agent calls.
+            Action::ComposePrev | Action::ComposeNext => Some("compose_walk"),
+            Action::ComposeMemberPrev | Action::ComposeMemberNext => Some("compose_focus"),
+            Action::CarouselPrev | Action::CarouselNext => Some("compose_carousel_step"),
+            // **The rig list and the Tiles page's rows are cursors, so view state** (E-002, #129 slice 24): up and down walk
+            // them through the operations an agent calls.
+            Action::PrevRig | Action::NextRig => Some("rig_walk"),
+            Action::TilePrev | Action::TileNext => Some("tile_page_walk"),
+            // **A fold and the filter boxes' keyboard are view state** (E-002, #129 slice 25): `Space` folds, `F` and `/`
+            // take a box, through the operations an agent calls.
+            Action::FoldPack => Some("pack_fold"),
+            Action::FocusFilter | Action::FocusTagFilter => Some("filter_focus"),
             // **The tool keys** (E-002, #129): `B`, `Shift+B` and the run chord arm a tool through `tool_arm`.
             // **`Remove` and `NoteTool` arm a tool, so they name the arming operation** (E-002,
             // #129). They named `placement_remove` and `note_add`: a write neither key makes — its

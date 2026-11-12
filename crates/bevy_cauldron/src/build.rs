@@ -1387,21 +1387,33 @@ pub fn build_keys(
     // Runs before the size guard below: there is no tile in hand while the page is being walked,
     // and the first `right`/`Enter` is what puts one in hand.
     if let Some(row) = build.browsing {
-        let step = |row: usize, by: i32| -> usize {
-            // Saturating, like the member walk: an author holding an arrow at the end of a list
-            // should stop there rather than wrap to the other end of it.
-            (row as i32 + by).clamp(0, page.saturating_sub(1) as i32) as usize
-        };
         let dt = time.delta_secs();
-        let stride = if crate::keys::shift_held(&keyboard) { 5 } else { 1 };
+        let rows = if crate::keys::shift_held(&keyboard) { crate::ops::list_walk::STRIDE_ROWS } else { 1 };
         // One `repeating` call per direction: each key owns its own countdown and has to ramp on
         // its own hold (`keys::Repeat` is a `Vec<Countdown>` keyed by id). It was `just_pressed`
         // and `±1` while every other list in the editor repeats and strides (N8).
-        if crate::keys::repeating(&keyboard, *live, Action::TileNext, &mut repeat, dt) {
-            build.browsing = Some(step(row, stride));
-        }
-        if crate::keys::repeating(&keyboard, *live, Action::TilePrev, &mut repeat, dt) {
-            build.browsing = Some(step(row, -stride));
+        let down = crate::keys::repeating(&keyboard, *live, Action::TileNext, &mut repeat, dt);
+        let up = crate::keys::repeating(&keyboard, *live, Action::TilePrev, &mut repeat, dt);
+        if down || up {
+            // **The key dispatches the operation an agent calls** (E-002, #129 slice 24), and the rule — an author holding an
+            // arrow at the end of a list stops there rather than wrapping to the other end of it — lives there once.
+            let mut ctx = crate::ops::Ctx {
+                project: Some(project.clone()),
+                source: crate::ops::Source::Human,
+                session: crate::ops::session_id(),
+                view: Some(crate::ops_view::View {
+                    tile_page: Some(crate::ops_view::TilePage { row, rows: page }),
+                    ..Default::default()
+                }),
+                ..crate::ops::Ctx::default()
+            };
+            let by = if down { "next" } else { "prev" };
+            let _ = crate::ops::dispatch(&mut ctx, "tile_page_walk", &serde_json::json!({ "by": by, "rows": rows }));
+            if let Some(landed) = ctx.view.take().and_then(|v| v.tile_page)
+                && build.browsing != Some(landed.row)
+            {
+                build.browsing = Some(landed.row);
+            }
         }
         // **`right` opens the tile under the cursor and drills into the Meshes page.** The
         // author's shape for the tab: *"push right arrow with a tile selected to add/move to the

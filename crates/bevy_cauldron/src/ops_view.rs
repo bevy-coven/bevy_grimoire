@@ -79,6 +79,138 @@ pub struct View {
     /// **Whether the arrows walk the composition picker** rather than the palette (`P`). Not serialised while false.
     #[serde(default, skip_serializing_if = "is_false")]
     pub picker_active: bool,
+    /// **The COMPOSE tab's cursors** (E-002, #129 slice 23): which group, which member, and which of the two lists the
+    /// arrows walk. Session state like the picker's; not serialised while it is where a session opens.
+    #[serde(default, skip_serializing_if = "ComposeCursor::is_default")]
+    pub compose: ComposeCursor,
+    /// **The rig bench's list and where its cursor is** (E-002, #129 slice 24). Empty until the front end fills it from
+    /// the bench it is looking at, so a call with no bench in hand is refused.
+    #[serde(default, skip_serializing_if = "RigCursor::is_default")]
+    pub rig: RigCursor,
+    /// **The Tiles page's row cursor**, when that page is up (E-002, #129 slice 24): `Build::browsing`, and how many rows
+    /// the page draws. `None` is the editor not being on the page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_page: Option<TilePage>,
+    /// **Which packs are folded away, and whether the `EXCLUDED` band is open** on the candidate list (E-002, #129
+    /// slice 25): session state like the rest. Not serialised while nothing is folded and the band is closed.
+    #[serde(default, skip_serializing_if = "PackFold::is_default")]
+    pub packs: PackFold,
+    /// **Which filter box has the keyboard**, by the name `pane_name` gives it (E-002, #129 slice 25). `None` is no box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_pane: Option<String>,
+}
+
+/// **Where the COMPOSE tab's cursors are**, as a value an operation can move (E-002, #129 slice 23).
+///
+/// The same three facts `compose::ComposeState` holds as `selected`, `member` and `focus`, and the editor's own state
+/// is what a front end carries in and applies out. The rules for moving them are written once, in
+/// `ops::compose_cursor`, and this is the one place that says choosing a group puts the member cursor back.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComposeCursor {
+    /// Index into the project's compositions, in the order the tab draws them.
+    #[serde(default)]
+    pub selected: usize,
+    /// Index into the selected group's members: the second cursor, under the first.
+    #[serde(default)]
+    pub member: usize,
+    /// **Whether the arrows walk the MEMBERS list** rather than the COMPOSITIONS list.
+    #[serde(default)]
+    pub members_focused: bool,
+}
+
+impl ComposeCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **The rig bench's list and cursor**, as a value an operation can move (E-002, #129 slice 24).
+///
+/// The names are the list the bench draws, in manifest order, so the walk goes round the list a person is looking at
+/// and not a second reading of the file; the front end carries them in with the cursor.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RigCursor {
+    /// The rig names, in manifest order.
+    #[serde(default)]
+    pub names: Vec<String>,
+    /// Which rig, as an index into `names`.
+    #[serde(default)]
+    pub selected: usize,
+    /// **Whether the bench shows the project-wide summary** rather than one rig. Walking to a rig puts it back on one.
+    #[serde(default)]
+    pub all: bool,
+}
+
+impl RigCursor {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **The Tiles page's cursor**: which row, of how many the page draws (`+ New Tile`, the kit's tiles and the draft).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TilePage {
+    /// The row the cursor is on: `0` is `+ New Tile`.
+    pub row: usize,
+    /// How many rows the page draws, `+ New Tile` included.
+    pub rows: usize,
+}
+
+/// **The candidate list's folds**: the packs folded away, by the folder name a heading spells, and whether the
+/// `EXCLUDED` band at the bottom is open. The same two facts `tiles::ImportState` holds as `folded_packs` and
+/// `excluded_open`; a `BTreeSet` here, so two views of the same folds are equal and print the same.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackFold {
+    /// The packs whose rows are folded away.
+    #[serde(default)]
+    pub folded: std::collections::BTreeSet<String>,
+    /// Whether the `EXCLUDED` band is open. Closed by default: the group exists to get its packs out of the way.
+    #[serde(default)]
+    pub excluded_open: bool,
+}
+
+impl PackFold {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **A filter box by name, not by variant**, for the reason a rung is: an agent writes `"candidates"` and a reordering
+/// of the enum can never silently hand it another box.
+pub(crate) fn pane_name(pane: crate::filter::Pane) -> &'static str {
+    use crate::filter::Pane;
+    match pane {
+        Pane::Palette => "palette",
+        Pane::Candidates => "candidates",
+        Pane::Rigs => "rigs",
+        Pane::Tags => "tags",
+    }
+}
+
+pub(crate) fn pane_from_name(name: &str) -> Option<crate::filter::Pane> {
+    use crate::filter::Pane;
+    Pane::ALL.into_iter().find(|p| pane_name(*p) == name)
+}
+
+/// **The filter boxes an agent may name**, in the order `Pane::ALL` lists them, derived so the schema's enum and the parse
+/// cannot disagree.
+pub(crate) fn pane_names() -> Vec<&'static str> {
+    crate::filter::Pane::ALL.into_iter().map(pane_name).collect()
+}
+
+/// **Choose a group, and put the member cursor back on the first member.**
+///
+/// A different group has different members, so leaving the old index would point the seat verbs at whatever
+/// happened to sit there. Focus is deliberately not touched: the carousel must move the group cursor without
+/// disturbing which list has the arrows. `compose::select_group` (a click on a row or a miniature) and the
+/// operations both call this, so the rule is kept once.
+pub fn select_group(selected: &mut usize, member: &mut usize, ix: usize) {
+    *selected = ix;
+    *member = 0;
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -209,6 +341,14 @@ mod tests {
             // Assumed owner exception (2026-11-11): the literal names the two picker fields #129 slice 22 adds (their defaults).
             picker_selected: 0,
             picker_active: false,
+            // Assumed owner exception (2026-11-12): the literal names the field #129 slice 23 adds (its default); the round trip is unchanged.
+            compose: Default::default(),
+            // Assumed owner exception (2026-11-12): the literal names the two fields #129 slice 24 adds (their defaults); the round trip is unchanged.
+            rig: Default::default(),
+            tile_page: None,
+            // Assumed owner exception (2026-11-12): the literal names the two fields #129 slice 25 adds (their defaults); the round trip is unchanged.
+            packs: Default::default(),
+            filter_pane: None,
         };
         let text = serde_json::to_string(&view).unwrap();
         assert_eq!(serde_json::from_str::<View>(&text).unwrap(), view);

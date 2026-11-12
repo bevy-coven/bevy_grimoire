@@ -107,7 +107,7 @@ impl Pane {
         }
     }
 
-    fn step(self, by: i32) -> Pane {
+    pub(crate) fn step(self, by: i32) -> Pane {
         let at = Pane::ALL.iter().position(|p| *p == self).unwrap_or(0) as i32;
         let n = Pane::ALL.len() as i32;
         Pane::ALL[(at + by).rem_euclid(n) as usize]
@@ -444,10 +444,55 @@ fn rebuild_picker(
 /// [`step_carousel`] must move the group cursor *without* disturbing the focus, which is the whole
 /// reason it has its own keys. One of the two callers would have to be wrong.
 fn select_group(state: &mut ComposeState, ix: usize) {
-    state.selected = ix;
-    // A different group has different members; leaving the old index would point the seat verbs at
-    // whatever happened to sit there.
-    state.member = 0;
+    // **The rule lives in `ops_view::select_group`**, which the COMPOSE cursor operations call as well.
+    crate::ops_view::select_group(&mut state.selected, &mut state.member, ix);
+}
+
+impl ComposeState {
+    /// **The tab's cursors as a value**, which is what an operation moves (E-002, #129 slice 23).
+    pub fn cursor(&self) -> crate::ops_view::ComposeCursor {
+        crate::ops_view::ComposeCursor {
+            selected: self.selected,
+            member: self.member,
+            members_focused: self.focus == Pane::Members,
+        }
+    }
+
+    /// **Put the cursors where an operation answered.** The caller compares first, because a write through a `ResMut`
+    /// marks the resource changed and `restage_group` and `rebuild` redo their work for a call that moved nothing.
+    pub fn set_cursor(&mut self, cursor: crate::ops_view::ComposeCursor) {
+        self.selected = cursor.selected;
+        self.member = cursor.member;
+        self.focus = if cursor.members_focused { Pane::Members } else { Pane::Groups };
+    }
+}
+
+/// **Dispatch a COMPOSE cursor operation** with the tab's cursors in `Ctx::view`, and write the answer back only when it
+/// moved. Returns the operation's sentence, or its refusal. The keys below all come through here, so a key and an agent's
+/// `grimoire/operation_apply` run the same body.
+fn dispatch_cursor(
+    project: &Project,
+    state: &mut ResMut<ComposeState>,
+    operation: &str,
+    params: &serde_json::Value,
+) -> Result<String, String> {
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { compose: state.cursor(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let outcome = crate::ops::dispatch(&mut ctx, operation, params);
+    if let Some(view) = ctx.view.take()
+        && state.cursor() != view.compose
+    {
+        state.set_cursor(view.compose);
+    }
+    match outcome {
+        Ok(crate::ops::Applied::Done { outcome, .. }) => Ok(outcome.summary),
+        Ok(crate::ops::Applied::Refused(e)) | Err(e) => Err(e.0),
+    }
 }
 
 /// **Keep both cursors inside their lists, at the one place they can leave them.**
@@ -729,7 +774,7 @@ fn member_count(project: &Project, selected: usize) -> usize {
 /// Tiles page fills tiles; an `Anchored` one is refused there by name, so its members come from the
 /// file or from a fresh capture. Pointing an anchored group at the Tiles page would be sending an
 /// author to a refusal.
-fn nothing_to_walk(c: &Composition) -> String {
+pub(crate) fn nothing_to_walk(c: &Composition) -> String {
     match c.envelope {
         Envelope::Bounded { .. } => format!(
             "`{}` has nothing in it yet — open it on {} and drop a piece in",
@@ -765,19 +810,17 @@ fn cycle_focus(
     input: Res<ButtonInput<KeyCode>>,
 ) {
     let by = if keys::just_pressed(&input, *keys, Action::ComposeMemberNext) {
-        1
+        "next"
     } else if keys::just_pressed(&input, *keys, Action::ComposeMemberPrev) {
-        -1
+        "prev"
     } else {
         return;
     };
-    state.focus = state.focus.step(by);
-    let empty_members = state.focus == Pane::Members && member_count(&project, state.selected) == 0;
-    let said = match project.compositions.compositions.get(state.selected) {
-        Some(c) if empty_members => nothing_to_walk(c),
-        _ => state.focus.label().to_owned(),
-    };
-    state.status.note(said);
+    // **The key dispatches the operation an agent calls** (E-002, #129 slice 23); its sentence is the note.
+    match dispatch_cursor(&project, &mut state, "compose_focus", &serde_json::json!({ "by": by })) {
+        Ok(said) => state.status.note(said),
+        Err(why) => state.status.problem(why),
+    }
 }
 
 /// **`up`/`down` walk whichever list has focus.** Shift strides five, as every list here does.
@@ -809,7 +852,7 @@ fn walk(
     time: Res<Time>,
     mut repeat: ResMut<keys::Repeat>,
 ) {
-    let step = if keys::shift_held(&input) { 5 } else { 1 };
+    let rows = if keys::shift_held(&input) { crate::ops::list_walk::STRIDE_ROWS } else { 1 };
     // **Held arrows repeat**, at the shared cadence every other list in the editor walks at. This
     // read `just_pressed`, so holding `↓` stepped exactly once on the tab whose job is reading
     // down every composition (N9). One `repeating` call per direction: each key owns its own
@@ -818,41 +861,22 @@ fn walk(
     let down = keys::repeating(&input, *keys, Action::ComposeNext, &mut repeat, dt);
     let up = keys::repeating(&input, *keys, Action::ComposePrev, &mut repeat, dt);
     let by = if down {
-        step
+        "next"
     } else if up {
-        -step
+        "prev"
     } else {
         return;
     };
-    let n = match state.focus {
-        Pane::Groups => project.compositions.compositions.len(),
-        Pane::Members => member_count(&project, state.selected),
-    };
-    if n == 0 {
-        // **Guidance, not silence.** An empty MEMBERS list can hold the focus (see `cycle_focus`),
-        // and an arrow that answers nothing at all is the defect. The groups list needs nothing
-        // here: `rebuild` states *that* empty case in prose that stays on screen, which is the right
-        // lifetime for a fact about the file rather than about a keypress.
-        if state.focus == Pane::Members
-            && let Some(said) = project
-                .compositions
-                .compositions
-                .get(state.selected)
-                .map(nothing_to_walk)
-            {
-                state.status.note(said);
-            }
-        return;
-    }
-    let last = (n - 1) as i64;
-    let to = |at: usize| (at as i64 + by).clamp(0, last) as usize;
-    match state.focus {
-        Pane::Groups => {
-            let want = to(state.selected);
-            // Both cursors, through the one writer — see `select_group`.
-            select_group(&mut state, want);
-        }
-        Pane::Members => state.member = to(state.member),
+    // **The key dispatches the operation an agent calls** (E-002, #129 slice 23), and the rules — clamp at the ends,
+    // choosing a group puts the member cursor back — live there once.
+    let focus = state.focus;
+    if let Err(why) = dispatch_cursor(&project, &mut state, "compose_walk", &serde_json::json!({ "by": by, "rows": rows }))
+        // **Guidance, not silence.** An empty MEMBERS list can hold the focus (see `cycle_focus`), and an arrow that
+        // answers nothing at all is the defect. The groups list needs nothing here: `rebuild` states *that* empty case in
+        // prose that stays on screen, which is the right lifetime for a fact about the file rather than about a keypress.
+        && focus == Pane::Members
+    {
+        state.status.note(why);
     }
 }
 
@@ -2289,17 +2313,13 @@ fn step_carousel(
         keys::just_pressed(&keys, *live, Action::CarouselNext),
         keys::just_pressed(&keys, *live, Action::CarouselPrev),
     ) {
-        (true, false) => 1i64,
-        (false, true) => -1,
+        (true, false) => "next",
+        (false, true) => "prev",
         _ => return,
     };
-    let n = project.compositions.compositions.len();
-    if n == 0 {
-        return;
-    }
-    let want = ((state.selected as i64 + by).rem_euclid(n as i64)) as usize;
-    // Both cursors, through the one writer — see `select_group`.
-    select_group(&mut state, want);
+    // **The key dispatches the operation an agent calls** (E-002, #129 slice 23): the ring, and the member cursor going
+    // back to the first member, live there once. A refusal (no compositions) leaves the cursors where they were, as the key did.
+    let _ = dispatch_cursor(&project, &mut state, "compose_carousel_step", &serde_json::json!({ "by": by }));
 }
 
 /// **Click a miniature to bring it to the middle** — the strip lies on the ground plane, so this is

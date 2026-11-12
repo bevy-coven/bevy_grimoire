@@ -794,41 +794,70 @@ fn keep_selection_visible(filters: Res<crate::filter::Filters>, mut bench: ResMu
     }
 }
 
+impl BenchState {
+    /// **The bench's list and cursor as a value**, which is what `rig_walk` moves (E-002, #129 slice 24).
+    pub fn cursor(&self) -> crate::ops_view::RigCursor {
+        crate::ops_view::RigCursor {
+            names: self.names().into_iter().map(str::to_owned).collect(),
+            selected: self.selected,
+            all: self.view == View::All,
+        }
+    }
+
+    /// **Whether the bench is already where an operation answered.** Compared first by the caller, because a write through
+    /// a `ResMut` marks the bench changed and every system gated on a change redoes its work for a call that moved nothing.
+    pub fn is_at(&self, cursor: &crate::ops_view::RigCursor) -> bool {
+        self.selected == cursor.selected && (self.view == View::All) == cursor.all
+    }
+
+    /// **Put the bench where an operation answered**: the rig, and one rig's face rather than the summary.
+    pub fn set_cursor(&mut self, cursor: &crate::ops_view::RigCursor) {
+        self.selected = cursor.selected;
+        self.view = if cursor.all { View::All } else { View::One };
+    }
+}
+
 fn move_selection(
     keyboard: Res<ButtonInput<KeyCode>>,
     live: Res<crate::keys::Live>,
     time: Res<Time>,
     mut repeat: ResMut<crate::keys::Repeat>,
     mut bench: ResMut<BenchState>,
+    // `Option`, because a door with no project has no rig list to walk and a missing `Res` panics.
+    project: Option<Res<crate::project::Project>>,
 ) {
-    let n = bench.names().len();
-    if n == 0 {
-        return;
-    }
     // Held arrows walk the list at the shared [`crate::keys::REPEAT_SECS`] cadence — the same
     // helper the aim keys ride, so every held key in the editor has one rhythm. Shift is the long
     // stride, five at a time, the same bargain the tiles lists strike.
     let dt = time.delta_secs();
-    // Clamped below the list's length: this list wraps, and on a short list a stride of exactly
-    // `n` is the identity wearing a jump's clothes.
-    let stride = if crate::keys::SHIFT_KEYS.iter().any(|k| keyboard.pressed(*k)) {
-        5.min(n.saturating_sub(1)).max(1)
-    } else {
-        1
-    };
-    let step = if crate::keys::repeating(
+    let by = if crate::keys::repeating(
         &keyboard, *live, crate::keys::Action::NextRig, &mut repeat, dt,
     ) {
-        stride
+        "next"
     } else if crate::keys::repeating(
         &keyboard, *live, crate::keys::Action::PrevRig, &mut repeat, dt,
     ) {
-        n - stride
+        "prev"
     } else {
         return;
     };
-    bench.selected = (bench.selected + step) % n;
-    bench.view = View::One;
+    let Some(project) = project else { return };
+    let rows = if crate::keys::SHIFT_KEYS.iter().any(|k| keyboard.pressed(*k)) { crate::ops::list_walk::STRIDE_ROWS } else { 1 };
+    // **The key dispatches the operation an agent calls** (E-002, #129 slice 24), and the rule — the list is a ring, and a
+    // stride is clamped below its length — lives there once. A refusal (no rigs) leaves the bench where it was, as the key did.
+    let mut ctx = crate::ops::Ctx {
+        project: Some(project.clone()),
+        source: crate::ops::Source::Human,
+        session: crate::ops::session_id(),
+        view: Some(crate::ops_view::View { rig: bench.cursor(), ..Default::default() }),
+        ..crate::ops::Ctx::default()
+    };
+    let _ = crate::ops::dispatch(&mut ctx, "rig_walk", &serde_json::json!({ "by": by, "rows": rows }));
+    if let Some(view) = ctx.view.take()
+        && !bench.is_at(&view.rig)
+    {
+        bench.set_cursor(&view.rig);
+    }
 }
 
 fn on_rig_click(

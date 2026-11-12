@@ -126,11 +126,18 @@ Goal: know what an agent can change, and what undoes each change.
 | `map_rename` | Renames the open map. The name is forced to snake_case, so `Town Two` becomes `town_two`. | Puts the old name back |
 | `brush_arm` | Arms a library piece as the brush. `null` puts the brush down. | None: it changes the view, not the map |
 | `composition_arm` | Arms a composition, so the next click on the Map stamps it. `null` puts it down. | None: it changes the view, not the map |
+| `compose_carousel_step` | Steps the COMPOSE carousel, `by` `prev` or `next`, as `O` and `P` do: the previous or next composition becomes the focal one, wrapping round the ring. The focused list is left alone. | None: it changes the view, not the map |
+| `compose_focus` | Chooses which COMPOSE list the arrows walk, COMPOSITIONS or MEMBERS, as left and right do. | None: it changes the view, not the map |
+| `compose_walk` | Moves the cursor of whichever COMPOSE list has the arrows, `by` `prev` or `next`, `rows` at a time (Shift is 5), as up and down do. It stops at the ends of the list. | None: it changes the view, not the map |
 | `composition_picker_toggle` | Gives the arrow keys to the composition picker, or back to the palette, as `P` does. | None: it changes the view, not the map |
 | `composition_picker_walk` | Moves the composition picker's cursor one row, `by` `prev` or `next`, as Shift+up and Shift+down do. It stops at the ends of the list; `composition_arm` arms the composition it is on. | None: it changes the view, not the map |
 | `composition_rename` | Renames a composition, and every map that stamps it follows. The name is forced to snake_case per `/` segment. | Puts the old name back, in the compositions file and every map |
 | `door_open` | Opens the kit, map, or rigs door, and optionally one of its tabs. | None: it changes the view, not the map |
 | `piece_select` | Selects a library piece on the Meshes shelf. | None: it changes the view, not the map |
+| `rig_walk` | Moves the rig bench's cursor along the rig list, `by` `prev` or `next`, `rows` at a time (Shift is 5), as up and down do on the Anim tab. The list is a ring. | None: it changes the view, not the map |
+| `tile_page_walk` | Moves the Tiles page's cursor along its rows (`+ New Tile`, then the kit's tiles), `by` `prev` or `next`, `rows` at a time, as up and down do. It stops at the ends of the page, and is refused unless the Tiles page is up. | None: it changes the view, not the map |
+| `pack_fold` | Folds a pack away on the Meshes tab's candidate list, or opens it, as Space on a heading does. Name the `pack` (its folder) or `excluded: true` for the EXCLUDED band; `folded` says which way, and absent toggles. | None: it changes the view, not the map |
+| `filter_focus` | Puts the keyboard in a filter box, `palette`, `candidates`, `rigs` or `tags`, and starts its search fresh, as F and / do. | None: it changes the view, not the map |
 | `label_set` | Sets one label axis (kind, effects, look, or surfaces) on a piece. | Puts the old labels back |
 
 `map_set_settings` refuses `bounds` and `axis` in the same call.

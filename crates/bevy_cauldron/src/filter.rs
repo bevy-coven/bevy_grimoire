@@ -122,6 +122,17 @@ impl Filters {
         self.focus
     }
 
+    /// **The box that owns the keyboard, by the name an operation's view gives it** (E-002, #129 slice 25), or `None`.
+    pub fn focus_name(&self) -> Option<String> {
+        self.focus.map(|pane| crate::ops_view::pane_name(pane).to_owned())
+    }
+
+    /// **The box a view names, when it is not the one that has the keyboard.** The caller takes focus on `Some` and leaves the
+    /// filters alone on `None`: a write through a `ResMut` marks them changed, and taking focus clears the search.
+    pub fn wants_focus(&self, named: Option<&str>) -> Option<Pane> {
+        crate::ops_view::pane_from_name(named?).filter(|pane| self.focus != Some(*pane))
+    }
+
     /// **Put the keyboard in this box**, and start the search fresh — the same two writes
     /// `on_click` makes, so the `F` key and the mouse leave the filter in one state rather than two.
     ///

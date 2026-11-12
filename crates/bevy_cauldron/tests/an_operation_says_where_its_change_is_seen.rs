@@ -53,6 +53,19 @@ const PINNED_NOWHERE: &[&str] = &[
     // picker's cursor and its hold on the arrows, which a person's own view holds, like the rung above.
     "composition_picker_walk",
     "composition_picker_toggle",
+    // Assumed owner exception (2026-11-12): the list grows by the three operations #129 slice 23 registers, the COMPOSE tab's
+    // cursors and which list has the arrows, which a person's own view holds, like the picker's above.
+    "compose_walk",
+    "compose_focus",
+    "compose_carousel_step",
+    // Assumed owner exception (2026-11-12): the list grows by the two operations #129 slice 24 registers, the rig bench's
+    // cursor and the Tiles page's, which a person's own view holds, like the picker's above.
+    "rig_walk",
+    "tile_page_walk",
+    // Assumed owner exception (2026-11-12): the list grows by the two operations #129 slice 25 registers, which of the candidate
+    // list's groups are folded and which filter box has the keyboard, which a person's own view holds, like the picker's above.
+    "pack_fold",
+    "filter_focus",
     "tool_arm",
     "snip_arm",
     "brush_arm",
