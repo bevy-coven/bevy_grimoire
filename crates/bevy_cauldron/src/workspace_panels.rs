@@ -102,6 +102,9 @@ fn spawn_world_panel(mut commands: Commands, frame: Res<Frame>) {
             // **Terrain (#99):** one line, `<brush> <x> <z> <radius_m> <strength>`.
             crate::editor::spawn_terrain_section(p);
 
+            // **Water (NV-11, #393):** what the map's water plan holds. Placed on the terrain line above.
+            block(p).with_children(crate::world_lists::spawn_water_section);
+
             // **Lights (#103, NV-11 #395):** the fixtures the map carries, in every build; the family crate's section adds the pool's
             // budget from where the camera looks, and draws the heading itself. After the terrain line, which keeps its place.
             block(p).with_children(|s| {

@@ -823,7 +823,6 @@ fn target_of(what: &str) -> Target {
 /// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
 /// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
 const FILED: &[(&str, &str)] = &[
-    ("A map's water", "#393"),
     ("A map's forest", "#394"),
 ];
 

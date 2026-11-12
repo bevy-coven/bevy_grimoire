@@ -20,6 +20,7 @@
 
 use bevy::prelude::*;
 use bevy_grimoire_core::map::Map;
+use bevy_grimoire_core::water::WaterPlan;
 
 use crate::chrome;
 use crate::project::{OpenMap, Project};
@@ -28,6 +29,16 @@ use crate::workspace::Workspace;
 
 /// How often the lists look at their files again, in seconds.
 const READ_SECS: f32 = 0.5;
+
+/// What the WATER list says when the map has none.
+pub const NO_WATER: &str = "no water placed";
+
+/// How the terrain line places water: what the WATER heading tells a person who wants to add some.
+pub const WATER_HINT: &str = "place it on the TERRAIN line: water spring|sink <x> <z> <rate_m3_s> <radius_m>, water lake <x> <z> <radius_m> <level_m>, water clear";
+
+/// The WATER section's list, in the World workspace's panel.
+#[derive(Component, Clone, Copy)]
+pub struct WaterList;
 
 /// The most characters of a light's settings one row shows before it is cut with an ellipsis. A row is one line of the panel.
 const ROW_CHARS: usize = 72;
@@ -64,9 +75,54 @@ impl Plugin for WorldListsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (refresh_lights.run_if(Workspace::world_is_open), refresh_cues.run_if(Workspace::sound_is_open)).run_if(in_state(Screen::Editor)),
+            (refresh_water.run_if(Workspace::world_is_open), refresh_lights.run_if(Workspace::world_is_open), refresh_cues.run_if(Workspace::sound_is_open))
+                .run_if(in_state(Screen::Editor)),
         );
     }
+}
+
+/// **The WATER section**: a heading, how to place some, and what the map's plan holds.
+pub fn spawn_water_section(p: &mut ChildSpawnerCommands) {
+    chrome::section(p, "WATER");
+    p.spawn(bevy_gooey::label(WATER_HINT));
+    p.spawn((WaterList, list_node()));
+}
+
+/// **What reading a map's file found**: none, the value, or why it did not read.
+enum Read<T> {
+    Absent,
+    Value(T),
+    Broken(String),
+}
+
+/// **Read one RON file a map's operation writes**, naming it (`water/m.ron`) when it exists and does not parse.
+fn read_file<T: serde::de::DeserializeOwned>(path: &std::path::Path, shown_as: &str) -> Read<T> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => match ron::from_str(&text) {
+            Ok(value) => Read::Value(value),
+            Err(e) => Read::Broken(format!("{shown_as} does not read: {e}")),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Read::Absent,
+        Err(e) => Read::Broken(format!("{shown_as} cannot be read: {e}")),
+    }
+}
+
+/// **The water plan in words**: a row per spring, sink and lake, in the order the plan lists them (springs, sinks, lakes).
+pub fn water_rows(plan: &WaterPlan) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    for s in &plan.springs {
+        rows.push(format!("spring at ({}, {}): {} m3/s, radius {} m", s.x, s.z, s.rate_m3_s, s.radius_m));
+    }
+    for s in &plan.sinks {
+        rows.push(format!("sink at ({}, {}): {} m3/s, radius {} m", s.x, s.z, s.rate_m3_s, s.radius_m));
+    }
+    for l in &plan.lakes {
+        rows.push(format!("lake at ({}, {}): radius {} m, level {} m", l.x, l.z, l.radius_m, l.level_m));
+    }
+    if rows.is_empty() {
+        rows.push(NO_WATER.to_owned());
+    }
+    rows
 }
 
 /// **The fixtures list of the LIGHTS section**: the heading is the caller's (the family crate's section draws its own, with the pool
@@ -197,4 +253,24 @@ fn refresh_lights(
     mut shown: Local<(Option<Vec<String>>, f32)>,
 ) {
     keep(&mut commands, &time, &mut shown, &lists, || Some(light_rows(&open.as_deref()?.map)));
+}
+
+fn refresh_water(
+    mut commands: Commands,
+    time: Res<Time>,
+    project: Option<Res<Project>>,
+    open: Option<Res<OpenMap>>,
+    lists: Query<(Entity, Has<Children>), With<WaterList>>,
+    mut shown: Local<(Option<Vec<String>>, f32)>,
+) {
+    keep(&mut commands, &time, &mut shown, &lists, || {
+        let (project, open) = (project.as_deref()?, open.as_deref()?);
+        let name = open.map_path.file_name()?.to_str()?.strip_suffix(".map.ron")?;
+        let path = project.grimoire_dir.join("water").join(format!("{name}.ron"));
+        Some(match read_file::<WaterPlan>(&path, &format!("water/{name}.ron")) {
+            Read::Value(plan) => water_rows(&plan),
+            Read::Absent => vec![NO_WATER.to_owned()],
+            Read::Broken(why) => vec![why],
+        })
+    });
 }
