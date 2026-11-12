@@ -86,6 +86,7 @@ These keys work on the Map tab.
 | `Shift+Cmd+B` | Any time | Run. |
 | `Cmd+B` | Any time | Show or hide the left panel (`Ctrl+B` elsewhere; View, Show left panel). |
 | `Shift+Cmd+M` | Any time | Zen mode: hide everything but the viewport, and bring it back (`Shift+Ctrl+M` elsewhere; View, Zen mode). |
+| `Shift+Cmd+X` | Any time | Show the problems list: the Map inspector's PROBLEMS, scrolled on screen from any workspace (`Shift+Ctrl+X` elsewhere; View, Show problems). |
 | `M` | Any time | Keep the selected set as a composition. |
 | `N` | Any time | Rename the map. |
 | `O` | Any time | Pin or unpin. |

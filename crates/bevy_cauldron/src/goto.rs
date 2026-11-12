@@ -47,7 +47,8 @@
 //!
 //! **A thing the editor cannot show is not a result.** A result that reveals nothing is the dead link
 //! NV-07 (#384) exists to forbid, so the rows are the pages there are: the open map and its
-//! placements, library pieces and their lattices, compositions, rigs, registered data files, notes,
+//! placements, library pieces and their lattices, compositions, rigs and each rig's clips (NV-11, #391: a clip
+//! is a slot of the rig's manifest entry, and its page is the rig on the bench with that slot soloed), registered data files, notes,
 //! settings sections and the built workspaces. A cue has no page until the Sound workspace lands
 //! (NV-08, #385), a project file none until the Files workspace does (GD-11, #373), and a map other
 //! than the open one would have to be *opened* rather than shown. The three are `Part of #382`'s
@@ -119,6 +120,8 @@ pub enum Kind {
     Tile,
     Composition,
     Rig,
+    /// One of a rig's clips: a slot of its manifest entry, on the bench (NV-11, #391).
+    Clip,
     /// A registered data file, whose page is the DATA table.
     Data,
     Note,
@@ -136,6 +139,7 @@ impl Kind {
             Kind::Tile => "tile",
             Kind::Composition => "composition",
             Kind::Rig => "rig",
+            Kind::Clip => "clip",
             Kind::Data => "data",
             Kind::Note => "note",
             Kind::Settings => "settings",
@@ -152,6 +156,7 @@ impl Kind {
             Kind::Tile => "Tile",
             Kind::Composition => "Composition",
             Kind::Rig => "Rig",
+            Kind::Clip => "Clip",
             Kind::Data => "Data file",
             Kind::Note => "Note",
             Kind::Settings => "Setting",
@@ -160,13 +165,14 @@ impl Kind {
     }
 
     /// **The order the headings appear in**, which is [`GotoIndex`]'s own order.
-    pub const ALL: [Kind; 10] = [
+    pub const ALL: [Kind; 11] = [
         Kind::Map,
         Kind::Placement,
         Kind::Piece,
         Kind::Tile,
         Kind::Composition,
         Kind::Rig,
+        Kind::Clip,
         Kind::Data,
         Kind::Note,
         Kind::Settings,
@@ -427,6 +433,10 @@ fn collect_the_rest(
             });
         }
     }
+    // **A rig's clips, read from the manifest** (NV-11, #391), not from the bench: the bench reads `rigs.ron` when the Animation
+    // workspace is first opened, and a finder that could name a clip only after a person had been to the page it names would not be
+    // a finder. A clip is a slot of the rig, and the manifest is the one file that says what the slots are.
+    out.extend(collect_the_clips(project));
     // **A registered data file's page is the DATA table**, which is where the reveal puts
     // `Shown::File` when `data.ron` lists it — the same resolution, so the two cannot disagree.
     if let Ok(Some(reg)) = bevy_grimoire_core::data_files::DataFiles::load(&project.grimoire_dir) {
@@ -489,6 +499,54 @@ fn collect_the_rest(
             shown: Shown::Nowhere,
             opens: Some(workspace),
         });
+    }
+    out
+}
+
+/// **What ends the word that names a clip in a slot's note**: the note's first clause is the word a person types (`walk`, from
+/// `walk — the phase reference all the others are measured against`).
+const CLIP_NOTE_SEPARATOR: &str = " — ";
+
+/// **What a rig's slot is called**: the asset's own clip name when the manifest recorded one (`provenance`), else the first clause of the
+/// slot's note, else `clip <index>`, which is how the bench's slot table spells a slot that has no other name.
+pub fn clip_name(rig: &bevy_grimoire_core::rigs::Rig, slot: usize) -> Option<String> {
+    let def = rig.slots.get(slot)?;
+    let from_asset = rig
+        .provenance
+        .as_ref()
+        .and_then(|p| p.clip_names.get(def.clip))
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned);
+    let from_note = || {
+        def.note
+            .as_deref()
+            .and_then(|note| note.split(CLIP_NOTE_SEPARATOR).next())
+            .map(str::trim)
+            .filter(|clause| !clause.is_empty())
+            .map(str::to_owned)
+    };
+    Some(from_asset.or_else(from_note).unwrap_or_else(|| format!("clip {}", def.clip)))
+}
+
+/// **Every rig's every clip**, from `assets/grimoire/rigs.ron`: a project with no manifest, or one that does not read, has none (the
+/// bench says which on its own page).
+fn collect_the_clips(project: &Project) -> Vec<Entry> {
+    let Ok(text) = std::fs::read_to_string(project.root.join(crate::anim_tab::RIGS_FILE)) else { return Vec::new() };
+    let Ok(rigs) = bevy_grimoire_core::rigs::Rigs::parse(&text) else { return Vec::new() };
+    let mut out = Vec::new();
+    for (name, rig) in &rigs.rigs {
+        for slot in 0..rig.slots.len() {
+            let Some(clip) = clip_name(rig, slot) else { continue };
+            out.push(Entry {
+                kind: Kind::Clip,
+                key: format!("{name}#{slot}"),
+                title: format!("{name} — {clip}"),
+                lives: "Animation".to_owned(),
+                shown: Shown::Clip { rig: name.clone(), slot },
+                opens: None,
+            });
+        }
     }
     out
 }

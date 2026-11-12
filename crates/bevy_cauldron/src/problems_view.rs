@@ -33,12 +33,65 @@ pub struct ProblemGoTo {
     pub pieces: Vec<String>,
 }
 
+/// **The chord that brings the PROBLEMS list on screen**: Command+Shift+X on a Mac, Ctrl+Shift+X elsewhere (NV-11, #397).
+///
+/// The list is a heading of the Map inspector, six wheel notches down (`docs/ui/navigation.md`), and the navigation target for it is one
+/// press. It is a chord of its own beside the shell's two (`shell_view::LEFT_PANEL_CHORD`, `zen_chord`): a letter and a modifier pair
+/// that no binding of `keys.rs` takes, so nothing else fires with it. **Assumed decision (owner may override):** a chord outside the key
+/// census, as the shell's are, rather than a census `Action`, which would move three protected pins for one key.
+pub fn show_problems_chord() -> bevy_gooey::Shortcut {
+    bevy_gooey::Shortcut::new(bevy_gooey::Modifiers::PRIMARY | bevy_gooey::Modifiers::SHIFT, KeyCode::KeyX)
+}
+
 pub struct ProblemsViewPlugin;
 
 impl Plugin for ProblemsViewPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(on_problem_go_to).add_systems(Update, refresh_problems_list.run_if(in_state(Screen::Editor)));
+        app.add_observer(on_problem_go_to)
+            .add_systems(Update, (refresh_problems_list, show_the_problems_on_the_chord).run_if(in_state(Screen::Editor)));
     }
+}
+
+/// **Show the problems**: the chord asks the reveal for the `problems` section of the Map inspector, which crosses to the Map workspace
+/// if the person is elsewhere and scrolls the heading on screen — the one path every other page takes, so a second path to a section
+/// cannot disagree with it. Not while a text field has the keys, nor over a question, nor when the terminal owns a Ctrl chord (the shell's
+/// own rule, `shell_view::toggle_on_the_chords`).
+///
+/// **The scroll is armed again on every press.** The reveal scrolls when the section it names *changes* (`reveal::Follow`), so a second
+/// press, after the person has scrolled away, would name the section the first one did and scroll nothing. Clearing it first makes each
+/// press a change.
+fn show_the_problems_on_the_chord(
+    keys: Res<ButtonInput<KeyCode>>,
+    live: Res<crate::keys::Live>,
+    confirm: Res<crate::confirm::Confirm>,
+    focus: Res<crate::terminal_pane::TerminalFocus>,
+    mut revealing: ResMut<crate::reveal::Revealing>,
+    mut inspector: ResMut<crate::reveal::InspectorReveal>,
+) {
+    let chord = show_problems_chord();
+    if !chord.just_pressed(&keys) || focus.owns(&chord) || live.0 == crate::keys::Context::Typing || confirm.is_open() {
+        return;
+    }
+    ask(&mut revealing, &mut inspector);
+}
+
+/// **Ask the reveal for the problems**: the one request the chord and View ▸ Show problems both make. The inspector's section is cleared first,
+/// so each ask is a change the scroll follows.
+fn ask(revealing: &mut crate::reveal::Revealing, inspector: &mut crate::reveal::InspectorReveal) {
+    if inspector.0.is_some() {
+        inspector.0 = None;
+    }
+    revealing.request_by_person("show_problems", &crate::ops::Shown::Settings { section: "problems".to_owned() });
+}
+
+/// **View ▸ Show problems**: the menu row's half of [`show_the_problems_on_the_chord`]. A world without the reveal (no editor open) has
+/// nothing to show, so it asks for nothing.
+pub fn ask_for_the_problems(world: &mut World) {
+    let Some(mut revealing) = world.remove_resource::<crate::reveal::Revealing>() else { return };
+    if let Some(mut inspector) = world.get_resource_mut::<crate::reveal::InspectorReveal>() {
+        ask(&mut revealing, &mut inspector);
+    }
+    world.insert_resource(revealing);
 }
 
 /// **A relation in words**: what it says and which way it fails. `<of> faces <to>`, with ` (hard)` for a relation that must hold

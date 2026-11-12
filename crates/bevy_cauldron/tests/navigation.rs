@@ -471,7 +471,7 @@ fn a_rigs_clip() -> Destination {
         steps,
         cost: d.cost,
         reach: Reach::Unreachable(format!(
-            "a clip is chosen from a list inside the bench, which Cmd/Ctrl+5 opens; this fixture has no rig, so its list reads {rows:?}"
+            "by hand a clip is chosen on the stage chips of a rig the bench has selected, which Cmd/Ctrl+5 opens; this fixture has no rig, so the bench's list reads {rows:?} and there is no chip to click (the finder route in the Target column is measured on a project that has a rig)"
         )),
     }
 }
@@ -534,6 +534,23 @@ fn an_inspector_section(what: &'static str, label: &'static str, tag: &'static s
     let steps = d.steps.clone();
     let reach = if arrived { Reach::Arrived } else { Reach::Unreachable(absent.to_owned()) };
     Destination { what, steps, cost, reach }
+}
+
+/// **The problems list**, shown by one chord (NV-11, #397): the Map inspector's `PROBLEMS` heading was six wheel notches down.
+///
+/// Owner exception (2026-11-12, #397): the row was the generic inspector-section row (the wheel, up to [`WHEEL_BUDGET`] notches); the
+/// list now has a chord of its own, `Cmd/Ctrl+Shift+X`, which asks the reveal for the heading and scrolls it on screen, so the row
+/// drives the chord. The row asserts the arrival the same way every other row does — the heading on screen — and a chord that did not
+/// bring it is a row that does not arrive.
+fn the_problems_list() -> Destination {
+    let mut d = Driver::cold_start("problems");
+    d.chord(&[primary(), KeyCode::ShiftLeft, KeyCode::KeyX], "press Cmd/Ctrl+Shift+X (show the problems)");
+    let reach = if d.showing("PROBLEMS") {
+        Reach::Arrived
+    } else {
+        Reach::Unreachable("the show-problems chord was pressed and the PROBLEMS heading is not on screen".to_owned())
+    };
+    Destination { what: "The problems list", steps: d.steps, cost: d.cost, reach }
 }
 
 /// **The history list**, which is the rows beside REDO.
@@ -696,12 +713,7 @@ fn table() -> Vec<Destination> {
             "data",
             "the DATA table is a heading of the Map inspector and the wheel never reached it",
         ),
-        an_inspector_section(
-            "The problems list",
-            "PROBLEMS",
-            "problems",
-            "PROBLEMS is a heading of the Map inspector and the wheel never reached it",
-        ),
+        the_problems_list(),
         an_inspector_section("The notes", "NOTES", "notes", "NOTES is a heading of the Map inspector and the wheel never reached it"),
         the_history(),
         the_agent_block(),
@@ -811,12 +823,6 @@ fn target_of(what: &str) -> Target {
 /// **The issues filed for a missed target**, by destination (NV-11, #388): a missed target is its own issue, naming the destination and
 /// the route. A miss with no entry here fails the test, so a target cannot be missed quietly.
 const FILED: &[(&str, &str)] = &[
-    ("One of a rig's clips", "#391"),
-    ("A sound cue", "#392"),
-    ("A map's water", "#393"),
-    ("A map's forest", "#394"),
-    ("A map's lights", "#395"),
-    ("The problems list", "#397"),
 ];
 
 // ───────────────────────────── driving the finder ─────────────────────────────
@@ -828,9 +834,16 @@ const FRAMED_WITHIN_M: f32 = 6.0;
 /// The registered data file the finder fixture holds, and its id.
 const DATA_REGISTRY: &str = "(version: 1, files: [(id: \"tuning\", path: \"mob.ron\", bounds: {\"mob.speed\": (min: 0.0, max: 9.0)})])";
 const DATA_FILE: &str = "// tuning\n(mob: (speed: 1.50, name: \"orc\", hp: 7), fast: false)\n";
+/// **The rig the finder fixture holds, and the clip a person asks for** (NV-11, #391): a clip is a slot of the rig's manifest entry, and the
+/// finder names it by the slot's note. The clip is slot 1, so a finder that landed on the rig alone, or on its first slot, is caught.
+const RIGS: &str = "(version: 3, rigs: { \"hound\": (mesh: \"characters/hound.glb\", scale: 1.0, slots: [\
+    (clip: 0, playback: Free(speed: 1.0), note: Some(\"idle\")), \
+    (clip: 1, playback: Free(speed: 1.0), note: Some(\"gallop\"))])})";
+const CLIP_RIG: &str = "hound";
+const CLIP_SLOT: usize = 1;
 
 /// **What typing into the finder asks for, per destination**: the thing's own name as a person types it.
-const FINDER_ASKS: [(&str, &str); 7] = [
+const FINDER_ASKS: [(&str, &str); 8] = [
     ("A named map", "meadow"),
     ("A named piece on the open map", "bed@3"),
     ("A piece's library entry", "stool"),
@@ -838,6 +851,7 @@ const FINDER_ASKS: [(&str, &str); 7] = [
     ("A composition", "stack"),
     ("A game data file", "tuning"),
     ("The notes", "mind"),
+    ("One of a rig's clips", "gallop"),
 ];
 
 /// **The editor for the finder rows**: the same kind of project as the other rows' (pieces, a placed piece, a composition) with what
@@ -855,6 +869,8 @@ fn finder_editor(tag: &str) -> App {
     let dir = bevy_cauldron::project::Project::open(&root, None).unwrap_or_else(|e| panic!("{e}")).grimoire_dir;
     std::fs::write(dir.join("mob.ron"), DATA_FILE).unwrap_or_else(|e| panic!("{e}"));
     std::fs::write(dir.join("data.ron"), DATA_REGISTRY).unwrap_or_else(|e| panic!("{e}"));
+    // **A rig with two clips** (NV-11, #391), in the manifest the bench and the finder both read.
+    std::fs::write(root.join("assets/grimoire/rigs.ron"), RIGS).unwrap_or_else(|e| panic!("{e}"));
     let mut app = bevy_cauldron::harness::build_headless(&root, "meadow", None).unwrap_or_else(|e| panic!("{e}"));
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(1.0 / 60.0)));
     app.world_mut().spawn((Window::default(), bevy::window::PrimaryWindow));
@@ -969,6 +985,12 @@ fn drive_the_finder(what: &'static str, query: &'static str) -> Result<Cost, Str
         "A tile" => (workspace == Workspace::Kit && selected.as_deref() == Some("tiling")).then_some(()),
         "A composition" => (workspace == Workspace::Kit && mode == Some(Mode::Compose.label())).then_some(()),
         "A game data file" | "The notes" => (workspace == Workspace::Map).then_some(()),
+        "One of a rig's clips" => {
+            let bench = app.world().resource::<bevy_cauldron::anim_tab::BenchState>();
+            let on_the_rig = bench.names().get(bench.selected).is_some_and(|name| *name == CLIP_RIG);
+            let soloed = app.world().resource::<bevy_cauldron::anim_stage::BenchScrub>().solo == Some(CLIP_SLOT);
+            (workspace == Workspace::Animation && on_the_rig && soloed).then_some(())
+        }
         other => return Err(format!("no arrival is defined for `{other}`")),
     };
     match arrived {
@@ -979,11 +1001,7 @@ fn drive_the_finder(what: &'static str, query: &'static str) -> Result<Cost, Str
 
 /// **Every named-thing destination, asked of the finder**, and what became of it.
 fn finder_runs() -> Vec<(&'static str, Result<Cost, String>)> {
-    let mut runs: Vec<(&'static str, Result<Cost, String>)> = FINDER_ASKS.iter().map(|(what, query)| (*what, drive_the_finder(what, query))).collect();
-    runs.push((
-        "One of a rig's clips",
-        Err("the finder indexes rigs and not their clips: a clip has no page of its own, so Cmd+P cannot name one".to_owned()),
-    ));
+    let runs: Vec<(&'static str, Result<Cost, String>)> = FINDER_ASKS.iter().map(|(what, query)| (*what, drive_the_finder(what, query))).collect();
     runs
 }
 

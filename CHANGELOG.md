@@ -4,6 +4,12 @@ What each change added, newest first. A visible change has a clip: click the sti
 
 ## 2026-11-12
 
+- **nv-11-forest-list** `b25d4d5f9` NV-11: the World workspace lists a map's forest *For you: The World workspace now lists how many trees your map has and how many of each kind.* *No clip: visible, not yet recorded: fleet worker*
+- **nv-11-water-list** `345402870` NV-11: the World workspace lists a map's water *For you: The World workspace now lists the springs, sinks and lakes placed on your map.* *No clip: visible, not yet recorded: fleet worker*
+- **nv-11-lights-list** `603092e0e` NV-11: the World workspace lists the map's lights in every build *For you: The World workspace now lists the light fixtures on your map, even in an editor built without the lights crate.* *No clip: visible, not yet recorded: fleet worker*
+- **nv-11-cue-list** `b02f5f083` NV-11: the Sound workspace lists the project's cues in every build *For you: The Sound workspace now lists your project's sound cues even in an editor built without the audio crate.* *No clip: visible, not yet recorded: fleet worker*
+- **nv-11-clip-in-finder** `585c68b5b` NV-11: a rig's clip is a row of the Go to anything finder *For you: Press Cmd+P and type a clip's name, such as a rig's gallop, then Enter, to open that rig on the bench with that clip playing alone.* *No clip: visible, not yet recorded: fleet worker*
+- **nv-11-problems-chord** `d06a386b0` NV-11: Cmd/Ctrl+Shift+X shows the problems list, which was six wheel notches down the inspector *For you: Press Cmd+Shift+X (Ctrl+Shift+X off a Mac) to bring the list of problems with your map on screen, wherever you are in the editor.* *No clip: visible, not yet recorded: fleet worker*
 - **gd-14-agent-file-edit** `c071cc57d` An agent's file_edit lands live in the open file: comments kept, the person's caret untouched, the changed lines tinted *No clip: visible, not yet recorded: fleet worker*
 - **gd-13-project-replace** `c071cc57d` Find and replace across the project: a streaming, cancellable search, a diff preview, and Replace all as one operation with one undo *No clip: visible, not yet recorded: fleet worker*
 - **gd-12-file-editor-navigation** `c071cc57d` The file editor has a minimap, folding by structure, indent guides and find; the fold chords are the editor's own *No clip: visible, not yet recorded: fleet worker*

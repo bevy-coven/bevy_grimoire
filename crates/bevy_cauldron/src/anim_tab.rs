@@ -40,6 +40,9 @@ pub enum View {
     All,
 }
 
+/// **The rig manifest, under a project's root**: what the bench reads and writes, and what the finder lists the clips of (NV-11, #391).
+pub const RIGS_FILE: &str = "assets/grimoire/rigs.ron";
+
 /// What the bench is looking at.
 #[derive(Resource, Default)]
 pub struct BenchState {
@@ -434,7 +437,7 @@ fn load_on_entry(
         return;
     }
     bench.loaded = true;
-    let path = project.root.join("assets/grimoire/rigs.ron");
+    let path = project.root.join(RIGS_FILE);
     match std::fs::read_to_string(&path) {
         Ok(text) => match Rigs::parse(&text) {
             Ok(rigs) => {
@@ -474,7 +477,7 @@ fn commit_text(
     new_text: String,
 ) -> Result<(), String> {
     let parsed = Rigs::parse(&new_text)?;
-    let path = root.join("assets/grimoire/rigs.ron");
+    let path = root.join(RIGS_FILE);
     bevy_grimoire_core::ron_surgery::save_atomic(&path, &new_text)?;
     bench.rigs = Some(parsed);
     bench.text = Some(new_text);
@@ -679,7 +682,7 @@ fn adopt_measured(
         bench.status.problem("NOT WRITTEN: no rig selected".to_owned());
         return;
     };
-    let path = project.root.join("assets/grimoire/rigs.ron");
+    let path = project.root.join(RIGS_FILE);
     // **The text on disk now is what the operation replaces**, so it is what the tab's undo puts back:
     // the tab may hold older text than the file when the file was edited under it (by hand, or by an
     // agent's adoption), and undoing to the held text would discard that edit too.

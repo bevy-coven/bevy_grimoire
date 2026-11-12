@@ -309,6 +309,7 @@ fn layout(category: &str, registry: &[Command], recent: Vec<PathBuf>) -> Vec<Slo
         slots.push(Slot::ActivityBar);
         slots.push(Slot::LeftPanel);
         slots.push(Slot::Zen);
+        slots.push(Slot::Verb(AppVerb::ShowProblems));
         slots.push(Slot::ReloadPanel);
         slots.push(Slot::Outliner);
         slots.push(Slot::Library);

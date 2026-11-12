@@ -2636,6 +2636,8 @@ impl Plugin for EditorPlugin {
         app.add_plugins(crate::activity_bar::ActivityBarPlugin);
         // **The World and Sound workspaces' panels** (NV-08, #385): spawned when their workspace is entered.
         app.add_plugins(crate::workspace_panels::WorkspacePanelsPlugin);
+        // **What the map and the project hold, as lists** (NV-11, #392-#395): cues, water, forest and lights, read from their files.
+        app.add_plugins(crate::world_lists::WorldListsPlugin);
         // **The Game workspace** (NV-09, #386): the running game's panel, its log and its state, and the watching of it.
         app.add_plugins(crate::game_view::GameViewPlugin);
         // **The Agent workspace** (NV-10, #387): the Familiar's block and history, in a workspace of their own.
@@ -4038,7 +4040,8 @@ fn spawn_panel(mut commands: Commands, frame: Res<crate::chrome::Frame>) {
                 ..default()
             })
             .with_children(|s| {
-                crate::chrome::section(s, "PROBLEMS");
+                // **Named for the reveal** (NV-11, #397): the show-problems chord scrolls this heading on screen, where it was six wheel notches down.
+                crate::chrome::section(s, "PROBLEMS").insert(crate::reveal::Section(crate::reveal::InspectorSection::Problems));
                 s.spawn((
                     crate::problems_view::ProblemsList,
                     Node {
